@@ -1,0 +1,25 @@
+{
+  "name": "@beanbag/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "bb": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@beanbag/core": "workspace:*",
+    "@beanbag/daemon": "workspace:*",
+    "commander": "^13.0.0",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@beanbag/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

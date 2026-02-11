@@ -1,0 +1,179 @@
+import { useEffect, useMemo, useState } from "react";
+import type { AvailableModel, ReasoningLevel } from "@beanbag/core";
+import { useAvailableModels } from "./useApi";
+
+const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
+const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
+
+const FALLBACK_REASONING_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra High" },
+] as const;
+
+const FALLBACK_MODELS: AvailableModel[] = [
+  {
+    id: "gpt-5.3-codex",
+    model: "gpt-5.3-codex",
+    displayName: "gpt-5.3-codex",
+    description: "Latest frontier agentic coding model.",
+    supportedReasoningEfforts: FALLBACK_REASONING_OPTIONS.map((option) => ({
+      reasoningEffort: option.value,
+      description: `${option.label} reasoning effort`,
+    })),
+    defaultReasoningEffort: "medium",
+    isDefault: true,
+  },
+];
+
+const REASONING_LABELS: Record<ReasoningLevel, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra High",
+};
+
+interface PromptOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+function isReasoningLevel(value: unknown): value is ReasoningLevel {
+  return (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  );
+}
+
+function getStoredModel(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(MODEL_STORAGE_KEY) ?? "";
+}
+
+function getStoredReasoningLevel(): ReasoningLevel {
+  if (typeof window === "undefined") return "medium";
+  const raw = window.localStorage.getItem(REASONING_STORAGE_KEY);
+  return isReasoningLevel(raw) ? raw : "medium";
+}
+
+function formatModelLabel(value: string): string {
+  return value
+    .split("-")
+    .map((part) => {
+      if (part.toLowerCase() === "gpt") return "GPT";
+      if (/^\d+(\.\d+)*$/.test(part)) return part;
+      if (/^[a-z]+$/i.test(part)) {
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      }
+      return part;
+    })
+    .join("-");
+}
+
+export function usePromptModelReasoning() {
+  const availableModelsQuery = useAvailableModels();
+  const [selectedModel, setSelectedModel] = useState<string>(() =>
+    getStoredModel(),
+  );
+  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(() =>
+    getStoredReasoningLevel(),
+  );
+
+  const availableModels = useMemo(
+    () =>
+      availableModelsQuery.data && availableModelsQuery.data.length > 0
+        ? availableModelsQuery.data
+        : FALLBACK_MODELS,
+    [availableModelsQuery.data],
+  );
+
+  const modelOptions = useMemo(
+    (): PromptOption<string>[] =>
+      availableModels.map((model) => ({
+        value: model.model,
+        label: formatModelLabel(model.displayName || model.model),
+      })),
+    [availableModels],
+  );
+
+  const activeModel = useMemo(
+    () =>
+      availableModels.find((model) => model.model === selectedModel) ??
+      availableModels.find((model) => model.isDefault) ??
+      availableModels[0],
+    [availableModels, selectedModel],
+  );
+
+  const reasoningOptions = useMemo(
+    (): PromptOption<ReasoningLevel>[] => {
+      const options: PromptOption<ReasoningLevel>[] = [];
+      const seen = new Set<ReasoningLevel>();
+      const efforts =
+        activeModel?.supportedReasoningEfforts ??
+        FALLBACK_MODELS[0].supportedReasoningEfforts;
+
+      for (const effort of efforts) {
+        if (seen.has(effort.reasoningEffort)) continue;
+        seen.add(effort.reasoningEffort);
+        options.push({
+          value: effort.reasoningEffort,
+          label: REASONING_LABELS[effort.reasoningEffort],
+        });
+      }
+
+      if (options.length === 0) {
+        return FALLBACK_REASONING_OPTIONS.map((option) => ({
+          value: option.value,
+          label: option.label,
+        }));
+      }
+
+      return options;
+    },
+    [activeModel],
+  );
+
+  useEffect(() => {
+    if (availableModels.length === 0) return;
+    const hasSelection = availableModels.some(
+      (model) => model.model === selectedModel,
+    );
+    if (hasSelection) return;
+
+    const fallbackModel =
+      availableModels.find((model) => model.isDefault)?.model ??
+      availableModels[0].model;
+    setSelectedModel(fallbackModel);
+  }, [availableModels, selectedModel]);
+
+  useEffect(() => {
+    if (!reasoningOptions.some((option) => option.value === reasoningLevel)) {
+      setReasoningLevel(
+        activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value,
+      );
+    }
+  }, [activeModel, reasoningLevel, reasoningOptions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !selectedModel) return;
+    window.localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
+  }, [selectedModel]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(REASONING_STORAGE_KEY, reasoningLevel);
+  }, [reasoningLevel]);
+
+  return {
+    selectedModel,
+    setSelectedModel,
+    reasoningLevel,
+    setReasoningLevel,
+    activeModel,
+    modelOptions,
+    reasoningOptions,
+  };
+}

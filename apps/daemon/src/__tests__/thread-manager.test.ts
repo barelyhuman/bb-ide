@@ -1,0 +1,2260 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { EventEmitter, Readable, Writable } from "node:stream";
+import type { ChildProcess } from "node:child_process";
+import type { Thread, ThreadEvent } from "@beanbag/core";
+import type {
+  ThreadRepository,
+  EventRepository,
+  ProjectRepository,
+} from "@beanbag/db";
+import { ThreadManager } from "../thread-manager.js";
+import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
+import { WSManager } from "../ws.js";
+
+// Mock child_process.spawn
+vi.mock("node:child_process", () => ({
+  spawn: vi.fn(),
+}));
+
+import { spawn as spawnMock } from "node:child_process";
+
+const CODEX_THREAD_ID = "codex-thread-abc-123";
+
+/**
+ * Create a fake ChildProcess with piped stdio streams.
+ * stdout is a real Readable we can push data into.
+ * stdin is a Writable that captures writes.
+ *
+ * When autoRespond is true (default), automatically emits the thread/start
+ * response when a thread/start request is written to stdin, so that
+ * _waitForResponse resolves.
+ */
+function createFakeChildProcess(opts?: { autoRespond?: boolean }): ChildProcess & {
+  _stdinData: string[];
+  _pushStdout: (line: string) => void;
+  _emitExit: (code: number | null, signal: string | null) => void;
+} {
+  const autoRespond = opts?.autoRespond ?? true;
+  const child = new EventEmitter() as any;
+  const stdinData: string[] = [];
+
+  child.stdin = new Writable({
+    write(chunk: Buffer, _encoding: string, callback: () => void) {
+      const data = chunk.toString();
+      stdinData.push(data);
+
+      // Auto-respond to thread/start requests
+      if (autoRespond) {
+        try {
+          const msg = JSON.parse(data.trim());
+          if (msg.method === "thread/start" && msg.id) {
+            // Emit the response on stdout after a tick
+            process.nextTick(() => {
+              child.stdout.push(
+                JSON.stringify({
+                  id: msg.id,
+                  result: {
+                    thread: { id: CODEX_THREAD_ID },
+                    model: "test-model",
+                  },
+                }) + "\n",
+              );
+            });
+          }
+        } catch {
+          // not JSON, ignore
+        }
+      }
+
+      callback();
+    },
+  });
+  child.stdout = new Readable({ read() {} });
+  child.stderr = new Readable({ read() {} });
+  child.pid = 12345;
+  child.exitCode = null;
+  child.kill = vi.fn();
+  child._stdinData = stdinData;
+  child._pushStdout = (line: string) => {
+    child.stdout.push(line + "\n");
+  };
+  child._emitExit = (code: number | null, signal: string | null) => {
+    child.exitCode = code;
+    child.emit("exit", code, signal);
+  };
+
+  return child;
+}
+
+function makeThread(overrides: Partial<Thread> = {}): Thread {
+  return {
+    id: "thread-1",
+    projectId: "proj-1",
+    status: "active",
+    createdAt: 1000,
+    updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function makeEvent(overrides: Partial<ThreadEvent> = {}): ThreadEvent {
+  return {
+    id: "evt-1",
+    threadId: "thread-1",
+    seq: 1,
+    type: "item/completed",
+    data: {},
+    createdAt: 1000,
+    ...overrides,
+  };
+}
+
+function createMocks() {
+  const threadRepo = {
+    create: vi.fn(),
+    getById: vi.fn(),
+    list: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as ThreadRepository;
+
+  const eventRepo = {
+    create: vi.fn(),
+    listByThread: vi.fn(),
+    getLatestSeq: vi.fn(),
+  } as unknown as EventRepository;
+
+  const projectRepo = {
+    create: vi.fn(),
+    getById: vi.fn(),
+    list: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as ProjectRepository;
+
+  const ws = {
+    broadcast: vi.fn(),
+    handleConnection: vi.fn(),
+    close: vi.fn(),
+  } as unknown as WSManager;
+
+  return { threadRepo, eventRepo, projectRepo, ws };
+}
+
+describe("ThreadManager", () => {
+  let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
+  let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
+  let projectRepo: ReturnType<typeof createMocks>["projectRepo"];
+  let ws: ReturnType<typeof createMocks>["ws"];
+  let manager: ThreadManager;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mocks = createMocks();
+    threadRepo = mocks.threadRepo;
+    eventRepo = mocks.eventRepo;
+    projectRepo = mocks.projectRepo;
+    ws = mocks.ws;
+    manager = new ThreadManager(
+      threadRepo as any,
+      eventRepo as any,
+      projectRepo as any,
+      ws as any,
+    );
+  });
+
+  describe("boot status healing", () => {
+    it("resets persisted active threads to idle when they cannot be resumed", async () => {
+      const bootThreadRepo = {
+        create: vi.fn(),
+        getById: vi.fn(),
+        list: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ThreadRepository;
+
+      const bootEventRepo = {
+        create: vi.fn(),
+        listByThread: vi.fn(),
+        getLatestSeq: vi.fn(),
+      } as unknown as EventRepository;
+
+      const bootProjectRepo = {
+        create: vi.fn(),
+        getById: vi.fn(),
+        list: vi.fn(),
+        delete: vi.fn(),
+      } as unknown as ProjectRepository;
+
+      const bootWs = {
+        broadcast: vi.fn(),
+        handleConnection: vi.fn(),
+        close: vi.fn(),
+      } as unknown as WSManager;
+
+      (bootThreadRepo.list as ReturnType<typeof vi.fn>).mockImplementation(
+        (filters?: { status?: Thread["status"] }) => {
+          if (filters?.status === "active") {
+            return [makeThread({ id: "boot-active", status: "active" })];
+          }
+          return [];
+        },
+      );
+
+      const bootManager = new ThreadManager(
+        bootThreadRepo as any,
+        bootEventRepo as any,
+        bootProjectRepo as any,
+        bootWs as any,
+      );
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(bootThreadRepo.update).toHaveBeenCalledWith("boot-active", {
+        status: "idle",
+      });
+      expect(bootWs.broadcast).toHaveBeenCalledWith("thread", "boot-active");
+    });
+  });
+
+  describe("spawn()", () => {
+    let fakeChild: ReturnType<typeof createFakeChildProcess>;
+
+    beforeEach(() => {
+      fakeChild = createFakeChildProcess();
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(fakeChild);
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+    });
+
+    it("spawns codex app-server with correct args and cwd", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/my/project", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      expect(spawnMock).toHaveBeenCalledWith("codex", ["app-server"], {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: "/my/project",
+      });
+    });
+
+    it("creates a thread record in the DB", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      expect(threadRepo.create).toHaveBeenCalledWith({
+        projectId: "proj-1",
+      });
+    });
+
+    it("registers the process and marks thread as active", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      expect(manager.isActive("t-new")).toBe(true);
+      expect(manager.getActiveCount()).toBe(1);
+    });
+
+    it("updates thread status to active and broadcasts", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "active" });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+    });
+
+    it("sends initialize and thread/start JSON-RPC to the child process stdin", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Should have written initialize + thread/start to stdin
+      expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
+
+      // First message: initialize
+      const initMsg = JSON.parse(fakeChild._stdinData[0].trim());
+      expect(initMsg.jsonrpc).toBe("2.0");
+      expect(initMsg.method).toBe("initialize");
+      expect(initMsg.params.clientInfo.name).toBe("beanbag");
+      expect(initMsg.id).toBe(1);
+
+      // Second message: thread/start
+      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      expect(startMsg.jsonrpc).toBe("2.0");
+      expect(startMsg.method).toBe("thread/start");
+      expect(startMsg.params.approvalPolicy).toBe("never");
+      expect(startMsg.params.baseInstructions).toContain("coding agent");
+      expect(startMsg.id).toBe(2);
+    });
+
+    it("sends turn/start when input is provided", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Fix the login bug" }],
+      });
+
+      // Should have written initialize + thread/start + turn/start
+      expect(fakeChild._stdinData.length).toBe(3);
+      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      expect(turnMsg.jsonrpc).toBe("2.0");
+      expect(turnMsg.method).toBe("turn/start");
+      expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
+      expect(turnMsg.params.input).toEqual([{ type: "text", text: "Fix the login bug" }]);
+      expect(turnMsg.id).toBe(3);
+    });
+
+    it("auto-generates and persists thread names when provider title generation is enabled", async () => {
+      const providerTitleGenerator = vi
+        .fn()
+        .mockResolvedValue("Generated Login Fix Title");
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ titleGenerator: providerTitleGenerator }),
+      );
+
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      let persistedThread = makeThread({
+        id: "t-new",
+        status: "active",
+        title: "Fix the login bug",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        () => persistedThread,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          persistedThread = {
+            ...persistedThread,
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.title !== undefined ? { title: updates.title } : {}),
+          };
+          return persistedThread;
+        },
+      );
+
+      await autogenManager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Fix the login bug" }],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      expect(providerTitleGenerator).toHaveBeenCalledWith({
+        input: [{ type: "text", text: "Fix the login bug" }],
+        cwd: "/test",
+      });
+
+      const renameMsgRaw = fakeChild._stdinData
+        .map((entry) => JSON.parse(entry.trim()))
+        .find((entry) => entry.method === "thread/name/set");
+      expect(renameMsgRaw).toBeDefined();
+      expect(renameMsgRaw.params).toEqual({
+        threadId: CODEX_THREAD_ID,
+        name: "Generated Login Fix Title",
+      });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+        title: "Generated Login Fix Title",
+      });
+    });
+
+    it("sets fallback title from the initial prompt while async title generation is pending", async () => {
+      const providerTitleGenerator = vi
+        .fn()
+        .mockImplementation(() => new Promise<string>(() => {}));
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ titleGenerator: providerTitleGenerator }),
+      );
+
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "t-new",
+          status: "active",
+          title: "Fix flaky login redirect",
+        }),
+      );
+
+      await autogenManager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Fix flaky login redirect" }],
+      });
+
+      expect(threadRepo.create).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        title: "Fix flaky login redirect",
+      });
+      expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps generated title when a later provider rename suggests the first message", async () => {
+      const providerTitleGenerator = vi
+        .fn()
+        .mockResolvedValue("Generated Login Fix Title");
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ titleGenerator: providerTitleGenerator }),
+      );
+
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      let persistedThread = makeThread({
+        id: "t-new",
+        status: "active",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        () => persistedThread,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          persistedThread = {
+            ...persistedThread,
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.title !== undefined ? { title: updates.title } : {}),
+          };
+          return persistedThread;
+        },
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+
+      await autogenManager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Fix the login bug" }],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/name/updated",
+          params: {
+            threadId: CODEX_THREAD_ID,
+            threadName: "Fix the login bug",
+          },
+        }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      expect(persistedThread.title).toBe("Generated Login Fix Title");
+    });
+
+    it("sends turn/start when multimodal input is provided", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [
+          { type: "text", text: "Please review these references." },
+          { type: "image", url: "https://example.com/diagram.png" },
+          { type: "localImage", path: "/tmp/local-diagram.png" },
+        ],
+      });
+
+      expect(fakeChild._stdinData.length).toBe(3);
+      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      expect(turnMsg.method).toBe("turn/start");
+      expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
+      expect(turnMsg.params.input).toEqual([
+        { type: "text", text: "Please review these references." },
+        { type: "image", url: "https://example.com/diagram.png" },
+        { type: "localImage", path: "/tmp/local-diagram.png" },
+      ]);
+    });
+
+    it("includes model and reasoning config when input options are provided", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Fix the login bug" }],
+        model: "gpt-5-codex",
+        reasoningLevel: "high",
+      });
+
+      expect(fakeChild._stdinData.length).toBe(3);
+
+      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      expect(startMsg.params.model).toBe("gpt-5-codex");
+      expect(startMsg.params.config).toEqual({
+        model_reasoning_effort: "high",
+      });
+
+      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      expect(turnMsg.params.model).toBe("gpt-5-codex");
+      expect(turnMsg.params.config).toEqual({
+        model_reasoning_effort: "high",
+      });
+    });
+
+    it("does NOT send turn/start when no input is provided", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Only initialize + thread/start, no turn/start
+      expect(fakeChild._stdinData.length).toBe(2);
+    });
+
+    it("throws if project not found", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      await expect(
+        manager.spawn({ projectId: "bad-proj" }),
+      ).rejects.toThrow("Project bad-proj not found");
+
+      expect(spawnMock).not.toHaveBeenCalled();
+    });
+
+    it("returns the thread record from DB after spawn", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+      const updatedThread = makeThread({ id: "t-new", status: "active" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      const result = await manager.spawn({ projectId: "proj-1" });
+
+      expect(result).toBe(updatedThread);
+      expect(result.status).toBe("active");
+    });
+
+    it("marks thread idle and re-throws if spawn errors", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+      // Make spawn throw
+      (spawnMock as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error("ENOENT: codex not found");
+      });
+
+      await expect(
+        manager.spawn({ projectId: "proj-1" }),
+      ).rejects.toThrow("ENOENT: codex not found");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+    });
+
+    it("throws and marks thread idle when codex returns RPC error to thread/start", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-err", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+      // Use a non-auto-responding child, manually return an error
+      const errorChild = createFakeChildProcess({ autoRespond: false });
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(errorChild);
+
+      // After the thread/start write, push an error response
+      errorChild.stdin = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          const data = chunk.toString();
+          errorChild._stdinData.push(data);
+          try {
+            const msg = JSON.parse(data.trim());
+            if (msg.method === "thread/start" && msg.id) {
+              process.nextTick(() => {
+                errorChild.stdout!.push(
+                  JSON.stringify({
+                    id: msg.id,
+                    error: { code: -32600, message: "Invalid params" },
+                  }) + "\n",
+                );
+              });
+            }
+          } catch {}
+          callback();
+        },
+      });
+
+      await expect(
+        manager.spawn({ projectId: "proj-1" }),
+      ).rejects.toThrow("RPC error");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-err", { status: "idle" });
+    });
+
+    it("throws and marks thread idle when thread/start times out", async () => {
+      vi.useFakeTimers();
+      try {
+        const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+        const createdThread = makeThread({ id: "t-timeout", status: "idle" });
+        (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+        // Use non-auto-responding child — thread/start will never get a response
+        const silentChild = createFakeChildProcess({ autoRespond: false });
+        (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(silentChild);
+
+        // Attach the catch handler before advancing timers to avoid unhandled rejection
+        const spawnPromise = manager
+          .spawn({ projectId: "proj-1" })
+          .catch((e: Error) => e);
+
+        // Advance past the 10s timeout
+        await vi.advanceTimersByTimeAsync(10_001);
+
+        const err = await spawnPromise;
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toMatch("Timed out waiting for response");
+        expect(threadRepo.update).toHaveBeenCalledWith("t-timeout", { status: "idle" });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("logs JSON-RPC errors from codex in event streaming", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Push a JSON-RPC error response on stdout (as if codex rejected a request)
+      fakeChild._pushStdout(
+        JSON.stringify({
+          id: 99,
+          error: { code: -32600, message: "Bad request" },
+        }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("RPC error"),
+        expect.stringContaining("Bad request"),
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it("streams stdout JSON-RPC notifications as events", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Simulate codex sending JSON-RPC notifications on stdout
+      fakeChild._pushStdout(
+        JSON.stringify({ method: "item/started", params: { itemId: "i1" } }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({ method: "item/completed", params: { content: "done" } }),
+      );
+
+      // Give the readline interface time to process
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(eventRepo.create).toHaveBeenCalledTimes(2);
+      expect(eventRepo.create).toHaveBeenNthCalledWith(1, {
+        threadId: "t-new",
+        seq: 1,
+        type: "item/started",
+        data: { itemId: "i1" },
+      });
+      expect(eventRepo.create).toHaveBeenNthCalledWith(2, {
+        threadId: "t-new",
+        seq: 2,
+        type: "item/completed",
+        data: { content: "done" },
+      });
+    });
+
+    it("does not broadcast thread changes for high-frequency delta notifications", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (ws.broadcast as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({ method: "item/agentMessage/delta", params: { delta: "hel" } }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(eventRepo.create).toHaveBeenCalledWith({
+        threadId: "t-new",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: { delta: "hel" },
+      });
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
+    it("broadcasts thread changes for item completion notifications", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (ws.broadcast as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({ method: "item/completed", params: { item: { type: "agentMessage", text: "done" } } }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+    });
+
+    it("marks thread idle when turn/completed is received", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(JSON.stringify({ method: "turn/completed", params: {} }));
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
+    });
+
+    it("marks thread active when turn/started is received", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "idle" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(JSON.stringify({ method: "turn/started", params: {} }));
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "active" });
+    });
+
+    it("tracks active turn IDs from turn lifecycle events", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      fakeChild._pushStdout(
+        JSON.stringify({ method: "turn/started", params: { turnId: "turn-77" } }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect((manager as any).activeTurnIds.get("t-new")).toBe("turn-77");
+
+      fakeChild._pushStdout(
+        JSON.stringify({ method: "turn/completed", params: { turnId: "turn-77" } }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect((manager as any).activeTurnIds.has("t-new")).toBe(false);
+    });
+
+    it("sets title from thread/started preview when thread title is missing", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      const persistedThread = makeThread({ id: "t-new", status: "active" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(() => persistedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          if (updates.status !== undefined) persistedThread.status = updates.status;
+          if (updates.title !== undefined) persistedThread.title = updates.title;
+          return persistedThread;
+        },
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/started",
+          params: {
+            thread: {
+              id: CODEX_THREAD_ID,
+              preview: "Draft migration checklist",
+            },
+          },
+        }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+        title: "Draft migration checklist",
+      });
+    });
+
+    it("sets title from thread/name/updated when title is not locked", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      const persistedThread = makeThread({ id: "t-new", status: "active" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(() => persistedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          if (updates.status !== undefined) persistedThread.status = updates.status;
+          if (updates.title !== undefined) persistedThread.title = updates.title;
+          return persistedThread;
+        },
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/name/updated",
+          params: {
+            threadId: CODEX_THREAD_ID,
+            threadName: "Server-assigned title",
+          },
+        }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+        title: "Server-assigned title",
+      });
+    });
+
+    it("does not overwrite explicit spawn title from thread/name/updated", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({
+        id: "t-new",
+        status: "idle",
+        title: "Pinned custom title",
+      });
+      const persistedThread = makeThread({
+        id: "t-new",
+        status: "active",
+        title: "Pinned custom title",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(() => persistedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          if (updates.status !== undefined) persistedThread.status = updates.status;
+          if (updates.title !== undefined) persistedThread.title = updates.title;
+          return persistedThread;
+        },
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        title: "Pinned custom title",
+      });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/name/updated",
+          params: {
+            threadId: CODEX_THREAD_ID,
+            threadName: "Server-assigned title",
+          },
+        }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(threadRepo.update).not.toHaveBeenCalledWith("t-new", {
+        title: "Server-assigned title",
+      });
+    });
+
+    it("allows server rename when spawn title matches derived prompt title", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({
+        id: "t-new",
+        status: "idle",
+        title: "Fix flaky login redirect",
+      });
+      const persistedThread = makeThread({
+        id: "t-new",
+        status: "active",
+        title: "Fix flaky login redirect",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(() => persistedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          if (updates.status !== undefined) persistedThread.status = updates.status;
+          if (updates.title !== undefined) persistedThread.title = updates.title;
+          return persistedThread;
+        },
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        title: "Fix flaky login redirect",
+        input: [{ type: "text", text: "Fix flaky login redirect" }],
+      });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/name/updated",
+          params: {
+            threadId: CODEX_THREAD_ID,
+            threadName: "Server refined title",
+          },
+        }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+        title: "Server refined title",
+      });
+    });
+
+    it("ignores blank lines on stdout", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Push blank/whitespace lines
+      fakeChild._pushStdout("");
+      fakeChild._pushStdout("   ");
+      // Push one valid message
+      fakeChild._pushStdout(JSON.stringify({ method: "turn/start", params: {} }));
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Only the valid message should create an event
+      expect(eventRepo.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores non-JSON stdout output", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Push debug output that isn't JSON
+      fakeChild._pushStdout("DEBUG: some internal message");
+      fakeChild._pushStdout("Error: something happened");
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(eventRepo.create).not.toHaveBeenCalled();
+    });
+
+    it("ignores JSON without method field (non-notification)", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Push JSON-RPC responses (have result but no method)
+      fakeChild._pushStdout(JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} }));
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(eventRepo.create).not.toHaveBeenCalled();
+    });
+
+    it("uses empty object as data when notification has no params", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      fakeChild._pushStdout(JSON.stringify({ method: "turn/end" }));
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(eventRepo.create).toHaveBeenCalledWith({
+        threadId: "t-new",
+        seq: 1,
+        type: "turn/end",
+        data: {},
+      });
+    });
+
+    it("handles process exit events correctly", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      expect(manager.isActive("t-new")).toBe(true);
+
+      // Simulate process exiting with code 0
+      fakeChild._emitExit(0, null);
+
+      expect(manager.isActive("t-new")).toBe(false);
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
+    });
+
+    it("handles process error events", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      // Suppress console.error for this test
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // Simulate process error
+      fakeChild.emit("error", new Error("Process crashed"));
+
+      expect(manager.isActive("t-new")).toBe(false);
+      // Error handler calls _handleProcessExit(id, 1, null) which should set idle
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
+
+      consoleSpy.mockRestore();
+    });
+
+    it("increments RPC IDs across multiple spawns", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      // First spawn with input: initialize(1) + thread/start(2) + turn/start(3)
+      const thread1 = makeThread({ id: "t-1", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValueOnce(thread1);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-1", status: "active" }),
+      );
+
+      const child1 = createFakeChildProcess();
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(child1);
+
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "First" }],
+      });
+
+      // initialize gets id=1, thread/start gets id=2, turn/start gets id=3
+      const initMsg = JSON.parse(child1._stdinData[0].trim());
+      const startMsg = JSON.parse(child1._stdinData[1].trim());
+      const turnMsg = JSON.parse(child1._stdinData[2].trim());
+      expect(initMsg.id).toBe(1);
+      expect(startMsg.id).toBe(2);
+      expect(turnMsg.id).toBe(3);
+
+      // Second spawn: initialize(4) + thread/start(5)
+      const thread2 = makeThread({ id: "t-2", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValueOnce(thread2);
+
+      const child2 = createFakeChildProcess();
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(child2);
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      // initialize gets id=4, thread/start gets id=5
+      const initMsg2 = JSON.parse(child2._stdinData[0].trim());
+      const startMsg2 = JSON.parse(child2._stdinData[1].trim());
+      expect(initMsg2.id).toBe(4);
+      expect(startMsg2.id).toBe(5);
+    });
+  });
+
+  describe("tell()", () => {
+    it("throws if thread not found", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
+
+      await expect(
+        manager.tell("nonexistent", { input: [{ type: "text", text: "hello" }] }),
+      ).rejects.toThrow(
+        "Thread nonexistent not found",
+      );
+    });
+
+    it("throws if thread has no active process", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      // processes map is empty by default, so no active process
+
+      await expect(
+        manager.tell("thread-1", { input: [{ type: "text", text: "hello" }] }),
+      ).rejects.toThrow(
+        "Thread thread-1 has no codex session",
+      );
+    });
+
+    it("throws if thread has no codex session", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      // Register a process but no codex thread ID
+      const fakeProcess = { kill: vi.fn(), stdin: null, stdout: null, stderr: null };
+      (manager as any).processes.set("thread-1", fakeProcess);
+
+      await expect(
+        manager.tell("thread-1", { input: [{ type: "text", text: "hello" }] }),
+      ).rejects.toThrow(
+        "Thread thread-1 has no codex session",
+      );
+    });
+
+    it("sends turn/start JSON-RPC when thread has an active process and codex session", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      // Manually register a fake process and codex thread ID
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell("thread-1", { input: [{ type: "text", text: "Do more work" }] });
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.jsonrpc).toBe("2.0");
+      expect(msg.method).toBe("turn/start");
+      expect(msg.params.threadId).toBe("codex-tid-123");
+      expect(msg.params.input).toEqual([{ type: "text", text: "Do more work" }]);
+    });
+
+    it("sends turn/steer JSON-RPC when mode=steer and an active turn exists", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+      (manager as any).activeTurnIds.set("thread-1", "turn-123");
+
+      await manager.tell("thread-1", {
+        input: [{ type: "text", text: "Keep going" }],
+        mode: "steer",
+      });
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.method).toBe("turn/steer");
+      expect(msg.params).toEqual({
+        threadId: "codex-tid-123",
+        expectedTurnId: "turn-123",
+        input: [{ type: "text", text: "Keep going" }],
+      });
+    });
+
+    it("auto mode uses turn/steer when an active turn is known", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+      (manager as any).activeTurnIds.set("thread-1", "turn-123");
+
+      await manager.tell("thread-1", {
+        input: [{ type: "text", text: "Keep going" }],
+      });
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.method).toBe("turn/steer");
+    });
+
+    it("throws when mode=steer but no active turn exists", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(_chunk: Buffer, _enc: string, cb: () => void) {
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await expect(
+        manager.tell("thread-1", {
+          input: [{ type: "text", text: "Keep going" }],
+          mode: "steer",
+        }),
+      ).rejects.toThrow("Thread thread-1 has no active turn to steer");
+    });
+
+    it("throws when mode=steer is used with model/reasoning overrides", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(_chunk: Buffer, _enc: string, cb: () => void) {
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+      (manager as any).activeTurnIds.set("thread-1", "turn-123");
+
+      await expect(
+        manager.tell(
+          "thread-1",
+          {
+            input: [{ type: "text", text: "Keep going" }],
+            mode: "steer",
+          },
+          {
+            model: "gpt-5-codex",
+          },
+        ),
+      ).rejects.toThrow(
+        "Tell mode 'steer' does not support model or reasoning overrides",
+      );
+    });
+
+    it("sends turn/start with multimodal input payload", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell("thread-1", {
+        input: [
+          { type: "text", text: "Analyze these images." },
+          { type: "image", url: "https://example.com/mock.png" },
+          { type: "localImage", path: "/tmp/mock.png" },
+        ],
+      });
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.params.input).toEqual([
+        { type: "text", text: "Analyze these images." },
+        { type: "image", url: "https://example.com/mock.png" },
+        { type: "localImage", path: "/tmp/mock.png" },
+      ]);
+    });
+
+    it("throws for empty tell payload object", async () => {
+      await expect(manager.tell("thread-1", { input: [] })).rejects.toThrow(
+        "Tell payload input must be non-empty",
+      );
+    });
+
+    it("marks an idle thread as active before turn/start", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell("thread-1", { input: [{ type: "text", text: "Continue" }] });
+
+      expect(fakeStdinData.length).toBe(1);
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", { status: "active" });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+    });
+
+    it("sets missing title from first tell input text", async () => {
+      let storedThread = makeThread({ id: "thread-1", status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        () => storedThread,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          storedThread = {
+            ...storedThread,
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.title !== undefined ? { title: updates.title } : {}),
+          };
+          return storedThread;
+        },
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell("thread-1", {
+        input: [{ type: "text", text: "  Fix   flaky   search tests  " }],
+      });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        title: "Fix flaky search tests",
+      });
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "active",
+      });
+      expect(fakeStdinData.length).toBe(1);
+    });
+
+    it("does not overwrite existing title from tell input", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle", title: "Existing custom title" }),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell("thread-1", { input: [{ type: "text", text: "New candidate" }] });
+
+      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", {
+        title: "New candidate",
+      });
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "active",
+      });
+      expect(fakeStdinData.length).toBe(1);
+    });
+
+    it("includes model and reasoning config when tell() options are provided", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell(
+        "thread-1",
+        { input: [{ type: "text", text: "Do more work" }] },
+        {
+        model: "gpt-5-codex",
+        reasoningLevel: "medium",
+        },
+      );
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.params.model).toBe("gpt-5-codex");
+      expect(msg.params.config).toEqual({
+        model_reasoning_effort: "medium",
+      });
+    });
+
+    it("sets fallback title from first tell input while async generation is pending", async () => {
+      const providerTitleGenerator = vi
+        .fn()
+        .mockImplementation(() => new Promise<string>(() => {}));
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ titleGenerator: providerTitleGenerator }),
+      );
+
+      let storedThread = makeThread({ id: "thread-1", status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        () => storedThread,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          storedThread = {
+            ...storedThread,
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.title !== undefined ? { title: updates.title } : {}),
+          };
+          return storedThread;
+        },
+      );
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (autogenManager as any).processes.set("thread-1", fakeProcess);
+      (autogenManager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await autogenManager.tell("thread-1", {
+        input: [{ type: "text", text: "Fix flaky search tests" }],
+      });
+
+      expect(storedThread.title).toBe("Fix flaky search tests");
+      expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
+      expect(fakeStdinData.length).toBe(1);
+    });
+
+    it("does not auto-generate a new title after the first user message exists", async () => {
+      const providerTitleGenerator = vi.fn().mockResolvedValue("Second title");
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ titleGenerator: providerTitleGenerator }),
+      );
+
+      let storedThread = makeThread({ id: "thread-1", status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        () => storedThread,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          storedThread = {
+            ...storedThread,
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.title !== undefined ? { title: updates.title } : {}),
+          };
+          return storedThread;
+        },
+      );
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          type: "item/completed",
+          data: {
+            turnId: "turn-1",
+            item: {
+              type: "userMessage",
+              text: "First thread prompt",
+            },
+          },
+        }),
+      ]);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (autogenManager as any).processes.set("thread-1", fakeProcess);
+      (autogenManager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await autogenManager.tell("thread-1", {
+        input: [{ type: "text", text: "Second prompt should not retitle" }],
+      });
+
+      expect(providerTitleGenerator).not.toHaveBeenCalled();
+      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", {
+        title: "Second prompt should not retitle",
+      });
+      expect(fakeStdinData.length).toBe(1);
+    });
+  });
+
+  describe("stop()", () => {
+    it("updates status to idle and broadcasts when no active process", () => {
+      manager.stop("thread-1");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+      });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+    });
+
+    it("kills the process with SIGTERM when an active process exists", () => {
+      const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
+      (manager as any).processes.set("thread-1", fakeProcess);
+
+      manager.stop("thread-1");
+
+      expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+      });
+    });
+  });
+
+  describe("archive()", () => {
+    it("marks a thread archived and broadcasts when no active process", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "idle" }),
+      );
+
+      manager.archive("thread-1");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+        archivedAt: expect.any(Number),
+      });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+    });
+
+    it("kills running process and clears runtime state when archiving", () => {
+      const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "active" }),
+      );
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "provider-thread-1");
+      (manager as any).activeTurnIds.set("thread-1", "turn-1");
+
+      manager.archive("thread-1");
+
+      expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
+      expect((manager as any).processes.has("thread-1")).toBe(false);
+      expect((manager as any).providerThreadIds.has("thread-1")).toBe(false);
+      expect((manager as any).activeTurnIds.has("thread-1")).toBe(false);
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+        archivedAt: expect.any(Number),
+      });
+    });
+  });
+
+  describe("tell() archived threads", () => {
+    it("rejects tells for archived threads", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "idle", archivedAt: 1234 }),
+      );
+
+      await expect(
+        manager.tell("thread-1", {
+          input: [{ type: "text", text: "hello" }],
+        }),
+      ).rejects.toThrow("Thread thread-1 is archived");
+    });
+  });
+
+  describe("getEvents()", () => {
+    it("returns raw persisted events", () => {
+      const events = [
+        makeEvent({ seq: 1, type: "turn/start", data: { turnId: "turn-1" } }),
+        makeEvent({ seq: 2, id: "evt-2", type: "turn/end", data: { turnId: "turn-1" } }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      const result = manager.getEvents("thread-1", 0);
+
+      expect(result).toEqual(events);
+      expect(eventRepo.listByThread).toHaveBeenCalledWith("thread-1", 0);
+    });
+
+    it("passes undefined afterSeq when not provided", () => {
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+      manager.getEvents("thread-1");
+
+      expect(eventRepo.listByThread).toHaveBeenCalledWith(
+        "thread-1",
+        undefined,
+      );
+    });
+  });
+
+  describe("listModels()", () => {
+    it("delegates to the provider adapter", async () => {
+      const models = [
+        {
+          id: "model-a",
+          model: "model-a",
+          displayName: "Model A",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ];
+
+      const providerListModels = vi.fn().mockResolvedValue(models);
+      (manager as any).provider.listModels = providerListModels;
+
+      await expect(manager.listModels()).resolves.toEqual(models);
+      expect(providerListModels).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getOutput()", () => {
+    it("extracts text from last item/completed agentMessage event", () => {
+      const events = [
+        makeEvent({ seq: 1, type: "turn/start", data: {} }),
+        makeEvent({
+          seq: 2,
+          type: "item/completed",
+          data: { item: { type: "agentMessage", text: "Final output" } },
+        }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      expect(manager.getOutput("thread-1")).toBe("Final output");
+    });
+
+    it("ignores item/completed events that are not agentMessage type", () => {
+      const events = [
+        makeEvent({
+          seq: 1,
+          type: "item/completed",
+          data: { item: { type: "toolCall", name: "bash" } },
+        }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      expect(manager.getOutput("thread-1")).toBeUndefined();
+    });
+
+    it("returns undefined if no item/completed events", () => {
+      const events = [
+        makeEvent({ seq: 1, type: "turn/start", data: {} }),
+        makeEvent({ seq: 2, type: "turn/end", data: {} }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      expect(manager.getOutput("thread-1")).toBeUndefined();
+    });
+
+    it("returns undefined for empty events list", () => {
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+      expect(manager.getOutput("thread-1")).toBeUndefined();
+    });
+
+    it("returns undefined when item has no text field", () => {
+      const events = [
+        makeEvent({
+          seq: 1,
+          type: "item/completed",
+          data: { item: { type: "agentMessage" } },
+        }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      expect(manager.getOutput("thread-1")).toBeUndefined();
+    });
+
+    it("returns undefined when item.text is not a string", () => {
+      const events = [
+        makeEvent({
+          seq: 1,
+          type: "item/completed",
+          data: { item: { type: "agentMessage", text: 42 } },
+        }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      expect(manager.getOutput("thread-1")).toBeUndefined();
+    });
+
+    it("returns text from the LAST agentMessage item/completed event when multiple exist", () => {
+      const events = [
+        makeEvent({
+          seq: 1,
+          type: "item/completed",
+          data: { item: { type: "agentMessage", text: "First output" } },
+        }),
+        makeEvent({ seq: 2, type: "turn/start", data: {} }),
+        makeEvent({
+          seq: 3,
+          type: "item/completed",
+          data: { item: { type: "agentMessage", text: "Latest output" } },
+        }),
+      ];
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        events,
+      );
+
+      expect(manager.getOutput("thread-1")).toBe("Latest output");
+    });
+  });
+
+  describe("getById()", () => {
+    it("delegates to threadRepo", () => {
+      const thread = makeThread({ status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      expect(manager.getById("thread-1")).toBe(thread);
+      expect(threadRepo.getById).toHaveBeenCalledWith("thread-1");
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
+    it("returns undefined for nonexistent thread", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
+
+      expect(manager.getById("nonexistent")).toBeUndefined();
+    });
+
+    it("returns persisted active status even when lifecycle events suggest completion", () => {
+      const runningThread = makeThread({ status: "active" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(runningThread);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, type: "turn/started", data: {} }),
+        makeEvent({ seq: 2, type: "turn/completed", data: {} }),
+      ]);
+      const result = manager.getById("thread-1");
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+      expect(result?.status).toBe("active");
+    });
+
+    it("reconciles idle thread to idle when latest turn is started but no process exists", () => {
+      const idleThread = makeThread({ status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(idleThread);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
+        makeEvent({ seq: 2, type: "turn/started", data: {} }),
+      ]);
+      const result = manager.getById("thread-1");
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+      expect(result?.status).toBe("idle");
+    });
+
+    it("returns persisted idle status even when process exists and lifecycle events started", () => {
+      const idleThread = makeThread({ status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(idleThread);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
+        makeEvent({ seq: 2, type: "turn/started", data: {} }),
+      ]);
+      (manager as any).processes.set("thread-1", { kill: vi.fn(), stdin: null, stdout: null });
+
+      const result = manager.getById("thread-1");
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+      expect(result?.status).toBe("idle");
+    });
+  });
+
+  describe("list()", () => {
+    it("delegates to threadRepo with filters", () => {
+      const threads = [makeThread({ status: "idle" })];
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue(threads);
+
+      const filters = { projectId: "proj-1" };
+      const result = manager.list(filters);
+
+      expect(result).toStrictEqual(threads);
+      expect(threadRepo.list).toHaveBeenCalledWith(filters);
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
+    it("returns persisted active list status even when lifecycle events suggest completion", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "thread-1", status: "active" }),
+      ]);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
+      ]);
+      const result = manager.list();
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+      expect(result[0]?.status).toBe("active");
+    });
+
+    it("reconciles idle threads to idle when latest turn is started but no process exists", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "thread-1", status: "idle" }),
+      ]);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
+        makeEvent({ seq: 2, type: "turn/started", data: {} }),
+      ]);
+      const result = manager.list();
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+      expect(result[0]?.status).toBe("idle");
+    });
+
+    it("returns persisted idle list status even when process exists and lifecycle events started", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "thread-1", status: "idle" }),
+      ]);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
+        makeEvent({ seq: 2, type: "turn/started", data: {} }),
+      ]);
+      (manager as any).processes.set("thread-1", { kill: vi.fn(), stdin: null, stdout: null });
+
+      const result = manager.list();
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+      expect(result[0]?.status).toBe("idle");
+    });
+  });
+
+  describe("isActive()", () => {
+    it("returns false when no process registered", () => {
+      expect(manager.isActive("thread-1")).toBe(false);
+    });
+  });
+
+  describe("getActiveCount()", () => {
+    it("returns 0 when no processes are active", () => {
+      expect(manager.getActiveCount()).toBe(0);
+    });
+  });
+
+  describe("getRunningCount()", () => {
+    it("returns active count from persisted DB status", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-1", status: "active" }),
+        makeThread({ id: "t-2", status: "active" }),
+      ]);
+      (manager as any).processes.set("t-1", { kill: vi.fn(), stdin: null, stdout: null });
+      (manager as any).processes.set("t-2", { kill: vi.fn(), stdin: null, stdout: null });
+
+      expect(manager.getRunningCount()).toBe(2);
+      expect(threadRepo.list).toHaveBeenCalledWith({ status: "active" });
+    });
+
+    it("treats stale persisted active rows as active until explicitly updated", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-1", status: "active" }),
+      ]);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({ seq: 1, threadId: "t-1", type: "turn/started", data: {} }),
+      ]);
+
+      expect(manager.getRunningCount()).toBe(1);
+    });
+  });
+
+  describe("stopAll()", () => {
+    it("clears all processes and is safe to call when empty", () => {
+      // Should not throw when no processes
+      manager.stopAll();
+      expect(manager.getActiveCount()).toBe(0);
+    });
+
+    it("kills all active processes and marks them idle", () => {
+      const proc1 = { kill: vi.fn(), stdin: null, stdout: null };
+      const proc2 = { kill: vi.fn(), stdin: null, stdout: null };
+      (manager as any).processes.set("thread-1", proc1);
+      (manager as any).processes.set("thread-2", proc2);
+
+      expect(manager.getActiveCount()).toBe(2);
+
+      manager.stopAll();
+
+      expect(proc1.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(proc2.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", { status: "idle" });
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-2", { status: "idle" });
+      expect(manager.getActiveCount()).toBe(0);
+    });
+  });
+
+  describe("_handleProcessExit()", () => {
+    // Access private method for testing
+    it("sets idle on exit code 0", () => {
+      const thread = makeThread({ status: "active" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      // Call private method via bracket notation
+      (manager as any)._handleProcessExit("thread-1", 0, null);
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+      });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+    });
+
+    it("sets idle on SIGTERM signal", () => {
+      const thread = makeThread({ status: "active" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      (manager as any)._handleProcessExit("thread-1", null, "SIGTERM");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+      });
+    });
+
+    it("sets idle on non-zero exit code", () => {
+      const thread = makeThread({ status: "active" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      (manager as any)._handleProcessExit("thread-1", 1, null);
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+      });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+    });
+
+    it("does not update status on exit code 0 when thread is already idle", () => {
+      const thread = makeThread({ status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      (manager as any)._handleProcessExit("thread-1", 0, null);
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+    });
+
+    it("does not update status on non-zero exit when thread is already idle", () => {
+      const thread = makeThread({ status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      (manager as any)._handleProcessExit("thread-1", 1, null);
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+    });
+
+    it("does not update status if thread is already idle", () => {
+      const thread = makeThread({ status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      (manager as any)._handleProcessExit("thread-1", 0, null);
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      // Should still broadcast
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+    });
+
+    it("does nothing if thread not found in DB", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
+
+      (manager as any)._handleProcessExit("thread-1", 0, null);
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      // Should not broadcast
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
+    it("removes process from the internal map", () => {
+      // Manually add a fake process to the internal map
+      const fakeProcess = { kill: vi.fn(), stdin: null, stdout: null };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      expect(manager.isActive("thread-1")).toBe(true);
+
+      const thread = makeThread({ status: "active" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      (manager as any)._handleProcessExit("thread-1", 0, null);
+
+      expect(manager.isActive("thread-1")).toBe(false);
+    });
+  });
+});
