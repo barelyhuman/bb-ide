@@ -44,6 +44,15 @@ export interface TellThreadRequest {
   mode?: TellThreadMode;
 }
 
+export interface ThreadExecutionOptions {
+  model?: string;
+  reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
+  approvalPolicy?: string;
+  source?: "client/thread/start" | "client/turn/start";
+  seq?: number;
+}
+
 // Project endpoints
 export interface CreateProjectRequest {
   name: string;

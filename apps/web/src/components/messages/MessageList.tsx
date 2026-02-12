@@ -15,7 +15,7 @@ interface MessageListProps {
 }
 
 export function MessageList({ messages, isWorking, workingStartTime }: MessageListProps) {
-  const { containerRef, handleScroll } = useAutoScroll(messages.length)
+  const { containerRef, handleScroll } = useAutoScroll(messages)
 
   if (messages.length === 0 && !isWorking) {
     return (

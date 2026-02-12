@@ -1,4 +1,4 @@
-import { eq, and, sql, gt, isNull, desc } from "drizzle-orm";
+import { eq, and, sql, gt, isNull, desc, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
   Project,
@@ -7,6 +7,7 @@ import type {
   ThreadEvent,
   ThreadEventData,
   ThreadEventType,
+  ThreadExecutionOptions,
 } from "@beanbag/core";
 import type { DbConnection } from "./connection.js";
 import { projects, threads, events } from "./schema.js";
@@ -112,6 +113,33 @@ function deriveEventLookupFields(type: string, data: unknown): {
     ...(providerThreadId ? { providerThreadId } : {}),
     isTurnLifecycle,
     isThreadIdentity: Boolean(providerThreadId),
+  };
+}
+
+function parseThreadExecutionOptions(
+  data: unknown,
+): ThreadExecutionOptions | undefined {
+  const root = asRecord(data);
+  const execution = asRecord(root?.execution);
+  if (!execution) return undefined;
+
+  const model = getStringField(execution, "model");
+  const reasoningLevel = getStringField(execution, "reasoningLevel");
+  const sandboxMode = getStringField(execution, "sandboxMode");
+  const approvalPolicy = getStringField(execution, "approvalPolicy");
+
+  const hasAny =
+    Boolean(model) ||
+    Boolean(reasoningLevel) ||
+    Boolean(sandboxMode) ||
+    Boolean(approvalPolicy);
+  if (!hasAny) return undefined;
+
+  return {
+    ...(model ? { model } : {}),
+    ...(reasoningLevel ? { reasoningLevel: reasoningLevel as ThreadExecutionOptions["reasoningLevel"] } : {}),
+    ...(sandboxMode ? { sandboxMode: sandboxMode as ThreadExecutionOptions["sandboxMode"] } : {}),
+    ...(approvalPolicy ? { approvalPolicy } : {}),
   };
 }
 
@@ -373,5 +401,36 @@ export class EventRepository {
       .get();
 
     return row?.providerThreadId ?? undefined;
+  }
+
+  getLatestExecutionOptions(
+    threadId: string,
+  ): ThreadExecutionOptions | undefined {
+    const row = this.db
+      .select({
+        seq: events.seq,
+        normType: events.normType,
+        data: events.data,
+      })
+      .from(events)
+      .where(
+        and(
+          eq(events.threadId, threadId),
+          inArray(events.normType, ["client/turn/start", "client/thread/start"]),
+        ),
+      )
+      .orderBy(desc(events.seq))
+      .get();
+
+    if (!row) return undefined;
+    const data = JSON.parse(row.data);
+    const execution = parseThreadExecutionOptions(data);
+    if (!execution) return undefined;
+
+    return {
+      ...execution,
+      source: row.normType as ThreadExecutionOptions["source"],
+      seq: row.seq,
+    };
   }
 }

@@ -38,6 +38,7 @@ export type {
   ReasoningLevel,
   SandboxMode,
   TellThreadMode,
+  ThreadExecutionOptions,
   SystemStatus,
   ProviderCapabilities,
   SystemProviderInfo,

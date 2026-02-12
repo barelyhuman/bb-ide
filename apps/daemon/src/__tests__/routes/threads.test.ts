@@ -41,6 +41,7 @@ function mockThreadManager(): ThreadManager {
     stop: vi.fn(),
     archive: vi.fn(),
     getById: vi.fn(),
+    getDefaultExecutionOptions: vi.fn(),
     list: vi.fn(),
     getEvents: vi.fn(),
     getOutput: vi.fn(),
@@ -221,6 +222,44 @@ describe("Thread routes", () => {
       const body = await res.json();
       expect(body.error).toBe("Thread nonexistent not found");
       expect(body.code).toBe("thread_not_found");
+    });
+  });
+
+  describe("GET /threads/:id/default-execution-options", () => {
+    it("returns defaults when present", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      (threadManager.getDefaultExecutionOptions as ReturnType<typeof vi.fn>).mockReturnValue({
+        model: "gpt-5-codex",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        source: "client/turn/start",
+        seq: 42,
+      });
+
+      const res = await app.request("/threads/thread-1/default-execution-options");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        model: "gpt-5-codex",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        source: "client/turn/start",
+        seq: 42,
+      });
+    });
+
+    it("returns null when defaults are absent", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      (threadManager.getDefaultExecutionOptions as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
+
+      const res = await app.request("/threads/thread-1/default-execution-options");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toBeNull();
     });
   });
 

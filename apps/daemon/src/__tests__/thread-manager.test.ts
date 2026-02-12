@@ -853,16 +853,16 @@ describe("ThreadManager", () => {
       // Give the readline interface time to process
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledTimes(2);
-      expect(eventRepo.create).toHaveBeenNthCalledWith(1, {
-        threadId: "t-new",
-        seq: 1,
-        type: "item/started",
-        data: { itemId: "i1" },
-      });
+      expect(eventRepo.create).toHaveBeenCalledTimes(3);
       expect(eventRepo.create).toHaveBeenNthCalledWith(2, {
         threadId: "t-new",
         seq: 2,
+        type: "item/started",
+        data: { itemId: "i1" },
+      });
+      expect(eventRepo.create).toHaveBeenNthCalledWith(3, {
+        threadId: "t-new",
+        seq: 3,
         type: "item/completed",
         data: { content: "done" },
       });
@@ -892,7 +892,7 @@ describe("ThreadManager", () => {
 
       expect(eventRepo.create).toHaveBeenCalledWith({
         threadId: "t-new",
-        seq: 1,
+        seq: 2,
         type: "item/agentMessage/delta",
         data: { delta: "hel" },
       });
@@ -1177,8 +1177,8 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      // Only the valid message should create an event
-      expect(eventRepo.create).toHaveBeenCalledTimes(1);
+      // Outbound thread/start + valid notification
+      expect(eventRepo.create).toHaveBeenCalledTimes(2);
     });
 
     it("ignores non-JSON stdout output", async () => {
@@ -1199,7 +1199,13 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).not.toHaveBeenCalled();
+      expect(eventRepo.create).toHaveBeenCalledTimes(1);
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "t-new",
+          type: "client/thread/start",
+        }),
+      );
     });
 
     it("ignores JSON without method field (non-notification)", async () => {
@@ -1219,7 +1225,13 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).not.toHaveBeenCalled();
+      expect(eventRepo.create).toHaveBeenCalledTimes(1);
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "t-new",
+          type: "client/thread/start",
+        }),
+      );
     });
 
     it("uses empty object as data when notification has no params", async () => {
@@ -1240,7 +1252,7 @@ describe("ThreadManager", () => {
 
       expect(eventRepo.create).toHaveBeenCalledWith({
         threadId: "t-new",
-        seq: 1,
+        seq: 2,
         type: "turn/end",
         data: {},
       });

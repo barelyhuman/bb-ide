@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import type {
   AvailableModel,
+  ThreadExecutionOptions,
   SystemProviderInfo,
   Thread,
   ThreadEvent,
@@ -62,6 +63,8 @@ export class ThreadManager {
   private suppressedAuthStderrDepth = new Map<string, number>();
   /** Tracks in-flight provisioning operations by thread ID. */
   private provisioningTasks = new Map<string, Promise<void>>();
+  /** Monotonic sequence counter per thread for persisted events (inbound + outbound). */
+  private eventSeqCounters = new Map<string, number>();
   private rpcIdCounter = 0;
 
   constructor(
@@ -297,6 +300,12 @@ export class ThreadManager {
       id: ++this.rpcIdCounter,
       params: this.provider.createTurnStartParams(providerThreadId, input, options),
     };
+    this._persistOutboundStartEvent(
+      threadId,
+      "client/turn/start",
+      turnStartMsg.params,
+      "tell",
+    );
     this._sendToProcess(threadId, turnStartMsg);
   }
 
@@ -392,6 +401,12 @@ export class ThreadManager {
     return this.threadRepo.getById(threadId);
   }
 
+  getDefaultExecutionOptions(
+    threadId: string,
+  ): ThreadExecutionOptions | undefined {
+    return this.eventRepo.getLatestExecutionOptions(threadId);
+  }
+
   /**
    * List threads with optional filters.
    */
@@ -458,6 +473,7 @@ export class ThreadManager {
     this.authRefreshWarningThreadIds.clear();
     this.suppressedAuthStderrDepth.clear();
     this.provisioningTasks.clear();
+    this.eventSeqCounters.clear();
   }
 
   private _scheduleProvisioning(
@@ -506,10 +522,17 @@ export class ThreadManager {
     this._spawnProcess(threadId, opts?.rootPathHint ?? project.rootPath);
     this._sendInitialize(threadId);
 
+    const threadStartParams = this.provider.createThreadStartParams(req);
+    this._persistOutboundStartEvent(
+      threadId,
+      "client/thread/start",
+      threadStartParams,
+      "spawn",
+    );
     const providerThreadId = await this._sendRequestAndAwaitThreadId(
       threadId,
       this.provider.threadStartMethod,
-      this.provider.createThreadStartParams(req),
+      threadStartParams,
     );
     this.providerThreadIds.set(threadId, providerThreadId);
 
@@ -523,15 +546,22 @@ export class ThreadManager {
 
     if (initialInput.length > 0) {
       this._setThreadStatus(threadId, "active");
+      const turnStartParams = this.provider.createTurnStartParams(
+        providerThreadId,
+        initialInput,
+        req,
+      );
+      this._persistOutboundStartEvent(
+        threadId,
+        "client/turn/start",
+        turnStartParams,
+        "spawn",
+      );
       const turnMsg = {
         jsonrpc: "2.0",
         method: this.provider.turnStartMethod,
         id: ++this.rpcIdCounter,
-        params: this.provider.createTurnStartParams(
-          providerThreadId,
-          initialInput,
-          req,
-        ),
+        params: turnStartParams,
       };
       this._sendToProcess(threadId, turnMsg);
       return;
@@ -561,6 +591,7 @@ export class ThreadManager {
     this.activeTurnIds.delete(threadId);
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
+    this.eventSeqCounters.delete(threadId);
   }
 
   private _spawnProcess(threadId: string, cwd: string): void {
@@ -570,13 +601,11 @@ export class ThreadManager {
     });
 
     this.processes.set(threadId, child);
-    let seqCounter = this.eventRepo.getLatestSeq(threadId);
-
     const runtime = new ProviderRuntime({
       threadId,
       child,
       onNotification: (msg) => {
-        seqCounter = this._handleProviderNotification(threadId, seqCounter, msg);
+        this._handleProviderNotification(threadId, msg);
       },
       onUnmatchedRpcError: (requestId, errorMessage) => {
         console.error(
@@ -743,23 +772,16 @@ export class ThreadManager {
 
   private _handleProviderNotification(
     threadId: string,
-    seqCounter: number,
     msg: { method: unknown; params: unknown },
-  ): number {
+  ): void {
     if (typeof msg.method !== "string") {
-      return seqCounter;
+      return;
     }
 
     const eventType = msg.method as ThreadEventType;
     const eventData = (msg.params ?? {}) as ThreadEventData;
 
-    const nextSeq = seqCounter + 1;
-    this.eventRepo.create({
-      threadId,
-      seq: nextSeq,
-      type: eventType,
-      data: eventData,
-    });
+    this._appendEvent(threadId, eventType, eventData);
 
     this._syncTitleFromEvent(threadId, msg.method, eventData);
     this._syncStatusFromEvent(threadId, msg.method);
@@ -768,7 +790,103 @@ export class ThreadManager {
     if (this.provider.shouldBroadcastForEvent(msg.method)) {
       this.ws.broadcast("thread", threadId);
     }
-    return nextSeq;
+  }
+
+  private _appendEvent(
+    threadId: string,
+    type: ThreadEventType,
+    data: ThreadEventData,
+  ): void {
+    const seq = this._nextEventSeq(threadId);
+    this.eventRepo.create({
+      threadId,
+      seq,
+      type,
+      data,
+    });
+  }
+
+  private _nextEventSeq(threadId: string): number {
+    const current =
+      this.eventSeqCounters.get(threadId) ?? this.eventRepo.getLatestSeq(threadId);
+    const next = current + 1;
+    this.eventSeqCounters.set(threadId, next);
+    return next;
+  }
+
+  private _persistOutboundStartEvent(
+    threadId: string,
+    type: "client/thread/start" | "client/turn/start",
+    params: Record<string, unknown>,
+    source: "spawn" | "tell",
+  ): void {
+    const eventData: ThreadEventData = {
+      direction: "outbound",
+      source,
+      request: {
+        method: type === "client/thread/start" ? "thread/start" : "turn/start",
+        params,
+      },
+      execution: this._extractExecutionOptionsFromParams(type, params),
+    };
+
+    this._appendEvent(threadId, type, eventData);
+  }
+
+  private _extractExecutionOptionsFromParams(
+    type: "client/thread/start" | "client/turn/start",
+    params: Record<string, unknown>,
+  ): ThreadExecutionOptions {
+    const model =
+      typeof params.model === "string" && params.model.length > 0
+        ? params.model
+        : undefined;
+    const approvalPolicy =
+      typeof params.approvalPolicy === "string" && params.approvalPolicy.length > 0
+        ? params.approvalPolicy
+        : undefined;
+
+    const config =
+      params.config && typeof params.config === "object" && !Array.isArray(params.config)
+        ? (params.config as Record<string, unknown>)
+        : undefined;
+    const reasoningLevel =
+      typeof config?.model_reasoning_effort === "string"
+        ? (config.model_reasoning_effort as ThreadExecutionOptions["reasoningLevel"])
+        : undefined;
+
+    let sandboxMode: ThreadExecutionOptions["sandboxMode"];
+    if (type === "client/thread/start") {
+      if (
+        params.sandbox === "read-only" ||
+        params.sandbox === "workspace-write" ||
+        params.sandbox === "danger-full-access"
+      ) {
+        sandboxMode = params.sandbox;
+      }
+    } else {
+      const sandboxPolicy =
+        params.sandboxPolicy &&
+        typeof params.sandboxPolicy === "object" &&
+        !Array.isArray(params.sandboxPolicy)
+          ? (params.sandboxPolicy as Record<string, unknown>)
+          : undefined;
+
+      if (sandboxPolicy?.type === "readOnly") {
+        sandboxMode = "read-only";
+      } else if (sandboxPolicy?.type === "workspaceWrite") {
+        sandboxMode = "workspace-write";
+      } else if (sandboxPolicy?.type === "dangerFullAccess") {
+        sandboxMode = "danger-full-access";
+      }
+    }
+
+    return {
+      ...(model ? { model } : {}),
+      ...(reasoningLevel ? { reasoningLevel } : {}),
+      ...(sandboxMode ? { sandboxMode } : {}),
+      ...(approvalPolicy ? { approvalPolicy } : {}),
+    };
   }
 
   /**
@@ -793,6 +911,7 @@ export class ThreadManager {
     this.activeTurnIds.delete(threadId);
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
+    this.eventSeqCounters.delete(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;

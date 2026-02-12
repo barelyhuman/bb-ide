@@ -50,6 +50,13 @@ interface PromptOption<T extends string> {
   tone?: "default" | "warning";
 }
 
+interface UsePromptModelReasoningOptions {
+  scope?: "new-thread" | "thread";
+  initialModel?: string;
+  initialReasoningLevel?: ReasoningLevel;
+  initialSandboxMode?: SandboxMode;
+}
+
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return (
     value === "low" ||
@@ -98,16 +105,23 @@ function formatModelLabel(value: string): string {
     .join("-");
 }
 
-export function usePromptModelReasoning() {
+export function usePromptModelReasoning(
+  options?: UsePromptModelReasoningOptions,
+) {
+  const scope = options?.scope ?? "new-thread";
   const availableModelsQuery = useAvailableModels();
   const [selectedModel, setSelectedModel] = useState<string>(() =>
-    getStoredModel(),
+    scope === "new-thread" ? getStoredModel() : (options?.initialModel ?? ""),
   );
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(() =>
-    getStoredReasoningLevel(),
+    scope === "new-thread"
+      ? getStoredReasoningLevel()
+      : (options?.initialReasoningLevel ?? "medium"),
   );
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>(() =>
-    getStoredSandboxMode(),
+    scope === "new-thread"
+      ? getStoredSandboxMode()
+      : (options?.initialSandboxMode ?? "danger-full-access"),
   );
 
   const availableModels = useMemo(
@@ -186,19 +200,43 @@ export function usePromptModelReasoning() {
   }, [activeModel, reasoningLevel, reasoningOptions]);
 
   useEffect(() => {
+    if (scope !== "thread") return;
+    if (options?.initialModel !== undefined) {
+      setSelectedModel(options.initialModel);
+    }
+  }, [options?.initialModel, scope]);
+
+  useEffect(() => {
+    if (scope !== "thread") return;
+    if (options?.initialReasoningLevel !== undefined) {
+      setReasoningLevel(options.initialReasoningLevel);
+    }
+  }, [options?.initialReasoningLevel, scope]);
+
+  useEffect(() => {
+    if (scope !== "thread") return;
+    if (options?.initialSandboxMode !== undefined) {
+      setSandboxMode(options.initialSandboxMode);
+    }
+  }, [options?.initialSandboxMode, scope]);
+
+  useEffect(() => {
+    if (scope !== "new-thread") return;
     if (typeof window === "undefined" || !selectedModel) return;
     window.localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
-  }, [selectedModel]);
+  }, [scope, selectedModel]);
 
   useEffect(() => {
+    if (scope !== "new-thread") return;
     if (typeof window === "undefined") return;
     window.localStorage.setItem(REASONING_STORAGE_KEY, reasoningLevel);
-  }, [reasoningLevel]);
+  }, [scope, reasoningLevel]);
 
   useEffect(() => {
+    if (scope !== "new-thread") return;
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SANDBOX_STORAGE_KEY, sandboxMode);
-  }, [sandboxMode]);
+  }, [scope, sandboxMode]);
 
   return {
     selectedModel,

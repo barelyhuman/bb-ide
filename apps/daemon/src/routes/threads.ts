@@ -45,6 +45,20 @@ export function createThreadRoutes(threadManager: ThreadManager) {
         return sendRouteError(c, err);
       }
     })
+    .get("/:id/default-execution-options", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        const options = threadManager.getDefaultExecutionOptions(
+          c.req.param("id"),
+        );
+        return c.json(options ?? null);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .post(
       "/:id/tell",
       zValidator("json", tellThreadSchema),

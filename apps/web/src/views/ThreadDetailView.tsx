@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useThread, useThreadEvents, useTellThread, useStopThread } from "../hooks/useApi";
+import {
+  useThread,
+  useThreadEvents,
+  useTellThread,
+  useStopThread,
+  useThreadDefaultExecutionOptions,
+} from "../hooks/useApi";
 import {
   ConversationEntry,
 } from "@/components/messages/ConversationEntry";
@@ -128,6 +134,9 @@ export function ThreadDetailView() {
   }>();
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
   const { data: events } = useThreadEvents(threadId ?? "");
+  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
+    threadId ?? "",
+  );
   const { debugMode } = useDebugMode();
   const tellThread = useTellThread();
   const stopThread = useStopThread();
@@ -146,7 +155,12 @@ export function ThreadDetailView() {
     modelOptions,
     reasoningOptions,
     sandboxOptions,
-  } = usePromptModelReasoning();
+  } = usePromptModelReasoning({
+    scope: "thread",
+    initialModel: defaultExecutionOptions?.model,
+    initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
+    initialSandboxMode: defaultExecutionOptions?.sandboxMode,
+  });
 
   const uiMessages = useMemo(
     () =>
@@ -184,7 +198,7 @@ export function ThreadDetailView() {
   );
 
   const { containerRef, handleScroll: baseHandleScroll } = useAutoScroll(
-    threadDetailRows.length,
+    threadDetailRows,
     threadId,
   );
 

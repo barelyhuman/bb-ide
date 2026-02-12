@@ -2,7 +2,11 @@ import type {
   CodexServerNotificationMethod,
   CodexServerNotificationParamsByMethod,
 } from "./generated/codex-app-server/index.js";
-import type { PromptInput } from "./api-types.js";
+import type {
+  PromptInput,
+  ReasoningLevel,
+  SandboxMode,
+} from "./api-types.js";
 
 // Project
 export interface Project {
@@ -31,14 +35,36 @@ export interface Thread {
   updatedAt: number;
 }
 
-export type ThreadEventType = CodexServerNotificationMethod;
+export type AppThreadEventType = "client/thread/start" | "client/turn/start";
+
+export interface ClientExecutionOptionsSnapshot {
+  model?: string;
+  reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
+  approvalPolicy?: string;
+}
+
+export interface ClientOutboundStartEventData {
+  direction: "outbound";
+  source: "spawn" | "tell";
+  request: {
+    method: "thread/start" | "turn/start";
+    params: Record<string, unknown>;
+  };
+  execution: ClientExecutionOptionsSnapshot;
+}
+
+export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
 
 export interface TurnLifecycleEventData {
   turnId?: string;
   input?: PromptInput[];
 }
 
-export type ThreadEventDataByType = CodexServerNotificationParamsByMethod;
+export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
+  "client/thread/start": ClientOutboundStartEventData;
+  "client/turn/start": ClientOutboundStartEventData;
+};
 
 export type ThreadEventData = ThreadEventDataByType[ThreadEventType];
 

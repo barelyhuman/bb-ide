@@ -750,7 +750,15 @@ function FileEditRow({
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
   }, [message.changes, message.status, preferOngoingLabels]);
-  const title = isExpanded ? `${actionLabel} file` : `${actionLabel} ${collapsedFileLabel}`;
+  const title = isExpanded
+    ? message.status === "pending" || preferOngoingLabels
+      ? "Applying file changes"
+      : message.status === "error"
+        ? "Failed to apply file changes"
+        : message.status === "interrupted"
+          ? "Declined file changes"
+          : `${actionLabel} ${message.changes.length === 1 ? "file" : "files"}`
+    : `${actionLabel} ${collapsedFileLabel}`;
   const collapsedSummaryContent = isExpanded ? (
     title
   ) : (

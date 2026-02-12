@@ -9,6 +9,7 @@ import type {
   SystemProviderInfo,
   AvailableModel,
   ProjectFileSuggestion,
+  ThreadExecutionOptions,
 } from "@beanbag/core";
 
 const BASE = "/api/v1";
@@ -74,6 +75,15 @@ export async function listThreads(filters?: { projectId?: string }): Promise<Thr
 
 export async function getThread(id: string): Promise<Thread> {
   return request<Thread>("GET", `/threads/${id}`);
+}
+
+export async function getThreadDefaultExecutionOptions(
+  id: string,
+): Promise<ThreadExecutionOptions | null> {
+  return request<ThreadExecutionOptions | null>(
+    "GET",
+    `/threads/${id}/default-execution-options`,
+  );
 }
 
 export async function tellThread(id: string, req: TellThreadRequest): Promise<void> {

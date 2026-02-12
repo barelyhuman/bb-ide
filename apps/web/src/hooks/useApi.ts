@@ -9,6 +9,7 @@ import type {
   SystemStatus,
   AvailableModel,
   ProjectFileSuggestion,
+  ThreadExecutionOptions,
 } from "@beanbag/core";
 import * as api from "../lib/api";
 
@@ -72,6 +73,15 @@ export function useThreadEvents(id: string) {
   });
 }
 
+export function useThreadDefaultExecutionOptions(id: string) {
+  return useQuery<ThreadExecutionOptions | null>({
+    queryKey: ["threadDefaultExecutionOptions", id],
+    queryFn: () => api.getThreadDefaultExecutionOptions(id),
+    enabled: !!id,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useSystemStatus() {
   return useQuery<SystemStatus>({
     queryKey: ["status"],
@@ -115,6 +125,9 @@ export function useTellThread() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["threadDefaultExecutionOptions", variables.id],
+      });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },

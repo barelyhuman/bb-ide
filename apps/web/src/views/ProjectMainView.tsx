@@ -26,7 +26,7 @@ export function ProjectMainView() {
     modelOptions,
     reasoningOptions,
     sandboxOptions,
-  } = usePromptModelReasoning();
+  } = usePromptModelReasoning({ scope: "new-thread" });
 
   const shouldFocusPrompt =
     typeof location.state === "object" &&
