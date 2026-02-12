@@ -14,5 +14,15 @@ const __dirname = dirname(__filename);
 export function migrate(db: DbConnection): void {
   // From src/ or dist/, go up to packages/db/, then into drizzle/
   const migrationsFolder = resolve(__dirname, "..", "drizzle");
-  drizzleMigrate(db, { migrationsFolder });
+  const sqlite = (db as { $client?: { pragma?: (sql: string) => unknown } })
+    .$client;
+
+  // Drizzle runs SQLite migrations in a transaction; toggle FK checks before it
+  // starts so table rebuild migrations can safely drop referenced tables.
+  sqlite?.pragma?.("foreign_keys = OFF");
+  try {
+    drizzleMigrate(db, { migrationsFolder });
+  } finally {
+    sqlite?.pragma?.("foreign_keys = ON");
+  }
 }
