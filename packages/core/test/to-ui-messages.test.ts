@@ -303,6 +303,221 @@ describe("toUIMessages replay coverage", () => {
     expect(tool?.output).toContain("second");
   });
 
+  it("coalesces consecutive exploring exec calls into one exploring cell", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "exec_command_begin",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "cat README.md"],
+          cwd: "/repo",
+          parsed_cmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          source: "agent",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "exec_command_end",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "cat README.md"],
+          cwd: "/repo",
+          parsed_cmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          source: "agent",
+          stdout: "",
+          stderr: "",
+          aggregated_output: "README",
+          exit_code: 0,
+          duration: "10ms",
+          formatted_output: "README",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "exec_command_begin",
+        data: {
+          call_id: "call-2",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "cat package.json"],
+          cwd: "/repo",
+          parsed_cmd: [
+            {
+              type: "read",
+              cmd: "cat package.json",
+              name: "package.json",
+              path: "/repo/package.json",
+            },
+          ],
+          source: "agent",
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "exec_command_end",
+        data: {
+          call_id: "call-2",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "cat package.json"],
+          cwd: "/repo",
+          parsed_cmd: [
+            {
+              type: "read",
+              cmd: "cat package.json",
+              name: "package.json",
+              path: "/repo/package.json",
+            },
+          ],
+          source: "agent",
+          stdout: "",
+          stderr: "",
+          aggregated_output: "{}",
+          exit_code: 0,
+          duration: "8ms",
+          formatted_output: "{}",
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const exploringRows = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "tool-exploring" }> =>
+        message.kind === "tool-exploring",
+    );
+
+    expect(exploringRows).toHaveLength(1);
+    expect(exploringRows[0]?.calls).toHaveLength(2);
+    expect(exploringRows[0]?.status).toBe("completed");
+  });
+
+  it("flushes completed non-exploring exec cells before assistant text", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "exec_command_begin",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "npm test"],
+          cwd: "/repo",
+          parsed_cmd: [{ type: "unknown", cmd: "npm test" }],
+          source: "agent",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "exec_command_end",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "npm test"],
+          cwd: "/repo",
+          parsed_cmd: [{ type: "unknown", cmd: "npm test" }],
+          source: "agent",
+          stdout: "",
+          stderr: "",
+          aggregated_output: "ok",
+          exit_code: 0,
+          duration: "123ms",
+          formatted_output: "ok",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "done",
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    expect(projected.map((message) => message.kind)).toEqual([
+      "tool-call",
+      "assistant-text",
+    ]);
+  });
+
+  it("projects web search begin/end as dedicated web-search cells", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "web_search_begin",
+        data: {
+          call_id: "web-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "web_search_end",
+        data: {
+          call_id: "web-1",
+          query: "react suspense",
+          action: { type: "search", query: "react suspense" },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const search = projected.find(
+      (message): message is Extract<UIMessage, { kind: "web-search" }> =>
+        message.kind === "web-search",
+    );
+
+    expect(search).toBeDefined();
+    expect(search?.status).toBe("completed");
+    expect(search?.query).toBe("react suspense");
+  });
+
   it("merges file-change lifecycle with output delta details", () => {
     const events: ThreadEvent[] = [
       {

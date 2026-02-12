@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
 import type {
   UIMessage,
   UIDebugRawEventMessage,
@@ -6,16 +6,25 @@ import type {
   UIFileEditMessage,
   UIOperationMessage,
   UIToolCallMessage,
+  UIToolExploringMessage,
+  UIToolParsedIntent,
   UIUserMessage,
   UIAssistantReasoningMessage,
   UIAssistantTextMessage,
+  UIWebSearchMessage,
 } from "@beanbag/core";
 import { ChevronDown, ChevronRight, CircleX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  createLatestInitialExpandedState,
+  reduceLatestInitialExpandedState,
+} from "@/lib/latestInitialExpanded";
 import { ConversationMarkdown } from "./ConversationMarkdown";
 
 interface ConversationEntryProps {
   message: UIMessage;
+  initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
 }
 
 const DEBUG_EVENT_EXPANDED_MAX_LENGTH = 4000;
@@ -265,6 +274,27 @@ const HEADER_TEXT_CLASS = "min-w-0 truncate";
 const HEADER_CHEVRON_COLLAPSED_CLASS =
   "size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100";
 
+function useLatestInitialExpanded(initialExpanded: boolean): {
+  isExpanded: boolean;
+  onToggle: () => void;
+} {
+  const [state, dispatch] = useReducer(
+    reduceLatestInitialExpandedState,
+    initialExpanded,
+    createLatestInitialExpandedState,
+  );
+
+  useEffect(() => {
+    dispatch({ type: "sync", initialExpanded });
+  }, [initialExpanded]);
+
+  const onToggle = () => {
+    dispatch({ type: "toggle" });
+  };
+
+  return { isExpanded: state.isExpanded, onToggle };
+}
+
 function ExpandableEntryContainer({
   isExpanded,
   summaryContent,
@@ -415,15 +445,206 @@ function ReasoningRow({ message }: { message: UIAssistantReasoningMessage }) {
   );
 }
 
-function ToolCallRow({ message }: { message: UIToolCallMessage }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function isReadOnlyIntent(intent: UIToolParsedIntent): boolean {
+  return intent.type === "read";
+}
+
+function isReadOnlyCall(call: UIToolExploringMessage["calls"][number]): boolean {
+  return call.parsedCmd.length > 0 && call.parsedCmd.every((intent) => isReadOnlyIntent(intent));
+}
+
+function formatSearchDetail(intent: Extract<UIToolParsedIntent, { type: "search" }>): string {
+  if (intent.query && intent.path) return `${intent.query} in ${intent.path}`;
+  if (intent.query) return intent.query;
+  return intent.cmd;
+}
+
+function formatExploringIntentLine(intent: UIToolParsedIntent): string {
+  if (intent.type === "read") return `Read ${intent.name}`;
+  if (intent.type === "list_files") {
+    return `List ${intent.path && intent.path.length > 0 ? intent.path : intent.cmd}`;
+  }
+  if (intent.type === "search") return `Search ${formatSearchDetail(intent)}`;
+  return intent.cmd;
+}
+
+function buildExploringDetailLines(
+  calls: UIToolExploringMessage["calls"],
+): string[] {
+  const detailLines: string[] = [];
+  let index = 0;
+
+  while (index < calls.length) {
+    const call = calls[index];
+    if (!call) break;
+
+    if (isReadOnlyCall(call)) {
+      const readNames: string[] = [];
+      const seen = new Set<string>();
+      while (index < calls.length && calls[index] && isReadOnlyCall(calls[index])) {
+        const current = calls[index];
+        if (!current) break;
+        for (const intent of current.parsedCmd) {
+          if (intent.type !== "read") continue;
+          if (seen.has(intent.name)) continue;
+          seen.add(intent.name);
+          readNames.push(intent.name);
+        }
+        index += 1;
+      }
+
+      if (readNames.length > 0) {
+        detailLines.push(`Read ${readNames.join(", ")}`);
+      }
+      continue;
+    }
+
+    if (call.parsedCmd.length === 0) {
+      if (call.command) detailLines.push(call.command);
+      index += 1;
+      continue;
+    }
+
+    for (const intent of call.parsedCmd) {
+      detailLines.push(formatExploringIntentLine(intent));
+    }
+    index += 1;
+  }
+
+  return detailLines;
+}
+
+function summarizeExploringCounts(calls: UIToolExploringMessage["calls"]): {
+  filesRead: number;
+  searches: number;
+} {
+  const readNames = new Set<string>();
+  let searches = 0;
+
+  for (const call of calls) {
+    for (const intent of call.parsedCmd) {
+      if (intent.type === "read") {
+        readNames.add(intent.name);
+        continue;
+      }
+      if (intent.type === "search") {
+        searches += 1;
+      }
+    }
+  }
+
+  return {
+    filesRead: readNames.size,
+    searches,
+  };
+}
+
+function formatExploredSummary(counts: { filesRead: number; searches: number }): string {
+  const parts: string[] = [];
+  if (counts.filesRead > 0) {
+    parts.push(`${counts.filesRead} file${counts.filesRead === 1 ? "" : "s"}`);
+  }
+  if (counts.searches > 0) {
+    parts.push(`${counts.searches} search${counts.searches === 1 ? "" : "es"}`);
+  }
+  if (parts.length === 0) return "Explored";
+  return `Explored ${parts.join(", ")}`;
+}
+
+function formatExploredDetail(counts: { filesRead: number; searches: number }): string {
+  const summary = formatExploredSummary(counts);
+  if (!summary.startsWith("Explored ")) return "";
+  return summary.slice("Explored ".length);
+}
+
+function ToolExploringRow({
+  message,
+  initialExpanded = false,
+  preferOngoingLabels = false,
+}: {
+  message: UIToolExploringMessage;
+  initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
+}) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const detailLines = useMemo(
+    () => buildExploringDetailLines(message.calls),
+    [message.calls],
+  );
+  const counts = useMemo(() => summarizeExploringCounts(message.calls), [message.calls]);
+  const hasDetails = detailLines.length > 0;
+  const headerToneClass = isExpanded
+    ? HEADER_EXPANDED_TONE_CLASS
+    : HEADER_COLLAPSED_TONE_CLASS;
+  const actionLabel =
+    message.status === "pending" || preferOngoingLabels ? "Exploring" : "Explored";
+  const exploredDetail = formatExploredDetail(counts);
+  const collapsedSummaryContent =
+    actionLabel === "Exploring" || !exploredDetail ? (
+      actionLabel
+    ) : (
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0 text-muted-foreground/90">Explored</span>
+        <span className="truncate font-semibold text-foreground/95">
+          {exploredDetail}
+        </span>
+      </span>
+    );
+
+  if (!hasDetails) {
+    return (
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+        <div className="mr-auto w-full">
+          <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+            <div className={`py-0.5 ${HEADER_STATIC_TONE_CLASS}`}>
+              {collapsedSummaryContent}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="mr-auto w-full">
+        <ExpandableEntryContainer
+          isExpanded={isExpanded}
+          summaryContent={isExpanded ? actionLabel : collapsedSummaryContent}
+          summaryContentClassName={isExpanded ? HEADER_TEXT_CLASS : "min-w-0"}
+          headerToneClass={headerToneClass}
+          onToggle={onToggle}
+        >
+          <div className="mt-0.5 space-y-0.5">
+              {detailLines.map((line, index) => (
+                <div key={`${message.id}:${index}`} className="font-mono text-[12px] text-foreground/80">
+                  {line}
+                </div>
+              ))}
+          </div>
+        </ExpandableEntryContainer>
+      </div>
+    </div>
+  );
+}
+
+function ToolCallRow({
+  message,
+  initialExpanded = false,
+  preferOngoingLabels = false,
+}: {
+  message: UIToolCallMessage;
+  initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
+}) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const command = message.command ?? message.toolName;
   const actionLabel =
     message.status === "error"
       ? "Failed"
       : message.status === "interrupted"
         ? "Declined"
-        : message.status === "pending"
+        : message.status === "pending" || preferOngoingLabels
           ? "Running"
           : "Ran";
   const summaryText = isExpanded ? `${actionLabel} command` : `${actionLabel} ${command}`;
@@ -438,7 +659,7 @@ function ToolCallRow({ message }: { message: UIToolCallMessage }) {
           isExpanded={isExpanded}
           summaryContent={summaryText}
           headerToneClass={headerToneClass}
-          onToggle={() => setIsExpanded((prev) => !prev)}
+          onToggle={onToggle}
         >
           <div className="overflow-hidden rounded-lg border border-zinc-700/40 bg-zinc-900/90">
             <div className="px-4 py-3 font-mono text-[12px] leading-tight text-zinc-100">
@@ -456,8 +677,41 @@ function ToolCallRow({ message }: { message: UIToolCallMessage }) {
   );
 }
 
-function FileEditRow({ message }: { message: UIFileEditMessage }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+function WebSearchRow({
+  message,
+  preferOngoingLabels = false,
+}: {
+  message: UIWebSearchMessage;
+  preferOngoingLabels?: boolean;
+}) {
+  const summary =
+    message.status === "pending" || preferOngoingLabels
+      ? "Searching the web"
+      : message.query
+        ? `Searched ${message.query}`
+        : "Searched the web";
+
+  return (
+    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="mr-auto w-full">
+        <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+          <div className={`py-0.5 ${HEADER_STATIC_TONE_CLASS}`}>{summary}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileEditRow({
+  message,
+  initialExpanded = false,
+  preferOngoingLabels = false,
+}: {
+  message: UIFileEditMessage;
+  initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
+}) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const firstChange = message.changes[0];
   const firstPath = firstChange?.path;
   const firstFileName = firstPath ? fileNameFromPath(firstPath) : "file";
@@ -488,14 +742,14 @@ function FileEditRow({ message }: { message: UIFileEditMessage }) {
   const actionLabel = useMemo(() => {
     if (message.status === "error") return "Failed";
     if (message.status === "interrupted") return "Declined";
-    if (message.status === "pending") return "Applying";
+    if (message.status === "pending" || preferOngoingLabels) return "Applying";
     if (message.changes.length === 0) return "Edited";
     const actions = message.changes.map((change) => fileChangeAction(change));
     const first = actions[0];
     const hasMixed = actions.some((action) => action !== first);
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
-  }, [message.changes, message.status]);
+  }, [message.changes, message.status, preferOngoingLabels]);
   const title = isExpanded ? `${actionLabel} file` : `${actionLabel} ${collapsedFileLabel}`;
   const collapsedSummaryContent = isExpanded ? (
     title
@@ -521,7 +775,7 @@ function FileEditRow({ message }: { message: UIFileEditMessage }) {
           summaryContent={collapsedSummaryContent}
           summaryContentClassName={isExpanded ? HEADER_TEXT_CLASS : "min-w-0"}
           headerToneClass={headerToneClass}
-          onToggle={() => setIsExpanded((prev) => !prev)}
+          onToggle={onToggle}
         >
           <div className="font-mono text-[12px] text-foreground/90">
               {message.changes.map((change, index) => {
@@ -651,6 +905,8 @@ function DebugEventRow({ message }: { message: UIDebugRawEventMessage }) {
 
 function ConversationEntryComponent({
   message,
+  initialExpanded = false,
+  preferOngoingLabels = false,
 }: ConversationEntryProps) {
   if (message.kind === "user") {
     return <UserMessageRow message={message} />;
@@ -664,12 +920,40 @@ function ConversationEntryComponent({
     return <AssistantMessageRow message={message} />;
   }
 
+  if (message.kind === "tool-exploring") {
+    return (
+      <ToolExploringRow
+        message={message}
+        initialExpanded={initialExpanded}
+        preferOngoingLabels={preferOngoingLabels}
+      />
+    );
+  }
+
   if (message.kind === "tool-call") {
-    return <ToolCallRow message={message} />;
+    return (
+      <ToolCallRow
+        message={message}
+        initialExpanded={initialExpanded}
+        preferOngoingLabels={preferOngoingLabels}
+      />
+    );
+  }
+
+  if (message.kind === "web-search") {
+    return (
+      <WebSearchRow message={message} preferOngoingLabels={preferOngoingLabels} />
+    );
   }
 
   if (message.kind === "file-edit") {
-    return <FileEditRow message={message} />;
+    return (
+      <FileEditRow
+        message={message}
+        initialExpanded={initialExpanded}
+        preferOngoingLabels={preferOngoingLabels}
+      />
+    );
   }
 
   if (message.kind === "operation") {

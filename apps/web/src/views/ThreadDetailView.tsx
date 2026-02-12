@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useThread, useThreadEvents, useTellThread, useStopThread } from "../hooks/useApi";
 import {
@@ -15,7 +15,19 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { useDebugMode } from "@/hooks/useDebugMode";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { toUIMessages } from "@beanbag/core";
-import { buildThreadDetailRows, type ThreadDetailToolGroupRow } from "./threadDetailRows";
+import {
+  buildThreadDetailRows,
+  type ThreadDetailToolGroupRow,
+} from "./threadDetailRows";
+import {
+  findLatestActivityMessageId,
+  findLatestActivityRowId,
+  shouldHighlightLatestActivity,
+} from "./threadDetailActivity";
+import {
+  createLatestInitialExpandedState,
+  reduceLatestInitialExpandedState,
+} from "@/lib/latestInitialExpanded";
 
 const SCROLL_THRESHOLD = 40;
 const HEADER_COLLAPSED_TONE_CLASS =
@@ -27,9 +39,40 @@ const HEADER_TEXT_CLASS = "min-w-0 truncate";
 const HEADER_CHEVRON_COLLAPSED_CLASS =
   "size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100";
 
-function ToolGroupEntry({ entry }: { entry: ThreadDetailToolGroupRow }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const count = entry.messages.length;
+function useLatestInitialExpanded(initialExpanded: boolean): {
+  isExpanded: boolean;
+  onToggle: () => void;
+} {
+  const [state, dispatch] = useReducer(
+    reduceLatestInitialExpandedState,
+    initialExpanded,
+    createLatestInitialExpandedState,
+  );
+
+  useEffect(() => {
+    dispatch({ type: "sync", initialExpanded });
+  }, [initialExpanded]);
+
+  const onToggle = () => {
+    dispatch({ type: "toggle" });
+  };
+
+  return { isExpanded: state.isExpanded, onToggle };
+}
+
+function ToolGroupEntry({
+  entry,
+  isLatestActivity,
+}: {
+  entry: ThreadDetailToolGroupRow;
+  isLatestActivity: boolean;
+}) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(isLatestActivity);
+  const latestActivityMessageId = useMemo(
+    () => findLatestActivityMessageId(entry.messages),
+    [entry.messages],
+  );
+  const count = entry.summaryCount;
   const summaryContent = `${count} tools and changes`;
   const headerToneClass = isExpanded
     ? HEADER_EXPANDED_TONE_CLASS
@@ -42,7 +85,7 @@ function ToolGroupEntry({ entry }: { entry: ThreadDetailToolGroupRow }) {
           <div className="px-2 py-1">
             <button
               type="button"
-              onClick={() => setIsExpanded((prev) => !prev)}
+              onClick={onToggle}
               className={`${HEADER_BUTTON_BASE_CLASS} ${headerToneClass}`}
             >
               <span className={HEADER_TEXT_CLASS}>{summaryContent}</span>
@@ -56,9 +99,19 @@ function ToolGroupEntry({ entry }: { entry: ThreadDetailToolGroupRow }) {
           {isExpanded ? (
             <div className="px-2 pb-1">
               <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
-                {entry.messages.map((message) => (
-                  <ConversationEntry key={message.id} message={message} />
-                ))}
+                {entry.messages.map((message) => {
+                  const isLatestMessage =
+                    isLatestActivity &&
+                    message.id === latestActivityMessageId;
+                  return (
+                    <ConversationEntry
+                      key={message.id}
+                      message={message}
+                      initialExpanded={isLatestMessage}
+                      preferOngoingLabels={isLatestMessage}
+                    />
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -109,6 +162,14 @@ export function ThreadDetailView() {
   const threadDetailRows = useMemo(
     () => buildThreadDetailRows(visibleMessages),
     [visibleMessages],
+  );
+  const latestActivityRowId = useMemo(
+    () => findLatestActivityRowId(threadDetailRows),
+    [threadDetailRows],
+  );
+  const shouldHighlightLatest = useMemo(
+    () => shouldHighlightLatestActivity(threadDetailRows, latestActivityRowId),
+    [latestActivityRowId, threadDetailRows],
   );
 
   const isReasoningBlockActive = useMemo(
@@ -202,16 +263,28 @@ export function ThreadDetailView() {
                 No events yet
               </div>
             ) : (
-              threadDetailRows.map((entry) =>
-                entry.kind === "tool-group" ? (
-                  <ToolGroupEntry key={`${threadId}:${entry.id}`} entry={entry} />
+              threadDetailRows.map((entry) => {
+                const isLatestActivity =
+                  shouldHighlightLatest && entry.id === latestActivityRowId;
+                return entry.kind === "tool-group" ? (
+                  <ToolGroupEntry
+                    key={`${threadId}:${entry.id}`}
+                    entry={entry}
+                    isLatestActivity={isLatestActivity}
+                  />
                 ) : (
                   <ConversationEntry
                     key={`${threadId}:${entry.id}`}
                     message={entry.message}
+                    initialExpanded={
+                      isLatestActivity
+                    }
+                    preferOngoingLabels={
+                      isLatestActivity
+                    }
                   />
-                ),
-              )
+                );
+              })
             )}
             {thread.status === "active" ? (
               <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />

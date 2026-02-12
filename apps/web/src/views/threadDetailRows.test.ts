@@ -16,7 +16,7 @@ function baseMessage(
 }
 
 describe("buildThreadDetailRows", () => {
-  it("collapses all non-user rows before the final assistant message", () => {
+  it("collapses tool activity before the final assistant message in a turn", () => {
     const messages: UIMessage[] = [
       {
         ...baseMessage("user-1", 1),
@@ -25,21 +25,46 @@ describe("buildThreadDetailRows", () => {
         text: "do work",
       },
       {
-        ...baseMessage("tool-1", 2),
-        kind: "tool-call",
+        ...baseMessage("exploring-1", 2),
+        kind: "tool-exploring",
         turnId: "turn-1",
-        toolName: "exec_command",
-        callId: "call-1",
-        command: "ls",
         status: "completed",
+        calls: [
+          {
+            callId: "call-1",
+            command: "cat README.md",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "cat README.md",
+                name: "README.md",
+                path: "/repo/README.md",
+              },
+            ],
+            status: "completed",
+          },
+        ],
       },
       {
-        ...baseMessage("edit-1", 3),
-        kind: "file-edit",
+        ...baseMessage("exploring-2", 3),
+        kind: "tool-exploring",
         turnId: "turn-1",
-        callId: "edit-call-1",
-        changes: [{ path: "/repo/a.ts" }],
         status: "completed",
+        calls: [
+          {
+            callId: "call-2",
+            command: "rg TODO src",
+            parsedCmd: [
+              {
+                type: "search",
+                cmd: "rg TODO src",
+                query: "TODO",
+                path: "src",
+              },
+            ],
+            status: "completed",
+          },
+        ],
       },
       {
         ...baseMessage("assistant-1", 4),
@@ -71,52 +96,16 @@ describe("buildThreadDetailRows", () => {
     const group = rows.find((row) => row.kind === "tool-group");
     expect(group).toBeDefined();
     if (!group || group.kind !== "tool-group") return;
-    expect(group.messages.map((message) => message.id)).toEqual([
-      "tool-1",
-      "edit-1",
-    ]);
+    expect(group.summaryCount).toBe(2);
+    expect(group.messages).toHaveLength(1);
+    expect(group.messages[0]?.kind).toBe("tool-exploring");
+    if (group.messages[0]?.kind !== "tool-exploring") return;
+    expect(group.messages[0].calls).toHaveLength(2);
 
     const renderedMessageIds = rows
       .filter((row): row is Extract<(typeof rows)[number], { kind: "message" }> => row.kind === "message")
       .map((row) => row.message.id);
     expect(renderedMessageIds).toEqual(["user-1", "assistant-1", "tool-2"]);
-  });
-
-  it("keeps user and final assistant rows visible while collapsing earlier non-user rows", () => {
-    const messages: UIMessage[] = [
-      {
-        ...baseMessage("user-1", 1),
-        kind: "user",
-        turnId: "turn-1",
-        text: "do work",
-      },
-      {
-        ...baseMessage("op-1", 2),
-        kind: "operation",
-        turnId: "turn-1",
-        opType: "compaction",
-        title: "Context compacted",
-      },
-      {
-        ...baseMessage("assistant-1", 3),
-        kind: "assistant-text",
-        turnId: "turn-1",
-        text: "done",
-        status: "completed",
-      },
-    ];
-
-    const rows = buildThreadDetailRows(messages);
-    const renderedMessageIds = rows
-      .filter((row): row is Extract<(typeof rows)[number], { kind: "message" }> => row.kind === "message")
-      .map((row) => row.message.id);
-
-    expect(renderedMessageIds).toEqual(["user-1", "assistant-1"]);
-
-    const group = rows.find((row) => row.kind === "tool-group");
-    expect(group).toBeDefined();
-    if (!group || group.kind !== "tool-group") return;
-    expect(group.messages.map((message) => message.id)).toEqual(["op-1"]);
   });
 
   it("does not collapse rows when a turn has no assistant message", () => {
@@ -128,21 +117,32 @@ describe("buildThreadDetailRows", () => {
         text: "do work",
       },
       {
-        ...baseMessage("tool-1", 2),
-        kind: "tool-call",
+        ...baseMessage("search-1", 2),
+        kind: "web-search",
         turnId: "turn-1",
-        toolName: "exec_command",
-        callId: "call-1",
-        command: "ls",
+        callId: "web-1",
         status: "pending",
       },
       {
-        ...baseMessage("edit-1", 3),
-        kind: "file-edit",
+        ...baseMessage("exploring-1", 3),
+        kind: "tool-exploring",
         turnId: "turn-1",
-        callId: "edit-call-1",
-        changes: [{ path: "/repo/a.ts" }],
         status: "pending",
+        calls: [
+          {
+            callId: "call-1",
+            command: "cat README.md",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "cat README.md",
+                name: "README.md",
+                path: "/repo/README.md",
+              },
+            ],
+            status: "pending",
+          },
+        ],
       },
     ];
 
@@ -153,13 +153,25 @@ describe("buildThreadDetailRows", () => {
   it("collapses each turn independently", () => {
     const messages: UIMessage[] = [
       {
-        ...baseMessage("tool-1", 1),
-        kind: "tool-call",
+        ...baseMessage("exploring-1", 1),
+        kind: "tool-exploring",
         turnId: "turn-1",
-        toolName: "exec_command",
-        callId: "call-1",
-        command: "ls",
         status: "completed",
+        calls: [
+          {
+            callId: "call-1",
+            command: "cat README.md",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "cat README.md",
+                name: "README.md",
+                path: "/repo/README.md",
+              },
+            ],
+            status: "completed",
+          },
+        ],
       },
       {
         ...baseMessage("assistant-1", 2),
@@ -169,12 +181,11 @@ describe("buildThreadDetailRows", () => {
         status: "completed",
       },
       {
-        ...baseMessage("tool-2", 3),
-        kind: "tool-call",
+        ...baseMessage("search-2", 3),
+        kind: "web-search",
         turnId: "turn-2",
-        toolName: "exec_command",
-        callId: "call-2",
-        command: "pwd",
+        callId: "web-2",
+        query: "vite cache",
         status: "completed",
       },
       {
@@ -189,8 +200,143 @@ describe("buildThreadDetailRows", () => {
     const rows = buildThreadDetailRows(messages);
     const groupedRows = rows.filter((row) => row.kind === "tool-group");
     expect(groupedRows).toHaveLength(2);
+    expect(groupedRows.map((row) => row.turnId)).toEqual(["turn-1", "turn-2"]);
+  });
 
-    const groupedTurnIds = groupedRows.map((row) => row.turnId);
-    expect(groupedTurnIds).toEqual(["turn-1", "turn-2"]);
+  it("does not merge exploring messages across non-exploring entries", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("exploring-1", 1),
+        kind: "tool-exploring",
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-1",
+            command: "cat README.md",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "cat README.md",
+                name: "README.md",
+                path: "/repo/README.md",
+              },
+            ],
+            status: "completed",
+          },
+        ],
+      },
+      {
+        ...baseMessage("file-1", 2),
+        kind: "file-edit",
+        turnId: "turn-1",
+        callId: "edit-1",
+        changes: [{ path: "/repo/a.ts" }],
+        status: "completed",
+      },
+      {
+        ...baseMessage("exploring-2", 3),
+        kind: "tool-exploring",
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-2",
+            command: "cat package.json",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "cat package.json",
+                name: "package.json",
+                path: "/repo/package.json",
+              },
+            ],
+            status: "completed",
+          },
+        ],
+      },
+      {
+        ...baseMessage("assistant-1", 4),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "done",
+        status: "completed",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    const group = rows.find((row) => row.kind === "tool-group");
+    expect(group).toBeDefined();
+    if (!group || group.kind !== "tool-group") return;
+
+    expect(group.summaryCount).toBe(3);
+    expect(group.messages.map((message) => message.kind)).toEqual([
+      "tool-exploring",
+      "file-edit",
+      "tool-exploring",
+    ]);
+  });
+
+  it("merges consecutive exploring rows even when they are not in a tool-group", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("assistant-1", 1),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "I will inspect the repo",
+        status: "completed",
+      },
+      {
+        ...baseMessage("exploring-1", 2),
+        kind: "tool-exploring",
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-1",
+            command: "cat README.md",
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "cat README.md",
+                name: "README.md",
+                path: "/repo/README.md",
+              },
+            ],
+            status: "completed",
+          },
+        ],
+      },
+      {
+        ...baseMessage("exploring-2", 3),
+        kind: "tool-exploring",
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-2",
+            command: "rg TODO src",
+            parsedCmd: [
+              {
+                type: "search",
+                cmd: "rg TODO src",
+                query: "TODO",
+                path: "src",
+              },
+            ],
+            status: "completed",
+          },
+        ],
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.kind).toBe("message");
+    expect(rows[1]?.kind).toBe("message");
+    if (rows[1]?.kind !== "message") return;
+    expect(rows[1].message.kind).toBe("tool-exploring");
+    if (rows[1].message.kind !== "tool-exploring") return;
+    expect(rows[1].message.calls).toHaveLength(2);
   });
 });

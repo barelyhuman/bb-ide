@@ -108,6 +108,145 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Declined rm -rf /tmp/nope");
   });
 
+  it("uses ongoing labels for latest tool activity presentation", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-latest",
+      command: "ls -la",
+      status: "completed",
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry
+        message={message}
+        initialExpanded
+        preferOngoingLabels
+      />,
+    );
+    expect(html).toContain("Running command");
+    expect(html).not.toContain("Ran command");
+  });
+
+  it("renders exploring rows with collapsed count summary", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-exploring",
+      status: "completed",
+      calls: [
+        {
+          callId: "call-1",
+          command: "cat README.md",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          status: "completed",
+        },
+        {
+          callId: "call-2",
+          command: "cat package.json",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat package.json",
+              name: "package.json",
+              path: "/repo/package.json",
+            },
+          ],
+          status: "completed",
+        },
+        {
+          callId: "call-3",
+          command: "cat README.md",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          status: "completed",
+        },
+        {
+          callId: "call-search-1",
+          command: "rg TODO src",
+          parsedCmd: [
+            {
+              type: "search",
+              cmd: "rg TODO src",
+              query: "TODO",
+              path: "src",
+            },
+          ],
+          status: "completed",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain(">Explored<");
+    expect(html).toContain("2 files, 1 search");
+    expect(html).toContain("font-semibold");
+    expect(html).not.toContain("Read README.md, package.json");
+  });
+
+  it("renders web-search rows with pending/completed labels", () => {
+    const pending: UIMessage = {
+      ...baseMessage(),
+      kind: "web-search",
+      callId: "web-1",
+      status: "pending",
+    };
+    const completed: UIMessage = {
+      ...baseMessage(),
+      kind: "web-search",
+      callId: "web-2",
+      query: "react suspense",
+      status: "completed",
+    };
+
+    const pendingHtml = renderToStaticMarkup(<ConversationEntry message={pending} />);
+    const completedHtml = renderToStaticMarkup(<ConversationEntry message={completed} />);
+    expect(pendingHtml).toContain("Searching the web");
+    expect(completedHtml).toContain("Searched react suspense");
+  });
+
+  it("uses 'Exploring' label for latest exploring presentation", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-exploring",
+      status: "completed",
+      calls: [
+        {
+          callId: "call-1",
+          command: "cat README.md",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          status: "completed",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} preferOngoingLabels initialExpanded />,
+    );
+    expect(html).toContain("Exploring");
+    expect(html).not.toContain(">Explored<");
+  });
+
   it("renders file-edit summary as 'Edited <filename>'", () => {
     const message: UIMessage = {
       ...baseMessage(),
