@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   Project,
+  Task,
+  TaskStatus,
+  CreateTaskRequest,
+  UpdateTaskRequest,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -28,6 +32,62 @@ export function useCreateProject() {
     mutationFn: (req: CreateProjectRequest) => api.createProject(req),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+// --- Tasks ---
+
+export function useTasks(filters?: {
+  projectId?: string;
+  status?: TaskStatus;
+  parentId?: string;
+}) {
+  return useQuery<Task[]>({
+    queryKey: ["tasks", filters],
+    queryFn: () => api.listTasks(filters),
+  });
+}
+
+export function useTask(id: string) {
+  return useQuery<Task>({
+    queryKey: ["task", id],
+    queryFn: () => api.getTask(id),
+    enabled: !!id,
+  });
+}
+
+export function useCreateTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (req: CreateTaskRequest) => api.createTask(req),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(["task", task.id], task);
+    },
+  });
+}
+
+export function useUpdateTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, req }: { id: string; req: UpdateTaskRequest }) =>
+      api.updateTask(id, req),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(["task", task.id], task);
+    },
+  });
+}
+
+export function useAssignTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, assignee }: { id: string; assignee: string }) =>
+      api.assignTask(id, { assignee }),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(["task", task.id], task);
     },
   });
 }

@@ -1,5 +1,9 @@
 import type {
   Project,
+  Task,
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  AssignTaskRequest,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -58,6 +62,37 @@ export async function searchProjectFiles(
 
 export async function pickProjectFolder(): Promise<{ path: string | null }> {
   return request<{ path: string | null }>("POST", "/system/pick-folder");
+}
+
+// --- Tasks ---
+
+export async function createTask(req: CreateTaskRequest): Promise<Task> {
+  return request<Task>("POST", "/tasks", req);
+}
+
+export async function listTasks(filters?: {
+  projectId?: string;
+  status?: Task["status"];
+  parentId?: string;
+}): Promise<Task[]> {
+  const params = new URLSearchParams();
+  if (filters?.projectId) params.set("projectId", filters.projectId);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.parentId) params.set("parentId", filters.parentId);
+  const qs = params.toString();
+  return request<Task[]>("GET", `/tasks${qs ? `?${qs}` : ""}`);
+}
+
+export async function getTask(id: string): Promise<Task> {
+  return request<Task>("GET", `/tasks/${id}`);
+}
+
+export async function updateTask(id: string, req: UpdateTaskRequest): Promise<Task> {
+  return request<Task>("PATCH", `/tasks/${id}`, req);
+}
+
+export async function assignTask(id: string, req: AssignTaskRequest): Promise<Task> {
+  return request<Task>("POST", `/tasks/${id}/assign`, req);
 }
 
 // --- Threads ---

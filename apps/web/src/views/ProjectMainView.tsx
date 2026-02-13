@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
+import { ProjectTaskPanel } from "@/components/tasks/ProjectTaskPanel";
 import { useSpawnThread } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
@@ -79,7 +80,7 @@ export function ProjectMainView() {
   const isSubmitDisabled = spawnThread.isPending || prompt.trim().length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-[750px]">
+    <div className="mx-auto w-full max-w-[950px] space-y-6">
       <PromptBox
         id="project-main-prompt"
         value={prompt}
@@ -121,6 +122,7 @@ export function ProjectMainView() {
       {errorMessage ? (
         <p className="pt-2 text-sm text-destructive">{errorMessage}</p>
       ) : null}
+      <ProjectTaskPanel projectId={projectId} />
     </div>
   );
 }
