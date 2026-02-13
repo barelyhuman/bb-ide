@@ -135,7 +135,7 @@ export function ProjectMainView() {
     <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-center">
       <div className="w-full space-y-4">
         <div className="flex justify-center">
-          <div className="inline-flex rounded-lg border border-border/70 bg-muted/30 p-1">
+          <div className="inline-flex rounded-lg bg-muted/30 p-1">
             <button
               type="button"
               onClick={() => setActiveTab("thread")}
