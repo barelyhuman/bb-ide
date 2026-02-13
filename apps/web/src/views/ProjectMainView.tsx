@@ -163,8 +163,16 @@ export function ProjectMainView() {
           </div>
         </div>
 
-        {activeTab === "thread" ? (
-          <>
+        <div className="grid">
+          <div
+            aria-hidden={activeTab !== "thread"}
+            className={cn(
+              "col-start-1 row-start-1 transition-opacity duration-150",
+              activeTab === "thread"
+                ? "visible opacity-100"
+                : "pointer-events-none invisible opacity-0"
+            )}
+          >
             <PromptBox
               id="project-main-prompt"
               value={prompt}
@@ -203,12 +211,16 @@ export function ProjectMainView() {
                 </>
               }
             />
-            {threadErrorMessage ? (
-              <p className="pt-1 text-sm text-destructive">{threadErrorMessage}</p>
-            ) : null}
-          </>
-        ) : (
-          <>
+          </div>
+          <div
+            aria-hidden={activeTab !== "tasks"}
+            className={cn(
+              "col-start-1 row-start-1 transition-opacity duration-150",
+              activeTab === "tasks"
+                ? "visible opacity-100"
+                : "pointer-events-none invisible opacity-0"
+            )}
+          >
             <TaskComposer
               titleInputId="project-main-task-title"
               title={taskTitle}
@@ -224,11 +236,16 @@ export function ProjectMainView() {
               submitTitle={createTask.isPending ? "Creating..." : "Create task (Enter)"}
               autoFocusTitle={shouldFocusTaskComposer}
             />
-            {taskErrorMessage ? (
-              <p className="pt-1 text-sm text-destructive">{taskErrorMessage}</p>
-            ) : null}
-          </>
-        )}
+          </div>
+        </div>
+        <div className="min-h-5">
+          {activeTab === "thread" && threadErrorMessage ? (
+            <p className="pt-1 text-sm text-destructive">{threadErrorMessage}</p>
+          ) : null}
+          {activeTab === "tasks" && taskErrorMessage ? (
+            <p className="pt-1 text-sm text-destructive">{taskErrorMessage}</p>
+          ) : null}
+        </div>
       </div>
     </div>
   );

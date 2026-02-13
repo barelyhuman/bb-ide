@@ -86,10 +86,7 @@ export function TaskComposer({
           className="mt-1 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
-      <div className="flex items-center justify-between gap-3 px-3.5 pt-1.5">
-        <p className="text-xs text-muted-foreground">
-          Create a task for this project.
-        </p>
+      <div className="flex items-center justify-end gap-3 px-3.5 pt-1.5">
         <Button
           type="submit"
           size="icon"
