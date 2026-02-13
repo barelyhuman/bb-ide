@@ -241,9 +241,9 @@ export function ProjectList({
                             >
                               <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
                                 {isBusyThread ? (
-                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                  <LoaderCircle className="size-3.5 animate-spin opacity-0 transition-opacity group-hover/thread-row:opacity-100" />
                                 ) : (
-                                  <MessageSquare className="size-3.5" />
+                                  <MessageSquare className="size-3.5 opacity-0 transition-opacity group-hover/thread-row:opacity-100" />
                                 )}
                               </span>
                               <span className="min-w-0 flex-1 truncate">
@@ -288,7 +288,10 @@ export function ProjectList({
                             }
                           >
                             <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                              <TaskStatusIcon status={task.status} />
+                              <TaskStatusIcon
+                                status={task.status}
+                                className="opacity-0 transition-opacity group-hover/task-row:opacity-100"
+                              />
                             </span>
                             <span className="min-w-0 flex-1 truncate">
                               {task.title}
@@ -317,17 +320,23 @@ export function ProjectList({
   )
 }
 
-function TaskStatusIcon({ status }: { status: Task["status"] }) {
+function TaskStatusIcon({
+  status,
+  className,
+}: {
+  status: Task["status"]
+  className?: string
+}) {
   switch (status) {
     case "in_progress":
-      return <LoaderCircle className="size-3.5 animate-spin" />
+      return <LoaderCircle className={cn("size-3.5 animate-spin", className)} />
     case "blocked":
-      return <AlertTriangle className="size-3.5 text-destructive" />
+      return <AlertTriangle className={cn("size-3.5 text-destructive", className)} />
     case "closed":
-      return <CheckCircle2 className="size-3.5" />
+      return <CheckCircle2 className={cn("size-3.5", className)} />
     case "open":
     default:
-      return <Circle className="size-3.5" />
+      return <Circle className={cn("size-3.5", className)} />
   }
 }
 
