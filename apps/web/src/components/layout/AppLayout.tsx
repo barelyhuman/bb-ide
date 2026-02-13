@@ -57,7 +57,9 @@ function AppHeader({
     collapsedProjectLabel ? undefined : (showProjectNameInHeader ? meta.title : undefined)
 
   return (
-    <header className="relative h-12 shrink-0 border-b border-border px-4">
+    <header
+      className={`relative h-12 shrink-0 px-4${isProjectMainView ? "" : " border-b border-border"}`}
+    >
       <div className="flex h-full items-center">
         <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
         <div className="ml-3 flex min-w-0 flex-1 items-center gap-2">
