@@ -135,12 +135,12 @@ export function ProjectMainView() {
     <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-center">
       <div className="w-full space-y-4">
         <div className="flex justify-center">
-          <div className="inline-flex rounded-lg bg-muted/30 p-1">
+          <div className="inline-flex overflow-hidden rounded-lg border border-border/70 bg-muted/30">
             <button
               type="button"
               onClick={() => setActiveTab("thread")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm transition-colors",
+                "rounded-l-md border-r border-border/60 px-3 py-1.5 text-sm transition-colors",
                 activeTab === "thread"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -152,7 +152,7 @@ export function ProjectMainView() {
               type="button"
               onClick={() => setActiveTab("tasks")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm transition-colors",
+                "rounded-r-md px-3 py-1.5 text-sm transition-colors",
                 activeTab === "tasks"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
