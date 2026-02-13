@@ -268,7 +268,7 @@ export function PromptBox({
         placeholder={placeholder}
         rows={1}
         autoFocus={autoFocus}
-        className="w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+        className="w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60"
         style={{
           minHeight: `${PROMPTBOX_MIN_HEIGHT}px`,
           maxHeight: `${PROMPTBOX_MAX_HEIGHT}px`,

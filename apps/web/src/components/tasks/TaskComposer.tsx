@@ -66,7 +66,7 @@ export function TaskComposer({
           onChange={(event) => onTitleChange(event.target.value)}
           placeholder="Describe the task outcome"
           autoFocus={autoFocusTitle}
-          className="mt-1 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="mt-1 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
         />
       </div>
       <div className="px-4 pb-1 pt-2">
@@ -83,7 +83,7 @@ export function TaskComposer({
           onKeyDown={handleDescriptionKeyDown}
           rows={3}
           placeholder="Add context, constraints, or acceptance criteria"
-          className="mt-1 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className="mt-1 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
         />
       </div>
       <div className="flex items-center justify-end gap-3 px-3.5 pt-1.5">
