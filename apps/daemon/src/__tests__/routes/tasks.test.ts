@@ -54,12 +54,20 @@ function mockTaskRepo(): TaskRepository {
 describe("Task routes", () => {
   let projectRepo: ReturnType<typeof mockProjectRepo>;
   let taskRepo: ReturnType<typeof mockTaskRepo>;
+  let wsManager: { broadcast: ReturnType<typeof vi.fn> };
   let app: Hono;
 
   beforeEach(() => {
     projectRepo = mockProjectRepo();
     taskRepo = mockTaskRepo();
-    const routes = createTaskRoutes(projectRepo as any, taskRepo as any);
+    wsManager = {
+      broadcast: vi.fn(),
+    };
+    const routes = createTaskRoutes(
+      projectRepo as any,
+      taskRepo as any,
+      wsManager as any,
+    );
     app = new Hono().route("/tasks", routes);
   });
 
@@ -86,6 +94,7 @@ describe("Task routes", () => {
         projectId: "proj-1",
         title: "Implement task API",
       });
+      expect(wsManager.broadcast).toHaveBeenCalledWith("task", "task-1");
     });
 
     it("returns 404 when project does not exist", async () => {
@@ -142,6 +151,7 @@ describe("Task routes", () => {
       const body = await res.json();
       expect(body.assignee).toBe("builder-1");
       expect(body.status).toBe("in_progress");
+      expect(wsManager.broadcast).toHaveBeenCalledWith("task", "task-1");
     });
 
     it("returns 409 when already assigned", async () => {
@@ -185,6 +195,7 @@ describe("Task routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(dependency);
+      expect(wsManager.broadcast).toHaveBeenCalledWith("task", "task-1");
     });
 
     it("lists dependencies for a task", async () => {

@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
-import type { ClientMessage, ServerMessage } from "@beanbag/core";
+import type { ClientMessage, RealtimeEntity, ServerMessage } from "@beanbag/core";
 
-function subscriptionKey(entity: string, id?: string): string {
+function subscriptionKey(entity: RealtimeEntity, id?: string): string {
   return id ? `${entity}:${id}` : entity;
 }
 
@@ -36,7 +36,7 @@ export class WSManager {
     });
   }
 
-  private subscribe(socket: WebSocket, entity: string, id?: string): void {
+  private subscribe(socket: WebSocket, entity: RealtimeEntity, id?: string): void {
     const key = subscriptionKey(entity, id);
 
     // Track on the connection side
@@ -54,7 +54,7 @@ export class WSManager {
     sockets.add(socket);
   }
 
-  private unsubscribe(socket: WebSocket, entity: string, id?: string): void {
+  private unsubscribe(socket: WebSocket, entity: RealtimeEntity, id?: string): void {
     const key = subscriptionKey(entity, id);
 
     // Remove from connection tracking
@@ -94,8 +94,8 @@ export class WSManager {
    * Subscribers who subscribed to the entity without an id get all changes.
    * Subscribers who subscribed with a specific id only get changes for that id.
    */
-  broadcast(entity: string, id?: string): void {
-    const msg: ServerMessage = { type: "changed", entity: entity as any, id };
+  broadcast(entity: RealtimeEntity, id?: string): void {
+    const msg: ServerMessage = { type: "changed", entity, id };
     const raw = JSON.stringify(msg);
 
     const recipients = new Set<WebSocket>();

@@ -1,6 +1,10 @@
-import type { ClientMessage, ServerMessage } from "@beanbag/core";
+import type {
+  ClientMessage,
+  RealtimeEntity,
+  ServerMessage,
+} from "@beanbag/core";
 
-export type ChangeCallback = (entity: string, id?: string) => void;
+export type ChangeCallback = (entity: RealtimeEntity, id?: string) => void;
 
 class WebSocketManager {
   private socket: WebSocket | null = null;
@@ -27,7 +31,7 @@ class WebSocketManager {
       // Re-subscribe to all active subscriptions
       for (const key of this.subscriptions) {
         const [entity, id] = parseSubKey(key);
-        this.sendMessage({ type: "subscribe", entity: entity as any, id });
+        this.sendMessage({ type: "subscribe", entity, id });
       }
     };
 
@@ -67,19 +71,19 @@ class WebSocketManager {
     this.connected = false;
   }
 
-  subscribe(entity: string, id?: string): void {
+  subscribe(entity: RealtimeEntity, id?: string): void {
     const key = subKey(entity, id);
     this.subscriptions.add(key);
     if (this.connected) {
-      this.sendMessage({ type: "subscribe", entity: entity as any, id });
+      this.sendMessage({ type: "subscribe", entity, id });
     }
   }
 
-  unsubscribe(entity: string, id?: string): void {
+  unsubscribe(entity: RealtimeEntity, id?: string): void {
     const key = subKey(entity, id);
     this.subscriptions.delete(key);
     if (this.connected) {
-      this.sendMessage({ type: "unsubscribe", entity: entity as any, id });
+      this.sendMessage({ type: "unsubscribe", entity, id });
     }
   }
 
@@ -105,14 +109,14 @@ class WebSocketManager {
   }
 }
 
-function subKey(entity: string, id?: string): string {
+function subKey(entity: RealtimeEntity, id?: string): string {
   return id ? `${entity}:${id}` : entity;
 }
 
-function parseSubKey(key: string): [string, string | undefined] {
+function parseSubKey(key: string): [RealtimeEntity, string | undefined] {
   const idx = key.indexOf(":");
-  if (idx === -1) return [key, undefined];
-  return [key.slice(0, idx), key.slice(idx + 1)];
+  if (idx === -1) return [key as RealtimeEntity, undefined];
+  return [key.slice(0, idx) as RealtimeEntity, key.slice(idx + 1)];
 }
 
 // Singleton instance

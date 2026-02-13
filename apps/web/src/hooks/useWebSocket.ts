@@ -12,7 +12,9 @@ export function useWebSocket(): void {
 
   useEffect(() => {
     const changedThreadIds = new Set<string>();
+    const changedTaskIds = new Set<string>();
     let shouldInvalidateThreads = false;
+    let shouldInvalidateTasks = false;
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadEvents = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -89,8 +91,22 @@ export function useWebSocket(): void {
         queryClient.invalidateQueries({ queryKey: ["status"] });
       }
 
+      if (shouldInvalidateTasks) {
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      }
+
+      if (shouldInvalidateTasks && changedTaskIds.size === 0) {
+        queryClient.invalidateQueries({ queryKey: ["task"] });
+      }
+
+      for (const taskId of changedTaskIds) {
+        queryClient.invalidateQueries({ queryKey: ["task", taskId] });
+      }
+
       changedThreadIds.clear();
+      changedTaskIds.clear();
       shouldInvalidateThreads = false;
+      shouldInvalidateTasks = false;
       shouldInvalidateStatus = false;
       shouldInvalidateAllThreadEvents = false;
     };
@@ -111,6 +127,7 @@ export function useWebSocket(): void {
 
     // Subscribe to all entity types
     wsManager.subscribe("thread");
+    wsManager.subscribe("task");
 
     // Invalidate React Query caches on changes
     const unsubscribe = wsManager.onChanged((entity, id) => {
@@ -126,6 +143,13 @@ export function useWebSocket(): void {
           shouldInvalidateStatus = true;
           scheduleInvalidations();
           break;
+        case "task":
+          shouldInvalidateTasks = true;
+          if (id) {
+            changedTaskIds.add(id);
+          }
+          scheduleInvalidations();
+          break;
       }
     });
 
@@ -138,6 +162,7 @@ export function useWebSocket(): void {
       }
       unsubscribe();
       wsManager.unsubscribe("thread");
+      wsManager.unsubscribe("task");
       wsManager.disconnect();
     };
   }, [queryClient]);

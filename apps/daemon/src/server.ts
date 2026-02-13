@@ -66,6 +66,7 @@ export function createServer(deps: ServerDeps) {
     projectRepo: deps.projectRepo,
     taskRepo: deps.taskRepo,
     threadManager,
+    wsManager,
     startTime,
   });
 

@@ -1,13 +1,15 @@
+export type RealtimeEntity = "thread" | "task";
+
 // Client -> Server
 export interface SubscribeMessage {
   type: "subscribe";
-  entity: "thread";
+  entity: RealtimeEntity;
   id?: string;
 }
 
 export interface UnsubscribeMessage {
   type: "unsubscribe";
-  entity: "thread";
+  entity: RealtimeEntity;
   id?: string;
 }
 
@@ -16,7 +18,7 @@ export type ClientMessage = SubscribeMessage | UnsubscribeMessage;
 // Server -> Client
 export interface ChangedMessage {
   type: "changed";
-  entity: "thread";
+  entity: RealtimeEntity;
   id?: string;
 }
 

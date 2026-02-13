@@ -10,6 +10,7 @@ import {
 } from "@beanbag/core";
 import { z } from "zod";
 import type { ProjectRepository, TaskRepository } from "@beanbag/db";
+import type { WSManager } from "../ws.js";
 
 const listTasksQuerySchema = z.object({
   projectId: z.string().optional(),
@@ -36,7 +37,12 @@ function toErrorMessage(err: unknown): string {
 export function createTaskRoutes(
   projectRepo: ProjectRepository,
   taskRepo: TaskRepository,
+  wsManager?: Pick<WSManager, "broadcast">,
 ) {
+  const broadcastTaskChange = (taskId: string) => {
+    wsManager?.broadcast("task", taskId);
+  };
+
   return new Hono()
     .post("/", zValidator("json", createTaskSchema), async (c) => {
       try {
@@ -46,6 +52,7 @@ export function createTaskRoutes(
           return c.json({ error: "Project not found" }, 404);
         }
         const task = taskRepo.create(body);
+        broadcastTaskChange(task.id);
         return c.json(task, 201);
       } catch (err) {
         const message = toErrorMessage(err);
@@ -98,6 +105,7 @@ export function createTaskRoutes(
         if (!updated) {
           return c.json({ error: "Task not found" }, 404);
         }
+        broadcastTaskChange(updated.id);
         return c.json(updated);
       } catch (err) {
         return c.json({ error: toErrorMessage(err) }, 400);
@@ -117,6 +125,10 @@ export function createTaskRoutes(
             409,
           );
         }
+        if (!result.task) {
+          return c.json({ error: "Task assignment did not return a task" }, 500);
+        }
+        broadcastTaskChange(result.task.id);
         return c.json(result.task);
       } catch (err) {
         return c.json({ error: toErrorMessage(err) }, 400);
@@ -146,6 +158,7 @@ export function createTaskRoutes(
           if (!dependency) {
             return c.json({ error: "Task not found" }, 404);
           }
+          broadcastTaskChange(dependency.taskId);
           return c.json(dependency, 201);
         } catch (err) {
           return c.json({ error: toErrorMessage(err) }, 400);
@@ -166,6 +179,7 @@ export function createTaskRoutes(
           if (!removed) {
             return c.json({ error: "Dependency not found" }, 404);
           }
+          broadcastTaskChange(c.req.param("id"));
           return c.json({ ok: true });
         } catch (err) {
           return c.json({ error: toErrorMessage(err) }, 400);

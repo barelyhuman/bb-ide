@@ -27,6 +27,7 @@ export type {
 } from "./generated/codex-app-server/index.js";
 
 export type {
+  RealtimeEntity,
   SubscribeMessage,
   UnsubscribeMessage,
   ClientMessage,
