@@ -17,6 +17,7 @@ export function useWebSocket(): void {
     let shouldInvalidateTasks = false;
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadEvents = false;
+    let shouldInvalidateAllTaskEvents = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -103,12 +104,21 @@ export function useWebSocket(): void {
         queryClient.invalidateQueries({ queryKey: ["task", taskId] });
       }
 
+      if (shouldInvalidateAllTaskEvents) {
+        queryClient.invalidateQueries({ queryKey: ["taskEvents"] });
+      } else {
+        for (const taskId of changedTaskIds) {
+          queryClient.invalidateQueries({ queryKey: ["taskEvents", taskId] });
+        }
+      }
+
       changedThreadIds.clear();
       changedTaskIds.clear();
       shouldInvalidateThreads = false;
       shouldInvalidateTasks = false;
       shouldInvalidateStatus = false;
       shouldInvalidateAllThreadEvents = false;
+      shouldInvalidateAllTaskEvents = false;
     };
 
     const scheduleInvalidations = () => {
@@ -147,6 +157,8 @@ export function useWebSocket(): void {
           shouldInvalidateTasks = true;
           if (id) {
             changedTaskIds.add(id);
+          } else {
+            shouldInvalidateAllTaskEvents = true;
           }
           scheduleInvalidations();
           break;

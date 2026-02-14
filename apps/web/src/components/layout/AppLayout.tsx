@@ -161,7 +161,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     : taskMatch
       ? {
           title: task?.title ?? "Task",
-          subtitle: task ? `Status: ${task.status.replace("_", " ")}` : undefined,
+          subtitle: undefined,
         }
     : projectMatch
         ? {

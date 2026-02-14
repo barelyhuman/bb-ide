@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
 import { CornerDownLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -17,6 +17,25 @@ interface TaskComposerProps {
   className?: string
 }
 
+const TASK_COMPOSER_MIN_HEIGHT = 68
+const TASK_COMPOSER_MAX_HEIGHT = 158
+
+function parseTaskBody(value: string): { title: string; description: string } {
+  const newlineIndex = value.indexOf("\n")
+  if (newlineIndex === -1) {
+    return { title: value, description: "" }
+  }
+
+  return {
+    title: value.slice(0, newlineIndex),
+    description: value.slice(newlineIndex + 1),
+  }
+}
+
+function composeTaskBody(title: string, description: string): string {
+  return description.length > 0 ? `${title}\n${description}` : title
+}
+
 export function TaskComposer({
   titleInputId,
   title,
@@ -30,7 +49,17 @@ export function TaskComposer({
   autoFocusTitle = false,
   className,
 }: TaskComposerProps) {
-  const canSubmit = title.trim().length > 0 && !isSubmitting && !submitDisabled
+  const [body, setBody] = useState(() => composeTaskBody(title, description))
+  const parsedBody = useMemo(() => parseTaskBody(body), [body])
+  const canSubmit =
+    parsedBody.title.trim().length > 0 && !isSubmitting && !submitDisabled
+
+  useEffect(() => {
+    if (parsedBody.title === title && parsedBody.description === description) {
+      return
+    }
+    setBody(composeTaskBody(title, description))
+  }, [title, description, parsedBody.title, parsedBody.description])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -38,7 +67,7 @@ export function TaskComposer({
     onSubmit()
   }
 
-  const handleDescriptionKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return
     event.preventDefault()
     if (!canSubmit) return
@@ -53,54 +82,44 @@ export function TaskComposer({
         className
       )}
     >
-      <div className="border-b border-border/60 px-4 pb-2 pt-3">
-        <label
-          htmlFor={titleInputId}
-          className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
-        >
-          Title
-        </label>
-        <input
-          id={titleInputId}
-          value={title}
-          onChange={(event) => onTitleChange(event.target.value)}
-          placeholder="Describe the task outcome"
-          autoFocus={autoFocusTitle}
-          className="mt-1 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-        />
-      </div>
-      <div className="px-4 pb-1 pt-2">
-        <label
-          htmlFor={`${titleInputId ?? "task-composer"}-description`}
-          className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
-        >
-          Description (optional)
-        </label>
-        <textarea
-          id={`${titleInputId ?? "task-composer"}-description`}
-          value={description}
-          onChange={(event) => onDescriptionChange(event.target.value)}
-          onKeyDown={handleDescriptionKeyDown}
-          rows={3}
-          placeholder="Add context, constraints, or acceptance criteria"
-          className="mt-1 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-        />
-      </div>
-      <div className="flex items-center justify-end gap-3 px-3.5 pt-1.5">
-        <Button
-          type="submit"
-          size="icon"
-          variant="default"
-          title={submitTitle}
-          disabled={!canSubmit}
-          className="size-auto h-8 px-2 transition-all"
-        >
-          {isSubmitting ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <CornerDownLeft className="size-4" />
-          )}
-        </Button>
+      <textarea
+        id={titleInputId}
+        value={body}
+        onChange={(event) => {
+          const next = event.target.value
+          setBody(next)
+          const parsed = parseTaskBody(next)
+          onTitleChange(parsed.title)
+          onDescriptionChange(parsed.description)
+        }}
+        onKeyDown={handleComposerKeyDown}
+        rows={1}
+        placeholder="Describe the task. Use multiple lines to include additional description."
+        autoFocus={autoFocusTitle}
+        className="w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60"
+        style={{
+          minHeight: `${TASK_COMPOSER_MIN_HEIGHT}px`,
+          maxHeight: `${TASK_COMPOSER_MAX_HEIGHT}px`,
+        }}
+      />
+      <div className="flex flex-row items-center gap-3 px-3.5 pt-1.5">
+        <div className="flex min-w-0 flex-1 flex-row items-center gap-1" />
+        <div className="flex shrink-0 flex-row items-center gap-1">
+          <Button
+            type="submit"
+            size="icon"
+            variant="default"
+            title={submitTitle}
+            disabled={!canSubmit}
+            className="size-auto h-8 px-2 transition-all"
+          >
+            {isSubmitting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <CornerDownLeft className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
     </form>
   )

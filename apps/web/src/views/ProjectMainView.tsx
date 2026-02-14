@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
@@ -49,32 +49,35 @@ export function ProjectMainView() {
     "focusTaskComposer" in location.state &&
     location.state.focusTaskComposer === true;
 
+  const focusComposerById = useCallback((elementId: string) => {
+    const handle = window.requestAnimationFrame(() => {
+      const composerElement = document.getElementById(elementId);
+      if (!(composerElement instanceof HTMLTextAreaElement)) return;
+      composerElement.focus();
+      const caretIndex = composerElement.value.length;
+      composerElement.setSelectionRange(caretIndex, caretIndex);
+    });
+
+    return () => window.cancelAnimationFrame(handle);
+  }, []);
+
+  const handleTabChange = (nextTab: ComposerTab) => {
+    setActiveTab(nextTab);
+    focusComposerById(
+      nextTab === "thread" ? "project-main-prompt" : "project-main-task-title",
+    );
+  };
+
   useEffect(() => {
     if (shouldFocusTaskComposer) {
       setActiveTab("tasks");
-      const handle = window.requestAnimationFrame(() => {
-        const titleElement = document.getElementById("project-main-task-title");
-        if (!(titleElement instanceof HTMLInputElement)) return;
-        titleElement.focus();
-        const caretIndex = titleElement.value.length;
-        titleElement.setSelectionRange(caretIndex, caretIndex);
-      });
-
-      return () => window.cancelAnimationFrame(handle);
+      return focusComposerById("project-main-task-title");
     }
 
     if (!shouldFocusPrompt) return;
     setActiveTab("thread");
-    const handle = window.requestAnimationFrame(() => {
-      const promptElement = document.getElementById("project-main-prompt");
-      if (!(promptElement instanceof HTMLTextAreaElement)) return;
-      promptElement.focus();
-      const caretIndex = promptElement.value.length;
-      promptElement.setSelectionRange(caretIndex, caretIndex);
-    });
-
-    return () => window.cancelAnimationFrame(handle);
-  }, [location.key, shouldFocusPrompt, shouldFocusTaskComposer]);
+    return focusComposerById("project-main-prompt");
+  }, [location.key, shouldFocusPrompt, shouldFocusTaskComposer, focusComposerById]);
 
   if (!projectId) {
     return (
@@ -138,7 +141,7 @@ export function ProjectMainView() {
           <div className="inline-flex overflow-hidden rounded-lg border border-border/70 bg-muted/30">
             <button
               type="button"
-              onClick={() => setActiveTab("thread")}
+              onClick={() => handleTabChange("thread")}
               className={cn(
                 "rounded-l-md border-r border-border/60 px-3 py-1.5 text-sm transition-colors",
                 activeTab === "thread"
@@ -150,7 +153,7 @@ export function ProjectMainView() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("tasks")}
+              onClick={() => handleTabChange("tasks")}
               className={cn(
                 "rounded-r-md px-3 py-1.5 text-sm transition-colors",
                 activeTab === "tasks"

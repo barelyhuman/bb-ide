@@ -1,9 +1,9 @@
 import type {
   Project,
   Task,
+  TaskEvent,
   CreateTaskRequest,
   UpdateTaskRequest,
-  AssignTaskRequest,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -91,8 +91,14 @@ export async function updateTask(id: string, req: UpdateTaskRequest): Promise<Ta
   return request<Task>("PATCH", `/tasks/${id}`, req);
 }
 
-export async function assignTask(id: string, req: AssignTaskRequest): Promise<Task> {
-  return request<Task>("POST", `/tasks/${id}/assign`, req);
+export async function getTaskEvents(
+  id: string,
+  afterSeq?: number,
+): Promise<TaskEvent[]> {
+  const params = new URLSearchParams();
+  if (afterSeq !== undefined) params.set("afterSeq", String(afterSeq));
+  const qs = params.toString();
+  return request<TaskEvent[]>("GET", `/tasks/${id}/events${qs ? `?${qs}` : ""}`);
 }
 
 // --- Threads ---

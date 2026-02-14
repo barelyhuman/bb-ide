@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   Project,
   Task,
+  TaskEvent,
   TaskStatus,
   CreateTaskRequest,
   UpdateTaskRequest,
@@ -57,6 +58,14 @@ export function useTask(id: string) {
   });
 }
 
+export function useTaskEvents(id: string) {
+  return useQuery<TaskEvent[]>({
+    queryKey: ["taskEvents", id],
+    queryFn: () => api.getTaskEvents(id),
+    enabled: !!id,
+  });
+}
+
 export function useCreateTask() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -64,6 +73,7 @@ export function useCreateTask() {
     onSuccess: (task) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.setQueryData(["task", task.id], task);
+      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
     },
   });
 }
@@ -76,18 +86,7 @@ export function useUpdateTask() {
     onSuccess: (task) => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.setQueryData(["task", task.id], task);
-    },
-  });
-}
-
-export function useAssignTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, assignee }: { id: string; assignee: string }) =>
-      api.assignTask(id, { assignee }),
-    onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.setQueryData(["task", task.id], task);
+      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
     },
   });
 }
