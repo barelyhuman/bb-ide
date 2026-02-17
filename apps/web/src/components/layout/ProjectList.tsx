@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import type { Task, Thread } from "@beanbag/core"
+import { assertNever, type Task, type Thread } from "@beanbag/core"
 import {
   Archive,
   ChevronRight,
@@ -356,7 +356,17 @@ export function ProjectList({
 }
 
 function isBusyThreadStatus(status: Thread["status"]): boolean {
-  return status === "active" || status === "created" || status === "provisioning"
+  switch (status) {
+    case "active":
+    case "created":
+    case "provisioning":
+      return true
+    case "idle":
+    case "provisioning_failed":
+      return false
+    default:
+      return assertNever(status)
+  }
 }
 
 function isTaskPrimaryThread(thread: Thread): boolean {

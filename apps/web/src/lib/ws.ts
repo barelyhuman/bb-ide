@@ -30,8 +30,9 @@ class WebSocketManager {
       this.connected = true;
       // Re-subscribe to all active subscriptions
       for (const key of this.subscriptions) {
-        const [entity, id] = parseSubKey(key);
-        this.sendMessage({ type: "subscribe", entity, id });
+        const parsed = parseSubKey(key);
+        if (!parsed) continue;
+        this.sendMessage({ type: "subscribe", entity: parsed.entity, id: parsed.id });
       }
     };
 
@@ -113,10 +114,20 @@ function subKey(entity: RealtimeEntity, id?: string): string {
   return id ? `${entity}:${id}` : entity;
 }
 
-function parseSubKey(key: string): [RealtimeEntity, string | undefined] {
+function isRealtimeEntity(value: string): value is RealtimeEntity {
+  return value === "thread" || value === "task";
+}
+
+export function parseSubKey(
+  key: string,
+): { entity: RealtimeEntity; id?: string } | null {
   const idx = key.indexOf(":");
-  if (idx === -1) return [key as RealtimeEntity, undefined];
-  return [key.slice(0, idx) as RealtimeEntity, key.slice(idx + 1)];
+  const entity = idx === -1 ? key : key.slice(0, idx);
+  if (!isRealtimeEntity(entity)) {
+    return null;
+  }
+  const id = idx === -1 ? undefined : key.slice(idx + 1);
+  return id ? { entity, id } : { entity };
 }
 
 // Singleton instance

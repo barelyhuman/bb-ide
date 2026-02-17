@@ -1,9 +1,16 @@
 import { Command } from "commander";
-import type { Task, TaskEvent, TaskStatus, TaskCloseReason, TaskDependencyType } from "@beanbag/core";
+import {
+  assertNever,
+  type Task,
+  type TaskEvent,
+  type TaskStatus,
+  type TaskCloseReason,
+  type TaskDependencyType,
+} from "@beanbag/core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId } from "../context-env.js";
 
-function statusIcon(status: TaskStatus): string {
+export function statusIcon(status: TaskStatus): string {
   switch (status) {
     case "open":
       return "\u25CB";
@@ -14,7 +21,7 @@ function statusIcon(status: TaskStatus): string {
     case "closed":
       return "\u25CF";
     default:
-      return "?";
+      return assertNever(status);
   }
 }
 

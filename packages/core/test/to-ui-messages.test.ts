@@ -518,6 +518,32 @@ describe("toUIMessages replay coverage", () => {
     expect(search?.query).toBe("react suspense");
   });
 
+  it("preserves unknown provider web-search action types", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "web_search_end",
+        data: {
+          call_id: "web-2",
+          query: "new runtime action",
+          action: { type: "providerCustomAction" },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const search = projected.find(
+      (message): message is Extract<UIMessage, { kind: "web-search" }> =>
+        message.kind === "web-search",
+    );
+
+    expect(search).toBeDefined();
+    expect(search?.action).toBe("providerCustomAction");
+  });
+
   it("merges file-change lifecycle with output delta details", () => {
     const events: ThreadEvent[] = [
       {

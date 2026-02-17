@@ -8,6 +8,9 @@
     "clean": "turbo run clean",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
+    "bb": "node apps/cli/dist/index.js",
+    "bb:dev": "pnpm --filter @beanbag/daemon exec tsx ../cli/src/index.ts",
+    "daemon": "node apps/daemon/dist/index.js",
     "drizzle-studio": "pnpm --filter @beanbag/db db:studio"
   },
   "devDependencies": {

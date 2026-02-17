@@ -92,6 +92,28 @@ function getNumberField(
   return undefined;
 }
 
+function getFirstStringField(
+  record: Record<string, unknown> | null,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = getStringField(record, key);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function getFirstNumberField(
+  record: Record<string, unknown> | null,
+  keys: readonly string[],
+): number | undefined {
+  for (const key of keys) {
+    const value = getNumberField(record, key);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
 function collectTextFragments(value: unknown, out: string[]): void {
   if (typeof value === "string") {
     if (value.length > 0) out.push(value);
@@ -486,12 +508,9 @@ function parseExecLifecycleEvent(
 ): ExecLifecycleEvent | null {
   if (eventTypeMatches(eventType, "item/commandexecution/outputdelta")) {
     const payload = getEventPayloadRecord(event.data);
-    const callId =
-      getStringField(payload, "itemId") ??
-      getStringField(payload, "item_id") ??
-      getStringField(payload, "call_id");
+    const callId = getFirstStringField(payload, ["itemId", "item_id", "call_id"]);
     if (!callId) return null;
-    const delta = getStringField(payload, "delta");
+    const delta = getFirstStringField(payload, ["delta"]);
     return {
       kind: "output",
       call: {
@@ -506,9 +525,9 @@ function parseExecLifecycleEvent(
 
   if (eventTypeMatches(eventType, "exec_command_output_delta")) {
     const payload = getEventPayloadRecord(event.data);
-    const callId = getStringField(payload, "call_id");
+    const callId = getFirstStringField(payload, ["call_id"]);
     if (!callId) return null;
-    const delta = getStringField(payload, "delta");
+    const delta = getFirstStringField(payload, ["delta"]);
     return {
       kind: "output",
       call: {
@@ -526,30 +545,30 @@ function parseExecLifecycleEvent(
     getItemTypeToken(event.data) === "commandexecution"
   ) {
     const item = getItemRecord(event.data);
-    const callId = getStringField(item, "id");
+    const callId = getFirstStringField(item, ["id"]);
     if (!callId) return null;
 
     const kind = eventTypeMatches(eventType, "item/started") ? "begin" : "end";
-    const exitCode = getNumberField(item, "exitCode") ?? getNumberField(item, "exit_code");
+    const exitCode = getFirstNumberField(item, ["exitCode", "exit_code"]);
     const status =
       exitCode !== undefined && exitCode !== 0
         ? "error"
-        : (toToolStatus(getStringField(item, "status")) ?? toExecDefaultStatus(kind));
+        : (toToolStatus(getFirstStringField(item, ["status"])) ??
+            toExecDefaultStatus(kind));
 
     return {
       kind,
       call: {
         callId,
         command: extractShellCommand(item?.command),
-        cwd: getStringField(item, "cwd"),
+        cwd: getFirstStringField(item, ["cwd"]),
         parsedCmd: parseParsedIntentsFromRecord(item),
-        source: getStringField(item, "source"),
-        output:
-          getStringField(item, "aggregatedOutput") ??
-          getStringField(item, "aggregated_output"),
+        source: getFirstStringField(item, ["source"]),
+        output: getFirstStringField(item, ["aggregatedOutput", "aggregated_output"]),
         exitCode,
         duration: durationToString(
-          getStringField(item, "duration") ?? getNumberField(item, "durationMs"),
+          getFirstStringField(item, ["duration"]) ??
+            getFirstNumberField(item, ["durationMs"]),
         ),
         status,
       },
@@ -560,30 +579,33 @@ function parseExecLifecycleEvent(
     eventTypeMatchesAny(eventType, ["exec_command_begin", "exec_command_end"])
   ) {
     const payload = getEventPayloadRecord(event.data);
-    const callId = getStringField(payload, "call_id");
+    const callId = getFirstStringField(payload, ["call_id"]);
     if (!callId) return null;
 
     const kind = eventTypeMatches(eventType, "exec_command_begin") ? "begin" : "end";
-    const exitCode = getNumberField(payload, "exit_code");
+    const exitCode = getFirstNumberField(payload, ["exit_code"]);
     const status =
       exitCode !== undefined && exitCode !== 0
         ? "error"
-        : (toToolStatus(getStringField(payload, "status")) ?? toExecDefaultStatus(kind));
+        : (toToolStatus(getFirstStringField(payload, ["status"])) ??
+            toExecDefaultStatus(kind));
 
     return {
       kind,
       call: {
         callId,
         command: extractShellCommand(payload?.command),
-        cwd: getStringField(payload, "cwd"),
+        cwd: getFirstStringField(payload, ["cwd"]),
         parsedCmd: parseParsedIntentsFromRecord(payload),
-        source: getStringField(payload, "source"),
-        output:
-          getStringField(payload, "formatted_output") ??
-          getStringField(payload, "aggregated_output"),
+        source: getFirstStringField(payload, ["source"]),
+        output: getFirstStringField(payload, [
+          "formatted_output",
+          "aggregated_output",
+        ]),
         exitCode,
         duration: durationToString(
-          getStringField(payload, "duration") ?? getNumberField(payload, "duration_ms"),
+          getFirstStringField(payload, ["duration"]) ??
+            getFirstNumberField(payload, ["duration_ms"]),
         ),
         status,
       },
@@ -603,6 +625,7 @@ interface WebSearchLifecycleEvent {
 function parseWebSearchAction(value: unknown): string | undefined {
   if (typeof value === "string" && value.length > 0) return value;
   const record = toRecord(value);
+  // Open provider/runtime set: preserve provider-defined action types.
   return getStringField(record, "type");
 }
 
@@ -615,26 +638,26 @@ function parseWebSearchLifecycleEvent(
     getItemTypeToken(event.data) === "websearch"
   ) {
     const item = getItemRecord(event.data);
-    const callId = getStringField(item, "id");
+    const callId = getFirstStringField(item, ["id"]);
     if (!callId) return null;
 
     return {
       kind: eventTypeMatches(eventType, "item/started") ? "begin" : "end",
       callId,
-      query: getStringField(item, "query"),
+      query: getFirstStringField(item, ["query"]),
       action: parseWebSearchAction(item?.action),
     };
   }
 
   if (eventTypeMatchesAny(eventType, ["web_search_begin", "web_search_end"])) {
     const payload = getEventPayloadRecord(event.data);
-    const callId = getStringField(payload, "call_id");
+    const callId = getFirstStringField(payload, ["call_id"]);
     if (!callId) return null;
 
     return {
       kind: eventTypeMatches(eventType, "web_search_begin") ? "begin" : "end",
       callId,
-      query: getStringField(payload, "query"),
+      query: getFirstStringField(payload, ["query"]),
       action: parseWebSearchAction(payload?.action),
     };
   }
@@ -722,12 +745,10 @@ function parseFileEditFromItemEvent(
 ): FileEditPartial | null {
   if (eventTypeMatches(eventType, "item/filechange/outputdelta")) {
     const payload = getEventPayloadRecord(event.data);
-    const callId =
-      getStringField(payload, "itemId") ??
-      getStringField(payload, "item_id");
+    const callId = getFirstStringField(payload, ["itemId", "item_id"]);
     if (!callId) return null;
 
-    const delta = getStringField(payload, "delta") ?? "";
+    const delta = getFirstStringField(payload, ["delta"]) ?? "";
     return {
       callId,
       stdout: delta,
@@ -742,19 +763,20 @@ function parseFileEditFromItemEvent(
   if (getItemTypeToken(event.data) !== "filechange") return null;
 
   const item = getItemRecord(event.data);
-  const callId = getStringField(item, "id");
+  const callId = getFirstStringField(item, ["id"]);
   if (!callId) return null;
 
   const defaultStatus = eventType === "item/completed" ? "completed" : "pending";
   return {
     callId,
     changes: parseFileChangesFromArray(item?.changes),
-    stdout:
-      getStringField(item, "stdout") ??
-      getStringField(item, "aggregatedOutput") ??
-      getStringField(item, "aggregated_output"),
-    stderr: getStringField(item, "stderr"),
-    status: toFileEditStatus(getStringField(item, "status")) ?? defaultStatus,
+    stdout: getFirstStringField(item, [
+      "stdout",
+      "aggregatedOutput",
+      "aggregated_output",
+    ]),
+    stderr: getFirstStringField(item, ["stderr"]),
+    status: toFileEditStatus(getFirstStringField(item, ["status"])) ?? defaultStatus,
   };
 }
 

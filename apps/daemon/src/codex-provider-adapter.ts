@@ -5,6 +5,7 @@ import type {
   Thread,
   ThreadEvent,
 } from "@beanbag/core";
+import { assertNever } from "@beanbag/core";
 import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,
@@ -100,14 +101,16 @@ function resolveSandboxMode(sandboxMode?: SandboxMode): SandboxMode {
 }
 
 function toTurnSandboxPolicy(sandboxMode?: SandboxMode): Record<string, unknown> {
-  switch (resolveSandboxMode(sandboxMode)) {
+  const resolved = resolveSandboxMode(sandboxMode);
+  switch (resolved) {
     case "read-only":
       return { type: "readOnly" };
     case "workspace-write":
       return { ...DEFAULT_WORKSPACE_WRITE_POLICY };
     case "danger-full-access":
-    default:
       return { type: "dangerFullAccess" };
+    default:
+      return assertNever(resolved);
   }
 }
 
@@ -281,6 +284,7 @@ export function createCodexProviderAdapter(
       if (normalized === "turn/completed" || normalized === "turn/end") {
         return "idle";
       }
+      // Open provider/runtime set: ignore unrelated provider event methods.
       return undefined;
     },
     titleFromEvent(method: string, data: unknown): string | undefined {

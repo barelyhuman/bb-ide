@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import type { Thread, ThreadEvent } from "@beanbag/core";
+import {
+  assertNever,
+  type Thread,
+  type ThreadEvent,
+  type ThreadStatus,
+} from "@beanbag/core";
 import { createClient, unwrap } from "../client.js";
 import {
   requireProjectId,
@@ -209,7 +214,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     });
 }
 
-export function statusIcon(status: string): string {
+export function statusIcon(status: ThreadStatus): string {
   switch (status) {
     case "created":
       return "\u25CC"; // dotted circle
@@ -222,7 +227,7 @@ export function statusIcon(status: string): string {
     case "active":
       return "\u25D4"; // circle with upper-right quadrant
     default:
-      return "?";
+      return assertNever(status);
   }
 }
 

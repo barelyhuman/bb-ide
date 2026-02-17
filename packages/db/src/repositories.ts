@@ -70,38 +70,6 @@ function toTaskEvent<TType extends TaskEventType>(row: {
   };
 }
 
-function parseLegacyTaskChatMessageData(rawData: string): string {
-  try {
-    const parsed = JSON.parse(rawData) as Record<string, unknown>;
-    const message =
-      typeof parsed.preview === "string" && parsed.preview.trim().length > 0
-        ? parsed.preview
-        : "(no text)";
-    const fromThreadId =
-      parsed.sender === "user"
-        ? null
-        : typeof parsed.threadId === "string" && parsed.threadId.trim().length > 0
-          ? parsed.threadId
-          : null;
-    return JSON.stringify({ message, fromThreadId });
-  } catch {
-    return JSON.stringify({ message: "(no text)", fromThreadId: null });
-  }
-}
-
-function parseLegacyTaskChatThreadBoundData(rawData: string): string {
-  try {
-    const parsed = JSON.parse(rawData) as Record<string, unknown>;
-    const threadId =
-      typeof parsed.threadId === "string" && parsed.threadId.trim().length > 0
-        ? parsed.threadId
-        : "";
-    return JSON.stringify({ threadId });
-  } catch {
-    return JSON.stringify({ threadId: "" });
-  }
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -214,8 +182,12 @@ function parseThreadExecutionOptions(
   if (!execution) return undefined;
 
   const model = getStringField(execution, "model");
-  const reasoningLevel = getStringField(execution, "reasoningLevel");
-  const sandboxMode = getStringField(execution, "sandboxMode");
+  const reasoningLevel = toThreadExecutionReasoningLevel(
+    getStringField(execution, "reasoningLevel"),
+  );
+  const sandboxMode = toThreadExecutionSandboxMode(
+    getStringField(execution, "sandboxMode"),
+  );
   const approvalPolicy = getStringField(execution, "approvalPolicy");
 
   const hasAny =
@@ -227,55 +199,116 @@ function parseThreadExecutionOptions(
 
   return {
     ...(model ? { model } : {}),
-    ...(reasoningLevel ? { reasoningLevel: reasoningLevel as ThreadExecutionOptions["reasoningLevel"] } : {}),
-    ...(sandboxMode ? { sandboxMode: sandboxMode as ThreadExecutionOptions["sandboxMode"] } : {}),
+    ...(reasoningLevel ? { reasoningLevel } : {}),
+    ...(sandboxMode ? { sandboxMode } : {}),
     ...(approvalPolicy ? { approvalPolicy } : {}),
   };
 }
 
-function normalizeTaskStatus(status: string): TaskStatus {
-  if (
+function isTaskStatus(status: string): status is TaskStatus {
+  return (
     status === "open" ||
     status === "in_progress" ||
     status === "blocked" ||
     status === "closed"
-  ) {
-    return status;
-  }
-  return "open";
+  );
+}
+
+function normalizeTaskStatus(status: string): TaskStatus {
+  if (isTaskStatus(status)) return status;
+  throw new Error(`Invalid persisted task status: ${status}`);
+}
+
+function isTaskCloseReason(
+  closeReason: string,
+): closeReason is TaskCloseReason {
+  return (
+    closeReason === "completed" ||
+    closeReason === "failed" ||
+    closeReason === "canceled"
+  );
 }
 
 function normalizeTaskCloseReason(
   closeReason: string | null | undefined,
 ): TaskCloseReason | undefined {
-  if (
-    closeReason === "completed" ||
-    closeReason === "failed" ||
-    closeReason === "canceled"
-  ) {
-    return closeReason;
-  }
-  return undefined;
+  if (!closeReason) return undefined;
+  if (isTaskCloseReason(closeReason)) return closeReason;
+  throw new Error(`Invalid persisted task close reason: ${closeReason}`);
+}
+
+function isTaskDependencyType(type: string): type is TaskDependencyType {
+  return type === "blocks" || type === "parent-child" || type === "related";
 }
 
 function normalizeTaskDependencyType(type: string): TaskDependencyType {
-  if (
-    type === "blocks" ||
-    type === "parent-child" ||
-    type === "related"
-  ) {
-    return type;
-  }
-  return "related";
+  if (isTaskDependencyType(type)) return type;
+  throw new Error(`Invalid persisted task dependency type: ${type}`);
+}
+
+function isTaskThreadRole(role: string): role is TaskThreadRole {
+  return role === "primary" || role === "worker";
 }
 
 function normalizeTaskThreadRole(
   role: string | null | undefined,
 ): TaskThreadRole | undefined {
-  if (role === "primary" || role === "worker") {
-    return role;
+  if (!role) return undefined;
+  if (isTaskThreadRole(role)) return role;
+  throw new Error(`Invalid persisted task thread role: ${role}`);
+}
+
+function isThreadStatus(status: string): status is ThreadStatus {
+  return (
+    status === "created" ||
+    status === "provisioning" ||
+    status === "provisioning_failed" ||
+    status === "active" ||
+    status === "idle"
+  );
+}
+
+function normalizeThreadStatus(status: string): ThreadStatus {
+  if (isThreadStatus(status)) return status;
+  throw new Error(`Invalid persisted thread status: ${status}`);
+}
+
+function toThreadExecutionReasoningLevel(
+  value: string | undefined,
+): ThreadExecutionOptions["reasoningLevel"] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  ) {
+    return value;
   }
-  return undefined;
+  throw new Error(`Invalid persisted reasoning level: ${value}`);
+}
+
+function toThreadExecutionSandboxMode(
+  value: string | undefined,
+): ThreadExecutionOptions["sandboxMode"] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    value === "read-only" ||
+    value === "workspace-write" ||
+    value === "danger-full-access"
+  ) {
+    return value;
+  }
+  throw new Error(`Invalid persisted sandbox mode: ${value}`);
+}
+
+function toThreadExecutionSource(
+  value: string,
+): ThreadExecutionOptions["source"] {
+  if (value === "client/thread/start" || value === "client/turn/start") {
+    return value;
+  }
+  throw new Error(`Invalid persisted thread execution source: ${value}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -416,26 +449,11 @@ export class ThreadRepository {
   }
 
   private rowToThread(row: typeof threads.$inferSelect): Thread {
-    const normalizedStatus = (() => {
-      if (
-        row.status === "created" ||
-        row.status === "provisioning" ||
-        row.status === "provisioning_failed" ||
-        row.status === "active" ||
-        row.status === "idle"
-      ) {
-        return row.status;
-      }
-      // Backward compatibility for databases that still contain legacy statuses.
-      if (row.status === "running") return "active";
-      return "created";
-    })();
-
     return {
       id: row.id,
       projectId: row.projectId,
       title: row.title ?? undefined,
-      status: normalizedStatus,
+      status: normalizeThreadStatus(row.status),
       taskId: row.taskId ?? undefined,
       taskRole: normalizeTaskThreadRole(row.taskRole),
       parentThreadId: row.parentThreadId ?? undefined,
@@ -585,10 +603,11 @@ export class EventRepository {
     const data = JSON.parse(row.data);
     const execution = parseThreadExecutionOptions(data);
     if (!execution) return undefined;
+    const source = toThreadExecutionSource(row.normType);
 
     return {
       ...execution,
-      source: row.normType as ThreadExecutionOptions["source"],
+      source,
       seq: row.seq,
     };
   }
@@ -1061,29 +1080,9 @@ export class TaskRepository {
     for (const row of rows) {
       if (isTaskEventType(row.type)) {
         events.push(toTaskEvent({ ...row, type: row.type }));
-        continue;
       }
-
-      // Backward compatibility for older task-chat event names.
-      if (row.type === "task.chat.message_sent") {
-        events.push(
-          toTaskEvent({
-            ...row,
-            type: "task.chat.message",
-            data: parseLegacyTaskChatMessageData(row.data),
-          }),
-        );
-        continue;
-      }
-
-      if (row.type === "task.chat.thread_bound") {
-        events.push(
-          toTaskEvent({
-            ...row,
-            type: "task.chat.thread_created",
-            data: parseLegacyTaskChatThreadBoundData(row.data),
-          }),
-        );
+      else {
+        throw new Error(`Invalid persisted task event type: ${row.type}`);
       }
     }
     return events;
@@ -1188,15 +1187,15 @@ export class TaskRepository {
   }
 
   private rowToTask(row: typeof tasks.$inferSelect): Task {
+    const closeReason = normalizeTaskCloseReason(row.closeReason);
+
     return {
       id: row.id,
       projectId: row.projectId,
       title: row.title,
       ...(row.description ? { description: row.description } : {}),
       status: normalizeTaskStatus(row.status),
-      ...(normalizeTaskCloseReason(row.closeReason)
-        ? { closeReason: normalizeTaskCloseReason(row.closeReason) }
-        : {}),
+      ...(closeReason ? { closeReason } : {}),
       ...(row.assignee ? { assignee: row.assignee } : {}),
       ...(row.archivedAt !== null ? { archivedAt: row.archivedAt } : {}),
       ...(row.closedAt !== null ? { closedAt: row.closedAt } : {}),

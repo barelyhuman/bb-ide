@@ -55,26 +55,33 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
         return;
       }
 
-      const daemonEntryPath = resolve(daemonPackagePath, "src", "index.ts");
-      const daemonRunnerPath = resolve(
+      const daemonDistEntryPath = resolve(daemonPackagePath, "dist", "index.js");
+      const daemonSourceEntryPath = resolve(daemonPackagePath, "src", "index.ts");
+      const daemonTsxRunnerPath = resolve(
         daemonPackagePath,
         "node_modules",
         ".bin",
         "tsx",
       );
+      const useBuiltDaemon = existsSync(daemonDistEntryPath);
+      const daemonCommand = useBuiltDaemon ? process.execPath : daemonTsxRunnerPath;
+      const daemonArgs = useBuiltDaemon
+        ? [daemonDistEntryPath]
+        : [daemonSourceEntryPath];
 
-      if (!existsSync(daemonEntryPath)) {
-        console.error(`Daemon source not found at ${daemonEntryPath}`);
+      if (!useBuiltDaemon && !existsSync(daemonSourceEntryPath)) {
+        console.error(`Daemon source not found at ${daemonSourceEntryPath}`);
+        console.error("Build daemon for production: pnpm build");
         process.exit(1);
       }
 
-      if (!existsSync(daemonRunnerPath)) {
-        console.error(`Daemon runner not found at ${daemonRunnerPath}`);
+      if (!useBuiltDaemon && !existsSync(daemonTsxRunnerPath)) {
+        console.error(`Daemon runner not found at ${daemonTsxRunnerPath}`);
         console.error("Install dependencies first: pnpm install");
         process.exit(1);
       }
 
-      const child = spawn(daemonRunnerPath, [daemonEntryPath], {
+      const child = spawn(daemonCommand, daemonArgs, {
         cwd: daemonPackagePath,
         detached: true,
         stdio: "ignore",

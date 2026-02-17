@@ -84,6 +84,24 @@ Raise type safety across the codebase by:
 - Then cover `P1` UX-facing formatters and web/cli render helpers.
 - Finally harden parser-heavy `open_external` paths with explicit tolerance boundaries.
 
+## Audit Checklist
+
+| File / Function | Classification | Planned Change | Test Impact | Status |
+| --- | --- | --- | --- | --- |
+| `packages/core/src/assert-never.ts` + `packages/core/src/index.ts` | `closed_internal` | Add shared `assertNever` helper and export from core | Typecheck across all packages that consume `@beanbag/core` | `done` |
+| `apps/cli/src/commands/thread.ts` `statusIcon` | `closed_internal` | Type as `ThreadStatus` and make switch exhaustive via `assertNever` | `apps/cli/src/__tests__/helpers.test.ts` thread status assertions | `done` |
+| `apps/cli/src/commands/task.ts` `statusIcon` | `closed_internal` | Remove permissive fallback and make switch exhaustive via `assertNever` | `apps/cli/src/__tests__/helpers.test.ts` task status assertions | `done` |
+| `apps/web/src/hooks/useWebSocket.ts` entity switch | `closed_internal` | Add exhaustive default guard with `assertNever` | Covered by web package typecheck; no runtime behavior change | `done` |
+| `apps/web/src/lib/ws.ts` `parseSubKey` | `closed_internal` at boundary | Replace unsafe casts with runtime `RealtimeEntity` guard; ignore invalid keys | Added `apps/web/src/lib/ws.test.ts` parse coverage | `done` |
+| `apps/web/src/components/layout/ProjectList.tsx` `isBusyThreadStatus` | `closed_internal` | Use exhaustive switch over `Thread["status"]` + `assertNever` | Covered by web package typecheck | `done` |
+| `apps/web/src/components/shared/StatusBadge.tsx` | `closed_internal` | Keep union-keyed mapping (`Record<ThreadStatus, ...>`) with no string fallback | Existing behavior unchanged; no new test required | `done` |
+| `apps/daemon/src/routes/error-response.ts` `statusFromCode` | `closed_internal` (+ internal fallback) | Narrow to `DomainErrorCode | "internal_error"` and exhaustively map statuses | Added `apps/daemon/src/__tests__/routes/error-response.test.ts` | `done` |
+| `apps/daemon/src/thread-manager.ts` provider decode paths | `open_external` | Add typed decode helpers for provider notifications/params and keep tolerant open-set behavior | Covered by existing `thread-manager` tests + typecheck | `done` |
+| `apps/daemon/src/codex-provider-adapter.ts` sandbox/status helpers | mixed | Make closed sandbox switch exhaustive; keep explicit open-event fallback comments | Covered by existing `codex-provider-adapter` tests | `done` |
+| `packages/core/src/to-ui-messages.ts` exec/file/web parser helpers | mixed | Centralize repeated payload field extraction with typed helper functions; retain open-provider tolerance | Extended `packages/core/test/to-ui-messages.test.ts` for unknown web-search action preservation | `done` |
+| `packages/db/src/repositories.ts` normalization helpers | `closed_internal` | Enforce strict union parsing for persisted internal values; remove compatibility coercions and legacy task-event remaps | Added `packages/db/test/repositories.strict.test.ts` for invalid persisted values | `done` |
+| `packages/core/src/types.ts` + `packages/core/src/api-types.ts` union duplication | `closed_internal` | Consolidate duplicate unions into a single source file (`shared-types.ts`) and re-export from both surfaces | Covered by workspace typecheck and core package tests | `done` |
+
 ## Workstream B: Standardize Exhaustive Union Pattern
 
 ### B1. Shared Helper
@@ -145,10 +163,10 @@ Raise type safety across the codebase by:
 ### C5. DB (`packages/db`)
 
 - Split normalization intent in `packages/db/src/repositories.ts`:
-  - explicit closed union conversions for internal writes/reads
-  - explicit legacy/open fallback for old DB/event payloads
-- Keep backward-compatibility branches (`running` thread status, legacy task-chat event types), but mark as intentionally tolerant.
-- Add first-pass repository tests if none exist, focused on normalization and fallback behavior.
+  - explicit strict closed-union conversions for internal writes/reads
+  - fail fast on invalid persisted union values
+- Remove backward-compatibility remaps for legacy DB/task event values.
+- Add repository tests focused on strict normalization failures.
 
 ## Workstream D: Verification and Regression Safety
 

@@ -101,3 +101,4 @@ export type {
 } from "./ui-message.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
+export { assertNever } from "./assert-never.js";

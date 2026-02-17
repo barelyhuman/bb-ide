@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ThreadEvent } from "@beanbag/core";
+import { assertNever, type ThreadEvent } from "@beanbag/core";
 import { wsManager } from "../lib/ws";
 import { getThreadEvents } from "../lib/api";
 
@@ -162,6 +162,8 @@ export function useWebSocket(): void {
           }
           scheduleInvalidations();
           break;
+        default:
+          assertNever(entity);
       }
     });
 

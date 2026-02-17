@@ -8,17 +8,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
-import type {
-  AvailableModel,
-  ThreadExecutionOptions,
-  SystemProviderInfo,
-  Thread,
-  ThreadEvent,
-  ThreadEventData,
-  ThreadEventType,
-  PromptInput,
-  SpawnThreadRequest,
-  TellThreadRequest,
+import {
+  assertNever,
+  type AvailableModel,
+  type ThreadExecutionOptions,
+  type SystemProviderInfo,
+  type Thread,
+  type ThreadEvent,
+  type ThreadEventData,
+  type ThreadEventType,
+  type PromptInput,
+  type SpawnThreadRequest,
+  type TellThreadRequest,
 } from "@beanbag/core";
 import type {
   ThreadRepository,
@@ -154,6 +155,86 @@ function resolveThreadShellPath(pathValue: string | undefined): string | undefin
   if (!shimBinDir) return pathValue;
 
   return prependPathEntry(pathValue, shimBinDir);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function getStringField(
+  record: Record<string, unknown> | null,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function toProviderEventType(method: string): ThreadEventType {
+  // Open provider/runtime set: upstream providers can add event methods.
+  return method as ThreadEventType;
+}
+
+function toProviderEventData(params: unknown): ThreadEventData {
+  // Open provider/runtime set: preserve payload shape as delivered by provider.
+  return (params ?? {}) as ThreadEventData;
+}
+
+function toReasoningLevel(
+  value: unknown,
+): ThreadExecutionOptions["reasoningLevel"] | undefined {
+  if (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function toSandboxMode(
+  value: unknown,
+): ThreadExecutionOptions["sandboxMode"] | undefined {
+  if (
+    value === "read-only" ||
+    value === "workspace-write" ||
+    value === "danger-full-access"
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function toSandboxModeFromPolicy(
+  policy: Record<string, unknown> | null,
+): ThreadExecutionOptions["sandboxMode"] | undefined {
+  const type = getStringField(policy, "type");
+  switch (type) {
+    case "readOnly":
+      return "read-only";
+    case "workspaceWrite":
+      return "workspace-write";
+    case "dangerFullAccess":
+      return "danger-full-access";
+    default:
+      // Open provider/runtime set: tolerate unknown policy types intentionally.
+      return undefined;
+  }
+}
+
+function toTurnLifecycleState(
+  normalizedType: string,
+): "active" | "idle" | undefined {
+  if (normalizedType === "turn/started" || normalizedType === "turn/start") {
+    return "active";
+  }
+  if (normalizedType === "turn/completed" || normalizedType === "turn/end") {
+    return "idle";
+  }
+  // Open provider/runtime set: ignore non-lifecycle event types intentionally.
+  return undefined;
 }
 
 export class ThreadManager {
@@ -815,28 +896,20 @@ export class ThreadManager {
         ? this.eventRepo.getLatestTurnLifecycle(threadId)
         : undefined;
     if (latestLifecycle) {
-      if (
-        latestLifecycle.normType === "turn/completed" ||
-        latestLifecycle.normType === "turn/end"
-      ) {
-        return undefined;
-      }
-      if (
-        latestLifecycle.normType === "turn/started" ||
-        latestLifecycle.normType === "turn/start"
-      ) {
+      const state = toTurnLifecycleState(latestLifecycle.normType);
+      if (state === "active") {
         return latestLifecycle.turnId;
       }
+      if (state === "idle") return undefined;
     }
 
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       const normalizedType = this.provider.normalizeEventType(event.type);
-      if (normalizedType === "turn/completed" || normalizedType === "turn/end") {
-        return undefined;
-      }
-      if (normalizedType === "turn/started" || normalizedType === "turn/start") {
+      const state = toTurnLifecycleState(normalizedType);
+      if (state === "idle") return undefined;
+      if (state === "active") {
         return this._extractTurnIdFromEventData(event.data);
       }
     }
@@ -844,23 +917,14 @@ export class ThreadManager {
   }
 
   private _extractTurnIdFromEventData(data: unknown): string | undefined {
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      return undefined;
-    }
+    const payload = asRecord(data);
+    if (!payload) return undefined;
 
-    const payload = data as Record<string, unknown>;
-    if (typeof payload.turnId === "string" && payload.turnId.length > 0) {
-      return payload.turnId;
-    }
+    const directTurnId =
+      getStringField(payload, "turnId") ?? getStringField(payload, "turn_id");
+    if (directTurnId) return directTurnId;
 
-    const turn = payload.turn;
-    if (!turn || typeof turn !== "object" || Array.isArray(turn)) {
-      return undefined;
-    }
-    const turnRecord = turn as Record<string, unknown>;
-    return typeof turnRecord.id === "string" && turnRecord.id.length > 0
-      ? turnRecord.id
-      : undefined;
+    return getStringField(asRecord(payload.turn), "id");
   }
 
   private async _ensureProviderSession(
@@ -943,8 +1007,8 @@ export class ThreadManager {
       return;
     }
 
-    const eventType = msg.method as ThreadEventType;
-    const eventData = (msg.params ?? {}) as ThreadEventData;
+    const eventType = toProviderEventType(msg.method);
+    const eventData = toProviderEventData(msg.params);
 
     this._appendEvent(threadId, eventType, eventData);
 
@@ -1002,48 +1066,21 @@ export class ThreadManager {
     type: "client/thread/start" | "client/turn/start",
     params: Record<string, unknown>,
   ): ThreadExecutionOptions {
-    const model =
-      typeof params.model === "string" && params.model.length > 0
-        ? params.model
-        : undefined;
-    const approvalPolicy =
-      typeof params.approvalPolicy === "string" && params.approvalPolicy.length > 0
-        ? params.approvalPolicy
-        : undefined;
+    const model = getStringField(params, "model");
+    const approvalPolicy = getStringField(params, "approvalPolicy");
+    const config = asRecord(params.config);
+    const reasoningLevel = toReasoningLevel(config?.model_reasoning_effort);
 
-    const config =
-      params.config && typeof params.config === "object" && !Array.isArray(params.config)
-        ? (params.config as Record<string, unknown>)
-        : undefined;
-    const reasoningLevel =
-      typeof config?.model_reasoning_effort === "string"
-        ? (config.model_reasoning_effort as ThreadExecutionOptions["reasoningLevel"])
-        : undefined;
-
-    let sandboxMode: ThreadExecutionOptions["sandboxMode"];
-    if (type === "client/thread/start") {
-      if (
-        params.sandbox === "read-only" ||
-        params.sandbox === "workspace-write" ||
-        params.sandbox === "danger-full-access"
-      ) {
-        sandboxMode = params.sandbox;
-      }
-    } else {
-      const sandboxPolicy =
-        params.sandboxPolicy &&
-        typeof params.sandboxPolicy === "object" &&
-        !Array.isArray(params.sandboxPolicy)
-          ? (params.sandboxPolicy as Record<string, unknown>)
-          : undefined;
-
-      if (sandboxPolicy?.type === "readOnly") {
-        sandboxMode = "read-only";
-      } else if (sandboxPolicy?.type === "workspaceWrite") {
-        sandboxMode = "workspace-write";
-      } else if (sandboxPolicy?.type === "dangerFullAccess") {
-        sandboxMode = "danger-full-access";
-      }
+    let sandboxMode: ThreadExecutionOptions["sandboxMode"] | undefined;
+    switch (type) {
+      case "client/thread/start":
+        sandboxMode = toSandboxMode(params.sandbox);
+        break;
+      case "client/turn/start":
+        sandboxMode = toSandboxModeFromPolicy(asRecord(params.sandboxPolicy));
+        break;
+      default:
+        return assertNever(type);
     }
 
     return {
@@ -1229,17 +1266,13 @@ export class ThreadManager {
     method: string,
     data: unknown,
   ): void {
-    const normalizedMethod = this.provider.normalizeEventType(method);
-
-    if (normalizedMethod === "turn/start" || normalizedMethod === "turn/started") {
+    const state = toTurnLifecycleState(this.provider.normalizeEventType(method));
+    if (state === "active") {
       const turnId = this._extractTurnIdFromEventData(data);
-      if (turnId) {
-        this.activeTurnIds.set(threadId, turnId);
-      }
+      if (turnId) this.activeTurnIds.set(threadId, turnId);
       return;
     }
-
-    if (normalizedMethod === "turn/completed" || normalizedMethod === "turn/end") {
+    if (state === "idle") {
       this.activeTurnIds.delete(threadId);
     }
   }
@@ -1408,29 +1441,15 @@ export class ThreadManager {
         ? this.eventRepo.getLatestTurnLifecycle(threadId)
         : undefined;
     if (latestLifecycle) {
-      if (
-        latestLifecycle.normType === "turn/completed" ||
-        latestLifecycle.normType === "turn/end"
-      ) {
-        return "idle";
-      }
-      if (
-        latestLifecycle.normType === "turn/started" ||
-        latestLifecycle.normType === "turn/start"
-      ) {
-        return "active";
-      }
+      const state = toTurnLifecycleState(latestLifecycle.normType);
+      if (state) return state;
     }
 
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const normalizedType = this.provider.normalizeEventType(events[i].type);
-      if (normalizedType === "turn/completed" || normalizedType === "turn/end") {
-        return "idle";
-      }
-      if (normalizedType === "turn/started" || normalizedType === "turn/start") {
-        return "active";
-      }
+      const state = toTurnLifecycleState(normalizedType);
+      if (state) return state;
     }
     return undefined;
   }

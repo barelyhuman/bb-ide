@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import type { TaskStatus, ThreadStatus } from "@beanbag/core";
 import { formatUptime } from "../commands/daemon.js";
-import { statusIcon } from "../commands/thread.js";
+import { statusIcon as threadStatusIcon } from "../commands/thread.js";
+import { statusIcon as taskStatusIcon } from "../commands/task.js";
 
 describe("formatUptime()", () => {
   it("formats seconds only", () => {
@@ -34,29 +36,32 @@ describe("formatUptime()", () => {
 });
 
 describe("statusIcon()", () => {
-  it("returns dotted circle for created", () => {
-    expect(statusIcon("created")).toBe("\u25CC");
-  });
+  const threadStatusCases: Array<{ status: ThreadStatus; icon: string }> = [
+    { status: "created", icon: "\u25CC" },
+    { status: "provisioning", icon: "\u25D1" },
+    { status: "provisioning_failed", icon: "\u25C9" },
+    { status: "idle", icon: "\u25CB" },
+    { status: "active", icon: "\u25D4" },
+  ];
 
-  it("returns half circle for provisioning", () => {
-    expect(statusIcon("provisioning")).toBe("\u25D1");
-  });
+  for (const { status, icon } of threadStatusCases) {
+    it(`returns ${icon} for thread status ${status}`, () => {
+      expect(threadStatusIcon(status)).toBe(icon);
+    });
+  }
+});
 
-  it("returns fisheye circle for provisioning_failed", () => {
-    expect(statusIcon("provisioning_failed")).toBe("\u25C9");
-  });
+describe("task statusIcon()", () => {
+  const taskStatusCases: Array<{ status: TaskStatus; icon: string }> = [
+    { status: "open", icon: "\u25CB" },
+    { status: "in_progress", icon: "\u25D4" },
+    { status: "blocked", icon: "\u25D1" },
+    { status: "closed", icon: "\u25CF" },
+  ];
 
-  it("returns empty circle for idle", () => {
-    expect(statusIcon("idle")).toBe("\u25CB");
-  });
-
-  it("returns quarter circle for active", () => {
-    expect(statusIcon("active")).toBe("\u25D4");
-  });
-
-  it("returns ? for unknown status", () => {
-    expect(statusIcon("unknown")).toBe("?");
-    expect(statusIcon("")).toBe("?");
-    expect(statusIcon("cancelled")).toBe("?");
-  });
+  for (const { status, icon } of taskStatusCases) {
+    it(`returns ${icon} for task status ${status}`, () => {
+      expect(taskStatusIcon(status)).toBe(icon);
+    });
+  }
 });

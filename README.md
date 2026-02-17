@@ -31,6 +31,36 @@ Endpoints:
 
 `apps/web` dev server proxies `/api` and `/ws` to daemon `:3333`.
 
+## CLI and Daemon Run Modes
+
+Development (source + watch):
+
+```bash
+pnpm install
+pnpm dev
+
+# run CLI from source in dev
+pnpm bb:dev --help
+pnpm bb:dev daemon status
+```
+
+Production (built `dist`):
+
+```bash
+pnpm build
+
+# run built daemon and built CLI
+pnpm daemon --help
+pnpm bb --help
+pnpm bb daemon start
+```
+
+Notes:
+
+- `dist/` output is generated for `@beanbag/core`, `@beanbag/db`, `@beanbag/daemon`, and `@beanbag/cli`.
+- `bb daemon start` prefers `apps/daemon/dist/index.js` when available; if not built, it falls back to `apps/daemon/src/index.ts` via `tsx` for local development.
+- `pnpm dev` starts the daemon on `:3333`; stop any already-running background daemon first (`pnpm bb daemon stop`) to avoid `EADDRINUSE`.
+
 ## Build, Typecheck, Test
 
 Workspace:
@@ -47,6 +77,15 @@ UI consistency checklist for frontend changes:
 - Keep the canonical message rendering path (`ConversationEntry` + `ConversationWorkingIndicator`).
 - Use `ui-text-*` typography utilities instead of arbitrary `text-[Npx]` classes.
 - Keep light/dark typography tokens aligned unless a divergence is intentionally documented.
+
+## Union Handling
+
+When working with string domains:
+
+- `closed_internal`: Beanbag-owned values. Use exhaustive `switch` handling and `assertNever`.
+- `open_external`: provider/runtime-owned values. Keep tolerant fallback branches with a comment that unknown values are intentional.
+
+`assertNever` is exported from `@beanbag/core`.
 
 ## Thread Lifecycle
 

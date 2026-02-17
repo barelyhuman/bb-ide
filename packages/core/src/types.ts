@@ -6,8 +6,16 @@ import type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
+  TaskCloseReason,
+  TaskDependencyType,
+  TaskStatus,
   TaskThreadRole,
-} from "./api-types.js";
+} from "./shared-types.js";
+export type {
+  TaskStatus,
+  TaskCloseReason,
+  TaskDependencyType,
+} from "./shared-types.js";
 
 // Project
 export interface Project {
@@ -19,12 +27,6 @@ export interface Project {
 }
 
 // Task
-export type TaskStatus = "open" | "in_progress" | "blocked" | "closed";
-
-export type TaskCloseReason = "completed" | "failed" | "canceled";
-
-export type TaskDependencyType = "blocks" | "parent-child" | "related";
-
 export interface Task {
   id: string;
   projectId: string;

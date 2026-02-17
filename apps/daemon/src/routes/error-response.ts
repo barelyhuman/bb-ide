@@ -1,8 +1,12 @@
 import type { Context } from "hono";
+import { assertNever } from "@beanbag/core";
+import type { DomainErrorCode } from "../domain-errors.js";
 import { isDomainError } from "../domain-errors.js";
 
+type ApiErrorCode = DomainErrorCode | "internal_error";
+
 interface ApiErrorBody {
-  code: string;
+  code: ApiErrorCode;
   message: string;
   retryable?: boolean;
   details?: unknown;
@@ -12,7 +16,7 @@ interface ApiErrorBody {
 
 type ApiErrorStatus = 400 | 404 | 409 | 422 | 500 | 502 | 503 | 504;
 
-function statusFromCode(code: string): ApiErrorStatus {
+function statusFromCode(code: ApiErrorCode): ApiErrorStatus {
   switch (code) {
     case "invalid_request":
       return 400;
@@ -33,13 +37,15 @@ function statusFromCode(code: string): ApiErrorStatus {
       return 504;
     case "provider_rpc_error":
       return 502;
-    default:
+    case "internal_error":
       return 500;
+    default:
+      return assertNever(code);
   }
 }
 
 function createBody(
-  code: string,
+  code: ApiErrorCode,
   message: string,
   opts?: { retryable?: boolean; details?: unknown },
 ): ApiErrorBody {
