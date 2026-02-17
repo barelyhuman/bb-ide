@@ -19,6 +19,12 @@ import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
 } from "@/lib/latestInitialExpanded";
+import {
+  CollapsibleHeader,
+  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
+  COLLAPSIBLE_HEADER_TEXT_CLASS,
+  getCollapsibleHeaderToneClass,
+} from "@/components/messages/CollapsibleHeader";
 import { ConversationMarkdown } from "./ConversationMarkdown";
 
 interface ConversationEntryProps {
@@ -223,7 +229,7 @@ function DiffLine({
 }) {
   if (line.type === "hunk") {
     return (
-      <div className="px-2 py-0.5 font-mono text-[10px] text-muted-foreground/90">
+      <div className="px-2 py-0.5 font-mono ui-text-2xs text-muted-foreground/90">
         {line.content}
       </div>
     );
@@ -231,7 +237,7 @@ function DiffLine({
 
   if (line.type === "meta") {
     return (
-      <div className="px-2 py-0.5 font-mono text-[10px] text-muted-foreground/80">
+      <div className="px-2 py-0.5 font-mono ui-text-2xs text-muted-foreground/80">
         {line.content}
       </div>
     );
@@ -250,29 +256,19 @@ function DiffLine({
 
   return (
     <div
-      className={`grid items-center px-2 py-0.5 font-mono text-[11px] ${lineClassName}`}
+      className={`grid items-center px-2 py-0.5 font-mono ui-text-xs ${lineClassName}`}
       style={{ gridTemplateColumns: "30px 30px 1fr", whiteSpace: "pre" }}
     >
-      <span className="select-none pr-2 text-right text-[10px] text-muted-foreground/70">
+      <span className="select-none pr-2 text-right ui-text-2xs text-muted-foreground/70">
         {line.oldLineNumber ?? ""}
       </span>
-      <span className="select-none pr-2 text-right text-[10px] text-muted-foreground/70">
+      <span className="select-none pr-2 text-right ui-text-2xs text-muted-foreground/70">
         {line.newLineNumber ?? ""}
       </span>
       <span className={contentClassName}>{line.content}</span>
     </div>
   );
 }
-
-const HEADER_COLLAPSED_TONE_CLASS =
-  "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
-const HEADER_EXPANDED_TONE_CLASS = "text-foreground/90";
-const HEADER_STATIC_TONE_CLASS = "text-muted-foreground/90";
-const HEADER_BUTTON_BASE_CLASS =
-  "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
-const HEADER_TEXT_CLASS = "min-w-0 truncate";
-const HEADER_CHEVRON_COLLAPSED_CLASS =
-  "size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100";
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -315,20 +311,14 @@ function ExpandableEntryContainer({
   return (
     <div className="rounded-md text-muted-foreground">
       <div className="px-2 py-1">
-        <button
-          type="button"
-          onClick={onToggle}
-          className={`${HEADER_BUTTON_BASE_CLASS} ${headerToneClass}${headerButtonClassName ? ` ${headerButtonClassName}` : ""}`}
-        >
-          <span className={summaryContentClassName ?? HEADER_TEXT_CLASS}>
-            {summaryContent}
-          </span>
-          {isExpanded ? (
-            <ChevronDown className="size-4 shrink-0" />
-          ) : (
-            <ChevronRight className={HEADER_CHEVRON_COLLAPSED_CLASS} />
-          )}
-        </button>
+        <CollapsibleHeader
+          isExpanded={isExpanded}
+          onToggle={onToggle}
+          toneClassName={headerToneClass}
+          className={headerButtonClassName}
+          summaryClassName={summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS}
+          summaryContent={summaryContent}
+        />
       </div>
       {isExpanded ? (
         <div className="px-2 pb-1">
@@ -365,7 +355,7 @@ function UserMessageRow({ message }: { message: UIUserMessage }) {
                 <Badge
                   key={attachment}
                   variant="outline"
-                  className="rounded-full border-primary/30 bg-background/70 px-2 py-0 text-[10px] text-muted-foreground"
+                  className="rounded-full border-primary/30 bg-background/70 px-2 py-0 ui-text-2xs text-muted-foreground"
                 >
                   {attachment}
                 </Badge>
@@ -402,9 +392,7 @@ function ReasoningRow({ message }: { message: UIAssistantReasoningMessage }) {
     () => isStreaming || isReasoningExpandable(message.text, title),
     [isStreaming, message.text, title],
   );
-  const headerToneClass = isExpanded
-    ? HEADER_EXPANDED_TONE_CLASS
-    : HEADER_COLLAPSED_TONE_CLASS;
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   useEffect(() => {
     if (isStreaming) setIsExpanded(true);
@@ -416,7 +404,7 @@ function ReasoningRow({ message }: { message: UIAssistantReasoningMessage }) {
       <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="mr-auto w-full">
           <div className="rounded-md px-2 py-1 text-muted-foreground">
-            <div className={`py-0.5 text-sm italic ${HEADER_STATIC_TONE_CLASS}`}>
+            <div className={`py-0.5 text-sm italic ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
               <span className="truncate">{title}</span>
             </div>
           </div>
@@ -573,9 +561,7 @@ function ToolExploringRow({
   );
   const counts = useMemo(() => summarizeExploringCounts(message.calls), [message.calls]);
   const hasDetails = detailLines.length > 0;
-  const headerToneClass = isExpanded
-    ? HEADER_EXPANDED_TONE_CLASS
-    : HEADER_COLLAPSED_TONE_CLASS;
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
   const actionLabel =
     message.status === "pending" || preferOngoingLabels ? "Exploring" : "Explored";
   const exploredDetail = formatExploredDetail(counts);
@@ -596,7 +582,7 @@ function ToolExploringRow({
       <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="mr-auto w-full">
           <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-            <div className={`py-0.5 ${HEADER_STATIC_TONE_CLASS}`}>
+            <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
               {collapsedSummaryContent}
             </div>
           </div>
@@ -611,13 +597,13 @@ function ToolExploringRow({
         <ExpandableEntryContainer
           isExpanded={isExpanded}
           summaryContent={isExpanded ? actionLabel : collapsedSummaryContent}
-          summaryContentClassName={isExpanded ? HEADER_TEXT_CLASS : "min-w-0"}
+          summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
           <div className="mt-0.5 space-y-0.5">
               {detailLines.map((line, index) => (
-                <div key={`${message.id}:${index}`} className="font-mono text-[12px] text-foreground/80">
+                <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">
                   {line}
                 </div>
               ))}
@@ -648,9 +634,7 @@ function ToolCallRow({
           ? "Running"
           : "Ran";
   const summaryText = isExpanded ? `${actionLabel} command` : `${actionLabel} ${command}`;
-  const headerToneClass = isExpanded
-    ? HEADER_EXPANDED_TONE_CLASS
-    : HEADER_COLLAPSED_TONE_CLASS;
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
@@ -662,7 +646,7 @@ function ToolCallRow({
           onToggle={onToggle}
         >
           <div className="overflow-hidden rounded-lg border border-zinc-700/40 bg-zinc-900/90">
-            <div className="px-4 py-3 font-mono text-[12px] leading-tight text-zinc-100">
+            <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-zinc-100">
               <div className="whitespace-pre-wrap break-words leading-tight">$ {command}</div>
               <pre className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-zinc-400">
                 {message.output && message.output.length > 0
@@ -695,7 +679,7 @@ function WebSearchRow({
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-          <div className={`py-0.5 ${HEADER_STATIC_TONE_CLASS}`}>{summary}</div>
+          <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{summary}</div>
         </div>
       </div>
     </div>
@@ -771,9 +755,7 @@ function FileEditRow({
       <span className="shrink-0 text-destructive/80">-{collapsedStats.removed}</span>
     </span>
   );
-  const headerToneClass = isExpanded
-    ? HEADER_EXPANDED_TONE_CLASS
-    : HEADER_COLLAPSED_TONE_CLASS;
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
@@ -781,11 +763,11 @@ function FileEditRow({
         <ExpandableEntryContainer
           isExpanded={isExpanded}
           summaryContent={collapsedSummaryContent}
-          summaryContentClassName={isExpanded ? HEADER_TEXT_CLASS : "min-w-0"}
+          summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div className="font-mono text-[12px] text-foreground/90">
+          <div className="font-mono ui-text-sm text-foreground/90">
               {message.changes.map((change, index) => {
                 const action = fileChangeAction(change);
                 const actionChip = fileChangeActionLabel(action);
@@ -805,21 +787,21 @@ function FileEditRow({
                   >
                     <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
                       <div className="flex items-center gap-2 px-3 pb-0.5 pt-2">
-                        <Badge variant="outline" className="h-4 rounded px-1 text-[9px]">
+                        <Badge variant="outline" className="h-4 rounded px-1 ui-text-3xs">
                           {actionChip}
                         </Badge>
                         <span
-                          className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground/90"
+                          className="min-w-0 flex-1 truncate font-mono ui-text-sm text-foreground/90"
                           title={change.path}
                         >
                           {fileName}
                         </span>
-                        <span className="shrink-0 font-mono text-[12px]">
+                        <span className="shrink-0 font-mono ui-text-sm">
                           <span className="text-emerald-600">+{stats.added}</span>{" "}
                           <span className="text-destructive/80">-{stats.removed}</span>
                         </span>
                       </div>
-                      <div className="break-all px-3 pb-1 pt-0.5 font-mono text-[10px] text-muted-foreground/75">
+                      <div className="break-all px-3 pb-1 pt-0.5 font-mono ui-text-2xs text-muted-foreground/75">
                         {pathDetail}
                       </div>
                       <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
@@ -829,7 +811,7 @@ function FileEditRow({
                               <DiffLine key={`${change.path}:${lineIndex}`} line={line} />
                             ))
                           ) : (
-                            <div className="px-3 py-2 font-mono text-[11px] text-muted-foreground/80">
+                            <div className="px-3 py-2 font-mono ui-text-xs text-muted-foreground/80">
                               (No diff provided)
                             </div>
                           )}
@@ -863,7 +845,7 @@ function ErrorRow({ message }: { message: UIErrorMessage }) {
   return (
     <div className="group flex w-full items-center gap-2 rounded-md bg-destructive/5 px-3 py-1.5 text-xs">
       <CircleX className="size-3.5 shrink-0 text-destructive" />
-      <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-destructive/90">
+      <p className="min-w-0 flex-1 truncate font-mono ui-text-xs text-destructive/90">
         {message.message}
       </p>
     </div>
@@ -886,7 +868,7 @@ function DebugEventRow({ message }: { message: UIDebugRawEventMessage }) {
           onClick={() => setIsExpanded((value) => !value)}
           className="w-full px-1 py-0.5 text-left"
         >
-          <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1.5 font-mono ui-text-xs text-muted-foreground">
             {isExpanded ? (
               <ChevronDown className="size-3 shrink-0" />
             ) : (
@@ -894,14 +876,14 @@ function DebugEventRow({ message }: { message: UIDebugRawEventMessage }) {
             )}
             <span className="shrink-0">#{event.seq}</span>
             <span className="shrink-0">{message.rawType}</span>
-            <Badge variant="outline" className="h-4 rounded px-1 text-[9px]">
+            <Badge variant="outline" className="h-4 rounded px-1 ui-text-3xs">
               {message.reason}
             </Badge>
           </p>
         </button>
         {isExpanded ? (
           <div className="mt-1 rounded-md border border-border/60 bg-muted/30 px-2 py-1">
-            <pre className="whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground/80">
+            <pre className="whitespace-pre-wrap break-all font-mono ui-text-xs text-muted-foreground/80">
               {expandedContent}
             </pre>
           </div>

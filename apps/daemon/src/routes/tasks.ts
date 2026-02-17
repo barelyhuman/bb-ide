@@ -9,7 +9,6 @@ import {
   taskStatusSchema,
   taskDependencyTypeSchema,
   type Task,
-  type TaskEvent,
   type PromptInput,
 } from "@beanbag/core";
 import { z } from "zod";
@@ -43,7 +42,7 @@ function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unknown error";
 }
 
-function summarizePromptInput(input: PromptInput[]): string {
+function toTaskChatMessage(input: PromptInput[]): string {
   const parts: string[] = [];
   for (const chunk of input) {
     if (chunk.type === "text") {
@@ -57,24 +56,7 @@ function summarizePromptInput(input: PromptInput[]): string {
       parts.push("[image]");
     }
   }
-  const summary = parts.join(" ").trim();
-  if (!summary) return "(no text)";
-  return summary.length > 240 ? `${summary.slice(0, 237)}...` : summary;
-}
-
-function getThreadIdFromTaskEvent(event: TaskEvent): string | undefined {
-  const threadId = event.data?.threadId;
-  return typeof threadId === "string" && threadId.length > 0
-    ? threadId
-    : undefined;
-}
-
-function resolveBoundTaskThreadId(taskEvents: TaskEvent[]): string | undefined {
-  for (let i = taskEvents.length - 1; i >= 0; i -= 1) {
-    const threadId = getThreadIdFromTaskEvent(taskEvents[i]);
-    if (threadId) return threadId;
-  }
-  return undefined;
+  return parts.join(" ").trim() || "(no text)";
 }
 
 function buildTaskRolePreamble(task: Task): string {
@@ -98,18 +80,71 @@ function buildTaskRolePreamble(task: Task): string {
     `- status: ${task.status}`,
     `- description: ${description}`,
     "",
+    "Delegation:",
+    "- If you spawn helper threads, use `bb thread spawn --prompt \"...\"`.",
+    "- Task context is injected automatically so helper threads are linked back to this task activity.",
+    "",
     "Collaborate directly in this thread with the user who owns the task.",
   ].join("\n");
+}
+
+function buildPrimaryThreadTitle(task: Task): string {
+  return `Primary Thread for Task ${task.id}`;
 }
 
 export function createTaskRoutes(
   projectRepo: ProjectRepository,
   taskRepo: TaskRepository,
-  threadManager?: Pick<ThreadManager, "spawn" | "tell" | "getById">,
+  threadManager?: Pick<ThreadManager, "spawn" | "tell" | "list">,
   wsManager?: Pick<WSManager, "broadcast">,
 ) {
   const broadcastTaskChange = (taskId: string) => {
     wsManager?.broadcast("task", taskId);
+  };
+
+  const ensurePrimaryThread = async (
+    task: Task,
+    opts?: { forceNew?: boolean; initialInput?: PromptInput[] },
+  ): Promise<{ threadId: string; createdThread: boolean }> => {
+    if (!threadManager) {
+      throw new Error("Task chat is unavailable");
+    }
+    if (!task.assignee) {
+      throw new Error("Task must be assigned to an agent role before chatting");
+    }
+
+    if (!opts?.forceNew) {
+      const primaryThread = threadManager
+        .list({
+          projectId: task.projectId,
+          taskId: task.id,
+          taskRole: "primary",
+          includeArchived: true,
+        })
+        .filter((thread) => thread.archivedAt === undefined)
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .at(-1);
+
+      if (primaryThread) {
+        return { threadId: primaryThread.id, createdThread: false };
+      }
+    }
+
+    const input: PromptInput[] = [
+      { type: "text", text: buildTaskRolePreamble(task) },
+      ...(opts?.initialInput ?? []),
+    ];
+    const thread = await threadManager.spawn({
+      projectId: task.projectId,
+      title: buildPrimaryThreadTitle(task),
+      input,
+      taskId: task.id,
+      taskRole: "primary",
+    });
+    taskRepo.appendEvent(task.id, "task.chat.thread_created", {
+      threadId: thread.id,
+    });
+    return { threadId: thread.id, createdThread: true };
   };
 
   return new Hono()
@@ -121,6 +156,13 @@ export function createTaskRoutes(
           return c.json({ error: "Project not found" }, 404);
         }
         const task = taskRepo.create(body);
+        if (threadManager && task.assignee) {
+          try {
+            await ensurePrimaryThread(task);
+          } catch {
+            // Assignment succeeds even if kickoff provisioning fails.
+          }
+        }
         broadcastTaskChange(task.id);
         return c.json(task, 201);
       } catch (err) {
@@ -170,9 +212,23 @@ export function createTaskRoutes(
     })
     .patch("/:id", zValidator("json", updateTaskSchema), async (c) => {
       try {
-        const updated = taskRepo.update(c.req.param("id"), c.req.valid("json"));
+        const taskId = c.req.param("id");
+        const previous = taskRepo.getById(taskId);
+        const updated = taskRepo.update(taskId, c.req.valid("json"));
         if (!updated) {
           return c.json({ error: "Task not found" }, 404);
+        }
+        if (threadManager && updated.assignee) {
+          const assigneeChanged = updated.assignee !== previous?.assignee;
+          if (assigneeChanged) {
+            try {
+              await ensurePrimaryThread(updated, {
+                forceNew: Boolean(previous?.assignee),
+              });
+            } catch {
+              // Updating task assignee succeeds even if kickoff provisioning fails.
+            }
+          }
         }
         broadcastTaskChange(updated.id);
         return c.json(updated);
@@ -196,6 +252,13 @@ export function createTaskRoutes(
         }
         if (!result.task) {
           return c.json({ error: "Task assignment did not return a task" }, 500);
+        }
+        if (threadManager && result.task.assignee) {
+          try {
+            await ensurePrimaryThread(result.task);
+          } catch {
+            // Assignment succeeds even if kickoff provisioning fails.
+          }
         }
         broadcastTaskChange(result.task.id);
         return c.json(result.task);
@@ -222,41 +285,16 @@ export function createTaskRoutes(
         }
 
         const input = c.req.valid("json").input;
-        const existingEvents = taskRepo.listEvents(taskId);
-        let threadId = resolveBoundTaskThreadId(existingEvents);
-        let createdThread = false;
-
-        if (threadId) {
-          const thread = threadManager.getById(threadId);
-          if (!thread || thread.projectId !== task.projectId) {
-            threadId = undefined;
-          }
-        }
-
-        if (!threadId) {
-          const firstTurnInput: PromptInput[] = [
-            { type: "text", text: buildTaskRolePreamble(task) },
-            ...input,
-          ];
-          const thread = await threadManager.spawn({
-            projectId: task.projectId,
-            title: `Task ${task.id.slice(0, 8)}: ${task.title}`,
-            input: firstTurnInput,
-          });
-          threadId = thread.id;
-          createdThread = true;
-          taskRepo.appendEvent(task.id, "task.chat.thread_bound", {
-            threadId,
-            assignee: task.assignee,
-          });
-        } else {
+        const { threadId, createdThread } = await ensurePrimaryThread(task, {
+          initialInput: input,
+        });
+        if (!createdThread) {
           await threadManager.tell(threadId, { input });
         }
 
-        taskRepo.appendEvent(task.id, "task.chat.message_sent", {
-          threadId,
-          assignee: task.assignee,
-          preview: summarizePromptInput(input),
+        taskRepo.appendEvent(task.id, "task.chat.message", {
+          message: toTaskChatMessage(input),
+          fromThreadId: null,
         });
         broadcastTaskChange(task.id);
         return c.json({ ok: true, threadId, createdThread });

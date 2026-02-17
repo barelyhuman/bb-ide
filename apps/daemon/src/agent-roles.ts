@@ -10,7 +10,7 @@ const GENERIC_AGENT_INSTRUCTIONS = [
   "You own execution for the assigned task until it reaches a clear outcome.",
   "You may spawn helper threads when needed and follow up with them before reporting back.",
   "Use Beanbag CLI commands to coordinate work:",
-  "- `bb thread spawn --project <projectId> --prompt \"...\"`",
+  "- `bb thread spawn --prompt \"...\"` (uses BB_PROJECT_ID from thread context)",
   "- `bb thread tell <threadId> \"...\"`",
   "- `bb thread logs <threadId> --follow`",
   "- `bb thread output <threadId>`",
@@ -52,4 +52,3 @@ export function getAgentRoleDefinition(roleId: string): AgentRoleDefinition | un
 export function getDefaultAgentRole(): AgentRoleDefinition {
   return AGENT_ROLES[0];
 }
-

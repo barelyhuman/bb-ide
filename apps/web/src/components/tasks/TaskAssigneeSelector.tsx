@@ -3,6 +3,11 @@ import type { AgentRole } from "@beanbag/core"
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker"
 import { useRoles } from "@/hooks/useApi"
 
+const UNASSIGNED_OPTION = {
+  id: "",
+  name: "Unassigned",
+}
+
 const DEFAULT_AGENT_ROLE: AgentRole = {
   id: "agent/generic",
   name: "Generic Agent",
@@ -33,22 +38,22 @@ export function TaskAssigneeSelector({
     () => resolveRoleOptions(rolesQuery.data),
     [rolesQuery.data]
   )
-  const selectedValue = useMemo(() => {
-    if (value && roleOptions.some((role) => role.id === value)) return value
-    return (
-      roleOptions.find((role) => role.id === DEFAULT_AGENT_ROLE.id)?.id ??
-      roleOptions[0]?.id ??
-      DEFAULT_AGENT_ROLE.id
-    )
-  }, [roleOptions, value])
   const pickerOptions = useMemo(
-    () =>
-      roleOptions.map((role) => ({
+    () => [
+      { value: UNASSIGNED_OPTION.id, label: UNASSIGNED_OPTION.name },
+      ...roleOptions.map((role) => ({
         value: role.id,
         label: role.name,
       })),
+    ],
     [roleOptions]
   )
+  const selectedValue = useMemo(() => {
+    if (typeof value === "string") {
+      if (pickerOptions.some((option) => option.value === value)) return value
+    }
+    return UNASSIGNED_OPTION.id
+  }, [pickerOptions, value])
 
   return (
     <PromptOptionPicker
@@ -60,4 +65,3 @@ export function TaskAssigneeSelector({
     />
   )
 }
-

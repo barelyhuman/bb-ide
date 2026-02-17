@@ -1,10 +1,8 @@
 import type { TaskStatus } from "@beanbag/core";
-import { Badge } from "@/components/ui/badge";
+import { formatSnakeCaseLabel } from "@/lib/formatting";
+import { StatusPill, type StatusPillVariant } from "./StatusPill";
 
-const variantMap: Record<
-  TaskStatus,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
+const variantMap: Record<TaskStatus, StatusPillVariant> = {
   open: "outline",
   in_progress: "default",
   blocked: "destructive",
@@ -12,9 +10,5 @@ const variantMap: Record<
 };
 
 export function TaskStatusBadge({ status }: { status: TaskStatus }) {
-  return (
-    <Badge variant={variantMap[status]} className="text-[11px]">
-      {status.replace("_", " ")}
-    </Badge>
-  );
+  return <StatusPill variant={variantMap[status]}>{formatSnakeCaseLabel(status)}</StatusPill>;
 }

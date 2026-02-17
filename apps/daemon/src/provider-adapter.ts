@@ -24,6 +24,13 @@ export type ProviderTitleGenerator = (
   args: ProviderTitleGeneratorArgs,
 ) => Promise<string | undefined>;
 
+export interface ProviderThreadContext {
+  projectId: string;
+  threadId: string;
+  taskId?: string;
+  path?: string;
+}
+
 export interface ProviderAdapter {
   id: string;
   displayName: string;
@@ -37,9 +44,13 @@ export interface ProviderAdapter {
   turnStartMethod: string;
   turnSteerMethod?: string;
   threadNameSetMethod?: string;
-  createThreadStartParams(req: SpawnThreadRequest): Record<string, unknown>;
+  createThreadStartParams(
+    req: SpawnThreadRequest,
+    context: ProviderThreadContext,
+  ): Record<string, unknown>;
   createThreadResumeParams(
     providerThreadId: string,
+    context: ProviderThreadContext,
     options?: ProviderExecutionOptions,
   ): Record<string, unknown>;
   createTurnStartParams(

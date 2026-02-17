@@ -1,4 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join, resolve } from "node:path";
 import type {
   AvailableModel,
   ThreadExecutionOptions,
@@ -21,6 +30,7 @@ import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
 import type {
   ProviderAdapter,
   ProviderExecutionOptions,
+  ProviderThreadContext,
 } from "./provider-adapter.js";
 import {
   ProviderRuntime,
@@ -46,6 +56,106 @@ import { canTransitionThreadStatus } from "./thread-status-machine.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
+function resolveBbBinDir(pathValue: string | undefined): string | undefined {
+  if (!pathValue) return undefined;
+  for (const pathEntry of pathValue.split(delimiter)) {
+    if (!pathEntry) continue;
+    const bbCandidate = join(pathEntry, "bb");
+    try {
+      accessSync(bbCandidate, constants.X_OK);
+      return pathEntry;
+    } catch {
+      // continue
+    }
+  }
+  return undefined;
+}
+
+function isExecutable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function shellEscapeDoubleQuoted(value: string): string {
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("\"", "\\\"")
+    .replaceAll("$", "\\$")
+    .replaceAll("`", "\\`");
+}
+
+function resolveBbLaunchTarget():
+  | { runnerPath: string; entryPath: string }
+  | undefined {
+  const cliDistPath = resolve(import.meta.dirname, "..", "..", "cli", "dist", "index.js");
+  if (existsSync(cliDistPath)) {
+    return {
+      runnerPath: process.execPath,
+      entryPath: cliDistPath,
+    };
+  }
+
+  const cliSourcePath = resolve(import.meta.dirname, "..", "..", "cli", "src", "index.ts");
+  if (!existsSync(cliSourcePath)) return undefined;
+
+  const tsxRunnerCandidates = [
+    resolve(import.meta.dirname, "..", "node_modules", ".bin", "tsx"),
+    resolve(import.meta.dirname, "..", "..", "..", "node_modules", ".bin", "tsx"),
+  ];
+  const tsxRunnerPath = tsxRunnerCandidates.find((candidate) => isExecutable(candidate));
+  if (!tsxRunnerPath) return undefined;
+
+  return {
+    runnerPath: tsxRunnerPath,
+    entryPath: cliSourcePath,
+  };
+}
+
+function ensureBbShimBinDir(): string | undefined {
+  const launchTarget = resolveBbLaunchTarget();
+  if (!launchTarget) return undefined;
+
+  const shimBinDir = join(tmpdir(), "beanbag", "bin");
+  const shimPath = join(shimBinDir, "bb");
+  const runnerPath = shellEscapeDoubleQuoted(launchTarget.runnerPath);
+  const entryPath = shellEscapeDoubleQuoted(launchTarget.entryPath);
+  const script = `#!/bin/sh
+exec "${runnerPath}" "${entryPath}" "$@"
+`;
+
+  try {
+    mkdirSync(shimBinDir, { recursive: true });
+    writeFileSync(shimPath, script, { encoding: "utf-8", mode: 0o755 });
+    return shimBinDir;
+  } catch {
+    return undefined;
+  }
+}
+
+function prependPathEntry(
+  pathValue: string | undefined,
+  entryToPrepend: string,
+): string {
+  const entries = (pathValue ?? "")
+    .split(delimiter)
+    .filter((entry) => entry.length > 0 && entry !== entryToPrepend);
+  return [entryToPrepend, ...entries].join(delimiter);
+}
+
+function resolveThreadShellPath(pathValue: string | undefined): string | undefined {
+  const bbBinDir = resolveBbBinDir(pathValue);
+  if (bbBinDir) return prependPathEntry(pathValue, bbBinDir);
+
+  const shimBinDir = ensureBbShimBinDir();
+  if (!shimBinDir) return pathValue;
+
+  return prependPathEntry(pathValue, shimBinDir);
+}
+
 export class ThreadManager {
   private processes = new Map<string, ChildProcess>();
   private runtimes = new Map<string, ProviderRuntime>();
@@ -66,6 +176,7 @@ export class ThreadManager {
   /** Monotonic sequence counter per thread for persisted events (inbound + outbound). */
   private eventSeqCounters = new Map<string, number>();
   private rpcIdCounter = 0;
+  private threadShellPath: string | undefined;
 
   constructor(
     private threadRepo: ThreadRepository,
@@ -73,7 +184,10 @@ export class ThreadManager {
     private projectRepo: ProjectRepository,
     private ws: WSManager,
     private provider: ProviderAdapter = createCodexProviderAdapter(),
-  ) {}
+    private runtimeEnv: NodeJS.ProcessEnv = process.env,
+  ) {
+    this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
+  }
 
   /**
    * One-time startup reconciliation for persisted thread statuses.
@@ -134,7 +248,14 @@ export class ThreadManager {
         const resumedThreadId = await this._sendRequestAndAwaitThreadId(
           thread.id,
           this.provider.threadResumeMethod,
-          this.provider.createThreadResumeParams(providerThreadId),
+          this.provider.createThreadResumeParams(
+            providerThreadId,
+            this._buildProviderThreadContext({
+              threadId: thread.id,
+              projectId: thread.projectId,
+              taskId: thread.taskId,
+            }),
+          ),
         );
         this.providerThreadIds.set(thread.id, resumedThreadId);
 
@@ -168,7 +289,10 @@ export class ThreadManager {
     const threadTitle = explicitTitle ?? derivedTitle;
     const thread = this.threadRepo.create({
       projectId: req.projectId,
-      title: threadTitle,
+      ...(threadTitle ? { title: threadTitle } : {}),
+      ...(req.taskId ? { taskId: req.taskId } : {}),
+      ...(req.taskRole ? { taskRole: req.taskRole } : {}),
+      ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     // Treat only truly custom titles as locked. If caller title matches our
     // normal first-message derivation, keep it mutable so server events can refine it.
@@ -410,7 +534,13 @@ export class ThreadManager {
   /**
    * List threads with optional filters.
    */
-  list(filters?: { projectId?: string; includeArchived?: boolean }): Thread[] {
+  list(filters?: {
+    projectId?: string;
+    taskId?: string;
+    taskRole?: "primary" | "worker";
+    parentThreadId?: string;
+    includeArchived?: boolean;
+  }): Thread[] {
     return this.threadRepo.list(filters);
   }
 
@@ -522,7 +652,14 @@ export class ThreadManager {
     this._spawnProcess(threadId, opts?.rootPathHint ?? project.rootPath);
     this._sendInitialize(threadId);
 
-    const threadStartParams = this.provider.createThreadStartParams(req);
+    const threadStartParams = this.provider.createThreadStartParams(
+      req,
+      this._buildProviderThreadContext({
+        threadId,
+        projectId: req.projectId,
+        taskId: thread?.taskId ?? req.taskId,
+      }),
+    );
     this._persistOutboundStartEvent(
       threadId,
       "client/thread/start",
@@ -595,9 +732,19 @@ export class ThreadManager {
   }
 
   private _spawnProcess(threadId: string, cwd: string): void {
+    const thread = this.threadRepo.getById(threadId);
+    const projectId = thread?.projectId;
+    const taskId = thread?.taskId;
     const child = spawn(this.provider.processCommand, this.provider.processArgs, {
       stdio: ["pipe", "pipe", "pipe"],
       cwd,
+      env: {
+        ...this.runtimeEnv,
+        ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+        ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
+        BB_THREAD_ID: threadId,
+        ...(taskId ? { BB_TASK_ID: taskId } : {}),
+      },
     });
 
     this.processes.set(threadId, child);
@@ -759,6 +906,11 @@ export class ThreadManager {
         this.provider.threadResumeMethod,
         this.provider.createThreadResumeParams(
           persistedThreadId,
+          this._buildProviderThreadContext({
+            threadId,
+            projectId: thread.projectId,
+            taskId: thread.taskId,
+          }),
           options,
         ),
       );
@@ -768,6 +920,19 @@ export class ThreadManager {
       this._cleanupThreadRuntime(threadId);
       throw err;
     }
+  }
+
+  private _buildProviderThreadContext(args: {
+    threadId: string;
+    projectId: string;
+    taskId?: string;
+  }): ProviderThreadContext {
+    return {
+      projectId: args.projectId,
+      threadId: args.threadId,
+      ...(args.taskId ? { taskId: args.taskId } : {}),
+      ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
+    };
   }
 
   private _handleProviderNotification(

@@ -6,6 +6,7 @@ export type SandboxMode =
 export type TaskStatus = "open" | "in_progress" | "blocked" | "closed";
 export type TaskCloseReason = "completed" | "failed" | "canceled";
 export type TaskDependencyType = "blocks" | "parent-child" | "related";
+export type TaskThreadRole = "primary" | "worker";
 
 export type PromptInput =
   | { type: "text"; text: string }
@@ -35,6 +36,9 @@ export interface SpawnThreadRequest {
   model?: string;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
+  taskId?: string;
+  parentThreadId?: string;
+  taskRole?: TaskThreadRole;
 }
 
 export type TellThreadMode = "auto" | "start" | "steer";
@@ -70,7 +74,6 @@ export interface UpdateTaskRequest {
   description?: string;
   status?: TaskStatus;
   closeReason?: TaskCloseReason;
-  resultSummary?: string;
   assignee?: string;
 }
 

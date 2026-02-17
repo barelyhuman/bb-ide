@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useRoles } from "@/hooks/useApi";
+import { PageShell } from "@/components/layout/PageShell";
 import { ConversationMarkdown } from "@/components/messages/ConversationMarkdown";
+import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 
 function decodeRoleId(value: string): string {
   try {
@@ -21,56 +23,66 @@ export function RoleDetailView() {
   );
 
   if (!resolvedRoleId) {
-    return <p className="py-12 text-center text-sm text-destructive">Not found</p>;
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">Not found</p>
+      </PageShell>
+    );
   }
 
   if (isLoading) {
     return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        Loading role...
-      </p>
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Loading role...
+        </p>
+      </PageShell>
     );
   }
 
   if (error || !role) {
     return (
-      <p className="py-12 text-center text-sm text-destructive">
-        {error ? error.message : "Role not found"}
-      </p>
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">
+          {error ? error.message : "Role not found"}
+        </p>
+      </PageShell>
     );
   }
 
   return (
-    <div className="-mx-4 -mt-4 flex h-full min-h-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mt-5">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[800px] flex-col px-4 pb-4 pt-2">
-        <section className="sticky top-0 z-10 shrink-0 bg-background pb-3">
-          <dl className="rounded-md border border-border/60 bg-background/40 px-2 py-1">
-            <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-              <dt className="text-xs text-muted-foreground">Id</dt>
-              <dd className="min-w-0 break-words text-foreground/90">{role.id}</dd>
-            </div>
-            <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-              <dt className="text-xs text-muted-foreground">Name</dt>
-              <dd className="min-w-0 break-words text-foreground/90">{role.name}</dd>
-            </div>
-            <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-              <dt className="text-xs text-muted-foreground">Description</dt>
-              <dd className="min-w-0 break-words text-foreground/90">
-                {role.description}
-              </dd>
-            </div>
-            <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-              <dt className="text-xs text-muted-foreground">Instructions</dt>
-              <dd className="min-w-0 break-words text-foreground/90">
-                <ConversationMarkdown
-                  content={role.instructions}
-                  className="text-foreground/90"
-                />
-              </dd>
-            </div>
-          </dl>
-        </section>
-      </div>
-    </div>
+    <PageShell contentClassName="gap-3">
+      <section className="shrink-0">
+        <DetailCard>
+          <DetailRow
+            label="Id"
+            valueClassName="min-w-0 break-words text-foreground/90"
+          >
+            {role.id}
+          </DetailRow>
+          <DetailRow
+            label="Name"
+            valueClassName="min-w-0 break-words text-foreground/90"
+          >
+            {role.name}
+          </DetailRow>
+          <DetailRow
+            label="Description"
+            valueClassName="min-w-0 break-words text-foreground/90"
+          >
+            {role.description}
+          </DetailRow>
+          <DetailRow
+            label="Instructions"
+            valueClassName="min-w-0 break-words text-foreground/90"
+          >
+            <ConversationMarkdown
+              content={role.instructions}
+              className="text-foreground/90"
+            />
+          </DetailRow>
+        </DetailCard>
+      </section>
+    </PageShell>
   );
 }

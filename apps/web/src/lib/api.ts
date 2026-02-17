@@ -18,6 +18,7 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
+  TaskThreadRole,
 } from "@beanbag/core";
 
 const BASE = "/api/v1";
@@ -130,9 +131,23 @@ export async function spawnThread(req: SpawnThreadRequest): Promise<Thread> {
   return request<Thread>("POST", "/threads", req);
 }
 
-export async function listThreads(filters?: { projectId?: string }): Promise<Thread[]> {
+export async function listThreads(filters?: {
+  projectId?: string;
+  taskId?: string;
+  taskRole?: TaskThreadRole;
+  parentThreadId?: string;
+  includeArchived?: boolean;
+}): Promise<Thread[]> {
   const params = new URLSearchParams();
   if (filters?.projectId) params.set("projectId", filters.projectId);
+  if (filters?.taskId) params.set("taskId", filters.taskId);
+  if (filters?.taskRole) params.set("taskRole", filters.taskRole);
+  if (filters?.parentThreadId) {
+    params.set("parentThreadId", filters.parentThreadId);
+  }
+  if (filters?.includeArchived !== undefined) {
+    params.set("includeArchived", String(filters.includeArchived));
+  }
   const qs = params.toString();
   return request<Thread[]>("GET", `/threads${qs ? `?${qs}` : ""}`);
 }

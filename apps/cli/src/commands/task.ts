@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import type { Task, TaskEvent, TaskStatus, TaskCloseReason, TaskDependencyType } from "@beanbag/core";
 import { createClient, unwrap } from "../client.js";
+import { requireProjectId } from "../context-env.js";
 
 function statusIcon(status: TaskStatus): string {
   switch (status) {
@@ -25,7 +26,6 @@ function printTask(task: Task): void {
   console.log(`  Status:      ${statusIcon(task.status)} ${task.status}`);
   if (task.assignee) console.log(`  Assignee:    ${task.assignee}`);
   if (task.closeReason) console.log(`  CloseReason: ${task.closeReason}`);
-  if (task.resultSummary) console.log(`  Summary:     ${task.resultSummary}`);
   console.log(`  Created:     ${new Date(task.createdAt).toLocaleString()}`);
   console.log(`  Updated:     ${new Date(task.updatedAt).toLocaleString()}`);
   if (task.closedAt) console.log(`  Closed:      ${new Date(task.closedAt).toLocaleString()}`);
@@ -76,23 +76,24 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
   task
     .command("create")
     .description("Create a task")
-    .requiredOption("--project <id>", "Project ID")
+    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .requiredOption("--title <title>", "Task title")
     .option("--description <description>", "Task description")
     .option("--parent <taskId>", "Parent task ID")
     .action(
       async (opts: {
-        project: string;
+        project?: string;
         title: string;
         description?: string;
         parent?: string;
       }) => {
         const client = createClient(getUrl());
         try {
+          const projectId = requireProjectId(opts.project);
           const created = await unwrap<Task>(
             client.api.v1.tasks.$post({
               json: {
-                projectId: opts.project,
+                projectId,
                 title: opts.title,
                 description: opts.description,
                 parentId: opts.parent,
@@ -111,17 +112,18 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
   task
     .command("list")
     .description("List tasks")
-    .requiredOption("--project <id>", "Project ID")
+    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--status <status>", "Task status")
     .option("--parent <taskId>", "Parent task ID")
     .action(
-      async (opts: { project: string; status?: TaskStatus; parent?: string }) => {
+      async (opts: { project?: string; status?: TaskStatus; parent?: string }) => {
         const client = createClient(getUrl());
         try {
+          const projectId = requireProjectId(opts.project);
           const tasks = await unwrap<Task[]>(
             client.api.v1.tasks.$get({
               query: {
-                projectId: opts.project,
+                projectId,
                 status: opts.status,
                 parentId: opts.parent,
               },
@@ -142,13 +144,14 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
   task
     .command("ready")
     .description("List assignable ready tasks")
-    .requiredOption("--project <id>", "Project ID")
-    .action(async (opts: { project: string }) => {
+    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .action(async (opts: { project?: string }) => {
       const client = createClient(getUrl());
       try {
+        const projectId = requireProjectId(opts.project);
         const tasks = await unwrap<Task[]>(
           client.api.v1.tasks.ready.$get({
-            query: { projectId: opts.project },
+            query: { projectId },
           }),
         );
         if (tasks.length === 0) {
@@ -184,7 +187,6 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
     .option("--title <title>", "New title")
     .option("--description <description>", "New description")
     .option("--status <status>", "open|in_progress|blocked|closed")
-    .option("--summary <summary>", "Result summary")
     .option("--assignee <assignee>", "Assignee")
     .option("--close-reason <reason>", "completed|failed|canceled")
     .action(
@@ -194,7 +196,6 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
           title?: string;
           description?: string;
           status?: TaskStatus;
-          summary?: string;
           assignee?: string;
           closeReason?: TaskCloseReason;
         },
@@ -208,7 +209,6 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
                 title: opts.title,
                 description: opts.description,
                 status: opts.status,
-                resultSummary: opts.summary,
                 assignee: opts.assignee,
                 closeReason: opts.closeReason,
               },
@@ -248,8 +248,7 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
     .command("close <id>")
     .description("Close a task with a reason")
     .requiredOption("--reason <reason>", "completed|failed|canceled")
-    .option("--summary <summary>", "Result summary")
-    .action(async (id: string, opts: { reason: TaskCloseReason; summary?: string }) => {
+    .action(async (id: string, opts: { reason: TaskCloseReason }) => {
       const client = createClient(getUrl());
       try {
         const closed = await unwrap<Task>(
@@ -258,7 +257,6 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
             json: {
               status: "closed",
               closeReason: opts.reason,
-              resultSummary: opts.summary,
             },
           }),
         );

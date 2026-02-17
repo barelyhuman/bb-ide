@@ -154,7 +154,7 @@
   --sidebar-accent-foreground: oklch(0.8853 0 0);
   --sidebar-border: oklch(0.329 0 0);
   --sidebar-ring: oklch(0.7058 0 0);
-  --font-sans: Inter, sans-serif;
+  --font-sans: Montserrat, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: "Fira Code", monospace;
   --radius: 0.35rem;
@@ -215,6 +215,26 @@ body.sidebar-resizing [data-sidebar="panel"] {
 }
 
 @layer utilities {
+  .ui-text-3xs {
+    font-size: 0.5625rem;
+    line-height: 0.75rem;
+  }
+
+  .ui-text-2xs {
+    font-size: 0.625rem;
+    line-height: 0.875rem;
+  }
+
+  .ui-text-xs {
+    font-size: 0.6875rem;
+    line-height: 0.875rem;
+  }
+
+  .ui-text-sm {
+    font-size: 0.75rem;
+    line-height: 1rem;
+  }
+
   .animate-shine {
     display: inline-block;
     background: linear-gradient(

@@ -1,15 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import type { Task, Thread } from "@beanbag/core"
 import {
-  AlertTriangle,
   Archive,
-  CheckCircle2,
   ChevronRight,
-  Circle,
   Folder,
   FolderOpen,
   LoaderCircle,
-  MessageSquare,
   SquarePen,
 } from "lucide-react"
 import {
@@ -21,6 +17,7 @@ import {
 } from "@/hooks/useApi"
 import { NavLink, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
+import { formatRelativeTime } from "@/lib/formatting"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -82,6 +79,7 @@ export function ProjectList({
     const grouped = new Map<string, ProjectItem[]>()
 
     for (const projectThread of threads ?? []) {
+      if (isTaskPrimaryThread(projectThread)) continue
       const existing = grouped.get(projectThread.projectId)
       const item: ProjectItem = {
         kind: "thread",
@@ -115,6 +113,27 @@ export function ProjectList({
 
     return grouped
   }, [tasks, threads])
+
+  const activePrimaryThreadTaskIds = useMemo(() => {
+    const latestPrimaryThreadsByTaskId = new Map<string, Thread>()
+
+    for (const thread of threads ?? []) {
+      if (!thread.taskId || thread.taskRole !== "primary") continue
+      const existing = latestPrimaryThreadsByTaskId.get(thread.taskId)
+      if (!existing || thread.createdAt > existing.createdAt) {
+        latestPrimaryThreadsByTaskId.set(thread.taskId, thread)
+      }
+    }
+
+    const taskIds = new Set<string>()
+    for (const [taskId, thread] of latestPrimaryThreadsByTaskId.entries()) {
+      if (thread.status === "active" && isBusyThreadStatus(thread.status)) {
+        taskIds.add(taskId)
+      }
+    }
+
+    return taskIds
+  }, [threads])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -218,10 +237,7 @@ export function ProjectList({
                       {projectItems.map((item) => {
                         if (item.kind === "thread") {
                           const thread = item.thread
-                          const isBusyThread =
-                            thread.status === "active" ||
-                            thread.status === "created" ||
-                            thread.status === "provisioning"
+                          const isBusyThread = isBusyThreadStatus(thread.status)
 
                           return (
                             <NavLink
@@ -238,11 +254,7 @@ export function ProjectList({
                               }
                             >
                               <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                                {isBusyThread ? (
-                                  <LoaderCircle className="size-3.5 animate-spin opacity-0 transition-opacity group-hover/thread-row:opacity-100" />
-                                ) : (
-                                  <MessageSquare className="size-3.5 opacity-0 transition-opacity group-hover/thread-row:opacity-100" />
-                                )}
+                                {isBusyThread ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
                               </span>
                               <span className="min-w-0 flex-1 truncate">
                                 {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
@@ -271,6 +283,7 @@ export function ProjectList({
                         }
 
                         const task = item.task
+                        const showTaskLoader = activePrimaryThreadTaskIds.has(task.id)
                         return (
                           <NavLink
                             key={task.id}
@@ -286,10 +299,7 @@ export function ProjectList({
                             }
                           >
                             <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                              <TaskStatusIcon
-                                status={task.status}
-                                className="opacity-0 transition-opacity group-hover/task-row:opacity-100"
-                              />
+                              {showTaskLoader ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
                             </span>
                             <span className="min-w-0 flex-1 truncate">
                               {task.title}
@@ -345,36 +355,10 @@ export function ProjectList({
   )
 }
 
-function TaskStatusIcon({
-  status,
-  className,
-}: {
-  status: Task["status"]
-  className?: string
-}) {
-  switch (status) {
-    case "in_progress":
-      return <LoaderCircle className={cn("size-3.5 animate-spin", className)} />
-    case "blocked":
-      return <AlertTriangle className={cn("size-3.5 text-destructive", className)} />
-    case "closed":
-      return <CheckCircle2 className={cn("size-3.5", className)} />
-    case "open":
-    default:
-      return <Circle className={cn("size-3.5", className)} />
-  }
+function isBusyThreadStatus(status: Thread["status"]): boolean {
+  return status === "active" || status === "created" || status === "provisioning"
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const elapsedSeconds = Math.max(1, Math.floor((Date.now() - timestamp) / 1000))
-
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s`
-  const elapsedMinutes = Math.floor(elapsedSeconds / 60)
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`
-  const elapsedHours = Math.floor(elapsedMinutes / 60)
-  if (elapsedHours < 24) return `${elapsedHours}h`
-  const elapsedDays = Math.floor(elapsedHours / 24)
-  if (elapsedDays < 7) return `${elapsedDays}d`
-  const elapsedWeeks = Math.floor(elapsedDays / 7)
-  return `${elapsedWeeks}w`
+function isTaskPrimaryThread(thread: Thread): boolean {
+  return thread.taskRole === "primary" && Boolean(thread.taskId)
 }

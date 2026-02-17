@@ -1,5 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter, Readable, Writable } from "node:stream";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { Thread, ThreadEvent } from "@beanbag/core";
 import type {
@@ -246,10 +259,23 @@ describe("ThreadManager", () => {
 
       await manager.spawn({ projectId: "proj-1" });
 
-      expect(spawnMock).toHaveBeenCalledWith("codex", ["app-server"], {
-        stdio: ["pipe", "pipe", "pipe"],
-        cwd: "/my/project",
-      });
+      expect(spawnMock).toHaveBeenCalledWith(
+        "codex",
+        ["app-server"],
+        expect.objectContaining({
+          stdio: ["pipe", "pipe", "pipe"],
+          cwd: "/my/project",
+          env: expect.objectContaining({
+            BB_PROJECT_ID: "proj-1",
+            BB_THREAD_ID: "t-new",
+          }),
+        }),
+      );
+
+      const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
+        | { env?: Record<string, string | undefined> }
+        | undefined;
+      expect(spawnOptions?.env?.BB_TASK_ID).toBeUndefined();
     });
 
     it("creates a thread record in the DB", async () => {
@@ -267,6 +293,115 @@ describe("ThreadManager", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
       });
+    });
+
+    it("prepends bb path to PATH and injects it into thread/start config", async () => {
+      const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      const firstBin = join(tmpRoot, "first-bin");
+      const bbBin = join(tmpRoot, "bb-bin");
+      mkdirSync(firstBin, { recursive: true });
+      mkdirSync(bbBin, { recursive: true });
+      const bbPath = join(bbBin, "bb");
+      writeFileSync(bbPath, "#!/bin/sh\nexit 0\n", "utf-8");
+      chmodSync(bbPath, 0o755);
+
+      const pathValue = [firstBin, bbBin].join(delimiter);
+      const runtimeEnv = { ...process.env, PATH: pathValue };
+
+      try {
+        const localManager = new ThreadManager(
+          threadRepo as any,
+          eventRepo as any,
+          projectRepo as any,
+          ws as any,
+          createCodexProviderAdapter(),
+          runtimeEnv,
+        );
+
+        const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+        const createdThread = makeThread({ id: "t-new", status: "idle" });
+        (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+          makeThread({ id: "t-new", status: "active" }),
+        );
+
+        await localManager.spawn({ projectId: "proj-1" });
+        await vi.waitFor(() => {
+          expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
+        });
+
+        const expectedPath = [bbBin, firstBin].join(delimiter);
+        const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
+          | { env?: Record<string, string | undefined> }
+          | undefined;
+        expect(spawnOptions?.env?.PATH).toBe(expectedPath);
+
+        const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+        expect(startMsg.params.config["shell_environment_policy.set.PATH"]).toBe(expectedPath);
+      } finally {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("creates a bb shim and injects it into PATH when bb is not on PATH", async () => {
+      const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      const firstBin = join(tmpRoot, "first-bin");
+      const secondBin = join(tmpRoot, "second-bin");
+      mkdirSync(firstBin, { recursive: true });
+      mkdirSync(secondBin, { recursive: true });
+
+      const pathValue = [firstBin, secondBin].join(delimiter);
+      const runtimeEnv = { ...process.env, PATH: pathValue };
+
+      try {
+        const localManager = new ThreadManager(
+          threadRepo as any,
+          eventRepo as any,
+          projectRepo as any,
+          ws as any,
+          createCodexProviderAdapter(),
+          runtimeEnv,
+        );
+
+        const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+        const createdThread = makeThread({ id: "t-new", status: "idle" });
+        (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+          makeThread({ id: "t-new", status: "active" }),
+        );
+
+        await localManager.spawn({ projectId: "proj-1" });
+        await vi.waitFor(() => {
+          expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
+        });
+
+        const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
+          | { env?: Record<string, string | undefined> }
+          | undefined;
+        const injectedPath = spawnOptions?.env?.PATH;
+        expect(typeof injectedPath).toBe("string");
+        expect(injectedPath).toBeTruthy();
+
+        const firstEntry = injectedPath!.split(delimiter)[0];
+        const shimPath = join(firstEntry, "bb");
+        expect(existsSync(shimPath)).toBe(true);
+        expect(() => accessSync(shimPath, constants.X_OK)).not.toThrow();
+
+        const shimScript = readFileSync(shimPath, "utf-8");
+        expect(shimScript).toContain(`"${process.execPath}"`);
+        expect(shimScript).toContain('"$@"');
+
+        const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+        expect(startMsg.params.config["shell_environment_policy.set.PATH"]).toBe(
+          injectedPath,
+        );
+      } finally {
+        rmSync(tmpRoot, { recursive: true, force: true });
+      }
     });
 
     it("registers the process and marks thread as active", async () => {
@@ -331,6 +466,8 @@ describe("ThreadManager", () => {
       expect(startMsg.params.approvalPolicy).toBe("never");
       expect(startMsg.params.sandbox).toBe("danger-full-access");
       expect(startMsg.params.baseInstructions).toContain("coding agent");
+      expect(startMsg.params.config["shell_environment_policy.set.BB_PROJECT_ID"]).toBe("proj-1");
+      expect(startMsg.params.config["shell_environment_policy.set.BB_THREAD_ID"]).toBe("t-new");
       expect(startMsg.id).toBe(2);
     });
 
@@ -585,8 +722,10 @@ describe("ThreadManager", () => {
 
       const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
       expect(startMsg.params.model).toBe("gpt-5-codex");
-      expect(startMsg.params.config).toEqual({
+      expect(startMsg.params.config).toMatchObject({
         model_reasoning_effort: "high",
+        "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
+        "shell_environment_policy.set.BB_THREAD_ID": "t-new",
       });
       expect(startMsg.params.sandbox).toBe("danger-full-access");
 

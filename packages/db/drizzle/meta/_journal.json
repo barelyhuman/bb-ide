@@ -57,6 +57,13 @@
       "when": 1771025400000,
       "tag": "0007_tasks_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1771320000000,
+      "tag": "0008_thread_task_links",
+      "breakpoints": true
     }
   ]
 }

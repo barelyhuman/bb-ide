@@ -45,11 +45,20 @@ function mockTaskRepo(): TaskRepository {
     update: vi.fn(),
     assign: vi.fn(),
     archive: vi.fn(),
+    appendEvent: vi.fn(),
     addDependency: vi.fn(),
     removeDependency: vi.fn(),
     listDependencies: vi.fn(),
     listEvents: vi.fn(),
   } as unknown as TaskRepository;
+}
+
+function mockThreadManager() {
+  return {
+    spawn: vi.fn(),
+    tell: vi.fn(),
+    list: vi.fn(),
+  };
 }
 
 describe("Task routes", () => {
@@ -202,6 +211,55 @@ describe("Task routes", () => {
     });
   });
 
+  describe("POST /tasks/:id/chat", () => {
+    it("creates a primary thread with a deterministic primary-thread title", async () => {
+      const threadManager = mockThreadManager();
+      const routes = createTaskRoutes(
+        projectRepo as any,
+        taskRepo as any,
+        threadManager as any,
+        wsManager as any,
+      );
+      const appWithThreadManager = new Hono().route("/tasks", routes);
+
+      (taskRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeTask({ assignee: "builder-1" }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: "thread-1",
+      });
+
+      const res = await appWithThreadManager.request("/tasks/task-1/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "hello from task chat" }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        threadId: "thread-1",
+        createdThread: true,
+      });
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "proj-1",
+          title: "Primary Thread for Task task-1",
+          taskId: "task-1",
+          taskRole: "primary",
+        }),
+      );
+      expect(taskRepo.appendEvent).toHaveBeenCalledWith(
+        "task-1",
+        "task.chat.thread_created",
+        { threadId: "thread-1" },
+      );
+    });
+  });
+
   describe("Dependencies", () => {
     it("adds a dependency", async () => {
       const dependency: TaskDependency = {
@@ -257,7 +315,11 @@ describe("Task routes", () => {
           taskId: "task-1",
           seq: 1,
           type: "task.created",
-          data: { title: "Implement task API" },
+          data: {
+            projectId: "proj-1",
+            title: "Implement task API",
+            assignee: "agent/generic",
+          },
           createdAt: 1000,
         } satisfies TaskEvent,
       ]);

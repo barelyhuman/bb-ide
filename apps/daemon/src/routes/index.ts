@@ -29,6 +29,9 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       ),
     )
     .route("/roles", createRoleRoutes())
-    .route("/threads", createThreadRoutes(deps.threadManager))
+    .route(
+      "/threads",
+      createThreadRoutes(deps.threadManager, deps.taskRepo, deps.wsManager),
+    )
     .route("/system", createSystemRoutes(deps.threadManager, deps.startTime));
 }

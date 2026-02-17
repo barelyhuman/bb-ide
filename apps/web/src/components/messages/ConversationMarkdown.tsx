@@ -21,7 +21,7 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
             if (isBlock) {
               return (
                 <pre className="my-2 overflow-x-auto rounded-md border border-border/70 bg-muted/35 p-3">
-                  <code className={cn("font-mono text-[12px]", language ? `language-${language}` : "")} {...props}>
+                  <code className={cn("font-mono ui-text-sm", language ? `language-${language}` : "")} {...props}>
                     {codeText}
                   </code>
                 </pre>

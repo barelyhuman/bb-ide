@@ -7,7 +7,10 @@ import type {
   TaskCloseReason,
   TaskDependency,
   TaskDependencyType,
+  TaskThreadRole,
   TaskEvent,
+  TaskEventDataForType,
+  TaskEventType,
   Thread,
   ThreadStatus,
   ThreadEvent,
@@ -25,7 +28,79 @@ import {
   taskEvents,
 } from "./schema.js";
 
-const DEFAULT_TASK_ASSIGNEE = "agent/generic";
+const TASK_EVENT_TYPES = [
+  "task.created",
+  "task.updated.title",
+  "task.updated.description",
+  "task.updated.status",
+  "task.assigned",
+  "task.archived",
+  "task.dependency_added",
+  "task.dependency_removed",
+  "task.chat.message",
+  "task.chat.thread_created",
+] as const satisfies readonly TaskEventType[];
+
+function isTaskEventType(type: string): type is TaskEventType {
+  return (TASK_EVENT_TYPES as readonly string[]).includes(type);
+}
+
+function parseTaskEventData<TType extends TaskEventType>(
+  _type: TType,
+  rawData: string,
+): TaskEventDataForType<TType> {
+  return JSON.parse(rawData) as TaskEventDataForType<TType>;
+}
+
+function toTaskEvent<TType extends TaskEventType>(row: {
+  id: string;
+  taskId: string;
+  seq: number;
+  type: TType;
+  data: string;
+  createdAt: number;
+}): TaskEvent<TType> {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    seq: row.seq,
+    type: row.type,
+    data: parseTaskEventData(row.type, row.data),
+    createdAt: row.createdAt,
+  };
+}
+
+function parseLegacyTaskChatMessageData(rawData: string): string {
+  try {
+    const parsed = JSON.parse(rawData) as Record<string, unknown>;
+    const message =
+      typeof parsed.preview === "string" && parsed.preview.trim().length > 0
+        ? parsed.preview
+        : "(no text)";
+    const fromThreadId =
+      parsed.sender === "user"
+        ? null
+        : typeof parsed.threadId === "string" && parsed.threadId.trim().length > 0
+          ? parsed.threadId
+          : null;
+    return JSON.stringify({ message, fromThreadId });
+  } catch {
+    return JSON.stringify({ message: "(no text)", fromThreadId: null });
+  }
+}
+
+function parseLegacyTaskChatThreadBoundData(rawData: string): string {
+  try {
+    const parsed = JSON.parse(rawData) as Record<string, unknown>;
+    const threadId =
+      typeof parsed.threadId === "string" && parsed.threadId.trim().length > 0
+        ? parsed.threadId
+        : "";
+    return JSON.stringify({ threadId });
+  } catch {
+    return JSON.stringify({ threadId: "" });
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -194,6 +269,15 @@ function normalizeTaskDependencyType(type: string): TaskDependencyType {
   return "related";
 }
 
+function normalizeTaskThreadRole(
+  role: string | null | undefined,
+): TaskThreadRole | undefined {
+  if (role === "primary" || role === "worker") {
+    return role;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // ProjectRepository
 // ---------------------------------------------------------------------------
@@ -237,13 +321,22 @@ export class ProjectRepository {
 export class ThreadRepository {
   constructor(private db: DbConnection) {}
 
-  create(data: { projectId: string; title?: string }): Thread {
+  create(data: {
+    projectId: string;
+    title?: string;
+    taskId?: string;
+    taskRole?: TaskThreadRole;
+    parentThreadId?: string;
+  }): Thread {
     const now = Date.now();
     const row = {
       id: nanoid(),
       projectId: data.projectId,
       title: data.title ?? null,
       status: "created" as const,
+      taskId: data.taskId ?? null,
+      taskRole: data.taskRole ?? null,
+      parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -265,6 +358,9 @@ export class ThreadRepository {
   list(filters?: {
     projectId?: string;
     status?: ThreadStatus;
+    taskId?: string;
+    taskRole?: TaskThreadRole;
+    parentThreadId?: string;
     includeArchived?: boolean;
   }): Thread[] {
     const conditions = [];
@@ -276,6 +372,15 @@ export class ThreadRepository {
     }
     if (filters?.status) {
       conditions.push(eq(threads.status, filters.status));
+    }
+    if (filters?.taskId) {
+      conditions.push(eq(threads.taskId, filters.taskId));
+    }
+    if (filters?.taskRole) {
+      conditions.push(eq(threads.taskRole, filters.taskRole));
+    }
+    if (filters?.parentThreadId) {
+      conditions.push(eq(threads.parentThreadId, filters.parentThreadId));
     }
 
     let query = this.db.select().from(threads);
@@ -331,6 +436,9 @@ export class ThreadRepository {
       projectId: row.projectId,
       title: row.title ?? undefined,
       status: normalizedStatus,
+      taskId: row.taskId ?? undefined,
+      taskRole: normalizeTaskThreadRole(row.taskRole),
+      parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -508,10 +616,9 @@ export class TaskRepository {
       description: data.description ?? null,
       status: "open",
       closeReason: null,
-      assignee: data.assignee ?? DEFAULT_TASK_ASSIGNEE,
+      assignee: data.assignee ?? null,
       archivedAt: null,
       closedAt: null,
-      resultSummary: null,
       createdAt: now,
       updatedAt: now,
     } as const;
@@ -521,11 +628,13 @@ export class TaskRepository {
       this.appendTaskEventTx(tx, row.id, "task.created", {
         projectId: row.projectId,
         title: row.title,
-        assignee: row.assignee,
+        ...(row.assignee ? { assignee: row.assignee } : {}),
       });
-      this.appendTaskEventTx(tx, row.id, "task.assigned", {
-        assignee: row.assignee,
-      });
+      if (row.assignee) {
+        this.appendTaskEventTx(tx, row.id, "task.assigned", {
+          assignee: row.assignee,
+        });
+      }
 
       if (data.parentId) {
         const parent = tx
@@ -651,7 +760,6 @@ export class TaskRepository {
       description?: string;
       status?: TaskStatus;
       closeReason?: TaskCloseReason;
-      resultSummary?: string;
       assignee?: string;
     },
   ): Task | undefined {
@@ -671,9 +779,6 @@ export class TaskRepository {
 
       if (data.title !== undefined) updates.title = data.title;
       if (data.description !== undefined) updates.description = data.description;
-      if (data.resultSummary !== undefined) {
-        updates.resultSummary = data.resultSummary;
-      }
       if (data.assignee !== undefined) {
         updates.assignee = data.assignee;
       }
@@ -713,9 +818,37 @@ export class TaskRepository {
         .get();
       if (!updated) return undefined;
 
-      this.appendTaskEventTx(tx, id, "task.updated", {
-        updates: data,
-      });
+      if (updated.title !== existing.title) {
+        this.appendTaskEventTx(tx, id, "task.updated.title", {
+          title: updated.title,
+        });
+      }
+
+      if (updated.description !== existing.description) {
+        this.appendTaskEventTx(tx, id, "task.updated.description", {
+          description: updated.description ?? "",
+        });
+      }
+
+      const existingStatus = normalizeTaskStatus(existing.status);
+      const updatedStatus = normalizeTaskStatus(updated.status);
+      const existingCloseReason = normalizeTaskCloseReason(existing.closeReason);
+      const updatedCloseReason = normalizeTaskCloseReason(updated.closeReason);
+      if (
+        updatedStatus !== existingStatus ||
+        updatedCloseReason !== existingCloseReason
+      ) {
+        this.appendTaskEventTx(tx, id, "task.updated.status", {
+          status: updatedStatus,
+          ...(updatedCloseReason ? { closeReason: updatedCloseReason } : {}),
+        });
+      }
+
+      if (updated.assignee && updated.assignee !== existing.assignee) {
+        this.appendTaskEventTx(tx, id, "task.assigned", {
+          assignee: updated.assignee,
+        });
+      }
       return this.rowToTask(updated);
     });
   }
@@ -924,23 +1057,43 @@ export class TaskRepository {
       .orderBy(taskEvents.seq)
       .all();
 
-    return rows.map((row) => {
-      return {
-        id: row.id,
-        taskId: row.taskId,
-        seq: row.seq,
-        type: row.type,
-        data: JSON.parse(row.data),
-        createdAt: row.createdAt,
-      };
-    });
+    const events: TaskEvent[] = [];
+    for (const row of rows) {
+      if (isTaskEventType(row.type)) {
+        events.push(toTaskEvent({ ...row, type: row.type }));
+        continue;
+      }
+
+      // Backward compatibility for older task-chat event names.
+      if (row.type === "task.chat.message_sent") {
+        events.push(
+          toTaskEvent({
+            ...row,
+            type: "task.chat.message",
+            data: parseLegacyTaskChatMessageData(row.data),
+          }),
+        );
+        continue;
+      }
+
+      if (row.type === "task.chat.thread_bound") {
+        events.push(
+          toTaskEvent({
+            ...row,
+            type: "task.chat.thread_created",
+            data: parseLegacyTaskChatThreadBoundData(row.data),
+          }),
+        );
+      }
+    }
+    return events;
   }
 
-  appendEvent(
+  appendEvent<TType extends TaskEventType>(
     taskId: string,
-    type: string,
-    data: Record<string, unknown>,
-  ): TaskEvent | undefined {
+    type: TType,
+    data: TaskEventDataForType<TType>,
+  ): TaskEvent<TType> | undefined {
     return this.withTransaction((tx) => {
       const task = tx
         .select({ id: tasks.id })
@@ -967,14 +1120,7 @@ export class TaskRepository {
       tx.insert(taskEvents).values(row).run();
       tx.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, taskId)).run();
 
-      return {
-        id: row.id,
-        taskId: row.taskId,
-        seq: row.seq,
-        type: row.type,
-        data: JSON.parse(row.data),
-        createdAt: row.createdAt,
-      };
+      return toTaskEvent({ ...row, type });
     });
   }
 
@@ -982,11 +1128,11 @@ export class TaskRepository {
     return (this.db as any).transaction(work);
   }
 
-  private appendTaskEventTx(
+  private appendTaskEventTx<TType extends TaskEventType>(
     tx: any,
     taskId: string,
-    type: string,
-    data: Record<string, unknown>,
+    type: TType,
+    data: TaskEventDataForType<TType>,
   ): void {
     const latest = tx
       .select({ maxSeq: sql<number>`MAX(${taskEvents.seq})` })
@@ -1054,7 +1200,6 @@ export class TaskRepository {
       ...(row.assignee ? { assignee: row.assignee } : {}),
       ...(row.archivedAt !== null ? { archivedAt: row.archivedAt } : {}),
       ...(row.closedAt !== null ? { closedAt: row.closedAt } : {}),
-      ...(row.resultSummary ? { resultSummary: row.resultSummary } : {}),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

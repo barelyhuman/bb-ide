@@ -1,19 +1,17 @@
 import type { ThreadStatus } from "@beanbag/core";
-import { Badge } from "@/components/ui/badge";
+import { formatSnakeCaseLabel } from "@/lib/formatting";
+import { StatusPill, type StatusPillVariant } from "./StatusPill";
 
 type Status = ThreadStatus;
 
-const variantMap: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const variantMap: Record<Status, StatusPillVariant> = {
+  created: "secondary",
+  provisioning: "secondary",
+  provisioning_failed: "destructive",
   active: "default",
   idle: "outline",
 };
 
 export function StatusBadge({ status }: { status: Status }) {
-  const variant = variantMap[status] ?? "outline";
-
-  return (
-    <Badge variant={variant} className="text-[11px] capitalize">
-      {status}
-    </Badge>
-  );
+  return <StatusPill variant={variantMap[status]}>{formatSnakeCaseLabel(status)}</StatusPill>;
 }

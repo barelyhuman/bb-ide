@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { TaskComposer } from "@/components/tasks/TaskComposer";
+import { PageShell } from "@/components/layout/PageShell";
 import { useCreateTask, useSpawnThread } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
@@ -24,7 +25,7 @@ export function ProjectMainView() {
   const [taskErrorMessage, setTaskErrorMessage] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState("agent/generic");
+  const [taskAssignee, setTaskAssignee] = useState("");
   const [activeTab, setActiveTab] = useState<ComposerTab>("thread");
   const {
     selectedModel,
@@ -82,9 +83,11 @@ export function ProjectMainView() {
 
   if (!projectId) {
     return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        Select a project.
-      </p>
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Select a project.
+        </p>
+      </PageShell>
     );
   }
 
@@ -120,7 +123,7 @@ export function ProjectMainView() {
         projectId,
         title: trimmedTitle,
         description: taskDescription.trim() || undefined,
-        assignee: taskAssignee,
+        assignee: taskAssignee.trim().length > 0 ? taskAssignee : undefined,
       });
       setTaskTitle("");
       setTaskDescription("");
@@ -137,7 +140,7 @@ export function ProjectMainView() {
     createTask.isPending || taskTitle.trim().length === 0;
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-start pt-8 md:pt-10">
+    <PageShell contentClassName="pt-8 md:pt-10">
       <div className="w-full space-y-4">
         <div className="flex justify-center">
           <div className="inline-flex overflow-hidden rounded-lg border border-border/70 bg-muted/30">
@@ -257,6 +260,6 @@ export function ProjectMainView() {
           ) : null}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

@@ -111,20 +111,32 @@ describe("codex provider adapter", () => {
 
   it("defaults to full-access sandbox for start, resume, and turns", () => {
     const adapter = createCodexProviderAdapter();
+    const context = {
+      projectId: "proj-1",
+      threadId: "thread-1",
+    };
 
     expect(
       adapter.createThreadStartParams({
         projectId: "proj-1",
-      }),
+      }, context),
     ).toMatchObject({
       approvalPolicy: "never",
       sandbox: "danger-full-access",
+      config: {
+        "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
+        "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+      },
     });
 
-    expect(adapter.createThreadResumeParams("provider-thread-1")).toMatchObject({
+    expect(adapter.createThreadResumeParams("provider-thread-1", context)).toMatchObject({
       threadId: "provider-thread-1",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
+      config: {
+        "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
+        "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+      },
     });
 
     expect(
@@ -140,18 +152,33 @@ describe("codex provider adapter", () => {
 
   it("maps sandbox mode overrides to Codex thread/turn params", () => {
     const adapter = createCodexProviderAdapter();
+    const context = {
+      projectId: "proj-1",
+      threadId: "thread-1",
+      taskId: "task-1",
+      path: "/bb/bin:/usr/bin",
+    };
 
     expect(
       adapter.createThreadStartParams({
         projectId: "proj-1",
         sandboxMode: "read-only",
-      }),
+      }, context),
     ).toMatchObject({
       sandbox: "read-only",
+      config: {
+        "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
+        "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+        "shell_environment_policy.set.BB_TASK_ID": "task-1",
+        "shell_environment_policy.set.PATH": "/bb/bin:/usr/bin",
+      },
     });
 
     expect(
       adapter.createThreadResumeParams("provider-thread-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+      }, {
         sandboxMode: "workspace-write",
       }),
     ).toMatchObject({
@@ -181,6 +208,29 @@ describe("codex provider adapter", () => {
         networkAccess: true,
         excludeTmpdirEnvVar: false,
         excludeSlashTmp: false,
+      },
+    });
+  });
+
+  it("merges reasoning config with thread env config", () => {
+    const adapter = createCodexProviderAdapter();
+
+    const params = adapter.createThreadStartParams(
+      {
+        projectId: "proj-1",
+        reasoningLevel: "high",
+      },
+      {
+        projectId: "proj-1",
+        threadId: "thread-1",
+      },
+    );
+
+    expect(params).toMatchObject({
+      config: {
+        model_reasoning_effort: "high",
+        "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
+        "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
       },
     });
   });

@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { useProjects } from "../hooks/useApi";
 import { Button } from "@/components/ui/button";
+import { PageShell } from "@/components/layout/PageShell";
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject";
 
 export function MainView() {
@@ -10,15 +11,15 @@ export function MainView() {
 
   if (projectsLoading) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center">
+      <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="text-sm text-muted-foreground">Loading projects...</p>
-      </div>
+      </PageShell>
     );
   }
 
   if (!hasProjects) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center">
+      <PageShell contentClassName="min-h-full items-center justify-center">
         <div className="flex flex-col items-center gap-4 text-center">
           <p className="text-sm text-muted-foreground">
             Create a new project to get started
@@ -32,7 +33,7 @@ export function MainView() {
             {isCreating ? "Creating..." : "New project"}
           </Button>
         </div>
-      </div>
+      </PageShell>
     );
   }
 

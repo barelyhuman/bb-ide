@@ -1,6 +1,12 @@
 import { Command } from "commander";
 import type { Thread, ThreadEvent } from "@beanbag/core";
 import { createClient, unwrap } from "../client.js";
+import {
+  requireProjectId,
+  resolveProjectId,
+  resolveTaskId,
+  resolveThreadId,
+} from "../context-env.js";
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
   const thread = program.command("thread").description("Manage threads");
@@ -9,17 +15,36 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("spawn")
     .description("Spawn a new thread for a project")
     .option("--prompt <prompt>", "Initial prompt for the thread")
-    .requiredOption("--project <id>", "Project ID")
-    .action(async (opts: { prompt?: string; project: string }) => {
+    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .option("--task <id>", "Task ID context (defaults to BB_TASK_ID)")
+    .option(
+      "--parent-thread <id>",
+      "Parent thread ID for worker thread links (defaults to BB_THREAD_ID)",
+    )
+    .option("--task-role <role>", "primary|worker", "worker")
+    .action(async (opts: {
+      prompt?: string;
+      project?: string;
+      task?: string;
+      parentThread?: string;
+      taskRole?: "primary" | "worker";
+    }) => {
       const client = createClient(getUrl());
       try {
+        const projectId = requireProjectId(opts.project);
+        const taskId = resolveTaskId(opts.task);
+        const parentThreadId = resolveThreadId(opts.parentThread);
+        const taskRole = opts.taskRole === "primary" ? "primary" : "worker";
         const thread = await unwrap<Thread>(
           client.api.v1.threads.$post({
             json: {
-              projectId: opts.project,
+              projectId,
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
+              ...(taskId ? { taskId } : {}),
+              ...(taskId ? { taskRole } : {}),
+              ...(taskId && parentThreadId ? { parentThreadId } : {}),
             },
           }),
         );
@@ -34,13 +59,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("list")
     .description("List threads")
-    .option("--project <id>", "Filter by project ID")
+    .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
     .action(async (opts: { project?: string }) => {
       const client = createClient(getUrl());
       try {
+        const projectId = resolveProjectId(opts.project);
         const threads = await unwrap<Thread[]>(
           client.api.v1.threads.$get({
-            query: { projectId: opts.project },
+            query: { projectId },
           }),
         );
         if (threads.length === 0) {

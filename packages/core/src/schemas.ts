@@ -44,6 +44,9 @@ export const spawnThreadSchema = z.object({
   sandboxMode: z
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .optional(),
+  taskId: z.string().optional(),
+  parentThreadId: z.string().optional(),
+  taskRole: z.enum(["primary", "worker"]).optional(),
 });
 
 export const tellThreadSchema = z.object({
@@ -70,8 +73,7 @@ export const updateTaskSchema = z.object({
   description: z.string().optional(),
   status: taskStatusSchema.optional(),
   closeReason: taskCloseReasonSchema.optional(),
-  resultSummary: z.string().optional(),
-  assignee: z.string().min(1).optional(),
+  assignee: z.string().optional(),
 });
 
 export const assignTaskSchema = z.object({

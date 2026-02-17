@@ -1,173 +1,171 @@
 import { useMemo, useState } from "react";
-import type { TaskEvent, TaskStatus, UIMessage } from "@beanbag/core";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import type {
+  TaskEvent,
+  TaskStatus,
+  Thread,
+  ThreadEvent,
+  UIMessage,
+} from "@beanbag/core";
+import { ChevronDown } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { ConversationEntry } from "@/components/messages/ConversationEntry";
+import {
+  CollapsibleHeader,
+  COLLAPSIBLE_HEADER_TEXT_CLASS,
+  getCollapsibleHeaderToneClass,
+} from "@/components/messages/CollapsibleHeader";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
+import { PageShell } from "@/components/layout/PageShell";
+import {
+  DetailCard,
+  DetailMessageRow,
+  DetailRow,
+} from "@/components/shared/DetailCard";
 import { TaskAssigneeSelector } from "@/components/tasks/TaskAssigneeSelector";
 import {
   useSetTaskAssignee,
   useTask,
   useTaskChat,
   useTaskEvents,
-  useThread,
-  useThreadEvents,
+  useRoles,
+  useThreadEventsBatch,
+  useThreads,
   useUpdateTask,
 } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
-import { toUIMessages } from "@beanbag/core";
+import { formatRelativeTime, formatSnakeCaseLabel } from "@/lib/formatting";
 
-const TASK_STATUS_OPTIONS: Array<{ value: TaskStatus; label: string }> = [
-  { value: "open", label: "open" },
-  { value: "in_progress", label: "in progress" },
-  { value: "blocked", label: "blocked" },
-  { value: "closed", label: "closed" },
+const TASK_STATUS_OPTIONS: TaskStatus[] = [
+  "open",
+  "in_progress",
+  "blocked",
+  "closed",
 ];
-
-const EVENT_HEADER_COLLAPSED_TONE_CLASS =
-  "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
-const EVENT_HEADER_EXPANDED_TONE_CLASS = "text-foreground/90";
-const EVENT_HEADER_BUTTON_BASE_CLASS =
-  "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
-const EVENT_HEADER_TEXT_CLASS = "min-w-0 truncate";
-const EVENT_HEADER_CHEVRON_COLLAPSED_CLASS =
-  "size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100";
 
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const elapsedSeconds = Math.max(1, Math.floor((Date.now() - timestamp) / 1000));
-
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
-  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-  if (elapsedMinutes < 60) return `${elapsedMinutes}m`;
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) return `${elapsedHours}h`;
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  if (elapsedDays < 7) return `${elapsedDays}d`;
-  const elapsedWeeks = Math.floor(elapsedDays / 7);
-  return `${elapsedWeeks}w`;
-}
-
-function formatPrimitiveValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value.length > 72 ? `${value.slice(0, 69)}...` : value;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (Array.isArray(value)) {
-    return `${value.length} items`;
-  }
-  if (value && typeof value === "object") {
-    return "details";
-  }
-  if (value === null) {
-    return "null";
-  }
-  return "value";
-}
-
 function summarizeTaskEvent(event: TaskEvent): string {
-  const data = event.data ?? {};
-
   switch (event.type) {
     case "task.created":
       return "Task created";
-    case "task.updated": {
-      const maybeUpdates = data.updates;
-      if (maybeUpdates && typeof maybeUpdates === "object") {
-        const keys = Object.keys(maybeUpdates as Record<string, unknown>);
-        if (keys.length > 0) {
-          return `Updated ${keys.join(", ")}`;
-        }
-      }
-      return "Task updated";
-    }
-    case "task.assigned": {
-      const assignee = data.assignee;
-      if (typeof assignee === "string" && assignee.length > 0) {
-        return `Assigned to ${assignee}`;
+    case "task.updated.title":
+      return "Updated title";
+    case "task.updated.description":
+      return "Updated description";
+    case "task.updated.status":
+      return `Updated status to ${formatSnakeCaseLabel(event.data.status)}`;
+    case "task.assigned":
+      if (event.data.assignee.length > 0) {
+        return `Assigned to ${event.data.assignee}`;
       }
       return "Task assigned";
-    }
+    case "task.archived":
+      return "Task archived";
     case "task.dependency_added":
     case "task.dependency_removed": {
-      const type = typeof data.type === "string" ? data.type : "dependency";
-      const dependsOnTaskId =
-        typeof data.dependsOnTaskId === "string"
-          ? data.dependsOnTaskId.slice(0, 8)
-          : "unknown";
-      const action = event.type.endsWith("added") ? "Added" : "Removed";
-      return `${action} ${type} dependency on ${dependsOnTaskId}`;
+      const action = event.type === "task.dependency_added" ? "Added" : "Removed";
+      return `${action} ${event.data.type} dependency on ${event.data.dependsOnTaskId.slice(0, 8)}`;
     }
-    case "task.chat.thread_bound": {
-      const threadId =
-        typeof data.threadId === "string" && data.threadId.length > 0
-          ? data.threadId.slice(0, 8)
-          : "unknown";
-      return `Linked agent thread ${threadId}`;
-    }
-    case "task.chat.message_sent": {
-      const preview =
-        typeof data.preview === "string" && data.preview.trim().length > 0
-          ? data.preview
-          : "sent a message";
-      return `Message sent: ${preview}`;
-    }
-    default: {
-      const entries = Object.entries(data);
-      if (entries.length === 0) {
-        return "Event recorded";
+    case "task.chat.message":
+      if (event.data.fromThreadId === null) {
+        return "User sent a message";
       }
-      const [key, value] = entries[0];
-      return `${key}: ${formatPrimitiveValue(value)}`;
-    }
+      return `Thread ${event.data.fromThreadId.slice(0, 8)} sent a message`;
+    case "task.chat.thread_created":
+      return "Created primary thread";
   }
 }
 
-function getTaskEventThreadId(event: TaskEvent): string | undefined {
-  const threadId = event.data?.threadId;
-  if (typeof threadId !== "string" || threadId.length === 0) return undefined;
-  return threadId;
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
 
-function resolveTaskAgentThreadId(events: TaskEvent[]): string | undefined {
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const threadId = getTaskEventThreadId(events[i]);
-    if (threadId) return threadId;
-  }
-  return undefined;
+function getStringField(
+  record: Record<string, unknown> | null,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function isTaskStatus(value: unknown): value is TaskStatus {
+function extractTurnIdFromThreadEventData(data: unknown): string | undefined {
+  const root = asRecord(data);
+  if (!root) return undefined;
+
+  const direct =
+    getStringField(root, "turnId") ??
+    getStringField(root, "turn_id");
+  if (direct) return direct;
+
+  const turn = asRecord(root.turn);
+  const turnId = getStringField(turn, "id");
+  if (turnId) return turnId;
+
+  const msg = asRecord(root.msg);
+  const msgTurnId =
+    getStringField(msg, "turn_id") ??
+    getStringField(msg, "turnId");
+  if (msgTurnId) return msgTurnId;
+
+  const payload = asRecord(root.payload);
+  if (!payload) return undefined;
   return (
-    value === "open" ||
-    value === "in_progress" ||
-    value === "blocked" ||
-    value === "closed"
+    getStringField(payload, "turnId") ??
+    getStringField(payload, "turn_id") ??
+    getStringField(asRecord(payload.turn), "id") ??
+    getStringField(asRecord(payload.msg), "turn_id") ??
+    getStringField(asRecord(payload.msg), "turnId")
   );
 }
 
-function formatTaskStatusLabel(status: TaskStatus): string {
-  return status.replace("_", " ");
+function extractAgentMessageText(event: ThreadEvent): string | undefined {
+  if (event.type !== "item/completed") return undefined;
+  const payload = asRecord(event.data);
+  const item = asRecord(payload?.item);
+  if (!item || item.type !== "agentMessage") return undefined;
+  return typeof item.text === "string" && item.text.trim().length > 0
+    ? item.text
+    : undefined;
 }
 
-function getTaskUpdateData(event: TaskEvent): Record<string, unknown> | null {
-  if (event.type !== "task.updated") return null;
-  const maybeUpdates = event.data?.updates;
-  if (
-    !maybeUpdates ||
-    typeof maybeUpdates !== "object" ||
-    Array.isArray(maybeUpdates)
-  ) {
-    return null;
+function toPrimaryThreadTurnMessages(
+  thread: Thread,
+  events: ThreadEvent[],
+): UIMessage[] {
+  const sortedEvents = events.slice().sort((a, b) => a.seq - b.seq);
+  const lastAgentMessageByTurn = new Map<
+    string,
+    { seq: number; createdAt: number; text: string }
+  >();
+
+  for (const event of sortedEvents) {
+    const text = extractAgentMessageText(event);
+    if (!text) continue;
+    const turnId = extractTurnIdFromThreadEventData(event.data) ?? `seq:${event.seq}`;
+    lastAgentMessageByTurn.set(turnId, {
+      seq: event.seq,
+      createdAt: event.createdAt,
+      text,
+    });
   }
-  return maybeUpdates as Record<string, unknown>;
+
+  return Array.from(lastAgentMessageByTurn.values())
+    .sort((a, b) => (a.createdAt === b.createdAt ? a.seq - b.seq : a.createdAt - b.createdAt))
+    .map((entry) => ({
+      kind: "assistant-text" as const,
+      id: `primary-thread-turn:${thread.id}:${entry.seq}`,
+      threadId: thread.id,
+      sourceSeqStart: entry.seq,
+      sourceSeqEnd: entry.seq,
+      createdAt: entry.createdAt,
+      text: entry.text,
+      status: "completed" as const,
+    }));
 }
 
 type TaskEventRow =
@@ -202,6 +200,13 @@ type TaskActivityRow =
       row: TaskEventRow;
     }
   | {
+      kind: "task-chat-message";
+      id: string;
+      createdAt: number;
+      order: number;
+      message: UIMessage;
+    }
+  | {
       kind: "agent-message";
       id: string;
       createdAt: number;
@@ -209,17 +214,45 @@ type TaskActivityRow =
       message: UIMessage;
     };
 
+function toTaskChatActivityMessage(event: TaskEvent): UIMessage | null {
+  if (event.type !== "task.chat.message") return null;
+
+  const text =
+    event.data.message.trim().length > 0 ? event.data.message : "(no text)";
+
+  if (event.data.fromThreadId === null) {
+    return {
+      kind: "user",
+      id: `task-chat:user:${event.id}`,
+      threadId: `task-${event.taskId}`,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      text,
+    };
+  }
+
+  return {
+    kind: "assistant-text",
+    id: `task-chat:thread:${event.id}`,
+    threadId: event.data.fromThreadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    text,
+    status: "completed",
+  };
+}
+
 function buildTaskEventRows(events: TaskEvent[]): TaskEventRow[] {
   let inferredStatus: TaskStatus = "open";
   let inferredTitle: string | undefined;
 
   return events.map((event) => {
-    const data = event.data ?? {};
-
     if (event.type === "task.created") {
       const createdTitle =
-        typeof data.title === "string" && data.title.trim().length > 0
-          ? data.title
+        event.data.title.trim().length > 0
+          ? event.data.title
           : undefined;
       if (createdTitle) inferredTitle = createdTitle;
       inferredStatus = "open";
@@ -230,26 +263,20 @@ function buildTaskEventRows(events: TaskEvent[]): TaskEventRow[] {
       };
     }
 
-    const updates = getTaskUpdateData(event);
-    if (updates) {
-      const nextStatus = isTaskStatus(updates.status) ? updates.status : undefined;
+    if (event.type === "task.updated.status") {
+      const row: TaskEventRow = {
+        kind: "status-updated",
+        event,
+        fromStatus: inferredStatus,
+        toStatus: event.data.status,
+      };
+      inferredStatus = event.data.status;
+      return row;
+    }
+
+    if (event.type === "task.updated.title") {
       const nextTitle =
-        typeof updates.title === "string" && updates.title.trim().length > 0
-          ? updates.title
-          : undefined;
-
-      if (nextStatus) {
-        const row: TaskEventRow = {
-          kind: "status-updated",
-          event,
-          fromStatus: inferredStatus,
-          toStatus: nextStatus,
-        };
-        inferredStatus = nextStatus;
-        if (nextTitle) inferredTitle = nextTitle;
-        return row;
-      }
-
+        event.data.title.trim().length > 0 ? event.data.title : undefined;
       if (nextTitle) {
         const row: TaskEventRow = {
           kind: "title-updated",
@@ -275,7 +302,7 @@ function buildTaskEventRows(events: TaskEvent[]): TaskEventRow[] {
 
 function buildTaskEventDetailLine(row: TaskEventRow): string {
   if (row.kind === "status-updated") {
-    return `From ${formatTaskStatusLabel(row.fromStatus ?? row.toStatus)}`;
+    return `From ${formatSnakeCaseLabel(row.fromStatus ?? row.toStatus)}`;
   }
 
   if (row.kind === "title-updated") {
@@ -291,68 +318,112 @@ function buildTaskEventDetailLine(row: TaskEventRow): string {
       : `Created ${formatDate(row.event.createdAt)}`;
   }
 
-  const data = row.event.data ?? {};
-  if (row.event.type === "task.assigned") {
-    const assignee = data.assignee;
-    if (typeof assignee === "string" && assignee.length > 0) {
-      return `Assigned to ${assignee}`;
+  switch (row.event.type) {
+    case "task.assigned":
+      if (row.event.data.assignee.length > 0) {
+        return `Assigned to ${row.event.data.assignee}`;
+      }
+      return "Task assigned";
+    case "task.dependency_added":
+    case "task.dependency_removed": {
+      const action = row.event.type === "task.dependency_added" ? "Added" : "Removed";
+      return `${action} ${row.event.data.type} dependency on ${row.event.data.dependsOnTaskId.slice(0, 8)}`;
     }
+    case "task.chat.message":
+      if (row.event.data.fromThreadId === null) {
+        return `User: ${row.event.data.message.trim().length > 0 ? row.event.data.message : "(no text)"}`;
+      }
+      return `Thread ${row.event.data.fromThreadId}: ${row.event.data.message.trim().length > 0 ? row.event.data.message : "(no text)"}`;
+    case "task.chat.thread_created":
+      return row.event.data.threadId.length > 0
+        ? `Created primary thread ${row.event.data.threadId}`
+        : "Created primary thread";
+    case "task.updated.title":
+      return `Set title to ${row.event.data.title}`;
+    case "task.updated.description":
+      return row.event.data.description.trim().length > 0
+        ? row.event.data.description
+        : "Cleared description";
+    case "task.updated.status":
+      return row.event.data.closeReason
+        ? `Set status to ${formatSnakeCaseLabel(row.event.data.status)} (${row.event.data.closeReason})`
+        : `Set status to ${formatSnakeCaseLabel(row.event.data.status)}`;
+    case "task.archived":
+      return `Archived at ${formatDate(row.event.data.archivedAt)}`;
+    case "task.created":
+      return "Task created";
   }
-  if (
-    row.event.type === "task.dependency_added" ||
-    row.event.type === "task.dependency_removed"
-  ) {
-    const type = typeof data.type === "string" ? data.type : "dependency";
-    const dependsOnTaskId =
-      typeof data.dependsOnTaskId === "string"
-        ? data.dependsOnTaskId.slice(0, 8)
-        : "unknown";
-    const action = row.event.type.endsWith("added") ? "Added" : "Removed";
-    return `${action} ${type} dependency on ${dependsOnTaskId}`;
-  }
-  if (row.event.type === "task.chat.thread_bound") {
-    const threadId =
-      typeof data.threadId === "string" && data.threadId.length > 0
-        ? data.threadId
-        : "unknown";
-    const assignee =
-      typeof data.assignee === "string" && data.assignee.length > 0
-        ? data.assignee
-        : "unknown";
-    return `Bound ${assignee} to thread ${threadId}`;
-  }
-  if (row.event.type === "task.chat.message_sent") {
-    const preview =
-      typeof data.preview === "string" && data.preview.trim().length > 0
-        ? data.preview
-        : "sent a message";
-    return preview;
-  }
+}
 
-  const entries = Object.entries(data);
-  if (entries.length === 0) return `Recorded ${formatDate(row.event.createdAt)}`;
-  const [key, value] = entries[0];
-  return `${key}: ${formatPrimitiveValue(value)}`;
+function isNonExpandableTaskEventRow(row: TaskEventRow): boolean {
+  if (row.kind !== "generic") return false;
+  return (
+    row.event.type === "task.assigned" ||
+    row.event.type === "task.dependency_added" ||
+    row.event.type === "task.dependency_removed" ||
+    row.event.type === "task.chat.thread_created"
+  );
 }
 
 function TaskEventLogEntry({
   row,
+  roleNameById,
+  threadDisplayNameById,
+  projectId,
 }: {
   row: TaskEventRow;
+  roleNameById: Map<string, string>;
+  threadDisplayNameById: Map<string, string>;
+  projectId: string;
 }) {
   const event = row.event;
   const [isExpanded, setIsExpanded] = useState(false);
-  const headerToneClass = isExpanded
-    ? EVENT_HEADER_EXPANDED_TONE_CLASS
-    : EVENT_HEADER_COLLAPSED_TONE_CLASS;
+  const isAssigneeEvent = row.kind === "generic" && event.type === "task.assigned";
+  const isThreadCreatedEvent =
+    row.kind === "generic" && event.type === "task.chat.thread_created";
+  const isExpandable = !isNonExpandableTaskEventRow(row);
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
   const relativeTime = formatRelativeTime(event.createdAt);
 
+  const assigneeRoleName =
+    isAssigneeEvent && event.data.assignee.length > 0
+      ? roleNameById.get(event.data.assignee) ?? event.data.assignee
+      : null;
+  const createdThreadDisplayName =
+    isThreadCreatedEvent && event.data.threadId.length > 0
+      ? threadDisplayNameById.get(event.data.threadId) ?? event.data.threadId
+      : null;
+
   const summaryContent =
-    row.kind === "status-updated" ? (
+    isAssigneeEvent && assigneeRoleName ? (
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0 text-muted-foreground/90">Assigned to</span>
+        <Link
+          to={`/roles/${encodeURIComponent(event.data.assignee)}`}
+          className="min-w-0 truncate text-foreground/95 underline underline-offset-2 hover:no-underline"
+        >
+          {assigneeRoleName}
+        </Link>
+        <span className="shrink-0 text-muted-foreground/80">· {relativeTime}</span>
+      </span>
+    ) : isThreadCreatedEvent && createdThreadDisplayName ? (
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0 text-muted-foreground/90">Created primary thread</span>
+        <Link
+          to={`/projects/${projectId}/threads/${event.data.threadId}`}
+          className="min-w-0 truncate text-foreground/95 underline underline-offset-2 hover:no-underline"
+        >
+          {createdThreadDisplayName}
+        </Link>
+        <span className="shrink-0 text-muted-foreground/80">· {relativeTime}</span>
+      </span>
+    ) : isThreadCreatedEvent ? (
+      `Created primary thread · ${relativeTime}`
+    ) : row.kind === "status-updated" ? (
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <span className="shrink-0 text-muted-foreground/90">Updated status to</span>
         <span className="truncate font-semibold text-foreground/95">
-          {formatTaskStatusLabel(row.toStatus)}
+          {formatSnakeCaseLabel(row.toStatus)}
         </span>
         <span className="shrink-0 text-muted-foreground/80">· {relativeTime}</span>
       </span>
@@ -369,35 +440,34 @@ function TaskEventLogEntry({
     ) : (
       `${summarizeTaskEvent(event)} · ${relativeTime}`
     );
-  const expandedDetail = buildTaskEventDetailLine(row);
+  const expandedDetail = isExpandable ? buildTaskEventDetailLine(row) : null;
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md text-muted-foreground">
           <div className={isExpanded ? "px-2 pb-0 pt-1" : "px-2 py-1"}>
-            <button
-              type="button"
-              onClick={() => setIsExpanded((value) => !value)}
-              className={`${EVENT_HEADER_BUTTON_BASE_CLASS} ${headerToneClass}`}
-            >
-              <span
-                className={
+            {isExpandable ? (
+              <CollapsibleHeader
+                isExpanded={isExpanded}
+                onToggle={() => setIsExpanded((value) => !value)}
+                toneClassName={headerToneClass}
+                summaryClassName={
                   row.kind === "status-updated" || row.kind === "title-updated"
                     ? "min-w-0"
-                    : EVENT_HEADER_TEXT_CLASS
+                    : COLLAPSIBLE_HEADER_TEXT_CLASS
                 }
-              >
-                {summaryContent}
-              </span>
-              {isExpanded ? (
-                <ChevronDown className="size-4 shrink-0" />
-              ) : (
-                <ChevronRight className={EVENT_HEADER_CHEVRON_COLLAPSED_CLASS} />
-              )}
-            </button>
+                summaryContent={summaryContent}
+              />
+            ) : (
+              <CollapsibleHeader
+                toneClassName={headerToneClass}
+                summaryClassName={COLLAPSIBLE_HEADER_TEXT_CLASS}
+                summaryContent={summaryContent}
+              />
+            )}
           </div>
-          {isExpanded ? (
+          {isExpanded && expandedDetail ? (
             <div className="px-2 pb-0.5">
               <p
                 className="truncate text-sm text-foreground/80"
@@ -417,6 +487,7 @@ export function TaskDetailView() {
   const { projectId, taskId } = useParams<{ projectId: string; taskId: string }>();
   const { data: task, isLoading, error } = useTask(taskId ?? "");
   const taskEventsQuery = useTaskEvents(taskId ?? "");
+  const rolesQuery = useRoles();
   const setTaskAssignee = useSetTaskAssignee();
   const taskChat = useTaskChat();
   const updateTask = useUpdateTask();
@@ -436,34 +507,77 @@ export function TaskDetailView() {
     [taskEventsQuery.data],
   );
   const taskEventRows = useMemo(() => buildTaskEventRows(taskEvents), [taskEvents]);
-  const boundAgentThreadId = useMemo(
-    () => resolveTaskAgentThreadId(taskEvents),
-    [taskEvents],
+  const primaryThreadsQuery = useThreads(
+    task
+      ? {
+          projectId: task.projectId,
+          taskId: task.id,
+          taskRole: "primary",
+          includeArchived: true,
+        }
+      : undefined,
+    { enabled: Boolean(task) },
   );
-  const { data: boundAgentThread } = useThread(boundAgentThreadId ?? "");
-  const boundAgentThreadEventsQuery = useThreadEvents(boundAgentThreadId ?? "");
-  const boundAgentMessages = useMemo(
-    () =>
-      toUIMessages(boundAgentThreadEventsQuery.data, {
-        threadStatus: boundAgentThread?.status,
-      }).filter((entry) => entry.kind !== "assistant-reasoning"),
-    [boundAgentThread?.status, boundAgentThreadEventsQuery.data],
+  const primaryThreads = useMemo(
+    () => (primaryThreadsQuery.data ?? []).slice().sort((a, b) => a.createdAt - b.createdAt),
+    [primaryThreadsQuery.data],
+  );
+  const currentPrimaryThread = useMemo(
+    () => primaryThreads.filter((thread) => thread.archivedAt === undefined).at(-1),
+    [primaryThreads],
+  );
+  const currentPrimaryThreadId = currentPrimaryThread?.id;
+  const currentPrimaryThreadDisplayName =
+    currentPrimaryThread?.title?.trim() || currentPrimaryThreadId;
+  const primaryThreadIds = useMemo(
+    () => primaryThreads.map((thread) => thread.id),
+    [primaryThreads],
+  );
+  const primaryThreadEventsQueries = useThreadEventsBatch(primaryThreadIds);
+  const primaryThreadMessages = useMemo(() => {
+    const messages: UIMessage[] = [];
+    for (let i = 0; i < primaryThreads.length; i += 1) {
+      const thread = primaryThreads[i];
+      const threadEvents = primaryThreadEventsQueries[i]?.data ?? [];
+      messages.push(...toPrimaryThreadTurnMessages(thread, threadEvents));
+    }
+    messages.sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+      const aSeq = "sourceSeqStart" in a ? a.sourceSeqStart : 0;
+      const bSeq = "sourceSeqStart" in b ? b.sourceSeqStart : 0;
+      return aSeq - bSeq;
+    });
+    return messages;
+  }, [primaryThreadEventsQueries, primaryThreads]);
+  const isPrimaryThreadEventsLoading = primaryThreadEventsQueries.some(
+    (query) => query.isLoading,
   );
   const taskActivityRows = useMemo(() => {
     const activityRows: TaskActivityRow[] = [];
     for (let i = 0; i < taskEventRows.length; i += 1) {
       const row = taskEventRows[i];
-      activityRows.push({
-        kind: "task-event",
-        id: `task-event:${row.event.id}`,
-        createdAt: row.event.createdAt,
-        order: i,
-        row,
-      });
+      const taskChatMessage = toTaskChatActivityMessage(row.event);
+      if (taskChatMessage) {
+        activityRows.push({
+          kind: "task-chat-message",
+          id: `task-chat-message:${row.event.id}`,
+          createdAt: row.event.createdAt,
+          order: i,
+          message: taskChatMessage,
+        });
+      } else {
+        activityRows.push({
+          kind: "task-event",
+          id: `task-event:${row.event.id}`,
+          createdAt: row.event.createdAt,
+          order: i,
+          row,
+        });
+      }
     }
     const offset = taskEventRows.length;
-    for (let i = 0; i < boundAgentMessages.length; i += 1) {
-      const message = boundAgentMessages[i];
+    for (let i = 0; i < primaryThreadMessages.length; i += 1) {
+      const message = primaryThreadMessages[i];
       activityRows.push({
         kind: "agent-message",
         id: `agent-message:${message.id}`,
@@ -478,26 +592,46 @@ export function TaskDetailView() {
       return a.order - b.order;
     });
     return activityRows;
-  }, [boundAgentMessages, taskEventRows]);
-  const showAgentWorking = taskChat.isPending || boundAgentThread?.status === "active";
+  }, [primaryThreadMessages, taskEventRows]);
+  const showAgentWorking =
+    taskChat.isPending ||
+    currentPrimaryThread?.status === "active" ||
+    currentPrimaryThread?.status === "created" ||
+    currentPrimaryThread?.status === "provisioning";
+  const primaryThreadDisplayNameById = useMemo(() => {
+    return new Map(
+      primaryThreads.map((thread) => [thread.id, thread.title?.trim() || thread.id]),
+    );
+  }, [primaryThreads]);
+  const roleNameById = useMemo(() => {
+    return new Map((rolesQuery.data ?? []).map((role) => [role.id, role.name]));
+  }, [rolesQuery.data]);
 
   if (!projectId || !taskId) {
-    return <p className="py-12 text-center text-sm text-destructive">Not found</p>;
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">Not found</p>
+      </PageShell>
+    );
   }
 
   if (isLoading) {
     return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        Loading task...
-      </p>
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Loading task...
+        </p>
+      </PageShell>
     );
   }
 
   if (error || !task || task.projectId !== projectId) {
     return (
-      <p className="py-12 text-center text-sm text-destructive">
-        {error ? error.message : "Not found"}
-      </p>
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">
+          {error ? error.message : "Not found"}
+        </p>
+      </PageShell>
     );
   }
 
@@ -574,200 +708,162 @@ export function TaskDetailView() {
   };
 
   return (
-    <div className="-mx-4 -mt-4 flex h-full min-h-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mt-5">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[800px] flex-col px-4 pb-4 pt-2">
-        <section className="sticky top-0 z-10 shrink-0 space-y-1 bg-background pb-3">
-            <dl className="rounded-md border border-border/60 bg-background/40 px-2 py-1">
-              {task.description && task.description.trim().length > 0 ? (
-                <div className="py-1">
-                  <dt className="sr-only">Description</dt>
-                  <dd className="min-w-0 break-words text-sm text-foreground/90">
-                    {task.description}
-                  </dd>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                <dt className="text-xs text-muted-foreground">
-                  Status
-                </dt>
-                <dd className="min-w-0">
-                  <div className="inline-flex max-w-full">
-                    <div className="relative inline-flex items-center rounded-sm px-0.5 focus-within:ring-1 focus-within:ring-ring">
-                      <span className="pointer-events-none text-sm text-foreground">
-                        {formatTaskStatusLabel(task.status)}
-                      </span>
-                      <ChevronDown className="pointer-events-none ml-1 size-3 text-muted-foreground" />
-                      <select
-                        value={task.status}
-                        onChange={(event) =>
-                          handleStatusChange(event.target.value as TaskStatus)
-                        }
-                        disabled={!canEditStatus}
-                        aria-label="Task status"
-                        className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
-                      >
-                        {TASK_STATUS_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </dd>
-              </div>
-              {statusErrorMessage ? (
-                <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-0.5 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                  <div aria-hidden="true" />
-                  <p className="text-xs text-destructive">{statusErrorMessage}</p>
-                </div>
-              ) : null}
-              {task.status === "closed" ? (
-                <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-0.5 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                  <div aria-hidden="true" />
-                  <p className="text-xs text-muted-foreground">
-                    Closed tasks cannot be reopened.
-                  </p>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-[92px_minmax(0,1fr)] items-center gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                <dt className="text-xs text-muted-foreground">
-                  Assignee
-                </dt>
-                <dd className="min-w-0">
-                  <TaskAssigneeSelector
-                    value={task.assignee}
-                    onChange={(nextRoleId) => {
-                      if (assignmentErrorMessage) setAssignmentErrorMessage(null);
-                      handleAssignRole(nextRoleId);
-                    }}
-                    className="h-auto px-0 text-sm text-foreground/90 hover:text-foreground"
-                  />
-                </dd>
-              </div>
-              {assignmentErrorMessage ? (
-                <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-0.5 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                  <div aria-hidden="true" />
-                  <p className="text-xs text-destructive">
-                    {assignmentErrorMessage}
-                  </p>
-                </div>
-              ) : null}
-              {boundAgentThreadId ? (
-                <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                  <dt className="text-xs text-muted-foreground">
-                    Agent Thread
-                  </dt>
-                  <dd className="min-w-0 truncate">
-                    <Link
-                      to={`/projects/${projectId}/threads/${boundAgentThreadId}`}
-                      className="underline-offset-2 hover:underline"
-                    >
-                      {boundAgentThreadId}
-                    </Link>
-                  </dd>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                <dt className="text-xs text-muted-foreground">
-                  Created
-                </dt>
-                <dd>{formatDate(task.createdAt)}</dd>
-              </div>
-              <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                <dt className="text-xs text-muted-foreground">
-                  Updated
-                </dt>
-                <dd>{formatDate(task.updatedAt)}</dd>
-              </div>
-              {task.closeReason ? (
-                <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                  <dt className="text-xs text-muted-foreground">
-                    Close Reason
-                  </dt>
-                  <dd>{task.closeReason}</dd>
-                </div>
-              ) : null}
-              {task.resultSummary ? (
-                <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2 py-1 text-sm sm:grid-cols-[124px_minmax(0,1fr)]">
-                  <dt className="text-xs text-muted-foreground">
-                    Result Summary
-                  </dt>
-                  <dd className="min-w-0 break-words text-foreground/90">
-                    {task.resultSummary}
-                  </dd>
-                </div>
-              ) : null}
-            </dl>
-          </section>
-
-          <section className="min-h-0 flex flex-1 flex-col">
-            <div className="min-h-0 flex flex-1 flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-                {taskEventsQuery.isLoading ||
-                (boundAgentThreadId && boundAgentThreadEventsQuery.isLoading) ? (
-                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    Loading task activity...
-                  </div>
-                ) : taskActivityRows.length === 0 ? (
-                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-                    No task activity yet.
-                  </div>
-                ) : (
-                  <div className="space-y-0.5 py-1">
-                    {taskActivityRows.map((activityRow) =>
-                      activityRow.kind === "task-event" ? (
-                        <TaskEventLogEntry key={activityRow.id} row={activityRow.row} />
-                      ) : (
-                        <ConversationEntry
-                          key={activityRow.id}
-                          message={activityRow.message}
-                          initialExpanded={false}
-                        />
-                      ),
-                    )}
-                    {showAgentWorking ? (
-                      <ConversationWorkingIndicator isThinking={false} />
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              <div className="shrink-0 bg-background/30 p-3">
-                <PromptBox
-                  id="task-detail-chat-prompt"
-                  value={taskPromptDraft.value}
-                  onChange={(value) => {
-                    taskPromptDraft.setValue(value);
-                    if (chatErrorMessage) setChatErrorMessage(null);
-                  }}
-                  onSubmit={submitTaskPrompt}
-                  isSubmitting={taskChat.isPending}
-                  submitDisabled={
-                    !task.assignee ||
-                    taskPromptDraft.value.trim().length === 0 ||
-                    taskChat.isPending
+    <PageShell
+      contentClassName="gap-3"
+      footerUsesPromptPadding
+      footer={
+        <>
+          <PromptBox
+            id="task-detail-chat-prompt"
+            value={taskPromptDraft.value}
+            onChange={(value) => {
+              taskPromptDraft.setValue(value);
+              if (chatErrorMessage) setChatErrorMessage(null);
+            }}
+            onSubmit={submitTaskPrompt}
+            isSubmitting={taskChat.isPending}
+            submitDisabled={
+              !task.assignee ||
+              taskPromptDraft.value.trim().length === 0 ||
+              taskChat.isPending
+            }
+            submitTitle={taskChat.isPending ? "Sending..." : "Send"}
+            placeholder={
+              task.assignee
+                ? "Message the assigned task agent"
+                : "Assign a role before chatting"
+            }
+            mentionSuggestions={fileMentions.suggestions}
+            mentionLoading={fileMentions.isLoading}
+            mentionError={fileMentions.isError}
+            onMentionQueryChange={fileMentions.setQuery}
+          />
+          {chatErrorMessage ? (
+            <p className="px-1 pt-2 text-xs text-destructive">
+              {chatErrorMessage}
+            </p>
+          ) : null}
+        </>
+      }
+    >
+      <section className="shrink-0">
+        <DetailCard>
+          {task.description && task.description.trim().length > 0 ? (
+            <div className="py-1">
+              <dt className="sr-only">Description</dt>
+              <dd className="min-w-0 break-words text-sm text-foreground/90">
+                {task.description}
+              </dd>
+            </div>
+          ) : null}
+          <DetailRow label="Status" align="center">
+            <div className="inline-flex max-w-full">
+              <div className="relative inline-flex items-center rounded-sm px-0.5 focus-within:ring-1 focus-within:ring-ring">
+                <span className="pointer-events-none text-sm text-foreground">
+                  {formatSnakeCaseLabel(task.status)}
+                </span>
+                <ChevronDown className="pointer-events-none ml-1 size-3 text-muted-foreground" />
+                <select
+                  value={task.status}
+                  onChange={(event) =>
+                    handleStatusChange(event.target.value as TaskStatus)
                   }
-                  submitTitle={taskChat.isPending ? "Sending..." : "Send"}
-                  placeholder={
-                    task.assignee
-                      ? "Message the assigned task agent"
-                      : "Assign a role before chatting"
-                  }
-                  mentionSuggestions={fileMentions.suggestions}
-                  mentionLoading={fileMentions.isLoading}
-                  mentionError={fileMentions.isError}
-                  onMentionQueryChange={fileMentions.setQuery}
-                />
-                {chatErrorMessage ? (
-                  <p className="px-1 pt-2 text-xs text-destructive">
-                    {chatErrorMessage}
-                  </p>
-                ) : null}
+                  disabled={!canEditStatus}
+                  aria-label="Task status"
+                  className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent opacity-0 disabled:cursor-not-allowed"
+                >
+                  {TASK_STATUS_OPTIONS.map((statusOption) => (
+                    <option key={statusOption} value={statusOption}>
+                      {formatSnakeCaseLabel(statusOption)}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          </section>
-      </div>
-    </div>
+          </DetailRow>
+          {statusErrorMessage ? (
+            <DetailMessageRow>
+              <p className="text-xs text-destructive">{statusErrorMessage}</p>
+            </DetailMessageRow>
+          ) : null}
+          {task.status === "closed" ? (
+            <DetailMessageRow>
+              <p className="text-xs text-muted-foreground">
+                Closed tasks cannot be reopened.
+              </p>
+            </DetailMessageRow>
+          ) : null}
+          <DetailRow label="Assignee" align="center">
+            <TaskAssigneeSelector
+              value={task.assignee}
+              onChange={(nextRoleId) => {
+                if (assignmentErrorMessage) setAssignmentErrorMessage(null);
+                handleAssignRole(nextRoleId);
+              }}
+              className="h-auto px-0 text-sm text-foreground/90 hover:text-foreground"
+            />
+          </DetailRow>
+          {assignmentErrorMessage ? (
+            <DetailMessageRow>
+              <p className="text-xs text-destructive">
+                {assignmentErrorMessage}
+              </p>
+            </DetailMessageRow>
+          ) : null}
+          {currentPrimaryThreadId ? (
+            <DetailRow label="Primary Thread" valueClassName="min-w-0 truncate">
+              <Link
+                to={`/projects/${projectId}/threads/${currentPrimaryThreadId}`}
+                className="underline underline-offset-2"
+              >
+                {currentPrimaryThreadDisplayName}
+              </Link>
+            </DetailRow>
+          ) : null}
+          <DetailRow label="Created">{formatDate(task.createdAt)}</DetailRow>
+          <DetailRow label="Updated">{formatDate(task.updatedAt)}</DetailRow>
+          {task.closeReason ? (
+            <DetailRow label="Close Reason">{task.closeReason}</DetailRow>
+          ) : null}
+        </DetailCard>
+      </section>
+
+      <section className="min-h-0">
+        {taskEventsQuery.isLoading ||
+        primaryThreadsQuery.isLoading ||
+        isPrimaryThreadEventsLoading ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            Loading task activity...
+          </div>
+        ) : taskActivityRows.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No task activity yet.
+          </div>
+        ) : (
+          <div className="space-y-0.5 py-1">
+            {taskActivityRows.map((activityRow) =>
+              activityRow.kind === "task-event" ? (
+                <TaskEventLogEntry
+                  key={activityRow.id}
+                  row={activityRow.row}
+                  roleNameById={roleNameById}
+                  threadDisplayNameById={primaryThreadDisplayNameById}
+                  projectId={projectId}
+                />
+              ) : (
+                <ConversationEntry
+                  key={activityRow.id}
+                  message={activityRow.message}
+                  initialExpanded={false}
+                />
+              ),
+            )}
+            {showAgentWorking ? (
+              <ConversationWorkingIndicator isThinking={false} />
+            ) : null}
+          </div>
+        )}
+      </section>
+    </PageShell>
   );
 }

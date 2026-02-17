@@ -10,16 +10,21 @@ import {
 import {
   ConversationEntry,
 } from "@/components/messages/ConversationEntry";
+import {
+  CollapsibleHeader,
+  getCollapsibleHeaderToneClass,
+} from "@/components/messages/CollapsibleHeader";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
-import { ArrowDown, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { useDebugMode } from "@/hooks/useDebugMode";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
+import { PageShell } from "@/components/layout/PageShell";
 import { toUIMessages } from "@beanbag/core";
 import {
   buildThreadDetailRows,
@@ -36,14 +41,6 @@ import {
 } from "@/lib/latestInitialExpanded";
 
 const SCROLL_THRESHOLD = 40;
-const HEADER_COLLAPSED_TONE_CLASS =
-  "text-muted-foreground/70 transition-colors hover:text-foreground/90 focus-visible:text-foreground/90";
-const HEADER_EXPANDED_TONE_CLASS = "text-foreground/90";
-const HEADER_BUTTON_BASE_CLASS =
-  "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
-const HEADER_TEXT_CLASS = "min-w-0 truncate";
-const HEADER_CHEVRON_COLLAPSED_CLASS =
-  "size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100";
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -80,27 +77,19 @@ function ToolGroupEntry({
   );
   const count = entry.summaryCount;
   const summaryContent = `${count} tools and changes`;
-  const headerToneClass = isExpanded
-    ? HEADER_EXPANDED_TONE_CLASS
-    : HEADER_COLLAPSED_TONE_CLASS;
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md text-muted-foreground">
           <div className="px-2 py-1">
-            <button
-              type="button"
-              onClick={onToggle}
-              className={`${HEADER_BUTTON_BASE_CLASS} ${headerToneClass}`}
-            >
-              <span className={HEADER_TEXT_CLASS}>{summaryContent}</span>
-              {isExpanded ? (
-                <ChevronDown className="size-4 shrink-0" />
-              ) : (
-                <ChevronRight className={HEADER_CHEVRON_COLLAPSED_CLASS} />
-              )}
-            </button>
+            <CollapsibleHeader
+              isExpanded={isExpanded}
+              onToggle={onToggle}
+              toneClassName={headerToneClass}
+              summaryContent={summaryContent}
+            />
           </div>
           {isExpanded ? (
             <div className="px-2 pb-1">
@@ -222,18 +211,30 @@ export function ThreadDetailView() {
   }, [containerRef]);
 
   if (!projectId || !threadId) {
-    return <p className="text-sm text-destructive py-12 text-center">Not found</p>;
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">Not found</p>
+      </PageShell>
+    );
   }
-  if (isLoading) return <p className="text-sm text-muted-foreground py-12 text-center">Loading...</p>;
+  if (isLoading) {
+    return (
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-muted-foreground">Loading...</p>
+      </PageShell>
+    );
+  }
   if (
     error ||
     !thread ||
     thread.projectId !== projectId
   ) {
     return (
-      <p className="text-sm text-destructive py-12 text-center">
-        {error ? error.message : "Not found"}
-      </p>
+      <PageShell contentClassName="min-h-full items-center justify-center">
+        <p className="py-12 text-center text-sm text-destructive">
+          {error ? error.message : "Not found"}
+        </p>
+      </PageShell>
     );
   }
 
@@ -268,119 +269,109 @@ export function ThreadDetailView() {
   };
 
   return (
-    <div className="-mx-4 -mt-4 flex h-full min-h-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mt-5">
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div
-          ref={containerRef}
-          onScroll={handleScroll}
-          className="min-h-0 flex-1 overflow-y-auto"
-        >
-          <div className="mx-auto flex w-full max-w-[800px] flex-col gap-1 px-4 pb-4 pt-2">
-            {threadDetailRows.length === 0 ? (
-              <div className="py-16 text-center text-sm text-muted-foreground">
-                No events yet
-              </div>
-            ) : (
-              threadDetailRows.map((entry) => {
-                const isLatestActivity =
-                  shouldHighlightLatest && entry.id === latestActivityRowId;
-                return entry.kind === "tool-group" ? (
-                  <ToolGroupEntry
-                    key={`${threadId}:${entry.id}`}
-                    entry={entry}
-                    isLatestActivity={isLatestActivity}
-                  />
-                ) : (
-                  <ConversationEntry
-                    key={`${threadId}:${entry.id}`}
-                    message={entry.message}
-                    initialExpanded={
-                      isLatestActivity
-                    }
-                    preferOngoingLabels={
-                      isLatestActivity
-                    }
-                  />
-                );
-              })
-            )}
-            {thread.status === "active" ? (
-              <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
-            ) : null}
-          </div>
-        </div>
-
-        <div className="shrink-0">
-          <div className="chat-prompt-box mx-auto w-full max-w-[800px] bg-background px-4 pb-4 pt-2">
-            {isCreated || isProvisioning || isProvisioningFailed ? (
-              <div className="pb-2 text-xs text-muted-foreground">
-                {isCreated
-                  ? "Created..."
-                  : isProvisioning
-                  ? "Provisioning..."
-                  : "Provisioning failed"}
-              </div>
-            ) : null}
-            <div className="flex h-0 items-center justify-center">
-              <button
-                onClick={scrollToLatest}
-                className={cn(
-                  "z-20 -mt-20 flex size-8 items-center justify-center rounded-full border border-foreground/20 bg-background/80 shadow-md backdrop-blur-md transition-all duration-200 hover:border-foreground/30 hover:bg-background/90",
-                  showScrollToLatest
-                    ? "translate-y-0 opacity-100"
-                    : "pointer-events-none translate-y-2 opacity-0",
-                )}
-                aria-label="Scroll to latest event"
-                type="button"
-              >
-                <ArrowDown className="size-4" />
-              </button>
+    <PageShell
+      scrollRef={containerRef}
+      onScroll={handleScroll}
+      contentClassName="gap-1"
+      footerUsesPromptPadding
+      footer={
+        <>
+          {isCreated || isProvisioning || isProvisioningFailed ? (
+            <div className="pb-2 text-xs text-muted-foreground">
+              {isCreated
+                ? "Created..."
+                : isProvisioning
+                ? "Provisioning..."
+                : "Provisioning failed"}
             </div>
-            <PromptBox
-              value={message}
-              onChange={promptDraft.setValue}
-              onSubmit={handleSend}
-              onStop={
-                thread.status === "active"
-                  ? () => stopThread.mutate(thread.id)
-                  : undefined
-              }
-              isSubmitting={tellThread.isPending}
-              submitDisabled={!canSendFollowUp}
-              isRunning={thread.status === "active"}
-              placeholder={promptPlaceholder}
-              submitMode="enter"
-              autoFocus
-              mentionSuggestions={fileMentions.suggestions}
-              mentionLoading={fileMentions.isLoading}
-              mentionError={fileMentions.isError}
-              onMentionQueryChange={fileMentions.setQuery}
-              footerStart={
-                <>
-                  <PromptOptionPicker
-                    label="Model"
-                    value={activeModel?.model ?? selectedModel}
-                    options={modelOptions}
-                    onChange={setSelectedModel}
-                  />
-                  <PromptOptionPicker
-                    label="Reasoning"
-                    value={reasoningLevel}
-                    options={reasoningOptions}
-                    onChange={setReasoningLevel}
-                  />
-                  <PromptOptionPicker
-                    label="Sandbox"
-                    value={sandboxMode}
-                    options={sandboxOptions}
-                    onChange={setSandboxMode}
-                  />
-                </>
-              }
-            />
+          ) : null}
+          <div className="flex h-0 items-center justify-center">
+            <button
+              onClick={scrollToLatest}
+              className={cn(
+                "z-20 -mt-20 flex size-8 items-center justify-center rounded-full border border-foreground/20 bg-background/80 shadow-md backdrop-blur-md transition-all duration-200 hover:border-foreground/30 hover:bg-background/90",
+                showScrollToLatest
+                  ? "translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-2 opacity-0",
+              )}
+              aria-label="Scroll to latest event"
+              type="button"
+            >
+              <ArrowDown className="size-4" />
+            </button>
           </div>
+          <PromptBox
+            value={message}
+            onChange={promptDraft.setValue}
+            onSubmit={handleSend}
+            onStop={
+              thread.status === "active"
+                ? () => stopThread.mutate(thread.id)
+                : undefined
+            }
+            isSubmitting={tellThread.isPending}
+            submitDisabled={!canSendFollowUp}
+            isRunning={thread.status === "active"}
+            placeholder={promptPlaceholder}
+            submitMode="enter"
+            autoFocus
+            mentionSuggestions={fileMentions.suggestions}
+            mentionLoading={fileMentions.isLoading}
+            mentionError={fileMentions.isError}
+            onMentionQueryChange={fileMentions.setQuery}
+            footerStart={
+              <>
+                <PromptOptionPicker
+                  label="Model"
+                  value={activeModel?.model ?? selectedModel}
+                  options={modelOptions}
+                  onChange={setSelectedModel}
+                />
+                <PromptOptionPicker
+                  label="Reasoning"
+                  value={reasoningLevel}
+                  options={reasoningOptions}
+                  onChange={setReasoningLevel}
+                />
+                <PromptOptionPicker
+                  label="Sandbox"
+                  value={sandboxMode}
+                  options={sandboxOptions}
+                  onChange={setSandboxMode}
+                />
+              </>
+            }
+          />
+        </>
+      }
+    >
+      {threadDetailRows.length === 0 ? (
+        <div className="py-16 text-center text-sm text-muted-foreground">
+          No events yet
         </div>
-      </div>
-    </div>
+      ) : (
+        threadDetailRows.map((entry) => {
+          const isLatestActivity =
+            shouldHighlightLatest && entry.id === latestActivityRowId;
+          return entry.kind === "tool-group" ? (
+            <ToolGroupEntry
+              key={`${threadId}:${entry.id}`}
+              entry={entry}
+              isLatestActivity={isLatestActivity}
+            />
+          ) : (
+            <ConversationEntry
+              key={`${threadId}:${entry.id}`}
+              message={entry.message}
+              initialExpanded={isLatestActivity}
+              preferOngoingLabels={isLatestActivity}
+            />
+          );
+        })
+      )}
+      {thread.status === "active" ? (
+        <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
+      ) : null}
+    </PageShell>
   );
 }

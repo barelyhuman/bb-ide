@@ -9,6 +9,7 @@ import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,
   ProviderExecutionOptions,
+  ProviderThreadContext,
   ProviderTitleGenerator,
   ProviderTitleGeneratorArgs,
 } from "./provider-adapter.js";
@@ -56,11 +57,42 @@ function withExecutionOptions(
     nextParams.model = options.model;
   }
   if (options.reasoningLevel) {
-    nextParams.config = {
+    return withConfigValues(nextParams, {
       model_reasoning_effort: options.reasoningLevel,
-    };
+    });
   }
   return nextParams;
+}
+
+function withConfigValues(
+  params: Record<string, unknown>,
+  configValues: Record<string, unknown>,
+): Record<string, unknown> {
+  const entries = Object.entries(configValues).filter(
+    ([, value]) => value !== undefined,
+  );
+  if (entries.length === 0) return params;
+
+  const nextConfig = {
+    ...(asRecord(params.config) ?? {}),
+    ...Object.fromEntries(entries),
+  };
+  return {
+    ...params,
+    config: nextConfig,
+  };
+}
+
+function withThreadEnvironmentPolicy(
+  params: Record<string, unknown>,
+  context: ProviderThreadContext,
+): Record<string, unknown> {
+  return withConfigValues(params, {
+    "shell_environment_policy.set.BB_PROJECT_ID": context.projectId,
+    "shell_environment_policy.set.BB_THREAD_ID": context.threadId,
+    "shell_environment_policy.set.BB_TASK_ID": context.taskId,
+    "shell_environment_policy.set.PATH": context.path,
+  });
 }
 
 function resolveSandboxMode(sandboxMode?: SandboxMode): SandboxMode {
@@ -148,26 +180,36 @@ export function createCodexProviderAdapter(
     turnStartMethod: "turn/start",
     turnSteerMethod: "turn/steer",
     threadNameSetMethod: "thread/name/set",
-    createThreadStartParams(req: SpawnThreadRequest): Record<string, unknown> {
+    createThreadStartParams(
+      req: SpawnThreadRequest,
+      context: ProviderThreadContext,
+    ): Record<string, unknown> {
       return withExecutionOptions(
-        {
-          approvalPolicy: DEFAULT_APPROVAL_POLICY,
-          sandbox: resolveSandboxMode(req.sandboxMode),
-          baseInstructions: DEFAULT_BASE_INSTRUCTIONS,
-        },
+        withThreadEnvironmentPolicy(
+          {
+            approvalPolicy: DEFAULT_APPROVAL_POLICY,
+            sandbox: resolveSandboxMode(req.sandboxMode),
+            baseInstructions: DEFAULT_BASE_INSTRUCTIONS,
+          },
+          context,
+        ),
         req,
       );
     },
     createThreadResumeParams(
       providerThreadId: string,
+      context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
     ): Record<string, unknown> {
       return withExecutionOptions(
-        {
-          threadId: providerThreadId,
-          approvalPolicy: DEFAULT_APPROVAL_POLICY,
-          sandbox: resolveSandboxMode(options?.sandboxMode),
-        },
+        withThreadEnvironmentPolicy(
+          {
+            threadId: providerThreadId,
+            approvalPolicy: DEFAULT_APPROVAL_POLICY,
+            sandbox: resolveSandboxMode(options?.sandboxMode),
+          },
+          context,
+        ),
         options,
       );
     },

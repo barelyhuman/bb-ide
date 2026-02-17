@@ -41,6 +41,13 @@ pnpm typecheck
 pnpm test
 ```
 
+UI consistency checklist for frontend changes:
+
+- Reuse shared primitives (`PageShell`, `DetailCard`/`DetailRow`, `CollapsibleHeader`, status pills).
+- Keep the canonical message rendering path (`ConversationEntry` + `ConversationWorkingIndicator`).
+- Use `ui-text-*` typography utilities instead of arbitrary `text-[Npx]` classes.
+- Keep light/dark typography tokens aligned unless a divergence is intentionally documented.
+
 ## Thread Lifecycle
 
 Persisted status model:
@@ -54,6 +61,19 @@ Transition rules are centralized in
 - `tell`: sends `turn/start` or `turn/steer` (`mode=auto|start|steer`).
 - `archive`: stops process/runtime and sets `archivedAt`.
 - daemon boot: reconciles persisted active/provisioning threads.
+
+## CLI Context Env
+
+Thread execution context is exposed to agent shells as:
+
+- `BB_PROJECT_ID`
+- `BB_TASK_ID` (task-linked threads)
+- `BB_THREAD_ID`
+
+`bb` is also kept on `PATH` for agent shell commands.
+
+CLI commands that need project context accept `--project`, or fall back to
+`BB_PROJECT_ID` when the flag is omitted.
 
 ## Typed Codex Event Schema
 

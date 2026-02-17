@@ -1,4 +1,9 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useQueries,
+} from "@tanstack/react-query";
 import type {
   Project,
   Task,
@@ -17,6 +22,7 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
+  TaskThreadRole,
 } from "@beanbag/core";
 import * as api from "../lib/api";
 
@@ -170,10 +176,17 @@ export function useProjectFileSuggestions(
 
 // --- Query Hooks ---
 
-export function useThreads(filters?: { projectId?: string }) {
+export function useThreads(filters?: {
+  projectId?: string;
+  taskId?: string;
+  taskRole?: TaskThreadRole;
+  parentThreadId?: string;
+  includeArchived?: boolean;
+}, options?: { enabled?: boolean }) {
   return useQuery<Thread[]>({
     queryKey: ["threads", filters],
     queryFn: () => api.listThreads(filters),
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -190,6 +203,17 @@ export function useThreadEvents(id: string) {
     queryKey: ["threadEvents", id],
     queryFn: () => api.getThreadEvents(id),
     enabled: !!id,
+  });
+}
+
+export function useThreadEventsBatch(threadIds: string[]) {
+  const uniqueThreadIds = Array.from(new Set(threadIds.filter(Boolean)));
+  return useQueries({
+    queries: uniqueThreadIds.map((threadId) => ({
+      queryKey: ["threadEvents", threadId],
+      queryFn: () => api.getThreadEvents(threadId),
+      enabled: threadId.length > 0,
+    })),
   });
 }
 
