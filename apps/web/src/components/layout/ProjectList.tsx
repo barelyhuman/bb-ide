@@ -197,27 +197,29 @@ export function ProjectList({
                         isProjectCollapsed ? "Expand project items" : "Collapse project items"
                       }
                       onClick={() => toggleProjectCollapsed(project.id)}
-                      className="flex min-w-0 flex-1 items-center"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
                     >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2">
-                        <span className="relative inline-flex size-4 items-center justify-center">
-                          <ChevronRight
-                            className={cn(
-                              "absolute size-4 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
-                              !isProjectCollapsed && "rotate-90"
-                            )}
-                          />
-                          {isProjectCollapsed ? (
-                            <Folder className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
-                          ) : (
-                            <FolderOpen className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
+                      <span className="relative inline-flex size-4 items-center justify-center">
+                        <ChevronRight
+                          className={cn(
+                            "absolute size-4 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
+                            !isProjectCollapsed && "rotate-90"
                           )}
-                        </span>
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-left">
-                        {project.name}
+                        />
+                        {isProjectCollapsed ? (
+                          <Folder className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
+                        ) : (
+                          <FolderOpen className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
+                        )}
                       </span>
                     </button>
+                    <NavLink
+                      to={`/projects/${project.id}`}
+                      onClick={onProjectSelect}
+                      className="flex min-w-0 flex-1 items-center"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
+                    </NavLink>
                     <NavLink
                       to={`/projects/${project.id}`}
                       state={{ focusTaskComposer: true }}
