@@ -1,104 +1,90 @@
-# Auto vs Manual Modes
+# Auto/Manual Roadmap (Consolidated)
 
-In "Manual mode", a user's prompt is used to kickoff an new agent thread. That thread is expected to do the work directly and the user is responsible for managing it (steering, follow ups etc). This is great for quick tasks, tight control and very synchronous workflows with lots of back and forth.
+This is the canonical roadmap for task-thread orchestration and role-based execution.
 
-In "Auto mode", a user's prompt is sent to an agent who delegates the work to other agents and track progress until completion.
+## Current State In Code (As Implemented)
 
-## Roles
+### Shipped Task Model
 
-Auto mode introduces the concept of agent roles. Roles define a structure to help coordinate the work between agents.
+- `tasks` table with `open|in_progress|blocked|closed` status and close reasons (`completed|failed|canceled`)
+- typed dependency graph via `task_dependencies` (`blocks|parent-child|related`)
+- append-only `task_events` with typed event payloads
+- archived tasks (`archivedAt`) and closed timestamp (`closedAt`)
+- assignment compare-and-swap semantics (`assign` succeeds only when task is unassigned)
+- parent-child task relationship represented as a `parent-child` dependency
 
-By default, there are 3 roles in the system:
+### Shipped Thread Linkage and Orchestration Primitives
 
-| role             | description                                                       |
-| ---------------- | ----------------------------------------------------------------- |
-| agent/manage     | interface with user, creates task and assigns to agent/build/main |
-| agent/build/main | works with agent/build/code to complete the task                  |
-| agent/build/code | write the code                                                    |
+- thread metadata: `taskId`, `taskRole` (`primary|worker`), `agentRoleId`, `parentThreadId`
+- task assignment and task chat can auto-create a deterministic primary thread for that task
+- worker threads can be linked to a parent thread for completion notifications
+- child thread completion sends a system notification to parent thread (deduped by turn/lifecycle)
+- tell behavior supports provider routing modes (`auto|start|steer`)
 
-> The `agent/build/` convention is used to visually group a team of roles together but do not mean anything otherwise. You can imagine adding an `agent/build/review` role to the `agent/build/` team.
+### Shipped Role Surface
 
-Here's an example flow:
+- role APIs/UI exist, but are currently backed by static in-process role definitions
+- current default role catalog is minimal (`agent/generic`)
+- role instructions are injected into spawned threads when role metadata is provided
 
-- user: submits prompt
-- agent/manage: creates a task and assigns it to an agent/build/main
-- agent/build/main: gives the task to agent/build/code
-- agent/build/code: write the code
-- agent/build/main: reviews the work of the agent/build/code, potentially follows up / steers it
-- agent/build/code: performs follow up
-- agent/build/main: when done, changes the status of the task
-- agent/manage: notifies the user of the change in task status
+### Shipped Product Surfaces
 
-# How it works
+- daemon task APIs: create/list/get/update/assign/chat/archive/dependencies/events
+- daemon thread APIs: spawn/list/get/tell/stop/archive/events/output
+- CLI task flows: create/list/status/show/update/assign/close/dependencies/events
+- CLI thread flows: spawn/tell/steer/status/show/log with context defaults (`BB_*`)
+- web task detail includes assignment, task chat, status transitions, primary-thread linkage, and activity timeline
+- web sidebar includes roles and project-level task/thread navigation
 
-## Role definitions
+## Gap Analysis Against Previous Phase Plans
 
-Roles are defined in markdown files: `.beanbag/roles/*.md `. Example:
+### Landed
 
-```md
----
-id: agent/manage
-name: Manage
-description: "..."
----
+- phase 1 core task model and dependency/event foundation
+- atomic assignment behavior
+- CLI/API/web visibility for tasks
+- role-aware thread spawning and persisted thread-role/task linkage
 
-You are a manager of agents. When prompted to do work, you should create a task and assign it to the agent/build/main agent.
-```
+### Landed Differently Than Planned
 
-In the sidebar, all the roles will be listed above the list of projects and threads. For the mvp, the "edit" button for a role will simply open the system default markdown editor.
+- role ownership is currently modeled on threads (`agentRoleId`) plus task assignee string, not a dedicated `tasks.roleId` + `tasks.assigneeThreadId`
+- role definitions are static, not loaded from `.beanbag/roles/*.md`
+- orchestration currently relies on task chat + parent-thread completion notifications, not manager-driven task graph execution
 
-When using auto mode, the user has a long running thread with agent/manage. Its behavior is defined by its `role/*.md` but by default it is asked to create a task and assign the task to agent/build/main.
+### Not Landed Yet
 
-For the MVP, we won't worry about memory and compaction for this long running thread but the goal is to give this agent a way to see its history using the `bb` cli so we only need to give it the last few messages everytime.
+- project-managed role files (`.beanbag/roles/*.md`) with reload/edit flows
+- manager role (`agent/manage`) and root-task orchestration loop
+- explicit interaction mode (`manual|auto`) on thread/task entry
+- task-status bubbling to parent/root task owners
+- manager context envelope contract and restart reconciliation semantics
 
-## Task Model
+## Delivery Plan From Current Baseline
 
-Tasks are the unit of orchestration. TaskEvents track events associated to a task
+### Phase A: Stabilize Current Task-Thread Model
 
-Task Fields:
+- formalize the current data model as the stable contract (task assignee + thread role metadata)
+- close test gaps with end-to-end coverage across CLI -> API -> daemon -> mocked provider
+- harden task chat and assignment kickoff behavior under retries/restarts
 
-- `id`
-- `title`
-- `description` (nullable)
-- `projectId`
-- `parentTaskId` (nullable)
-- `roleId` (intended owner role)
-- `assigneeThreadId` (nullable runtime worker thread)
-- `status`
-- `blockedByTaskIds` (JSON array)
-- `createdAt`, `updatedAt`
-- `completedAt` (nullable)
-- `resultSummary` (nullable)
+### Phase B: Project-Defined Roles
 
-Status enum:
+- introduce project role sources from `.beanbag/roles/*.md`
+- add daemon role reload/edit endpoints
+- add CLI role commands (`list`, `reload`, optional `edit`)
+- keep static defaults as fallback when project roles are absent
 
-- `pending`
-- `in_progress`
-- `blocked`
-- `completed`
-- `failed`
-- `canceled`
+### Phase C: Manager Orchestration (True Auto Mode)
 
-TaskEvents should be a strongly type discriminated union to capture:
+- add explicit `interactionMode` at work-entry points
+- introduce long-lived `agent/manage` thread per project (or workspace contract)
+- manager creates/delegates tasks to role threads and tracks completion
+- route closure/blocking updates through parent/root task graph
+- expose manager observability via task/thread events and web UX affordances
 
-- creation
-- status/assignee changes
-- key updates like threads created etc
+## Aspirational Backlog (Not In Active Scope)
 
-Task status changes will forwarded to the parentTaskId's assignee or the primary agent/manage if there's no parentTaskId.
-
-## Extending thread
-
-The thread model will have the following additions:
-
-- **role**: The agent's role (nullable for manual mode)
-- **taskId**: The associated task id (nullable for manual mode)
-- **managedBy**: A reference to the threadId of another thread managing this thread. (nullable for manual mode). This is how we know which thread to notify when a thread is done with a turn.
-
-## `bb` cli and skill
-
-As part of auto mode, we need to make sure that the `bb` provides functionality for agents to work autonomously. Agents will learn how to use the `bb` cli via an autoloaded skill.
-
-- read, create and update tasks
-- read, spawn and update threads
-- steer/follow-up on threads
+- multi-role build teams beyond generic role defaults (for example build/review/test specializations)
+- richer manager memory and compaction strategy
+- advanced decomposition heuristics for manager delegation behavior
+- expanded auto-mode UX defaults and user-visible orchestration controls
