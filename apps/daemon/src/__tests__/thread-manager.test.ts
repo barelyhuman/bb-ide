@@ -295,27 +295,6 @@ describe("ThreadManager", () => {
       });
     });
 
-    it("persists agent role metadata on thread creation", async () => {
-      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
-
-      const createdThread = makeThread({ id: "t-new", status: "idle" });
-      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active" }),
-      );
-
-      await manager.spawn({
-        projectId: "proj-1",
-        agentRoleId: "agent/generic",
-      });
-
-      expect(threadRepo.create).toHaveBeenCalledWith({
-        projectId: "proj-1",
-        agentRoleId: "agent/generic",
-      });
-    });
-
     it("prepends bb path to PATH and injects it into thread/start config", async () => {
       const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
       const firstBin = join(tmpRoot, "first-bin");

@@ -30,7 +30,6 @@ export interface Thread {
   projectId: string;
   title?: string;
   status: ThreadStatus;
-  agentRoleId?: string;
   parentThreadId?: string;
   archivedAt?: number;
   createdAt: number;

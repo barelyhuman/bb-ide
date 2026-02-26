@@ -86,13 +86,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
-    .option("--role <id>", "Agent role ID for role-based thread instructions")
     .action(async (opts: {
       prompt?: string;
       project?: string;
       parentThread?: string;
       contextParentThread?: boolean;
-      role?: string;
     }) => {
       const client = createClient(getUrl());
       try {
@@ -115,7 +113,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
-              ...(opts.role ? { roleId: opts.role } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
             },
           }),
@@ -333,9 +330,6 @@ function printThread(thread: Thread): void {
   console.log(`  ID:       ${thread.id}`);
   console.log(`  Project:  ${thread.projectId}`);
   console.log(`  Status:   ${statusText(thread.status)}`);
-  if (thread.agentRoleId) {
-    console.log(`  Role:     ${thread.agentRoleId}`);
-  }
   console.log(`  Created:  ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`  Updated:  ${new Date(thread.updatedAt).toLocaleString()}`);
   console.log("");
@@ -391,9 +385,6 @@ function printThreadStatus(
   console.log(`Thread ${thread.id}`);
   console.log(`Status ${statusText(thread.status)}`);
   console.log(`Project ${thread.projectId}`);
-  if (thread.agentRoleId) {
-    console.log(`Role ${thread.agentRoleId}`);
-  }
   if (thread.parentThreadId) {
     console.log(`Parent ${thread.parentThreadId}`);
   }

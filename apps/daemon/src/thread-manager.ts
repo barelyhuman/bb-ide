@@ -410,7 +410,6 @@ export class ThreadManager implements ThreadOrchestrator {
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       ...(threadTitle ? { title: threadTitle } : {}),
-      ...(req.agentRoleId ? { agentRoleId: req.agentRoleId } : {}),
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     // Treat only truly custom titles as locked. If caller title matches our
@@ -688,7 +687,6 @@ export class ThreadManager implements ThreadOrchestrator {
    */
   list(filters?: {
     projectId?: string;
-    agentRoleId?: string;
     parentThreadId?: string;
     includeArchived?: boolean;
   }): Thread[] {

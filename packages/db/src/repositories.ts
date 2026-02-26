@@ -250,7 +250,6 @@ export class ThreadRepository {
   create(data: {
     projectId: string;
     title?: string;
-    agentRoleId?: string;
     parentThreadId?: string;
   }): Thread {
     const now = Date.now();
@@ -259,7 +258,6 @@ export class ThreadRepository {
       projectId: data.projectId,
       title: data.title ?? null,
       status: "created" as const,
-      agentRoleId: data.agentRoleId ?? null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       createdAt: now,
@@ -282,7 +280,6 @@ export class ThreadRepository {
   list(filters?: {
     projectId?: string;
     status?: ThreadStatus;
-    agentRoleId?: string;
     parentThreadId?: string;
     includeArchived?: boolean;
   }): Thread[] {
@@ -295,9 +292,6 @@ export class ThreadRepository {
     }
     if (filters?.status) {
       conditions.push(eq(threads.status, filters.status));
-    }
-    if (filters?.agentRoleId) {
-      conditions.push(eq(threads.agentRoleId, filters.agentRoleId));
     }
     if (filters?.parentThreadId) {
       conditions.push(eq(threads.parentThreadId, filters.parentThreadId));
@@ -341,7 +335,6 @@ export class ThreadRepository {
       projectId: row.projectId,
       title: row.title ?? undefined,
       status: normalizeThreadStatus(row.status),
-      agentRoleId: row.agentRoleId ?? undefined,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
       createdAt: row.createdAt,
@@ -498,4 +491,3 @@ export class EventRepository {
     };
   }
 }
-

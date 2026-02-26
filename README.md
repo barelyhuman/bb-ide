@@ -118,7 +118,6 @@ CLI commands that need project context accept `--project`, or fall back to
 Creation defaults:
 
 - `bb thread spawn` defaults parent-thread context to `BB_THREAD_ID` (opt out with `--no-context-parent-thread`).
-- `bb thread spawn --role ...` attaches a predefined agent role to the thread.
 
 Status output defaults:
 

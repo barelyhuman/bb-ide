@@ -32,8 +32,6 @@ export interface SpawnThreadRequest {
   model?: string;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
-  roleId?: string;
-  agentRoleId?: string;
   developerInstructions?: string;
   parentThreadId?: string;
 }
@@ -55,13 +53,6 @@ export interface ThreadExecutionOptions {
   approvalPolicy?: string;
   source?: "client/thread/start" | "client/turn/start";
   seq?: number;
-}
-
-export interface AgentRole {
-  id: string;
-  name: string;
-  description: string;
-  instructions: string;
 }
 
 // Project endpoints

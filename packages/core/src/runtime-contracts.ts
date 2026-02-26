@@ -113,7 +113,6 @@ export interface EnvironmentAdapter {
 
 export interface ThreadListFilters {
   projectId?: string;
-  agentRoleId?: string;
   parentThreadId?: string;
   includeArchived?: boolean;
 }

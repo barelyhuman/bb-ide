@@ -25,8 +25,6 @@ export const spawnThreadSchema = z.object({
   sandboxMode: z
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .optional(),
-  roleId: z.string().min(1).optional(),
-  agentRoleId: z.string().min(1).optional(),
   developerInstructions: z.string().optional(),
   parentThreadId: z.string().optional(),
 });

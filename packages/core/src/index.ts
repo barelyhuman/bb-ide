@@ -33,7 +33,6 @@ export type {
 export type {
   SpawnThreadRequest,
   TellThreadRequest,
-  AgentRole,
   CreateProjectRequest,
   PromptInput,
   ModelReasoningEffort,

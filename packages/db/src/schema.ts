@@ -23,7 +23,6 @@ export const threads = sqliteTable(
       .references(() => projects.id),
     title: text("title"),
     status: text("status").notNull().default("created"),
-    agentRoleId: text("agent_role_id"),
     parentThreadId: text("parent_thread_id"),
     archivedAt: integer("archived_at"),
     createdAt: integer("created_at").notNull(),
@@ -31,11 +30,6 @@ export const threads = sqliteTable(
   },
   (table) => [
     index("threads_project_updated_idx").on(table.projectId, table.updatedAt),
-    index("threads_project_agent_role_updated_idx").on(
-      table.projectId,
-      table.agentRoleId,
-      table.updatedAt,
-    ),
     index("threads_parent_thread_idx").on(table.parentThreadId),
   ]
 );

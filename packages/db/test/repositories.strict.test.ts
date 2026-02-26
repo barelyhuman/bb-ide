@@ -52,32 +52,32 @@ describe("repository strict normalization", () => {
     );
   });
 
-  it("persists and loads thread agent role metadata", () => {
+  it("persists and loads parent thread metadata", () => {
     const projectId = createProjectId();
     const thread = threads.create({
       projectId,
-      agentRoleId: "agent/generic",
+      parentThreadId: "parent-1",
     });
 
     expect(threads.getById(thread.id)).toMatchObject({
       id: thread.id,
-      agentRoleId: "agent/generic",
+      parentThreadId: "parent-1",
     });
   });
 
-  it("filters thread listings by agent role id", () => {
+  it("filters thread listings by parent thread id", () => {
     const projectId = createProjectId();
-    const genericThread = threads.create({
+    const childThread = threads.create({
       projectId,
-      agentRoleId: "agent/generic",
+      parentThreadId: "parent-1",
     });
     threads.create({
       projectId,
-      agentRoleId: "agent/other",
+      parentThreadId: "parent-2",
     });
 
-    expect(threads.list({ projectId, agentRoleId: "agent/generic" })).toEqual([
-      expect.objectContaining({ id: genericThread.id, agentRoleId: "agent/generic" }),
+    expect(threads.list({ projectId, parentThreadId: "parent-1" })).toEqual([
+      expect.objectContaining({ id: childThread.id, parentThreadId: "parent-1" }),
     ]);
   });
 });

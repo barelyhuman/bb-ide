@@ -7,12 +7,10 @@ import {
 } from "@beanbag/agent-core";
 import { z } from "zod";
 import { threadNotFoundError } from "../domain-errors.js";
-import { getAgentRoleDefinition } from "../agent-roles.js";
 import { sendRouteError } from "./error-response.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
-  agentRoleId: z.string().optional(),
   parentThreadId: z.string().optional(),
   includeArchived: z.enum(["true", "false"]).optional(),
 });
@@ -28,14 +26,6 @@ export function createThreadRoutes(
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
       try {
         const body = c.req.valid("json");
-        const role = body.roleId ? getAgentRoleDefinition(body.roleId) : undefined;
-        if (body.roleId && !role) {
-          return c.json({ error: `Unknown role id: ${body.roleId}` }, 400);
-        }
-        const resolvedAgentRoleId = role?.id ?? body.agentRoleId;
-        const resolvedDeveloperInstructions =
-          role?.instructions ?? body.developerInstructions;
-
         const thread = await threadManager.spawn({
           projectId: body.projectId,
           ...(body.title ? { title: body.title } : {}),
@@ -44,9 +34,8 @@ export function createThreadRoutes(
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
-          ...(resolvedAgentRoleId ? { agentRoleId: resolvedAgentRoleId } : {}),
-          ...(resolvedDeveloperInstructions !== undefined
-            ? { developerInstructions: resolvedDeveloperInstructions }
+          ...(body.developerInstructions !== undefined
+            ? { developerInstructions: body.developerInstructions }
             : {}),
         });
         return c.json(thread, 201);
@@ -65,7 +54,6 @@ export function createThreadRoutes(
               : undefined;
         const threads = threadManager.list({
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
-          ...(filters.agentRoleId ? { agentRoleId: filters.agentRoleId } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),
