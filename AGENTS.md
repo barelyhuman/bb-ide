@@ -22,3 +22,10 @@
 - When investigating entity/state issues from a route like `http://localhost:5173/projects/<projectId>/threads/<threadId>`, prefer inspecting data through the daemon HTTP API or CLI first.
 - For data-only debugging, prefer daemon API/CLI over `curl` + browser workflows; it is faster to inspect entities directly without frontend/UI noise.
 - Use direct SQLite queries as an alternative fast path, especially when you need to validate persisted state or compare raw stored values against daemon/API responses.
+
+## Planning Workflow
+
+- When the user asks to "make a plan", create or update a Markdown file under `plans/` instead of only replying with plan text.
+- Use a descriptive kebab-case filename in `plans/` that matches the feature or subsystem being planned.
+- Structure plan docs with these sections: `Goal`, `Scope`, `Implementation Steps`, `Validation`, and `Open Questions/Risks`.
+- Delete plan files from `plans/` once they are completed, obsolete, or superseded by a newer plan.
