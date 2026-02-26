@@ -6,7 +6,6 @@ import {
 } from "@tanstack/react-query";
 import type {
   Project,
-  AgentRole,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -37,13 +36,6 @@ export function useCreateProject() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
-  });
-}
-
-export function useRoles() {
-  return useQuery<AgentRole[]>({
-    queryKey: ["roles"],
-    queryFn: () => api.listRoles(),
   });
 }
 

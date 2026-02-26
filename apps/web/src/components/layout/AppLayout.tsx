@@ -17,20 +17,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
-import { useProjects, useRoles, useThread } from "@/hooks/useApi"
+import { useProjects, useThread } from "@/hooks/useApi"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
 const SIDEBAR_MAX_WIDTH = 460
 const SIDEBAR_DEFAULT_WIDTH = 320
-
-function decodePathSegment(value: string): string {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
-  }
-}
 
 function clampSidebarWidth(value: number) {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value))
@@ -164,18 +156,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectThreadMatch = location.pathname.match(
     /^\/projects\/([^/]+)\/threads\/([^/]+)(?:\/|$)/
   )
-  const roleMatch = location.pathname.match(/^\/roles\/([^/]+)(?:\/|$)/)
   const threadMatch = projectThreadMatch
   const isProjectMainView = Boolean(projectMatch && !threadMatch)
   const threadId = projectThreadMatch?.[2] ?? ""
-  const roleId = roleMatch?.[1] ? decodePathSegment(roleMatch[1]) : ""
 
   const projectId = projectMatch?.[1]
   const projectName = projectId
     ? projects?.find((project) => project.id === projectId)?.name
     : undefined
-  const { data: roles } = useRoles()
-  const role = roleId ? roles?.find((entry) => entry.id === roleId) : undefined
   const { data: thread } = useThread(threadId)
 
   const meta = threadMatch
@@ -183,12 +171,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         title: thread?.title ?? "Thread",
         subtitle: undefined,
       }
-    : roleMatch
-      ? {
-          title: (role?.name ?? roleId) || "Role",
-          breadcrumbs: ["Roles", (role?.name ?? roleId) || "Role"],
-          subtitle: undefined,
-        }
     : projectMatch
         ? {
             title: projectName ?? projectMatch[1],

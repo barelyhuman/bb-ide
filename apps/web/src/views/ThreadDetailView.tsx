@@ -8,7 +8,6 @@ import {
   useTellThread,
   useStopThread,
   useThreadDefaultExecutionOptions,
-  useRoles,
 } from "../hooks/useApi";
 import {
   ConversationEntry,
@@ -138,12 +137,8 @@ export function ThreadDetailView() {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
-  const rolesQuery = useRoles();
   const providerInfoQuery = useSystemProvider();
   const environmentInfoQuery = useSystemEnvironment();
-  const roleNameById = useMemo(() => {
-    return new Map((rolesQuery.data ?? []).map((role) => [role.id, role.name]));
-  }, [rolesQuery.data]);
   const { debugMode } = useDebugMode();
   const tellThread = useTellThread();
   const stopThread = useStopThread();
@@ -263,11 +258,7 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
-  const threadRoleId = thread.agentRoleId;
-  const threadRoleDisplayName = threadRoleId
-    ? (roleNameById.get(threadRoleId) ?? threadRoleId)
-    : null;
-  const showThreadMetadata = Boolean(parentThreadId || threadRoleId);
+  const showThreadMetadata = Boolean(parentThreadId);
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -332,16 +323,6 @@ export function ThreadDetailView() {
                   className="underline underline-offset-2"
                 >
                   {parentThreadDisplayName}
-                </Link>
-              </DetailRow>
-            ) : null}
-            {threadRoleId && threadRoleDisplayName ? (
-              <DetailRow label="Role" valueClassName="min-w-0 truncate" align="center">
-                <Link
-                  to={`/roles/${encodeURIComponent(threadRoleId)}`}
-                  className="underline underline-offset-2"
-                >
-                  {threadRoleDisplayName}
                 </Link>
               </DetailRow>
             ) : null}

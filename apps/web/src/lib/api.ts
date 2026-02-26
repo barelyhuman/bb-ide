@@ -1,6 +1,5 @@
 import type {
   Project,
-  AgentRole,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -60,10 +59,6 @@ export async function searchProjectFiles(
 
 export async function pickProjectFolder(): Promise<{ path: string | null }> {
   return request<{ path: string | null }>("POST", "/system/pick-folder");
-}
-
-export async function listRoles(): Promise<AgentRole[]> {
-  return request<AgentRole[]>("GET", "/roles");
 }
 
 // --- Threads ---

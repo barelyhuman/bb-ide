@@ -11,7 +11,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { RoleList } from "./RoleList"
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
 import { useDebugMode } from "@/hooks/useDebugMode"
@@ -59,7 +58,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     <>
       <Sidebar>
         <SidebarContent>
-          <RoleList />
           <ProjectList
             onNewProject={() => {
               void createFromPicker()
