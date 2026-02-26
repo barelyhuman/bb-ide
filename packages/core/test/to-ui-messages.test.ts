@@ -1111,4 +1111,206 @@ describe("toUIMessages replay coverage", () => {
       ),
     ).toBe(true);
   });
+
+  it("renders initial client thread input while provisioning has failed", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Fix the sidebar menu state bug" }],
+          request: {
+            method: "thread/start",
+            params: {
+              model: "gpt-5.3-codex",
+            },
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "provisioning_failed",
+    });
+
+    expect(
+      projected.some(
+        (message) =>
+          message.kind === "user" &&
+          message.text.includes("Fix the sidebar menu state bug"),
+      ),
+    ).toBe(true);
+  });
+
+  it("renders initial client thread input while idle when no user item events exist", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Recover from provisioning failure" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+
+    expect(
+      projected.some(
+        (message) =>
+          message.kind === "user" &&
+          message.text.includes("Recover from provisioning failure"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not duplicate client thread input when a real user item event exists", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Fix duplicate user messages" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "item-user-1",
+            type: "user_message",
+            content: [{ type: "text", text: "Fix duplicate user messages" }],
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+    const userMessages = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.id).not.toContain("user-seed");
+    expect(userMessages[0]?.text).toBe("Fix duplicate user messages");
+  });
+
+  it("keeps non-duplicated initial client thread input alongside later user items", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Original failed prompt" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-2",
+          item: {
+            id: "item-user-2",
+            type: "user_message",
+            content: [{ type: "text", text: "sanity retry" }],
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+    const userMessages = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.some((message) => message.text === "Original failed prompt")).toBe(true);
+    expect(userMessages.some((message) => message.text === "sanity retry")).toBe(true);
+  });
+
+  it("formats system error messages with detail", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/error",
+        data: {
+          code: "project_root_missing",
+          message: "Project folder not found: /Users/michael/Projects/beanbag",
+          detail:
+            "This project points to a folder that no longer exists. Update the project path and retry.",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "provisioning_failed",
+    });
+    const error = projected.find(
+      (message): message is Extract<UIMessage, { kind: "error" }> =>
+        message.kind === "error",
+    );
+
+    expect(error).toBeDefined();
+    expect(error?.message).toContain("Project folder not found");
+    expect(error?.message).toContain("Update the project path and retry");
+  });
 });

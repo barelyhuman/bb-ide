@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "./types.js";
+import { assertNever } from "./assert-never.js";
 import type {
   ToUIMessagesOptions,
   UIAssistantReasoningMessage,
@@ -226,6 +227,74 @@ function getEventPayloadRecord(data: unknown): Record<string, unknown> | null {
   return msg ?? params;
 }
 
+function parsePromptInput(input: unknown): {
+  text: string;
+  webImages: number;
+  localImages: number;
+} | null {
+  if (!Array.isArray(input)) return null;
+
+  const textParts: string[] = [];
+  let webImages = 0;
+  let localImages = 0;
+
+  for (const entry of input) {
+    const part = toRecord(entry);
+    if (!part) continue;
+    const typeToken =
+      typeof part.type === "string" ? normalizeToken(part.type) : "";
+
+    if (typeToken === "text") {
+      if (typeof part.text === "string" && part.text.length > 0) {
+        textParts.push(part.text);
+      }
+      continue;
+    }
+    if (typeToken === "image") {
+      webImages += 1;
+      continue;
+    }
+    if (typeToken === "localimage") {
+      localImages += 1;
+    }
+  }
+
+  const text = textParts.join("");
+  if (!text && webImages === 0 && localImages === 0) return null;
+
+  return {
+    text,
+    webImages,
+    localImages,
+  };
+}
+
+function userMessageSignature(value: {
+  text: string;
+  webImages: number;
+  localImages: number;
+}): string {
+  return `${value.text}\u0000${value.webImages}\u0000${value.localImages}`;
+}
+
+function shouldRenderThreadStartInput(
+  threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
+  hasMatchingUserItem: boolean,
+): boolean {
+  if (!threadStatus) return false;
+  switch (threadStatus) {
+    case "created":
+    case "provisioning":
+    case "provisioning_failed":
+      return true;
+    case "idle":
+    case "active":
+      return !hasMatchingUserItem;
+    default:
+      return assertNever(threadStatus);
+  }
+}
+
 function messageId(threadId: string, kind: string, key: string): string {
   return `${threadId}:${kind}:${key}`;
 }
@@ -287,6 +356,39 @@ function parseUserFromItemEvent(
     attachments: {
       webImages,
       localImages,
+    },
+  };
+}
+
+function parseUserFromClientThreadStart(
+  event: ThreadEvent,
+  eventType: string,
+  options?: ToUIMessagesOptions,
+  userItemSignatures: ReadonlySet<string> = new Set<string>(),
+): UIUserMessage | null {
+  if (!eventTypeMatches(eventType, "client/thread/start")) {
+    return null;
+  }
+
+  const payload = toRecord(event.data);
+  const parsedInput = parsePromptInput(payload?.input);
+  if (!parsedInput) return null;
+  const hasMatchingUserItem = userItemSignatures.has(userMessageSignature(parsedInput));
+  if (!shouldRenderThreadStartInput(options?.threadStatus, hasMatchingUserItem)) {
+    return null;
+  }
+
+  return {
+    kind: "user",
+    id: messageId(event.threadId, "user-seed", `${event.seq}`),
+    threadId: event.threadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    text: parsedInput.text,
+    attachments: {
+      webImages: parsedInput.webImages,
+      localImages: parsedInput.localImages,
     },
   };
 }
@@ -923,7 +1025,19 @@ function parseOperationMessage(
 function parseErrorMessage(event: ThreadEvent, eventType: string): UIErrorMessage | null {
   if (!eventType.includes("error")) return null;
 
-  const message = extractText(event.data);
+  const payload = toRecord(event.data);
+  const error = toRecord(payload?.error);
+  const message =
+    getStringField(payload, "message") ??
+    getStringField(error, "message") ??
+    extractText(event.data);
+  const detail =
+    getStringField(payload, "detail") ??
+    getStringField(payload, "hint") ??
+    getStringField(error, "detail");
+  const formattedMessage =
+    detail && detail !== message ? `${message} - ${detail}` : message;
+
   return {
     kind: "error",
     id: messageId(event.threadId, "error", `${event.seq}`),
@@ -933,7 +1047,7 @@ function parseErrorMessage(event: ThreadEvent, eventType: string): UIErrorMessag
     createdAt: event.createdAt,
     turnId: getTurnId(event.data),
     rawType: eventType,
-    message: message || "Error event",
+    message: formattedMessage || "Error event",
   };
 }
 
@@ -1633,12 +1747,40 @@ export function toUIMessages(
   const includeDebugRawEvents = options?.includeDebugRawEvents ?? false;
 
   const orderedEvents = [...events].sort((a, b) => a.seq - b.seq);
+  const userItemSignatures = new Set<string>();
+  for (const event of orderedEvents) {
+    const userFromItem = parseUserFromItemEvent(event, getEventType(event));
+    if (!userFromItem) continue;
+    userItemSignatures.add(
+      userMessageSignature({
+        text: userFromItem.text,
+        webImages: userFromItem.attachments?.webImages ?? 0,
+        localImages: userFromItem.attachments?.localImages ?? 0,
+      }),
+    );
+  }
 
   for (const originalEvent of orderedEvents) {
     const eventType = getEventType(originalEvent);
     const event = originalEvent;
 
     const eventTurnId = getTurnId(event.data);
+
+    const userFromClientThreadStart = parseUserFromClientThreadStart(
+      event,
+      eventType,
+      options,
+      userItemSignatures,
+    );
+    if (userFromClientThreadStart) {
+      const key = `${userFromClientThreadStart.id}:${userFromClientThreadStart.text}`;
+      if (!state.seenUserKeys.has(key)) {
+        state.seenUserKeys.add(key);
+        flushToolActivityBeforeNonToolMessage(state);
+        state.messages.push(userFromClientThreadStart);
+      }
+      continue;
+    }
 
     const userFromItem = parseUserFromItemEvent(event, eventType);
     if (userFromItem) {

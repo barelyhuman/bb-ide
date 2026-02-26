@@ -25,6 +25,7 @@ import {
   type Thread,
   type ThreadEvent,
   type ThreadEventData,
+  type ThreadEventDataForType,
   type ThreadEventType,
   type PromptInput,
   type SpawnThreadRequest,
@@ -45,6 +46,7 @@ import {
   ProviderRuntimeUnavailableError,
 } from "./provider-runtime.js";
 import {
+  isDomainError,
   inactiveSessionError,
   invalidRequestError,
   noActiveTurnError,
@@ -53,7 +55,6 @@ import {
   providerTimeoutError,
   providerUnavailableError,
   threadProvisioningError,
-  threadProvisioningFailedError,
   threadArchivedError,
   threadNotFoundError,
   unsupportedOperationError,
@@ -473,6 +474,7 @@ export class ThreadManager implements ThreadOrchestrator {
         threadId,
         {
           projectId: thread.projectId,
+          input,
           model: options?.model,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
@@ -481,7 +483,7 @@ export class ThreadManager implements ThreadOrchestrator {
           reason: "tell-after-provisioning-failure",
         },
       );
-      throw threadProvisioningFailedError(threadId);
+      return;
     }
 
     const providerThreadId = await this._ensureProviderSession(threadId, options);
@@ -568,6 +570,7 @@ export class ThreadManager implements ThreadOrchestrator {
       threadId,
       "client/turn/start",
       turnStartMsg.params,
+      input,
       {
         source: "tell",
         initiator: context.initiator,
@@ -799,7 +802,12 @@ export class ThreadManager implements ThreadOrchestrator {
         this._setThreadStatus(threadId, "provisioning_failed", true, {
           force: true,
         });
-        const message = err instanceof Error ? err.message : String(err);
+        this._appendEvent(
+          threadId,
+          "system/error",
+          this._createProvisioningFailureEventData(err, req.projectId),
+        );
+        const message = this._toErrorMessage(err);
         const reason = opts?.reason ? ` (${opts.reason})` : "";
         console.error(`[thread ${threadId}] provisioning failed${reason}: ${message}`);
       })
@@ -831,6 +839,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
     this._spawnProcess(threadId, opts?.rootPathHint ?? project.rootPath);
     this._sendInitialize(threadId);
+    const initialInput = req.input ?? [];
 
     const threadStartParams = this.provider.createThreadStartParams(
       req,
@@ -843,6 +852,7 @@ export class ThreadManager implements ThreadOrchestrator {
       threadId,
       "client/thread/start",
       threadStartParams,
+      initialInput,
       {
         source: "spawn",
         initiator: "agent",
@@ -855,7 +865,6 @@ export class ThreadManager implements ThreadOrchestrator {
     );
     this.providerThreadIds.set(threadId, providerThreadId);
 
-    const initialInput = req.input ?? [];
     this._maybeAutogenerateThreadTitle(
       threadId,
       project.rootPath,
@@ -874,6 +883,7 @@ export class ThreadManager implements ThreadOrchestrator {
         threadId,
         "client/turn/start",
         turnStartParams,
+        initialInput,
         {
           source: "spawn",
           initiator: "agent",
@@ -1140,6 +1150,25 @@ export class ThreadManager implements ThreadOrchestrator {
       return resumedThreadId;
     } catch (err) {
       this._cleanupThreadRuntime(threadId);
+      if (!this._isMissingProviderThreadError(err)) {
+        throw err;
+      }
+
+      // Resume can fail when provider-side rollout state has been evicted.
+      // Fall back to fresh provisioning so the pending tell can continue.
+      await this._provisionThread(
+        threadId,
+        {
+          projectId: thread.projectId,
+          model: options?.model,
+          reasoningLevel: options?.reasoningLevel,
+          sandboxMode: options?.sandboxMode,
+        },
+        { rootPathHint: project.rootPath },
+      );
+      const reprovisionedThreadId = this.providerThreadIds.get(threadId);
+      if (reprovisionedThreadId) return reprovisionedThreadId;
+
       throw err;
     }
   }
@@ -1157,6 +1186,39 @@ export class ThreadManager implements ThreadOrchestrator {
         ? { workspaceRoot: environmentSession.cwd }
         : {}),
       environmentId: this.environmentAdapter.info.id,
+    };
+  }
+
+  private _toErrorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  private _isMissingProviderThreadError(err: unknown): boolean {
+    if (!isDomainError(err) || err.code !== "provider_rpc_error") return false;
+    const normalized = err.message.toLowerCase();
+    return normalized.includes("no rollout found for thread id");
+  }
+
+  private _createProvisioningFailureEventData(
+    err: unknown,
+    projectId: string,
+  ): ThreadEventDataForType<"system/error"> {
+    const project = this.projectRepo.getById(projectId);
+    if (project && !existsSync(project.rootPath)) {
+      return {
+        code: "project_root_missing",
+        message: `Project folder not found: ${project.rootPath}`,
+        detail:
+          "This project points to a folder that no longer exists. " +
+          "Update the project path and retry by sending your prompt again.",
+      };
+    }
+
+    const message = this._toErrorMessage(err);
+    return {
+      code: "thread_provisioning_failed",
+      message: `Thread provisioning failed for project ${projectId}`,
+      detail: message,
     };
   }
 
@@ -1222,12 +1284,14 @@ export class ThreadManager implements ThreadOrchestrator {
     threadId: string,
     type: "client/thread/start" | "client/turn/start",
     params: Record<string, unknown>,
+    input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
   ): void {
     const eventData: ThreadEventData = {
       direction: "outbound",
       source: meta.source,
       initiator: meta.initiator,
+      ...(input && input.length > 0 ? { input } : {}),
       request: {
         method: type === "client/thread/start" ? "thread/start" : "turn/start",
         params,

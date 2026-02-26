@@ -793,6 +793,29 @@ describe("ThreadManager", () => {
       expect(fakeChild._stdinData.length).toBe(2);
     });
 
+    it("persists initial input on outbound client/thread/start events", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      const input = [{ type: "text", text: "Fix provisioning status UI" }] as const;
+      await manager.spawn({ projectId: "proj-1", input: [...input] });
+
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "client/thread/start",
+          data: expect.objectContaining({
+            input,
+          }),
+        }),
+      );
+    });
+
     it("throws if project not found", async () => {
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
 
@@ -1914,6 +1937,95 @@ describe("ThreadManager", () => {
       ).rejects.toThrow(
         "Thread nonexistent not found",
       );
+    });
+
+    it("reprovisions and accepts tell when thread is provisioning_failed", async () => {
+      const input = [{ type: "text" as const, text: "Retry after fixing project path" }];
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "provisioning_failed" }),
+      );
+      const scheduleProvisioningSpy = vi
+        .spyOn(manager as any, "_scheduleProvisioning")
+        .mockImplementation(() => {});
+
+      await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
+
+      expect(scheduleProvisioningSpy).toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({
+          projectId: "proj-1",
+          input,
+        }),
+        { reason: "tell-after-provisioning-failure" },
+      );
+    });
+
+    it("falls back to reprovision when thread/resume fails with missing rollout", async () => {
+      const input = [{ type: "text" as const, text: "Retry after resume miss" }];
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo as any).getLatestProviderThreadId = vi
+        .fn()
+        .mockReturnValue("stale-rollout-1");
+
+      const resumeChild = createFakeChildProcess({ autoRespond: false });
+      resumeChild.stdin = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          const data = chunk.toString();
+          resumeChild._stdinData.push(data);
+          try {
+            const msg = JSON.parse(data.trim());
+            if (msg.method === "thread/resume" && msg.id) {
+              process.nextTick(() => {
+                resumeChild.stdout!.push(
+                  JSON.stringify({
+                    id: msg.id,
+                    error: {
+                      code: -32602,
+                      message: "no rollout found for thread id stale-rollout-1",
+                    },
+                  }) + "\n",
+                );
+              });
+            }
+          } catch {}
+          callback();
+        },
+      });
+
+      const reprovisionChild = createFakeChildProcess();
+      (spawnMock as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(resumeChild)
+        .mockReturnValueOnce(reprovisionChild);
+
+      await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
+
+      const resumeMethods = resumeChild._stdinData.map((line) => {
+        try {
+          return JSON.parse(line.trim()).method as string;
+        } catch {
+          return "";
+        }
+      });
+      expect(resumeMethods).toContain("thread/resume");
+
+      const reprovisionMethods = reprovisionChild._stdinData.map((line) => {
+        try {
+          return JSON.parse(line.trim()).method as string;
+        } catch {
+          return "";
+        }
+      });
+      expect(reprovisionMethods).toContain("thread/start");
+      expect(reprovisionMethods).toContain("turn/start");
     });
 
     it("throws if thread has no active process", async () => {

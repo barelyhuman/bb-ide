@@ -61,6 +61,11 @@ export interface CreateProjectRequest {
   rootPath: string;
 }
 
+export interface UpdateProjectRequest {
+  name?: string;
+  rootPath?: string;
+}
+
 export interface ProjectFileSuggestion {
   path: string;
 }

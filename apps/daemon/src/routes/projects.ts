@@ -1,6 +1,12 @@
+import { existsSync } from "node:fs";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { createProjectSchema, type ProjectFileSuggestion } from "@beanbag/agent-core";
+import {
+  createProjectSchema,
+  updateProjectSchema,
+  type Project,
+  type ProjectFileSuggestion,
+} from "@beanbag/agent-core";
 import { z } from "zod";
 import type { ProjectRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
@@ -23,6 +29,13 @@ type SearchProjectFilesFn = (
   limit?: number,
 ) => Promise<ProjectFileSuggestion[]>;
 
+function withProjectPathStatus(project: Project): Project {
+  return {
+    ...project,
+    rootPathExists: existsSync(project.rootPath),
+  };
+}
+
 export function createProjectRoutes(
   projectRepo: ProjectRepository,
   findProjectFiles: SearchProjectFilesFn = searchProjectFiles,
@@ -32,7 +45,21 @@ export function createProjectRoutes(
       try {
         const { name, rootPath } = c.req.valid("json");
         const project = projectRepo.create({ name, rootPath });
-        return c.json(project, 201);
+        return c.json(withProjectPathStatus(project), 201);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return c.json({ error: message }, 500);
+      }
+    })
+    .patch("/:id", zValidator("json", updateProjectSchema), async (c) => {
+      try {
+        const projectId = c.req.param("id");
+        const { name, rootPath } = c.req.valid("json");
+        const updated = projectRepo.update(projectId, { name, rootPath });
+        if (!updated) {
+          return c.json({ error: "Project not found" }, 404);
+        }
+        return c.json(withProjectPathStatus(updated));
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return c.json({ error: message }, 500);
@@ -41,7 +68,7 @@ export function createProjectRoutes(
     .get("/", async (c) => {
       try {
         const projects = projectRepo.list();
-        return c.json(projects);
+        return c.json(projects.map((project) => withProjectPathStatus(project)));
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return c.json({ error: message }, 500);

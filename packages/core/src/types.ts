@@ -13,6 +13,7 @@ export interface Project {
   id: string;
   name: string;
   rootPath: string;
+  rootPathExists?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -36,7 +37,10 @@ export interface Thread {
   updatedAt: number;
 }
 
-export type AppThreadEventType = "client/thread/start" | "client/turn/start";
+export type AppThreadEventType =
+  | "client/thread/start"
+  | "client/turn/start"
+  | "system/error";
 
 export type ThreadTurnInitiator = "user" | "agent" | "system";
 
@@ -51,11 +55,18 @@ export interface ClientOutboundStartEventData {
   direction: "outbound";
   source: "spawn" | "tell";
   initiator?: ThreadTurnInitiator;
+  input?: PromptInput[];
   request: {
     method: "thread/start" | "turn/start";
     params: Record<string, unknown>;
   };
   execution: ClientExecutionOptionsSnapshot;
+}
+
+export interface SystemErrorEventData {
+  code?: string;
+  message: string;
+  detail?: string;
 }
 
 export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
@@ -68,6 +79,7 @@ export interface TurnLifecycleEventData {
 export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/thread/start": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
+  "system/error": SystemErrorEventData;
 };
 
 export type ThreadEventData = ThreadEventDataByType[ThreadEventType];

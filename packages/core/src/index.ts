@@ -34,6 +34,7 @@ export type {
   SpawnThreadRequest,
   TellThreadRequest,
   CreateProjectRequest,
+  UpdateProjectRequest,
   PromptInput,
   ModelReasoningEffort,
   AvailableModel,
@@ -54,6 +55,7 @@ export {
   spawnThreadSchema,
   tellThreadSchema,
   createProjectSchema,
+  updateProjectSchema,
 } from "./schemas.js";
 
 export type {

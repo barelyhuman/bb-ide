@@ -44,3 +44,13 @@ export const createProjectSchema = z.object({
   name: z.string(),
   rootPath: z.string(),
 });
+
+export const updateProjectSchema = z
+  .object({
+    name: z.string().optional(),
+    rootPath: z.string().optional(),
+  })
+  .refine(
+    (value) => value.name !== undefined || value.rootPath !== undefined,
+    "At least one field must be provided",
+  );

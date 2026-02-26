@@ -256,8 +256,6 @@ export function ThreadDetailView() {
       ? "Created..."
       : isProvisioning
       ? "Provisioning..."
-      : isProvisioningFailed
-      ? "Provisioning failed"
       : undefined;
 
   const handleSend = () => {

@@ -105,4 +105,54 @@ describe("threadDetailActivity", () => {
 
     expect(findLatestActivityMessageId(messages)).toBe("tool-1");
   });
+
+  it("treats error rows as activity and highlights when trailing", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "user-1",
+        message: {
+          ...baseMessage("user-1", 1),
+          kind: "user",
+          text: "hi",
+        },
+      },
+      {
+        kind: "message",
+        id: "error-1",
+        message: {
+          ...baseMessage("error-1", 2),
+          kind: "error",
+          rawType: "system/error",
+          message: "Project folder not found",
+        },
+      },
+    ];
+
+    const latestActivityRowId = findLatestActivityRowId(rows);
+    expect(latestActivityRowId).toBe("error-1");
+    expect(shouldHighlightLatestActivity(rows, latestActivityRowId)).toBe(true);
+  });
+
+  it("returns latest error message id when it is the final activity", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("tool-1", 1),
+        kind: "tool-call",
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "ls",
+        status: "completed",
+      },
+      {
+        ...baseMessage("error-1", 2),
+        kind: "error",
+        rawType: "system/error",
+        message: "Project folder not found",
+      },
+    ];
+
+    expect(findLatestActivityMessageId(messages)).toBe("error-1");
+  });
 });

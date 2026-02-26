@@ -13,7 +13,7 @@ import type {
   UIAssistantTextMessage,
   UIWebSearchMessage,
 } from "@beanbag/agent-core";
-import { ChevronDown, ChevronRight, CircleX } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   createLatestInitialExpandedState,
@@ -841,13 +841,91 @@ function OperationRow({ message }: { message: UIOperationMessage }) {
   );
 }
 
-function ErrorRow({ message }: { message: UIErrorMessage }) {
+function parseErrorDisplay(message: UIErrorMessage): {
+  title: string;
+  detail?: string;
+  hint?: string;
+} {
+  const trimmed = message.message.trim();
+  if (!trimmed) {
+    return {
+      title: "Error event",
+    };
+  }
+
+  const [titleCandidate, ...detailParts] = trimmed.split(" - ");
+  const detailFromDelimiter = detailParts.join(" - ").trim();
+  const titleFromDelimiter = titleCandidate?.trim();
+
+  if (message.rawType === "system/error" && trimmed.startsWith("Project folder not found")) {
+    const missingPathMatch = trimmed.match(/^Project folder not found:\s*(.+?)(?:\s+-\s+.*)?$/);
+    const missingPath = missingPathMatch?.[1]?.trim();
+    const detail = missingPath
+      ? `Project folder not found: ${missingPath}. Please update the project path and try again.`
+      : "Project folder not found. Please update the project path and try again.";
+    return {
+      title: "Project folder is missing",
+      detail,
+    };
+  }
+
+  if (
+    titleFromDelimiter &&
+    detailFromDelimiter &&
+    titleFromDelimiter.length <= 96
+  ) {
+    return {
+      title: titleFromDelimiter,
+      detail: detailFromDelimiter,
+    };
+  }
+
+  return {
+    title: trimmed,
+  };
+}
+
+function ErrorRow({
+  message,
+  initialExpanded = false,
+}: {
+  message: UIErrorMessage;
+  initialExpanded?: boolean;
+}) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const display = parseErrorDisplay(message);
+  const headerToneClass = isExpanded
+    ? "text-destructive"
+    : "text-destructive/90 transition-colors group-hover:text-destructive group-focus-within:text-destructive";
+  const summaryContent = (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0 text-destructive/85">Error:</span>
+      <span className="truncate font-semibold text-destructive">
+        {display.title}
+      </span>
+    </span>
+  );
+
   return (
-    <div className="group flex w-full items-center gap-2 rounded-md bg-destructive/5 px-3 py-1.5 text-xs">
-      <CircleX className="size-3.5 shrink-0 text-destructive" />
-      <p className="min-w-0 flex-1 truncate font-mono ui-text-xs text-destructive/90">
-        {message.message}
-      </p>
+    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="mr-auto w-full">
+        <ExpandableEntryContainer
+          isExpanded={isExpanded}
+          summaryContent={summaryContent}
+          summaryContentClassName="min-w-0"
+          headerToneClass={headerToneClass}
+          onToggle={onToggle}
+        >
+          <div className="space-y-1 rounded-md border border-destructive/25 bg-destructive/[0.06] px-2 py-1.5 ui-text-sm text-destructive/90">
+            {display.detail ? (
+              <p className="whitespace-pre-wrap break-words">
+                {display.detail}
+              </p>
+            ) : null}
+            {display.hint ? <p>{display.hint}</p> : null}
+          </div>
+        </ExpandableEntryContainer>
+      </div>
     </div>
   );
 }
@@ -951,7 +1029,7 @@ function ConversationEntryComponent({
   }
 
   if (message.kind === "error") {
-    return <ErrorRow message={message} />;
+    return <ErrorRow message={message} initialExpanded={initialExpanded} />;
   }
 
   if (message.kind === "debug/raw-event") {

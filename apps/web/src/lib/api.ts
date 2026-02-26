@@ -3,6 +3,7 @@ import type {
   Thread,
   ThreadEvent,
   CreateProjectRequest,
+  UpdateProjectRequest,
   SpawnThreadRequest,
   TellThreadRequest,
   SystemStatus,
@@ -37,6 +38,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export async function createProject(req: CreateProjectRequest): Promise<Project> {
   return request<Project>("POST", "/projects", req);
+}
+
+export async function updateProject(
+  id: string,
+  req: UpdateProjectRequest,
+): Promise<Project> {
+  return request<Project>("PATCH", `/projects/${id}`, req);
 }
 
 export async function listProjects(): Promise<Project[]> {

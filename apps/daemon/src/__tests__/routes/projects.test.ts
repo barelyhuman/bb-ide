@@ -18,6 +18,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 function mockProjectRepo(): ProjectRepository {
   return {
     create: vi.fn(),
+    update: vi.fn(),
     getById: vi.fn(),
     list: vi.fn(),
     delete: vi.fn(),
@@ -147,6 +148,58 @@ describe("Project routes", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("DB error");
+    });
+  });
+
+  describe("PATCH /projects/:id", () => {
+    it("updates project fields and returns the updated project", async () => {
+      const updatedProject = makeProject({
+        id: "proj-2",
+        name: "Renamed",
+        rootPath: "/new/path",
+      });
+      (projectRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedProject);
+
+      const res = await app.request("/projects/proj-2", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Renamed", rootPath: "/new/path" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe("proj-2");
+      expect(body.name).toBe("Renamed");
+      expect(body.rootPath).toBe("/new/path");
+      expect(projectRepo.update).toHaveBeenCalledWith("proj-2", {
+        name: "Renamed",
+        rootPath: "/new/path",
+      });
+    });
+
+    it("returns 404 when project does not exist", async () => {
+      (projectRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      const res = await app.request("/projects/unknown", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rootPath: "/tmp/project" }),
+      });
+
+      expect(res.status).toBe(404);
+      const body = await res.json();
+      expect(body.error).toBe("Project not found");
+    });
+
+    it("returns 400 when body has no updatable fields", async () => {
+      const res = await app.request("/projects/proj-2", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+      expect(projectRepo.update).not.toHaveBeenCalled();
     });
   });
 

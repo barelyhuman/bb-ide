@@ -330,6 +330,43 @@ describe("ConversationEntry", () => {
     expect(html).toContain("new-name.ts");
   });
 
+  it("renders collapsed error rows with concise encountered summary", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "error",
+      rawType: "system/error",
+      message:
+        "Thread provisioning failed for project proj-1 - Provider RPC error for request 2: Invalid params",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Error:");
+    expect(html).toContain("Thread provisioning failed for project proj-1");
+    expect(html).not.toContain("Provider RPC error for request 2: Invalid params");
+  });
+
+  it("expands latest error rows with concise missing-folder recovery text", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "error",
+      rawType: "system/error",
+      message:
+        "Project folder not found: /Users/michael/Projects/beanbag - This project points to a folder that no longer exists.",
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
+    expect(html).toContain("Error:");
+    expect(html).toContain("Project folder is missing");
+    expect(html).toContain(
+      "Project folder not found: /Users/michael/Projects/beanbag. Please update the project path and try again.",
+    );
+    expect(html).not.toContain("Repair the project path from the sidebar and resend your message.");
+    expect(html).not.toContain("This project points to a folder that no longer exists.");
+    expect((html.match(/Project folder is missing/g) ?? []).length).toBe(1);
+  });
+
   it("renders debug raw event rows when provided by projector", () => {
     const message: UIMessage = {
       ...baseMessage(),

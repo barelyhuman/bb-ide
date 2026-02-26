@@ -9,6 +9,7 @@ import type {
   Thread,
   ThreadEvent,
   CreateProjectRequest,
+  UpdateProjectRequest,
   SpawnThreadRequest,
   TellThreadRequest,
   SystemStatus,
@@ -35,6 +36,19 @@ export function useCreateProject() {
     mutationFn: (req: CreateProjectRequest) => api.createProject(req),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}
+
+export function useUpdateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...req }: { id: string } & UpdateProjectRequest) =>
+      api.updateProject(id, req),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projectFiles", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
     },
   });
 }

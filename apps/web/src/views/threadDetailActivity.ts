@@ -6,7 +6,8 @@ export function isActivityMessage(message: UIMessage): boolean {
     message.kind === "tool-call" ||
     message.kind === "file-edit" ||
     message.kind === "tool-exploring" ||
-    message.kind === "web-search"
+    message.kind === "web-search" ||
+    message.kind === "error"
   );
 }
 

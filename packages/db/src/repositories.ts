@@ -235,6 +235,22 @@ export class ProjectRepository {
     return rows as Project[];
   }
 
+  update(
+    id: string,
+    data: { name?: string; rootPath?: string },
+  ): Project | undefined {
+    const existing = this.db.select().from(projects).where(eq(projects.id, id)).get();
+    if (!existing) return undefined;
+
+    const updates: Record<string, unknown> = { updatedAt: Date.now() };
+    if (data.name !== undefined) updates.name = data.name;
+    if (data.rootPath !== undefined) updates.rootPath = data.rootPath;
+
+    this.db.update(projects).set(updates).where(eq(projects.id, id)).run();
+    const updated = this.db.select().from(projects).where(eq(projects.id, id)).get();
+    return updated ? (updated as Project) : undefined;
+  }
+
   delete(id: string): void {
     this.db.delete(projects).where(eq(projects.id, id)).run();
   }
