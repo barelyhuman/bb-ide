@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import {
   useThread,
   useThreadEvents,
+  useSystemEnvironment,
+  useSystemProvider,
   useTellThread,
   useStopThread,
   useThreadDefaultExecutionOptions,
@@ -11,6 +13,7 @@ import {
 import {
   ConversationEntry,
 } from "@/components/messages/ConversationEntry";
+import { ConversationMarkdown } from "@/components/messages/ConversationMarkdown";
 import {
   CollapsibleHeader,
   getCollapsibleHeaderToneClass,
@@ -27,6 +30,14 @@ import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
+import {
+  ContextPanel,
+  ContextPanelCard,
+  ConversationEmptyState,
+  ConversationTimeline,
+  PromptComposerShell,
+  ThreePaneLayout,
+} from "@beanbag/ui-core";
 import { toUIMessages } from "@beanbag/agent-core";
 import {
   buildThreadDetailRows,
@@ -128,6 +139,8 @@ export function ThreadDetailView() {
     threadId ?? "",
   );
   const rolesQuery = useRoles();
+  const providerInfoQuery = useSystemProvider();
+  const environmentInfoQuery = useSystemEnvironment();
   const roleNameById = useMemo(() => {
     return new Map((rolesQuery.data ?? []).map((role) => [role.id, role.name]));
   }, [rolesQuery.data]);
@@ -148,6 +161,8 @@ export function ThreadDetailView() {
     modelOptions,
     reasoningOptions,
     sandboxOptions,
+    supportsModelList,
+    supportsReasoningLevels,
   } = usePromptModelReasoning({
     scope: "thread",
     initialModel: defaultExecutionOptions?.model,
@@ -253,6 +268,38 @@ export function ThreadDetailView() {
     ? (roleNameById.get(threadRoleId) ?? threadRoleId)
     : null;
   const showThreadMetadata = Boolean(parentThreadId || threadRoleId);
+  const provisioningStatusLabel =
+    isCreated
+      ? "Created..."
+      : isProvisioning
+      ? "Provisioning..."
+      : isProvisioningFailed
+      ? "Provisioning failed"
+      : undefined;
+  const runtimeProviderName = providerInfoQuery.data?.displayName ?? "Unknown provider";
+  const runtimeEnvironmentName =
+    environmentInfoQuery.data?.displayName ?? "Unknown environment";
+  const toolGroupCount = threadDetailRows.filter(
+    (entry) => entry.kind === "tool-group",
+  ).length;
+  const fileEditMessages = visibleMessages.filter(
+    (entry) => entry.kind === "file-edit",
+  );
+  const changedFileCount = new Set(
+    fileEditMessages.flatMap((message) =>
+      message.changes.map((change) => change.path),
+    ),
+  ).size;
+  const changedHunkCount = fileEditMessages.reduce(
+    (total, message) => total + message.changes.length,
+    0,
+  );
+  const latestAssistantTextMessage = [...visibleMessages]
+    .reverse()
+    .find(
+      (entry): entry is Extract<typeof entry, { kind: "assistant-text" }> =>
+        entry.kind === "assistant-text",
+    );
 
   const handleSend = () => {
     const trimmed = message.trim();
@@ -269,72 +316,8 @@ export function ThreadDetailView() {
     );
   };
 
-  return (
-    <PageShell
-      scrollRef={containerRef}
-      onScroll={handleScroll}
-      contentClassName="gap-1 pt-0"
-      footerUsesPromptPadding
-      footer={
-        <>
-          {isCreated || isProvisioning || isProvisioningFailed ? (
-            <div className="pb-2 text-xs text-muted-foreground">
-              {isCreated
-                ? "Created..."
-                : isProvisioning
-                ? "Provisioning..."
-                : "Provisioning failed"}
-            </div>
-          ) : null}
-          <ScrollToBottomButton
-            visible={showScrollToBottom}
-            onClick={scrollToBottom}
-          />
-          <PromptBox
-            value={message}
-            onChange={promptDraft.setValue}
-            onSubmit={handleSend}
-            onStop={
-              thread.status === "active"
-                ? () => stopThread.mutate(thread.id)
-                : undefined
-            }
-            isSubmitting={tellThread.isPending}
-            submitDisabled={!canSendFollowUp}
-            isRunning={thread.status === "active"}
-            placeholder={promptPlaceholder}
-            submitMode="enter"
-            autoFocus
-            mentionSuggestions={fileMentions.suggestions}
-            mentionLoading={fileMentions.isLoading}
-            mentionError={fileMentions.isError}
-            onMentionQueryChange={fileMentions.setQuery}
-            footerStart={
-              <>
-                <PromptOptionPicker
-                  label="Model"
-                  value={activeModel?.model ?? selectedModel}
-                  options={modelOptions}
-                  onChange={setSelectedModel}
-                />
-                <PromptOptionPicker
-                  label="Reasoning"
-                  value={reasoningLevel}
-                  options={reasoningOptions}
-                  onChange={setReasoningLevel}
-                />
-                <PromptOptionPicker
-                  label="Sandbox"
-                  value={sandboxMode}
-                  options={sandboxOptions}
-                  onChange={setSandboxMode}
-                />
-              </>
-            }
-          />
-        </>
-      }
-    >
+  const conversationMain = (
+    <>
       {showThreadMetadata ? (
         <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
           <DetailCard>
@@ -365,33 +348,137 @@ export function ThreadDetailView() {
           </DetailCard>
         </section>
       ) : null}
-      {threadDetailRows.length === 0 ? (
-        <div className="py-16 text-center text-sm text-muted-foreground">
-          No events yet
-        </div>
-      ) : (
-        threadDetailRows.map((entry) => {
-          const isLatestActivity =
-            shouldHighlightLatest && entry.id === latestActivityRowId;
-          return entry.kind === "tool-group" ? (
-            <ToolGroupEntry
-              key={`${threadId}:${entry.id}`}
-              entry={entry}
-              isLatestActivity={isLatestActivity}
-            />
-          ) : (
-            <ConversationEntry
-              key={`${threadId}:${entry.id}`}
-              message={entry.message}
-              initialExpanded={isLatestActivity}
-              preferOngoingLabels={isLatestActivity}
-            />
-          );
-        })
-      )}
+      <ConversationTimeline>
+        {threadDetailRows.length === 0 ? (
+          <ConversationEmptyState message="No events yet" />
+        ) : (
+          threadDetailRows.map((entry) => {
+            const isLatestActivity =
+              shouldHighlightLatest && entry.id === latestActivityRowId;
+            return entry.kind === "tool-group" ? (
+              <ToolGroupEntry
+                key={`${threadId}:${entry.id}`}
+                entry={entry}
+                isLatestActivity={isLatestActivity}
+              />
+            ) : (
+              <ConversationEntry
+                key={`${threadId}:${entry.id}`}
+                message={entry.message}
+                initialExpanded={isLatestActivity}
+                preferOngoingLabels={isLatestActivity}
+              />
+            );
+          })
+        )}
+      </ConversationTimeline>
       {thread.status === "active" ? (
         <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
       ) : null}
+    </>
+  );
+
+  const contextPanel = (
+    <ContextPanel>
+      <ContextPanelCard title="Runtime">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Provider</span>
+          <span className="truncate">{runtimeProviderName}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Environment</span>
+          <span className="truncate">{runtimeEnvironmentName}</span>
+        </div>
+      </ContextPanelCard>
+      <ContextPanelCard title="Artifacts">
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Tool Groups</span>
+          <span>{toolGroupCount}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Changed Files</span>
+          <span>{changedFileCount}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">Diff Hunks</span>
+          <span>{changedHunkCount}</span>
+        </div>
+      </ContextPanelCard>
+      <ContextPanelCard title="Markdown Preview">
+        {latestAssistantTextMessage ? (
+          <div className="max-h-80 overflow-y-auto rounded border border-border/60 bg-background/60 px-2 py-1.5 text-xs">
+            <ConversationMarkdown content={latestAssistantTextMessage.text} />
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No assistant markdown yet.</p>
+        )}
+      </ContextPanelCard>
+    </ContextPanel>
+  );
+
+  return (
+    <PageShell
+      scrollRef={containerRef}
+      onScroll={handleScroll}
+      maxWidthClassName="max-w-[1400px]"
+      contentClassName="gap-2 pt-0"
+      footerUsesPromptPadding
+      footer={
+        <PromptComposerShell statusLabel={provisioningStatusLabel}>
+          <ScrollToBottomButton
+            visible={showScrollToBottom}
+            onClick={scrollToBottom}
+          />
+          <PromptBox
+            value={message}
+            onChange={promptDraft.setValue}
+            onSubmit={handleSend}
+            onStop={
+              thread.status === "active"
+                ? () => stopThread.mutate(thread.id)
+                : undefined
+            }
+            isSubmitting={tellThread.isPending}
+            submitDisabled={!canSendFollowUp}
+            isRunning={thread.status === "active"}
+            placeholder={promptPlaceholder}
+            submitMode="enter"
+            autoFocus
+            mentionSuggestions={fileMentions.suggestions}
+            mentionLoading={fileMentions.isLoading}
+            mentionError={fileMentions.isError}
+            onMentionQueryChange={fileMentions.setQuery}
+            footerStart={
+              <>
+                {supportsModelList ? (
+                  <PromptOptionPicker
+                    label="Model"
+                    value={activeModel?.model ?? selectedModel}
+                    options={modelOptions}
+                    onChange={setSelectedModel}
+                  />
+                ) : null}
+                {supportsReasoningLevels ? (
+                  <PromptOptionPicker
+                    label="Reasoning"
+                    value={reasoningLevel}
+                    options={reasoningOptions}
+                    onChange={setReasoningLevel}
+                  />
+                ) : null}
+                <PromptOptionPicker
+                  label="Sandbox"
+                  value={sandboxMode}
+                  options={sandboxOptions}
+                  onChange={setSandboxMode}
+                />
+              </>
+            }
+          />
+        </PromptComposerShell>
+      }
+    >
+      <ThreePaneLayout main={conversationMain} right={contextPanel} />
     </PageShell>
   );
 }
