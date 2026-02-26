@@ -4,6 +4,15 @@
 
 Provide a concrete cut plan to separate runtime bridge concerns from daemon host concerns while aligning folder names with package boundaries.
 
+## Status
+
+- State: completed
+- Completed on: 2026-02-26
+- Completed commits:
+  - `0419fb4` (agent-server extraction + daemon reshape)
+  - `540bfc1` (folder rename to `agent-core` and `app`)
+  - `e4c0254` (event envelope normalization + contract helpers)
+
 ## Target Topology
 
 - `packages/agent-core` (rename from `packages/core`)
@@ -95,8 +104,8 @@ From current `apps/daemon/src`:
 - `pnpm test`
 - targeted e2e spawn/tell test run after Chunk C+
 
-## Open Decisions (resolve before implementation)
+## Resolved Decisions
 
-- Whether `codex-title-generator.ts` belongs in runtime bridge package or daemon host package.
-- Whether project file search remains daemon-only or becomes reusable service.
-- Whether to introduce `@beanbag/daemon` exports for testing harnesses immediately or later.
+- `codex-title-generator.ts` belongs in `@beanbag/agent-server` (runtime bridge concern).
+- Project file search remains daemon-host scoped for now.
+- `@beanbag/daemon` continues exposing its current app-type/testing surface; no extra export fanout added in Phase 5.

@@ -6,6 +6,21 @@ Define and enforce strongly typed, documented contracts across package boundarie
 
 This is a Phase 5 gate, not optional follow-up work.
 
+## Status
+
+- State: completed
+- Completed on: 2026-02-26
+- Deliverables landed:
+  - `docs/contracts/packages.md`
+  - `docs/contracts/http-api.md`
+  - `docs/contracts/db-shapes.md`
+  - `docs/contracts/thread-events.md`
+- Implementation landed:
+  - typed provider event envelope + decode helpers in `@beanbag/agent-core`
+  - daemon ingestion writes normalized provider envelopes
+  - DB lookup extraction reads normalized envelopes with legacy fallback
+  - UI projection unwraps normalized envelopes before rendering
+
 ## Goals
 
 - Make package boundaries explicit and stable.

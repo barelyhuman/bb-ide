@@ -207,6 +207,23 @@ Composable rendering and layout seams.
 - Align folders with package boundaries.
 - Separate daemon host responsibilities from provider runtime shim responsibilities.
 
+### Completion Snapshot
+
+- Completed in commits:
+  - `0419fb4`, `540bfc1`, `e4c0254`
+- Folder/package split complete:
+  - `packages/agent-core`, `packages/agent-server`, `apps/app`, `apps/daemon (@beanbag/daemon)`
+- Contract hardening delivered:
+  - `docs/contracts/packages.md`
+  - `docs/contracts/http-api.md`
+  - `docs/contracts/db-shapes.md`
+  - `docs/contracts/thread-events.md`
+- Provider event pipeline updated to:
+  - provider notification -> normalized provider envelope in DB -> UI projection payload unwrap -> render
+- Validation status:
+  - `pnpm typecheck` passed
+  - `pnpm test` passed
+
 ### Scope
 
 - Move folders to target topology:

@@ -13,7 +13,7 @@
 - `[x]` Phase 2 complete
 - `[x]` Phase 3 complete
 - `[x]` Phase 4 complete
-- `[ ]` Phase 5 complete
+- `[x]` Phase 5 complete
 - `[ ]` Phase 6 complete
 - `[ ]` Phase 7 complete
 - `[ ]` Phase 8 complete
@@ -70,14 +70,14 @@
 - `[x]` Create `packages/agent-server` runtime bridge package from current mixed daemon code
 - `[x]` Keep/reshape `apps/daemon` as `@beanbag/daemon` host app
 - `[x]` Update workspace paths (`pnpm-workspace.yaml`, `turbo`, Vitest, scripts, tsconfig refs)
-- `[ ]` Update docs and references to new folder paths
-- `[ ]` Publish contract catalog for package boundaries, API schemas, and DB shapes
-- `[ ]` Document all supported `events.type` values and event payload typing strategy
-- `[ ]` Add typed decode/guard helpers where runtime unknown payloads cross boundaries
-- `[ ]` Enforce exhaustive handling for closed internal unions (`assertNever`)
-- `[ ]` Implement event pipeline boundary: provider-specific -> normalized DB events -> UI projection -> render
-- `[ ]` Run `pnpm typecheck`
-- `[ ]` Run `pnpm test`
+- `[x]` Update docs and references to new folder paths
+- `[x]` Publish contract catalog for package boundaries, API schemas, and DB shapes
+- `[x]` Document all supported `events.type` values and event payload typing strategy
+- `[x]` Add typed decode/guard helpers where runtime unknown payloads cross boundaries
+- `[x]` Enforce exhaustive handling for closed internal unions (`assertNever`)
+- `[x]` Implement event pipeline boundary: provider-specific -> normalized DB events -> UI projection -> render
+- `[x]` Run `pnpm typecheck`
+- `[x]` Run `pnpm test`
 
 ## Phase 6: Table-Stakes Feature Pass
 
@@ -103,7 +103,7 @@
 
 ## Current Focus
 
-- Next focus: Phase 5 folder rename + daemon/agent-server split.
+- Next focus: Phase 6 table-stakes feature pass (environment provisioning parity, prompt attachments/images, voice input).
 - Supporting plans:
   - `plans/extensible-ade-phase5-split-map.md`
   - `plans/extensible-ade-contract-hardening.md`
