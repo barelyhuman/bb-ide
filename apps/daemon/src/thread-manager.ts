@@ -11,9 +11,17 @@ import { delimiter, join, resolve } from "node:path";
 import {
   assertNever,
   type AvailableModel,
+  type EnvironmentAdapter,
+  type EnvironmentSession,
+  type ProviderAdapter,
+  type ProviderExecutionOptions,
+  type ProviderThreadContext,
+  type SchedulerService,
+  type SystemEnvironmentInfo,
+  type SystemProviderInfo,
+  type ThreadOrchestrator,
   type ThreadTurnInitiator,
   type ThreadExecutionOptions,
-  type SystemProviderInfo,
   type Thread,
   type ThreadEvent,
   type ThreadEventData,
@@ -29,11 +37,7 @@ import type {
 } from "@beanbag/db";
 import { WSManager } from "./ws.js";
 import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
-import type {
-  ProviderAdapter,
-  ProviderExecutionOptions,
-  ProviderThreadContext,
-} from "./provider-adapter.js";
+import { createLocalEnvironmentAdapter } from "./environment-adapter.js";
 import {
   ProviderRuntime,
   ProviderRuntimeRpcError,
@@ -54,6 +58,7 @@ import {
   threadNotFoundError,
   unsupportedOperationError,
 } from "./domain-errors.js";
+import { InMemorySchedulerService } from "./scheduler-service.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
@@ -242,9 +247,10 @@ function toTurnLifecycleState(
   return undefined;
 }
 
-export class ThreadManager {
+export class ThreadManager implements ThreadOrchestrator {
   private processes = new Map<string, ChildProcess>();
   private runtimes = new Map<string, ProviderRuntime>();
+  private environmentSessions = new Map<string, EnvironmentSession>();
   /** Maps our internal thread ID to the provider thread ID */
   private providerThreadIds = new Map<string, string>();
   /** Tracks the currently active provider turn ID for each thread (when known). */
@@ -269,6 +275,8 @@ export class ThreadManager {
   private lastNotifiedCompletionEpochs = new Map<string, number>();
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
+  private providerCatalog: SystemProviderInfo[];
+  private environmentCatalog: SystemEnvironmentInfo[];
 
   constructor(
     private threadRepo: ThreadRepository,
@@ -277,8 +285,29 @@ export class ThreadManager {
     private ws: WSManager,
     private provider: ProviderAdapter = createCodexProviderAdapter(),
     private runtimeEnv: NodeJS.ProcessEnv = process.env,
+    private environmentAdapter: EnvironmentAdapter = createLocalEnvironmentAdapter(),
+    providerCatalog?: SystemProviderInfo[],
+    environmentCatalog?: SystemEnvironmentInfo[],
+    private scheduler: SchedulerService = new InMemorySchedulerService(),
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
+    this.providerCatalog =
+      providerCatalog ??
+      [
+        {
+          id: this.provider.id,
+          displayName: this.provider.displayName,
+          capabilities: { ...this.provider.capabilities },
+        },
+      ];
+    this.environmentCatalog =
+      environmentCatalog ??
+      [
+        {
+          ...this.environmentAdapter.info,
+          capabilities: { ...this.environmentAdapter.info.capabilities },
+        },
+      ];
   }
 
   /**
@@ -575,6 +604,7 @@ export class ThreadManager {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this.ws.broadcast("thread", threadId);
   }
@@ -611,6 +641,7 @@ export class ThreadManager {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
@@ -689,6 +720,9 @@ export class ThreadManager {
    * List available models from the active provider.
    */
   async listModels(): Promise<AvailableModel[]> {
+    if (!this.provider.capabilities.supportsModelList) {
+      return [];
+    }
     return this.provider.listModels();
   }
 
@@ -698,6 +732,27 @@ export class ThreadManager {
       displayName: this.provider.displayName,
       capabilities: { ...this.provider.capabilities },
     };
+  }
+
+  listProviders(): SystemProviderInfo[] {
+    return this.providerCatalog.map((provider) => ({
+      ...provider,
+      capabilities: { ...provider.capabilities },
+    }));
+  }
+
+  getEnvironmentInfo(): SystemEnvironmentInfo {
+    return {
+      ...this.environmentAdapter.info,
+      capabilities: { ...this.environmentAdapter.info.capabilities },
+    };
+  }
+
+  listEnvironments(): SystemEnvironmentInfo[] {
+    return this.environmentCatalog.map((environment) => ({
+      ...environment,
+      capabilities: { ...environment.capabilities },
+    }));
   }
 
   /**
@@ -717,6 +772,10 @@ export class ThreadManager {
     }
     this.runtimes.clear();
     this.processes.clear();
+    for (const [threadId] of this.environmentSessions) {
+      this._cleanupEnvironmentSession(threadId);
+    }
+    this.environmentSessions.clear();
     this.providerThreadIds.clear();
     this.activeTurnIds.clear();
     this.autoTitleAttemptedThreadIds.clear();
@@ -860,19 +919,69 @@ export class ThreadManager {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this._cleanupEnvironmentSession(threadId);
   }
 
-  private _spawnProcess(threadId: string, cwd: string): void {
+  private _setEnvironmentSession(
+    threadId: string,
+    session: EnvironmentSession,
+  ): void {
+    this._cleanupEnvironmentSession(threadId);
+    this.environmentSessions.set(threadId, session);
+  }
+
+  private _cleanupEnvironmentSession(threadId: string): void {
+    const session = this.environmentSessions.get(threadId);
+    if (!session) return;
+    this.environmentSessions.delete(threadId);
+    if (!session.cleanup) return;
+    try {
+      const maybePromise = session.cleanup();
+      if (
+        maybePromise &&
+        typeof maybePromise === "object" &&
+        "then" in maybePromise &&
+        typeof maybePromise.then === "function"
+      ) {
+        void maybePromise.catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[thread ${threadId}] environment cleanup failed (${this.environmentAdapter.info.id}): ${message}`,
+          );
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[thread ${threadId}] environment cleanup failed (${this.environmentAdapter.info.id}): ${message}`,
+      );
+    }
+  }
+
+  private _spawnProcess(threadId: string, projectRootPath: string): void {
     const thread = this.threadRepo.getById(threadId);
     const projectId = thread?.projectId;
+    const environmentSession = this.environmentAdapter.prepare({
+      projectId: projectId ?? "",
+      threadId,
+      projectRootPath,
+      runtimeEnv: this.runtimeEnv,
+    });
+    this._setEnvironmentSession(threadId, environmentSession);
+    const sessionEnv = {
+      ...this.runtimeEnv,
+      ...(environmentSession.env ?? {}),
+    };
+    const effectivePath = this.threadShellPath ?? sessionEnv.PATH;
     const child = spawn(this.provider.processCommand, this.provider.processArgs, {
       stdio: ["pipe", "pipe", "pipe"],
-      cwd,
+      cwd: environmentSession.cwd,
       env: {
-        ...this.runtimeEnv,
-        ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+        ...sessionEnv,
+        ...(effectivePath ? { PATH: effectivePath } : {}),
         ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
         BB_THREAD_ID: threadId,
+        BB_ENVIRONMENT_ID: this.environmentAdapter.info.id,
       },
     });
 
@@ -1041,10 +1150,15 @@ export class ThreadManager {
     threadId: string;
     projectId: string;
   }): ProviderThreadContext {
+    const environmentSession = this.environmentSessions.get(args.threadId);
     return {
       projectId: args.projectId,
       threadId: args.threadId,
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
+      ...(environmentSession?.cwd
+        ? { workspaceRoot: environmentSession.cwd }
+        : {}),
+      environmentId: this.environmentAdapter.info.id,
     };
   }
 
@@ -1229,6 +1343,7 @@ export class ThreadManager {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this._cleanupEnvironmentSession(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;

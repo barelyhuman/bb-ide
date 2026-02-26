@@ -14,7 +14,15 @@ import { WSManager } from "./ws.js";
 import { ThreadManager } from "./thread-manager.js";
 import { generateCodexThreadTitle } from "./codex-title-generator.js";
 import { createApiRoutes } from "./routes/index.js";
-import { createProviderAdapter } from "./provider-registry.js";
+import {
+  createEnvironmentAdapter,
+  listAvailableEnvironmentInfos,
+} from "./environment-registry.js";
+import {
+  createProviderAdapter,
+  listAvailableProviderInfos,
+} from "./provider-registry.js";
+import { InMemorySchedulerService } from "./scheduler-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,12 +48,24 @@ export function createServer(deps: ServerDeps) {
     codexTitleGenerator: async ({ input, cwd }) =>
       generateCodexThreadTitle({ input, cwd }),
   });
+  const providerCatalog = listAvailableProviderInfos({
+    codexTitleGenerator: async ({ input, cwd }) =>
+      generateCodexThreadTitle({ input, cwd }),
+  });
+  const environmentAdapter = createEnvironmentAdapter();
+  const environmentCatalog = listAvailableEnvironmentInfos();
+  const scheduler = new InMemorySchedulerService();
   const threadManager = new ThreadManager(
     deps.threadRepo,
     deps.eventRepo,
     deps.projectRepo,
     wsManager,
     provider,
+    process.env,
+    environmentAdapter,
+    providerCatalog,
+    environmentCatalog,
+    scheduler,
   );
 
   // WebSocket handler

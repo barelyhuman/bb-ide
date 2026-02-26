@@ -7,6 +7,7 @@ import type {
   SpawnThreadRequest,
   TellThreadRequest,
   SystemStatus,
+  SystemEnvironmentInfo,
   SystemProviderInfo,
   AvailableModel,
   ProjectFileSuggestion,
@@ -139,4 +140,16 @@ export async function getAvailableModels(): Promise<AvailableModel[]> {
 
 export async function getSystemProvider(): Promise<SystemProviderInfo> {
   return request<SystemProviderInfo>("GET", "/system/provider");
+}
+
+export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
+  return request<SystemProviderInfo[]>("GET", "/system/providers");
+}
+
+export async function getSystemEnvironment(): Promise<SystemEnvironmentInfo> {
+  return request<SystemEnvironmentInfo>("GET", "/system/environment");
+}
+
+export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]> {
+  return request<SystemEnvironmentInfo[]>("GET", "/system/environments");
 }

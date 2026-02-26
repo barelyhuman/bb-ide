@@ -94,3 +94,16 @@ export interface SystemProviderInfo {
   displayName: string;
   capabilities: ProviderCapabilities;
 }
+
+export interface EnvironmentCapabilities {
+  isolatedFilesystem: boolean;
+  ephemeralWorkspace: boolean;
+  supportsCleanup: boolean;
+}
+
+export interface SystemEnvironmentInfo {
+  id: string;
+  displayName: string;
+  description?: string;
+  capabilities: EnvironmentCapabilities;
+}

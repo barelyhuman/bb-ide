@@ -13,6 +13,8 @@ import type {
   SpawnThreadRequest,
   TellThreadRequest,
   SystemStatus,
+  SystemEnvironmentInfo,
+  SystemProviderInfo,
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
@@ -122,6 +124,38 @@ export function useAvailableModels() {
   return useQuery<AvailableModel[]>({
     queryKey: ["availableModels"],
     queryFn: () => api.getAvailableModels(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSystemProvider() {
+  return useQuery<SystemProviderInfo>({
+    queryKey: ["systemProvider"],
+    queryFn: () => api.getSystemProvider(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSystemProviders() {
+  return useQuery<SystemProviderInfo[]>({
+    queryKey: ["systemProviders"],
+    queryFn: () => api.listSystemProviders(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSystemEnvironment() {
+  return useQuery<SystemEnvironmentInfo>({
+    queryKey: ["systemEnvironment"],
+    queryFn: () => api.getSystemEnvironment(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSystemEnvironments() {
+  return useQuery<SystemEnvironmentInfo[]>({
+    queryKey: ["systemEnvironments"],
+    queryFn: () => api.listSystemEnvironments(),
     staleTime: 60_000,
   });
 }

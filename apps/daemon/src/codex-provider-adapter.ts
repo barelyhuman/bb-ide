@@ -1,4 +1,6 @@
 import type {
+  AvailableModel,
+  ProviderCapabilities,
   PromptInput,
   SandboxMode,
   SpawnThreadRequest,
@@ -160,25 +162,38 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
 
 export interface CreateCodexProviderAdapterOptions {
   titleGenerator?: ProviderTitleGenerator;
+  id?: string;
+  displayName?: string;
+  processCommand?: string;
+  processArgs?: string[];
+  capabilities?: Partial<ProviderCapabilities>;
+  listModels?: () => Promise<AvailableModel[]>;
 }
 
 export function createCodexProviderAdapter(
   opts?: CreateCodexProviderAdapterOptions,
 ): ProviderAdapter {
   const titleGenerator = opts?.titleGenerator;
+  const capabilities: ProviderCapabilities = {
+    supportsSteer: true,
+    supportsRename: true,
+    supportsModelList: true,
+    supportsReasoningLevels: true,
+    supportsMultimodalInput: true,
+    ...(opts?.capabilities ?? {}),
+  };
+  const supportsSteer = capabilities.supportsSteer;
+  const supportsRename = capabilities.supportsRename;
+  const listModels =
+    opts?.listModels ??
+    (capabilities.supportsModelList ? listCodexModels : async () => []);
 
   return {
-    id: "codex",
-    displayName: "Codex app-server",
-    capabilities: {
-      supportsSteer: true,
-      supportsRename: true,
-      supportsModelList: true,
-      supportsReasoningLevels: true,
-      supportsMultimodalInput: true,
-    },
-    processCommand: "codex",
-    processArgs: ["app-server"],
+    id: opts?.id ?? "codex",
+    displayName: opts?.displayName ?? "Codex app-server",
+    capabilities,
+    processCommand: opts?.processCommand ?? "codex",
+    processArgs: opts?.processArgs ?? ["app-server"],
     clientInfo: {
       name: "beanbag",
       version: "0.0.1",
@@ -199,8 +214,8 @@ export function createCodexProviderAdapter(
     threadStartMethod: "thread/start",
     threadResumeMethod: "thread/resume",
     turnStartMethod: "turn/start",
-    turnSteerMethod: "turn/steer",
-    threadNameSetMethod: "thread/name/set",
+    turnSteerMethod: supportsSteer ? "turn/steer" : undefined,
+    threadNameSetMethod: supportsRename ? "thread/name/set" : undefined,
     createThreadStartParams(
       req: SpawnThreadRequest,
       context: ProviderThreadContext,
@@ -253,26 +268,27 @@ export function createCodexProviderAdapter(
         options,
       );
     },
-    createTurnSteerParams(
-      providerThreadId: string,
-      expectedTurnId: string,
-      input: PromptInput[],
-    ): Record<string, unknown> {
-      return {
-        threadId: providerThreadId,
-        expectedTurnId,
-        input,
-      };
-    },
-    createThreadNameSetParams(
-      providerThreadId: string,
-      title: string,
-    ): Record<string, unknown> {
-      return {
-        threadId: providerThreadId,
-        name: title,
-      };
-    },
+    createTurnSteerParams: supportsSteer
+      ? (
+          providerThreadId: string,
+          expectedTurnId: string,
+          input: PromptInput[],
+        ): Record<string, unknown> => {
+          return {
+            threadId: providerThreadId,
+            expectedTurnId,
+            input,
+          };
+        }
+      : undefined,
+    createThreadNameSetParams: supportsRename
+      ? (providerThreadId: string, title: string): Record<string, unknown> => {
+          return {
+            threadId: providerThreadId,
+            name: title,
+          };
+        }
+      : undefined,
     extractThreadIdFromResult,
     extractThreadIdFromEventData(data: unknown): string | undefined {
       const payload = asRecord(data);
@@ -332,7 +348,7 @@ export function createCodexProviderAdapter(
     },
     outputFromEvent,
     listModels() {
-      return listCodexModels();
+      return listModels();
     },
     deriveThreadTitle(input?: PromptInput[]): string | undefined {
       return deriveThreadTitleFromInput(input);

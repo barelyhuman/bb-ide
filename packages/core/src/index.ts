@@ -44,7 +44,9 @@ export type {
   ThreadExecutionOptions,
   SystemStatus,
   ProviderCapabilities,
+  EnvironmentCapabilities,
   SystemProviderInfo,
+  SystemEnvironmentInfo,
   ProjectFileSuggestion,
 } from "./api-types.js";
 
@@ -74,6 +76,22 @@ export type {
   UIMessage,
   ToUIMessagesOptions,
 } from "./ui-message.js";
+
+export type {
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  ProviderTitleGeneratorArgs,
+  ProviderTitleGenerator,
+  ProviderAdapter,
+  EnvironmentPrepareContext,
+  EnvironmentSession,
+  EnvironmentAdapter,
+  ThreadListFilters,
+  ThreadOrchestrator,
+  ThreadSchedule,
+  ScheduleRunRecord,
+  SchedulerService,
+} from "./runtime-contracts.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
 export { assertNever } from "./assert-never.js";

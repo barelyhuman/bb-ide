@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { AvailableModel, SystemProviderInfo, Thread } from "@beanbag/agent-core";
+import type {
+  AvailableModel,
+  SystemEnvironmentInfo,
+  SystemProviderInfo,
+  Thread,
+  ThreadOrchestrator,
+} from "@beanbag/agent-core";
 import { createSystemRoutes } from "../../routes/system.js";
-import type { ThreadManager } from "../../thread-manager.js";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
@@ -32,13 +37,26 @@ function makeModel(overrides: Partial<AvailableModel> = {}): AvailableModel {
   };
 }
 
-function mockThreadManager(): ThreadManager {
+function mockThreadManager(): ThreadOrchestrator {
+  const environmentInfo: SystemEnvironmentInfo = {
+    id: "local",
+    displayName: "Local Workspace",
+    capabilities: {
+      isolatedFilesystem: false,
+      ephemeralWorkspace: false,
+      supportsCleanup: false,
+    },
+  };
+
   return {
     list: vi.fn(),
     getRunningCount: vi.fn(),
     listModels: vi.fn(),
     getProviderInfo: vi.fn(),
-  } as unknown as ThreadManager;
+    listProviders: vi.fn(() => []),
+    getEnvironmentInfo: vi.fn(() => environmentInfo),
+    listEnvironments: vi.fn(() => [environmentInfo]),
+  } as unknown as ThreadOrchestrator;
 }
 
 describe("System routes", () => {
@@ -236,6 +254,89 @@ describe("System routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(providerInfo);
       expect(threadManager.getProviderInfo).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("GET /system/providers", () => {
+    it("returns provider catalog", async () => {
+      const providers: SystemProviderInfo[] = [
+        {
+          id: "codex",
+          displayName: "Codex app-server",
+          capabilities: {
+            supportsSteer: true,
+            supportsRename: true,
+            supportsModelList: true,
+            supportsReasoningLevels: true,
+            supportsMultimodalInput: true,
+          },
+        },
+        {
+          id: "claude-code",
+          displayName: "Claude Code (protocol-compatible)",
+          capabilities: {
+            supportsSteer: false,
+            supportsRename: true,
+            supportsModelList: false,
+            supportsReasoningLevels: false,
+            supportsMultimodalInput: true,
+          },
+        },
+      ];
+      (
+        threadManager.listProviders as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue(providers);
+
+      const res = await app.request("/system/providers");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(providers);
+      expect(threadManager.listProviders).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("GET /system/environment + /system/environments", () => {
+    it("returns active environment and environment catalog", async () => {
+      const activeEnvironment: SystemEnvironmentInfo = {
+        id: "worktree",
+        displayName: "Git Worktree Workspace",
+        capabilities: {
+          isolatedFilesystem: true,
+          ephemeralWorkspace: true,
+          supportsCleanup: true,
+        },
+      };
+      const environments: SystemEnvironmentInfo[] = [
+        {
+          id: "local",
+          displayName: "Local Workspace",
+          capabilities: {
+            isolatedFilesystem: false,
+            ephemeralWorkspace: false,
+            supportsCleanup: false,
+          },
+        },
+        activeEnvironment,
+      ];
+
+      (
+        threadManager.getEnvironmentInfo as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue(activeEnvironment);
+      (
+        threadManager.listEnvironments as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue(environments);
+
+      const [activeRes, allRes] = await Promise.all([
+        app.request("/system/environment"),
+        app.request("/system/environments"),
+      ]);
+
+      expect(activeRes.status).toBe(200);
+      expect(await activeRes.json()).toEqual(activeEnvironment);
+      expect(allRes.status).toBe(200);
+      expect(await allRes.json()).toEqual(environments);
+      expect(threadManager.getEnvironmentInfo).toHaveBeenCalledTimes(1);
+      expect(threadManager.listEnvironments).toHaveBeenCalledTimes(1);
     });
   });
 });

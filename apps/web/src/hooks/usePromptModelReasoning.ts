@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AvailableModel, ReasoningLevel, SandboxMode } from "@beanbag/agent-core";
-import { useAvailableModels } from "./useApi";
+import { useAvailableModels, useSystemProvider } from "./useApi";
 
 const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
 const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
@@ -110,6 +110,11 @@ export function usePromptModelReasoning(
 ) {
   const scope = options?.scope ?? "new-thread";
   const availableModelsQuery = useAvailableModels();
+  const providerInfoQuery = useSystemProvider();
+  const supportsModelList =
+    providerInfoQuery.data?.capabilities.supportsModelList ?? true;
+  const supportsReasoningLevels =
+    providerInfoQuery.data?.capabilities.supportsReasoningLevels ?? true;
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     scope === "new-thread" ? getStoredModel() : (options?.initialModel ?? ""),
   );
@@ -126,10 +131,12 @@ export function usePromptModelReasoning(
 
   const availableModels = useMemo(
     () =>
-      availableModelsQuery.data && availableModelsQuery.data.length > 0
+      supportsModelList &&
+      availableModelsQuery.data &&
+      availableModelsQuery.data.length > 0
         ? availableModelsQuery.data
         : FALLBACK_MODELS,
-    [availableModelsQuery.data],
+    [availableModelsQuery.data, supportsModelList],
   );
 
   const modelOptions = useMemo(
@@ -151,6 +158,9 @@ export function usePromptModelReasoning(
 
   const reasoningOptions = useMemo(
     (): PromptOption<ReasoningLevel>[] => {
+      if (!supportsReasoningLevels) {
+        return [{ value: "medium", label: REASONING_LABELS.medium }];
+      }
       const options: PromptOption<ReasoningLevel>[] = [];
       const seen = new Set<ReasoningLevel>();
       const efforts =
@@ -175,7 +185,7 @@ export function usePromptModelReasoning(
 
       return options;
     },
-    [activeModel],
+    [activeModel, supportsReasoningLevels],
   );
 
   useEffect(() => {
@@ -192,12 +202,16 @@ export function usePromptModelReasoning(
   }, [availableModels, selectedModel]);
 
   useEffect(() => {
+    if (!supportsReasoningLevels && reasoningLevel !== "medium") {
+      setReasoningLevel("medium");
+      return;
+    }
     if (!reasoningOptions.some((option) => option.value === reasoningLevel)) {
       setReasoningLevel(
         activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value,
       );
     }
-  }, [activeModel, reasoningLevel, reasoningOptions]);
+  }, [activeModel, reasoningLevel, reasoningOptions, supportsReasoningLevels]);
 
   useEffect(() => {
     if (scope !== "thread") return;
@@ -249,5 +263,7 @@ export function usePromptModelReasoning(
     modelOptions,
     reasoningOptions,
     sandboxOptions: SANDBOX_OPTIONS,
+    supportsModelList,
+    supportsReasoningLevels,
   };
 }
