@@ -15,7 +15,13 @@ Replatform Beanbag from a task-centric orchestration app into a thread-first, ha
 - Data migration policy: drop task model data completely.
 - Trust model: local trusted code only.
 - Package naming: rename now (no long-lived legacy package names).
+- Repository topology: align folder names with package boundaries now.
+- Daemon and agent-server are separate concerns:
+  - `@beanbag/agent-server` is a provider RPC/runtime shim layer.
+  - `@beanbag/daemon` is the API/WS/orchestration host that depends on `@beanbag/agent-server`.
+- Contract gate: package boundaries/API contracts/DB shapes must be strongly typed and documented as part of Phase 5 split.
 - Architecture priority: provider/workflow/environment boundaries first, extension type system later.
+- Delivery priority: table-stakes product features before scheduler/automation.
 
 ## Product Principles
 
@@ -23,8 +29,9 @@ Replatform Beanbag from a task-centric orchestration app into a thread-first, ha
 - Multi-provider support is table stakes (for example: codex, pi-mono, claude code).
 - Multi-environment provisioning support is table stakes (for example: local, worktrees, checkouts, sandbox, cloud sandbox).
 - UI primitives should be batteries-included, composable, and replaceable.
-- Application layout should support left IA sidebar, center thread surface, and right context panel.
-- Automation/scheduling of thread operations is a core capability, not a plugin afterthought.
+- Application layout should support left IA sidebar and center thread surface; right context surfaces are optional composition.
+- Prompt input should support modern multimodal workflows (file/image attachments and voice capture).
+- Automation/scheduling is important, but follows core table-stakes interaction quality.
 
 ## Target Bones (Packages)
 
@@ -40,13 +47,21 @@ Provider/workflow/environment agnostic contracts and domain primitives.
 
 ### `@beanbag/agent-server`
 
-Runtime and orchestration host.
+Runtime bridge over provider backends (for example: `codex app-server`, `pi-mono` RPC mode).
 
-- Provider adapter execution runtime
-- Environment adapter provisioning lifecycle
-- Thread orchestration lifecycle
-- Scheduling/automation service
-- HTTP/WS host, persistence integration
+- Provider RPC client lifecycle and protocol mapping
+- Environment adapter contracts used by runtime bridge
+- Event normalization into `agent-core` envelopes
+- Capability discovery and model metadata surfaces
+
+### `@beanbag/daemon`
+
+Orchestration/API host that composes core + runtime bridge + persistence.
+
+- HTTP + WS API contract
+- Thread lifecycle orchestration (`spawn/tell/stop/archive`)
+- Persistence integration and replay
+- Scheduler/automations (later phases)
 
 ### `@beanbag/ui-core`
 
@@ -55,7 +70,7 @@ Reusable ADE UI primitives.
 - Conversation timeline components
 - Prompt composer/input components
 - Diff/artifact/operation rendering primitives
-- Three-pane layout primitives and slot contracts
+- Layout slot primitives for app composition
 
 ### `@beanbag/app`
 
@@ -66,20 +81,32 @@ Composed product shell.
 - Default provider/environment wiring
 - Default panel and renderer selection
 
-## Boundary-First Interfaces (Phase-2 critical)
+### `@beanbag/db`
+
+Persistence package with schema, repositories, and migrations.
+
+## Folder Topology Target (breaking)
+
+- `packages/core` -> `packages/agent-core`
+- `apps/web` -> `apps/app`
+- Current mixed `apps/daemon` responsibilities split into:
+  - `packages/agent-server` (runtime bridge library)
+  - `apps/daemon` (`@beanbag/daemon` host app)
+
+## Boundary-First Interfaces (critical)
 
 No first-class extension loader yet. Start with explicit interfaces and static composition.
 
-### Provider Adapter
+### Provider Bridge (`agent-server`)
 
 Responsible for provider protocol mapping and event normalization.
 
 - initialize/start/resume/tell/interrupt
 - list models/capabilities
-- normalize provider events into core event envelope
+- normalize provider events into persisted core event envelope
 - expose provider-specific optional capabilities
 
-### Environment Adapter
+### Environment Adapter (`agent-server`)
 
 Responsible for execution context provisioning and cleanup.
 
@@ -88,7 +115,7 @@ Responsible for execution context provisioning and cleanup.
 - support local/worktree/checkout/sandbox/cloud variants
 - teardown/cleanup lifecycle
 
-### Thread Orchestrator
+### Thread Orchestrator (`daemon`)
 
 Provider/environment agnostic thread lifecycle coordinator.
 
@@ -97,7 +124,7 @@ Provider/environment agnostic thread lifecycle coordinator.
 - per-thread runtime state handling
 - delivery of normalized events to UI/API
 
-### Scheduler Service
+### Scheduler Service (`daemon`, later phase)
 
 Durable scheduling for recurring thread operations.
 
@@ -106,13 +133,14 @@ Durable scheduling for recurring thread operations.
 - run history/status persistence
 - guardrails (dedupe, concurrency limit, retry policy)
 
-### UI Contracts
+### UI Contracts (`ui-core`)
 
 Composable rendering and layout seams.
 
 - conversation renderer contracts
 - prompt composer contracts
-- right-panel artifact/diff/markdown contracts
+- attachment and voice-input integration seams
+- optional right-panel artifact/diff/markdown contracts
 - left sidebar IA contracts
 
 ## Roadmap
@@ -123,20 +151,6 @@ Composable rendering and layout seams.
 
 - Remove task model and all task-related API/UI/CLI/runtime code.
 - Rename package boundaries to new architecture names.
-
-### Scope
-
-- Remove task types/schemas/protocol entities from core package.
-- Remove task tables/repositories/routes and thread task linkage columns.
-- Remove task CLI command group and `BB_TASK_ID` context semantics.
-- Remove task web routes/views/hooks/components and websocket task entity.
-- Rename packages and update imports/scripts/docs.
-
-### Acceptance Criteria
-
-- No `Task*`, `taskId`, `taskRole`, `BB_TASK_ID`, or `/tasks` API surfaces remain.
-- `pnpm typecheck` and `pnpm test` pass.
-- Main app supports projects + threads only.
 
 ### Completion Snapshot
 
@@ -152,24 +166,12 @@ Composable rendering and layout seams.
 - Establish stable provider/environment/workflow boundaries.
 - Keep behavior mostly unchanged while moving code to new package architecture.
 
-### Scope
-
-- Extract provider runtime abstractions into `@beanbag/agent-server`.
-- Extract domain/protocol contracts into `@beanbag/agent-core`.
-- Extract reusable UI primitives into `@beanbag/ui-core`.
-- Keep wiring static in `@beanbag/app`.
-
-### Acceptance Criteria
-
-- All runtime paths flow through explicit adapter interfaces.
-- New providers/environments can be added without cross-cutting edits.
-
 ### Completion Snapshot
 
 - Completed in commit:
   - `07bbe84`
 - Added explicit runtime contracts in `@beanbag/agent-core`.
-- Daemon now composes provider, environment, and scheduler boundaries through registries and interface contracts.
+- Daemon composes provider, environment, and scheduler boundaries through registries and interface contracts.
 
 ## Phase 3: UI Core Hardening
 
@@ -177,40 +179,18 @@ Composable rendering and layout seams.
 
 - Deliver high-quality reusable ADE UI components with clear seams.
 
-### Scope
-
-- Standardize conversation timeline primitives.
-- Standardize prompt composer with batteries included (mentions, options, submit/stop states).
-- Introduce stable three-pane layout contracts and slot APIs.
-- Ensure right panel supports artifacts, diff summaries, markdown preview/edit.
-
-### Acceptance Criteria
-
-- `@beanbag/app` composes UI mostly via `@beanbag/ui-core` primitives.
-- Replacing a panel/renderer is a local composition change.
-
 ### Completion Snapshot
 
 - Completed in commit:
   - `50d6ef1`
-- Introduced `@beanbag/ui-core` with three-pane layout, conversation timeline, prompt composer shell, and context panel primitives.
-- Thread detail view now uses `ui-core` primitives with right-panel runtime/artifact/diff/markdown surfaces.
+- Introduced `@beanbag/ui-core` primitives for layout, conversation timeline, prompt composer shell, and context surfaces.
+- App currently composes a single-column thread detail by product choice; right context surfaces remain optional composition points.
 
 ## Phase 4: Multi-Provider + Multi-Environment First-Party Adapters
 
 ### Goals
 
 - Prove interfaces by implementing multiple adapters.
-
-### Scope
-
-- Provider adapters: codex baseline + at least one additional provider adapter.
-- Environment adapters: local baseline + at least one non-local variant (worktree/checkout/sandbox/cloud).
-- Capability-aware fallback behavior in UI and server.
-
-### Acceptance Criteria
-
-- Runtime can run with different provider/environment combinations with no core refactor.
 
 ### Completion Snapshot
 
@@ -220,7 +200,72 @@ Composable rendering and layout seams.
 - Environment adapters: `local`, `worktree`.
 - Capability-aware fallback added in server model listing and app prompt options.
 
-## Phase 5: Scheduler/Automations
+## Phase 5: Folder Rename + Daemon/Agent-Server Split (breaking)
+
+### Goals
+
+- Align folders with package boundaries.
+- Separate daemon host responsibilities from provider runtime shim responsibilities.
+
+### Scope
+
+- Move folders to target topology:
+  - `packages/core` -> `packages/agent-core`
+  - `apps/web` -> `apps/app`
+  - carve `packages/agent-server` out of current mixed daemon code
+- Create `@beanbag/daemon` package in `apps/daemon`.
+- Move provider bridge/runtime shim code into `packages/agent-server`.
+- Keep API routes/orchestration host in `apps/daemon` and consume exported `agent-server` interfaces.
+- Update workspace scripts, Turbo pipeline, Vitest config, docs, and import paths.
+- Deliver contract hardening artifacts (see `plans/extensible-ade-contract-hardening.md`):
+  - package public API inventory (`agent-core`, `agent-server`, `daemon`, `db`, `ui-core`, `app`)
+  - API request/response schema map with typed decode/guard helpers
+  - DB table/row shape catalog with ownership and invariants
+  - event-table taxonomy: full supported `events.type` list, payload typing source, and lookup/indexing semantics
+- Adopt event pipeline boundary:
+  - provider-specific event shapes
+  - normalization for DB persistence
+  - UI projection from normalized events
+  - rendering from UI projection model
+- Detailed split map: `plans/extensible-ade-phase5-split-map.md`
+
+### Acceptance Criteria
+
+- Folder names and package names are aligned.
+- `apps/daemon` imports `@beanbag/agent-server` (no cross-package deep imports).
+- Supported thread event types and event payload typing strategy are documented and test-validated.
+- Closed internal unions are exhaustively handled with `assertNever`; open external unions use explicit tolerant fallbacks.
+- Thread event processing no longer depends on raw provider payload shape in UI projection/render layers.
+- `pnpm typecheck` and `pnpm test` pass after moves.
+
+## Phase 6: Table-Stakes Feature Pass
+
+### Goals
+
+- Ship minimum expected ADE capabilities before automation work.
+
+### Scope
+
+- Environment provisioning hardening:
+  - local + worktree provisioning UX and lifecycle parity
+  - clear provisioning status and errors in thread flow
+- Prompt composer improvements:
+  - attach files
+  - attach/paste images
+  - attachment chips + send pipeline + API contract updates
+- Voice input:
+  - push-to-talk or hold-to-talk capture in web app
+  - speech-to-text insertion into composer with graceful fallback
+- Detailed execution spec: `plans/extensible-ade-table-stakes-phase6.md`
+
+### Acceptance Criteria
+
+- Users can choose local/worktree execution with predictable provisioning behavior.
+- Users can attach files/images in the prompt flow end-to-end.
+- Users can use voice input to draft prompt text.
+- New capabilities are covered by tests and do not regress existing thread workflows.
+
+## Phase 7: Scheduler/Automations
 
 ### Goals
 
@@ -236,7 +281,7 @@ Composable rendering and layout seams.
 
 - Scheduled thread operations run deterministically and are observable.
 
-## Phase 6: Optional First-Class Extension Runtime
+## Phase 8: Optional First-Class Extension Runtime
 
 ### Goals
 
@@ -256,15 +301,19 @@ Composable rendering and layout seams.
 
 - Risk: boundary leakage during migration.
   - Mitigation: enforce adapter interfaces before adding new capabilities.
-- Risk: package rename churn.
-  - Mitigation: do package rename in same breaking window as task removal.
+- Risk: package/folder rename churn.
+  - Mitigation: complete folder moves in one breaking window with focused commit chunks.
 - Risk: over-engineering extension model too early.
-  - Mitigation: keep static composition until Phase 6.
+  - Mitigation: keep static composition until Phase 8.
+- Risk: feature debt while refactoring topology.
+  - Mitigation: dedicate Phase 6 to table-stakes UX/provisioning before scheduler.
 
 ## Definition of Done for Replatform
 
 - Thread-first product with no task model.
 - Clear provider/environment/workflow package boundaries.
 - Multi-provider and multi-environment adapters proven in production path.
-- Reusable UI core powering app shell and panel layout.
+- Reusable UI core powering app shell and thread surface composition.
+- Folder topology aligned with package boundaries.
+- Table-stakes provisioning + composer (attachments/images/voice) shipped.
 - Scheduler/automations implemented for recurring thread workflows.
