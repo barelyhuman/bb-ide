@@ -195,6 +195,7 @@ export class ThreadRepository {
   create(data: {
     projectId: string;
     title?: string;
+    environmentId?: string;
     parentThreadId?: string;
   }): Thread {
     const now = Date.now();
@@ -203,6 +204,7 @@ export class ThreadRepository {
       projectId: data.projectId,
       title: data.title ?? null,
       status: "created" as const,
+      environmentId: data.environmentId ?? null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       createdAt: now,
@@ -252,7 +254,12 @@ export class ThreadRepository {
 
   update(
     id: string,
-    data: { status?: ThreadStatus; title?: string; archivedAt?: number | null }
+    data: {
+      status?: ThreadStatus;
+      title?: string;
+      environmentId?: string | null;
+      archivedAt?: number | null;
+    }
   ): Thread | undefined {
     const existing = this.db
       .select()
@@ -264,6 +271,7 @@ export class ThreadRepository {
     const updates: Record<string, unknown> = { updatedAt: Date.now() };
     if (data.status !== undefined) updates.status = data.status;
     if (data.title !== undefined) updates.title = data.title;
+    if (data.environmentId !== undefined) updates.environmentId = data.environmentId;
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
 
     this.db.update(threads).set(updates).where(eq(threads.id, id)).run();
@@ -280,6 +288,7 @@ export class ThreadRepository {
       projectId: row.projectId,
       title: row.title ?? undefined,
       status: normalizeThreadStatus(row.status),
+      environmentId: row.environmentId ?? undefined,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
       createdAt: row.createdAt,

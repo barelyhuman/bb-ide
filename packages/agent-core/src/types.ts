@@ -31,6 +31,7 @@ export interface Thread {
   projectId: string;
   title?: string;
   status: ThreadStatus;
+  environmentId?: string;
   parentThreadId?: string;
   archivedAt?: number;
   createdAt: number;
@@ -40,7 +41,11 @@ export interface Thread {
 export type AppThreadEventType =
   | "client/thread/start"
   | "client/turn/start"
-  | "system/error";
+  | "system/error"
+  | "system/provisioning/started"
+  | "system/provisioning/fallback"
+  | "system/provisioning/completed"
+  | "system/provisioning/cleanup_failed";
 
 export const PROVIDER_EVENT_ENVELOPE_SCHEMA =
   "beanbag/provider-event-envelope" as const;
@@ -86,6 +91,31 @@ export interface SystemErrorEventData {
   detail?: string;
 }
 
+export interface SystemProvisioningStartedEventData {
+  environmentId: string;
+  environmentDisplayName?: string;
+}
+
+export interface SystemProvisioningFallbackEventData {
+  requestedEnvironmentId: string;
+  fallbackEnvironmentId: string;
+  reason: string;
+  detail?: string;
+}
+
+export interface SystemProvisioningCompletedEventData {
+  environmentId: string;
+  workspaceRoot?: string;
+  mode?: string;
+  fallbackReason?: string;
+}
+
+export interface SystemProvisioningCleanupFailedEventData {
+  environmentId: string;
+  message: string;
+  detail?: string;
+}
+
 export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
 
 export interface TurnLifecycleEventData {
@@ -97,6 +127,10 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/thread/start": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
+  "system/provisioning/started": SystemProvisioningStartedEventData;
+  "system/provisioning/fallback": SystemProvisioningFallbackEventData;
+  "system/provisioning/completed": SystemProvisioningCompletedEventData;
+  "system/provisioning/cleanup_failed": SystemProvisioningCleanupFailedEventData;
 };
 
 export type ThreadEventData =

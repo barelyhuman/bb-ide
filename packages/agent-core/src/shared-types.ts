@@ -8,4 +8,11 @@ export type SandboxMode =
 export type PromptInput =
   | { type: "text"; text: string }
   | { type: "image"; url: string }
-  | { type: "localImage"; path: string };
+  | { type: "localImage"; path: string }
+  | {
+      type: "localFile";
+      path: string;
+      name?: string;
+      sizeBytes?: number;
+      mimeType?: string;
+    };

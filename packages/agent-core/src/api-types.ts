@@ -32,6 +32,7 @@ export interface SpawnThreadRequest {
   model?: string;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
+  environmentId?: string;
   developerInstructions?: string;
   parentThreadId?: string;
 }
@@ -68,6 +69,14 @@ export interface UpdateProjectRequest {
 
 export interface ProjectFileSuggestion {
   path: string;
+}
+
+export interface UploadedPromptAttachment {
+  type: "localImage" | "localFile";
+  path: string;
+  name: string;
+  mimeType?: string;
+  sizeBytes: number;
 }
 
 // System

@@ -45,6 +45,7 @@ import type {
 } from "@beanbag/db";
 import {
   createCodexProviderAdapter,
+  createEnvironmentAdapter,
   createLocalEnvironmentAdapter,
   ProviderRuntime,
   ProviderRuntimeRpcError,
@@ -73,6 +74,11 @@ export type PromptExecutionOptions = ProviderExecutionOptions;
 
 interface TellContext {
   initiator: ThreadTurnInitiator;
+}
+
+interface ActiveEnvironmentRuntime {
+  adapter: EnvironmentAdapter;
+  session: EnvironmentSession;
 }
 
 function resolveBbBinDir(pathValue: string | undefined): string | undefined {
@@ -240,7 +246,7 @@ function toTurnLifecycleState(
 export class ThreadManager implements ThreadOrchestrator {
   private processes = new Map<string, ChildProcess>();
   private runtimes = new Map<string, ProviderRuntime>();
-  private environmentSessions = new Map<string, EnvironmentSession>();
+  private environmentRuntimes = new Map<string, ActiveEnvironmentRuntime>();
   /** Maps our internal thread ID to the provider thread ID */
   private providerThreadIds = new Map<string, string>();
   /** Tracks the currently active provider turn ID for each thread (when known). */
@@ -316,7 +322,10 @@ export class ThreadManager implements ThreadOrchestrator {
         this._setThreadStatus(thread.id, "idle");
         continue;
       }
-      this._scheduleProvisioning(thread.id, { projectId: thread.projectId });
+      this._scheduleProvisioning(thread.id, {
+        projectId: thread.projectId,
+        environmentId: thread.environmentId,
+      });
     }
 
     const provisioningThreads = this.threadRepo.list({
@@ -354,7 +363,10 @@ export class ThreadManager implements ThreadOrchestrator {
       }
 
       try {
-        this._spawnProcess(thread.id, project.rootPath);
+        const environmentAdapter = this._resolveThreadEnvironmentAdapter({
+          thread,
+        });
+        this._spawnProcess(thread.id, project.rootPath, environmentAdapter);
         this._sendInitialize(thread.id);
         const resumedThreadId = await this._sendRequestAndAwaitThreadId(
           thread.id,
@@ -397,9 +409,11 @@ export class ThreadManager implements ThreadOrchestrator {
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const derivedTitle = this.provider.deriveThreadTitle(req.input);
     const threadTitle = explicitTitle ?? derivedTitle;
+    const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       ...(threadTitle ? { title: threadTitle } : {}),
+      environmentId,
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     // Treat only truly custom titles as locked. If caller title matches our
@@ -409,7 +423,11 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     this.ws.broadcast("thread", thread.id);
-    this._scheduleProvisioning(thread.id, req, { rootPathHint: project.rootPath });
+    this._scheduleProvisioning(
+      thread.id,
+      { ...req, environmentId },
+      { rootPathHint: project.rootPath },
+    );
     return thread;
   }
 
@@ -443,10 +461,11 @@ export class ThreadManager implements ThreadOrchestrator {
     options: PromptExecutionOptions | undefined,
     context: TellContext,
   ): Promise<void> {
-    const input = request.input;
-    if (input.length === 0) {
+    const requestedInput = request.input;
+    if (requestedInput.length === 0) {
       throw invalidRequestError("Tell payload input must be non-empty");
     }
+    const providerInput = this._normalizePromptInputForProvider(requestedInput);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
@@ -463,10 +482,11 @@ export class ThreadManager implements ThreadOrchestrator {
         threadId,
         {
           projectId: thread.projectId,
-          input,
+          input: requestedInput,
           model: options?.model,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
+          environmentId: thread.environmentId,
         },
         {
           reason: "tell-after-provisioning-failure",
@@ -487,7 +507,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     if (!this.provider.generateThreadTitle) {
-      const suggestedTitle = this.provider.deriveThreadTitle(input);
+      const suggestedTitle = this.provider.deriveThreadTitle(requestedInput);
       if (suggestedTitle) {
         this._setThreadTitle(threadId, suggestedTitle, {
           onlyIfMissing: true,
@@ -501,7 +521,7 @@ export class ThreadManager implements ThreadOrchestrator {
         threadId,
         project.rootPath,
         providerThreadId,
-        input,
+        requestedInput,
       );
     }
 
@@ -542,7 +562,7 @@ export class ThreadManager implements ThreadOrchestrator {
         params: this.provider.createTurnSteerParams!(
           providerThreadId,
           activeTurnId,
-          input,
+          providerInput,
         ),
       };
       this._sendToProcess(threadId, steerMsg);
@@ -553,13 +573,17 @@ export class ThreadManager implements ThreadOrchestrator {
       jsonrpc: "2.0",
       method: this.provider.turnStartMethod,
       id: ++this.rpcIdCounter,
-      params: this.provider.createTurnStartParams(providerThreadId, input, options),
+      params: this.provider.createTurnStartParams(
+        providerThreadId,
+        providerInput,
+        options,
+      ),
     };
     this._persistOutboundStartEvent(
       threadId,
       "client/turn/start",
       turnStartMsg.params,
-      input,
+      requestedInput,
       {
         source: "tell",
         initiator: context.initiator,
@@ -766,10 +790,10 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     this.runtimes.clear();
     this.processes.clear();
-    for (const [threadId] of this.environmentSessions) {
+    for (const [threadId] of this.environmentRuntimes) {
       this._cleanupEnvironmentSession(threadId);
     }
-    this.environmentSessions.clear();
+    this.environmentRuntimes.clear();
     this.providerThreadIds.clear();
     this.activeTurnIds.clear();
     this.autoTitleAttemptedThreadIds.clear();
@@ -830,9 +854,48 @@ export class ThreadManager implements ThreadOrchestrator {
       force: true,
     });
 
-    this._spawnProcess(threadId, opts?.rootPathHint ?? project.rootPath);
+    const environmentAdapter = this._resolveThreadEnvironmentAdapter({
+      thread,
+      requestedEnvironmentId: req.environmentId,
+    });
+    const requestedEnvironmentId =
+      req.environmentId ??
+      thread?.environmentId ??
+      environmentAdapter.info.id;
+    if (thread && thread.environmentId !== requestedEnvironmentId) {
+      this.threadRepo.update(threadId, { environmentId: requestedEnvironmentId });
+    }
+    this._appendEvent(threadId, "system/provisioning/started", {
+      environmentId: requestedEnvironmentId,
+      environmentDisplayName: environmentAdapter.info.displayName,
+    });
+
+    const environmentRuntime = this._spawnProcess(
+      threadId,
+      opts?.rootPathHint ?? project.rootPath,
+      environmentAdapter,
+    );
     this._sendInitialize(threadId);
-    const initialInput = req.input ?? [];
+    const effectiveEnvironmentId = this._resolveEffectiveEnvironmentId(
+      environmentRuntime.adapter,
+      environmentRuntime.session,
+    );
+    const fallbackReason = environmentRuntime.session.metadata?.fallbackReason;
+    if (fallbackReason && effectiveEnvironmentId !== requestedEnvironmentId) {
+      this._appendEvent(threadId, "system/provisioning/fallback", {
+        requestedEnvironmentId,
+        fallbackEnvironmentId: effectiveEnvironmentId,
+        reason: fallbackReason,
+      });
+    }
+    this._appendEvent(threadId, "system/provisioning/completed", {
+      environmentId: effectiveEnvironmentId,
+      workspaceRoot: environmentRuntime.session.cwd,
+      mode: environmentRuntime.session.metadata?.mode,
+      ...(fallbackReason ? { fallbackReason } : {}),
+    });
+    const requestedInput = req.input ?? [];
+    const providerInput = this._normalizePromptInputForProvider(requestedInput);
 
     const threadStartParams = this.provider.createThreadStartParams(
       req,
@@ -845,7 +908,7 @@ export class ThreadManager implements ThreadOrchestrator {
       threadId,
       "client/thread/start",
       threadStartParams,
-      initialInput,
+      requestedInput,
       {
         source: "spawn",
         initiator: "agent",
@@ -862,21 +925,21 @@ export class ThreadManager implements ThreadOrchestrator {
       threadId,
       project.rootPath,
       providerThreadId,
-      initialInput,
+      requestedInput,
     );
 
-    if (initialInput.length > 0) {
+    if (requestedInput.length > 0) {
       this._setThreadStatus(threadId, "active");
       const turnStartParams = this.provider.createTurnStartParams(
         providerThreadId,
-        initialInput,
+        providerInput,
         req,
       );
       this._persistOutboundStartEvent(
         threadId,
         "client/turn/start",
         turnStartParams,
-        initialInput,
+        requestedInput,
         {
           source: "spawn",
           initiator: "agent",
@@ -925,16 +988,18 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _setEnvironmentSession(
     threadId: string,
+    adapter: EnvironmentAdapter,
     session: EnvironmentSession,
   ): void {
     this._cleanupEnvironmentSession(threadId);
-    this.environmentSessions.set(threadId, session);
+    this.environmentRuntimes.set(threadId, { adapter, session });
   }
 
   private _cleanupEnvironmentSession(threadId: string): void {
-    const session = this.environmentSessions.get(threadId);
-    if (!session) return;
-    this.environmentSessions.delete(threadId);
+    const runtime = this.environmentRuntimes.get(threadId);
+    if (!runtime) return;
+    this.environmentRuntimes.delete(threadId);
+    const { adapter, session } = runtime;
     if (!session.cleanup) return;
     try {
       const maybePromise = session.cleanup();
@@ -947,28 +1012,65 @@ export class ThreadManager implements ThreadOrchestrator {
         void maybePromise.catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           console.warn(
-            `[thread ${threadId}] environment cleanup failed (${this.environmentAdapter.info.id}): ${message}`,
+            `[thread ${threadId}] environment cleanup failed (${adapter.info.id}): ${message}`,
+          );
+          this._appendEvent(
+            threadId,
+            "system/provisioning/cleanup_failed",
+            {
+              environmentId: adapter.info.id,
+              message: "Environment cleanup failed",
+              detail: message,
+            },
           );
         });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
-        `[thread ${threadId}] environment cleanup failed (${this.environmentAdapter.info.id}): ${message}`,
+        `[thread ${threadId}] environment cleanup failed (${adapter.info.id}): ${message}`,
+      );
+      this._appendEvent(
+        threadId,
+        "system/provisioning/cleanup_failed",
+        {
+          environmentId: adapter.info.id,
+          message: "Environment cleanup failed",
+          detail: message,
+        },
       );
     }
   }
 
-  private _spawnProcess(threadId: string, projectRootPath: string): void {
+  private _resolveEffectiveEnvironmentId(
+    adapter: EnvironmentAdapter,
+    session: EnvironmentSession,
+  ): string {
+    const mode = session.metadata?.mode;
+    if (adapter.info.id === "worktree" && mode === "local") {
+      return "local";
+    }
+    return adapter.info.id;
+  }
+
+  private _spawnProcess(
+    threadId: string,
+    projectRootPath: string,
+    environmentAdapter: EnvironmentAdapter,
+  ): ActiveEnvironmentRuntime {
     const thread = this.threadRepo.getById(threadId);
     const projectId = thread?.projectId;
-    const environmentSession = this.environmentAdapter.prepare({
+    const environmentSession = environmentAdapter.prepare({
       projectId: projectId ?? "",
       threadId,
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
     });
-    this._setEnvironmentSession(threadId, environmentSession);
+    this._setEnvironmentSession(threadId, environmentAdapter, environmentSession);
+    const effectiveEnvironmentId = this._resolveEffectiveEnvironmentId(
+      environmentAdapter,
+      environmentSession,
+    );
     const sessionEnv = {
       ...this.runtimeEnv,
       ...(environmentSession.env ?? {}),
@@ -982,7 +1084,7 @@ export class ThreadManager implements ThreadOrchestrator {
         ...(effectivePath ? { PATH: effectivePath } : {}),
         ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
         BB_THREAD_ID: threadId,
-        BB_ENVIRONMENT_ID: this.environmentAdapter.info.id,
+        BB_ENVIRONMENT_ID: effectiveEnvironmentId,
       },
     });
 
@@ -1016,6 +1118,11 @@ export class ThreadManager implements ThreadOrchestrator {
       );
       this._handleProcessExit(threadId, 1, null);
     });
+
+    return {
+      adapter: environmentAdapter,
+      session: environmentSession,
+    };
   }
 
   private _sendInitialize(threadId: string): void {
@@ -1124,7 +1231,10 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     try {
-      this._spawnProcess(threadId, project.rootPath);
+      const environmentAdapter = this._resolveThreadEnvironmentAdapter({
+        thread,
+      });
+      this._spawnProcess(threadId, project.rootPath, environmentAdapter);
       this._sendInitialize(threadId);
       const resumedThreadId = await this._sendRequestAndAwaitThreadId(
         threadId,
@@ -1155,6 +1265,7 @@ export class ThreadManager implements ThreadOrchestrator {
           model: options?.model,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
+          environmentId: thread.environmentId,
         },
         { rootPathHint: project.rootPath },
       );
@@ -1169,7 +1280,15 @@ export class ThreadManager implements ThreadOrchestrator {
     threadId: string;
     projectId: string;
   }): ProviderThreadContext {
-    const environmentSession = this.environmentSessions.get(args.threadId);
+    const environmentRuntime = this.environmentRuntimes.get(args.threadId);
+    const environmentSession = environmentRuntime?.session;
+    const environmentId = environmentRuntime
+      ? this._resolveEffectiveEnvironmentId(
+          environmentRuntime.adapter,
+          environmentRuntime.session,
+        )
+      : this.threadRepo.getById(args.threadId)?.environmentId ??
+        this.environmentAdapter.info.id;
     return {
       projectId: args.projectId,
       threadId: args.threadId,
@@ -1177,8 +1296,39 @@ export class ThreadManager implements ThreadOrchestrator {
       ...(environmentSession?.cwd
         ? { workspaceRoot: environmentSession.cwd }
         : {}),
-      environmentId: this.environmentAdapter.info.id,
+      environmentId,
     };
+  }
+
+  private _resolveRequestedEnvironmentId(value?: string): string {
+    const normalized = (value ?? this.environmentAdapter.info.id).trim().toLowerCase();
+    if (!normalized) return this.environmentAdapter.info.id;
+    this._resolveEnvironmentAdapter(normalized);
+    return normalized;
+  }
+
+  private _resolveEnvironmentAdapter(environmentId: string): EnvironmentAdapter {
+    if (environmentId === this.environmentAdapter.info.id) {
+      return this.environmentAdapter;
+    }
+    try {
+      return createEnvironmentAdapter({ environmentId });
+    } catch {
+      throw invalidRequestError(
+        `Unsupported environment "${environmentId}"`,
+      );
+    }
+  }
+
+  private _resolveThreadEnvironmentAdapter(args: {
+    thread?: Thread;
+    requestedEnvironmentId?: string;
+  }): EnvironmentAdapter {
+    const environmentId =
+      args.requestedEnvironmentId ??
+      args.thread?.environmentId ??
+      this.environmentAdapter.info.id;
+    return this._resolveEnvironmentAdapter(environmentId);
   }
 
   private _toErrorMessage(err: unknown): string {
@@ -1723,6 +1873,49 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!normalized) return undefined;
     if (normalized.length <= 60) return normalized;
     return `${normalized.slice(0, 57).trimEnd()}...`;
+  }
+
+  private _normalizePromptInputForProvider(input: PromptInput[]): PromptInput[] {
+    const normalized: PromptInput[] = [];
+    for (const chunk of input) {
+      switch (chunk.type) {
+        case "text":
+          normalized.push(chunk);
+          break;
+        case "localFile":
+          // No currently integrated runtime supports native local file prompt parts.
+          // Preserve intent via deterministic text annotations.
+          normalized.push({
+            type: "text",
+            text: `Attached local file: ${chunk.path}`,
+          });
+          break;
+        case "image":
+          if (this.provider.capabilities.supportsMultimodalInput) {
+            normalized.push(chunk);
+          } else {
+            normalized.push({
+              type: "text",
+              text: `Attached image URL: ${chunk.url}`,
+            });
+          }
+          break;
+        case "localImage":
+          if (this.provider.capabilities.supportsMultimodalInput) {
+            normalized.push(chunk);
+          } else {
+            normalized.push({
+              type: "text",
+              text: `Attached local image: ${chunk.path}`,
+            });
+          }
+          break;
+        default:
+          assertNever(chunk);
+      }
+    }
+
+    return normalized;
   }
 
   private _latestTurnLifecycleStatus(

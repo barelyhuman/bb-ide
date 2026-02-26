@@ -22,6 +22,7 @@ export interface UIUserMessage extends UIMessageBase {
   attachments?: {
     webImages: number;
     localImages: number;
+    localFiles: number;
   };
 }
 

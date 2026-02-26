@@ -3,10 +3,12 @@ import { zValidator } from "@hono/zod-validator";
 import {
   spawnThreadSchema,
   tellThreadSchema,
+  type PromptInput,
   type ThreadOrchestrator,
 } from "@beanbag/agent-core";
 import { z } from "zod";
-import { threadNotFoundError } from "../domain-errors.js";
+import { isAbsolute } from "node:path";
+import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 
 const listThreadsQuerySchema = z.object({
@@ -19,6 +21,31 @@ const eventsQuerySchema = z.object({
   afterSeq: z.string().optional(),
 });
 
+const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
+
+function validatePromptInputAttachments(input: PromptInput[]): void {
+  let attachmentCount = 0;
+  for (const chunk of input) {
+    if (chunk.type !== "localImage" && chunk.type !== "localFile") {
+      continue;
+    }
+    attachmentCount += 1;
+    const normalizedPath = chunk.path.trim();
+    if (normalizedPath.length === 0) {
+      throw invalidRequestError("Attachment path cannot be empty");
+    }
+    if (!isAbsolute(normalizedPath)) {
+      throw invalidRequestError("Attachment path must be absolute");
+    }
+  }
+
+  if (attachmentCount > MAX_PROMPT_ATTACHMENT_INPUTS) {
+    throw invalidRequestError(
+      `A single request can include at most ${MAX_PROMPT_ATTACHMENT_INPUTS} local attachments`,
+    );
+  }
+}
+
 export function createThreadRoutes(
   threadManager: ThreadOrchestrator,
 ) {
@@ -26,6 +53,9 @@ export function createThreadRoutes(
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
       try {
         const body = c.req.valid("json");
+        if (body.input) {
+          validatePromptInputAttachments(body.input);
+        }
         const thread = await threadManager.spawn({
           projectId: body.projectId,
           ...(body.title ? { title: body.title } : {}),
@@ -33,6 +63,7 @@ export function createThreadRoutes(
           ...(body.model ? { model: body.model } : {}),
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
+          ...(body.environmentId ? { environmentId: body.environmentId } : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.developerInstructions !== undefined
             ? { developerInstructions: body.developerInstructions }
@@ -95,6 +126,7 @@ export function createThreadRoutes(
       async (c) => {
         try {
           const { input, model, reasoningLevel, sandboxMode, mode } = c.req.valid("json");
+          validatePromptInputAttachments(input);
           const thread = threadManager.getById(c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));

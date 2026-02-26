@@ -101,6 +101,13 @@ describe("Thread routes", () => {
             { type: "text", text: "Review these assets." },
             { type: "image", url: "https://example.com/mock.png" },
             { type: "localImage", path: "/tmp/mock.png" },
+            {
+              type: "localFile",
+              path: "/tmp/spec.md",
+              name: "spec.md",
+              sizeBytes: 42,
+              mimeType: "text/markdown",
+            },
           ],
         }),
       });
@@ -112,7 +119,38 @@ describe("Thread routes", () => {
           { type: "text", text: "Review these assets." },
           { type: "image", url: "https://example.com/mock.png" },
           { type: "localImage", path: "/tmp/mock.png" },
+          {
+            type: "localFile",
+            path: "/tmp/spec.md",
+            name: "spec.md",
+            sizeBytes: 42,
+            mimeType: "text/markdown",
+          },
         ],
+      });
+    });
+
+    it("forwards environment id when provided", async () => {
+      const thread = makeThread({ id: "new-thread" });
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(
+        thread,
+      );
+
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          input: [{ type: "text", text: "Do work" }],
+          environmentId: "worktree",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Do work" }],
+        environmentId: "worktree",
       });
     });
 
@@ -148,6 +186,25 @@ describe("Thread routes", () => {
       });
 
       expect(res.status).toBe(400);
+      expect(threadManager.spawn).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for relative local attachment paths", async () => {
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          input: [{ type: "localFile", path: "relative/path.txt" }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        code: "invalid_request",
+        error: "Attachment path must be absolute",
+        message: "Attachment path must be absolute",
+      });
       expect(threadManager.spawn).not.toHaveBeenCalled();
     });
 
@@ -480,6 +537,29 @@ describe("Thread routes", () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when tell payload includes relative local attachment path", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        thread,
+      );
+
+      const res = await app.request("/threads/thread-1/tell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "localImage", path: "relative/image.png" }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        code: "invalid_request",
+        error: "Attachment path must be absolute",
+        message: "Attachment path must be absolute",
+      });
+      expect(threadManager.tell).not.toHaveBeenCalled();
     });
   });
 

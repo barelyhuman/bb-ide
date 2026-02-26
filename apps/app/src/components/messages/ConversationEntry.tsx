@@ -339,6 +339,10 @@ function UserMessageRow({ message }: { message: UIUserMessage }) {
     const count = message.attachments.localImages;
     attachments.push(`${count} local image${count === 1 ? "" : "s"}`);
   }
+  if (message.attachments?.localFiles) {
+    const count = message.attachments.localFiles;
+    attachments.push(`${count} local file${count === 1 ? "" : "s"}`);
+  }
 
   return (
     <div className="group w-full py-2" style={{ overflowAnchor: "none" }}>

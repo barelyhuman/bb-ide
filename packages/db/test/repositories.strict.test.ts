@@ -65,6 +65,19 @@ describe("repository strict normalization", () => {
     });
   });
 
+  it("persists and loads thread environment ownership", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({
+      projectId,
+      environmentId: "worktree",
+    });
+
+    expect(threads.getById(thread.id)).toMatchObject({
+      id: thread.id,
+      environmentId: "worktree",
+    });
+  });
+
   it("filters thread listings by parent thread id", () => {
     const projectId = createProjectId();
     const childThread = threads.create({

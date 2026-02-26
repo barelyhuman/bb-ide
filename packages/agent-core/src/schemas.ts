@@ -13,6 +13,13 @@ export const promptInputSchema = z.discriminatedUnion("type", [
     type: z.literal("localImage"),
     path: z.string(),
   }),
+  z.object({
+    type: z.literal("localFile"),
+    path: z.string(),
+    name: z.string().optional(),
+    sizeBytes: z.number().int().nonnegative().optional(),
+    mimeType: z.string().optional(),
+  }),
 ]);
 
 // Thread schemas
@@ -25,6 +32,7 @@ export const spawnThreadSchema = z.object({
   sandboxMode: z
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .optional(),
+  environmentId: z.string().min(1).optional(),
   developerInstructions: z.string().optional(),
   parentThreadId: z.string().optional(),
 });

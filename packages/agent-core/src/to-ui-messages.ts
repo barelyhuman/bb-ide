@@ -241,12 +241,14 @@ function parsePromptInput(input: unknown): {
   text: string;
   webImages: number;
   localImages: number;
+  localFiles: number;
 } | null {
   if (!Array.isArray(input)) return null;
 
   const textParts: string[] = [];
   let webImages = 0;
   let localImages = 0;
+  let localFiles = 0;
 
   for (const entry of input) {
     const part = toRecord(entry);
@@ -266,16 +268,23 @@ function parsePromptInput(input: unknown): {
     }
     if (typeToken === "localimage") {
       localImages += 1;
+      continue;
+    }
+    if (typeToken === "localfile") {
+      localFiles += 1;
     }
   }
 
   const text = textParts.join("");
-  if (!text && webImages === 0 && localImages === 0) return null;
+  if (!text && webImages === 0 && localImages === 0 && localFiles === 0) {
+    return null;
+  }
 
   return {
     text,
     webImages,
     localImages,
+    localFiles,
   };
 }
 
@@ -283,8 +292,9 @@ function userMessageSignature(value: {
   text: string;
   webImages: number;
   localImages: number;
+  localFiles: number;
 }): string {
-  return `${value.text}\u0000${value.webImages}\u0000${value.localImages}`;
+  return `${value.text}\u0000${value.webImages}\u0000${value.localImages}\u0000${value.localFiles}`;
 }
 
 function shouldRenderThreadStartInput(
@@ -323,6 +333,7 @@ function parseUserFromItemEvent(
   const textParts: string[] = [];
   let webImages = 0;
   let localImages = 0;
+  let localFiles = 0;
 
   for (const entry of content) {
     const part = toRecord(entry);
@@ -345,11 +356,18 @@ function parseUserFromItemEvent(
 
     if (typeToken === "localimage") {
       localImages += 1;
+      continue;
+    }
+
+    if (typeToken === "localfile") {
+      localFiles += 1;
     }
   }
 
   const text = textParts.join("");
-  if (!text && webImages === 0 && localImages === 0) return null;
+  if (!text && webImages === 0 && localImages === 0 && localFiles === 0) {
+    return null;
+  }
 
   const turnId = getTurnId(event.data);
   const itemId = getItemId(event.data) ?? `${event.seq}`;
@@ -366,6 +384,7 @@ function parseUserFromItemEvent(
     attachments: {
       webImages,
       localImages,
+      localFiles,
     },
   };
 }
@@ -399,6 +418,7 @@ function parseUserFromClientThreadStart(
     attachments: {
       webImages: parsedInput.webImages,
       localImages: parsedInput.localImages,
+      localFiles: parsedInput.localFiles,
     },
   };
 }
@@ -992,6 +1012,95 @@ function parseOperationMessage(
       opType: "warning",
       title: "Configuration warning",
       detail: detail || undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/provisioning/started")) {
+    const payload = toEventRecord(event.data);
+    const environmentDisplayName =
+      getStringField(payload, "environmentDisplayName") ??
+      getStringField(payload, "environmentId");
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `provisioning-started:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "provisioning-started",
+      title: "Provisioning started",
+      detail: environmentDisplayName
+        ? `Environment: ${environmentDisplayName}`
+        : undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/provisioning/fallback")) {
+    const payload = toEventRecord(event.data);
+    const requestedEnvironmentId = getStringField(payload, "requestedEnvironmentId");
+    const fallbackEnvironmentId = getStringField(payload, "fallbackEnvironmentId");
+    const reason = getStringField(payload, "reason");
+    const detailParts = [
+      requestedEnvironmentId && fallbackEnvironmentId
+        ? `Requested ${requestedEnvironmentId}, using ${fallbackEnvironmentId}`
+        : undefined,
+      reason ? `Reason: ${reason}` : undefined,
+      getStringField(payload, "detail"),
+    ].filter((value): value is string => Boolean(value));
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `provisioning-fallback:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "provisioning-fallback",
+      title: "Provisioning fallback",
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/provisioning/completed")) {
+    const payload = toEventRecord(event.data);
+    const detailParts = [
+      getStringField(payload, "environmentId"),
+      getStringField(payload, "workspaceRoot"),
+      getStringField(payload, "fallbackReason"),
+    ].filter((value): value is string => Boolean(value));
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `provisioning-completed:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "provisioning-completed",
+      title: "Provisioning ready",
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/provisioning/cleanup_failed")) {
+    const payload = toEventRecord(event.data);
+    const detailParts = [
+      getStringField(payload, "environmentId"),
+      getStringField(payload, "message"),
+      getStringField(payload, "detail"),
+    ].filter((value): value is string => Boolean(value));
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `provisioning-cleanup-failed:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "provisioning-cleanup-failed",
+      title: "Provisioning cleanup failed",
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
     };
   }
 
@@ -1766,6 +1875,7 @@ export function toUIMessages(
         text: userFromItem.text,
         webImages: userFromItem.attachments?.webImages ?? 0,
         localImages: userFromItem.attachments?.localImages ?? 0,
+        localFiles: userFromItem.attachments?.localFiles ?? 0,
       }),
     );
   }

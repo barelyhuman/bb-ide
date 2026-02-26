@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AvailableModel, ReasoningLevel, SandboxMode } from "@beanbag/agent-core";
-import { useAvailableModels, useSystemProvider } from "./useApi";
+import type {
+  AvailableModel,
+  ReasoningLevel,
+  SandboxMode,
+  SystemEnvironmentInfo,
+} from "@beanbag/agent-core";
+import {
+  useAvailableModels,
+  useSystemEnvironments,
+  useSystemProvider,
+} from "./useApi";
 
 const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
 const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
 const SANDBOX_STORAGE_KEY = "beanbag.promptbox.sandbox";
+const ENVIRONMENT_STORAGE_KEY = "beanbag.promptbox.environment";
 
 const FALLBACK_REASONING_OPTIONS = [
   { value: "low", label: "Low" },
@@ -55,6 +65,7 @@ interface UsePromptModelReasoningOptions {
   initialModel?: string;
   initialReasoningLevel?: ReasoningLevel;
   initialSandboxMode?: SandboxMode;
+  initialEnvironmentId?: string;
 }
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
@@ -91,6 +102,33 @@ function getStoredSandboxMode(): SandboxMode {
   return isSandboxMode(raw) ? raw : "danger-full-access";
 }
 
+function getStoredEnvironmentId(): string {
+  if (typeof window === "undefined") return "local";
+  return window.localStorage.getItem(ENVIRONMENT_STORAGE_KEY) ?? "local";
+}
+
+function toEnvironmentOptions(
+  environments: readonly SystemEnvironmentInfo[] | undefined,
+): PromptOption<string>[] {
+  const source = environments && environments.length > 0
+    ? environments
+    : [
+        {
+          id: "local",
+          displayName: "Local Workspace",
+          capabilities: {
+            isolatedFilesystem: false,
+            ephemeralWorkspace: false,
+            supportsCleanup: false,
+          },
+        },
+      ];
+  return source.map((environment) => ({
+    value: environment.id,
+    label: environment.displayName,
+  }));
+}
+
 function formatModelLabel(value: string): string {
   return value
     .split("-")
@@ -110,6 +148,7 @@ export function usePromptModelReasoning(
 ) {
   const scope = options?.scope ?? "new-thread";
   const availableModelsQuery = useAvailableModels();
+  const environmentsQuery = useSystemEnvironments();
   const providerInfoQuery = useSystemProvider();
   const supportsModelList =
     providerInfoQuery.data?.capabilities.supportsModelList ?? true;
@@ -127,6 +166,11 @@ export function usePromptModelReasoning(
     scope === "new-thread"
       ? getStoredSandboxMode()
       : (options?.initialSandboxMode ?? "danger-full-access"),
+  );
+  const [environmentId, setEnvironmentId] = useState<string>(() =>
+    scope === "new-thread"
+      ? getStoredEnvironmentId()
+      : (options?.initialEnvironmentId ?? "local"),
   );
 
   const availableModels = useMemo(
@@ -187,6 +231,10 @@ export function usePromptModelReasoning(
     },
     [activeModel, supportsReasoningLevels],
   );
+  const environmentOptions = useMemo(
+    () => toEnvironmentOptions(environmentsQuery.data),
+    [environmentsQuery.data],
+  );
 
   useEffect(() => {
     if (availableModels.length === 0) return;
@@ -214,6 +262,15 @@ export function usePromptModelReasoning(
   }, [activeModel, reasoningLevel, reasoningOptions, supportsReasoningLevels]);
 
   useEffect(() => {
+    if (environmentOptions.length === 0) return;
+    const hasSelection = environmentOptions.some(
+      (option) => option.value === environmentId,
+    );
+    if (hasSelection) return;
+    setEnvironmentId(environmentOptions[0].value);
+  }, [environmentId, environmentOptions]);
+
+  useEffect(() => {
     if (scope !== "thread") return;
     if (options?.initialModel !== undefined) {
       setSelectedModel(options.initialModel);
@@ -235,6 +292,13 @@ export function usePromptModelReasoning(
   }, [options?.initialSandboxMode, scope]);
 
   useEffect(() => {
+    if (scope !== "thread") return;
+    if (options?.initialEnvironmentId !== undefined) {
+      setEnvironmentId(options.initialEnvironmentId);
+    }
+  }, [options?.initialEnvironmentId, scope]);
+
+  useEffect(() => {
     if (scope !== "new-thread") return;
     if (typeof window === "undefined" || !selectedModel) return;
     window.localStorage.setItem(MODEL_STORAGE_KEY, selectedModel);
@@ -252,6 +316,12 @@ export function usePromptModelReasoning(
     window.localStorage.setItem(SANDBOX_STORAGE_KEY, sandboxMode);
   }, [scope, sandboxMode]);
 
+  useEffect(() => {
+    if (scope !== "new-thread") return;
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(ENVIRONMENT_STORAGE_KEY, environmentId);
+  }, [environmentId, scope]);
+
   return {
     selectedModel,
     setSelectedModel,
@@ -259,10 +329,13 @@ export function usePromptModelReasoning(
     setReasoningLevel,
     sandboxMode,
     setSandboxMode,
+    environmentId,
+    setEnvironmentId,
     activeModel,
     modelOptions,
     reasoningOptions,
     sandboxOptions: SANDBOX_OPTIONS,
+    environmentOptions,
     supportsModelList,
     supportsReasoningLevels,
   };

@@ -292,6 +292,7 @@ describe("ThreadManager", () => {
 
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
+        environmentId: "local",
       });
     });
 
@@ -645,6 +646,7 @@ describe("ThreadManager", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         title: "Fix flaky login redirect",
+        environmentId: "local",
       });
     });
 
@@ -737,6 +739,42 @@ describe("ThreadManager", () => {
         { type: "localImage", path: "/tmp/local-diagram.png" },
       ]);
       expect(turnMsg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
+    });
+
+    it("maps local file attachments to text annotations for provider compatibility", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [
+          { type: "text", text: "Please use the attached spec." },
+          {
+            type: "localFile",
+            path: "/tmp/spec.md",
+            name: "spec.md",
+            sizeBytes: 42,
+            mimeType: "text/markdown",
+          },
+        ],
+      });
+
+      await vi.waitFor(() => {
+        expect(fakeChild._stdinData.length).toBe(3);
+      });
+      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      expect(turnMsg.method).toBe("turn/start");
+      expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
+      expect(turnMsg.params.input).toEqual([
+        { type: "text", text: "Please use the attached spec." },
+        { type: "text", text: "Attached local file: /tmp/spec.md" },
+      ]);
     });
 
     it("includes model and reasoning config when input options are provided", async () => {
@@ -1055,10 +1093,14 @@ describe("ThreadManager", () => {
       // Give the readline interface time to process
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledTimes(3);
-      expect(eventRepo.create).toHaveBeenNthCalledWith(2, {
+      const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls
+        .map(([event]) => event);
+      const startedEvent = createdEvents.find((event) => event.type === "item/started");
+      const completedEvent = createdEvents.find((event) => event.type === "item/completed");
+
+      expect(startedEvent).toEqual({
         threadId: "t-new",
-        seq: 2,
+        seq: expect.any(Number),
         type: "item/started",
         data: expect.objectContaining({
           __bb_provider_event: expect.objectContaining({
@@ -1068,9 +1110,9 @@ describe("ThreadManager", () => {
           payload: { itemId: "i1" },
         }),
       });
-      expect(eventRepo.create).toHaveBeenNthCalledWith(3, {
+      expect(completedEvent).toEqual({
         threadId: "t-new",
-        seq: 3,
+        seq: expect.any(Number),
         type: "item/completed",
         data: expect.objectContaining({
           __bb_provider_event: expect.objectContaining({
@@ -1131,10 +1173,14 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledTimes(2);
-      expect(eventRepo.create).toHaveBeenNthCalledWith(2, {
+      const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls
+        .map(([event]) => event);
+      const canonicalCompletedEvent = createdEvents.find(
+        (event) => event.type === "item/completed",
+      );
+      expect(canonicalCompletedEvent).toEqual({
         threadId: "t-new",
-        seq: 2,
+        seq: expect.any(Number),
         type: "item/completed",
         data: expect.objectContaining({
           __bb_provider_event: expect.objectContaining({
@@ -1182,9 +1228,14 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledWith({
+      const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls
+        .map(([event]) => event);
+      const deltaEvent = createdEvents.find(
+        (event) => event.type === "item/agentMessage/delta",
+      );
+      expect(deltaEvent).toEqual({
         threadId: "t-new",
-        seq: 2,
+        seq: expect.any(Number),
         type: "item/agentMessage/delta",
         data: expect.objectContaining({
           __bb_provider_event: expect.objectContaining({
@@ -1774,8 +1825,8 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      // Outbound thread/start + valid notification
-      expect(eventRepo.create).toHaveBeenCalledTimes(2);
+      // Provisioning started/completed + outbound thread/start + valid notification
+      expect(eventRepo.create).toHaveBeenCalledTimes(4);
     });
 
     it("ignores non-JSON stdout output", async () => {
@@ -1796,7 +1847,7 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledTimes(1);
+      expect(eventRepo.create).toHaveBeenCalledTimes(3);
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "t-new",
@@ -1822,7 +1873,7 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledTimes(1);
+      expect(eventRepo.create).toHaveBeenCalledTimes(3);
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "t-new",
@@ -1847,9 +1898,12 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(eventRepo.create).toHaveBeenCalledWith({
+      const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls
+        .map(([event]) => event);
+      const turnEndEvent = createdEvents.find((event) => event.type === "turn/end");
+      expect(turnEndEvent).toEqual({
         threadId: "t-new",
-        seq: 2,
+        seq: expect.any(Number),
         type: "turn/end",
         data: expect.objectContaining({
           __bb_provider_event: expect.objectContaining({

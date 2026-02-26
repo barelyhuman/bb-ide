@@ -52,6 +52,7 @@ export type {
   SystemProviderInfo,
   SystemEnvironmentInfo,
   ProjectFileSuggestion,
+  UploadedPromptAttachment,
 } from "./api-types.js";
 
 export {
