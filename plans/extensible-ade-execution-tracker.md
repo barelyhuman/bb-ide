@@ -105,13 +105,16 @@
 
 - Next focus: Phase 6 table-stakes feature pass (environment provisioning parity, prompt attachments/images, voice input).
 - Supporting plans:
-  - `plans/extensible-ade-phase5-split-map.md`
-  - `plans/extensible-ade-contract-hardening.md`
   - `plans/extensible-ade-table-stakes-phase6.md`
+  - `plans/extensible-ade-phase6-environment-provisioning.md`
+  - `plans/extensible-ade-phase6-prompt-attachments.md`
+  - `plans/extensible-ade-phase6-voice-input.md`
+  - `plans/extensible-ade-phase6-test-matrix.md`
 
-## Suggested Commit Chunks for Phase 5
+## Suggested Commit Chunks for Phase 6
 
-- Chunk A: folder moves and workspace/script/config path updates only.
-- Chunk B: extract `packages/agent-server` runtime bridge surface and exports.
-- Chunk C: reshape `apps/daemon` host to consume `@beanbag/agent-server`.
-- Chunk D: docs cleanup + final typecheck/tests.
+- Chunk A: environment contracts and DB persistence (`environmentId`, request schemas).
+- Chunk B: daemon/runtime provisioning lifecycle + fallback/cleanup status events.
+- Chunk C: prompt composer attachment model and file/image send path.
+- Chunk D: voice capture state/hooks and composer integration.
+- Chunk E: test matrix completion + final typecheck/tests.

@@ -274,6 +274,11 @@ Composable rendering and layout seams.
   - push-to-talk or hold-to-talk capture in web app
   - speech-to-text insertion into composer with graceful fallback
 - Detailed execution spec: `plans/extensible-ade-table-stakes-phase6.md`
+- Workstream specs:
+  - `plans/extensible-ade-phase6-environment-provisioning.md`
+  - `plans/extensible-ade-phase6-prompt-attachments.md`
+  - `plans/extensible-ade-phase6-voice-input.md`
+  - `plans/extensible-ade-phase6-test-matrix.md`
 
 ### Acceptance Criteria
 
