@@ -345,7 +345,6 @@ export class ThreadManager {
             this._buildProviderThreadContext({
               threadId: thread.id,
               projectId: thread.projectId,
-              taskId: thread.taskId,
             }),
           ),
         );
@@ -382,8 +381,6 @@ export class ThreadManager {
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       ...(threadTitle ? { title: threadTitle } : {}),
-      ...(req.taskId ? { taskId: req.taskId } : {}),
-      ...(req.taskRole ? { taskRole: req.taskRole } : {}),
       ...(req.agentRoleId ? { agentRoleId: req.agentRoleId } : {}),
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
@@ -660,8 +657,6 @@ export class ThreadManager {
    */
   list(filters?: {
     projectId?: string;
-    taskId?: string;
-    taskRole?: "primary" | "worker";
     agentRoleId?: string;
     parentThreadId?: string;
     includeArchived?: boolean;
@@ -785,7 +780,6 @@ export class ThreadManager {
       this._buildProviderThreadContext({
         threadId,
         projectId: req.projectId,
-        taskId: thread?.taskId ?? req.taskId,
       }),
     );
     this._persistOutboundStartEvent(
@@ -871,7 +865,6 @@ export class ThreadManager {
   private _spawnProcess(threadId: string, cwd: string): void {
     const thread = this.threadRepo.getById(threadId);
     const projectId = thread?.projectId;
-    const taskId = thread?.taskId;
     const child = spawn(this.provider.processCommand, this.provider.processArgs, {
       stdio: ["pipe", "pipe", "pipe"],
       cwd,
@@ -880,7 +873,6 @@ export class ThreadManager {
         ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
         ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
         BB_THREAD_ID: threadId,
-        ...(taskId ? { BB_TASK_ID: taskId } : {}),
       },
     });
 
@@ -1033,7 +1025,6 @@ export class ThreadManager {
           this._buildProviderThreadContext({
             threadId,
             projectId: thread.projectId,
-            taskId: thread.taskId,
           }),
           options,
         ),
@@ -1049,12 +1040,10 @@ export class ThreadManager {
   private _buildProviderThreadContext(args: {
     threadId: string;
     projectId: string;
-    taskId?: string;
   }): ProviderThreadContext {
     return {
       projectId: args.projectId,
       threadId: args.threadId,
-      ...(args.taskId ? { taskId: args.taskId } : {}),
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
     };
   }

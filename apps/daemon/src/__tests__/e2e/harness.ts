@@ -12,7 +12,6 @@ import { serve } from "@hono/node-server";
 import {
   EventRepository,
   ProjectRepository,
-  TaskRepository,
   ThreadRepository,
   createConnection,
   migrate,
@@ -106,13 +105,11 @@ export async function startDaemonE2eHarness(
     const projectRepo = new ProjectRepository(db);
     const threadRepo = new ThreadRepository(db);
     const eventRepo = new EventRepository(db);
-    const taskRepo = new TaskRepository(db);
 
     const { app, injectWebSocket, wsManager, threadManager } = createServer({
       projectRepo,
       threadRepo,
       eventRepo,
-      taskRepo,
     });
 
     await threadManager.reconcileActiveThreadsOnBoot();

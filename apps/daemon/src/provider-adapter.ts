@@ -27,7 +27,6 @@ export type ProviderTitleGenerator = (
 export interface ProviderThreadContext {
   projectId: string;
   threadId: string;
-  taskId?: string;
   path?: string;
 }
 

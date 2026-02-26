@@ -10,7 +10,6 @@ import {
   requireProjectId,
   requireThreadId,
   resolveProjectId,
-  resolveTaskId,
   resolveThreadId,
 } from "../context-env.js";
 
@@ -79,33 +78,24 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .description("Spawn a new thread for a project")
     .option("--prompt <prompt>", "Initial prompt for the thread")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .option("--task <id>", "Task ID context (defaults to BB_TASK_ID)")
     .option(
       "--parent-thread <id>",
       "Parent thread ID for worker thread links (defaults to BB_THREAD_ID)",
     )
-    .option("--no-context-task", "Do not default task context to BB_TASK_ID")
     .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
-    .option("--task-role <role>", "primary|worker (requires task context)")
     .option("--role <id>", "Agent role ID for role-based thread instructions")
     .action(async (opts: {
       prompt?: string;
       project?: string;
-      task?: string;
       parentThread?: string;
-      contextTask?: boolean;
       contextParentThread?: boolean;
-      taskRole?: string;
       role?: string;
     }) => {
       const client = createClient(getUrl());
       try {
-        if (opts.task && opts.contextTask === false) {
-          throw new Error("Cannot combine --task with --no-context-task.");
-        }
         if (opts.parentThread && opts.contextParentThread === false) {
           throw new Error(
             "Cannot combine --parent-thread with --no-context-parent-thread.",
@@ -113,29 +103,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
 
         const projectId = requireProjectId(opts.project);
-        const taskId =
-          opts.task ??
-          (opts.contextTask === false ? undefined : resolveTaskId());
         const parentThreadId =
           opts.parentThread ??
           (opts.contextParentThread === false
             ? undefined
             : resolveThreadId());
-        if (
-          opts.taskRole !== undefined &&
-          opts.taskRole !== "primary" &&
-          opts.taskRole !== "worker"
-        ) {
-          throw new Error("Invalid --task-role value. Expected 'primary' or 'worker'.");
-        }
-        if (opts.taskRole !== undefined && !taskId) {
-          throw new Error(
-            "--task-role requires task context. Pass --task <id> or set BB_TASK_ID.",
-          );
-        }
-        const taskRole: "primary" | "worker" | undefined = taskId
-          ? (opts.taskRole ?? "worker")
-          : undefined;
         const thread = await unwrap<Thread>(
           client.api.v1.threads.$post({
             json: {
@@ -143,8 +115,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
-              ...(taskId ? { taskId } : {}),
-              ...(taskRole ? { taskRole } : {}),
               ...(opts.role ? { roleId: opts.role } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
             },
@@ -419,9 +389,7 @@ function printThreadStatus(
   },
 ): void {
   console.log(`Thread ${thread.id}`);
-  console.log(
-    `Status ${statusText(thread.status)}${thread.taskId ? ` (task: ${thread.taskId})` : ""}`,
-  );
+  console.log(`Status ${statusText(thread.status)}`);
   console.log(`Project ${thread.projectId}`);
   if (thread.agentRoleId) {
     console.log(`Role ${thread.agentRoleId}`);

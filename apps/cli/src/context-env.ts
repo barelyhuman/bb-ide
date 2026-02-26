@@ -18,10 +18,6 @@ export function resolveProjectId(flagValue?: string): string | undefined {
   return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_PROJECT_ID);
 }
 
-export function resolveTaskId(flagValue?: string): string | undefined {
-  return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_TASK_ID);
-}
-
 export function resolveThreadId(flagValue?: string): string | undefined {
   return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_THREAD_ID);
 }
@@ -34,12 +30,6 @@ export function requireProjectId(flagValue?: string): string {
   );
 }
 
-export function requireTaskId(flagValue?: string): string {
-  const taskId = resolveTaskId(flagValue);
-  if (taskId) return taskId;
-  throw new Error("Missing task context. Pass <taskId> or set BB_TASK_ID.");
-}
-
 export function requireThreadId(flagValue?: string): string {
   const threadId = resolveThreadId(flagValue);
   if (threadId) return threadId;
@@ -48,7 +38,6 @@ export function requireThreadId(flagValue?: string): string {
 
 export interface ContextSnapshot {
   projectId?: string;
-  taskId?: string;
   threadId?: string;
   daemonUrl: string;
   daemonUrlFromEnv?: string;
@@ -58,7 +47,6 @@ export function resolveContextSnapshot(): ContextSnapshot {
   const daemonUrlFromEnv = resolveDaemonUrlFromEnv();
   return {
     projectId: resolveProjectId(),
-    taskId: resolveTaskId(),
     threadId: resolveThreadId(),
     daemonUrl: daemonUrlFromEnv ?? DEFAULT_DAEMON_URL,
     daemonUrlFromEnv,

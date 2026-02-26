@@ -3,16 +3,12 @@ import { zValidator } from "@hono/zod-validator";
 import { spawnThreadSchema, tellThreadSchema } from "@beanbag/core";
 import { z } from "zod";
 import type { ThreadManager } from "../thread-manager.js";
-import type { TaskRepository } from "@beanbag/db";
-import type { WSManager } from "../ws.js";
 import { threadNotFoundError } from "../domain-errors.js";
 import { getAgentRoleDefinition } from "../agent-roles.js";
 import { sendRouteError } from "./error-response.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
-  taskId: z.string().optional(),
-  taskRole: z.enum(["primary", "worker"]).optional(),
   agentRoleId: z.string().optional(),
   parentThreadId: z.string().optional(),
   includeArchived: z.enum(["true", "false"]).optional(),
@@ -24,8 +20,6 @@ const eventsQuerySchema = z.object({
 
 export function createThreadRoutes(
   threadManager: ThreadManager,
-  taskRepo?: Pick<TaskRepository, "getById" | "appendEvent">,
-  wsManager?: Pick<WSManager, "broadcast">,
 ) {
   return new Hono()
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
@@ -38,18 +32,6 @@ export function createThreadRoutes(
         const resolvedAgentRoleId = role?.id ?? body.agentRoleId;
         const resolvedDeveloperInstructions =
           role?.instructions ?? body.developerInstructions;
-        if (taskRepo && body.taskId) {
-          const task = taskRepo.getById(body.taskId);
-          if (!task) {
-            return c.json({ error: "Task not found" }, 404);
-          }
-          if (task.projectId !== body.projectId) {
-            return c.json(
-              { error: "Task must belong to the same project as the thread" },
-              400,
-            );
-          }
-        }
 
         const thread = await threadManager.spawn({
           projectId: body.projectId,
@@ -58,22 +40,12 @@ export function createThreadRoutes(
           ...(body.model ? { model: body.model } : {}),
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
-          ...(body.taskId ? { taskId: body.taskId } : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
-          ...(body.taskRole ? { taskRole: body.taskRole } : {}),
           ...(resolvedAgentRoleId ? { agentRoleId: resolvedAgentRoleId } : {}),
           ...(resolvedDeveloperInstructions !== undefined
             ? { developerInstructions: resolvedDeveloperInstructions }
             : {}),
         });
-        if (body.taskId) {
-          const createdTaskRole = thread.taskRole ?? body.taskRole;
-          taskRepo?.appendEvent(body.taskId, "task.chat.thread_created", {
-            threadId: thread.id,
-            ...(createdTaskRole ? { taskRole: createdTaskRole } : {}),
-          });
-          wsManager?.broadcast("task", body.taskId);
-        }
         return c.json(thread, 201);
       } catch (err) {
         return sendRouteError(c, err);
@@ -90,8 +62,6 @@ export function createThreadRoutes(
               : undefined;
         const threads = threadManager.list({
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
-          ...(filters.taskId ? { taskId: filters.taskId } : {}),
-          ...(filters.taskRole ? { taskRole: filters.taskRole } : {}),
           ...(filters.agentRoleId ? { agentRoleId: filters.agentRoleId } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
