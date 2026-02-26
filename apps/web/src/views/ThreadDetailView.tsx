@@ -405,61 +405,69 @@ export function ThreadDetailView() {
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
-        <PromptComposerShell statusLabel={provisioningStatusLabel}>
-          <ScrollToBottomButton
-            visible={showScrollToBottom}
-            onClick={scrollToBottom}
-          />
-          <PromptBox
-            value={message}
-            onChange={promptDraft.setValue}
-            onSubmit={handleSend}
-            onStop={
-              thread.status === "active"
-                ? () => stopThread.mutate(thread.id)
-                : undefined
-            }
-            isSubmitting={tellThread.isPending}
-            submitDisabled={!canSendFollowUp}
-            isRunning={thread.status === "active"}
-            placeholder={promptPlaceholder}
-            submitMode="enter"
-            autoFocus
-            mentionSuggestions={fileMentions.suggestions}
-            mentionLoading={fileMentions.isLoading}
-            mentionError={fileMentions.isError}
-            onMentionQueryChange={fileMentions.setQuery}
-            footerStart={
-              <>
-                {supportsModelList ? (
-                  <PromptOptionPicker
-                    label="Model"
-                    value={activeModel?.model ?? selectedModel}
-                    options={modelOptions}
-                    onChange={setSelectedModel}
-                  />
-                ) : null}
-                {supportsReasoningLevels ? (
-                  <PromptOptionPicker
-                    label="Reasoning"
-                    value={reasoningLevel}
-                    options={reasoningOptions}
-                    onChange={setReasoningLevel}
-                  />
-                ) : null}
-                <PromptOptionPicker
-                  label="Sandbox"
-                  value={sandboxMode}
-                  options={sandboxOptions}
-                  onChange={setSandboxMode}
-                />
-              </>
-            }
-          />
-        </PromptComposerShell>
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
+          <div className="min-w-0 w-full max-w-[800px]">
+            <PromptComposerShell statusLabel={provisioningStatusLabel}>
+              <ScrollToBottomButton
+                visible={showScrollToBottom}
+                onClick={scrollToBottom}
+              />
+              <PromptBox
+                value={message}
+                onChange={promptDraft.setValue}
+                onSubmit={handleSend}
+                onStop={
+                  thread.status === "active"
+                    ? () => stopThread.mutate(thread.id)
+                    : undefined
+                }
+                isSubmitting={tellThread.isPending}
+                submitDisabled={!canSendFollowUp}
+                isRunning={thread.status === "active"}
+                placeholder={promptPlaceholder}
+                submitMode="enter"
+                autoFocus
+                mentionSuggestions={fileMentions.suggestions}
+                mentionLoading={fileMentions.isLoading}
+                mentionError={fileMentions.isError}
+                onMentionQueryChange={fileMentions.setQuery}
+                footerStart={
+                  <>
+                    {supportsModelList ? (
+                      <PromptOptionPicker
+                        label="Model"
+                        value={activeModel?.model ?? selectedModel}
+                        options={modelOptions}
+                        onChange={setSelectedModel}
+                      />
+                    ) : null}
+                    {supportsReasoningLevels ? (
+                      <PromptOptionPicker
+                        label="Reasoning"
+                        value={reasoningLevel}
+                        options={reasoningOptions}
+                        onChange={setReasoningLevel}
+                      />
+                    ) : null}
+                    <PromptOptionPicker
+                      label="Sandbox"
+                      value={sandboxMode}
+                      options={sandboxOptions}
+                      onChange={setSandboxMode}
+                    />
+                  </>
+                }
+              />
+            </PromptComposerShell>
+          </div>
+        </div>
       }
     >
-      <ThreePaneLayout main={conversationMain} right={contextPanel} />
+      <ThreePaneLayout
+        main={conversationMain}
+        right={contextPanel}
+        mainClassName="w-full max-w-[800px]"
+      />
     </PageShell>
   );
 }
