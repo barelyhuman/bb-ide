@@ -12,6 +12,7 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
+  UploadedPromptAttachment,
 } from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
@@ -25,6 +26,23 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(`${BASE}${path}`, opts);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
+  }
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
+}
+
+async function upload<T>(path: string, file: File): Promise<T> {
+  const formData = new FormData();
+  formData.set("file", file, file.name);
+
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: formData,
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
@@ -62,6 +80,16 @@ export async function searchProjectFiles(
   return request<ProjectFileSuggestion[]>(
     "GET",
     `/projects/${projectId}/files?${params.toString()}`,
+  );
+}
+
+export async function uploadPromptAttachment(
+  projectId: string,
+  file: File,
+): Promise<UploadedPromptAttachment> {
+  return upload<UploadedPromptAttachment>(
+    `/projects/${projectId}/attachments`,
+    file,
   );
 }
 

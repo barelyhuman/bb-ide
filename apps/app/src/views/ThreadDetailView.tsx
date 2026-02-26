@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   useThread,
@@ -6,6 +6,7 @@ import {
   useTellThread,
   useStopThread,
   useThreadDefaultExecutionOptions,
+  useUploadPromptAttachment,
 } from "../hooks/useApi";
 import {
   ConversationEntry,
@@ -45,6 +46,7 @@ import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
 } from "@/lib/latestInitialExpanded";
+import { promptDraftToInput } from "@/lib/prompt-draft";
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -134,9 +136,19 @@ export function ThreadDetailView() {
   const { debugMode } = useDebugMode();
   const tellThread = useTellThread();
   const stopThread = useStopThread();
+  const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const fileMentions = usePromptFileMentions(projectId);
-  const message = promptDraft.value;
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const message = promptDraft.text;
+  const promptInput = useMemo(
+    () =>
+      promptDraftToInput({
+        text: promptDraft.text,
+        attachments: promptDraft.attachments,
+      }),
+    [promptDraft.attachments, promptDraft.text],
+  );
   const {
     selectedModel,
     setSelectedModel,
@@ -155,6 +167,7 @@ export function ThreadDetailView() {
     initialModel: defaultExecutionOptions?.model,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
+    initialEnvironmentId: thread?.environmentId,
   });
 
   const uiMessages = useMemo(
@@ -250,7 +263,7 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
-  const showThreadMetadata = Boolean(parentThreadId);
+  const showThreadMetadata = Boolean(parentThreadId || thread.environmentId);
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -259,19 +272,41 @@ export function ThreadDetailView() {
       : undefined;
 
   const handleSend = () => {
-    const trimmed = message.trim();
-    if (!trimmed) return;
+    if (promptInput.length === 0) return;
     tellThread.mutate(
       {
         id: thread.id,
-        input: [{ type: "text", text: trimmed }],
+        input: promptInput,
         model: activeModel?.model ?? selectedModel,
         reasoningLevel,
         sandboxMode,
       },
-      { onSuccess: () => promptDraft.clear() },
+      {
+        onSuccess: () => {
+          promptDraft.clear();
+          setAttachmentError(null);
+        },
+      },
     );
   };
+
+  const handleAttachFiles = useCallback(async (files: File[]) => {
+    if (!projectId || files.length === 0) return;
+
+    setAttachmentError(null);
+    for (const file of files) {
+      try {
+        const uploaded = await uploadPromptAttachment.mutateAsync({
+          projectId,
+          file,
+        });
+        promptDraft.addAttachment(uploaded);
+      } catch (err) {
+        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
+        break;
+      }
+    }
+  }, [projectId, promptDraft, uploadPromptAttachment]);
 
   const conversationMain = (
     <>
@@ -290,6 +325,15 @@ export function ThreadDetailView() {
                 >
                   {parentThreadDisplayName}
                 </Link>
+              </DetailRow>
+            ) : null}
+            {thread.environmentId ? (
+              <DetailRow
+                label="Environment"
+                valueClassName="min-w-0 truncate"
+                align="center"
+              >
+                <span>{thread.environmentId}</span>
               </DetailRow>
             ) : null}
           </DetailCard>
@@ -339,7 +383,7 @@ export function ThreadDetailView() {
           />
           <PromptBox
             value={message}
-            onChange={promptDraft.setValue}
+            onChange={promptDraft.setText}
             onSubmit={handleSend}
             onStop={
               thread.status === "active"
@@ -356,6 +400,11 @@ export function ThreadDetailView() {
             mentionLoading={fileMentions.isLoading}
             mentionError={fileMentions.isError}
             onMentionQueryChange={fileMentions.setQuery}
+            attachments={promptDraft.attachments}
+            onAttachFiles={handleAttachFiles}
+            onRemoveAttachment={promptDraft.removeAttachment}
+            isAttaching={uploadPromptAttachment.isPending}
+            attachmentError={attachmentError}
             footerStart={
               <>
                 {supportsModelList ? (

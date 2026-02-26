@@ -1,20 +1,31 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { useSpawnThread } from "@/hooks/useApi";
+import { useSpawnThread, useUploadPromptAttachment } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { promptDraftToInput } from "@/lib/prompt-draft";
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
   const location = useLocation();
   const spawnThread = useSpawnThread();
+  const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const fileMentions = usePromptFileMentions(projectId);
-  const prompt = promptDraft.value;
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const prompt = promptDraft.text;
+  const promptInput = useMemo(
+    () =>
+      promptDraftToInput({
+        text: promptDraft.text,
+        attachments: promptDraft.attachments,
+      }),
+    [promptDraft.attachments, promptDraft.text],
+  );
   const {
     selectedModel,
     setSelectedModel,
@@ -22,10 +33,13 @@ export function ProjectMainView() {
     setReasoningLevel,
     sandboxMode,
     setSandboxMode,
+    environmentId,
+    setEnvironmentId,
     activeModel,
     modelOptions,
     reasoningOptions,
     sandboxOptions,
+    environmentOptions,
   } = usePromptModelReasoning({ scope: "new-thread" });
 
   const shouldFocusPrompt =
@@ -57,31 +71,50 @@ export function ProjectMainView() {
   }
 
   const submitPrompt = async () => {
-    const trimmed = prompt.trim();
-    if (!trimmed || spawnThread.isPending) return;
+    if (promptInput.length === 0 || spawnThread.isPending) return;
 
     try {
       await spawnThread.mutateAsync({
-        input: [{ type: "text", text: trimmed }],
+        input: promptInput,
         projectId,
         model: activeModel?.model,
         reasoningLevel,
         sandboxMode,
+        environmentId,
       });
       promptDraft.clear();
+      setAttachmentError(null);
     } catch {
       // Error state is surfaced in mutation status and can be shown by callers if needed.
     }
   };
 
-  const isSubmitDisabled = spawnThread.isPending || prompt.trim().length === 0;
+  const handleAttachFiles = useCallback(async (files: File[]) => {
+    if (!projectId || files.length === 0) return;
+
+    setAttachmentError(null);
+    for (const file of files) {
+      try {
+        const uploaded = await uploadPromptAttachment.mutateAsync({
+          projectId,
+          file,
+        });
+        promptDraft.addAttachment(uploaded);
+      } catch (err) {
+        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
+        break;
+      }
+    }
+  }, [projectId, promptDraft, uploadPromptAttachment]);
+
+  const isSubmitDisabled = spawnThread.isPending || promptInput.length === 0;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
       <PromptBox
         id="project-main-prompt"
         value={prompt}
-        onChange={promptDraft.setValue}
+        onChange={promptDraft.setText}
         onSubmit={submitPrompt}
         isSubmitting={spawnThread.isPending}
         submitDisabled={isSubmitDisabled}
@@ -90,6 +123,11 @@ export function ProjectMainView() {
         mentionLoading={fileMentions.isLoading}
         mentionError={fileMentions.isError}
         onMentionQueryChange={fileMentions.setQuery}
+        attachments={promptDraft.attachments}
+        onAttachFiles={handleAttachFiles}
+        onRemoveAttachment={promptDraft.removeAttachment}
+        isAttaching={uploadPromptAttachment.isPending}
+        attachmentError={attachmentError}
         footerStart={
           <>
             <PromptOptionPicker
@@ -109,6 +147,12 @@ export function ProjectMainView() {
               value={sandboxMode}
               options={sandboxOptions}
               onChange={setSandboxMode}
+            />
+            <PromptOptionPicker
+              label="Environment"
+              value={environmentId}
+              options={environmentOptions}
+              onChange={setEnvironmentId}
             />
           </>
         }

@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
@@ -6,10 +7,12 @@ import {
   updateProjectSchema,
   type Project,
   type ProjectFileSuggestion,
+  type UploadedPromptAttachment,
 } from "@beanbag/agent-core";
 import { z } from "zod";
 import type { ProjectRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
+import { invalidRequestError } from "../domain-errors.js";
 
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
@@ -29,6 +32,92 @@ type SearchProjectFilesFn = (
   limit?: number,
 ) => Promise<ProjectFileSuggestion[]>;
 
+type StorePromptAttachmentFn = (args: {
+  projectRootPath: string;
+  file: File;
+}) => Promise<UploadedPromptAttachment>;
+
+const ATTACHMENTS_ROOT_SEGMENT = ".beanbag";
+const ATTACHMENTS_DIRECTORY_SEGMENT = "attachments";
+const MAX_PROMPT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_PROMPT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
+
+function sanitizeFileName(rawName: string): string {
+  const base = basename(rawName).trim();
+  if (base.length === 0) return "attachment.bin";
+  const cleaned = base.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+  if (cleaned.length === 0) return "attachment.bin";
+  return cleaned.slice(0, 120);
+}
+
+function isImageAttachment(fileName: string, mimeType: string | undefined): boolean {
+  if (mimeType?.toLowerCase().startsWith("image/")) return true;
+  return IMAGE_EXTENSION_PATTERN.test(fileName);
+}
+
+function resolvePromptAttachmentPath(
+  projectRootPath: string,
+  fileName: string,
+): string {
+  const attachmentsDir = resolve(
+    projectRootPath,
+    ATTACHMENTS_ROOT_SEGMENT,
+    ATTACHMENTS_DIRECTORY_SEGMENT,
+  );
+  mkdirSync(attachmentsDir, { recursive: true });
+
+  const extension = extname(fileName);
+  const nameWithoutExtension = fileName.slice(0, fileName.length - extension.length);
+  const timestamp = Date.now();
+  const randomSuffix = Math.random().toString(36).slice(2, 10);
+  const savedName = `${nameWithoutExtension}-${timestamp}-${randomSuffix}${extension}`;
+  const destinationPath = resolve(attachmentsDir, savedName);
+
+  const attachmentsPrefix = `${attachmentsDir}${sep}`;
+  if (!destinationPath.startsWith(attachmentsPrefix)) {
+    throw invalidRequestError("Attachment path resolved outside project scope");
+  }
+  return destinationPath;
+}
+
+async function storePromptAttachment(args: {
+  projectRootPath: string;
+  file: File;
+}): Promise<UploadedPromptAttachment> {
+  const safeName = sanitizeFileName(args.file.name);
+  const mimeType = args.file.type.trim().length > 0 ? args.file.type : undefined;
+  const sizeBytes = args.file.size;
+
+  if (sizeBytes <= 0) {
+    throw invalidRequestError("Attachment cannot be empty");
+  }
+  if (sizeBytes > MAX_PROMPT_ATTACHMENT_BYTES) {
+    throw invalidRequestError(
+      `Attachment exceeds ${Math.floor(MAX_PROMPT_ATTACHMENT_BYTES / (1024 * 1024))}MB limit`,
+    );
+  }
+
+  const isImage = isImageAttachment(safeName, mimeType);
+  if (isImage && sizeBytes > MAX_PROMPT_IMAGE_ATTACHMENT_BYTES) {
+    throw invalidRequestError(
+      `Image attachment exceeds ${Math.floor(MAX_PROMPT_IMAGE_ATTACHMENT_BYTES / (1024 * 1024))}MB limit`,
+    );
+  }
+
+  const destinationPath = resolvePromptAttachmentPath(args.projectRootPath, safeName);
+  const bytes = Buffer.from(await args.file.arrayBuffer());
+  writeFileSync(destinationPath, bytes);
+
+  return {
+    type: isImage ? "localImage" : "localFile",
+    path: destinationPath,
+    name: safeName,
+    ...(mimeType ? { mimeType } : {}),
+    sizeBytes,
+  };
+}
+
 function withProjectPathStatus(project: Project): Project {
   return {
     ...project,
@@ -39,6 +128,7 @@ function withProjectPathStatus(project: Project): Project {
 export function createProjectRoutes(
   projectRepo: ProjectRepository,
   findProjectFiles: SearchProjectFilesFn = searchProjectFiles,
+  savePromptAttachment: StorePromptAttachmentFn = storePromptAttachment,
 ) {
   return new Hono()
     .post("/", zValidator("json", createProjectSchema), async (c) => {
@@ -90,6 +180,38 @@ export function createProjectRoutes(
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return c.json({ error: message }, 500);
+      }
+    })
+    .post("/:id/attachments", async (c) => {
+      try {
+        const project = projectRepo.getById(c.req.param("id"));
+        if (!project) {
+          return c.json({ error: "Project not found" }, 404);
+        }
+
+        const body = await c.req.parseBody();
+        const file = body.file;
+        if (!(file instanceof File)) {
+          return c.json({ error: "Expected multipart file field named 'file'" }, 400);
+        }
+
+        const uploaded = await savePromptAttachment({
+          projectRootPath: project.rootPath,
+          file,
+        });
+        return c.json(uploaded, 201);
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : err && typeof err === "object" && "message" in err
+            ? String((err as { message?: unknown }).message)
+            : "Unknown error";
+        const status = err && typeof err === "object" && "code" in err
+          ? (err as { code?: string }).code === "invalid_request"
+            ? 400
+            : 500
+          : 500;
+        return c.json({ error: message }, status);
       }
     });
 }

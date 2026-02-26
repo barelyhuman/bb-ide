@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { Project, ProjectFileSuggestion } from "@beanbag/agent-core";
+import type {
+  Project,
+  ProjectFileSuggestion,
+  UploadedPromptAttachment,
+} from "@beanbag/agent-core";
 import { createProjectRoutes } from "../../routes/projects.js";
 import type { ProjectRepository } from "@beanbag/db";
 
@@ -31,17 +35,30 @@ describe("Project routes", () => {
     query: string,
     limit?: number,
   ) => Promise<ProjectFileSuggestion[]>;
+  type StorePromptAttachmentFn = (args: {
+    projectRootPath: string;
+    file: File;
+  }) => Promise<UploadedPromptAttachment>;
 
   let projectRepo: ReturnType<typeof mockProjectRepo>;
   let findProjectFiles: ReturnType<typeof vi.fn>;
+  let savePromptAttachment: ReturnType<typeof vi.fn>;
   let app: Hono;
 
   beforeEach(() => {
     projectRepo = mockProjectRepo();
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
+    savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
+      type: "localImage",
+      path: "/repo/root/.beanbag/attachments/image.png",
+      name: "image.png",
+      mimeType: "image/png",
+      sizeBytes: 12,
+    });
     const routes = createProjectRoutes(
       projectRepo as any,
       findProjectFiles as SearchProjectFilesFn,
+      savePromptAttachment as StorePromptAttachmentFn,
     );
     app = new Hono().route("/projects", routes);
   });
@@ -259,6 +276,87 @@ describe("Project routes", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("Search failed");
+    });
+  });
+
+  describe("POST /projects/:id/attachments", () => {
+    it("uploads a prompt attachment for an existing project", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-2", rootPath: "/repo/root" }),
+      );
+
+      const formData = new FormData();
+      formData.set("file", new File(["hello"], "notes.txt", { type: "text/plain" }));
+      const res = await app.request("/projects/proj-2/attachments", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({
+        type: "localImage",
+        path: "/repo/root/.beanbag/attachments/image.png",
+        name: "image.png",
+        mimeType: "image/png",
+        sizeBytes: 12,
+      });
+      expect(savePromptAttachment).toHaveBeenCalledWith({
+        projectRootPath: "/repo/root",
+        file: expect.any(File),
+      });
+    });
+
+    it("returns 404 when project does not exist", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      const formData = new FormData();
+      formData.set("file", new File(["hello"], "notes.txt", { type: "text/plain" }));
+      const res = await app.request("/projects/missing/attachments", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Project not found" });
+      expect(savePromptAttachment).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 when file field is missing", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-2", rootPath: "/repo/root" }),
+      );
+
+      const formData = new FormData();
+      const res = await app.request("/projects/proj-2/attachments", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Expected multipart file field named 'file'",
+      });
+      expect(savePromptAttachment).not.toHaveBeenCalled();
+    });
+
+    it("returns 400 for invalid attachment payload errors", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-2", rootPath: "/repo/root" }),
+      );
+      savePromptAttachment.mockRejectedValueOnce({
+        code: "invalid_request",
+        message: "Attachment too large",
+      });
+
+      const formData = new FormData();
+      formData.set("file", new File(["hello"], "notes.txt", { type: "text/plain" }));
+      const res = await app.request("/projects/proj-2/attachments", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Attachment too large" });
     });
   });
 });

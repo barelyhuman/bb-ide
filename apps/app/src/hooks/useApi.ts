@@ -18,6 +18,7 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
+  UploadedPromptAttachment,
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
 
@@ -66,6 +67,20 @@ export function useProjectFileSuggestions(
     staleTime: 15_000,
     retry: false,
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useUploadPromptAttachment() {
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      file,
+    }: {
+      projectId: string;
+      file: File;
+    }): Promise<UploadedPromptAttachment> =>
+      api.uploadPromptAttachment(projectId, file),
+    retry: false,
   });
 }
 
