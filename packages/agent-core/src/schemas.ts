@@ -71,3 +71,10 @@ export const commitThreadSchema = z.object({
   message: z.string().min(1).optional(),
   includeUnstaged: z.boolean().optional(),
 });
+
+export const squashMergeThreadSchema = z.object({
+  commitIfNeeded: z.boolean().optional(),
+  includeUnstaged: z.boolean().optional(),
+  commitMessage: z.string().min(1).optional(),
+  squashMessage: z.string().min(1).optional(),
+});

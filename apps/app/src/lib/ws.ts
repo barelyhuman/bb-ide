@@ -1,10 +1,11 @@
 import type {
   ClientMessage,
+  ChangedMessage,
   RealtimeEntity,
   ServerMessage,
 } from "@beanbag/agent-core";
 
-export type ChangeCallback = (entity: RealtimeEntity, id?: string) => void;
+export type ChangeCallback = (message: ChangedMessage) => void;
 
 class WebSocketManager {
   private socket: WebSocket | null = null;
@@ -41,7 +42,7 @@ class WebSocketManager {
         const msg = JSON.parse(event.data) as ServerMessage;
         if (msg.type === "changed") {
           for (const cb of this.callbacks) {
-            cb(msg.entity, msg.id);
+            cb(msg);
           }
         }
       } catch {

@@ -3,11 +3,13 @@ import { fileURLToPath } from "node:url";
 import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
 import type {
   ProviderAdapter,
+  ProviderCommitMessageGenerator,
   ProviderTitleGenerator,
 } from "./provider-adapter.js";
 
 export interface CreatePiMonoProviderAdapterOptions {
   titleGenerator?: ProviderTitleGenerator;
+  commitMessageGenerator?: ProviderCommitMessageGenerator;
   /**
    * Command used by the bridge to start Pi (defaults to `pi`).
    */
@@ -39,6 +41,7 @@ export function createPiMonoProviderAdapter(
 
   return createCodexProviderAdapter({
     titleGenerator: opts?.titleGenerator,
+    commitMessageGenerator: opts?.commitMessageGenerator,
     id: "pi-mono",
     displayName: "Pi Mono (RPC bridge)",
     processCommand: process.execPath,

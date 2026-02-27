@@ -3,6 +3,8 @@ import type {
   CommitThreadRequest,
   CommitThreadResponse,
   MergeThreadResponse,
+  SquashMergeThreadRequest,
+  SquashMergeThreadResponse,
   ProviderCapabilities,
   SpawnThreadRequest,
   SystemEnvironmentInfo,
@@ -42,6 +44,14 @@ export interface ProviderTitleGeneratorArgs {
 
 export type ProviderTitleGenerator = (
   args: ProviderTitleGeneratorArgs,
+) => Promise<string | undefined>;
+
+export interface ProviderCommitMessageGeneratorArgs {
+  cwd: string;
+}
+
+export type ProviderCommitMessageGenerator = (
+  args: ProviderCommitMessageGeneratorArgs,
 ) => Promise<string | undefined>;
 
 export interface ProviderAdapter {
@@ -96,6 +106,9 @@ export interface ProviderAdapter {
   generateThreadTitle?(
     args: ProviderTitleGeneratorArgs,
   ): Promise<string | undefined>;
+  generateCommitMessage?(
+    args: ProviderCommitMessageGeneratorArgs,
+  ): Promise<string | undefined>;
   inactiveSessionErrorMessage(threadId: string): string;
 }
 
@@ -144,8 +157,12 @@ export interface ThreadOrchestrator {
   commitThread(
     threadId: string,
     request?: CommitThreadRequest,
-  ): CommitThreadResponse;
+  ): Promise<CommitThreadResponse>;
   mergeThread(threadId: string): MergeThreadResponse;
+  squashMergeThread(
+    threadId: string,
+    request?: SquashMergeThreadRequest,
+  ): Promise<SquashMergeThreadResponse>;
   getById(threadId: string): Thread | undefined;
   getWorkStatus(threadId: string): ThreadWorkStatus | undefined;
   getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];

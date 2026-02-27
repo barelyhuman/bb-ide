@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import type { CommitThreadResponse, ThreadWorkStatus } from "@beanbag/agent-core";
 
 type CacheEntry = {
@@ -426,5 +427,106 @@ export class ThreadGitStatusService {
     }
 
     return { merged: true, message: `Merged into ${defaultBranch}` };
+  }
+
+  squashMergeWorktreeIntoDefaultBranch(args: {
+    workspaceRoot: string;
+    projectRoot: string;
+    defaultBranch?: string;
+    message?: string;
+  }): { merged: boolean; message: string; conflictFiles?: string[] } {
+    const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
+    if (!defaultBranch) {
+      throw new Error("Could not determine default branch");
+    }
+
+    const workspaceStatus = this.getStatus({
+      workspaceRoot: args.workspaceRoot,
+      projectRoot: args.projectRoot,
+      defaultBranch,
+    });
+    if (workspaceStatus.hasUncommittedChanges) {
+      throw new Error("Workspace has uncommitted changes; commit first");
+    }
+    if (workspaceStatus.aheadCount <= 0) {
+      return { merged: false, message: "No commits to merge" };
+    }
+
+    const workspaceHead = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);
+    if (!workspaceHead.ok || !workspaceHead.stdout) {
+      throw new Error("Failed to resolve worktree HEAD");
+    }
+
+    const defaultHead = runGit(args.projectRoot, ["rev-parse", defaultBranch]);
+    if (!defaultHead.ok || !defaultHead.stdout) {
+      throw new Error(`Failed to resolve ${defaultBranch}`);
+    }
+
+    const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
+    const tempWorkspaceRoot = resolve(tempRoot, "integration");
+    try {
+      const addWorktree = runGit(args.projectRoot, [
+        "worktree",
+        "add",
+        "--detach",
+        tempWorkspaceRoot,
+        defaultHead.stdout,
+      ]);
+      if (!addWorktree.ok) {
+        throw new Error(addWorktree.stderr || "Failed to prepare integration worktree");
+      }
+
+      const squashResult = runGit(tempWorkspaceRoot, ["merge", "--squash", workspaceHead.stdout]);
+      if (!squashResult.ok) {
+        const conflictFiles = runGit(tempWorkspaceRoot, ["diff", "--name-only", "--diff-filter=U"]);
+        runGit(tempWorkspaceRoot, ["reset", "--hard"]);
+        return {
+          merged: false,
+          message:
+            `Squash merge has conflicts against ${defaultBranch}. Ask the thread agent to rebase/merge ${defaultBranch} into its worktree, resolve conflicts, and retry.`,
+          ...(conflictFiles.ok && conflictFiles.stdout
+            ? {
+                conflictFiles: conflictFiles.stdout
+                  .split("\n")
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0),
+              }
+            : {}),
+        };
+      }
+
+      const hasSquashedChanges = runGit(tempWorkspaceRoot, ["diff", "--cached", "--quiet"]);
+      if (hasSquashedChanges.ok) {
+        return { merged: false, message: "No changes to merge after squash" };
+      }
+
+      const message = args.message?.trim() || `chore: squash merge from ${workspaceStatus.currentBranch ?? "worktree"}`;
+      const commitResult = runGit(tempWorkspaceRoot, ["commit", "-m", message]);
+      if (!commitResult.ok) {
+        throw new Error(commitResult.stderr || "Failed to commit squashed merge");
+      }
+
+      const mergedHead = runGit(tempWorkspaceRoot, ["rev-parse", "HEAD"]);
+      if (!mergedHead.ok || !mergedHead.stdout) {
+        throw new Error("Failed to resolve squashed merge commit");
+      }
+
+      const updateRef = runGit(args.projectRoot, [
+        "update-ref",
+        `refs/heads/${defaultBranch}`,
+        mergedHead.stdout,
+        defaultHead.stdout,
+      ]);
+      if (!updateRef.ok) {
+        throw new Error(
+          updateRef.stderr || `${defaultBranch} moved during squash merge; please retry`,
+        );
+      }
+
+      return { merged: true, message: `Squash-merged into ${defaultBranch}` };
+    } finally {
+      runGit(args.projectRoot, ["worktree", "remove", "--force", tempWorkspaceRoot]);
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   }
 }

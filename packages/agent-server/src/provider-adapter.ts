@@ -1,4 +1,6 @@
 export type {
+  ProviderCommitMessageGenerator,
+  ProviderCommitMessageGeneratorArgs,
   ProviderExecutionOptions,
   ProviderThreadContext,
   ProviderTitleGeneratorArgs,

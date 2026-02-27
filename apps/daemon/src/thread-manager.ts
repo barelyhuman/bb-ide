@@ -43,9 +43,12 @@ import {
   type CommitThreadRequest,
   type CommitThreadResponse,
   type MergeThreadResponse,
+  type SquashMergeThreadRequest,
+  type SquashMergeThreadResponse,
   type ThreadTimelineResponse,
   type ThreadToolGroupMessagesRequest,
   type ThreadToolGroupMessagesResponse,
+  type ThreadChangeKind,
 } from "@beanbag/agent-core";
 import type {
   ThreadRepository,
@@ -110,6 +113,11 @@ const TIMELINE_NOISE_EVENT_TYPES: readonly string[] = [
   "codex/event/agent_reasoning_delta",
   "codex/event/reasoning_content_delta",
   "codex/event/exec_command_output_delta",
+];
+
+const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
+  "status-changed",
+  "work-status-changed",
 ];
 
 function resolveBbBinDir(pathValue: string | undefined): string | undefined {
@@ -384,7 +392,7 @@ export class ThreadManager implements ThreadOrchestrator {
       // Archived threads are never considered running.
       if (thread.archivedAt !== undefined) {
         this.threadRepo.update(thread.id, { status: "idle" }, { touchUpdatedAt: false });
-        this.ws.broadcast("thread", thread.id);
+        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
         continue;
       }
 
@@ -395,7 +403,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
       if (!project || !providerThreadId || !shouldRemainActive) {
         this.threadRepo.update(thread.id, { status: "idle" }, { touchUpdatedAt: false });
-        this.ws.broadcast("thread", thread.id);
+        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
         continue;
       }
 
@@ -425,7 +433,7 @@ export class ThreadManager implements ThreadOrchestrator {
       } catch {
         this._cleanupThreadRuntime(thread.id);
         this.threadRepo.update(thread.id, { status: "idle" }, { touchUpdatedAt: false });
-        this.ws.broadcast("thread", thread.id);
+        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
       }
     }
   }
@@ -459,7 +467,7 @@ export class ThreadManager implements ThreadOrchestrator {
       this.lockedTitleThreadIds.add(thread.id);
     }
 
-    this.ws.broadcast("thread", thread.id);
+    this._broadcastThreadChanged(thread.id, ["thread-created"]);
     this._scheduleProvisioning(
       thread.id,
       { ...req, environmentId },
@@ -662,7 +670,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
-    this.ws.broadcast("thread", threadId);
+    this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
   }
 
   /**
@@ -703,7 +711,10 @@ export class ThreadManager implements ThreadOrchestrator {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
     });
-    this.ws.broadcast("thread", threadId);
+    this._broadcastThreadChanged(threadId, [
+      ...THREAD_STATUS_CHANGE_KINDS,
+      "archived-changed",
+    ]);
   }
 
 
@@ -719,7 +730,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     if ((thread.lastReadAt ?? 0) !== updated.lastReadAt) {
-      this.ws.broadcast("thread", threadId);
+      this._broadcastThreadChanged(threadId, ["read-state-changed"]);
     }
 
     return updated;
@@ -875,10 +886,10 @@ export class ThreadManager implements ThreadOrchestrator {
     );
   }
 
-  commitThread(
+  async commitThread(
     threadId: string,
     request?: CommitThreadRequest,
-  ): CommitThreadResponse {
+  ): Promise<CommitThreadResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -892,14 +903,25 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+    let message = request?.message?.trim();
+    if (!message && this.provider.generateCommitMessage) {
+      try {
+        message = (await this.provider.generateCommitMessage({ cwd: workspaceRoot }))?.trim();
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `[thread ${thread.id}] Failed to auto-generate commit message (${this.provider.displayName}): ${detail}`,
+        );
+      }
+    }
     const result = this.gitStatusService.commit({
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
-      message: request?.message,
+      ...(message ? { message } : {}),
       includeUnstaged: request?.includeUnstaged,
     });
-    this.ws.broadcast("thread", thread.id);
+    this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
     return result;
   }
 
@@ -931,11 +953,73 @@ export class ThreadManager implements ThreadOrchestrator {
       projectRoot: project.rootPath,
       defaultBranch,
     });
-    this.ws.broadcast("thread", thread.id);
+    this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
     return {
       ok: true,
       merged: mergeResult.merged,
       message: mergeResult.message,
+      workStatus,
+    };
+  }
+
+  async squashMergeThread(
+    threadId: string,
+    request?: SquashMergeThreadRequest,
+  ): Promise<SquashMergeThreadResponse> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+    if (thread.environmentId !== "worktree") {
+      throw invalidRequestError("Squash merge is only available for worktree threads");
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+
+    let committed = false;
+    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+    const before = this.gitStatusService.getStatus({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+    });
+    const commitIfNeeded = request?.commitIfNeeded === true;
+    if (before.hasUncommittedChanges) {
+      if (!commitIfNeeded) {
+        throw invalidRequestError("Workspace has uncommitted changes; commit first");
+      }
+      const commitResult = await this.commitThread(threadId, {
+        includeUnstaged: request?.includeUnstaged,
+        message: request?.commitMessage,
+      });
+      committed = commitResult.commitCreated;
+    }
+
+    const mergeResult = this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+      message: request?.squashMessage,
+    });
+    this.gitStatusService.invalidate(workspaceRoot);
+    const workStatus = this.gitStatusService.getStatus({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+    });
+    this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
+    return {
+      ok: true,
+      merged: mergeResult.merged,
+      committed,
+      message: mergeResult.message,
+      ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
       workStatus,
     };
   }
@@ -1646,8 +1730,8 @@ export class ThreadManager implements ThreadOrchestrator {
 
     const persistedEvent = this._appendEvent(threadId, eventType, eventData);
 
-    this._syncTitleFromEvent(threadId, msg.method, providerPayload);
-    this._syncStatusFromEvent(threadId, msg.method);
+    const titleChanged = this._syncTitleFromEvent(threadId, msg.method, providerPayload);
+    const statusChanged = this._syncStatusFromEvent(threadId, msg.method);
     this._syncActiveTurnFromEvent(threadId, msg.method, providerPayload);
     this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
     const thread = this.threadRepo.getById(threadId);
@@ -1656,7 +1740,16 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     if (this.provider.shouldBroadcastForEvent(msg.method)) {
-      this.ws.broadcast("thread", threadId);
+      const changes = new Set<ThreadChangeKind>(["events-appended"]);
+      if (titleChanged) {
+        changes.add("title-changed");
+      }
+      if (statusChanged) {
+        for (const change of THREAD_STATUS_CHANGE_KINDS) {
+          changes.add(change);
+        }
+      }
+      this._broadcastThreadChanged(threadId, Array.from(changes));
     }
   }
 
@@ -1971,13 +2064,16 @@ export class ThreadManager implements ThreadOrchestrator {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
 
+    let statusChanged = false;
     if (thread.status === "active") {
-      this._setThreadStatus(threadId, "idle", false);
+      statusChanged = this._setThreadStatus(threadId, "idle", false);
     } else if (thread.status === "created" || thread.status === "provisioning") {
-      this._setThreadStatus(threadId, "provisioning_failed", false);
+      statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
     }
 
-    this.ws.broadcast("thread", threadId);
+    if (statusChanged) {
+      this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+    }
   }
 
   private _handleProviderStderrLine(threadId: string, line: string): void {
@@ -2108,10 +2204,10 @@ export class ThreadManager implements ThreadOrchestrator {
     return providerThreadId;
   }
 
-  private _syncStatusFromEvent(threadId: string, method: string): void {
+  private _syncStatusFromEvent(threadId: string, method: string): boolean {
     const nextStatus = this.provider.statusForEvent(method);
-    if (!nextStatus) return;
-    this._setThreadStatus(threadId, nextStatus, false);
+    if (!nextStatus) return false;
+    return this._setThreadStatus(threadId, nextStatus, false);
   }
 
   private _syncActiveTurnFromEvent(
@@ -2136,9 +2232,9 @@ export class ThreadManager implements ThreadOrchestrator {
     threadId: string,
     method: string,
     data: unknown,
-  ): void {
+  ): boolean {
     const title = this.provider.titleFromEvent(method, data);
-    if (!title) return;
+    if (!title) return false;
     const thread = this.threadRepo.getById(threadId);
     const changed = this._setThreadTitle(threadId, title, {
       // Thread titles are auto-assigned only once; subsequent provider
@@ -2146,13 +2242,14 @@ export class ThreadManager implements ThreadOrchestrator {
       onlyIfMissing: true,
       shouldBroadcast: false,
     });
-    if (!changed) return;
+    if (!changed) return false;
     this._appendEvent(threadId, "system/thread-title/updated", {
       title,
       ...(thread?.title ? { previousTitle: thread.title } : {}),
       source: "provider",
       providerMethod: method,
     });
+    return true;
   }
 
   private _setThreadTitle(
@@ -2171,7 +2268,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
     this.threadRepo.update(threadId, { title });
     if (opts?.shouldBroadcast !== false) {
-      this.ws.broadcast("thread", threadId);
+      this._broadcastThreadChanged(threadId, ["title-changed"]);
     }
     return true;
   }
@@ -2181,10 +2278,10 @@ export class ThreadManager implements ThreadOrchestrator {
     nextStatus: Thread["status"],
     shouldBroadcast = true,
     opts?: { force?: boolean; touchUpdatedAt?: boolean },
-  ): void {
+  ): boolean {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
-      if (!opts?.force) return;
+      if (!opts?.force) return false;
       if (opts?.touchUpdatedAt !== undefined) {
         this.threadRepo.update(threadId, { status: nextStatus }, {
           touchUpdatedAt: opts.touchUpdatedAt,
@@ -2193,15 +2290,15 @@ export class ThreadManager implements ThreadOrchestrator {
         this.threadRepo.update(threadId, { status: nextStatus });
       }
       if (shouldBroadcast) {
-        this.ws.broadcast("thread", threadId);
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
       }
-      return;
+      return true;
     }
-    if (thread.archivedAt !== undefined && nextStatus === "active") return;
+    if (thread.archivedAt !== undefined && nextStatus === "active") return false;
 
-    if (thread.status === nextStatus) return;
+    if (thread.status === nextStatus) return false;
     if (!opts?.force && !canTransitionThreadStatus(thread.status, nextStatus)) {
-      return;
+      return false;
     }
     if (thread.status === "active" && nextStatus === "idle") {
       this._captureAgentDiffStats(thread);
@@ -2215,8 +2312,18 @@ export class ThreadManager implements ThreadOrchestrator {
       this.threadRepo.update(threadId, { status: nextStatus });
     }
     if (shouldBroadcast) {
-      this.ws.broadcast("thread", threadId);
+      this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
     }
+    return true;
+  }
+
+  private _broadcastThreadChanged(
+    threadId: string,
+    changes: readonly ThreadChangeKind[],
+  ): void {
+    const uniqueChanges = Array.from(new Set(changes));
+    if (uniqueChanges.length === 0) return;
+    this.ws.broadcast("thread", threadId, uniqueChanges);
   }
 
   private _maybeAutogenerateThreadTitle(

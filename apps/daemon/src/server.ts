@@ -13,6 +13,7 @@ import type {
 import {
   createEnvironmentAdapter,
   createProviderAdapter,
+  generateCodexCommitMessage,
   generateCodexThreadTitle,
   listAvailableEnvironmentInfos,
   listAvailableProviderInfos,
@@ -45,10 +46,14 @@ export function createServer(deps: ServerDeps) {
   const provider = createProviderAdapter({
     codexTitleGenerator: async ({ input, cwd }) =>
       generateCodexThreadTitle({ input, cwd }),
+    codexCommitMessageGenerator: async ({ cwd }) =>
+      generateCodexCommitMessage({ cwd }),
   });
   const providerCatalog = listAvailableProviderInfos({
     codexTitleGenerator: async ({ input, cwd }) =>
       generateCodexThreadTitle({ input, cwd }),
+    codexCommitMessageGenerator: async ({ cwd }) =>
+      generateCodexCommitMessage({ cwd }),
   });
   const environmentAdapter = createEnvironmentAdapter();
   const environmentCatalog = listAvailableEnvironmentInfos();

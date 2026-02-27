@@ -1,11 +1,13 @@
 import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
 import type {
   ProviderAdapter,
+  ProviderCommitMessageGenerator,
   ProviderTitleGenerator,
 } from "./provider-adapter.js";
 
 export interface CreateClaudeCodeProviderAdapterOptions {
   titleGenerator?: ProviderTitleGenerator;
+  commitMessageGenerator?: ProviderCommitMessageGenerator;
   processCommand?: string;
   processArgs?: string[];
 }
@@ -27,6 +29,7 @@ export function createClaudeCodeProviderAdapter(
 
   return createCodexProviderAdapter({
     titleGenerator: opts?.titleGenerator,
+    commitMessageGenerator: opts?.commitMessageGenerator,
     id: "claude-code",
     displayName: "Claude Code (protocol-compatible)",
     processCommand,

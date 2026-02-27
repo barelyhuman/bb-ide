@@ -17,6 +17,8 @@ import type {
   CommitThreadRequest,
   CommitThreadResponse,
   MergeThreadResponse,
+  SquashMergeThreadRequest,
+  SquashMergeThreadResponse,
   CommitProjectResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
@@ -336,6 +338,13 @@ export async function commitThread(
 
 export async function mergeThread(id: string): Promise<MergeThreadResponse> {
   return request<MergeThreadResponse>("POST", `/threads/${id}/merge`);
+}
+
+export async function squashMergeThread(
+  id: string,
+  req?: SquashMergeThreadRequest,
+): Promise<SquashMergeThreadResponse> {
+  return request<SquashMergeThreadResponse>("POST", `/threads/${id}/squash-merge`, req ?? {});
 }
 
 export async function getThreadEvents(

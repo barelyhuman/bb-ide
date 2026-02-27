@@ -33,12 +33,15 @@ export type {
 
 export type {
   RealtimeEntity,
+  ThreadChangeKind,
   SubscribeMessage,
   UnsubscribeMessage,
   ClientMessage,
   ChangedMessage,
   ServerMessage,
 } from "./protocol.js";
+
+export { THREAD_CHANGE_KINDS } from "./protocol.js";
 
 export type {
   SpawnThreadRequest,
@@ -48,6 +51,8 @@ export type {
   CommitThreadRequest,
   CommitThreadResponse,
   MergeThreadResponse,
+  SquashMergeThreadRequest,
+  SquashMergeThreadResponse,
   CommitProjectResponse,
   PromptInput,
   ModelReasoningEffort,
@@ -75,6 +80,7 @@ export {
   createProjectSchema,
   updateProjectSchema,
   commitThreadSchema,
+  squashMergeThreadSchema,
 } from "./schemas.js";
 
 export type {
@@ -105,6 +111,8 @@ export type {
 } from "./thread-detail-rows.js";
 
 export type {
+  ProviderCommitMessageGeneratorArgs,
+  ProviderCommitMessageGenerator,
   ProviderExecutionOptions,
   ProviderThreadContext,
   ProviderTitleGeneratorArgs,

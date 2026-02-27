@@ -105,6 +105,22 @@ export interface MergeThreadResponse {
   workStatus: ThreadWorkStatus;
 }
 
+export interface SquashMergeThreadRequest {
+  commitIfNeeded?: boolean;
+  includeUnstaged?: boolean;
+  commitMessage?: string;
+  squashMessage?: string;
+}
+
+export interface SquashMergeThreadResponse {
+  ok: true;
+  merged: boolean;
+  committed: boolean;
+  message: string;
+  workStatus: ThreadWorkStatus;
+  conflictFiles?: string[];
+}
+
 export interface CommitProjectResponse {
   ok: true;
   commitCreated: boolean;

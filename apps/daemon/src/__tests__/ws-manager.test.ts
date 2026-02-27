@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { THREAD_CHANGE_KINDS } from "@beanbag/agent-core";
 import { WSManager } from "../ws.js";
 
 // Minimal mock WebSocket that emulates the 'ws' library interface
@@ -22,6 +23,11 @@ function createMockSocket(readyState = 1 /* OPEN */): any {
 
 describe("WSManager", () => {
   let wsManager: WSManager;
+  const defaultChangedMsg = JSON.stringify({
+    type: "changed",
+    entity: "thread",
+    changes: [...THREAD_CHANGE_KINDS],
+  });
 
   beforeEach(() => {
     wsManager = new WSManager();
@@ -41,7 +47,7 @@ describe("WSManager", () => {
       // Broadcast should reach the subscriber
       wsManager.broadcast("thread");
       expect(socket.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: "changed", entity: "thread" }),
+        defaultChangedMsg,
       );
     });
 
@@ -59,7 +65,12 @@ describe("WSManager", () => {
       // Should receive broadcast for thread:t1
       wsManager.broadcast("thread", "t1");
       expect(socket.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: "changed", entity: "thread", id: "t1" }),
+        JSON.stringify({
+          type: "changed",
+          entity: "thread",
+          id: "t1",
+          changes: [...THREAD_CHANGE_KINDS],
+        }),
       );
 
       // Should NOT receive broadcast for a different thread id
@@ -126,6 +137,7 @@ describe("WSManager", () => {
         type: "changed",
         entity: "thread",
         id: "t1",
+        changes: [...THREAD_CHANGE_KINDS],
       });
       expect(entitySub.send).toHaveBeenCalledWith(expected);
       expect(idSub.send).toHaveBeenCalledWith(expected);

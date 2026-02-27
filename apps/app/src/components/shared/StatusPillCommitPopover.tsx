@@ -17,21 +17,32 @@ export function StatusPillCommitPopover({
   variant,
   cleanTitle,
   canCommit,
+  canSquashMerge,
   isCommitting,
+  isSquashMerging,
   onCommit,
+  onSquashMerge,
 }: {
   status: ThreadWorkStatus | undefined;
   label: string;
   variant: StatusPillVariant;
   cleanTitle?: string;
   canCommit: boolean;
+  canSquashMerge?: boolean;
   isCommitting: boolean;
+  isSquashMerging?: boolean;
   onCommit: (args: { includeUnstaged: boolean; message?: string }) => Promise<void>;
+  onSquashMerge?: (args: {
+    commitIfNeeded: boolean;
+    includeUnstaged: boolean;
+    commitMessage?: string;
+  }) => Promise<{ message: string; merged: boolean }>;
 }) {
   const [open, setOpen] = useState(false);
   const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [commitMessage, setCommitMessage] = useState("");
-  const branchName = status?.currentBranch ?? status?.defaultBranch;
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const branchName = status?.currentBranch;
   const remoteSummary = status
     ? `${status.aheadCount} ahead · ${status.behindCount} behind`
     : "unknown";
@@ -176,7 +187,7 @@ export function StatusPillCommitPopover({
               <div className="flex justify-end">
                 <Button
                   type="button"
-                  disabled={!canCommit || isCommitting}
+                  disabled={!canCommit || isCommitting || Boolean(isSquashMerging)}
                   onClick={async () => {
                     await onCommit({
                       includeUnstaged,
@@ -188,8 +199,53 @@ export function StatusPillCommitPopover({
                 >
                   {isCommitting ? "Committing..." : "Commit changes"}
                 </Button>
+                {canSquashMerge && onSquashMerge ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={isCommitting || Boolean(isSquashMerging)}
+                    onClick={async () => {
+                      const result = await onSquashMerge({
+                        commitIfNeeded: true,
+                        includeUnstaged,
+                        commitMessage: commitMessage.trim() || undefined,
+                      });
+                      setActionMessage(result.message);
+                      if (result.merged) {
+                        setOpen(false);
+                        setCommitMessage("");
+                      }
+                    }}
+                  >
+                    {isSquashMerging ? "Squashing..." : "Commit + squash merge"}
+                  </Button>
+                ) : null}
               </div>
             </>
+          ) : null}
+          {!canCommit && canSquashMerge && onSquashMerge ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={Boolean(isSquashMerging)}
+                onClick={async () => {
+                  const result = await onSquashMerge({
+                    commitIfNeeded: false,
+                    includeUnstaged,
+                  });
+                  setActionMessage(result.message);
+                  if (result.merged) {
+                    setOpen(false);
+                  }
+                }}
+              >
+                {isSquashMerging ? "Squashing..." : "Squash merge"}
+              </Button>
+            </div>
+          ) : null}
+          {actionMessage ? (
+            <p className="text-xs text-muted-foreground">{actionMessage}</p>
           ) : null}
         </div>
       </PopoverContent>

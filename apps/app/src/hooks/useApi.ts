@@ -23,6 +23,8 @@ import type {
   CommitThreadResponse,
   CommitThreadRequest,
   MergeThreadResponse,
+  SquashMergeThreadRequest,
+  SquashMergeThreadResponse,
   CommitProjectResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
@@ -402,6 +404,25 @@ export function useMergeThread() {
   return useMutation({
     mutationFn: ({ id }: { id: string }): Promise<MergeThreadResponse> =>
       api.mergeThread(id),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function useSquashMergeThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...req
+    }: {
+      id: string;
+    } & SquashMergeThreadRequest): Promise<SquashMergeThreadResponse> =>
+      api.squashMergeThread(id, req),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });

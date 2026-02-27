@@ -13,6 +13,7 @@ export { createPiMonoProviderAdapter } from "./pi-provider-adapter.js";
 export { createClaudeCodeProviderAdapter } from "./claude-provider-adapter.js";
 export { listCodexModels } from "./codex-models.js";
 export { generateCodexThreadTitle } from "./codex-title-generator.js";
+export { generateCodexCommitMessage } from "./codex-commit-message-generator.js";
 
 export type {
   CreateProviderAdapterOptions,

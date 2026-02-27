@@ -1,20 +1,84 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { assertNever, type ThreadEvent } from "@beanbag/agent-core";
+import {
+  assertNever,
+  type ThreadChangeKind,
+  type ThreadEvent,
+} from "@beanbag/agent-core";
 import { wsManager } from "../lib/ws";
 import { getThreadEvents } from "../lib/api";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
 const INVALIDATION_MAX_WAIT_MS = 1500;
+const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 1500;
+
+interface ThreadChangeFlags {
+  listChanged: boolean;
+  threadChanged: boolean;
+  timelineChanged: boolean;
+  workStatusChanged: boolean;
+  eventsAppended: boolean;
+  statusChanged: boolean;
+}
+
+function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChangeFlags {
+  const flags: ThreadChangeFlags = {
+    listChanged: false,
+    threadChanged: false,
+    timelineChanged: false,
+    workStatusChanged: false,
+    eventsAppended: false,
+    statusChanged: false,
+  };
+
+  for (const change of changes) {
+    switch (change) {
+      case "thread-created":
+      case "thread-deleted":
+      case "archived-changed":
+      case "read-state-changed":
+      case "title-changed":
+        flags.listChanged = true;
+        flags.threadChanged = true;
+        if (change === "thread-created" || change === "thread-deleted") {
+          flags.timelineChanged = true;
+        }
+        break;
+      case "status-changed":
+        flags.listChanged = true;
+        flags.threadChanged = true;
+        flags.timelineChanged = true;
+        flags.workStatusChanged = true;
+        flags.statusChanged = true;
+        break;
+      case "work-status-changed":
+        flags.workStatusChanged = true;
+        break;
+      case "events-appended":
+        flags.eventsAppended = true;
+        flags.timelineChanged = true;
+        break;
+      default:
+        assertNever(change);
+    }
+  }
+
+  return flags;
+}
 
 export function useWebSocket(): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const changedThreadIds = new Set<string>();
+    const changedThreadKinds = new Map<string, Set<ThreadChangeKind>>();
+    const globalChangeKinds = new Set<ThreadChangeKind>();
+    const lastTimelineRefetchAtByThread = new Map<string, number>();
     let shouldInvalidateThreads = false;
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadEvents = false;
+    let shouldInvalidateAllThreadTimeline = false;
+    let shouldInvalidateAllThreadsById = false;
+    let shouldInvalidateAllThreadWorkStatus = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -56,6 +120,17 @@ export function useWebSocket(): void {
       }
     };
 
+    const mergeThreadChanges = (threadId: string, changes: readonly ThreadChangeKind[]) => {
+      let entry = changedThreadKinds.get(threadId);
+      if (!entry) {
+        entry = new Set<ThreadChangeKind>();
+        changedThreadKinds.set(threadId, entry);
+      }
+      for (const change of changes) {
+        entry.add(change);
+      }
+    };
+
     const flushInvalidations = () => {
       if (debounceTimer !== null) {
         clearTimeout(debounceTimer);
@@ -69,32 +144,70 @@ export function useWebSocket(): void {
 
       if (shouldInvalidateThreads) {
         queryClient.invalidateQueries({ queryKey: ["threads"] });
-        // Keep all per-thread detail caches aligned with the threads list,
-        // even when the changed event does not include a specific thread id.
-        queryClient.invalidateQueries({ queryKey: ["thread"] });
       }
 
-      const changedIds = Array.from(changedThreadIds);
+      if (shouldInvalidateAllThreadsById) {
+        queryClient.invalidateQueries({ queryKey: ["thread"] });
+      }
+      if (shouldInvalidateAllThreadWorkStatus) {
+        queryClient.invalidateQueries({ queryKey: ["threadWorkStatus"] });
+      }
+      if (shouldInvalidateAllThreadTimeline) {
+        queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
+      }
+
+      const now = Date.now();
+      const changedIds = Array.from(changedThreadKinds.keys());
       for (const id of changedIds) {
-        queryClient.invalidateQueries({ queryKey: ["thread", id] });
-        queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", id] });
-        queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
+        const changeKinds = changedThreadKinds.get(id);
+        if (!changeKinds) continue;
+        const flags = toThreadChangeFlags(Array.from(changeKinds));
+
+        if (flags.threadChanged) {
+          queryClient.invalidateQueries({ queryKey: ["thread", id] });
+        }
+        if (flags.workStatusChanged) {
+          queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", id] });
+        }
+        if (flags.timelineChanged) {
+          if (flags.statusChanged) {
+            queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
+            lastTimelineRefetchAtByThread.set(id, now);
+          } else {
+            const lastRefetchAt = lastTimelineRefetchAtByThread.get(id) ?? 0;
+            if (now - lastRefetchAt >= TIMELINE_EVENT_REFETCH_INTERVAL_MS) {
+              queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
+              lastTimelineRefetchAtByThread.set(id, now);
+            }
+          }
+        }
       }
 
       if (shouldInvalidateAllThreadEvents) {
         queryClient.invalidateQueries({ queryKey: ["threadEvents"] });
       } else if (changedIds.length > 0) {
-        void Promise.all(changedIds.map((id) => appendThreadEventDelta(id)));
+        const eventDeltaIds = changedIds.filter((id) => {
+          const changeKinds = changedThreadKinds.get(id);
+          if (!changeKinds) return false;
+          return toThreadChangeFlags(Array.from(changeKinds)).eventsAppended;
+        });
+        if (eventDeltaIds.length > 0) {
+          void Promise.all(eventDeltaIds.map((id) => appendThreadEventDelta(id)));
+        }
       }
 
       if (shouldInvalidateStatus) {
         queryClient.invalidateQueries({ queryKey: ["status"] });
       }
 
-      changedThreadIds.clear();
+      changedThreadKinds.clear();
+      globalChangeKinds.clear();
       shouldInvalidateThreads = false;
       shouldInvalidateStatus = false;
       shouldInvalidateAllThreadEvents = false;
+      shouldInvalidateAllThreadTimeline = false;
+      shouldInvalidateAllThreadsById = false;
+      shouldInvalidateAllThreadWorkStatus = false;
     };
 
     const scheduleInvalidations = () => {
@@ -115,21 +228,34 @@ export function useWebSocket(): void {
     wsManager.subscribe("thread");
 
     // Invalidate React Query caches on changes
-    const unsubscribe = wsManager.onChanged((entity, id) => {
-      switch (entity) {
+    const unsubscribe = wsManager.onChanged((message) => {
+      switch (message.entity) {
         case "thread":
-          shouldInvalidateThreads = true;
-          if (id) {
-            changedThreadIds.add(id);
+          if (message.id) {
+            mergeThreadChanges(message.id, message.changes);
+            const flags = toThreadChangeFlags(message.changes);
+            if (flags.listChanged) {
+              shouldInvalidateThreads = true;
+              shouldInvalidateStatus = true;
+            }
           } else {
-            shouldInvalidateAllThreadEvents = true;
+            for (const change of message.changes) {
+              globalChangeKinds.add(change);
+            }
+            const globalFlags = toThreadChangeFlags(Array.from(globalChangeKinds));
+            if (globalFlags.listChanged) {
+              shouldInvalidateThreads = true;
+              shouldInvalidateStatus = true;
+            }
+            shouldInvalidateAllThreadsById = globalFlags.threadChanged;
+            shouldInvalidateAllThreadWorkStatus = globalFlags.workStatusChanged;
+            shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
+            shouldInvalidateAllThreadEvents = globalFlags.eventsAppended;
           }
-          // Also invalidate system status since thread counts may change
-          shouldInvalidateStatus = true;
           scheduleInvalidations();
           break;
         default:
-          assertNever(entity);
+          assertNever(message.entity);
       }
     });
 

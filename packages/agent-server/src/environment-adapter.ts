@@ -38,6 +38,57 @@ function toChildEnv(
   return env;
 }
 
+function runGit(
+  gitCommand: string,
+  cwd: string,
+  args: string[],
+): { ok: boolean; stdout: string } {
+  const result = spawnSync(gitCommand, args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: "pipe",
+  });
+  return {
+    ok: result.status === 0,
+    stdout: result.stdout?.trim() ?? "",
+  };
+}
+
+function hasLocalBranch(
+  gitCommand: string,
+  projectRoot: string,
+  branch: string,
+): boolean {
+  return runGit(
+    gitCommand,
+    projectRoot,
+    ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+  ).ok;
+}
+
+function resolveWorktreeStartRef(
+  gitCommand: string,
+  projectRoot: string,
+): string | undefined {
+  if (hasLocalBranch(gitCommand, projectRoot, "main")) return "main";
+  if (hasLocalBranch(gitCommand, projectRoot, "master")) return "master";
+  const headBranch = runGit(gitCommand, projectRoot, ["symbolic-ref", "--short", "HEAD"]);
+  if (headBranch.ok && headBranch.stdout.length > 0) {
+    return headBranch.stdout;
+  }
+  return undefined;
+}
+
+function toWorktreeBranchName(threadId: string): string {
+  const normalized = threadId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix = normalized.length > 0 ? normalized : "thread";
+  return `bb/thread-${suffix}`;
+}
+
 function localSession(context: EnvironmentPrepareContext): EnvironmentSession {
   return {
     cwd: context.projectRootPath,
@@ -127,15 +178,38 @@ export function createWorktreeEnvironmentAdapter(
       mkdirSync(worktreeRoot, { recursive: true });
 
       if (!existsSync(workspaceRoot)) {
-        const addResult = spawnSync(
+        const worktreeBranch = toWorktreeBranchName(context.threadId);
+        const startRef = resolveWorktreeStartRef(gitCommand, projectRoot);
+        const branchAddArgs = hasLocalBranch(gitCommand, projectRoot, worktreeBranch)
+          ? ["worktree", "add", workspaceRoot, worktreeBranch]
+          : [
+              "worktree",
+              "add",
+              "-b",
+              worktreeBranch,
+              workspaceRoot,
+              ...(startRef ? [startRef] : []),
+            ];
+        const branchAddResult = spawnSync(
           gitCommand,
-          ["worktree", "add", "--detach", workspaceRoot],
+          branchAddArgs,
           {
             cwd: projectRoot,
             env: toChildEnv(context.runtimeEnv),
             stdio: "pipe",
           },
         );
+        const addResult = branchAddResult.status === 0
+          ? branchAddResult
+          : spawnSync(
+              gitCommand,
+              ["worktree", "add", "--detach", workspaceRoot],
+              {
+                cwd: projectRoot,
+                env: toChildEnv(context.runtimeEnv),
+                stdio: "pipe",
+              },
+            );
         if (addResult.status !== 0) {
           return {
             ...fallback,

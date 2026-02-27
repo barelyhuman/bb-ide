@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
   commitThreadSchema,
+  squashMergeThreadSchema,
   spawnThreadSchema,
   tellThreadSchema,
   type PromptInput,
@@ -323,7 +324,7 @@ export function createThreadRoutes(
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
           const body = c.req.valid("json");
-          const result = threadManager.commitThread(c.req.param("id"), body ?? undefined);
+          const result = await threadManager.commitThread(c.req.param("id"), body ?? undefined);
           return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);
@@ -342,6 +343,23 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .post(
+      "/:id/squash-merge",
+      zValidator("json", squashMergeThreadSchema.optional()),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const body = c.req.valid("json");
+          const result = await threadManager.squashMergeThread(c.req.param("id"), body ?? undefined);
+          return c.json(result);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
     .get(
       "/:id/events",
       zValidator("query", eventsQuerySchema),

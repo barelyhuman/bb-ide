@@ -9,6 +9,7 @@ import {
   useThreadToolGroupMessages,
   useTellThread,
   useCommitThread,
+  useSquashMergeThread,
   useStopThread,
   useMarkThreadRead,
   useThreadDefaultExecutionOptions,
@@ -180,6 +181,7 @@ export function ThreadDetailView() {
   );
   const tellThread = useTellThread();
   const commitThread = useCommitThread();
+  const squashMergeThread = useSquashMergeThread();
   const stopThread = useStopThread();
   const markThreadRead = useMarkThreadRead();
   const uploadPromptAttachment = useUploadPromptAttachment();
@@ -509,7 +511,15 @@ export function ThreadDetailView() {
                   variant={threadWorkStatusVariant(threadWorkStatus)}
                   cleanTitle={thread.environmentId === "worktree" ? "Clean, Up to date" : undefined}
                   canCommit={threadWorkStatus.hasUncommittedChanges}
+                  canSquashMerge={
+                    thread.environmentId === "worktree" &&
+                    (
+                      threadWorkStatus.hasCommittedUnmergedChanges ||
+                      threadWorkStatus.hasUncommittedChanges
+                    )
+                  }
                   isCommitting={commitThread.isPending}
+                  isSquashMerging={squashMergeThread.isPending}
                   onCommit={async ({ includeUnstaged, message }) => {
                     if (!threadId) return;
                     await commitThread.mutateAsync({
@@ -517,6 +527,30 @@ export function ThreadDetailView() {
                       includeUnstaged,
                       ...(message ? { message } : {}),
                     });
+                  }}
+                  onSquashMerge={async ({ commitIfNeeded, includeUnstaged, commitMessage }) => {
+                    if (!threadId) return { message: "Thread unavailable", merged: false };
+                    const result = await squashMergeThread.mutateAsync({
+                      id: threadId,
+                      commitIfNeeded,
+                      includeUnstaged,
+                      ...(commitMessage ? { commitMessage } : {}),
+                    });
+                    if (result.conflictFiles && result.conflictFiles.length > 0) {
+                      const branch = threadWorkStatus.defaultBranch ?? "main";
+                      const fileList = result.conflictFiles.slice(0, 12).join(", ");
+                      await tellThread.mutateAsync({
+                        id: threadId,
+                        input: [{
+                          type: "text",
+                          text:
+                            `Squash merge into ${branch} reported conflicts (${fileList}). ` +
+                            `Please merge ${branch} into this worktree branch, resolve conflicts, run relevant checks, and commit the fix. ` +
+                            "When done, let me know so I can retry squash merge.",
+                        }],
+                      }).catch(() => undefined);
+                    }
+                    return { message: result.message, merged: result.merged };
                   }}
                 />
               </DetailRow>

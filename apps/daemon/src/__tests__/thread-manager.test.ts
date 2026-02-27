@@ -242,7 +242,10 @@ describe("ThreadManager", () => {
           touchUpdatedAt: false,
         },
       );
-      expect(bootWs.broadcast).toHaveBeenCalledWith("thread", "boot-active");
+      expect(bootWs.broadcast).toHaveBeenCalledWith("thread", "boot-active", [
+        "status-changed",
+        "work-status-changed",
+      ]);
     });
   });
 
@@ -443,7 +446,10 @@ describe("ThreadManager", () => {
       await vi.waitFor(() => {
         expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "provisioning" });
       });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new", [
+        "status-changed",
+        "work-status-changed",
+      ]);
     });
 
     it("sends initialize and thread/start JSON-RPC to the child process stdin", async () => {
@@ -906,7 +912,10 @@ describe("ThreadManager", () => {
         expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "provisioning_failed" });
       });
 
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new", [
+        "status-changed",
+        "work-status-changed",
+      ]);
     });
 
     it("marks thread provisioning_failed when codex returns RPC error to thread/start", async () => {
@@ -1211,7 +1220,7 @@ describe("ThreadManager", () => {
         }),
       );
       expect(ws.broadcast).toHaveBeenCalledTimes(1);
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new", ["events-appended"]);
     });
 
     it("does not broadcast thread changes for high-frequency delta notifications", async () => {
@@ -1275,7 +1284,7 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new", ["events-appended"]);
     });
 
     it("marks thread idle when turn/completed is received", async () => {
@@ -2475,7 +2484,7 @@ describe("ThreadManager", () => {
 
       expect(fakeStdinData.length).toBe(1);
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", { status: "active" });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["status-changed", "work-status-changed"]);
     });
 
     it("sets missing title from first tell input text", async () => {
@@ -2808,7 +2817,10 @@ describe("ThreadManager", () => {
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
       });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+      ]);
     });
 
     it("kills the process with SIGTERM when an active process exists", () => {
@@ -2860,7 +2872,11 @@ describe("ThreadManager", () => {
         status: "idle",
         archivedAt: expect.any(Number),
       });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+        "archived-changed",
+      ]);
     });
 
     it("kills running process and clears runtime state when archiving", () => {
@@ -3282,7 +3298,10 @@ describe("ThreadManager", () => {
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
       });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+      ]);
     });
 
     it("sets idle on SIGTERM signal", () => {
@@ -3305,7 +3324,10 @@ describe("ThreadManager", () => {
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
       });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+      ]);
     });
 
     it("does not update status on exit code 0 when thread is already idle", () => {
@@ -3333,8 +3355,7 @@ describe("ThreadManager", () => {
       (manager as any)._handleProcessExit("thread-1", 0, null);
 
       expect(threadRepo.update).not.toHaveBeenCalled();
-      // Should still broadcast
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1");
+      expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
     it("does nothing if thread not found in DB", () => {

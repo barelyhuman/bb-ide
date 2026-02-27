@@ -11,6 +11,8 @@ import { assertNever, unwrapProviderEventPayload } from "@beanbag/agent-core";
 import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,
+  ProviderCommitMessageGenerator,
+  ProviderCommitMessageGeneratorArgs,
   ProviderExecutionOptions,
   ProviderThreadContext,
   ProviderTitleGenerator,
@@ -162,6 +164,7 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
 
 export interface CreateCodexProviderAdapterOptions {
   titleGenerator?: ProviderTitleGenerator;
+  commitMessageGenerator?: ProviderCommitMessageGenerator;
   id?: string;
   displayName?: string;
   processCommand?: string;
@@ -174,6 +177,7 @@ export function createCodexProviderAdapter(
   opts?: CreateCodexProviderAdapterOptions,
 ): ProviderAdapter {
   const titleGenerator = opts?.titleGenerator;
+  const commitMessageGenerator = opts?.commitMessageGenerator;
   const capabilities: ProviderCapabilities = {
     supportsSteer: true,
     supportsRename: true,
@@ -360,6 +364,20 @@ export function createCodexProviderAdapter(
           ): Promise<string | undefined> {
             const generated = await titleGenerator(args);
             return normalizeTitle(generated);
+          },
+        }
+      : {}),
+    ...(commitMessageGenerator
+      ? {
+          async generateCommitMessage(
+            args: ProviderCommitMessageGeneratorArgs,
+          ): Promise<string | undefined> {
+            const generated = await commitMessageGenerator(args);
+            if (typeof generated !== "string") return undefined;
+            const normalized = generated.replace(/\s+/g, " ").trim();
+            if (!normalized) return undefined;
+            if (normalized.length <= 120) return normalized;
+            return normalized.slice(0, 120).trimEnd();
           },
         }
       : {}),
