@@ -83,12 +83,14 @@ function useLatestInitialExpanded(initialExpanded: boolean): {
 }
 
 function ToolGroupEntry({
+  projectId,
   entry,
   messages,
   isLoadingMessages,
   onLoadMessages,
   isLatestActivity,
 }: {
+  projectId?: string;
   entry: ThreadDetailToolGroupRow;
   messages: ThreadDetailToolGroupRow["messages"];
   isLoadingMessages: boolean;
@@ -138,6 +140,7 @@ function ToolGroupEntry({
                     <ConversationEntry
                       key={message.id}
                       message={message}
+                      projectId={projectId}
                       initialExpanded={isLatestMessage}
                       preferOngoingLabels={isLatestMessage}
                     />
@@ -541,6 +544,7 @@ export function ThreadDetailView() {
             return entry.kind === "tool-group" ? (
               <ToolGroupEntry
                 key={`${threadId}:${entry.id}`}
+                projectId={projectId}
                 entry={entry}
                 messages={toolGroupMessagesById[entry.id] ?? entry.messages}
                 isLoadingMessages={loadingToolGroupIds.has(entry.id)}
@@ -551,6 +555,7 @@ export function ThreadDetailView() {
               <ConversationEntry
                 key={`${threadId}:${entry.id}`}
                 message={entry.message}
+                projectId={projectId}
                 initialExpanded={isLatestActivity}
                 preferOngoingLabels={isLatestActivity}
               />

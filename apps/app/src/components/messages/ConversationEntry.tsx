@@ -28,10 +28,12 @@ import {
   COLLAPSIBLE_HEADER_TEXT_CLASS,
   getCollapsibleHeaderToneClass,
 } from "@/components/messages/CollapsibleHeader";
+import { ansiToHtml } from "@/lib/ansi";
 import { ConversationMarkdown } from "./ConversationMarkdown";
 
 interface ConversationEntryProps {
   message: UIMessage;
+  projectId?: string;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;
 }
@@ -365,7 +367,29 @@ function ExpandableEntryContainer({
   );
 }
 
-function UserMessageRow({ message }: { message: UIUserMessage }) {
+function toUserAttachmentImageSrc(pathOrUrl: string, projectId?: string): string {
+  if (/^(https?:|data:|blob:)/i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+  if (projectId) {
+    const params = new URLSearchParams({ path: pathOrUrl });
+    return `/api/v1/projects/${encodeURIComponent(projectId)}/attachments/content?${params.toString()}`;
+  }
+
+  if (/^file:/i.test(pathOrUrl)) {
+    return pathOrUrl;
+  }
+  const normalized = pathOrUrl.replaceAll("\\", "/");
+  if (/^[a-zA-Z]:\//.test(normalized)) {
+    return `file:///${encodeURI(normalized)}`;
+  }
+  if (normalized.startsWith("/")) {
+    return `file://${encodeURI(normalized)}`;
+  }
+  return pathOrUrl;
+}
+
+function UserMessageRow({ message, projectId }: { message: UIUserMessage; projectId?: string }) {
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
   const attachments: string[] = [];
   if (message.attachments?.webImages) {
@@ -386,24 +410,10 @@ function UserMessageRow({ message }: { message: UIUserMessage }) {
     ...(message.attachments?.localImagePaths ?? []),
   ];
 
-  function toImageSrc(value: string): string {
-    if (/^(https?:|data:|blob:|file:)/i.test(value)) {
-      return value;
-    }
-    const normalized = value.replaceAll("\\", "/");
-    if (/^[a-zA-Z]:\//.test(normalized)) {
-      return `file:///${encodeURI(normalized)}`;
-    }
-    if (normalized.startsWith("/")) {
-      return `file://${encodeURI(normalized)}`;
-    }
-    return value;
-  }
-
   const hasMultipleImages = imageSources.length > 1;
   const currentImageSrc =
     expandedImageIndex !== null && imageSources[expandedImageIndex]
-      ? toImageSrc(imageSources[expandedImageIndex])
+      ? toUserAttachmentImageSrc(imageSources[expandedImageIndex], projectId)
       : null;
 
   return (
@@ -427,7 +437,7 @@ function UserMessageRow({ message }: { message: UIUserMessage }) {
                     onClick={() => setExpandedImageIndex(index)}
                   >
                     <img
-                      src={toImageSrc(source)}
+                      src={toUserAttachmentImageSrc(source, projectId)}
                       alt={`Attached image ${index + 1}`}
                       className="h-20 max-w-36 object-cover"
                       loading="lazy"
@@ -801,6 +811,8 @@ function ToolCallRow({
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const outputRef = useRef<HTMLPreElement | null>(null);
   const command = message.command ?? message.toolName;
+  const outputText = message.output && message.output.length > 0 ? message.output : "(no output)";
+  const renderedOutput = useMemo(() => ansiToHtml(outputText), [outputText]);
   const actionLabel =
     message.status === "error"
       ? "Failed"
@@ -834,10 +846,9 @@ function ToolCallRow({
               <pre
                 ref={outputRef}
                 className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-zinc-400"
+                // ANSI conversion escapes XML/HTML and only emits style tags for terminal formatting.
+                dangerouslySetInnerHTML={{ __html: renderedOutput }}
               >
-                {message.output && message.output.length > 0
-                  ? message.output
-                  : "(no output)"}
               </pre>
             </div>
           </div>
@@ -1245,11 +1256,12 @@ function DebugEventRow({ message }: { message: UIDebugRawEventMessage }) {
 
 function ConversationEntryComponent({
   message,
+  projectId,
   initialExpanded = false,
   preferOngoingLabels = false,
 }: ConversationEntryProps) {
   if (message.kind === "user") {
-    return <UserMessageRow message={message} />;
+    return <UserMessageRow message={message} projectId={projectId} />;
   }
 
   if (message.kind === "assistant-reasoning") {

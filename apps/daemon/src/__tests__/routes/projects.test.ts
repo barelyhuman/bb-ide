@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { homedir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Hono } from "hono";
 import type {
   Project,
@@ -415,6 +418,48 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: "Attachment too large" });
+    });
+  });
+
+  describe("GET /projects/:id/attachments/content", () => {
+    it("serves attachment bytes for files inside the project attachment directory", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-2", rootPath: "/repo/root" }),
+      );
+
+      const attachmentsDir = resolve(homedir(), ".beanbag", "attachments", "proj-2");
+      const filePath = resolve(attachmentsDir, "image.png");
+      mkdirSync(attachmentsDir, { recursive: true });
+      writeFileSync(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+      try {
+        const encodedPath = encodeURIComponent(filePath);
+        const res = await app.request(
+          `/projects/proj-2/attachments/content?path=${encodedPath}`,
+        );
+
+        expect(res.status).toBe(200);
+        expect(res.headers.get("content-type")).toBe("image/png");
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        expect(Array.from(bytes)).toEqual([0x89, 0x50, 0x4e, 0x47]);
+      } finally {
+        rmSync(attachmentsDir, { recursive: true, force: true });
+      }
+    });
+
+    it("rejects paths outside the project attachment directory", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-2", rootPath: "/repo/root" }),
+      );
+
+      const res = await app.request(
+        `/projects/proj-2/attachments/content?path=${encodeURIComponent("/tmp/not-allowed.png")}`,
+      );
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Attachment path is outside project scope",
+      });
     });
   });
 });

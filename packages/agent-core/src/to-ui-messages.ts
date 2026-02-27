@@ -141,6 +141,17 @@ function getFirstNumberField(
   return undefined;
 }
 
+function getStringArrayField(
+  record: Record<string, unknown> | null,
+  key: string,
+): string[] {
+  const value = record?.[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => {
+    return typeof entry === "string" && entry.length > 0;
+  });
+}
+
 function collectTextFragments(value: unknown, out: string[]): void {
   if (typeof value === "string") {
     if (value.length > 0) out.push(value);
@@ -259,6 +270,9 @@ function parsePromptInput(input: unknown): {
   webImages: number;
   localImages: number;
   localFiles: number;
+  imageUrls: string[];
+  localImagePaths: string[];
+  localFilePaths: string[];
 } | null {
   if (!Array.isArray(input)) return null;
 
@@ -266,6 +280,9 @@ function parsePromptInput(input: unknown): {
   let webImages = 0;
   let localImages = 0;
   let localFiles = 0;
+  const imageUrls: string[] = [];
+  const localImagePaths: string[] = [];
+  const localFilePaths: string[] = [];
 
   for (const entry of input) {
     const part = toRecord(entry);
@@ -281,14 +298,23 @@ function parsePromptInput(input: unknown): {
     }
     if (typeToken === "image") {
       webImages += 1;
+      if (typeof part.url === "string" && part.url.length > 0) {
+        imageUrls.push(part.url);
+      }
       continue;
     }
     if (typeToken === "localimage") {
       localImages += 1;
+      if (typeof part.path === "string" && part.path.length > 0) {
+        localImagePaths.push(part.path);
+      }
       continue;
     }
     if (typeToken === "localfile") {
       localFiles += 1;
+      if (typeof part.path === "string" && part.path.length > 0) {
+        localFilePaths.push(part.path);
+      }
     }
   }
 
@@ -302,6 +328,9 @@ function parsePromptInput(input: unknown): {
     webImages,
     localImages,
     localFiles,
+    imageUrls,
+    localImagePaths,
+    localFilePaths,
   };
 }
 
@@ -351,6 +380,9 @@ function parseUserFromItemEvent(
   let webImages = 0;
   let localImages = 0;
   let localFiles = 0;
+  const imageUrls: string[] = [];
+  const localImagePaths: string[] = [];
+  const localFilePaths: string[] = [];
 
   for (const entry of content) {
     const part = toRecord(entry);
@@ -368,16 +400,36 @@ function parseUserFromItemEvent(
 
     if (typeToken === "image") {
       webImages += 1;
+      const imageUrl =
+        getStringField(part, "image_url") ??
+        getStringField(part, "url") ??
+        getStringField(toRecord(part.data), "image_url") ??
+        getStringField(toRecord(part.data), "url");
+      if (imageUrl) {
+        imageUrls.push(imageUrl);
+      }
       continue;
     }
 
     if (typeToken === "localimage") {
       localImages += 1;
+      const imagePath =
+        getStringField(part, "path") ??
+        getStringField(toRecord(part.data), "path");
+      if (imagePath) {
+        localImagePaths.push(imagePath);
+      }
       continue;
     }
 
     if (typeToken === "localfile") {
       localFiles += 1;
+      const filePath =
+        getStringField(part, "path") ??
+        getStringField(toRecord(part.data), "path");
+      if (filePath) {
+        localFilePaths.push(filePath);
+      }
     }
   }
 
@@ -402,6 +454,54 @@ function parseUserFromItemEvent(
       webImages,
       localImages,
       localFiles,
+      ...(imageUrls.length > 0 ? { imageUrls } : {}),
+      ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
+      ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
+    },
+  };
+}
+
+function parseUserFromUserMessageEvent(
+  event: ThreadEvent,
+  eventType: string,
+): UIUserMessage | null {
+  if (!eventTypeMatches(eventType, "user_message")) {
+    return null;
+  }
+
+  const payload = getEventPayloadRecord(event.data);
+  if (!payload) return null;
+
+  const text = getStringField(payload, "message") ?? "";
+  const imageUrls = getStringArrayField(payload, "images");
+  const localImagePaths = getStringArrayField(payload, "local_images");
+
+  const webImages = imageUrls.length;
+  const localImages = localImagePaths.length;
+  const localFiles = 0;
+
+  if (!text && webImages === 0 && localImages === 0) {
+    return null;
+  }
+
+  const turnId = getTurnId(event.data);
+  const itemId = getItemId(event.data) ?? `${event.seq}`;
+
+  return {
+    kind: "user",
+    id: messageId(event.threadId, "user", itemId),
+    threadId: event.threadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    ...(turnId ? { turnId } : {}),
+    text,
+    attachments: {
+      webImages,
+      localImages,
+      localFiles,
+      ...(imageUrls.length > 0 ? { imageUrls } : {}),
+      ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
     },
   };
 }
@@ -441,6 +541,15 @@ function parseUserFromClientStart(
       webImages: parsedInput.webImages,
       localImages: parsedInput.localImages,
       localFiles: parsedInput.localFiles,
+      ...(parsedInput.imageUrls.length > 0
+        ? { imageUrls: parsedInput.imageUrls }
+        : {}),
+      ...(parsedInput.localImagePaths.length > 0
+        ? { localImagePaths: parsedInput.localImagePaths }
+        : {}),
+      ...(parsedInput.localFilePaths.length > 0
+        ? { localFilePaths: parsedInput.localFilePaths }
+        : {}),
     },
   };
 }
@@ -1923,14 +2032,17 @@ export function toUIMessages(
   );
   if (hasClientThreadStart) {
     for (const event of orderedEvents) {
-      const userFromItem = parseUserFromItemEvent(event, getEventType(event));
-      if (!userFromItem) continue;
+      const eventType = getEventType(event);
+      const userFromItem = parseUserFromItemEvent(event, eventType);
+      const userFromEvent = parseUserFromUserMessageEvent(event, eventType);
+      const userMessage = userFromItem ?? userFromEvent;
+      if (!userMessage) continue;
       userItemSignatures.add(
         userMessageSignature({
-          text: userFromItem.text,
-          webImages: userFromItem.attachments?.webImages ?? 0,
-          localImages: userFromItem.attachments?.localImages ?? 0,
-          localFiles: userFromItem.attachments?.localFiles ?? 0,
+          text: userMessage.text,
+          webImages: userMessage.attachments?.webImages ?? 0,
+          localImages: userMessage.attachments?.localImages ?? 0,
+          localFiles: userMessage.attachments?.localFiles ?? 0,
         }),
       );
     }
@@ -1959,12 +2071,14 @@ export function toUIMessages(
     }
 
     const userFromItem = parseUserFromItemEvent(event, eventType);
-    if (userFromItem) {
-      const key = `${userFromItem.turnId ?? userFromItem.id}:${userFromItem.text}`;
+    const userFromEvent = parseUserFromUserMessageEvent(event, eventType);
+    const userMessage = userFromItem ?? userFromEvent;
+    if (userMessage) {
+      const key = `${userMessage.turnId ?? userMessage.id}:${userMessage.text}`;
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
         flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(userFromItem);
+        state.messages.push(userMessage);
       }
       continue;
     }

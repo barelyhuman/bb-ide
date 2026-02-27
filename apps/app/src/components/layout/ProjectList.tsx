@@ -207,6 +207,7 @@ export function ProjectList({
     if (thread.environmentId === "worktree" && thread.workStatus) {
       switch (thread.workStatus.state) {
         case "clean":
+        case "deleted":
           break
         case "dirty_uncommitted":
         case "committed_unmerged":

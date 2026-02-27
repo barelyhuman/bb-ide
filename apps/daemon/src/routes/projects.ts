@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
@@ -27,6 +27,10 @@ const projectFileQuerySchema = z.object({
       const parsed = Number.parseInt(value, 10);
       return Number.isFinite(parsed) ? parsed : undefined;
     }),
+});
+
+const projectAttachmentQuerySchema = z.object({
+  path: z.string().min(1),
 });
 
 type SearchProjectFilesFn = (
@@ -85,6 +89,30 @@ function resolvePromptAttachmentPath(
     throw invalidRequestError("Attachment path resolved outside project scope");
   }
   return destinationPath;
+}
+
+function resolveProjectAttachmentDirectory(projectId: string): string {
+  return resolve(ATTACHMENTS_ROOT_PATH, sanitizePathSegment(projectId));
+}
+
+function isPathWithinDirectory(path: string, directory: string): boolean {
+  const normalizedDirectory = resolve(directory);
+  const normalizedPath = resolve(path);
+  return (
+    normalizedPath === normalizedDirectory ||
+    normalizedPath.startsWith(`${normalizedDirectory}${sep}`)
+  );
+}
+
+function inferImageContentType(path: string): string {
+  const extension = extname(path).toLowerCase();
+  if (extension === ".png") return "image/png";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".bmp") return "image/bmp";
+  if (extension === ".svg") return "image/svg+xml";
+  return "application/octet-stream";
 }
 
 async function storePromptAttachment(args: {
@@ -292,6 +320,34 @@ export function createProjectRoutes(
             : 500
           : 500;
         return c.json({ error: message }, status);
+      }
+    })
+    .get("/:id/attachments/content", zValidator("query", projectAttachmentQuerySchema), async (c) => {
+      try {
+        const project = projectRepo.getById(c.req.param("id"));
+        if (!project) {
+          return c.json({ error: "Project not found" }, 404);
+        }
+
+        const { path } = c.req.valid("query");
+        const attachmentsDir = resolveProjectAttachmentDirectory(project.id);
+        const requestedPath = resolve(path);
+        if (!isPathWithinDirectory(requestedPath, attachmentsDir)) {
+          return c.json({ error: "Attachment path is outside project scope" }, 400);
+        }
+        if (!existsSync(requestedPath)) {
+          return c.json({ error: "Attachment not found" }, 404);
+        }
+
+        const bytes = readFileSync(requestedPath);
+        c.header("Content-Type", inferImageContentType(requestedPath));
+        c.header("Cache-Control", "private, max-age=60");
+        return c.body(bytes);
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : "Unknown error";
+        return c.json({ error: message }, 500);
       }
     });
 }

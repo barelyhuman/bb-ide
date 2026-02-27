@@ -63,6 +63,27 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Attached image 1");
   });
 
+  it("renders user local image thumbnails through daemon attachment endpoint when projectId is provided", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "user",
+      text: "",
+      attachments: {
+        webImages: 0,
+        localImages: 1,
+        localFiles: 0,
+        localImagePaths: ["/Users/me/.beanbag/attachments/proj-1/example.png"],
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} projectId="proj-1" />,
+    );
+    expect(html).toContain(
+      "/api/v1/projects/proj-1/attachments/content?path=%2FUsers%2Fme%2F.beanbag%2Fattachments%2Fproj-1%2Fexample.png",
+    );
+  });
+
   it("renders non-expandable reasoning when expanded content matches title", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -148,6 +169,23 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Ran command");
     expect(html).toContain("max-h-[320px]");
     expect(html).toContain("max-h-[220px] overflow-auto");
+  });
+
+  it("renders ANSI-colored tool output instead of raw escape codes", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-ansi",
+      command: "git add -p",
+      status: "completed",
+      output: "\u001b[32m+\u001b[0m staged line",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("style=\"color:");
+    expect(html).toContain("staged line");
+    expect(html).not.toContain("[32m");
   });
 
   it("renders exploring rows with collapsed count summary", () => {
