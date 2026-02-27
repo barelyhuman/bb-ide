@@ -1,4 +1,3 @@
-import { Archive } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
 import { useThreads } from "@/hooks/useApi";
@@ -29,11 +28,7 @@ export function ProjectArchivedThreadsView() {
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
-      <div className="mx-auto w-full max-w-3xl space-y-3">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <Archive className="size-4 text-muted-foreground" />
-          <h2>Archived threads</h2>
-        </div>
+      <div className="mx-auto w-full max-w-3xl space-y-2">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading archived threads…</p>
         ) : archivedThreads.length === 0 ? (
@@ -41,20 +36,19 @@ export function ProjectArchivedThreadsView() {
             No archived threads yet.
           </p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-1">
             {archivedThreads.map((thread) => (
               <Link
                 key={thread.id}
                 to={`/projects/${projectId}/threads/${thread.id}`}
-                className="block rounded-md border border-border px-3 py-2.5 transition-colors hover:bg-accent"
+                className="flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-accent"
               >
-                <p className="truncate text-sm font-medium">
+                <span className="min-w-0 flex-1 truncate">
                   {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Archived {formatRelativeTime(thread.archivedAt ?? thread.updatedAt)} · Updated{" "}
-                  {formatRelativeTime(thread.updatedAt)}
-                </p>
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {formatRelativeTime(thread.archivedAt ?? thread.updatedAt)}
+                </span>
               </Link>
             ))}
           </div>

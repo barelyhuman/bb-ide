@@ -170,6 +170,14 @@ function resolveBaseRef(workspaceRoot: string, branch: string | undefined): stri
   return undefined;
 }
 
+function hasLocalWorkingChanges(repoRoot: string): boolean {
+  const status = runGit(repoRoot, ["status", "--porcelain"]);
+  if (!status.ok) {
+    return false;
+  }
+  return status.stdout.trim().length > 0;
+}
+
 function emptyStatus(workspaceRoot: string): ThreadWorkStatus {
   return {
     state: "clean",
@@ -398,9 +406,10 @@ export class ThreadGitStatusService {
       return { merged: false, message: "No commits to merge" };
     }
 
-    const projectDirty = runGit(args.projectRoot, ["diff", "--quiet"]);
-    if (!projectDirty.ok) {
-      throw new Error("Project root has local changes; clean working tree before merge");
+    if (hasLocalWorkingChanges(args.projectRoot)) {
+      throw new Error(
+        "Project root has local changes that could be lost; commit or stash them before merge",
+      );
     }
 
     const currentProjectBranch = runGit(args.projectRoot, ["symbolic-ref", "--short", "HEAD"]);
@@ -450,6 +459,12 @@ export class ThreadGitStatusService {
     }
     if (workspaceStatus.aheadCount <= 0) {
       return { merged: false, message: "No commits to merge" };
+    }
+
+    if (hasLocalWorkingChanges(args.projectRoot)) {
+      throw new Error(
+        "Project root has local changes that could be lost; commit or stash them before squash merge",
+      );
     }
 
     const workspaceHead = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);

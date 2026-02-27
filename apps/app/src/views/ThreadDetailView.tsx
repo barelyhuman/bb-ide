@@ -57,7 +57,6 @@ import { promptDraftToInput } from "@/lib/prompt-draft";
 import { openPathInEditor } from "@/lib/api";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
-import { formatRelativeTime } from "@/lib/formatting";
 import {
   threadWorkStatusLabel,
   threadWorkStatusVariant,
@@ -491,9 +490,7 @@ export function ThreadDetailView() {
                 valueClassName="min-w-0 truncate"
                 align="center"
               >
-                <span title={new Date(thread.archivedAt).toLocaleString()}>
-                  {formatRelativeTime(thread.archivedAt)}
-                </span>
+                <span>true</span>
               </DetailRow>
             ) : null}
             {threadWorkStatus ? (

@@ -69,4 +69,66 @@ describe("ThreadGitStatusService", () => {
     expect(status.hasCommittedUnmergedChanges).toBe(false);
     expect(status.state).toBe("clean");
   });
+
+  it("refuses squash merge when project root has local changes", () => {
+    const repoRoot = makeTempDir();
+    const threadRoot = join(makeTempDir(), "thread-worktree");
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "worktree", "add", "-b", "thread", threadRoot, "main");
+    writeFileSync(join(threadRoot, "README.md"), "initial\nthread change\n", "utf8");
+    git(threadRoot, "add", "README.md");
+    git(threadRoot, "commit", "-m", "thread change");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\nlocal dirty change\n", "utf8");
+
+    const service = new ThreadGitStatusService();
+    expect(() =>
+      service.squashMergeWorktreeIntoDefaultBranch({
+        workspaceRoot: threadRoot,
+        projectRoot: repoRoot,
+        defaultBranch: "main",
+      })
+    ).toThrow("Project root has local changes");
+  });
+
+  it("returns conflict file list when squash merge conflicts with main", () => {
+    const repoRoot = makeTempDir();
+    const threadRoot = join(makeTempDir(), "thread-worktree");
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "line\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "worktree", "add", "-b", "thread", threadRoot, "main");
+    writeFileSync(join(threadRoot, "README.md"), "thread line\n", "utf8");
+    git(threadRoot, "add", "README.md");
+    git(threadRoot, "commit", "-m", "thread change");
+
+    writeFileSync(join(repoRoot, "README.md"), "main line\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "main change");
+
+    const service = new ThreadGitStatusService();
+    const result = service.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot: threadRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    expect(result.merged).toBe(false);
+    expect(result.conflictFiles).toContain("README.md");
+    expect(result.message).toContain("conflicts");
+  });
 });

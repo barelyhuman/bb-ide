@@ -207,13 +207,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }
     : projectSettingsMatch
         ? {
-            title: `${projectLabel ?? projectSettingsMatch[1]} settings`,
+            title: "",
             subtitle: undefined,
+            breadcrumbs: ["Projects", projectLabel ?? projectSettingsMatch[1], "Settings"],
           }
     : projectArchivedMatch
         ? {
-            title: `${projectLabel ?? projectArchivedMatch[1]} archived threads`,
+            title: "",
             subtitle: undefined,
+            breadcrumbs: ["Projects", projectLabel ?? projectArchivedMatch[1], "Archived"],
           }
     : projectMatch
         ? {

@@ -935,6 +935,7 @@ function OperationRow({
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   if (message.opType === "provisioning") {
     const detailLines = (message.detail ?? "")
@@ -942,7 +943,6 @@ function OperationRow({
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
     const hasDetails = detailLines.length > 0;
-    const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
     const isCompleted = message.title.startsWith("Provisioned ");
     const environmentLabel = isCompleted
       ? message.title.slice("Provisioned ".length).trim()
@@ -981,6 +981,129 @@ function OperationRow({
             isExpanded={isExpanded}
             summaryContent={isExpanded ? actionLabel : collapsedSummaryContent}
             summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
+            headerToneClass={headerToneClass}
+            onToggle={onToggle}
+          >
+            <div className="mt-0.5 space-y-0.5">
+              {detailLines.map((line, index) => (
+                <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">
+                  {line}
+                </div>
+              ))}
+            </div>
+          </ExpandableEntryContainer>
+        </div>
+      </div>
+    );
+  }
+
+  if (message.opType === "worktree-commit") {
+    const detailLines = (message.detail ?? "")
+      .split("•")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const commitHash =
+      detailLines.find((line) => /^[0-9a-f]{7,40}$/i.test(line)) ??
+      detailLines[detailLines.length - 1];
+    const hasCommitHash = Boolean(commitHash);
+    const collapsedSummaryContent =
+      message.title === "Committed changes" ? (
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground/90">Committed</span>
+          <span className="truncate font-semibold text-foreground/95">changes</span>
+        </span>
+      ) : (
+        message.title
+      );
+
+    if (!hasCommitHash) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full">
+            <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+              <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+                {collapsedSummaryContent}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+        <div className="mr-auto w-full">
+          <ExpandableEntryContainer
+            isExpanded={isExpanded}
+            summaryContent={collapsedSummaryContent}
+            summaryContentClassName="min-w-0"
+            headerToneClass={headerToneClass}
+            onToggle={onToggle}
+          >
+            <div className="mt-0.5">
+              <div className="font-mono ui-text-sm text-foreground/80">{commitHash}</div>
+            </div>
+          </ExpandableEntryContainer>
+        </div>
+      </div>
+    );
+  }
+
+  if (message.opType === "worktree-squash-merge") {
+    const detailLines = (message.detail ?? "")
+      .split("•")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const hasDetails = detailLines.length > 0;
+    const mergedBranchMatch = message.detail?.match(
+      /\b(?:into|to)\s+[`'"]?([A-Za-z0-9._/-]+)[`'"]?/i,
+    );
+    const mergedBranch = mergedBranchMatch?.[1];
+    const collapsedSummaryContent =
+      message.title === "Squash merged" && mergedBranch ? (
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground/90">Squash merged into</span>
+          <em className="truncate font-semibold text-foreground/95">{mergedBranch}</em>
+        </span>
+      ) : (
+        message.title
+      );
+
+    if (message.title === "Squash merged" && mergedBranch) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full">
+            <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+              <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+                {collapsedSummaryContent}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (!hasDetails) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full">
+            <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+              <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+                {collapsedSummaryContent}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+        <div className="mr-auto w-full">
+          <ExpandableEntryContainer
+            isExpanded={isExpanded}
+            summaryContent={collapsedSummaryContent}
+            summaryContentClassName="min-w-0"
             headerToneClass={headerToneClass}
             onToggle={onToggle}
           >

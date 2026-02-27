@@ -511,6 +511,43 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
+  it("renders worktree commit summaries without commit hash until expanded", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "worktree-commit",
+      title: "Committed changes",
+      detail: "feat: improve prompt handling • abcdef1234567890",
+    };
+
+    const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(collapsedHtml).toContain("Committed");
+    expect(collapsedHtml).toContain("changes");
+    expect(collapsedHtml).not.toContain("abcdef1234567890");
+    expect(collapsedHtml).toContain("lucide-chevron-right");
+
+    const expandedHtml = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
+    expect(expandedHtml).toContain("abcdef1234567890");
+  });
+
+  it("renders squash merge summaries as 'Squash merged into <em>branch</em>'", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "worktree-squash-merge",
+      title: "Squash merged",
+      detail: "Squash merged into main",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Squash merged into");
+    expect(html).toContain("<em");
+    expect(html).toContain("main");
+    expect(html).not.toContain("lucide-chevron-right");
+  });
+
   it("expands latest error rows with concise missing-folder recovery text", () => {
     const message: UIMessage = {
       ...baseMessage(),
