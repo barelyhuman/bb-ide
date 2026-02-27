@@ -840,12 +840,12 @@ function ToolCallRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div className="max-h-[320px] overflow-hidden rounded-lg border border-zinc-700/40 bg-zinc-900/90">
-            <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-zinc-100">
+          <div className="max-h-[320px] overflow-hidden rounded-lg border border-border bg-card">
+            <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
               <div className="whitespace-pre-wrap break-words leading-tight">$ {command}</div>
               <pre
                 ref={outputRef}
-                className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-zinc-400"
+                className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-muted-foreground"
                 // ANSI conversion escapes XML/HTML and only emits style tags for terminal formatting.
                 dangerouslySetInnerHTML={{ __html: renderedOutput }}
               >

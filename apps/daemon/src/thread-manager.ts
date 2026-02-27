@@ -921,15 +921,19 @@ export class ThreadManager implements ThreadOrchestrator {
       ...(message ? { message } : {}),
       includeUnstaged: request?.includeUnstaged,
     });
-    this._appendEvent(thread.id, "system/worktree/commit", {
-      status: result.commitCreated ? "committed" : "noop",
-      message: result.message,
-      ...(result.commitSha ? { commitSha: result.commitSha } : {}),
-      ...(request?.includeUnstaged !== undefined
-        ? { includeUnstaged: request.includeUnstaged }
-        : {}),
-    });
-    this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
+    this._appendEvent(
+      thread.id,
+      "system/worktree/commit",
+      {
+        status: result.commitCreated ? "committed" : "noop",
+        message: result.message,
+        ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+        ...(request?.includeUnstaged !== undefined
+          ? { includeUnstaged: request.includeUnstaged }
+          : {}),
+      },
+      { broadcastChanges: ["events-appended", "work-status-changed"] },
+    );
     return result;
   }
 
@@ -1021,17 +1025,21 @@ export class ThreadManager implements ThreadOrchestrator {
       projectRoot: project.rootPath,
       defaultBranch,
     });
-    this._appendEvent(thread.id, "system/worktree/squash_merge", {
-      status: mergeResult.merged
-        ? "merged"
-        : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
-          ? "conflict"
-          : "noop",
-      message: mergeResult.message,
-      committed,
-      ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
-    });
-    this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
+    this._appendEvent(
+      thread.id,
+      "system/worktree/squash_merge",
+      {
+        status: mergeResult.merged
+          ? "merged"
+          : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
+            ? "conflict"
+            : "noop",
+        message: mergeResult.message,
+        committed,
+        ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
+      },
+      { broadcastChanges: ["events-appended", "work-status-changed"] },
+    );
     return {
       ok: true,
       merged: mergeResult.merged,
@@ -1746,10 +1754,26 @@ export class ThreadManager implements ThreadOrchestrator {
       payload: providerPayload,
     });
 
-    const persistedEvent = this._appendEvent(threadId, eventType, eventData);
+    const shouldBroadcast = this.provider.shouldBroadcastForEvent(msg.method);
+    const changes: ThreadChangeKind[] = [];
+    if (shouldBroadcast) {
+      changes.push("events-appended");
+    }
+
+    const persistedEvent = this._appendEvent(threadId, eventType, eventData, {
+      broadcastChanges: false,
+    });
 
     const titleChanged = this._syncTitleFromEvent(threadId, msg.method, providerPayload);
+    if (shouldBroadcast && titleChanged) {
+      changes.push("title-changed");
+    }
+
     const statusChanged = this._syncStatusFromEvent(threadId, msg.method);
+    if (shouldBroadcast && statusChanged) {
+      changes.push(...THREAD_STATUS_CHANGE_KINDS);
+    }
+
     this._syncActiveTurnFromEvent(threadId, msg.method, providerPayload);
     this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
     const thread = this.threadRepo.getById(threadId);
@@ -1757,17 +1781,8 @@ export class ThreadManager implements ThreadOrchestrator {
       this._invalidateThreadWorkStatus(thread);
     }
 
-    if (this.provider.shouldBroadcastForEvent(msg.method)) {
-      const changes = new Set<ThreadChangeKind>(["events-appended"]);
-      if (titleChanged) {
-        changes.add("title-changed");
-      }
-      if (statusChanged) {
-        for (const change of THREAD_STATUS_CHANGE_KINDS) {
-          changes.add(change);
-        }
-      }
-      this._broadcastThreadChanged(threadId, Array.from(changes));
+    if (changes.length > 0) {
+      this._broadcastThreadChanged(threadId, changes);
     }
   }
 
@@ -1775,6 +1790,7 @@ export class ThreadManager implements ThreadOrchestrator {
     threadId: string,
     type: ThreadEventType,
     data: ThreadEventData,
+    opts?: { broadcastChanges?: readonly ThreadChangeKind[] | false },
   ): ThreadEvent {
     const seq = this._nextEventSeq(threadId);
     const created = this.eventRepo.create({
@@ -1784,6 +1800,10 @@ export class ThreadManager implements ThreadOrchestrator {
       data,
     });
     this.timelineByThread.delete(threadId);
+    const broadcastChanges = opts?.broadcastChanges ?? ["events-appended"];
+    if (broadcastChanges !== false) {
+      this._broadcastThreadChanged(threadId, broadcastChanges);
+    }
     if (created) return created;
     return {
       id: "",
@@ -2261,12 +2281,17 @@ export class ThreadManager implements ThreadOrchestrator {
       shouldBroadcast: false,
     });
     if (!changed) return false;
-    this._appendEvent(threadId, "system/thread-title/updated", {
-      title,
-      ...(thread?.title ? { previousTitle: thread.title } : {}),
-      source: "provider",
-      providerMethod: method,
-    });
+    this._appendEvent(
+      threadId,
+      "system/thread-title/updated",
+      {
+        title,
+        ...(thread?.title ? { previousTitle: thread.title } : {}),
+        source: "provider",
+        providerMethod: method,
+      },
+      { broadcastChanges: false },
+    );
     return true;
   }
 

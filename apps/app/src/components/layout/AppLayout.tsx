@@ -1,7 +1,14 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { ChevronRight, MoreHorizontal, PencilLine, Settings, X } from "lucide-react"
+import {
+  Archive,
+  ChevronRight,
+  MoreHorizontal,
+  PencilLine,
+  Settings,
+  X,
+} from "lucide-react"
 import {
   SidebarProvider,
   SidebarInset,
@@ -102,14 +109,24 @@ function AppHeader({
           </div>
         </div>
         {isProjectMainView && projectMatch ? (
-          <Link
-            to={`/projects/${projectMatch[1]}/settings`}
-            className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            aria-label="Project settings"
-            title="Project settings"
-          >
-            <Settings className="size-4" />
-          </Link>
+          <div className="mr-2 flex items-center gap-1">
+            <Link
+              to={`/projects/${projectMatch[1]}/archived`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Archived threads"
+              title="Archived threads"
+            >
+              <Archive className="size-4" />
+            </Link>
+            <Link
+              to={`/projects/${projectMatch[1]}/settings`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Project settings"
+              title="Project settings"
+            >
+              <Settings className="size-4" />
+            </Link>
+          </div>
         ) : null}
         {showProjectMenuButton ? (
           <DropdownMenu>
@@ -166,9 +183,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectThreadMatch = location.pathname.match(
     /^\/projects\/([^/]+)\/threads\/([^/]+)(?:\/|$)/
   )
+  const projectArchivedMatch = location.pathname.match(/^\/projects\/([^/]+)\/archived(?:\/|$)/)
   const projectSettingsMatch = location.pathname.match(/^\/projects\/([^/]+)\/settings(?:\/|$)/)
   const threadMatch = projectThreadMatch
-  const isProjectMainView = Boolean(projectMatch && !threadMatch && !projectSettingsMatch)
+  const isProjectMainView = Boolean(
+    projectMatch && !threadMatch && !projectSettingsMatch && !projectArchivedMatch
+  )
   const threadId = projectThreadMatch?.[2] ?? ""
 
   const projectId = projectMatch?.[1]
@@ -188,6 +208,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     : projectSettingsMatch
         ? {
             title: `${projectLabel ?? projectSettingsMatch[1]} settings`,
+            subtitle: undefined,
+          }
+    : projectArchivedMatch
+        ? {
+            title: `${projectLabel ?? projectArchivedMatch[1]} archived threads`,
             subtitle: undefined,
           }
     : projectMatch

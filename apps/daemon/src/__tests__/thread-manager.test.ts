@@ -145,6 +145,7 @@ function createMocks() {
     create: vi.fn(),
     listByThread: vi.fn(),
     getLatestSeq: vi.fn(),
+    getLatestByType: vi.fn(),
   } as unknown as EventRepository;
 
   const projectRepo = {
@@ -3258,6 +3259,85 @@ describe("ThreadManager", () => {
       ]);
 
       expect(manager.getRunningCount()).toBe(1);
+    });
+  });
+
+  describe("worktree operation broadcasts", () => {
+    it("broadcasts events-appended after commitThread appends a system event", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/commit" }),
+      );
+
+      (manager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        commit: vi.fn().mockReturnValue({
+          ok: true,
+          commitCreated: true,
+          message: "Committed",
+          commitSha: "abc123",
+        }),
+      };
+
+      await manager.commitThread("thread-1", { message: "test commit" });
+
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "events-appended",
+        "work-status-changed",
+      ]);
+    });
+
+    it("broadcasts events-appended after squashMergeThread appends a system event", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/squash_merge" }),
+      );
+
+      (manager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        getStatus: vi
+          .fn()
+          .mockReturnValueOnce({ hasUncommittedChanges: false })
+          .mockReturnValueOnce({ hasUncommittedChanges: false }),
+        squashMergeWorktreeIntoDefaultBranch: vi.fn().mockReturnValue({
+          merged: true,
+          message: "Squash-merged into main",
+        }),
+        invalidate: vi.fn(),
+      };
+
+      await manager.squashMergeThread("thread-1");
+
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "events-appended",
+        "work-status-changed",
+      ]);
     });
   });
 
