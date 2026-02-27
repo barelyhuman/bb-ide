@@ -5,6 +5,7 @@ import {
   Archive,
   ChevronRight,
   Folder,
+  FolderGit2,
   FolderOpen,
   LoaderCircle,
   MoreHorizontal,
@@ -404,23 +405,35 @@ export function ProjectList({
                               }
                             >
                               <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                                {isBusyThread ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+                                {isBusyThread ? (
+                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                ) : showUnreadBadge ? (
+                                  <span
+                                    className="size-1.5 rounded-full bg-primary"
+                                    aria-label="Unread completed thread"
+                                    title="Unread completion"
+                                  />
+                                ) : null}
                               </span>
                               <span className="min-w-0 flex-1 truncate">
                                 {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
                               </span>
-                              {showUnreadBadge ? (
-                                <span
-                                  className="inline-flex shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-xs font-medium text-primary"
-                                  aria-label="Unread completed thread"
-                                  title="Unread completion"
-                                >
-                                  New
-                                </span>
-                              ) : null}
-                              <span className="relative shrink-0 text-xs text-sidebar-foreground/60">
-                                <span className="inline-block min-w-8 text-right transition-opacity group-hover/thread-row:opacity-0">
-                                  {formatRelativeTime(thread.updatedAt)}
+                              <span className="relative shrink-0 text-xs text-sidebar-foreground/60 tabular-nums">
+                                <span className="inline-grid grid-cols-[0.75rem_auto] items-center justify-items-end gap-0.5 transition-opacity group-hover/thread-row:opacity-0">
+                                  <span
+                                    className={cn(
+                                      "inline-flex h-3 w-3 items-center justify-center",
+                                      thread.environmentId === "worktree" ? undefined : "invisible"
+                                    )}
+                                  >
+                                    <FolderGit2
+                                      className="size-3 text-sidebar-foreground/70"
+                                      aria-label="Worktree thread"
+                                    />
+                                  </span>
+                                  <span className="min-w-8 text-right">
+                                    {formatRelativeTime(thread.updatedAt)}
+                                  </span>
                                 </span>
                                 <button
                                   type="button"
