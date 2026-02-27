@@ -1,7 +1,10 @@
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
 import type { StatusPillVariant } from "@/components/shared/StatusPill";
 
-export function threadWorkStatusLabel(status: ThreadWorkStatus | undefined): string {
+export function threadWorkStatusLabel(
+  status: ThreadWorkStatus | undefined,
+  options?: { cleanLabel?: string },
+): string {
   if (!status) return "Unknown";
 
   if (status.hasUncommittedChanges) {
@@ -12,7 +15,7 @@ export function threadWorkStatusLabel(status: ThreadWorkStatus | undefined): str
       ? `Ahead (${status.currentBranch})`
       : "Ahead";
   }
-  return "Up to date";
+  return options?.cleanLabel ?? "Up to date";
 }
 
 export function threadWorkStatusVariant(status: ThreadWorkStatus | undefined): StatusPillVariant {

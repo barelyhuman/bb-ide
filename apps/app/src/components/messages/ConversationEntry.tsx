@@ -14,8 +14,10 @@ import type {
   UIWebSearchMessage,
 } from "@beanbag/agent-core";
 import { assertNever } from "@beanbag/agent-core";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
@@ -364,6 +366,7 @@ function ExpandableEntryContainer({
 }
 
 function UserMessageRow({ message }: { message: UIUserMessage }) {
+  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
   const attachments: string[] = [];
   if (message.attachments?.webImages) {
     const count = message.attachments.webImages;
@@ -378,31 +381,136 @@ function UserMessageRow({ message }: { message: UIUserMessage }) {
     attachments.push(`${count} local file${count === 1 ? "" : "s"}`);
   }
 
+  const imageSources = [
+    ...(message.attachments?.imageUrls ?? []),
+    ...(message.attachments?.localImagePaths ?? []),
+  ];
+
+  function toImageSrc(value: string): string {
+    if (/^(https?:|data:|blob:|file:)/i.test(value)) {
+      return value;
+    }
+    const normalized = value.replaceAll("\\", "/");
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+      return `file:///${encodeURI(normalized)}`;
+    }
+    if (normalized.startsWith("/")) {
+      return `file://${encodeURI(normalized)}`;
+    }
+    return value;
+  }
+
+  const hasMultipleImages = imageSources.length > 1;
+  const currentImageSrc =
+    expandedImageIndex !== null && imageSources[expandedImageIndex]
+      ? toImageSrc(imageSources[expandedImageIndex])
+      : null;
+
   return (
-    <div className="group w-full py-2" style={{ overflowAnchor: "none" }}>
-      <div className="ml-auto w-fit max-w-[80%]">
-        <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
-          {message.text ? (
-            <p className="whitespace-pre-wrap break-words">{message.text}</p>
-          ) : (
-            <p className="text-muted-foreground">Sent attachments</p>
-          )}
-          {attachments.length > 0 ? (
-            <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
-              {attachments.map((attachment) => (
-                <Badge
-                  key={attachment}
-                  variant="outline"
-                  className="rounded-full border-primary/30 bg-background/70 px-2 py-0 ui-text-2xs text-muted-foreground"
-                >
-                  {attachment}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
+    <>
+      <div className="group w-full py-2" style={{ overflowAnchor: "none" }}>
+        <div className="ml-auto w-fit max-w-[80%]">
+          <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
+            {message.text ? (
+              <p className="whitespace-pre-wrap break-words">{message.text}</p>
+            ) : (
+              <p className="text-muted-foreground">Sent attachments</p>
+            )}
+
+            {imageSources.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap justify-end gap-2">
+                {imageSources.map((source, index) => (
+                  <button
+                    key={`${source}-${index}`}
+                    type="button"
+                    className="cursor-zoom-in overflow-hidden rounded-md border border-primary/30 bg-background/70"
+                    onClick={() => setExpandedImageIndex(index)}
+                  >
+                    <img
+                      src={toImageSrc(source)}
+                      alt={`Attached image ${index + 1}`}
+                      className="h-20 max-w-36 object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {attachments.length > 0 ? (
+              <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
+                {attachments.map((attachment) => (
+                  <Badge
+                    key={attachment}
+                    variant="outline"
+                    className="rounded-full border-primary/30 bg-background/70 px-2 py-0 ui-text-2xs text-muted-foreground"
+                  >
+                    {attachment}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
-    </div>
+
+      {currentImageSrc ? (
+        <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
+          <DialogContent className="max-w-[90vw] border-none bg-transparent p-0 shadow-none [&>button]:hidden">
+            <DialogTitle className="sr-only">Attached image preview</DialogTitle>
+            <img
+              src={currentImageSrc}
+              alt="Attached image"
+              className="max-h-[82vh] max-w-[90vw] rounded bg-background/95 object-contain"
+            />
+
+            {hasMultipleImages ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
+                  onClick={() => {
+                    setExpandedImageIndex((index) => {
+                      if (index === null) return index;
+                      return index === 0 ? imageSources.length - 1 : index - 1;
+                    });
+                  }}
+                >
+                  <ChevronLeft className="size-5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
+                  onClick={() => {
+                    setExpandedImageIndex((index) => {
+                      if (index === null) return index;
+                      return index === imageSources.length - 1 ? 0 : index + 1;
+                    });
+                  }}
+                >
+                  <ChevronRight className="size-5" />
+                </Button>
+              </>
+            ) : null}
+
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-2 size-9 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
+              >
+                <X className="size-5" />
+              </Button>
+            </DialogClose>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
   );
 }
 
@@ -1021,9 +1129,12 @@ function ErrorRow({
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const display = parseErrorDisplay(message);
+  const isExpandable = Boolean(display.detail?.trim() || display.hint?.trim());
   const headerToneClass = isExpanded
     ? "text-destructive"
-    : "text-destructive/90 transition-colors group-hover:text-destructive group-focus-within:text-destructive";
+    : isExpandable
+      ? "text-destructive/90 transition-colors group-hover:text-destructive group-focus-within:text-destructive"
+      : "text-destructive/90";
   const summaryContent = (
     <span className="inline-flex min-w-0 items-center gap-1.5">
       <span className="shrink-0 text-destructive/85">Error:</span>
@@ -1032,6 +1143,20 @@ function ErrorRow({
       </span>
     </span>
   );
+
+  if (!isExpandable) {
+    return (
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+        <div className="mr-auto w-full rounded-md px-2 py-1 text-muted-foreground">
+          <CollapsibleHeader
+            toneClassName={headerToneClass}
+            summaryClassName="min-w-0"
+            summaryContent={summaryContent}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>

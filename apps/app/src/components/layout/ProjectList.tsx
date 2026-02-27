@@ -5,6 +5,7 @@ import {
   Archive,
   ChevronRight,
   Folder,
+  FolderGit2,
   FolderOpen,
   LoaderCircle,
   MoreHorizontal,
@@ -362,7 +363,7 @@ export function ProjectList({
                               onClick={onProjectSelect}
                               className={({ isActive }) =>
                                 cn(
-                                  "group/thread-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
+                                  "group/thread-row grid h-8 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md p-2 text-sm transition-colors",
                                   isActive
                                     ? "bg-sidebar-border/80 text-sidebar-foreground"
                                     : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -375,9 +376,22 @@ export function ProjectList({
                               <span className="min-w-0 flex-1 truncate">
                                 {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
                               </span>
-                              <span className="relative shrink-0 text-xs text-sidebar-foreground/60">
-                                <span className="inline-block min-w-8 text-right transition-opacity group-hover/thread-row:opacity-0">
-                                  {formatRelativeTime(thread.updatedAt)}
+                              <span className="relative shrink-0 text-xs text-sidebar-foreground/60 tabular-nums">
+                                <span className="inline-grid grid-cols-[0.75rem_auto] items-center justify-items-end gap-0.5 transition-opacity group-hover/thread-row:opacity-0">
+                                  <span
+                                    className={cn(
+                                      "inline-flex h-3 w-3 items-center justify-center",
+                                      thread.environmentId === "worktree" ? undefined : "invisible"
+                                    )}
+                                  >
+                                    <FolderGit2
+                                      className="size-3 text-sidebar-foreground/70"
+                                      aria-label="Worktree thread"
+                                    />
+                                  </span>
+                                  <span className="min-w-8 text-right">
+                                    {formatRelativeTime(thread.updatedAt)}
+                                  </span>
                                 </span>
                                 <button
                                   type="button"

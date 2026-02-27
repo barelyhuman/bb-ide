@@ -44,6 +44,25 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("animate-pulse");
   });
 
+  it("renders user image attachment thumbnails when paths are available", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "user",
+      text: "Please review this screenshot",
+      attachments: {
+        webImages: 0,
+        localImages: 1,
+        localFiles: 0,
+        localImagePaths: ["/tmp/screenshot.png"],
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Please review this screenshot");
+    expect(html).toContain("src=\"file:///tmp/screenshot.png\"");
+    expect(html).toContain("Attached image 1");
+  });
+
   it("renders non-expandable reasoning when expanded content matches title", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -420,6 +439,21 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Error:");
     expect(html).toContain("Thread provisioning failed for project proj-1");
     expect(html).not.toContain("Provider RPC error for request 2: Invalid params");
+  });
+
+  it("renders non-expandable error rows when no details are available", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "error",
+      rawType: "system/error",
+      message: "Error event",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Error:");
+    expect(html).toContain("Error event");
+    expect(html).not.toContain("lucide-chevron-right");
+    expect(html).not.toContain("lucide-chevron-down");
   });
 
   it("renders merged provisioning operations with explored-style summary", () => {

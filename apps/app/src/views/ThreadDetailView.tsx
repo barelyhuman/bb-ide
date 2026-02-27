@@ -54,6 +54,7 @@ import {
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { openPathInEditor } from "@/lib/api";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
+import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import {
   threadWorkStatusLabel,
   threadWorkStatusVariant,
@@ -467,8 +468,12 @@ export function ThreadDetailView() {
               >
                 <StatusPillCommitPopover
                   status={threadWorkStatus}
-                  label={threadWorkStatusLabel(threadWorkStatus)}
+                  label={threadWorkStatusLabel(threadWorkStatus, {
+                    cleanLabel:
+                      thread.environmentId === "worktree" ? "Clean, Up to date" : undefined,
+                  })}
                   variant={threadWorkStatusVariant(threadWorkStatus)}
+                  cleanTitle={thread.environmentId === "worktree" ? "Clean, Up to date" : undefined}
                   canCommit={threadWorkStatus.hasUncommittedChanges}
                   isCommitting={commitThread.isPending}
                   onCommit={async ({ includeUnstaged, message }) => {
@@ -563,7 +568,7 @@ export function ThreadDetailView() {
                     onClick={() => setIsChangeListExpanded((prev) => !prev)}
                   >
                     <span className="truncate">
-                      {threadWorkStatus.workspaceChangedFiles} files changed +{threadWorkStatus.workspaceInsertions} -{threadWorkStatus.workspaceDeletions}
+                      {threadWorkStatus.workspaceChangedFiles} files, +{threadWorkStatus.workspaceInsertions} -{threadWorkStatus.workspaceDeletions}
                     </span>
                     <ChevronDown
                       className={`size-3.5 shrink-0 transition-transform duration-200 ${
@@ -577,18 +582,7 @@ export function ThreadDetailView() {
                     isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
                   }`}
                 >
-                  {threadWorkStatus.files && threadWorkStatus.files.length > 0 ? (
-                    <ul className="max-h-32 space-y-0.5 overflow-auto">
-                      {threadWorkStatus.files.map((file) => (
-                        <li key={`${file.status}:${file.path}`} className="flex items-center gap-2">
-                          <span className="w-8 shrink-0 text-[10px] uppercase text-muted-foreground/80">
-                            {file.status}
-                          </span>
-                          <span className="truncate">{file.path}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
+                  <WorkspaceChangesList files={threadWorkStatus.files} />
                 </div>
               </div>
             ) : null}

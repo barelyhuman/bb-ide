@@ -1386,6 +1386,101 @@ describe("toUIMessages replay coverage", () => {
     expect(userMessages.some((message) => message.text === "sanity retry")).toBe(true);
   });
 
+  it("preserves user attachment paths and urls from client start input", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [
+            { type: "text", text: "check these" },
+            { type: "image", url: "https://example.com/a.png" },
+            { type: "localImage", path: "/tmp/local-a.png" },
+            { type: "localFile", path: "/tmp/notes.md" },
+          ],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+    const user = projected.find(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(user).toBeDefined();
+    expect(user?.attachments?.imageUrls).toEqual(["https://example.com/a.png"]);
+    expect(user?.attachments?.localImagePaths).toEqual(["/tmp/local-a.png"]);
+    expect(user?.attachments?.localFilePaths).toEqual(["/tmp/notes.md"]);
+  });
+
+  it("deduplicates client start input when codex user_message exists", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [
+            { type: "text", text: "Check screenshot" },
+            { type: "localImage", path: "/tmp/shot.png" },
+          ],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "codex/event/user_message",
+        data: {
+          id: "turn-1",
+          msg: {
+            type: "user_message",
+            message: "Check screenshot",
+            images: [],
+            local_images: ["/tmp/shot.png"],
+            text_elements: [],
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+    const users = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(users).toHaveLength(1);
+    expect(users[0]?.attachments?.localImagePaths).toEqual(["/tmp/shot.png"]);
+  });
+
   it("formats system error messages with detail", () => {
     const events: ThreadEvent[] = [
       {

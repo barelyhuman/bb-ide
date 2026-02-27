@@ -23,6 +23,9 @@ export interface UIUserMessage extends UIMessageBase {
     webImages: number;
     localImages: number;
     localFiles: number;
+    imageUrls?: string[];
+    localImagePaths?: string[];
+    localFilePaths?: string[];
   };
 }
 
