@@ -511,20 +511,6 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
-  it("renders plan-updated operations as expandable rows", () => {
-    const message: UIMessage = {
-      ...baseMessage(),
-      kind: "operation",
-      opType: "plan-updated",
-      title: "Plan updated",
-      detail: "• [In progress] Inspect events\n• [Pending] Patch UI",
-    };
-
-    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Plan updated");
-    expect(html).toContain("lucide-chevron-right");
-  });
-
   it("expands latest error rows with concise missing-folder recovery text", () => {
     const message: UIMessage = {
       ...baseMessage(),

@@ -98,6 +98,8 @@ export type AppThreadEventType =
   | "client/turn/start"
   | "system/error"
   | "system/thread-title/updated"
+  | "system/worktree/commit"
+  | "system/worktree/squash_merge"
   | "system/provisioning/started"
   | "system/provisioning/fallback"
   | "system/provisioning/completed"
@@ -179,6 +181,20 @@ export interface SystemProvisioningCleanupFailedEventData {
   detail?: string;
 }
 
+export interface SystemWorktreeCommitEventData {
+  status: "committed" | "noop";
+  message: string;
+  commitSha?: string;
+  includeUnstaged?: boolean;
+}
+
+export interface SystemWorktreeSquashMergeEventData {
+  status: "merged" | "noop" | "conflict";
+  message: string;
+  committed?: boolean;
+  conflictFiles?: string[];
+}
+
 export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
 
 export interface TurnLifecycleEventData {
@@ -191,6 +207,8 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
+  "system/worktree/commit": SystemWorktreeCommitEventData;
+  "system/worktree/squash_merge": SystemWorktreeSquashMergeEventData;
   "system/provisioning/started": SystemProvisioningStartedEventData;
   "system/provisioning/fallback": SystemProvisioningFallbackEventData;
   "system/provisioning/completed": SystemProvisioningCompletedEventData;

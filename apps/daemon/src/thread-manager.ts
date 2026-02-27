@@ -921,6 +921,14 @@ export class ThreadManager implements ThreadOrchestrator {
       ...(message ? { message } : {}),
       includeUnstaged: request?.includeUnstaged,
     });
+    this._appendEvent(thread.id, "system/worktree/commit", {
+      status: result.commitCreated ? "committed" : "noop",
+      message: result.message,
+      ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+      ...(request?.includeUnstaged !== undefined
+        ? { includeUnstaged: request.includeUnstaged }
+        : {}),
+    });
     this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
     return result;
   }
@@ -1012,6 +1020,16 @@ export class ThreadManager implements ThreadOrchestrator {
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
+    });
+    this._appendEvent(thread.id, "system/worktree/squash_merge", {
+      status: mergeResult.merged
+        ? "merged"
+        : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
+          ? "conflict"
+          : "noop",
+      message: mergeResult.message,
+      committed,
+      ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
     });
     this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
     return {

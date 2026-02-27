@@ -184,7 +184,7 @@ export function StatusPillCommitPopover({
                   placeholder="Leave blank to autogenerate a commit message"
                 />
               </div>
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   disabled={!canCommit || isCommitting || Boolean(isSquashMerging)}
@@ -224,7 +224,7 @@ export function StatusPillCommitPopover({
             </>
           ) : null}
           {!canCommit && canSquashMerge && onSquashMerge ? (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button
                 type="button"
                 variant="secondary"

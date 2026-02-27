@@ -1048,20 +1048,6 @@ function parseOperationMessage(
   eventType: string,
   options?: { includeOptionalOperations?: boolean },
 ): UIOperationMessage | null {
-  function formatPlanStepStatus(status: string): string {
-    switch (normalizeToken(status)) {
-      case "inprogress":
-        return "In progress";
-      case "pending":
-        return "Pending";
-      case "completed":
-        return "Completed";
-      default:
-        // Open provider/runtime values: keep unknown statuses readable without dropping them.
-        return status;
-    }
-  }
-
   if (eventTypeMatches(eventType, "turn/plan/updated")) {
     const payload = toEventRecord(event.data);
     const plan = Array.isArray(payload?.plan) ? payload.plan : [];
@@ -1073,16 +1059,9 @@ function parseOperationMessage(
         const status = getStringField(step, "status");
         const text = getStringField(step, "step");
         if (!text) return null;
-        return status
-          ? `• [${formatPlanStepStatus(status)}] ${text}`
-          : `• ${text}`;
+        return status ? `[${status}] ${text}` : text;
       })
       .filter((value): value is string => Boolean(value));
-
-    const detail =
-      explanation && steps.length > 0
-        ? `${explanation}\n${steps.join("\n")}`
-        : explanation ?? (steps.length > 0 ? steps.join("\n") : undefined);
 
     return {
       kind: "operation",
@@ -1094,7 +1073,9 @@ function parseOperationMessage(
       turnId: getTurnId(event.data),
       opType: "plan-updated",
       title: "Plan updated",
-      detail,
+      detail:
+        explanation ??
+        (steps.length > 0 ? steps.join(" • ") : undefined),
     };
   }
 
@@ -1204,6 +1185,61 @@ function parseOperationMessage(
       detail: previousTitle
         ? `${previousTitle} → ${title}`
         : title,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/worktree/commit")) {
+    const payload = toEventRecord(event.data);
+    const status = getStringField(payload, "status");
+    const title = status === "committed" ? "Committed changes" : "No commit created";
+    const detailParts = [
+      getStringField(payload, "message"),
+      getStringField(payload, "commitSha"),
+    ].filter((value): value is string => Boolean(value));
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `worktree-commit:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "worktree-commit",
+      title,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/worktree/squash_merge")) {
+    const payload = toEventRecord(event.data);
+    const status = getStringField(payload, "status");
+    const title = status === "merged"
+      ? "Squash merged"
+      : status === "conflict"
+        ? "Squash merge has conflicts"
+        : "No squash merge performed";
+    const detailParts = [
+      getStringField(payload, "message"),
+      ...((() => {
+        const conflictFiles = payload?.conflictFiles;
+        if (!Array.isArray(conflictFiles)) return [];
+        const normalized = conflictFiles
+          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          .slice(0, 8);
+        return normalized.length > 0 ? [`Conflicts: ${normalized.join(", ")}`] : [];
+      })()),
+    ].filter((value): value is string => Boolean(value));
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `worktree-squash-merge:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "worktree-squash-merge",
+      title,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
     };
   }
 
@@ -1413,7 +1449,6 @@ function createProjectionState(): ProjectionState {
       activeCell: null,
       historyCells: [],
       finalizedExecCallIds: new Set(),
-      finalizedWebSearchCallIds: new Set(),
     },
   };
 }
@@ -1431,7 +1466,6 @@ interface ToolActivityState {
   activeCell: UIToolExploringMessage | UIToolCallMessage | UIWebSearchMessage | null;
   historyCells: Array<UIToolExploringMessage | UIToolCallMessage | UIWebSearchMessage>;
   finalizedExecCallIds: Set<string>;
-  finalizedWebSearchCallIds: Set<string>;
 }
 
 function getCallStatusRank(
@@ -1817,19 +1851,6 @@ function onWebSearchBegin(
   event: ThreadEvent,
   payload: WebSearchLifecycleEvent,
 ): void {
-  if (state.toolActivity.finalizedWebSearchCallIds.has(payload.callId)) {
-    return;
-  }
-
-  const active = state.toolActivity.activeCell;
-  if (active?.kind === "web-search" && active.callId === payload.callId) {
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, event.seq);
-    active.createdAt = Math.max(active.createdAt, event.createdAt);
-    if (payload.query) active.query = payload.query;
-    if (payload.action) active.action = payload.action;
-    return;
-  }
-
   flushActiveToolCell(state);
   const turnId = getTurnId(event.data);
   state.toolActivity.activeCell = {
@@ -1852,10 +1873,6 @@ function onWebSearchEnd(
   event: ThreadEvent,
   payload: WebSearchLifecycleEvent,
 ): void {
-  if (state.toolActivity.finalizedWebSearchCallIds.has(payload.callId)) {
-    return;
-  }
-
   const active = state.toolActivity.activeCell;
   if (active?.kind === "web-search" && active.callId === payload.callId) {
     active.sourceSeqEnd = Math.max(active.sourceSeqEnd, event.seq);
@@ -1864,7 +1881,6 @@ function onWebSearchEnd(
     if (payload.action) active.action = payload.action;
     active.status = "completed";
     flushActiveToolCell(state);
-    state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
     return;
   }
 
@@ -1884,7 +1900,6 @@ function onWebSearchEnd(
     action: payload.action,
     status: "completed",
   });
-  state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
 }
 
 function mergeFileChanges(
