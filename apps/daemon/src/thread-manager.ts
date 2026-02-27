@@ -676,7 +676,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
-    this._cleanupEnvironmentSession(threadId);
+    this._cleanupEnvironmentSession(threadId, { destroyWorkspace: true });
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
@@ -1156,10 +1156,14 @@ export class ThreadManager implements ThreadOrchestrator {
     this.environmentRuntimes.set(threadId, { adapter, session });
   }
 
-  private _cleanupEnvironmentSession(threadId: string): void {
+  private _cleanupEnvironmentSession(
+    threadId: string,
+    opts?: { destroyWorkspace?: boolean },
+  ): void {
     const runtime = this.environmentRuntimes.get(threadId);
     if (!runtime) return;
     this.environmentRuntimes.delete(threadId);
+    if (!opts?.destroyWorkspace) return;
     const { adapter, session } = runtime;
     if (!session.cleanup) return;
     try {

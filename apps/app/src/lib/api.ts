@@ -308,8 +308,17 @@ export async function stopThread(id: string): Promise<void> {
   return request<void>("POST", `/threads/${id}/stop`);
 }
 
-export async function archiveThread(id: string): Promise<void> {
-  return request<void>("POST", `/threads/${id}/archive`);
+export async function archiveThread(
+  id: string,
+  opts?: { force?: boolean },
+): Promise<void> {
+  return request<void>("POST", `/threads/${id}/archive`, {
+    force: opts?.force === true,
+  });
+}
+
+export async function markThreadRead(id: string): Promise<Thread> {
+  return request<Thread>("POST", `/threads/${id}/read`);
 }
 
 export async function getThreadWorkStatus(

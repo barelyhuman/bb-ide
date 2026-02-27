@@ -60,6 +60,10 @@ const toolGroupMessagesQuerySchema = z.object({
     .pipe(z.number().int().positive()),
 });
 
+const archiveThreadBodySchema = z.object({
+  force: z.boolean().optional(),
+});
+
 const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
 function validatePromptInputAttachments(input: PromptInput[]): void {
@@ -210,6 +214,30 @@ export function createThreadRoutes(
         const thread = threadManager.getById(c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
+        const parsedBody = archiveThreadBodySchema.safeParse(bodyRaw);
+        if (!parsedBody.success) {
+          throw invalidRequestError("Invalid archive request body");
+        }
+        const force = parsedBody.data.force === true;
+        if (!force && thread.environmentId === "worktree") {
+          const workStatus = threadManager.getWorkStatus(thread.id);
+          if (
+            workStatus &&
+            (
+              workStatus.state === "dirty_uncommitted" ||
+              workStatus.state === "committed_unmerged" ||
+              workStatus.state === "dirty_and_committed_unmerged"
+            )
+          ) {
+            return c.json({
+              error:
+                "Thread workspace has uncommitted or unmerged work. Archiving may lose work; retry with force=true.",
+              code: "worktree_not_clean",
+              workStatusState: workStatus.state,
+            }, 409);
+          }
         }
         threadManager.archive(c.req.param("id"));
         return c.json({ ok: true });

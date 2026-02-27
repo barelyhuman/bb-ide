@@ -42,6 +42,15 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface ProjectListProps {
   onNewProject: () => void
@@ -59,7 +68,9 @@ export function ProjectList({
   isCreatingProject = false,
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: threads, isLoading: threadsLoading } = useThreads()
+  const { data: threads, isLoading: threadsLoading } = useThreads({
+    includeWorkStatus: true,
+  })
   const archiveThread = useArchiveThread()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
@@ -80,6 +91,7 @@ export function ProjectList({
       }
     }
   )
+  const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
 
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
@@ -188,6 +200,26 @@ export function ProjectList({
         }
       },
     })
+  }
+
+  const requestArchiveThread = (thread: Thread) => {
+    if (archiveThread.isPending) return
+
+    if (thread.environmentId === "worktree" && thread.workStatus) {
+      switch (thread.workStatus.state) {
+        case "clean":
+          break
+        case "dirty_uncommitted":
+        case "committed_unmerged":
+        case "dirty_and_committed_unmerged":
+          setArchiveConfirmationThread(thread)
+          return
+        default:
+          assertNever(thread.workStatus.state)
+      }
+    }
+
+    archiveThread.mutate({ id: thread.id })
   }
 
   return (
@@ -401,22 +433,7 @@ export function ProjectList({
                                   onClick={(event) => {
                                     event.preventDefault()
                                     event.stopPropagation()
-                                    if (archiveThread.isPending) return
-                                    const workStatus = thread.workStatus
-                                    if (
-                                      workStatus &&
-                                      (
-                                        workStatus.state === "dirty_uncommitted" ||
-                                        workStatus.state === "committed_unmerged" ||
-                                        workStatus.state === "dirty_and_committed_unmerged"
-                                      )
-                                    ) {
-                                      const shouldArchive = window.confirm(
-                                        "This thread has uncommitted or unmerged work. Archive anyway?"
-                                      )
-                                      if (!shouldArchive) return
-                                    }
-                                    archiveThread.mutate(thread.id)
+                                    requestArchiveThread(thread)
                                   }}
                                 >
                                   <Archive className="size-3.5" />
@@ -451,6 +468,51 @@ export function ProjectList({
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroupContent>
+      <Dialog
+        open={archiveConfirmationThread !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setArchiveConfirmationThread(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="size-4 text-destructive" />
+              Archive and clean up workspace?
+            </DialogTitle>
+            <DialogDescription>
+              This thread has uncommitted or unmerged work in its worktree. Archiving will remove
+              that workspace and changes may be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setArchiveConfirmationThread(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!archiveConfirmationThread || archiveThread.isPending}
+              onClick={() => {
+                if (!archiveConfirmationThread) return
+                archiveThread.mutate({ id: archiveConfirmationThread.id, force: true }, {
+                  onSettled: () => {
+                    setArchiveConfirmationThread(null)
+                  },
+                })
+              }}
+            >
+              Archive anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarGroup>
   )
 }

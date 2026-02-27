@@ -615,6 +615,49 @@ describe("Thread routes", () => {
       expect(threadManager.archive).toHaveBeenCalledWith("thread-1");
     });
 
+    it("returns 409 when worktree has uncommitted work and force is not set", async () => {
+      const thread = makeThread({ environmentId: "worktree" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        thread,
+      );
+      (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockReturnValue({
+        state: "dirty_uncommitted",
+      });
+
+      const res = await app.request("/threads/thread-1/archive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error:
+          "Thread workspace has uncommitted or unmerged work. Archiving may lose work; retry with force=true.",
+        code: "worktree_not_clean",
+        workStatusState: "dirty_uncommitted",
+      });
+      expect(threadManager.archive).not.toHaveBeenCalled();
+    });
+
+    it("archives a dirty worktree thread when force=true", async () => {
+      const thread = makeThread({ environmentId: "worktree" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        thread,
+      );
+      (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockReturnValue({
+        state: "dirty_and_committed_unmerged",
+      });
+
+      const res = await app.request("/threads/thread-1/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(threadManager.archive).toHaveBeenCalledWith("thread-1");
+    });
+
     it("returns 404 when thread not found", async () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         undefined,

@@ -303,9 +303,10 @@ export function useStopThread() {
 export function useArchiveThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.archiveThread(id),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", id] });
+    mutationFn: (args: { id: string; force?: boolean }) =>
+      api.archiveThread(args.id, { force: args.force }),
+    onSuccess: (_data, args) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", args.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },

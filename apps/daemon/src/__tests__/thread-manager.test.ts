@@ -2820,6 +2820,30 @@ describe("ThreadManager", () => {
         status: "idle",
       });
     });
+
+    it("does not destroy workspace environment on stop", () => {
+      const cleanup = vi.fn();
+      (manager as any).environmentRuntimes.set("thread-1", {
+        adapter: {
+          info: {
+            id: "worktree",
+            displayName: "Git Worktree Workspace",
+            description: "",
+            capabilities: {
+              isolatedFilesystem: true,
+              ephemeralWorkspace: true,
+              supportsCleanup: true,
+            },
+          },
+          prepare: vi.fn(),
+        },
+        session: { cwd: "/tmp/worktree", cleanup },
+      });
+
+      manager.stop("thread-1");
+
+      expect(cleanup).not.toHaveBeenCalled();
+    });
   });
 
   describe("archive()", () => {
@@ -2856,6 +2880,33 @@ describe("ThreadManager", () => {
         status: "idle",
         archivedAt: expect.any(Number),
       });
+    });
+
+    it("destroys workspace environment on archive", () => {
+      const cleanup = vi.fn();
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "idle" }),
+      );
+      (manager as any).environmentRuntimes.set("thread-1", {
+        adapter: {
+          info: {
+            id: "worktree",
+            displayName: "Git Worktree Workspace",
+            description: "",
+            capabilities: {
+              isolatedFilesystem: true,
+              ephemeralWorkspace: true,
+              supportsCleanup: true,
+            },
+          },
+          prepare: vi.fn(),
+        },
+        session: { cwd: "/tmp/worktree", cleanup },
+      });
+
+      manager.archive("thread-1");
+
+      expect(cleanup).toHaveBeenCalledTimes(1);
     });
   });
 
