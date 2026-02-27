@@ -382,6 +382,21 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Provider RPC error for request 2: Invalid params");
   });
 
+  it("renders merged provisioning operations with explored-style summary", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned Local Workspace",
+      detail: "Environment: Local Workspace\nlocal • /Users/michael/Projects/bb",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Provisioned");
+    expect(html).toContain("Local Workspace");
+    expect(html).toContain("lucide-chevron-right");
+  });
+
   it("expands latest error rows with concise missing-folder recovery text", () => {
     const message: UIMessage = {
       ...baseMessage(),

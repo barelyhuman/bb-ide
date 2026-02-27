@@ -339,4 +339,34 @@ describe("buildThreadDetailRows", () => {
     if (rows[1].message.kind !== "tool-exploring") return;
     expect(rows[1].message.calls).toHaveLength(2);
   });
+
+  it("merges consecutive provisioning operations into a single row", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("provisioning-started-1", 1),
+        kind: "operation",
+        opType: "provisioning-started",
+        title: "Provisioning started",
+        detail: "Environment: Local Workspace",
+      },
+      {
+        ...baseMessage("provisioning-completed-1", 2),
+        kind: "operation",
+        opType: "provisioning-completed",
+        title: "Provisioning ready",
+        detail: "local • /Users/michael/Projects/bb",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.opType).toBe("provisioning");
+    expect(rows[0].message.title).toBe("Provisioned Local Workspace");
+    expect(rows[0].message.detail).toContain("Environment: Local Workspace");
+    expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
+  });
 });

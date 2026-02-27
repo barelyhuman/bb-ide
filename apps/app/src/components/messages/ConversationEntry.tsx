@@ -853,7 +853,75 @@ function FileEditRow({
   );
 }
 
-function OperationRow({ message }: { message: UIOperationMessage }) {
+function OperationRow({
+  message,
+  initialExpanded = false,
+}: {
+  message: UIOperationMessage;
+  initialExpanded?: boolean;
+}) {
+  if (message.opType === "provisioning") {
+    const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+    const detailLines = (message.detail ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const hasDetails = detailLines.length > 0;
+    const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
+    const isCompleted = message.title.startsWith("Provisioned ");
+    const environmentLabel = isCompleted
+      ? message.title.slice("Provisioned ".length).trim()
+      : message.title.startsWith("Provisioning ")
+        ? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim()
+        : "";
+    const actionLabel = isCompleted ? "Provisioned" : "Provisioning";
+    const collapsedSummaryContent =
+      actionLabel === "Provisioned" && environmentLabel ? (
+        <span className="inline-flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground/90">Provisioned</span>
+          <span className="truncate font-semibold text-foreground/95">{environmentLabel}</span>
+        </span>
+      ) : (
+        message.title
+      );
+
+    if (!hasDetails) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full">
+            <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+              <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+                {collapsedSummaryContent}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+        <div className="mr-auto w-full">
+          <ExpandableEntryContainer
+            isExpanded={isExpanded}
+            summaryContent={isExpanded ? actionLabel : collapsedSummaryContent}
+            summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
+            headerToneClass={headerToneClass}
+            onToggle={onToggle}
+          >
+            <div className="mt-0.5 space-y-0.5">
+              {detailLines.map((line, index) => (
+                <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">
+                  {line}
+                </div>
+              ))}
+            </div>
+          </ExpandableEntryContainer>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
@@ -1050,7 +1118,7 @@ function ConversationEntryComponent({
   }
 
   if (message.kind === "operation") {
-    return <OperationRow message={message} />;
+    return <OperationRow message={message} initialExpanded={initialExpanded} />;
   }
 
   if (message.kind === "error") {

@@ -28,6 +28,100 @@ function isToolExploringMessage(
   return message.kind === "tool-exploring";
 }
 
+function isProvisioningOperation(
+  message: UIMessage,
+): message is Extract<UIMessage, { kind: "operation" }> {
+  if (message.kind !== "operation") return false;
+  // opType is open/external; unknown values are intentionally ignored.
+  return (
+    message.opType === "provisioning-started" ||
+    message.opType === "provisioning-fallback" ||
+    message.opType === "provisioning-completed" ||
+    message.opType === "provisioning-cleanup-failed"
+  );
+}
+
+function parseProvisioningEnvironment(detail: string | undefined): string | undefined {
+  if (!detail) return undefined;
+  const fromEnvironmentPrefix = detail.match(/^Environment:\s*(.+)$/);
+  if (fromEnvironmentPrefix?.[1]) {
+    return fromEnvironmentPrefix[1].trim();
+  }
+  const [firstToken] = detail.split(" • ");
+  const value = firstToken?.trim();
+  return value && value.length > 0 ? value : undefined;
+}
+
+function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
+  const merged: UIMessage[] = [];
+  let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
+
+  const flush = () => {
+    if (active.length === 0) return;
+    if (active.length === 1) {
+      merged.push(active[0]);
+      active = [];
+      return;
+    }
+
+    const first = active[0];
+    const last = active[active.length - 1];
+    if (!first || !last) {
+      active = [];
+      return;
+    }
+
+    const hasCompleted = active.some((message) => message.opType === "provisioning-completed");
+    const details = active
+      .map((message) => message.detail?.trim())
+      .filter((value): value is string => Boolean(value));
+    const uniqueDetailLines = [...new Set(details)];
+    const environment =
+      active
+        .map((message) => parseProvisioningEnvironment(message.detail))
+        .find((value): value is string => Boolean(value)) ?? "environment";
+
+    merged.push({
+      kind: "operation",
+      id: `${first.id}:provisioning:${last.id}`,
+      threadId: first.threadId,
+      sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
+      sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),
+      createdAt: Math.max(...active.map((message) => message.createdAt)),
+      turnId: first.turnId ?? last.turnId,
+      opType: "provisioning",
+      title: hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`,
+      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+    });
+
+    active = [];
+  };
+
+  for (const message of messages) {
+    if (!isProvisioningOperation(message)) {
+      flush();
+      merged.push(message);
+      continue;
+    }
+
+    if (active.length === 0) {
+      active = [message];
+      continue;
+    }
+
+    if (message.opType === "provisioning-started") {
+      flush();
+      active = [message];
+      continue;
+    }
+
+    active.push(message);
+  }
+
+  flush();
+  return merged;
+}
+
 function mergeToolExploringMessages(
   messages: CollapsibleTurnMessage[],
 ): CollapsibleTurnMessage[] {
@@ -91,7 +185,8 @@ function getToolGroupSummaryCount(messages: CollapsibleTurnMessage[]): number {
 }
 
 export function buildThreadDetailRows(messages: UIMessage[]): ThreadDetailRow[] {
-  const mergedMessages = mergeToolExploringMessages(messages);
+  const provisioningMergedMessages = mergeProvisioningOperations(messages);
+  const mergedMessages = mergeToolExploringMessages(provisioningMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {
