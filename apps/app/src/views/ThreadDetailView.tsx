@@ -564,7 +564,7 @@ export function ThreadDetailView() {
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
-                    className="flex min-w-0 items-center justify-between gap-2 truncate text-left"
+                    className="flex min-w-0 items-center gap-2 truncate text-left"
                     onClick={() => setIsChangeListExpanded((prev) => !prev)}
                   >
                     <span className="truncate">
@@ -576,6 +576,11 @@ export function ThreadDetailView() {
                       }`}
                     />
                   </button>
+                  {thread.environmentId !== "worktree" ? (
+                    <span className="shrink-0 text-xs text-muted-foreground/90">
+                      Includes all threads in this working directory
+                    </span>
+                  ) : null}
                 </div>
                 <div
                   className={`overflow-hidden transition-all duration-200 ${

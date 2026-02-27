@@ -705,6 +705,12 @@ function formatExploredSummary(counts: { filesRead: number; searches: number; li
   return `Explored ${parts.join(", ")}`;
 }
 
+function formatExploringSummary(counts: { filesRead: number; searches: number; lists: number }): string {
+  const exploredSummary = formatExploredSummary(counts);
+  if (!exploredSummary.startsWith("Explored ")) return "Exploring...";
+  return `Exploring ${exploredSummary.slice("Explored ".length)}...`;
+}
+
 function formatExploredDetail(counts: { filesRead: number; searches: number; lists: number }): string {
   const summary = formatExploredSummary(counts);
   if (!summary.startsWith("Explored ")) return "";
@@ -730,10 +736,11 @@ function ToolExploringRow({
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
   const actionLabel =
     message.status === "pending" || preferOngoingLabels ? "Exploring" : "Explored";
+  const exploringSummary = formatExploringSummary(counts);
   const exploredDetail = formatExploredDetail(counts);
   const collapsedSummaryContent =
     actionLabel === "Exploring" || !exploredDetail ? (
-      actionLabel
+      actionLabel === "Exploring" ? exploringSummary : actionLabel
     ) : (
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <span className="shrink-0 text-muted-foreground/90">Explored</span>
@@ -762,7 +769,9 @@ function ToolExploringRow({
       <div className="mr-auto w-full">
         <ExpandableEntryContainer
           isExpanded={isExpanded}
-          summaryContent={isExpanded ? actionLabel : collapsedSummaryContent}
+          summaryContent={
+            isExpanded ? (actionLabel === "Exploring" ? exploringSummary : actionLabel) : collapsedSummaryContent
+          }
           summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
           headerToneClass={headerToneClass}
           onToggle={onToggle}

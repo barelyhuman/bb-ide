@@ -7,15 +7,21 @@ export function threadWorkStatusLabel(
 ): string {
   if (!status) return "Unknown";
 
-  if (status.hasUncommittedChanges) {
-    return `Dirty +${status.workspaceInsertions} -${status.workspaceDeletions}`;
+  switch (status.state) {
+    case "clean":
+      return options?.cleanLabel ?? "Up to date";
+    case "deleted":
+      return "Deleted";
+    case "dirty_uncommitted":
+    case "dirty_and_committed_unmerged":
+      return `Dirty +${status.workspaceInsertions} -${status.workspaceDeletions}`;
+    case "committed_unmerged":
+      return status.currentBranch
+        ? `Ahead (${status.currentBranch})`
+        : "Ahead";
+    default:
+      return assertNever(status.state);
   }
-  if (status.hasCommittedUnmergedChanges) {
-    return status.currentBranch
-      ? `Ahead (${status.currentBranch})`
-      : "Ahead";
-  }
-  return options?.cleanLabel ?? "Up to date";
 }
 
 export function threadWorkStatusVariant(status: ThreadWorkStatus | undefined): StatusPillVariant {
@@ -24,6 +30,8 @@ export function threadWorkStatusVariant(status: ThreadWorkStatus | undefined): S
   switch (status.state) {
     case "clean":
       return "outline";
+    case "deleted":
+      return "destructive";
     case "dirty_uncommitted":
       return "secondary";
     case "committed_unmerged":

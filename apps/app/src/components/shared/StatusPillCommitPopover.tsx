@@ -42,6 +42,14 @@ export function StatusPillCommitPopover({
     (status?.workspaceChangedFiles ?? 0) > 0 ||
     (status?.workspaceInsertions ?? 0) > 0 ||
     (status?.workspaceDeletions ?? 0) > 0;
+  const canShowChangedFiles = Boolean(
+    status &&
+      (
+        status.state === "dirty_uncommitted" ||
+        status.state === "dirty_and_committed_unmerged" ||
+        status.state === "committed_unmerged"
+      ),
+  );
   const showStatusCard = !isUpToDate || Boolean(branchName);
   const title = (() => {
     if (canCommit) return "Commit your changes";
@@ -49,6 +57,8 @@ export function StatusPillCommitPopover({
     switch (status.state) {
       case "clean":
         return isUpToDate ? (cleanTitle ?? "Up to date") : "Working tree clean";
+      case "deleted":
+        return "Workspace deleted";
       case "committed_unmerged":
         return "Branch ahead";
       case "dirty_uncommitted":
@@ -67,6 +77,8 @@ export function StatusPillCommitPopover({
         return isUpToDate
           ? "No local or remote differences."
           : "No local file changes in the workspace.";
+      case "deleted":
+        return "This workspace no longer exists on disk.";
       case "dirty_uncommitted":
         return "You have local changes that have not been committed yet.";
       case "committed_unmerged":
@@ -139,7 +151,7 @@ export function StatusPillCommitPopover({
             </DetailCard>
           ) : null}
 
-          {!isClean ? (
+          {canShowChangedFiles ? (
             <div className="space-y-1.5">
               <span className="text-xs text-muted-foreground">Changed files</span>
               <WorkspaceChangesList

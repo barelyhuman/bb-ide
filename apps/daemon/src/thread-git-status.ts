@@ -51,6 +51,46 @@ function parseAheadBehind(value: string): { behind: number; ahead: number } {
   };
 }
 
+function countUnmergedAheadCommits(
+  workspaceRoot: string,
+  baseRef: string,
+  aheadCount: number,
+): number {
+  if (aheadCount <= 0) {
+    return 0;
+  }
+
+  const cherryResult = runGit(workspaceRoot, ["cherry", baseRef, "HEAD"]);
+  if (!cherryResult.ok) {
+    return aheadCount;
+  }
+
+  const lines = cherryResult.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return 0;
+  }
+
+  let unmergedCount = 0;
+  for (const line of lines) {
+    if (line.startsWith("+")) {
+      unmergedCount += 1;
+      continue;
+    }
+    if (line.startsWith("-")) {
+      continue;
+    }
+
+    // Unknown output format from git (open_external); fall back to graph-based ahead count.
+    return aheadCount;
+  }
+
+  return unmergedCount;
+}
+
 function parsePorcelainLine(line: string): { status: string; path: string } | undefined {
   if (line.length < 3) return undefined;
   const status = line.slice(0, 2).trim() || "??";
@@ -146,6 +186,13 @@ function emptyStatus(workspaceRoot: string): ThreadWorkStatus {
   };
 }
 
+function deletedStatus(workspaceRoot: string): ThreadWorkStatus {
+  return {
+    ...emptyStatus(workspaceRoot),
+    state: "deleted",
+  };
+}
+
 function toReadableAutoCommitMessage(workspaceRoot: string): string {
   const stagedFiles = runGit(workspaceRoot, ["diff", "--cached", "--name-only"]);
   const files = stagedFiles.ok
@@ -197,7 +244,7 @@ export class ThreadGitStatusService {
     defaultBranch?: string;
   }): ThreadWorkStatus {
     if (!existsSync(args.workspaceRoot)) {
-      return emptyStatus(args.workspaceRoot);
+      return deletedStatus(args.workspaceRoot);
     }
 
     const isGitRepo = runGit(args.workspaceRoot, ["rev-parse", "--is-inside-work-tree"]);
@@ -238,7 +285,7 @@ export class ThreadGitStatusService {
       const aheadBehind = runGit(args.workspaceRoot, ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`]);
       if (aheadBehind.ok) {
         const parsed = parseAheadBehind(aheadBehind.stdout);
-        aheadCount = parsed.ahead;
+        aheadCount = countUnmergedAheadCommits(args.workspaceRoot, baseRef, parsed.ahead);
         behindCount = parsed.behind;
       }
     }

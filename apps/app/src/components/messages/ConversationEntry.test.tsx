@@ -276,7 +276,7 @@ describe("ConversationEntry", () => {
     expect(completedHtml).toContain("Searched react suspense");
   });
 
-  it("uses 'Exploring' label for latest exploring presentation", () => {
+  it("uses exploring count summary for latest exploring presentation", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
@@ -301,7 +301,7 @@ describe("ConversationEntry", () => {
     const html = renderToStaticMarkup(
       <ConversationEntry message={message} preferOngoingLabels initialExpanded />,
     );
-    expect(html).toContain("Exploring");
+    expect(html).toContain("Exploring 1 file...");
     expect(html).not.toContain(">Explored<");
   });
 
