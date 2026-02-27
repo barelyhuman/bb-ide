@@ -11,10 +11,14 @@ import { findActiveFileMention, insertFileMention, type ActiveFileMention } from
 
 const PROMPTBOX_MIN_HEIGHT = 68
 const PROMPTBOX_MAX_HEIGHT = 158
-const ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode"
 
 type SubmitMode = "enter" | "mod-enter"
 type ZenModeLayout = "thread" | "project-main"
+
+const ZEN_MODE_STORAGE_KEY: Record<ZenModeLayout, string> = {
+  thread: "bb.promptbox.zen-mode.thread",
+  "project-main": "bb.promptbox.zen-mode.project-main",
+}
 
 const ZEN_MODE_HEIGHT_CLASS: Record<ZenModeLayout, string> = {
   thread: "h-[50dvh]",
@@ -139,11 +143,14 @@ export function PromptBox({
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const storedValue = window.localStorage.getItem(ZEN_MODE_STORAGE_KEY)
+    const storageKey = ZEN_MODE_STORAGE_KEY[zenModeLayout]
+    const storedValue = window.localStorage.getItem(storageKey)
     if (storedValue === "true") {
       setIsZenMode(true)
+      return
     }
-  }, [])
+    setIsZenMode(false)
+  }, [zenModeLayout])
 
   useLayoutEffect(() => {
     const fromHeight = heightAnimationFromRef.current
@@ -378,7 +385,9 @@ export function PromptBox({
   const canSubmit = hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy
   const canStartVoiceInput = voiceInput.isSupported && !isSubmitting
   const effectiveSubmitMode: SubmitMode = submitMode
-  const effectiveSubmitTitle = submitTitle
+  const effectiveSubmitTitle = isZenMode
+    ? submitTitle.replace(/^Submit\s+/, "")
+    : submitTitle
 
   const emitAttachmentFiles = useCallback((files: File[]) => {
     if (!onAttachFiles || files.length === 0) return
@@ -401,7 +410,8 @@ export function PromptBox({
     setIsZenMode((previous) => {
       const next = !previous
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(ZEN_MODE_STORAGE_KEY, String(next))
+        const storageKey = ZEN_MODE_STORAGE_KEY[zenModeLayout]
+        window.localStorage.setItem(storageKey, String(next))
       }
       return next
     })
@@ -417,7 +427,7 @@ export function PromptBox({
         nextTextarea.scrollTop = scrollTop
       }
     })
-  }, [])
+  }, [zenModeLayout])
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
