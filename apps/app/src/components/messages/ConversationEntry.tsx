@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import type {
   UIMessage,
   UIDebugRawEventMessage,
@@ -790,6 +790,7 @@ function ToolCallRow({
   preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const outputRef = useRef<HTMLPreElement | null>(null);
   const command = message.command ?? message.toolName;
   const actionLabel =
     message.status === "error"
@@ -802,6 +803,13 @@ function ToolCallRow({
   const summaryText = isExpanded ? `${actionLabel} command` : `${actionLabel} ${command}`;
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
+  useEffect(() => {
+    if (!isExpanded || message.status !== "pending") return;
+    const outputElement = outputRef.current;
+    if (!outputElement) return;
+    outputElement.scrollTop = outputElement.scrollHeight;
+  }, [isExpanded, message.output, message.status]);
+
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
@@ -811,10 +819,13 @@ function ToolCallRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div className="overflow-hidden rounded-lg border border-zinc-700/40 bg-zinc-900/90">
+          <div className="max-h-[320px] overflow-hidden rounded-lg border border-zinc-700/40 bg-zinc-900/90">
             <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-zinc-100">
               <div className="whitespace-pre-wrap break-words leading-tight">$ {command}</div>
-              <pre className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-zinc-400">
+              <pre
+                ref={outputRef}
+                className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-zinc-400"
+              >
                 {message.output && message.output.length > 0
                   ? message.output
                   : "(no output)"}

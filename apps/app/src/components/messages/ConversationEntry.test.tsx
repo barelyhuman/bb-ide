@@ -146,6 +146,8 @@ describe("ConversationEntry", () => {
     );
     expect(html).toContain("Running command");
     expect(html).not.toContain("Ran command");
+    expect(html).toContain("max-h-[320px]");
+    expect(html).toContain("max-h-[220px] overflow-auto");
   });
 
   it("renders exploring rows with collapsed count summary", () => {
