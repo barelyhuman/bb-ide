@@ -80,6 +80,8 @@ export function createServer(deps: ServerDeps) {
   const startTime = Date.now();
   const apiRoutes = createApiRoutes({
     projectRepo: deps.projectRepo,
+    threadRepo: deps.threadRepo,
+    eventRepo: deps.eventRepo,
     threadManager,
     wsManager,
     startTime,

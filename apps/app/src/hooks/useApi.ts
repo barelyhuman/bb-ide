@@ -54,6 +54,18 @@ export function useUpdateProject() {
   });
 }
 
+export function useDeleteProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteProject(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
 export function useProjectFileSuggestions(
   projectId: string | undefined,
   query: string | null,

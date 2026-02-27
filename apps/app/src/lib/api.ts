@@ -189,6 +189,10 @@ export async function listProjects(): Promise<Project[]> {
   return request<Project[]>("GET", "/projects");
 }
 
+export async function deleteProject(id: string): Promise<void> {
+  return request<void>("DELETE", `/projects/${id}`);
+}
+
 export async function searchProjectFiles(
   projectId: string,
   query: string,

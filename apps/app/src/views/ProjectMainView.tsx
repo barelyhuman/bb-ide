@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderGit2, Laptop } from "lucide-react";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { useSpawnThread, useUploadPromptAttachment } from "@/hooks/useApi";
+import { useProjects, useSpawnThread, useUploadPromptAttachment } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -13,6 +13,8 @@ import { promptDraftToInput } from "@/lib/prompt-draft";
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
+  const { data: projects } = useProjects();
   const spawnThread = useSpawnThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
@@ -57,6 +59,23 @@ export function ProjectMainView() {
       }),
     [environmentOptions],
   );
+  const projectOptions = useMemo(() => {
+    const knownOptions =
+      projects?.map((project) => ({
+        value: project.id,
+        label: project.name,
+      })) ?? [];
+
+    if (projectId && !knownOptions.some((option) => option.value === projectId)) {
+      knownOptions.unshift({ value: projectId, label: projectId });
+    }
+
+    return knownOptions;
+  }, [projectId, projects]);
+  const handleProjectChange = useCallback((nextProjectId: string) => {
+    if (nextProjectId === projectId) return;
+    navigate(`/projects/${nextProjectId}`);
+  }, [navigate, projectId]);
 
   const shouldFocusPrompt =
     typeof location.state === "object" &&
@@ -128,6 +147,17 @@ export function ProjectMainView() {
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
       <div className="space-y-1">
+        <div className="flex items-center px-3.5">
+          {projectId ? (
+            <PromptOptionPicker
+              label="Project"
+              value={projectId}
+              options={projectOptions}
+              onChange={handleProjectChange}
+              className="h-8 px-0 text-sm text-foreground/90 hover:text-foreground"
+            />
+          ) : null}
+        </div>
         <PromptBox
           id="project-main-prompt"
           value={prompt}

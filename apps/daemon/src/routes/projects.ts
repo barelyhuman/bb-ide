@@ -10,7 +10,7 @@ import {
   type UploadedPromptAttachment,
 } from "@beanbag/agent-core";
 import { z } from "zod";
-import type { ProjectRepository } from "@beanbag/db";
+import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
 import { invalidRequestError } from "../domain-errors.js";
 
@@ -129,6 +129,10 @@ export function createProjectRoutes(
   projectRepo: ProjectRepository,
   findProjectFiles: SearchProjectFilesFn = searchProjectFiles,
   savePromptAttachment: StorePromptAttachmentFn = storePromptAttachment,
+  deps?: {
+    threadRepo?: ThreadRepository;
+    eventRepo?: EventRepository;
+  },
 ) {
   return new Hono()
     .post("/", zValidator("json", createProjectSchema), async (c) => {
@@ -150,6 +154,32 @@ export function createProjectRoutes(
           return c.json({ error: "Project not found" }, 404);
         }
         return c.json(withProjectPathStatus(updated));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return c.json({ error: message }, 500);
+      }
+    })
+    .delete("/:id", async (c) => {
+      try {
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
+        if (!project) {
+          return c.json({ error: "Project not found" }, 404);
+        }
+
+        if (deps?.threadRepo && deps.eventRepo) {
+          const projectThreads = deps.threadRepo.list({
+            projectId,
+            includeArchived: true,
+          });
+          for (const thread of projectThreads) {
+            deps.eventRepo.deleteByThreadId(thread.id);
+            deps.threadRepo.delete(thread.id);
+          }
+        }
+
+        projectRepo.delete(projectId);
+        return c.json({ ok: true });
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return c.json({ error: message }, 500);

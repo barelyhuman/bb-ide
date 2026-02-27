@@ -361,6 +361,10 @@ export class EventRepository {
     });
   }
 
+  deleteByThreadId(threadId: string): void {
+    this.db.delete(events).where(eq(events.threadId, threadId)).run();
+  }
+
   getLatestSeq(threadId: string): number {
     const row = this.db
       .select({ maxSeq: sql<number>`MAX(${events.seq})` })

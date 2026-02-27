@@ -7,22 +7,32 @@ import {
   Folder,
   FolderOpen,
   LoaderCircle,
+  MoreHorizontal,
+  PencilLine,
   SquarePen,
+  Trash2,
   Wrench,
 } from "lucide-react"
 import {
   useArchiveThread,
+  useDeleteProject,
   useProjects,
   useThreads,
   useUpdateProject,
 } from "@/hooks/useApi"
-import { NavLink, useLocation } from "react-router-dom"
+import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { formatRelativeTime } from "@/lib/formatting"
 import {
   deriveProjectNameFromPath,
   requestProjectRootPath,
 } from "@/lib/projectPathInput"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -51,7 +61,9 @@ export function ProjectList({
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
   const updateProject = useUpdateProject()
+  const deleteProject = useDeleteProject()
   const location = useLocation()
+  const navigate = useNavigate()
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
     () => {
       if (typeof window === "undefined") return new Set()
@@ -112,6 +124,36 @@ export function ProjectList({
     })
   }
 
+  const renameProject = (projectId: string, currentName: string) => {
+    if (updateProject.isPending) return
+
+    const typedName = window.prompt("Enter a new project name:", currentName)
+    if (typedName == null) return
+
+    const nextName = typedName.trim()
+    if (!nextName) {
+      window.alert("Project name cannot be empty.")
+      return
+    }
+
+    updateProject.mutate({
+      id: projectId,
+      name: nextName,
+    })
+  }
+
+  const changeProjectPath = async (projectId: string) => {
+    if (updateProject.isPending) return
+
+    const rootPath = await requestProjectRootPath()
+    if (!rootPath) return
+
+    updateProject.mutate({
+      id: projectId,
+      rootPath,
+    })
+  }
+
   const repairProjectPath = async (projectId: string, fallbackName: string) => {
     if (updateProject.isPending) return
 
@@ -123,6 +165,27 @@ export function ProjectList({
       id: projectId,
       rootPath,
       name: nextName,
+    })
+  }
+
+  const removeProject = (projectId: string, projectName: string) => {
+    if (deleteProject.isPending) return
+    const confirmed = window.confirm(
+      `Remove "${projectName}" and all of its threads? This cannot be undone.`
+    )
+    if (!confirmed) return
+
+    deleteProject.mutate(projectId, {
+      onSuccess: () => {
+        setCollapsedProjectIds((current) => {
+          const next = new Set(current)
+          next.delete(projectId)
+          return next
+        })
+        if (selectedProjectId === projectId) {
+          navigate("/", { replace: true })
+        }
+      },
     })
   }
 
@@ -218,6 +281,55 @@ export function ProjectList({
                         )}
                       </button>
                     ) : null}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          title={`${project.name} options`}
+                          aria-label={`${project.name} options`}
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                          }}
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          disabled={updateProject.isPending || deleteProject.isPending}
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            renameProject(project.id, project.name)
+                          }}
+                        >
+                          <PencilLine className="size-4" />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={updateProject.isPending || deleteProject.isPending}
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            void changeProjectPath(project.id)
+                          }}
+                        >
+                          <Wrench className="size-4" />
+                          Change path
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          disabled={deleteProject.isPending || updateProject.isPending}
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            removeProject(project.id, project.name)
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <NavLink
                       to={`/projects/${project.id}`}
                       state={{ focusPrompt: true }}

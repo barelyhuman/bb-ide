@@ -197,6 +197,43 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Read README.md, package.json");
   });
 
+  it("includes list intent counts in exploring summary", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-exploring",
+      status: "completed",
+      calls: [
+        {
+          callId: "call-list-1",
+          command: "ls src",
+          parsedCmd: [
+            {
+              type: "list_files",
+              cmd: "ls src",
+              path: "src",
+            },
+          ],
+          status: "completed",
+        },
+        {
+          callId: "call-list-2",
+          command: "find . -maxdepth 2",
+          parsedCmd: [
+            {
+              type: "list_files",
+              cmd: "find . -maxdepth 2",
+              path: null,
+            },
+          ],
+          status: "completed",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("2 lists");
+  });
+
   it("renders web-search rows with pending/completed labels", () => {
     const pending: UIMessage = {
       ...baseMessage(),

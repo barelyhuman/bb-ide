@@ -6,7 +6,7 @@ import type {
   UploadedPromptAttachment,
 } from "@beanbag/agent-core";
 import { createProjectRoutes } from "../../routes/projects.js";
-import type { ProjectRepository } from "@beanbag/db";
+import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -29,6 +29,19 @@ function mockProjectRepo(): ProjectRepository {
   } as unknown as ProjectRepository;
 }
 
+function mockThreadRepo(): ThreadRepository {
+  return {
+    list: vi.fn(),
+    delete: vi.fn(),
+  } as unknown as ThreadRepository;
+}
+
+function mockEventRepo(): EventRepository {
+  return {
+    deleteByThreadId: vi.fn(),
+  } as unknown as EventRepository;
+}
+
 describe("Project routes", () => {
   type SearchProjectFilesFn = (
     rootPath: string,
@@ -43,10 +56,14 @@ describe("Project routes", () => {
   let projectRepo: ReturnType<typeof mockProjectRepo>;
   let findProjectFiles: ReturnType<typeof vi.fn>;
   let savePromptAttachment: ReturnType<typeof vi.fn>;
+  let threadRepo: ReturnType<typeof mockThreadRepo>;
+  let eventRepo: ReturnType<typeof mockEventRepo>;
   let app: Hono;
 
   beforeEach(() => {
     projectRepo = mockProjectRepo();
+    threadRepo = mockThreadRepo();
+    eventRepo = mockEventRepo();
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
       type: "localImage",
@@ -59,6 +76,7 @@ describe("Project routes", () => {
       projectRepo as any,
       findProjectFiles as SearchProjectFilesFn,
       savePromptAttachment as StorePromptAttachmentFn,
+      { threadRepo: threadRepo as any, eventRepo: eventRepo as any },
     );
     app = new Hono().route("/projects", routes);
   });
@@ -217,6 +235,46 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(400);
       expect(projectRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("DELETE /projects/:id", () => {
+    it("removes the project and all associated thread/event rows", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-2" }),
+      );
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        { id: "thread-1" },
+        { id: "thread-2" },
+      ]);
+
+      const res = await app.request("/projects/proj-2", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(threadRepo.list).toHaveBeenCalledWith({
+        projectId: "proj-2",
+        includeArchived: true,
+      });
+      expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-1");
+      expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-2");
+      expect(threadRepo.delete).toHaveBeenCalledWith("thread-1");
+      expect(threadRepo.delete).toHaveBeenCalledWith("thread-2");
+      expect(projectRepo.delete).toHaveBeenCalledWith("proj-2");
+    });
+
+    it("returns 404 when project does not exist", async () => {
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      const res = await app.request("/projects/missing", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Project not found" });
+      expect(projectRepo.delete).not.toHaveBeenCalled();
     });
   });
 

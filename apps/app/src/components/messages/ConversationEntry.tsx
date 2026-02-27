@@ -13,6 +13,7 @@ import type {
   UIAssistantTextMessage,
   UIWebSearchMessage,
 } from "@beanbag/agent-core";
+import { assertNever } from "@beanbag/agent-core";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -452,12 +453,18 @@ function formatSearchDetail(intent: Extract<UIToolParsedIntent, { type: "search"
 }
 
 function formatExploringIntentLine(intent: UIToolParsedIntent): string {
-  if (intent.type === "read") return `Read ${intent.name}`;
-  if (intent.type === "list_files") {
-    return `List ${intent.path && intent.path.length > 0 ? intent.path : intent.cmd}`;
+  switch (intent.type) {
+    case "read":
+      return `Read ${intent.name}`;
+    case "list_files":
+      return `List ${intent.path && intent.path.length > 0 ? intent.path : intent.cmd}`;
+    case "search":
+      return `Search ${formatSearchDetail(intent)}`;
+    case "unknown":
+      return `Run ${intent.cmd}`;
+    default:
+      return assertNever(intent);
   }
-  if (intent.type === "search") return `Search ${formatSearchDetail(intent)}`;
-  return intent.cmd;
 }
 
 function buildExploringDetailLines(
@@ -509,18 +516,28 @@ function buildExploringDetailLines(
 function summarizeExploringCounts(calls: UIToolExploringMessage["calls"]): {
   filesRead: number;
   searches: number;
+  lists: number;
 } {
   const readNames = new Set<string>();
   let searches = 0;
+  let lists = 0;
 
   for (const call of calls) {
     for (const intent of call.parsedCmd) {
-      if (intent.type === "read") {
-        readNames.add(intent.name);
-        continue;
-      }
-      if (intent.type === "search") {
-        searches += 1;
+      switch (intent.type) {
+        case "read":
+          readNames.add(intent.name);
+          break;
+        case "search":
+          searches += 1;
+          break;
+        case "list_files":
+          lists += 1;
+          break;
+        case "unknown":
+          break;
+        default:
+          assertNever(intent);
       }
     }
   }
@@ -528,10 +545,11 @@ function summarizeExploringCounts(calls: UIToolExploringMessage["calls"]): {
   return {
     filesRead: readNames.size,
     searches,
+    lists,
   };
 }
 
-function formatExploredSummary(counts: { filesRead: number; searches: number }): string {
+function formatExploredSummary(counts: { filesRead: number; searches: number; lists: number }): string {
   const parts: string[] = [];
   if (counts.filesRead > 0) {
     parts.push(`${counts.filesRead} file${counts.filesRead === 1 ? "" : "s"}`);
@@ -539,11 +557,14 @@ function formatExploredSummary(counts: { filesRead: number; searches: number }):
   if (counts.searches > 0) {
     parts.push(`${counts.searches} search${counts.searches === 1 ? "" : "es"}`);
   }
+  if (counts.lists > 0) {
+    parts.push(`${counts.lists} list${counts.lists === 1 ? "" : "s"}`);
+  }
   if (parts.length === 0) return "Explored";
   return `Explored ${parts.join(", ")}`;
 }
 
-function formatExploredDetail(counts: { filesRead: number; searches: number }): string {
+function formatExploredDetail(counts: { filesRead: number; searches: number; lists: number }): string {
   const summary = formatExploredSummary(counts);
   if (!summary.startsWith("Explored ")) return "";
   return summary.slice("Explored ".length);
