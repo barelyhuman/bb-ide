@@ -14,7 +14,6 @@ import type {
   UIWebSearchMessage,
 } from "@beanbag/agent-core";
 import { assertNever } from "@beanbag/agent-core";
-import { PatchDiff } from "@pierre/diffs/react";
 import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,49 +169,143 @@ function diffStats(
   return { added, removed };
 }
 
-const DIFF_VIEW_OPTIONS = {
-  overflow: "scroll",
-  themeType: "system",
-  disableFileHeader: true,
-} as const;
+type ParsedDiffLineType = "add" | "del" | "normal" | "hunk" | "meta";
 
-function toSyntheticPatch(
-  change: UIFileEditMessage["changes"][number],
-  action: FileChangeAction,
-): string | undefined {
-  if (action !== "created" && action !== "deleted") return undefined;
-  const diff = change.diff?.replaceAll("\r\n", "\n") ?? "";
-  const lines = diff.endsWith("\n") ? diff.slice(0, -1).split("\n") : diff.split("\n");
-  if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) return undefined;
-  const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
-  const fromPath = action === "created" ? "/dev/null" : `a/${normalizedPath}`;
-  const toPath = action === "created" ? `b/${normalizedPath}` : "/dev/null";
-  const prefix = action === "created" ? "+" : "-";
-  const oldCount = action === "created" ? 0 : lines.length;
-  const newCount = action === "created" ? lines.length : 0;
-  const body = lines.map((line) => `${prefix}${line}`).join("\n");
-
-  return `--- ${fromPath}\n+++ ${toPath}\n@@ -1,${oldCount} +1,${newCount} @@\n${body}\n`;
+interface ParsedDiffLine {
+  type: ParsedDiffLineType;
+  content: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
 }
 
-function getRenderablePatch(change: UIFileEditMessage["changes"][number]): string | undefined {
-  const patch = change.diff;
-  if (patch && patch.trim().length > 0) {
-    const trimmedPatch = patch.trimEnd();
-    if (
-      trimmedPatch.startsWith("diff --git") ||
-      (trimmedPatch.includes("--- ") &&
-        trimmedPatch.includes("+++ ") &&
-        trimmedPatch.includes("@@"))
-    ) {
-      return patch;
+function parseUnifiedDiffLines(diff: string | undefined): ParsedDiffLine[] {
+  if (!diff || diff.trim().length === 0) {
+    return [{ type: "meta", content: "(No diff provided)" }];
+  }
+
+  const lines = diff.split("\n");
+  const parsed: ParsedDiffLine[] = [];
+  let oldLine = 1;
+  let newLine = 1;
+  let hasHunkHeader = false;
+
+  for (const line of lines) {
+    if (line.startsWith("@@")) {
+      hasHunkHeader = true;
+      const match = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (match?.[1] && match?.[2]) {
+        oldLine = Number(match[1]);
+        newLine = Number(match[2]);
+      }
+      parsed.push({ type: "hunk", content: line });
+      continue;
     }
-    if (patch.includes("@@")) {
-      const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
-      return `--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`;
+
+    if (line.startsWith("diff --git") || line.startsWith("index ")) {
+      parsed.push({ type: "meta", content: line });
+      continue;
+    }
+
+    if (line.startsWith("--- ") || line.startsWith("+++ ")) {
+      parsed.push({ type: "meta", content: line });
+      continue;
+    }
+
+    if (line.startsWith("+")) {
+      parsed.push({
+        type: "add",
+        content: line,
+        newLineNumber: hasHunkHeader ? newLine : undefined,
+      });
+      if (hasHunkHeader) newLine += 1;
+      continue;
+    }
+
+    if (line.startsWith("-")) {
+      parsed.push({
+        type: "del",
+        content: line,
+        oldLineNumber: hasHunkHeader ? oldLine : undefined,
+      });
+      if (hasHunkHeader) oldLine += 1;
+      continue;
+    }
+
+    if (line.startsWith(" ")) {
+      parsed.push({
+        type: "normal",
+        content: line,
+        oldLineNumber: hasHunkHeader ? oldLine : undefined,
+        newLineNumber: hasHunkHeader ? newLine : undefined,
+      });
+      if (hasHunkHeader) {
+        oldLine += 1;
+        newLine += 1;
+      }
+      continue;
+    }
+
+    parsed.push({
+      type: "normal",
+      content: line,
+      oldLineNumber: hasHunkHeader ? oldLine : undefined,
+      newLineNumber: hasHunkHeader ? newLine : undefined,
+    });
+    if (hasHunkHeader) {
+      oldLine += 1;
+      newLine += 1;
     }
   }
-  return toSyntheticPatch(change, fileChangeAction(change));
+
+  return parsed;
+}
+
+function DiffLine({
+  line,
+}: {
+  line: ParsedDiffLine;
+}) {
+  if (line.type === "hunk") {
+    return (
+      <div className="px-2 py-0.5 font-mono ui-text-2xs text-muted-foreground/90">
+        {line.content}
+      </div>
+    );
+  }
+
+  if (line.type === "meta") {
+    return (
+      <div className="px-2 py-0.5 font-mono ui-text-2xs text-muted-foreground/80">
+        {line.content}
+      </div>
+    );
+  }
+
+  let lineClassName = "bg-background/90 border-l-2 border-transparent";
+  let contentClassName = "text-foreground/85";
+
+  if (line.type === "add") {
+    lineClassName = "bg-emerald-500/10 border-l-2 border-emerald-500/60";
+    contentClassName = "text-emerald-700 dark:text-emerald-300";
+  } else if (line.type === "del") {
+    lineClassName = "bg-destructive/10 border-l-2 border-destructive/60";
+    contentClassName = "text-destructive/90";
+  }
+
+  return (
+    <div
+      className={`grid items-center px-2 py-0.5 font-mono ui-text-xs ${lineClassName}`}
+      style={{ gridTemplateColumns: "30px 30px 1fr", whiteSpace: "pre" }}
+    >
+      <span className="select-none pr-2 text-right ui-text-2xs text-muted-foreground/70">
+        {line.oldLineNumber ?? ""}
+      </span>
+      <span className="select-none pr-2 text-right ui-text-2xs text-muted-foreground/70">
+        {line.newLineNumber ?? ""}
+      </span>
+      <span className={contentClassName}>{line.content}</span>
+    </div>
+  );
 }
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
@@ -876,11 +969,14 @@ function FileEditRow({
                 const action = fileChangeAction(change);
                 const actionChip = fileChangeActionLabel(action);
                 const stats = diffStats(change);
+                const diffLines = parseUnifiedDiffLines(change.diff);
                 const fileName = fileNameFromPath(change.path);
                 const pathDetail = change.movePath
                   ? `${change.path} → ${change.movePath}`
                   : change.path;
-                const patch = getRenderablePatch(change);
+                const visibleDiffLines = diffLines.filter(
+                  (line) => line.type !== "meta" && line.type !== "hunk",
+                );
                 return (
                   <div
                     key={`${change.path}:${change.movePath ?? ""}:${index}`}
@@ -907,8 +1003,10 @@ function FileEditRow({
                       </div>
                       <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
                         <div className="min-w-fit">
-                          {patch ? (
-                            <PatchDiff patch={patch} options={DIFF_VIEW_OPTIONS} />
+                          {visibleDiffLines.length > 0 ? (
+                            visibleDiffLines.map((line, lineIndex) => (
+                              <DiffLine key={`${change.path}:${lineIndex}`} line={line} />
+                            ))
                           ) : (
                             <div className="px-3 py-2 font-mono ui-text-xs text-muted-foreground/80">
                               (No diff provided)
