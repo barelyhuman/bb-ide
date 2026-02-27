@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { FolderGit2, Laptop } from "lucide-react";
 import { useLocation, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
@@ -41,6 +42,21 @@ export function ProjectMainView() {
     sandboxOptions,
     environmentOptions,
   } = usePromptModelReasoning({ scope: "new-thread" });
+  const environmentSelectorOptions = useMemo(
+    () =>
+      environmentOptions.map((option) => {
+        switch (option.value) {
+          case "local":
+            return { ...option, label: "Local", icon: Laptop };
+          case "worktree":
+            return { ...option, label: "New worktree", icon: FolderGit2 };
+          default:
+            // Intentionally preserve unknown environment IDs surfaced by the daemon.
+            return option;
+        }
+      }),
+    [environmentOptions],
+  );
 
   const shouldFocusPrompt =
     typeof location.state === "object" &&
@@ -156,7 +172,7 @@ export function ProjectMainView() {
           <PromptOptionPicker
             label="Environment"
             value={environmentId}
-            options={environmentOptions}
+            options={environmentSelectorOptions}
             onChange={setEnvironmentId}
           />
         </div>

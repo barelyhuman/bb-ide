@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import type {
   EnvironmentAdapter,
   EnvironmentPrepareContext,
@@ -65,11 +66,37 @@ export interface CreateWorktreeEnvironmentAdapterOptions {
   worktreeRootName?: string;
 }
 
+const DEFAULT_WORKTREE_ROOT = "~/.beanbag/worktrees";
+
+function expandHomeDirectory(path: string): string {
+  if (path === "~") return homedir();
+  if (path.startsWith("~/")) {
+    return resolve(homedir(), path.slice(2));
+  }
+  return path;
+}
+
+function resolveConfiguredWorktreeRoot(
+  projectRoot: string,
+  configuredRoot: string,
+): { root: string; isGlobalRoot: boolean } {
+  const normalizedRoot = expandHomeDirectory(configuredRoot.trim());
+  if (isAbsolute(normalizedRoot)) {
+    return { root: normalizedRoot, isGlobalRoot: true };
+  }
+  return {
+    root: resolve(projectRoot, normalizedRoot),
+    isGlobalRoot: false,
+  };
+}
+
 export function createWorktreeEnvironmentAdapter(
   opts?: CreateWorktreeEnvironmentAdapterOptions,
 ): EnvironmentAdapter {
   const gitCommand = opts?.gitCommand ?? process.env.BEANBAG_GIT_COMMAND ?? "git";
-  const worktreeRootName = opts?.worktreeRootName ?? ".beanbag/worktrees";
+  const worktreeRootName = opts?.worktreeRootName ??
+    process.env.BEANBAG_WORKTREE_ROOT ??
+    DEFAULT_WORKTREE_ROOT;
 
   return {
     info: { ...WORKTREE_ENVIRONMENT_INFO },
@@ -91,7 +118,11 @@ export function createWorktreeEnvironmentAdapter(
         };
       }
 
-      const worktreeRoot = resolve(projectRoot, worktreeRootName);
+      const { root: configuredWorktreeRoot, isGlobalRoot } =
+        resolveConfiguredWorktreeRoot(projectRoot, worktreeRootName);
+      const worktreeRoot = isGlobalRoot
+        ? resolve(configuredWorktreeRoot, context.projectId)
+        : configuredWorktreeRoot;
       const workspaceRoot = resolve(worktreeRoot, context.threadId);
       mkdirSync(worktreeRoot, { recursive: true });
 

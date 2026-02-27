@@ -1,3 +1,4 @@
+import type { ComponentType } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,6 +13,7 @@ export interface PromptOption<T extends string> {
   value: T
   label: string
   tone?: "default" | "warning"
+  icon?: ComponentType<{ className?: string }>
 }
 
 interface PromptOptionPickerProps<T extends string> {
@@ -31,6 +33,7 @@ export function PromptOptionPicker<T extends string>({
 }: PromptOptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value)
   const selectedIsWarning = selectedOption?.tone === "warning"
+  const SelectedIcon = selectedOption?.icon
 
   return (
     <DropdownMenu>
@@ -48,7 +51,10 @@ export function PromptOptionPicker<T extends string>({
             className
           )}
         >
-          <span>{selectedOption?.label ?? value}</span>
+          <span className="flex items-center gap-1.5">
+            {SelectedIcon ? <SelectedIcon className="size-3.5 shrink-0" /> : null}
+            <span>{selectedOption?.label ?? value}</span>
+          </span>
           <ChevronDown
             className={cn(
               "size-3.5",
@@ -60,29 +66,33 @@ export function PromptOptionPicker<T extends string>({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-44">
-        {options.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onSelect={() => onChange(option.value)}
-            className="flex items-center justify-between gap-3"
-          >
-            <span
-              className={cn(
-                "flex items-center gap-2",
-                option.tone === "warning" &&
-                  "text-amber-700 dark:text-amber-300"
-              )}
+        {options.map((option) => {
+          const OptionIcon = option.icon
+          return (
+            <DropdownMenuItem
+              key={option.value}
+              onSelect={() => onChange(option.value)}
+              className="flex items-center justify-between gap-3"
             >
-              <span>{option.label}</span>
-            </span>
-            <Check
-              className={cn(
-                "size-4",
-                option.value === value ? "opacity-100" : "opacity-0"
-              )}
-            />
-          </DropdownMenuItem>
-        ))}
+              <span
+                className={cn(
+                  "flex items-center gap-2",
+                  option.tone === "warning" &&
+                    "text-amber-700 dark:text-amber-300"
+                )}
+              >
+                {OptionIcon ? <OptionIcon className="size-4 shrink-0" /> : null}
+                <span>{option.label}</span>
+              </span>
+              <Check
+                className={cn(
+                  "size-4",
+                  option.value === value ? "opacity-100" : "opacity-0"
+                )}
+              />
+            </DropdownMenuItem>
+          )
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -16,6 +16,98 @@ import type {
 } from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
+const MAX_ERROR_MESSAGE_LENGTH = 180;
+const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
+
+const ERROR_KEYS = ["message", "error", "detail"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeErrorText(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+function truncateErrorText(raw: string): string {
+  return raw.length > MAX_ERROR_MESSAGE_LENGTH
+    ? `${raw.slice(0, MAX_ERROR_MESSAGE_LENGTH - 1)}...`
+    : raw;
+}
+
+function extractErrorMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    const normalized = normalizeErrorText(value);
+    return normalized.length > 0 ? truncateErrorText(normalized) : null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = extractErrorMessage(item);
+      if (message) {
+        return message;
+      }
+    }
+    return null;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  for (const key of ERROR_KEYS) {
+    const message = extractErrorMessage(value[key]);
+    if (message) {
+      return message;
+    }
+  }
+  return null;
+}
+
+function deriveHttpErrorMessage(
+  status: number,
+  statusText: string,
+  rawBody: string,
+  contentType: string | null,
+): string {
+  const normalized = normalizeErrorText(rawBody);
+  if (normalized.length === 0) {
+    return statusText || "Request failed";
+  }
+
+  const shouldParseAsJson =
+    (contentType?.includes("application/json") ?? false) ||
+    normalized.startsWith("{") ||
+    normalized.startsWith("[");
+  if (shouldParseAsJson) {
+    try {
+      const parsed = JSON.parse(normalized) as unknown;
+      const message = extractErrorMessage(parsed);
+      if (message) {
+        return message;
+      }
+    } catch {
+      // Fall through to non-JSON handling.
+    }
+  }
+
+  if (HTML_DOCUMENT_PATTERN.test(normalized)) {
+    if (status === 401 || status === 403) {
+      return "Authentication failed";
+    }
+    return statusText || "Request failed";
+  }
+
+  return (extractErrorMessage(normalized) ?? statusText) || "Request failed";
+}
+
+async function throwHttpError(res: Response): Promise<never> {
+  const rawBody = await res.text().catch(() => "");
+  const message = deriveHttpErrorMessage(
+    res.status,
+    res.statusText,
+    rawBody,
+    res.headers.get("content-type"),
+  );
+  throw new Error(`HTTP ${res.status}: ${message}`);
+}
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = {
@@ -27,25 +119,53 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   const res = await fetch(`${BASE}${path}`, opts);
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
+    await throwHttpError(res);
   }
   const text = await res.text();
   if (!text) return undefined as T;
   return JSON.parse(text) as T;
 }
 
-async function upload<T>(path: string, file: File): Promise<T> {
+async function upload<T>(
+  path: string,
+  file: File,
+  signal?: AbortSignal,
+): Promise<T> {
   const formData = new FormData();
   formData.set("file", file, file.name);
 
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     body: formData,
+    signal,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
+    await throwHttpError(res);
+  }
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
+}
+
+async function uploadWithForm<T>(
+  path: string,
+  fields: Record<string, string>,
+  file: File,
+  signal?: AbortSignal,
+): Promise<T> {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    formData.set(key, value);
+  }
+  formData.set("file", file, file.name);
+
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: formData,
+    signal,
+  });
+  if (!res.ok) {
+    await throwHttpError(res);
   }
   const text = await res.text();
   if (!text) return undefined as T;
@@ -90,6 +210,23 @@ export async function uploadPromptAttachment(
   return upload<UploadedPromptAttachment>(
     `/projects/${projectId}/attachments`,
     file,
+  );
+}
+
+export async function transcribeVoiceInput(
+  file: File,
+  prompt?: string,
+  signal?: AbortSignal,
+): Promise<{ text: string }> {
+  const trimmedPrompt = prompt?.trim();
+  if (!trimmedPrompt) {
+    return upload<{ text: string }>("/system/voice-transcription", file, signal);
+  }
+  return uploadWithForm<{ text: string }>(
+    "/system/voice-transcription",
+    { prompt: trimmedPrompt },
+    file,
+    signal,
   );
 }
 

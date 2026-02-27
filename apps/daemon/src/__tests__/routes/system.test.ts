@@ -8,6 +8,7 @@ import type {
   ThreadOrchestrator,
 } from "@beanbag/agent-core";
 import { createSystemRoutes } from "../../routes/system.js";
+import { invalidRequestError } from "../../domain-errors.js";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
@@ -64,6 +65,11 @@ describe("System routes", () => {
   let pickFolder: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let listModels: ReturnType<typeof vi.fn<() => Promise<AvailableModel[]>>>;
   let getProviderInfo: ReturnType<typeof vi.fn<() => SystemProviderInfo>>;
+  let transcribeVoice: ReturnType<
+    typeof vi.fn<
+      (args: { file: File; prompt?: string }) => Promise<{ text: string }>
+    >
+  >;
   let app: Hono;
   const startTime = Date.now() - 3600_000;
 
@@ -72,12 +78,17 @@ describe("System routes", () => {
     pickFolder = vi.fn();
     listModels = vi.fn();
     getProviderInfo = vi.fn();
+    transcribeVoice = vi.fn().mockResolvedValue({ text: "transcribed prompt" });
     const routes = createSystemRoutes(
       threadManager as any,
       startTime,
       pickFolder,
       listModels,
       getProviderInfo,
+      undefined,
+      undefined,
+      undefined,
+      transcribeVoice,
     );
     app = new Hono().route("/system", routes);
   });
@@ -156,6 +167,77 @@ describe("System routes", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("picker unavailable");
+    });
+  });
+
+  describe("POST /system/voice-transcription", () => {
+    it("transcribes uploaded audio and returns text", async () => {
+      const formData = new FormData();
+      formData.set("file", new File(["audio"], "recording.webm", { type: "audio/webm" }));
+      formData.set("prompt", "existing prompt context");
+
+      const res = await app.request("/system/voice-transcription", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ text: "transcribed prompt" });
+      expect(transcribeVoice).toHaveBeenCalledWith({
+        file: expect.any(File),
+        prompt: "existing prompt context",
+      });
+    });
+
+    it("returns 400 when file field is missing", async () => {
+      const formData = new FormData();
+      formData.set("prompt", "hello");
+
+      const res = await app.request("/system/voice-transcription", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Expected multipart file field named 'file'",
+      });
+      expect(transcribeVoice).not.toHaveBeenCalled();
+    });
+
+    it("returns 500 when transcription fails", async () => {
+      transcribeVoice.mockRejectedValueOnce(new Error("transcription failed"));
+      const formData = new FormData();
+      formData.set("file", new File(["audio"], "recording.webm", { type: "audio/webm" }));
+
+      const res = await app.request("/system/voice-transcription", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBe("transcription failed");
+    });
+
+    it("returns 400 when transcription returns invalid_request", async () => {
+      transcribeVoice.mockRejectedValueOnce(
+        invalidRequestError("Voice transcription is not configured."),
+      );
+      const formData = new FormData();
+      formData.set("file", new File(["audio"], "recording.webm", { type: "audio/webm" }));
+
+      const res = await app.request("/system/voice-transcription", {
+        method: "POST",
+        body: formData,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        code: "invalid_request",
+        message: "Voice transcription is not configured.",
+        error: "Voice transcription is not configured.",
+      });
     });
   });
 

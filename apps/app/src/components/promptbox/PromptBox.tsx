@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
-import { CornerDownLeft, Loader2, Mic, MicOff, Paperclip, Square, X } from "lucide-react"
+import { AudioLines, CornerDownLeft, Loader2, Mic, Paperclip, Square, X } from "lucide-react"
 import type { ProjectFileSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
+import { transcribeVoiceInput } from "@/lib/api"
 import type { PromptDraftAttachment } from "@/lib/prompt-draft"
 import { cn } from "@/lib/utils"
 import { findActiveFileMention, insertFileMention, type ActiveFileMention } from "./file-mention"
@@ -43,6 +44,34 @@ interface DismissedMentionRange {
   start: number
   end: number
   hasLeftRange: boolean
+}
+
+function summarizeVoiceErrorMessage(input: string): string {
+  const normalized = input.replace(/\s+/g, " ").trim()
+  const lowered = normalized.toLowerCase()
+
+  if (
+    lowered.includes("authentication failed") ||
+    lowered.includes("not configured") ||
+    lowered.includes("codex login") ||
+    lowered.includes("openai_api_key")
+  ) {
+    return "Voice auth required. Run codex login or set OPENAI_API_KEY."
+  }
+  if (lowered.includes("rate limited")) {
+    return "Voice transcription is rate limited. Try again shortly."
+  }
+  if (lowered.includes("temporarily unavailable")) {
+    return "Voice transcription is unavailable. Try again."
+  }
+  if (lowered.includes("recording too short")) {
+    return "Recording too short. Hold for at least 1 second."
+  }
+  if (lowered.includes("no audio was captured")) {
+    return "No audio captured. Check your microphone and try again."
+  }
+
+  return normalized || "Voice input failed."
 }
 
 export function PromptBox({
@@ -141,8 +170,6 @@ export function PromptBox({
   const trimmedValue = value.trim()
   const hasAttachments = attachments.length > 0
   const hasSubmittableInput = trimmedValue.length > 0 || hasAttachments
-  const showStop = Boolean(isRunning && onStop && !hasSubmittableInput)
-  const canSubmit = hasSubmittableInput && !isSubmitting && !submitDisabled
   const hasMentionContext = activeMention !== null
   const showMentionMenu = hasMentionContext
   const activeMentionQuery = activeMention?.query.trim() ?? ""
@@ -238,14 +265,58 @@ export function PromptBox({
     })
   }, [onChange, resizeTextarea, syncMentionState])
 
+  const getVoicePromptContext = useCallback(() => {
+    const currentValue = valueRef.current
+    const textarea = textareaRef.current
+    if (!textarea) {
+      const trimmed = currentValue.trim()
+      return trimmed.length > 0 ? trimmed : undefined
+    }
+    const selectionStart = textarea.selectionStart ?? currentValue.length
+    const beforeCursor = currentValue.slice(0, selectionStart).trim()
+    return beforeCursor.length > 0 ? beforeCursor : undefined
+  }, [])
+
+  const requestVoiceTranscription = useCallback(async ({
+    file,
+    promptContext,
+    signal,
+  }: {
+    file: File
+    promptContext?: string
+    signal?: AbortSignal
+  }) => {
+    const transcription = await transcribeVoiceInput(file, promptContext, signal)
+    return transcription.text
+  }, [])
+
   const voiceInput = useVoiceInput({
     onTranscript: insertVoiceTranscript,
+    onTranscribe: requestVoiceTranscription,
+    getPromptContext: getVoicePromptContext,
   })
+  const isVoiceRecording = voiceInput.isRecording
+  const isVoiceProcessing = voiceInput.isProcessing
+  const isVoiceBusy = isVoiceRecording || isVoiceProcessing
+  const voiceErrorMessage = voiceInput.state === "error"
+    ? summarizeVoiceErrorMessage(
+      voiceInput.errorMessage ?? voiceInput.statusLabel ?? "Voice input failed."
+    )
+    : null
+  const showVoiceActionGroup = isVoiceRecording || isVoiceProcessing
+  const showStop = Boolean(isRunning && onStop && !hasSubmittableInput && !isVoiceBusy)
+  const canSubmit = hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy
+  const canStartVoiceInput = voiceInput.isSupported && !isSubmitting
 
   const emitAttachmentFiles = useCallback((files: File[]) => {
     if (!onAttachFiles || files.length === 0) return
     void onAttachFiles(files)
   }, [onAttachFiles])
+
+  const submitPrompt = useCallback(() => {
+    if (!canSubmit) return
+    onSubmit()
+  }, [canSubmit, onSubmit])
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -259,9 +330,7 @@ export function PromptBox({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!canSubmit) return
-    voiceInput.stop()
-    onSubmit()
+    submitPrompt()
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -303,9 +372,7 @@ export function PromptBox({
 
     if (!isSubmitKey) return
     event.preventDefault()
-    if (!canSubmit) return
-    voiceInput.stop()
-    onSubmit()
+    submitPrompt()
   }
 
   return (
@@ -459,21 +526,17 @@ export function PromptBox({
         </div>
       ) : null}
 
+      {voiceErrorMessage ? (
+        <div className="mx-3 mb-1 mt-1 rounded-md border border-destructive/30 bg-destructive/[0.06] px-2 py-1 text-xs text-destructive">
+          <span className="block truncate" title={voiceErrorMessage}>
+            {voiceErrorMessage}
+          </span>
+        </div>
+      ) : null}
+
       <div className="flex flex-row items-center gap-3 px-3.5 pt-1.5">
-        <div className="flex min-w-0 flex-1 flex-row items-center gap-1">
+        <div className="flex min-w-0 flex-1 flex-row items-center gap-1" aria-live="polite">
           {footerStart}
-          {voiceInput.statusLabel ? (
-            <span
-              className={cn(
-                "ml-1 truncate text-xs",
-                voiceInput.state === "error"
-                  ? "text-destructive"
-                  : "text-muted-foreground",
-              )}
-            >
-              {voiceInput.statusLabel}
-            </span>
-          ) : null}
         </div>
         <div className="flex shrink-0 flex-row items-center gap-1">
           <Button
@@ -491,33 +554,23 @@ export function PromptBox({
               <Paperclip className="size-4" />
             )}
           </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant={voiceInput.state === "error" ? "secondary" : "ghost"}
-            title={
-              !voiceInput.isSupported
-                ? "Voice input is not supported in this browser"
-                : voiceInput.isListening
-                  ? "Stop voice input"
+          {!showVoiceActionGroup ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              title={
+                !voiceInput.isSupported
+                  ? "Voice input is not supported in this browser"
                   : "Start voice input"
-            }
-            disabled={!voiceInput.isSupported}
-            onClick={() => {
-              if (voiceInput.isListening) {
-                voiceInput.stop()
-              } else {
-                voiceInput.start()
               }
-            }}
-            className="size-auto h-8 px-2 transition-all"
-          >
-            {voiceInput.isListening ? (
-              <MicOff className="size-4" />
-            ) : (
+              disabled={!canStartVoiceInput}
+              onClick={voiceInput.start}
+              className="size-auto h-8 px-2 transition-all"
+            >
               <Mic className="size-4" />
-            )}
-          </Button>
+            </Button>
+          ) : null}
           {showStop ? (
             <Button
               type="button"
@@ -529,14 +582,61 @@ export function PromptBox({
             >
               <Square className="size-3.5" fill="currentColor" strokeWidth={0} />
             </Button>
+          ) : isVoiceRecording ? (
+            <div className="relative inline-flex">
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                title="Stop and transcribe recording"
+                onClick={voiceInput.stop}
+                className="h-8 rounded-r-none px-2"
+              >
+                <AudioLines className="size-4 animate-pulse" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                title="Cancel recording"
+                onClick={voiceInput.cancel}
+                className="h-8 w-8 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          ) : isVoiceProcessing ? (
+            <div className="relative inline-flex">
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                title="Transcribing voice input..."
+                disabled
+                className="h-8 rounded-r-none px-2"
+              >
+                <AudioLines className="size-4" />
+                <Loader2 className="size-4 animate-spin" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                title="Cancel transcription"
+                onClick={voiceInput.cancel}
+                className="h-8 w-8 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
           ) : (
             <Button
               type="submit"
-              size="icon"
+              size="sm"
               variant="default"
               title={submitTitle}
               disabled={!canSubmit}
-              className="size-auto h-8 px-2 transition-all"
+              className="h-8 px-2 transition-all"
             >
               {isSubmitting ? (
                 <Loader2 className="size-4 animate-spin" />

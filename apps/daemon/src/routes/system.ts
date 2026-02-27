@@ -8,6 +8,11 @@ import type {
 } from "@beanbag/agent-core";
 import { pickFolderPath } from "../folder-picker.js";
 import { sendRouteError } from "./error-response.js";
+import {
+  type TranscribeVoiceInputArgs,
+  type TranscribeVoiceInputResult,
+  transcribeVoiceInput,
+} from "../voice-transcription.js";
 
 type PickFolderFn = () => Promise<string | null>;
 type ListModelsFn = () => Promise<AvailableModel[]>;
@@ -15,6 +20,9 @@ type ProviderInfoFn = () => SystemProviderInfo;
 type ProviderCatalogFn = () => SystemProviderInfo[];
 type EnvironmentInfoFn = () => SystemEnvironmentInfo;
 type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
+type TranscribeVoiceFn = (
+  args: TranscribeVoiceInputArgs,
+) => Promise<TranscribeVoiceInputResult>;
 
 export function createSystemRoutes(
   threadManager: ThreadOrchestrator,
@@ -25,6 +33,7 @@ export function createSystemRoutes(
   listProviders: ProviderCatalogFn = () => threadManager.listProviders(),
   getEnvironmentInfo: EnvironmentInfoFn = () => threadManager.getEnvironmentInfo(),
   listEnvironments: EnvironmentCatalogFn = () => threadManager.listEnvironments(),
+  transcribeVoice: TranscribeVoiceFn = transcribeVoiceInput,
 ) {
   return new Hono()
     .get("/status", async (c) => {
@@ -47,6 +56,21 @@ export function createSystemRoutes(
       try {
         const path = await pickFolder();
         return c.json({ path });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .post("/voice-transcription", async (c) => {
+      try {
+        const body = await c.req.parseBody();
+        const file = body.file;
+        if (!(file instanceof File)) {
+          return c.json({ error: "Expected multipart file field named 'file'" }, 400);
+        }
+        const promptField = body.prompt;
+        const prompt = typeof promptField === "string" ? promptField : undefined;
+        const transcription = await transcribeVoice({ file, prompt });
+        return c.json(transcription, 200);
       } catch (err) {
         return sendRouteError(c, err);
       }
