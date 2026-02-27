@@ -22,7 +22,7 @@ export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: projects } = useProjects();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
   const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const spawnThread = useSpawnThread();
   const commitProjectWorkspace = useCommitProjectWorkspace();
@@ -77,11 +77,14 @@ export function ProjectMainView() {
       })) ?? [];
 
     if (projectId && !knownOptions.some((option) => option.value === projectId)) {
-      knownOptions.unshift({ value: projectId, label: projectId });
+      knownOptions.unshift({
+        value: projectId,
+        label: projectsLoading ? "Loading project…" : projectId,
+      });
     }
 
     return knownOptions;
-  }, [projectId, projects]);
+  }, [projectId, projects, projectsLoading]);
   const projectWorkspaceStatus = useMemo<{
     label: string;
     variant: StatusPillVariant;

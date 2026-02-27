@@ -18,6 +18,7 @@ import {
   useArchiveThread,
   useDeleteProject,
   useProjects,
+  useThreadWorkStatusLookup,
   useThreads,
   useUpdateProject,
 } from "@/hooks/useApi"
@@ -68,10 +69,9 @@ export function ProjectList({
   isCreatingProject = false,
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: threads, isLoading: threadsLoading } = useThreads({
-    includeWorkStatus: true,
-  })
+  const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
+  const threadWorkStatusLookup = useThreadWorkStatusLookup()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
   const location = useLocation()
@@ -202,21 +202,16 @@ export function ProjectList({
     })
   }
 
-  const requestArchiveThread = (thread: Thread) => {
+  const requestArchiveThread = async (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    if (thread.environmentId === "worktree" && thread.workStatus) {
-      switch (thread.workStatus.state) {
-        case "clean":
-        case "deleted":
-          break
-        case "dirty_uncommitted":
-        case "committed_unmerged":
-        case "dirty_and_committed_unmerged":
-          setArchiveConfirmationThread(thread)
-          return
-        default:
-          assertNever(thread.workStatus.state)
+    if (thread.environmentId === "worktree") {
+      const workStatus =
+        thread.workStatus ??
+        (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
+      if (requiresArchiveConfirmation(workStatus)) {
+        setArchiveConfirmationThread(thread)
+        return
       }
     }
 
@@ -443,7 +438,7 @@ export function ProjectList({
                                   onClick={(event) => {
                                     event.preventDefault()
                                     event.stopPropagation()
-                                    requestArchiveThread(thread)
+                                    void requestArchiveThread(thread)
                                   }}
                                 >
                                   <Archive className="size-3.5" />
@@ -545,6 +540,24 @@ function isVisibleProjectThread(thread: Thread): boolean {
   return thread.archivedAt === undefined && thread.parentThreadId === undefined
 }
 
+function requiresArchiveConfirmation(
+  workStatus: Thread["workStatus"] | null | undefined,
+): boolean {
+  if (!workStatus) {
+    return false
+  }
+  switch (workStatus.state) {
+    case "clean":
+    case "deleted":
+      return false
+    case "dirty_uncommitted":
+    case "committed_unmerged":
+    case "dirty_and_committed_unmerged":
+      return true
+    default:
+      return assertNever(workStatus.state)
+  }
+}
 
 function isCompletedUnreadThread(thread: Thread): boolean {
   switch (thread.status) {

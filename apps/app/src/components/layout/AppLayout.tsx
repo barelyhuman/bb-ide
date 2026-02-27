@@ -145,7 +145,7 @@ function AppHeader({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const { data: projects } = useProjects()
+  const { data: projects, isLoading: projectsLoading } = useProjects()
   const showHeader = location.pathname !== "/"
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -175,6 +175,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectName = projectId
     ? projects?.find((project) => project.id === projectId)?.name
     : undefined
+  const projectLabel =
+    projectName ??
+    (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
   const { data: thread } = useThread(threadId)
 
   const meta = threadMatch
@@ -184,12 +187,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }
     : projectSettingsMatch
         ? {
-            title: `${projectName ?? projectSettingsMatch[1]} settings`,
+            title: `${projectLabel ?? projectSettingsMatch[1]} settings`,
             subtitle: undefined,
           }
     : projectMatch
         ? {
-            title: projectName ?? projectMatch[1],
+            title: projectLabel ?? projectMatch[1],
             subtitle: undefined,
           }
         : (routeTitles[location.pathname] ?? { title: "" })
@@ -286,7 +289,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <AppHeader
               isProjectMainView={isProjectMainView}
               projectMatch={projectMatch}
-              projectName={projectName}
+              projectName={projectLabel}
               meta={meta}
             />
           ) : null}

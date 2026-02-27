@@ -35,6 +35,7 @@ export function useProjects() {
   return useQuery<Project[]>({
     queryKey: ["projects"],
     queryFn: () => api.listProjects(),
+    staleTime: 30_000,
   });
 }
 
@@ -123,14 +124,28 @@ export function useThreads(filters?: {
     queryKey: ["threads", filters],
     queryFn: () => api.listThreads(filters),
     enabled: options?.enabled ?? true,
+    staleTime: 10_000,
   });
 }
 
 export function useThread(id: string) {
+  const queryClient = useQueryClient();
   return useQuery<Thread>({
     queryKey: ["thread", id],
     queryFn: () => api.getThread(id),
     enabled: !!id,
+    staleTime: 5_000,
+    initialData: () => {
+      if (!id) return undefined;
+      const threadLists = queryClient.getQueriesData<Thread[]>({
+        queryKey: ["threads"],
+      });
+      for (const [, threads] of threadLists) {
+        const match = threads?.find((thread) => thread.id === id);
+        if (match) return match;
+      }
+      return undefined;
+    },
   });
 }
 
@@ -172,6 +187,12 @@ export function useThreadWorkStatus(id: string) {
     queryFn: () => api.getThreadWorkStatus(id),
     enabled: !!id,
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadWorkStatusLookup() {
+  return useMutation({
+    mutationFn: (id: string) => api.getThreadWorkStatus(id),
   });
 }
 
