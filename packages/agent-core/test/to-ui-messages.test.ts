@@ -556,6 +556,81 @@ describe("toUIMessages replay coverage", () => {
     expect(search?.query).toBe("react suspense");
   });
 
+  it("deduplicates duplicate web-search lifecycle events from item and codex streams", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          item: {
+            type: "webSearch",
+            id: "web-1",
+            query: "",
+            action: { type: "other" },
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "codex/event/web_search_begin",
+        data: {
+          msg: {
+            type: "web_search_begin",
+            call_id: "web-1",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "webSearch",
+            id: "web-1",
+            query: "react suspense",
+            action: { type: "search", query: "react suspense" },
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "codex/event/web_search_end",
+        data: {
+          msg: {
+            type: "web_search_end",
+            call_id: "web-1",
+            query: "react suspense",
+            action: { type: "search", query: "react suspense" },
+          },
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const searches = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "web-search" }> =>
+        message.kind === "web-search",
+    );
+
+    expect(searches).toHaveLength(1);
+    expect(searches[0]?.status).toBe("completed");
+    expect(searches[0]?.query).toBe("react suspense");
+  });
+
   it("preserves unknown provider web-search action types", () => {
     const events: ThreadEvent[] = [
       {
@@ -799,6 +874,7 @@ describe("toUIMessages replay coverage", () => {
     expect(op?.opType).toBe("plan-updated");
     expect(op?.title).toBe("Plan updated");
     expect(op?.detail).toContain("Plan is now clearer");
+    expect(op?.detail).toContain("• [In progress] Apply fix");
   });
 
   it("treats raw reasoning text deltas as reasoning stream updates", () => {
