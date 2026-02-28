@@ -246,16 +246,15 @@ export function ProjectMainView() {
           }
         />
         <div className="flex items-center px-3.5">
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-center gap-2">
             <PromptOptionPicker
               label="Environment"
               value={environmentId}
               options={environmentSelectorOptions}
               onChange={setEnvironmentId}
-              className="h-fit py-1"
             />
             {!threadsLoading && environmentId === "local" ? (
-              <div className="flex h-fit items-center leading-none">
+              <div className="flex items-center">
                 <StatusPillCommitPopover
                   status={workspaceStatus}
                   label={projectWorkspaceStatus.label}

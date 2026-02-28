@@ -90,6 +90,9 @@ export function createServer(deps: ServerDeps) {
     threadManager,
     wsManager,
     startTime,
+    projectCommitMessageGenerator: provider.generateCommitMessage
+      ? async ({ cwd }) => provider.generateCommitMessage({ cwd })
+      : undefined,
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);

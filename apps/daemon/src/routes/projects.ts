@@ -7,6 +7,7 @@ import {
   commitThreadSchema,
   createProjectSchema,
   updateProjectSchema,
+  type ProviderCommitMessageGenerator,
   type Project,
   type ProjectFileSuggestion,
   type UploadedPromptAttachment,
@@ -166,6 +167,7 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
+    commitMessageGenerator?: ProviderCommitMessageGenerator;
   },
 ) {
   const gitStatusService = new ThreadGitStatusService();
@@ -276,12 +278,23 @@ export function createProjectRoutes(
           return c.json({ error: "Project not found" }, 404);
         }
         const body = c.req.valid("json");
+        let message = body?.message;
+        if (!message && deps?.commitMessageGenerator) {
+          try {
+            message = (await deps.commitMessageGenerator({ cwd: project.rootPath }))?.trim();
+          } catch (err) {
+            const detail = err instanceof Error ? err.message : "Unknown error";
+            console.warn(
+              `[project ${project.id}] Failed to auto-generate commit message: ${detail}`,
+            );
+          }
+        }
         const defaultBranch = gitStatusService.detectDefaultBranch(project.rootPath);
         const result = gitStatusService.commit({
           workspaceRoot: project.rootPath,
           projectRoot: project.rootPath,
           defaultBranch,
-          message: body?.message,
+          ...(message ? { message } : {}),
           includeUnstaged: body?.includeUnstaged,
         });
         return c.json(result);
