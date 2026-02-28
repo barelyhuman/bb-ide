@@ -160,7 +160,7 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
 
       {expandedImageIndex !== null && imageUrls[expandedImageIndex] ? (
         <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
-          <DialogContent className="max-w-[90vw] border-none bg-transparent p-0 shadow-none [&>button]:hidden">
+          <DialogContent className="flex h-[90vh] w-[90vw] max-w-[90vw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button]:hidden">
             <DialogTitle className="sr-only">Expanded image preview</DialogTitle>
             <div className="relative flex items-center justify-center">
               <img

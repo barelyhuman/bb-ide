@@ -5,6 +5,7 @@ import {
   useThread,
   useThreadWorkStatus,
   useThreadTimeline,
+  useThreadEvents,
   useThreadToolGroupMessages,
   useTellThread,
   useCommitThread,
@@ -55,6 +56,8 @@ import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
+import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
+import { extractThreadContextWindowUsage } from "@/lib/thread-context-window-usage";
 import {
   threadWorkStatusLabel,
   threadWorkStatusVariant,
@@ -165,6 +168,9 @@ export function ThreadDetailView() {
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
   );
+  const { data: threadEvents } = useThreadEvents(threadId ?? "", {
+    enabled: Boolean(threadId),
+  });
   const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
@@ -216,6 +222,10 @@ export function ThreadDetailView() {
   });
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
+  const contextWindowUsage = useMemo(
+    () => extractThreadContextWindowUsage(threadEvents ?? []),
+    [threadEvents],
+  );
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
@@ -693,6 +703,11 @@ export function ThreadDetailView() {
                 </>
               }
             />
+            {contextWindowUsage ? (
+              <div className="mt-1 flex justify-end pr-0.5">
+                <ThreadContextWindowIndicator usage={contextWindowUsage} />
+              </div>
+            ) : null}
           </PromptComposerShell>
         </div>
       }

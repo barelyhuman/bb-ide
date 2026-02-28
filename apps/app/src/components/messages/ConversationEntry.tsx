@@ -359,7 +359,7 @@ function UserMessageRow({ message, projectId }: { message: UIUserMessage; projec
 
       {currentImageSrc ? (
         <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
-          <DialogContent className="max-w-[90vw] border-none bg-transparent p-0 shadow-none [&>button]:hidden">
+          <DialogContent className="flex h-[90vh] w-[90vw] max-w-[90vw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button]:hidden">
             <DialogTitle className="sr-only">Attached image preview</DialogTitle>
             <img
               src={currentImageSrc}

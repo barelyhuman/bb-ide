@@ -6,6 +6,7 @@ import {
 import type {
   Project,
   Thread,
+  ThreadEvent,
   CreateProjectRequest,
   UpdateProjectRequest,
   SpawnThreadRequest,
@@ -29,6 +30,8 @@ import type {
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
 import { getAutoArchivePreferences } from "../lib/auto-archive-preferences";
+
+const DEFAULT_THREAD_EVENTS_LIMIT = 120;
 
 // --- Projects ---
 
@@ -182,6 +185,18 @@ export function useThreadTimeline(
     queryKey: ["threadTimeline", id, options?.limit ?? null],
     queryFn: () => api.getThreadTimeline(id, options?.limit, false),
     enabled: (options?.enabled ?? true) && !!id,
+  });
+}
+
+export function useThreadEvents(
+  id: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<ThreadEvent[]>({
+    queryKey: ["threadEvents", id],
+    queryFn: () => api.getThreadEvents(id, undefined, DEFAULT_THREAD_EVENTS_LIMIT),
+    enabled: (options?.enabled ?? true) && !!id,
+    refetchOnWindowFocus: false,
   });
 }
 
