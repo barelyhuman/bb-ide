@@ -4,6 +4,10 @@ import {
   getOpenPathPreferences,
   setOpenPathPreferences,
 } from "@/lib/open-path-preferences";
+import {
+  getAutoArchivePreferences,
+  setAutoArchivePreferences,
+} from "@/lib/auto-archive-preferences";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
 import { toast } from "sonner";
 
@@ -33,6 +37,9 @@ export function AppSettingsView() {
   const initialPreferences = useMemo(() => getOpenPathPreferences(), []);
   const [fileCommand, setFileCommand] = useState(initialPreferences.fileCommand);
   const [directoryCommand, setDirectoryCommand] = useState(initialPreferences.directoryCommand);
+  const [autoArchiveThreadOnCommit, setAutoArchiveThreadOnCommit] = useState(
+    () => getAutoArchivePreferences().autoArchiveThreadOnCommit,
+  );
   const theme = usePreferredTheme();
   const lastSavedRef = useRef({
     fileCommand: initialPreferences.fileCommand.trim(),
@@ -56,6 +63,12 @@ export function AppSettingsView() {
       directoryCommand: nextDirectoryCommand,
     };
     toast.success("Open-path settings saved");
+  };
+
+  const saveAutoArchiveSettings = (checked: boolean) => {
+    setAutoArchiveThreadOnCommit(checked);
+    setAutoArchivePreferences({ autoArchiveThreadOnCommit: checked });
+    toast.success("Auto-archive setting saved");
   };
 
   return (
@@ -90,6 +103,20 @@ export function AppSettingsView() {
             className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
             placeholder='e.g. "code -r"'
           />
+        </SettingsWithControl>
+        <SettingsWithControl
+          label="Auto-archive on commit"
+          description="Automatically archive local threads after commit and worktree threads after squash merge."
+        >
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={autoArchiveThreadOnCommit}
+              onChange={(event) => saveAutoArchiveSettings(event.target.checked)}
+              className="h-4 w-4 rounded border-border"
+            />
+            <span>Enabled</span>
+          </label>
         </SettingsWithControl>
         <SettingsWithControl
           label="Theme"

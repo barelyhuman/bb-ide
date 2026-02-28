@@ -76,6 +76,7 @@ export const updateProjectSchema = z
 export const commitThreadSchema = z.object({
   message: z.string().min(1).optional(),
   includeUnstaged: z.boolean().optional(),
+  autoArchiveThreadOnCommit: z.boolean().optional(),
 });
 
 export const squashMergeThreadSchema = z.object({
@@ -83,4 +84,5 @@ export const squashMergeThreadSchema = z.object({
   includeUnstaged: z.boolean().optional(),
   commitMessage: z.string().min(1).optional(),
   squashMessage: z.string().min(1).optional(),
+  autoArchiveThreadOnCommit: z.boolean().optional(),
 });

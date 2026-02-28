@@ -220,6 +220,12 @@ function resolveThreadShellPath(pathValue: string | undefined): string | undefin
   return prependPathEntry(pathValue, shimBinDir);
 }
 
+function isAutoArchiveThreadOnCommitEnabled(args: {
+  autoArchiveThreadOnCommit?: boolean;
+}): boolean {
+  return args.autoArchiveThreadOnCommit !== false;
+}
+
 function toProviderEventType(method: string): ThreadEventType {
   // Open provider/runtime set: upstream providers can add event methods.
   return method as ThreadEventType;
@@ -992,6 +998,13 @@ export class ThreadManager implements ThreadOrchestrator {
       },
       { broadcastChanges: ["events-appended", "work-status-changed"] },
     );
+    if (
+      result.commitCreated &&
+      thread.environmentId === "local" &&
+      isAutoArchiveThreadOnCommitEnabled(request ?? {})
+    ) {
+      this.archive(thread.id);
+    }
     return result;
   }
 
@@ -1098,6 +1111,9 @@ export class ThreadManager implements ThreadOrchestrator {
       },
       { broadcastChanges: ["events-appended", "work-status-changed"] },
     );
+    if (mergeResult.merged && isAutoArchiveThreadOnCommitEnabled(request ?? {})) {
+      this.archive(thread.id);
+    }
     return {
       ok: true,
       merged: mergeResult.merged,

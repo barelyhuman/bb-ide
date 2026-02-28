@@ -92,6 +92,7 @@ export interface UpdateProjectRequest {
 export interface CommitThreadRequest {
   message?: string;
   includeUnstaged?: boolean;
+  autoArchiveThreadOnCommit?: boolean;
 }
 
 export interface CommitThreadResponse {
@@ -114,6 +115,7 @@ export interface SquashMergeThreadRequest {
   includeUnstaged?: boolean;
   commitMessage?: string;
   squashMessage?: string;
+  autoArchiveThreadOnCommit?: boolean;
 }
 
 export interface SquashMergeThreadResponse {

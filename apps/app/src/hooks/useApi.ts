@@ -28,6 +28,7 @@ import type {
   ThreadToolGroupMessagesResponse,
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
+import { getAutoArchivePreferences } from "../lib/auto-archive-preferences";
 
 // --- Projects ---
 
@@ -442,7 +443,12 @@ export function useCommitThread() {
     }: {
       id: string;
     } & CommitThreadRequest): Promise<CommitThreadResponse> =>
-      api.commitThread(id, req),
+      api.commitThread(id, {
+        ...req,
+        autoArchiveThreadOnCommit:
+          req.autoArchiveThreadOnCommit ??
+          getAutoArchivePreferences().autoArchiveThreadOnCommit,
+      }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
@@ -475,7 +481,12 @@ export function useSquashMergeThread() {
     }: {
       id: string;
     } & SquashMergeThreadRequest): Promise<SquashMergeThreadResponse> =>
-      api.squashMergeThread(id, req),
+      api.squashMergeThread(id, {
+        ...req,
+        autoArchiveThreadOnCommit:
+          req.autoArchiveThreadOnCommit ??
+          getAutoArchivePreferences().autoArchiveThreadOnCommit,
+      }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });

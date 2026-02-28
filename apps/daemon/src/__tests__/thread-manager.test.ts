@@ -3318,6 +3318,7 @@ describe("ThreadManager", () => {
           message: "Committed",
           commitSha: "abc123",
         }),
+        invalidate: vi.fn(),
       };
 
       await manager.commitThread("thread-1", { message: "test commit" });
@@ -3366,6 +3367,132 @@ describe("ThreadManager", () => {
         "events-appended",
         "work-status-changed",
       ]);
+    });
+
+    it("auto-archives local threads after a successful commit by default", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "local",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/commit" }),
+      );
+
+      (manager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        commit: vi.fn().mockReturnValue({
+          ok: true,
+          commitCreated: true,
+          message: "Committed",
+          commitSha: "abc123",
+        }),
+        invalidate: vi.fn(),
+      };
+
+      await manager.commitThread("thread-1", { message: "test commit" });
+
+      expect(threadRepo.update).toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({
+          status: "idle",
+          archivedAt: expect.any(Number),
+        }),
+      );
+    });
+
+    it("does not auto-archive local threads when request setting is disabled", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "local",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/commit" }),
+      );
+
+      (manager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        commit: vi.fn().mockReturnValue({
+          ok: true,
+          commitCreated: true,
+          message: "Committed",
+          commitSha: "abc123",
+        }),
+      };
+
+      await manager.commitThread("thread-1", {
+        message: "test commit",
+        autoArchiveThreadOnCommit: false,
+      });
+
+      expect(threadRepo.update).not.toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({
+          archivedAt: expect.any(Number),
+        }),
+      );
+    });
+
+    it("auto-archives worktree threads after successful squash merge", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/squash_merge" }),
+      );
+
+      (manager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        getStatus: vi
+          .fn()
+          .mockReturnValueOnce({ hasUncommittedChanges: false })
+          .mockReturnValueOnce({ hasUncommittedChanges: false }),
+        squashMergeWorktreeIntoDefaultBranch: vi.fn().mockReturnValue({
+          merged: true,
+          message: "Squash-merged into main",
+        }),
+        invalidate: vi.fn(),
+      };
+
+      await manager.squashMergeThread("thread-1");
+
+      expect(threadRepo.update).toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({
+          status: "idle",
+          archivedAt: expect.any(Number),
+        }),
+      );
     });
   });
 
