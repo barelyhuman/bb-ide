@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import { useLocation } from "react-router-dom"
-import { Moon, Sun } from "lucide-react"
+import { Link, useLocation } from "react-router-dom"
+import { Moon, Settings, Sun } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -13,10 +12,7 @@ import {
 } from "@/components/ui/sidebar"
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
-
-const THEME_STORAGE_KEY = "beanbag.theme"
-
-type Theme = "light" | "dark"
+import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -27,13 +23,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const { createFromPicker, isCreating } = useQuickCreateProject()
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "light"
-    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
-    if (storedTheme === "light" || storedTheme === "dark") return storedTheme
-    if (document.documentElement.classList.contains("dark")) return "dark"
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-  })
+  const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
     if (isMobile) {
@@ -41,14 +31,9 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     }
   }
 
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark")
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme)
-  }, [theme])
-
   const isDarkTheme = theme === "dark"
   const toggleTheme = () => {
-    setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))
+    setPreferredTheme(isDarkTheme ? "light" : "dark")
   }
   const selectedProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1]
 
@@ -75,6 +60,18 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
               >
                 {isDarkTheme ? <Sun /> : <Moon />}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                className="w-8 justify-center p-0"
+                tooltip="App settings"
+                aria-label="App settings"
+              >
+                <Link to="/settings">
+                  <Settings />
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

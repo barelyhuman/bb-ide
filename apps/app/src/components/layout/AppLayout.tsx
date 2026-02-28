@@ -37,6 +37,7 @@ function clampSidebarWidth(value: number) {
 
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Projects", subtitle: "Select or create a project" },
+  "/settings": { title: "Settings" },
 }
 
 interface AppHeaderProps {

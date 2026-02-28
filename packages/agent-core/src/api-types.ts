@@ -142,6 +142,22 @@ export interface UploadedPromptAttachment {
 }
 
 // System
+export type OpenPathTarget = "file" | "directory";
+
+export type OpenPathEditor =
+  | "system_default"
+  | "vscode"
+  | "cursor"
+  | "zed"
+  | "windsurf";
+
+export interface OpenPathRequest {
+  path: string;
+  target?: OpenPathTarget;
+  editor?: OpenPathEditor;
+  command?: string;
+}
+
 export interface SystemStatus {
   runningThreads: number;
   totalThreads: number;

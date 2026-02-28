@@ -1557,6 +1557,61 @@ describe("toUIMessages replay coverage", () => {
     expect(users[0]?.attachments?.localImagePaths).toEqual(["/tmp/shot.png"]);
   });
 
+  it("deduplicates client start localImage against provider userMessage image data URL", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "agent",
+          input: [
+            { type: "text", text: "why is the theme selector not all the way to the right?" },
+            { type: "localImage", path: "/tmp/shot.png" },
+          ],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "item-user-1",
+            type: "user_message",
+            content: [
+              { type: "text", text: "why is the theme selector not all the way to the right?" },
+              { type: "image", url: "data:image/png;base64,abc" },
+            ],
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
+    const users = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(users).toHaveLength(1);
+    expect(users[0]?.attachments?.webImages).toBe(1);
+  });
+
   it("formats system error messages with detail", () => {
     const events: ThreadEvent[] = [
       {

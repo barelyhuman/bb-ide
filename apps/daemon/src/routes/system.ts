@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { Hono } from "hono";
@@ -6,6 +6,8 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import type {
   AvailableModel,
+  OpenPathEditor,
+  OpenPathRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   SystemStatus,
@@ -29,12 +31,66 @@ type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
 type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
 ) => Promise<TranscribeVoiceInputResult>;
+type OpenPathFn = (args: OpenPathRequest) => void;
 
 const openPathSchema = z.object({
   path: z.string().min(1),
+  target: z.enum(["file", "directory"]).optional(),
+  editor: z.enum(["system_default", "vscode", "cursor", "zed", "windsurf"]).optional(),
+  command: z.string().min(1).optional(),
 });
 
-function openPathInEditor(path: string): void {
+function toEditorCommand(editor: OpenPathEditor): string | null {
+  switch (editor) {
+    case "system_default":
+      return null;
+    case "vscode":
+      return "code";
+    case "cursor":
+      return "cursor";
+    case "zed":
+      return "zed";
+    case "windsurf":
+      return "windsurf";
+  }
+}
+
+function openPathInEditor(request: OpenPathRequest): void {
+  const path = request.path;
+  const customCommand = request.command?.trim();
+
+  if (customCommand) {
+    const quotedPath = JSON.stringify(path);
+    const commandWithPath = customCommand.includes("{path}")
+      ? customCommand.replaceAll("{path}", quotedPath)
+      : `${customCommand} ${quotedPath}`;
+    const result = spawnSync(commandWithPath, {
+      stdio: "ignore",
+      shell: true,
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    if ((result.status ?? 0) !== 0) {
+      throw new Error(`Open command failed: ${customCommand}`);
+    }
+    return;
+  }
+
+  const editor = request.editor ?? "system_default";
+
+  const editorCommand = toEditorCommand(editor);
+  if (editorCommand) {
+    const editorResult = spawnSync(editorCommand, [path], { stdio: "ignore" });
+    if (editorResult.error) {
+      throw editorResult.error;
+    }
+    if ((editorResult.status ?? 0) !== 0) {
+      throw new Error(`Editor command failed: ${editorCommand}`);
+    }
+    return;
+  }
+
   const platform = process.platform;
   const command =
     platform === "darwin"
@@ -42,18 +98,19 @@ function openPathInEditor(path: string): void {
       : platform === "win32"
         ? "cmd"
         : "xdg-open";
-  const args =
+  const commandArgs =
     platform === "darwin"
       ? [path]
       : platform === "win32"
         ? ["/c", "start", "", path]
         : [path];
-
-  const child = spawn(command, args, {
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
+  const result = spawnSync(command, commandArgs, { stdio: "ignore" });
+  if (result.error) {
+    throw result.error;
+  }
+  if ((result.status ?? 0) !== 0) {
+    throw new Error(`Failed to open path: ${path}`);
+  }
 }
 
 export function createSystemRoutes(
@@ -66,6 +123,7 @@ export function createSystemRoutes(
   getEnvironmentInfo: EnvironmentInfoFn = () => threadManager.getEnvironmentInfo(),
   listEnvironments: EnvironmentCatalogFn = () => threadManager.listEnvironments(),
   transcribeVoice: TranscribeVoiceFn = transcribeVoiceInput,
+  openPath: OpenPathFn = openPathInEditor,
 ) {
   return new Hono()
     .get("/status", async (c) => {
@@ -102,7 +160,12 @@ export function createSystemRoutes(
         if (!existsSync(targetPath)) {
           throw invalidRequestError("Path does not exist");
         }
-        openPathInEditor(targetPath);
+        openPath({
+          path: targetPath,
+          target: body.target ?? "file",
+          editor: body.editor ?? "system_default",
+          command: body.command?.trim() || undefined,
+        });
         return c.json({ ok: true });
       } catch (err) {
         return sendRouteError(c, err);

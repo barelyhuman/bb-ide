@@ -50,6 +50,7 @@ import {
 } from "@/lib/latestInitialExpanded";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { openPathInEditor } from "@/lib/api";
+import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import {
@@ -523,7 +524,10 @@ export function ThreadDetailView() {
                   className="w-full truncate text-left text-xs underline underline-offset-2"
                   title={threadWorkStatus.workspaceRoot}
                   onClick={() => {
-                    void openPathInEditor(threadWorkStatus.workspaceRoot!);
+                    void openPathInEditor(threadWorkStatus.workspaceRoot!, {
+                      target: "directory",
+                      command: getPathCommandForTarget("directory"),
+                    });
                   }}
                 >
                   {threadWorkStatus.workspaceRoot}
@@ -614,7 +618,10 @@ export function ThreadDetailView() {
                     isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
                   }`}
                 >
-                  <WorkspaceChangesList files={threadWorkStatus.files} />
+                  <WorkspaceChangesList
+                    files={threadWorkStatus.files}
+                    workspaceRoot={threadWorkStatus.workspaceRoot}
+                  />
                 </div>
               </div>
             ) : null}

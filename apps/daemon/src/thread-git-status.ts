@@ -268,7 +268,11 @@ export class ThreadGitStatusService {
       return cached.status;
     }
 
-    const statusResult = runGit(args.workspaceRoot, ["status", "--porcelain"]);
+    const statusResult = runGit(args.workspaceRoot, [
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+    ]);
     const statusLines = statusResult.ok
       ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
       : [];

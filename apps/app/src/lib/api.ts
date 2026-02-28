@@ -22,6 +22,7 @@ import type {
   CommitProjectResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
+  OpenPathTarget,
 } from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
@@ -258,8 +259,20 @@ export async function pickProjectFolder(): Promise<{ path: string | null }> {
   return request<{ path: string | null }>("POST", "/system/pick-folder");
 }
 
-export async function openPathInEditor(path: string): Promise<void> {
-  return request<void>("POST", "/system/open-path", { path });
+export async function openPathInEditor(
+  path: string,
+  options?: {
+    target?: OpenPathTarget;
+    editor?: "system_default" | "vscode" | "cursor" | "zed" | "windsurf";
+    command?: string;
+  },
+): Promise<void> {
+  return request<void>("POST", "/system/open-path", {
+    path,
+    ...(options?.target ? { target: options.target } : {}),
+    ...(options?.editor ? { editor: options.editor } : {}),
+    ...(options?.command ? { command: options.command } : {}),
+  });
 }
 
 // --- Threads ---

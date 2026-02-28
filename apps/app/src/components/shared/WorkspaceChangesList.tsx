@@ -1,12 +1,16 @@
 import type { ThreadWorkStatus } from "@beanbag/agent-core";
+import { openPathInEditor } from "@/lib/api";
+import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
 
 export function WorkspaceChangesList({
   files,
+  workspaceRoot,
   maxHeightClassName = "max-h-32",
   emptyMessage = "No changed files detected.",
 }: {
   files: ThreadWorkStatus["files"];
+  workspaceRoot?: string;
   maxHeightClassName?: string;
   emptyMessage?: string;
 }) {
@@ -23,7 +27,32 @@ export function WorkspaceChangesList({
           <span className="w-8 shrink-0 text-xs uppercase text-muted-foreground/80">
             {file.status}
           </span>
-          <span className="truncate text-xs">{file.path}</span>
+          {workspaceRoot ? (
+            <button
+              type="button"
+              className="truncate text-left text-xs underline-offset-2 hover:underline"
+              title={file.path}
+              onClick={() => {
+                const normalizedRoot = workspaceRoot.endsWith("/")
+                  ? workspaceRoot.slice(0, -1)
+                  : workspaceRoot;
+                const normalizedPath = file.path.startsWith("./")
+                  ? file.path.slice(2)
+                  : file.path;
+                const absolutePath = normalizedPath.startsWith("/")
+                  ? normalizedPath
+                  : `${normalizedRoot}/${normalizedPath}`;
+                void openPathInEditor(absolutePath, {
+                  target: "file",
+                  command: getPathCommandForTarget("file"),
+                });
+              }}
+            >
+              {file.path}
+            </button>
+          ) : (
+            <span className="truncate text-xs">{file.path}</span>
+          )}
         </li>
       ))}
     </ul>

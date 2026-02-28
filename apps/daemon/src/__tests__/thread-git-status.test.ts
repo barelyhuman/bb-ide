@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -130,5 +130,31 @@ describe("ThreadGitStatusService", () => {
     expect(result.merged).toBe(false);
     expect(result.conflictFiles).toContain("README.md");
     expect(result.message).toContain("conflicts");
+  });
+
+  it("lists untracked files instead of collapsing to untracked directories", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    const nestedDir = join(repoRoot, "plans");
+    mkdirSync(nestedDir, { recursive: true });
+    writeFileSync(join(nestedDir, "note.md"), "hello\n", { encoding: "utf8", flag: "w" });
+
+    const service = new ThreadGitStatusService();
+    const status = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    expect(status.files?.some((entry) => entry.path === "plans/note.md")).toBe(true);
+    expect(status.files?.some((entry) => entry.path === "plans/")).toBe(false);
   });
 });

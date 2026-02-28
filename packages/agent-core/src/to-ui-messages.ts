@@ -340,7 +340,8 @@ function userMessageSignature(value: {
   localImages: number;
   localFiles: number;
 }): string {
-  return `${value.text}\u0000${value.webImages}\u0000${value.localImages}\u0000${value.localFiles}`;
+  const totalImages = value.webImages + value.localImages;
+  return `${value.text}\u0000${totalImages}\u0000${value.localFiles}`;
 }
 
 function shouldRenderThreadStartInput(
@@ -2122,10 +2123,13 @@ export function toUIMessages(
   const orderedEvents = areEventsOrdered ? events : [...events].sort((a, b) => a.seq - b.seq);
 
   const userItemSignatures = new Set<string>();
-  const hasClientThreadStart = orderedEvents.some((event) =>
-    eventTypeMatches(getEventType(event), "client/thread/start")
+  const hasClientStartInput = orderedEvents.some((event) =>
+    eventTypeMatchesAny(getEventType(event), [
+      "client/thread/start",
+      "client/turn/start",
+    ])
   );
-  if (hasClientThreadStart) {
+  if (hasClientStartInput) {
     for (const event of orderedEvents) {
       const eventType = getEventType(event);
       const userFromItem = parseUserFromItemEvent(event, eventType);

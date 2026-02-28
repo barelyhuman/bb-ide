@@ -167,6 +167,7 @@ export function StatusPillCommitPopover({
               <span className="text-xs text-muted-foreground">Changed files</span>
               <WorkspaceChangesList
                 files={status?.files}
+                workspaceRoot={status?.workspaceRoot}
                 maxHeightClassName="max-h-36"
                 emptyMessage="No changed files in the current workspace."
               />

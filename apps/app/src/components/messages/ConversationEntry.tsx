@@ -1,4 +1,13 @@
-import { memo, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type {
   UIMessage,
   UIDebugRawEventMessage,
@@ -29,6 +38,7 @@ import {
   COLLAPSIBLE_HEADER_TEXT_CLASS,
   getCollapsibleHeaderToneClass,
 } from "@/components/messages/CollapsibleHeader";
+import { usePreferredTheme } from "@/hooks/useTheme";
 import { ansiToHtml } from "@/lib/ansi";
 import { ConversationMarkdown } from "./ConversationMarkdown";
 
@@ -170,12 +180,16 @@ function diffStats(
   return { added, removed };
 }
 
-const DIFF_VIEW_OPTIONS = {
+const DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   diffStyle: "unified",
-  themeType: "system",
   disableFileHeader: true,
 } as const;
+
+const DIFF_VIEW_STYLE = {
+  "--diffs-font-size": "12px",
+  "--diffs-line-height": "18px",
+} as CSSProperties;
 
 function toSyntheticPatch(
   change: UIFileEditMessage["changes"][number],
@@ -801,6 +815,14 @@ function FileEditRow({
   preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const preferredTheme = usePreferredTheme();
+  const diffViewOptions = useMemo(
+    () => ({
+      ...DIFF_VIEW_BASE_OPTIONS,
+      themeType: preferredTheme,
+    }),
+    [preferredTheme],
+  );
   const firstChange = message.changes[0];
   const firstPath = firstChange?.path;
   const firstFileName = firstPath ? fileNameFromPath(firstPath) : "file";
@@ -875,7 +897,6 @@ function FileEditRow({
           <div className="font-mono ui-text-sm text-foreground/90">
               {message.changes.map((change, index) => {
                 const action = fileChangeAction(change);
-                const actionChip = fileChangeActionLabel(action);
                 const stats = diffStats(change);
                 const fileName = fileNameFromPath(change.path);
                 const pathDetail = change.movePath
@@ -889,9 +910,6 @@ function FileEditRow({
                   >
                     <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
                       <div className="flex items-center gap-2 px-3 pb-0.5 pt-2">
-                        <Badge variant="outline" className="h-4 rounded px-1 ui-text-3xs">
-                          {actionChip}
-                        </Badge>
                         <span
                           className="min-w-0 flex-1 truncate font-mono ui-text-sm text-foreground/90"
                           title={change.path}
@@ -909,7 +927,9 @@ function FileEditRow({
                       <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
                         <div className="min-w-fit">
                           {patch ? (
-                            <PatchDiff patch={patch} options={DIFF_VIEW_OPTIONS} />
+                            <div style={DIFF_VIEW_STYLE}>
+                              <PatchDiff patch={patch} options={diffViewOptions} />
+                            </div>
                           ) : (
                             <div className="px-3 py-2 font-mono ui-text-xs text-muted-foreground/80">
                               (No diff provided)

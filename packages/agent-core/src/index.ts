@@ -71,6 +71,9 @@ export type {
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,
   ThreadTimelineResponse,
+  OpenPathTarget,
+  OpenPathEditor,
+  OpenPathRequest,
 } from "./api-types.js";
 
 export {

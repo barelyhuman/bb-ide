@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type {
   AvailableModel,
+  OpenPathRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   Thread,
@@ -71,6 +72,7 @@ describe("System routes", () => {
       (args: { file: File; prompt?: string }) => Promise<{ text: string }>
     >
   >;
+  let openPath: ReturnType<typeof vi.fn<(args: OpenPathRequest) => void>>;
   let app: Hono;
   const startTime = Date.now() - 3600_000;
 
@@ -80,6 +82,7 @@ describe("System routes", () => {
     listModels = vi.fn();
     getProviderInfo = vi.fn();
     transcribeVoice = vi.fn().mockResolvedValue({ text: "transcribed prompt" });
+    openPath = vi.fn();
     const routes = createSystemRoutes(
       threadManager as any,
       startTime,
@@ -90,6 +93,7 @@ describe("System routes", () => {
       undefined,
       undefined,
       transcribeVoice,
+      openPath,
     );
     app = new Hono().route("/system", routes);
   });
@@ -239,6 +243,41 @@ describe("System routes", () => {
         message: "Voice transcription is not configured.",
         error: "Voice transcription is not configured.",
       });
+    });
+  });
+
+  describe("POST /system/open-path", () => {
+    it("opens absolute paths with optional editor preference", async () => {
+      const res = await app.request("/system/open-path", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: process.cwd(),
+          target: "directory",
+          editor: "cursor",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(openPath).toHaveBeenCalledWith({
+        path: process.cwd(),
+        target: "directory",
+        editor: "cursor",
+      });
+    });
+
+    it("rejects non-absolute paths", async () => {
+      const res = await app.request("/system/open-path", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "relative/path.txt" }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.message).toContain("Path must be absolute");
+      expect(openPath).not.toHaveBeenCalled();
     });
   });
 
