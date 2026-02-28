@@ -49,7 +49,7 @@ function collectTextFragments(value: unknown, out: string[]): void {
 
   const record = asRecord(value);
   if (!record) return;
-  const candidates = [record.delta, record.text, record.content, record.value];
+  const candidates = [record.delta, record.text, record.content, record.value, record.item];
   for (const candidate of candidates) {
     if (candidate === undefined) continue;
     collectTextFragments(candidate, out);
@@ -291,13 +291,29 @@ export async function generateCodexCommitMessage(
     const params = message.params;
 
     if (
+      method === "item/agentmessage/delta" ||
+      method === "item/agent_message/delta" ||
       method === "item/streamed" ||
       method === "item/updated" ||
-      method === "item/completed" ||
       method === "thread/item/updated"
     ) {
       const fragments: string[] = [];
       collectTextFragments(params, fragments);
+      if (fragments.length > 0) {
+        sawDelta = true;
+        responseText += fragments.join("");
+      }
+      return;
+    }
+
+    if (method === "item/completed") {
+      if (sawDelta) return;
+      const payload = asRecord(params);
+      const item = asRecord(payload?.item);
+      if (!item || item.type !== "agentMessage") return;
+
+      const fragments: string[] = [];
+      collectTextFragments(item, fragments);
       if (fragments.length > 0) {
         sawDelta = true;
         responseText += fragments.join("");

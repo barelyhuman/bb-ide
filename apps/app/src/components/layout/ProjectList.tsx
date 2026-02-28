@@ -257,7 +257,7 @@ export function ProjectList({
     <SidebarGroup>
       <SidebarGroupLabel>Projects</SidebarGroupLabel>
       <SidebarGroupContent>
-        <SidebarMenu>
+        <SidebarMenu className="gap-2">
           {projectsLoading ? (
             <>
               <SidebarMenuSkeleton />
