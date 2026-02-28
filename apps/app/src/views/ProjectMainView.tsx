@@ -4,7 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
+import { type StatusPillVariant } from "@/components/shared/StatusPill";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import {
   useCommitProjectWorkspace,
@@ -200,23 +200,6 @@ export function ProjectMainView() {
                 onChange={handleProjectChange}
                 className="h-8 px-0 text-sm text-foreground/90 hover:text-foreground"
               />
-              {!threadsLoading ? (
-                <StatusPillCommitPopover
-                  status={workspaceStatus}
-                  label={projectWorkspaceStatus.label}
-                  variant={projectWorkspaceStatus.variant}
-                  canCommit={Boolean(workspaceStatus?.hasUncommittedChanges)}
-                  isCommitting={commitProjectWorkspace.isPending}
-                  onCommit={async ({ includeUnstaged, message }) => {
-                    if (!projectId) return;
-                    await commitProjectWorkspace.mutateAsync({
-                      projectId,
-                      includeUnstaged,
-                      ...(message ? { message } : {}),
-                    });
-                  }}
-                />
-              ) : null}
             </div>
           ) : null}
         </div>
@@ -263,12 +246,34 @@ export function ProjectMainView() {
           }
         />
         <div className="flex items-center px-3.5">
-          <PromptOptionPicker
-            label="Environment"
-            value={environmentId}
-            options={environmentSelectorOptions}
-            onChange={setEnvironmentId}
-          />
+          <div className="flex items-baseline gap-2">
+            <PromptOptionPicker
+              label="Environment"
+              value={environmentId}
+              options={environmentSelectorOptions}
+              onChange={setEnvironmentId}
+              className="h-fit py-1"
+            />
+            {!threadsLoading && environmentId === "local" ? (
+              <div className="flex h-fit items-center leading-none">
+                <StatusPillCommitPopover
+                  status={workspaceStatus}
+                  label={projectWorkspaceStatus.label}
+                  variant={projectWorkspaceStatus.variant}
+                  canCommit={Boolean(workspaceStatus?.hasUncommittedChanges)}
+                  isCommitting={commitProjectWorkspace.isPending}
+                  onCommit={async ({ includeUnstaged, message }) => {
+                    if (!projectId) return;
+                    await commitProjectWorkspace.mutateAsync({
+                      projectId,
+                      includeUnstaged,
+                      ...(message ? { message } : {}),
+                    });
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </PageShell>

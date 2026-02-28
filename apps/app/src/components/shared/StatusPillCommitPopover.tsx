@@ -104,7 +104,7 @@ export function StatusPillCommitPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="rounded-sm">
+        <button type="button" className="inline-flex items-center rounded-sm align-middle">
           <StatusPill variant={variant}>{label}</StatusPill>
         </button>
       </PopoverTrigger>
