@@ -476,6 +476,7 @@ export class ThreadGitStatusService {
       throw new Error("Failed to resolve worktree HEAD");
     }
 
+    const currentProjectBranch = runGit(args.projectRoot, ["symbolic-ref", "--short", "HEAD"]);
     const defaultHead = runGit(args.projectRoot, ["rev-parse", defaultBranch]);
     if (!defaultHead.ok || !defaultHead.stdout) {
       throw new Error(`Failed to resolve ${defaultBranch}`);
@@ -540,6 +541,15 @@ export class ThreadGitStatusService {
         throw new Error(
           updateRef.stderr || `${defaultBranch} moved during squash merge; please retry`,
         );
+      }
+
+      if (currentProjectBranch.ok && currentProjectBranch.stdout === defaultBranch) {
+        const resetResult = runGit(args.projectRoot, ["reset", "--hard", mergedHead.stdout]);
+        if (!resetResult.ok) {
+          throw new Error(
+            resetResult.stderr || `Squash merged into ${defaultBranch}, but failed to refresh checkout`,
+          );
+        }
       }
 
       return { merged: true, message: `Squash-merged into ${defaultBranch}` };

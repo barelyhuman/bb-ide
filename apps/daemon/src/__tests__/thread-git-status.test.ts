@@ -132,6 +132,35 @@ describe("ThreadGitStatusService", () => {
     expect(result.message).toContain("conflicts");
   });
 
+  it("keeps project root clean when squash merge updates the checked-out default branch", () => {
+    const repoRoot = makeTempDir();
+    const threadRoot = join(makeTempDir(), "thread-worktree");
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "worktree", "add", "-b", "thread", threadRoot, "main");
+    writeFileSync(join(threadRoot, "README.md"), "initial\nthread change\n", "utf8");
+    git(threadRoot, "add", "README.md");
+    git(threadRoot, "commit", "-m", "thread change");
+
+    const service = new ThreadGitStatusService();
+    const result = service.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot: threadRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    expect(result.merged).toBe(true);
+    expect(git(repoRoot, "status", "--porcelain")).toBe("");
+    expect(git(repoRoot, "show", "--pretty=format:", "--name-only", "HEAD")).toContain("README.md");
+  });
+
   it("lists untracked files instead of collapsing to untracked directories", () => {
     const repoRoot = makeTempDir();
     git(repoRoot, "init");
