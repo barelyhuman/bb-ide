@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react"
 import { assertNever, type Thread } from "@beanbag/agent-core"
 import {
   AlertTriangle,
-  Archive,
   ChevronRight,
   Folder,
   FolderGit2,
@@ -17,10 +16,13 @@ import {
 import {
   useArchiveThread,
   useDeleteProject,
+  useMarkThreadUnread,
   useProjects,
   useThreadWorkStatusLookup,
   useThreads,
+  useUnarchiveThread,
   useUpdateProject,
+  useUpdateThread,
 } from "@/hooks/useApi"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
@@ -44,6 +46,7 @@ import {
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 import {
   Dialog,
   DialogContent,
@@ -72,6 +75,9 @@ export function ProjectList({
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
   const threadWorkStatusLookup = useThreadWorkStatusLookup()
+  const markThreadUnread = useMarkThreadUnread()
+  const updateThread = useUpdateThread()
+  const unarchiveThread = useUnarchiveThread()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
   const location = useLocation()
@@ -216,6 +222,25 @@ export function ProjectList({
     }
 
     archiveThread.mutate({ id: thread.id })
+  }
+
+  const renameThread = (thread: Thread) => {
+    if (updateThread.isPending) return
+
+    const currentTitle = thread.title ?? `Thread ${thread.id.slice(0, 8)}`
+    const typedName = window.prompt("Enter a new thread name:", currentTitle)
+    if (typedName == null) return
+
+    const nextName = typedName.trim()
+    if (!nextName) {
+      window.alert("Thread name cannot be empty.")
+      return
+    }
+
+    updateThread.mutate({
+      id: thread.id,
+      title: nextName,
+    })
   }
 
   return (
@@ -430,19 +455,31 @@ export function ProjectList({
                                     {formatRelativeTime(thread.updatedAt)}
                                   </span>
                                 </span>
-                                <button
-                                  type="button"
-                                  title="Archive thread"
-                                  aria-label="Archive thread"
-                                  className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
-                                  onClick={(event) => {
-                                    event.preventDefault()
-                                    event.stopPropagation()
-                                    void requestArchiveThread(thread)
-                                  }}
-                                >
-                                  <Archive className="size-3.5" />
-                                </button>
+                                <div className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100">
+                                  <ThreadActionsMenu
+                                    triggerClassName="h-6 w-6 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                                    disabled={
+                                      archiveThread.isPending ||
+                                      unarchiveThread.isPending ||
+                                      updateThread.isPending ||
+                                      markThreadUnread.isPending
+                                    }
+                                    onMarkUnread={() => {
+                                      markThreadUnread.mutate(thread.id)
+                                    }}
+                                    onRename={() => {
+                                      renameThread(thread)
+                                    }}
+                                    onToggleArchive={() => {
+                                      if (thread.archivedAt !== undefined) {
+                                        unarchiveThread.mutate({ id: thread.id })
+                                        return
+                                      }
+                                      void requestArchiveThread(thread)
+                                    }}
+                                    isArchived={thread.archivedAt !== undefined}
+                                  />
+                                </div>
                               </span>
                             </NavLink>
                           )

@@ -50,6 +50,10 @@ export interface TellThreadRequest {
   mode?: TellThreadMode;
 }
 
+export interface UpdateThreadRequest {
+  title?: string;
+}
+
 export interface ThreadExecutionOptions {
   model?: string;
   reasoningLevel?: ReasoningLevel;

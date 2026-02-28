@@ -726,6 +726,34 @@ export class ThreadManager implements ThreadOrchestrator {
     this._broadcastThreadChanged(threadId, ["archived-changed"]);
   }
 
+  updateThread(threadId: string, request: { title?: string }): Thread {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+
+    let didChange = false;
+    const nextTitle = this._normalizeThreadTitle(request.title);
+    if (nextTitle && nextTitle !== thread.title) {
+      this.threadRepo.update(threadId, { title: nextTitle });
+      this.lockedTitleThreadIds.add(threadId);
+      const providerThreadId = this.providerThreadIds.get(threadId);
+      if (providerThreadId) {
+        this._sendThreadNameSet(threadId, providerThreadId, nextTitle);
+      }
+      didChange = true;
+    }
+
+    const updated = this.threadRepo.getById(threadId);
+    if (!updated) {
+      throw threadNotFoundError(threadId);
+    }
+    if (didChange) {
+      this._broadcastThreadChanged(threadId, ["title-changed"]);
+    }
+    return updated;
+  }
+
 
   markRead(threadId: string): Thread {
     const thread = this.threadRepo.getById(threadId);
@@ -742,6 +770,27 @@ export class ThreadManager implements ThreadOrchestrator {
       this._broadcastThreadChanged(threadId, ["read-state-changed"]);
     }
 
+    return updated;
+  }
+
+  markUnread(threadId: string): Thread {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+
+    const nextLastReadAt = Math.max(0, thread.updatedAt - 1);
+    if ((thread.lastReadAt ?? 0) <= nextLastReadAt) {
+      return thread;
+    }
+
+    const updated = this.threadRepo.update(threadId, { lastReadAt: nextLastReadAt }, {
+      touchUpdatedAt: false,
+    });
+    if (!updated) {
+      throw threadNotFoundError(threadId);
+    }
+    this._broadcastThreadChanged(threadId, ["read-state-changed"]);
     return updated;
   }
 

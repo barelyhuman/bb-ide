@@ -6,6 +6,7 @@ import type {
   UpdateProjectRequest,
   SpawnThreadRequest,
   TellThreadRequest,
+  UpdateThreadRequest,
   SystemStatus,
   SystemEnvironmentInfo,
   SystemProviderInfo,
@@ -306,6 +307,13 @@ export async function getThread(id: string): Promise<Thread> {
   return request<Thread>("GET", `/threads/${id}`);
 }
 
+export async function updateThread(
+  id: string,
+  req: UpdateThreadRequest,
+): Promise<Thread> {
+  return request<Thread>("PATCH", `/threads/${id}`, req);
+}
+
 export async function getThreadDefaultExecutionOptions(
   id: string,
 ): Promise<ThreadExecutionOptions | null> {
@@ -338,6 +346,10 @@ export async function unarchiveThread(id: string): Promise<void> {
 
 export async function markThreadRead(id: string): Promise<Thread> {
   return request<Thread>("POST", `/threads/${id}/read`);
+}
+
+export async function markThreadUnread(id: string): Promise<Thread> {
+  return request<Thread>("POST", `/threads/${id}/unread`);
 }
 
 export async function getThreadWorkStatus(

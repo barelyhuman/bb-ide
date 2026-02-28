@@ -5,6 +5,7 @@ import {
   squashMergeThreadSchema,
   spawnThreadSchema,
   tellThreadSchema,
+  updateThreadSchema,
   type PromptInput,
   type ThreadOrchestrator,
 } from "@beanbag/agent-core";
@@ -171,6 +172,23 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .patch(
+      "/:id",
+      zValidator("json", updateThreadSchema),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const { title } = c.req.valid("json");
+          const updated = threadManager.updateThread(c.req.param("id"), { title });
+          return c.json(updated);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
     .post(
       "/:id/tell",
       zValidator("json", tellThreadSchema),
@@ -265,6 +283,18 @@ export function createThreadRoutes(
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
         const updated = threadManager.markRead(c.req.param("id"));
+        return c.json(updated);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .post("/:id/unread", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        const updated = threadManager.markUnread(c.req.param("id"));
         return c.json(updated);
       } catch (err) {
         return sendRouteError(c, err);

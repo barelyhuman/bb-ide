@@ -46,6 +46,7 @@ export { THREAD_CHANGE_KINDS } from "./protocol.js";
 export type {
   SpawnThreadRequest,
   TellThreadRequest,
+  UpdateThreadRequest,
   CreateProjectRequest,
   UpdateProjectRequest,
   CommitThreadRequest,
@@ -80,6 +81,7 @@ export {
   promptInputSchema,
   spawnThreadSchema,
   tellThreadSchema,
+  updateThreadSchema,
   createProjectSchema,
   updateProjectSchema,
   commitThreadSchema,

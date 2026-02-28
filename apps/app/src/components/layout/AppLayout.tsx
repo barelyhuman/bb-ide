@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive,
   ChevronRight,
@@ -24,7 +24,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
-import { useProjects, useThread } from "@/hooks/useApi"
+import {
+  useArchiveThread,
+  useMarkThreadUnread,
+  useProjects,
+  useThread,
+  useThreadWorkStatusLookup,
+  useUnarchiveThread,
+  useUpdateThread,
+} from "@/hooks/useApi"
+import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -45,6 +54,7 @@ interface AppHeaderProps {
   projectMatch: RegExpMatchArray | null
   projectName?: string
   meta: { title: string; subtitle?: string; breadcrumbs?: string[] }
+  titleStartSlot?: ReactNode
 }
 
 function AppHeader({
@@ -52,6 +62,7 @@ function AppHeader({
   projectMatch,
   projectName,
   meta,
+  titleStartSlot,
 }: AppHeaderProps) {
   const { isMobile, open, openMobile } = useSidebar()
   const isSidebarCollapsed = isMobile ? !openMobile : !open
@@ -74,6 +85,7 @@ function AppHeader({
       <div className="flex h-full items-center">
         <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
         <div className="ml-3 flex min-w-0 flex-1 items-center gap-2">
+          {titleStartSlot ? titleStartSlot : null}
           {headerTitle || meta.subtitle ? (
             <Separator orientation="vertical" className="mr-2 h-4" />
           ) : null}
@@ -163,7 +175,13 @@ function AppHeader({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
+  const archiveThread = useArchiveThread()
+  const unarchiveThread = useUnarchiveThread()
+  const markThreadUnread = useMarkThreadUnread()
+  const updateThread = useUpdateThread()
+  const threadWorkStatusLookup = useThreadWorkStatusLookup()
   const showHeader = location.pathname !== "/"
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -200,6 +218,86 @@ export function AppLayout({ children }: { children: ReactNode }) {
     projectName ??
     (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
   const { data: thread } = useThread(threadId)
+
+  const renameThread = useCallback(() => {
+    if (!thread || updateThread.isPending) return
+    const currentTitle = thread.title ?? `Thread ${thread.id.slice(0, 8)}`
+    const typedName = window.prompt("Enter a new thread name:", currentTitle)
+    if (typedName == null) return
+
+    const nextName = typedName.trim()
+    if (!nextName) {
+      window.alert("Thread name cannot be empty.")
+      return
+    }
+
+    updateThread.mutate({
+      id: thread.id,
+      title: nextName,
+    })
+  }, [thread, updateThread])
+
+  const toggleArchiveThread = useCallback(async () => {
+    if (!thread) return
+    if (thread.archivedAt !== undefined) {
+      unarchiveThread.mutate({ id: thread.id })
+      return
+    }
+
+    if (thread.environmentId === "worktree") {
+      const workStatus =
+        thread.workStatus ??
+        (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
+      if (
+        workStatus &&
+        (
+          workStatus.state === "dirty_uncommitted" ||
+          workStatus.state === "committed_unmerged" ||
+          workStatus.state === "dirty_and_committed_unmerged"
+        )
+      ) {
+        const confirmed = window.confirm(
+          "This thread has uncommitted or unmerged work. Archive anyway?"
+        )
+        if (!confirmed) {
+          return
+        }
+        archiveThread.mutate({ id: thread.id, force: true }, {
+          onSuccess: () => {
+            navigate(`/projects/${thread.projectId}`)
+          },
+        })
+        return
+      }
+    }
+
+    archiveThread.mutate({ id: thread.id }, {
+      onSuccess: () => {
+        navigate(`/projects/${thread.projectId}`)
+      },
+    })
+  }, [archiveThread, navigate, thread, threadWorkStatusLookup, unarchiveThread])
+
+  const threadTitleActions = threadMatch && thread ? (
+    <ThreadActionsMenu
+      triggerClassName="h-7 w-7 text-muted-foreground"
+      align="start"
+      disabled={
+        archiveThread.isPending ||
+        unarchiveThread.isPending ||
+        markThreadUnread.isPending ||
+        updateThread.isPending
+      }
+      onMarkUnread={() => {
+        markThreadUnread.mutate(thread.id)
+      }}
+      onRename={renameThread}
+      onToggleArchive={() => {
+        void toggleArchiveThread()
+      }}
+      isArchived={thread.archivedAt !== undefined}
+    />
+  ) : null
 
   const meta = threadMatch
     ? {
@@ -319,6 +417,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               meta={meta}
+              titleStartSlot={threadTitleActions}
             />
           ) : null}
           <main className="flex min-h-0 flex-1 flex-col p-4 md:p-5">

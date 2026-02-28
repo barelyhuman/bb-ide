@@ -298,6 +298,19 @@ export function useStopThread() {
   });
 }
 
+export function useUpdateThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...req }: { id: string } & { title?: string }) =>
+      api.updateThread(id, req),
+    onSuccess: (thread) => {
+      queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
 export function useArchiveThread() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -402,6 +415,17 @@ export function useMarkThreadRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.markThreadRead(id),
+    onSuccess: (thread) => {
+      queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+    },
+  });
+}
+
+export function useMarkThreadUnread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.markThreadUnread(id),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
       queryClient.invalidateQueries({ queryKey: ["threads"] });

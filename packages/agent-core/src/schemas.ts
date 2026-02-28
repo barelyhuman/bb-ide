@@ -47,6 +47,12 @@ export const tellThreadSchema = z.object({
   mode: z.enum(["auto", "start", "steer"]).optional(),
 });
 
+export const updateThreadSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+  })
+  .refine((value) => value.title !== undefined, "At least one field must be provided");
+
 // Project schemas
 export const createProjectSchema = z.object({
   name: z.string(),

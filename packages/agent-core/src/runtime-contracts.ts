@@ -154,7 +154,9 @@ export interface ThreadOrchestrator {
   stop(threadId: string): void;
   archive(threadId: string): void;
   unarchive(threadId: string): void;
+  updateThread(threadId: string, request: { title?: string }): Thread;
   markRead(threadId: string): Thread;
+  markUnread(threadId: string): Thread;
   commitThread(
     threadId: string,
     request?: CommitThreadRequest,
