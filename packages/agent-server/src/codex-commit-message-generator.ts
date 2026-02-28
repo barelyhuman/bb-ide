@@ -67,6 +67,8 @@ function buildPrompt(args: {
     "Rules:",
     "- Return ONLY JSON: {\"message\":\"...\"}",
     "- Use conventional commit style (feat|fix|refactor|test|docs|chore|perf|build|ci|style).",
+    "- Prefer specific types like feat/fix/refactor/test/docs/perf over chore.",
+    "- Use chore only for housekeeping (deps, tooling, CI, formatting, repo maintenance).",
     "- Use imperative mood, max 72 characters.",
     "- Single line only, no body.",
     "",
@@ -139,6 +141,20 @@ function normalizeCommitMessage(value: unknown): string | undefined {
   if (!normalized) return undefined;
   if (normalized.length <= MAX_OUTPUT_CHARS) return normalized;
   return normalized.slice(0, MAX_OUTPUT_CHARS).trimEnd();
+}
+
+export function extractConventionalCommitLine(raw: string): string | undefined {
+  const lines = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line !== "```" && line !== "```json");
+
+  const conventionalCommitPattern = /^(feat|fix|refactor|test|docs|chore|perf|build|ci|style)(\([^)]+\))?!?:\s+\S/i;
+  for (const line of lines) {
+    if (!conventionalCommitPattern.test(line)) continue;
+    return normalizeCommitMessage(line);
+  }
+  return undefined;
 }
 
 export async function generateCodexCommitMessage(
@@ -352,8 +368,9 @@ export async function generateCodexCommitMessage(
       return undefined;
     }
 
-    const parsed = extractJsonValue(responseText.trim());
-    return normalizeCommitMessage(parsed?.message);
+    const raw = responseText.trim();
+    const parsed = extractJsonValue(raw);
+    return normalizeCommitMessage(parsed?.message) ?? extractConventionalCommitLine(raw);
   } finally {
     clearTimeout(timeout);
     for (const request of pending.values()) {

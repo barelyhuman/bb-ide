@@ -279,19 +279,17 @@ export function createProjectRoutes(
         }
         const body = c.req.valid("json");
         let message = body?.message;
-        if (!message && deps?.commitMessageGenerator) {
-          try {
-            message = (
-              await deps.commitMessageGenerator({
-                cwd: project.rootPath,
-                includeUnstaged: body?.includeUnstaged,
-              })
-            )?.trim();
-          } catch (err) {
-            const detail = err instanceof Error ? err.message : "Unknown error";
-            console.warn(
-              `[project ${project.id}] Failed to auto-generate commit message: ${detail}`,
-            );
+        if (!message) {
+          if (!deps?.commitMessageGenerator) {
+            throw new Error("Commit message generation is unavailable");
+          }
+          const generated = await deps.commitMessageGenerator({
+            cwd: project.rootPath,
+            includeUnstaged: body?.includeUnstaged,
+          });
+          message = generated?.trim();
+          if (!message) {
+            throw new Error("Failed to auto-generate commit message");
           }
         }
         const defaultBranch = gitStatusService.detectDefaultBranch(project.rootPath);

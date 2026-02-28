@@ -46,14 +46,14 @@ export function createServer(deps: ServerDeps) {
   const provider = createProviderAdapter({
     codexTitleGenerator: async ({ input, cwd }) =>
       generateCodexThreadTitle({ input, cwd }),
-    codexCommitMessageGenerator: async ({ cwd }) =>
-      generateCodexCommitMessage({ cwd }),
+    codexCommitMessageGenerator: async ({ cwd, includeUnstaged }) =>
+      generateCodexCommitMessage({ cwd, includeUnstaged }),
   });
   const providerCatalog = listAvailableProviderInfos({
     codexTitleGenerator: async ({ input, cwd }) =>
       generateCodexThreadTitle({ input, cwd }),
-    codexCommitMessageGenerator: async ({ cwd }) =>
-      generateCodexCommitMessage({ cwd }),
+    codexCommitMessageGenerator: async ({ cwd, includeUnstaged }) =>
+      generateCodexCommitMessage({ cwd, includeUnstaged }),
   });
   const environmentAdapter = createEnvironmentAdapter();
   const environmentCatalog = listAvailableEnvironmentInfos();

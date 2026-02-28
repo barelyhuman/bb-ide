@@ -3336,6 +3336,37 @@ describe("ThreadManager", () => {
       });
     });
 
+    it("throws when auto commit-message generation fails", async () => {
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ commitMessageGenerator: vi.fn().mockResolvedValue(undefined) }),
+      );
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (autogenManager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        commit: vi.fn(),
+      };
+
+      await expect(
+        autogenManager.commitThread("thread-1", { includeUnstaged: true }),
+      ).rejects.toThrow("Failed to auto-generate commit message");
+    });
+
     it("broadcasts events-appended after commitThread appends a system event", async () => {
       const thread = makeThread({
         id: "thread-1",

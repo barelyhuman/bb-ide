@@ -967,18 +967,18 @@ export class ThreadManager implements ThreadOrchestrator {
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     let message = request?.message?.trim();
-    if (!message && this.provider.generateCommitMessage) {
-      try {
-        message = (
-          await this.provider.generateCommitMessage({
-            cwd: workspaceRoot,
-            includeUnstaged: request?.includeUnstaged,
-          })
-        )?.trim();
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `[thread ${thread.id}] Failed to auto-generate commit message (${this.provider.displayName}): ${detail}`,
+    if (!message) {
+      if (!this.provider.generateCommitMessage) {
+        throw new Error("Commit message generation is unavailable");
+      }
+      const generated = await this.provider.generateCommitMessage({
+        cwd: workspaceRoot,
+        includeUnstaged: request?.includeUnstaged,
+      });
+      message = generated?.trim();
+      if (!message) {
+        throw new Error(
+          `Failed to auto-generate commit message (${this.provider.displayName})`,
         );
       }
     }
