@@ -293,14 +293,6 @@ function ExpandableEntryContainer({
 function UserMessageRow({ message, projectId }: { message: UIUserMessage; projectId?: string }) {
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
   const attachments: string[] = [];
-  if (message.attachments?.webImages) {
-    const count = message.attachments.webImages;
-    attachments.push(`${count} web image${count === 1 ? "" : "s"}`);
-  }
-  if (message.attachments?.localImages) {
-    const count = message.attachments.localImages;
-    attachments.push(`${count} local image${count === 1 ? "" : "s"}`);
-  }
   if (message.attachments?.localFiles) {
     const count = message.attachments.localFiles;
     attachments.push(`${count} local file${count === 1 ? "" : "s"}`);

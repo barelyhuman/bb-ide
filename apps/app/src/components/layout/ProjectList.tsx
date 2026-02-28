@@ -466,26 +466,6 @@ export function ProjectList({
                                       : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
                                   )}
                                 >
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    title="Archive thread"
-                                    aria-label="Archive thread"
-                                    disabled={
-                                      archiveThread.isPending ||
-                                      unarchiveThread.isPending ||
-                                      updateThread.isPending ||
-                                      markThreadRead.isPending ||
-                                      markThreadUnread.isPending
-                                    }
-                                    onClick={(event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      void requestArchiveThread(thread)
-                                    }}
-                                  >
-                                    <Archive className="size-4" />
-                                  </button>
                                   <ThreadActionsMenu
                                     triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                                     onOpenChange={(open) => {
@@ -518,6 +498,26 @@ export function ProjectList({
                                     }}
                                     isArchived={thread.archivedAt !== undefined}
                                   />
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    title="Archive thread"
+                                    aria-label="Archive thread"
+                                    disabled={
+                                      archiveThread.isPending ||
+                                      unarchiveThread.isPending ||
+                                      updateThread.isPending ||
+                                      markThreadRead.isPending ||
+                                      markThreadUnread.isPending
+                                    }
+                                    onClick={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      void requestArchiveThread(thread)
+                                    }}
+                                  >
+                                    <Archive className="size-4" />
+                                  </button>
                                 </div>
                               </span>
                             </NavLink>
