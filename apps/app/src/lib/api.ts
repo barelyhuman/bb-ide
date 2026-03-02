@@ -1,12 +1,16 @@
 import type {
   Project,
   Thread,
+  ThreadQueuedMessage,
   ThreadStatus,
   ThreadEvent,
   CreateProjectRequest,
   UpdateProjectRequest,
   SpawnThreadRequest,
   TellThreadRequest,
+  EnqueueThreadMessageRequest,
+  SendQueuedThreadMessageRequest,
+  SendQueuedThreadMessageResponse,
   UpdateThreadRequest,
   SystemStatus,
   SystemEnvironmentInfo,
@@ -406,6 +410,32 @@ export async function getThreadDefaultExecutionOptions(
 
 export async function tellThread(id: string, req: TellThreadRequest): Promise<void> {
   return request<void>("POST", `/threads/${id}/tell`, req);
+}
+
+export async function enqueueThreadMessage(
+  id: string,
+  req: EnqueueThreadMessageRequest,
+): Promise<ThreadQueuedMessage> {
+  return request<ThreadQueuedMessage>("POST", `/threads/${id}/queue`, req);
+}
+
+export async function sendQueuedThreadMessage(
+  id: string,
+  queuedMessageId: string,
+  req?: SendQueuedThreadMessageRequest,
+): Promise<SendQueuedThreadMessageResponse> {
+  return request<SendQueuedThreadMessageResponse>(
+    "POST",
+    `/threads/${id}/queue/${queuedMessageId}/send`,
+    req ?? {},
+  );
+}
+
+export async function deleteQueuedThreadMessage(
+  id: string,
+  queuedMessageId: string,
+): Promise<void> {
+  return request<void>("DELETE", `/threads/${id}/queue/${queuedMessageId}`);
 }
 
 export async function stopThread(id: string): Promise<void> {

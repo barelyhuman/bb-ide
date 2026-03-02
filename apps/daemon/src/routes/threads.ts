@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
   commitThreadSchema,
+  enqueueThreadMessageSchema,
+  sendQueuedThreadMessageSchema,
   squashMergeThreadSchema,
   spawnThreadSchema,
   tellThreadSchema,
@@ -220,6 +222,72 @@ export function createThreadRoutes(
         }
       },
     )
+    .post(
+      "/:id/queue",
+      zValidator("json", enqueueThreadMessageSchema),
+      async (c) => {
+        try {
+          const { input, model, reasoningLevel, sandboxMode } = c.req.valid("json");
+          validatePromptInputAttachments(input);
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+
+          const updatedThread = threadManager.enqueueFollowUp(c.req.param("id"), {
+            input,
+            model,
+            reasoningLevel,
+            sandboxMode,
+          });
+          const queuedMessages = updatedThread.queuedMessages ?? [];
+          const queuedMessage =
+            queuedMessages[queuedMessages.length - 1];
+          if (!queuedMessage) {
+            throw invalidRequestError("Failed to queue follow-up");
+          }
+          return c.json(queuedMessage, 201);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/queue/:queuedMessageId/send",
+      zValidator("json", sendQueuedThreadMessageSchema),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const body = c.req.valid("json");
+          const response = await threadManager.sendQueuedFollowUp(
+            c.req.param("id"),
+            c.req.param("queuedMessageId"),
+            body,
+          );
+          return c.json(response);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .delete("/:id/queue/:queuedMessageId", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        threadManager.removeQueuedFollowUp(
+          c.req.param("id"),
+          c.req.param("queuedMessageId"),
+        );
+        return c.json({ ok: true });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .post("/:id/stop", async (c) => {
       try {
         const thread = threadManager.getById(c.req.param("id"));

@@ -44,6 +44,9 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
           flags.timelineChanged = true;
         }
         break;
+      case "queue-changed":
+        flags.threadChanged = true;
+        break;
       case "status-changed":
         flags.listChanged = true;
         flags.threadChanged = true;

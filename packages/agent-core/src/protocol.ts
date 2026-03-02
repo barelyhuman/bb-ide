@@ -6,6 +6,7 @@ export const THREAD_CHANGE_KINDS = [
   "events-appended",
   "status-changed",
   "title-changed",
+  "queue-changed",
   "work-status-changed",
   "archived-changed",
   "read-state-changed",

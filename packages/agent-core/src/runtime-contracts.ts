@@ -3,8 +3,11 @@ import type {
   CommitThreadRequest,
   CommitThreadResponse,
   DemotePrimaryResponse,
+  EnqueueThreadMessageRequest,
   PrimaryCheckoutStatus,
   PromoteThreadResponse,
+  SendQueuedThreadMessageRequest,
+  SendQueuedThreadMessageResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   ProviderCapabilities,
@@ -176,6 +179,16 @@ export interface ThreadOrchestrator {
     options?: ProviderExecutionOptions,
     context?: { initiator?: ThreadTurnInitiator },
   ): Promise<void>;
+  enqueueFollowUp(
+    threadId: string,
+    request: EnqueueThreadMessageRequest,
+  ): Thread;
+  removeQueuedFollowUp(threadId: string, queuedMessageId: string): Thread;
+  sendQueuedFollowUp(
+    threadId: string,
+    queuedMessageId: string,
+    request?: SendQueuedThreadMessageRequest,
+  ): Promise<SendQueuedThreadMessageResponse>;
   systemTell(
     threadId: string,
     request: TellThreadRequest,

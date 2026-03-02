@@ -48,8 +48,14 @@ import {
   type SquashMergeThreadResponse,
   type PromoteThreadResponse,
   type DemotePrimaryResponse,
+  type EnqueueThreadMessageRequest,
   type PrimaryCheckoutStatus,
+  type ReasoningLevel,
+  type SandboxMode,
+  type SendQueuedThreadMessageRequest,
+  type SendQueuedThreadMessageResponse,
   type ThreadTimelineResponse,
+  type ThreadQueuedMessage,
   type ThreadToolGroupMessagesRequest,
   type ThreadToolGroupMessagesResponse,
   type ThreadChangeKind,
@@ -302,6 +308,18 @@ function toTurnLifecycleState(
   return undefined;
 }
 
+function normalizeQueuedReasoningLevel(
+  value: ReasoningLevel | undefined,
+): ReasoningLevel {
+  return value ?? "medium";
+}
+
+function normalizeQueuedSandboxMode(
+  value: SandboxMode | undefined,
+): SandboxMode {
+  return value ?? "danger-full-access";
+}
+
 export class ThreadManager implements ThreadOrchestrator {
   private processes = new Map<string, ChildProcess>();
   private runtimes = new Map<string, ProviderRuntime>();
@@ -330,6 +348,8 @@ export class ThreadManager implements ThreadOrchestrator {
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Per-project in-memory primary-checkout promotion status. */
   private primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
+  /** Prevents concurrent queued follow-up dispatch loops per thread. */
+  private queueDispatchInFlight = new Set<string>();
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
   private providerCatalog: SystemProviderInfo[];
@@ -412,6 +432,16 @@ export class ThreadManager implements ThreadOrchestrator {
           break;
         default:
           assertNever(action);
+      }
+
+      const hydratedThread = this.threadRepo.getById(thread.id);
+      if (
+        hydratedThread &&
+        hydratedThread.archivedAt === undefined &&
+        hydratedThread.status === "idle" &&
+        (hydratedThread.queuedMessages?.length ?? 0) > 0
+      ) {
+        this._scheduleQueuedFollowUpDispatch(thread.id);
       }
     }
   }
@@ -583,6 +613,107 @@ export class ThreadManager implements ThreadOrchestrator {
     await this._tell(threadId, request, options, { initiator });
   }
 
+  enqueueFollowUp(
+    threadId: string,
+    request: EnqueueThreadMessageRequest,
+  ): Thread {
+    if (request.input.length === 0) {
+      throw invalidRequestError("Queued follow-up input must be non-empty");
+    }
+
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+
+    // Normalize now so we fail fast on unsupported prompt input shapes.
+    this._normalizePromptInputForProvider(request.input);
+
+    const defaultOptions = this.getDefaultExecutionOptions(threadId);
+    this.threadRepo.enqueueQueuedMessage(threadId, {
+      input: request.input,
+      model: request.model ?? defaultOptions?.model,
+      reasoningLevel: normalizeQueuedReasoningLevel(
+        request.reasoningLevel ?? defaultOptions?.reasoningLevel,
+      ),
+      sandboxMode: normalizeQueuedSandboxMode(
+        request.sandboxMode ?? defaultOptions?.sandboxMode,
+      ),
+    });
+
+    this._broadcastThreadChanged(threadId, ["queue-changed"]);
+    if (thread.status !== "active") {
+      this._scheduleQueuedFollowUpDispatch(threadId);
+    }
+
+    const updatedThread = this.threadRepo.getById(threadId);
+    if (!updatedThread) {
+      throw threadNotFoundError(threadId);
+    }
+    return this._withPrimaryCheckoutState(updatedThread);
+  }
+
+  removeQueuedFollowUp(threadId: string, queuedMessageId: string): Thread {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+
+    const deleted = this.threadRepo.deleteQueuedMessage(threadId, queuedMessageId);
+    if (!deleted) {
+      throw invalidRequestError(`Queued follow-up not found: ${queuedMessageId}`);
+    }
+
+    this._broadcastThreadChanged(threadId, ["queue-changed"]);
+    const updatedThread = this.threadRepo.getById(threadId);
+    if (!updatedThread) {
+      throw threadNotFoundError(threadId);
+    }
+    return this._withPrimaryCheckoutState(updatedThread);
+  }
+
+  async sendQueuedFollowUp(
+    threadId: string,
+    queuedMessageId: string,
+    request?: SendQueuedThreadMessageRequest,
+  ): Promise<SendQueuedThreadMessageResponse> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+
+    const queuedMessage = this.threadRepo.getQueuedMessage(threadId, queuedMessageId);
+    if (!queuedMessage) {
+      throw invalidRequestError(`Queued follow-up not found: ${queuedMessageId}`);
+    }
+
+    const requestedMode = request?.mode ?? "auto";
+    let tellMode: TellThreadRequest["mode"];
+    switch (requestedMode) {
+      case "auto":
+        tellMode = "auto";
+        break;
+      case "steer-if-active":
+        tellMode = thread.status === "active" ? "steer" : "auto";
+        break;
+      case "steer":
+        tellMode = "steer";
+        break;
+      default:
+        assertNever(requestedMode);
+    }
+
+    await this._sendQueuedFollowUpMessage(threadId, queuedMessage, tellMode);
+    this._scheduleQueuedFollowUpDispatch(threadId);
+    return { ok: true, queuedMessage };
+  }
+
   /**
    * Send an internal system-originated message to a thread.
    */
@@ -712,6 +843,65 @@ export class ThreadManager implements ThreadOrchestrator {
     this._sendToProcess(threadId, turnStartMsg);
   }
 
+  private async _sendQueuedFollowUpMessage(
+    threadId: string,
+    queuedMessage: ThreadQueuedMessage,
+    tellMode: TellThreadRequest["mode"],
+  ): Promise<void> {
+    const options: PromptExecutionOptions | undefined =
+      tellMode === "steer"
+        ? undefined
+        : {
+            ...(queuedMessage.model ? { model: queuedMessage.model } : {}),
+            reasoningLevel: queuedMessage.reasoningLevel,
+            sandboxMode: queuedMessage.sandboxMode,
+          };
+
+    await this._tell(
+      threadId,
+      {
+        input: queuedMessage.input,
+        ...(tellMode ? { mode: tellMode } : {}),
+      },
+      options,
+      { initiator: "agent" },
+    );
+
+    const deleted = this.threadRepo.deleteQueuedMessage(threadId, queuedMessage.id);
+    if (deleted) {
+      this._broadcastThreadChanged(threadId, ["queue-changed"]);
+    }
+  }
+
+  private _scheduleQueuedFollowUpDispatch(threadId: string): void {
+    if (this.queueDispatchInFlight.has(threadId)) return;
+    this.queueDispatchInFlight.add(threadId);
+    void this._drainQueuedFollowUps(threadId).finally(() => {
+      this.queueDispatchInFlight.delete(threadId);
+    });
+  }
+
+  private async _drainQueuedFollowUps(threadId: string): Promise<void> {
+    while (true) {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return;
+      if (thread.archivedAt !== undefined) return;
+      if (thread.status === "active") return;
+      if (thread.status === "created" || thread.status === "provisioning") return;
+
+      const queuedMessage = thread.queuedMessages?.[0];
+      if (!queuedMessage) return;
+
+      try {
+        await this._sendQueuedFollowUpMessage(threadId, queuedMessage, "auto");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[thread ${threadId}] queued follow-up dispatch failed: ${message}`);
+        return;
+      }
+    }
+  }
+
   /**
    * Stop an active thread by killing its process.
    */
@@ -746,6 +936,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+    this._scheduleQueuedFollowUpDispatch(threadId);
   }
 
   /**
@@ -803,6 +994,7 @@ export class ThreadManager implements ThreadOrchestrator {
       archivedAt: null,
     });
     this._broadcastThreadChanged(threadId, ["archived-changed"]);
+    this._scheduleQueuedFollowUpDispatch(threadId);
   }
 
   updateThread(threadId: string, request: { title?: string }): Thread {
@@ -2782,6 +2974,12 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     if (shouldBroadcast) {
       this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+    }
+    if (nextStatus === "idle") {
+      const updatedThread = this.threadRepo.getById(threadId);
+      if (updatedThread && updatedThread.archivedAt === undefined) {
+        this._scheduleQueuedFollowUpDispatch(threadId);
+      }
     }
     return true;
   }

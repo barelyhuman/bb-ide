@@ -43,6 +43,29 @@ export const threads = sqliteTable(
   ]
 );
 
+export const queuedThreadMessages = sqliteTable(
+  "queued_thread_messages",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }),
+    id: text("id").notNull().unique(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    input: text("input").notNull().default("[]"),
+    model: text("model"),
+    reasoningLevel: text("reasoning_level").notNull(),
+    sandboxMode: text("sandbox_mode").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("queued_thread_messages_thread_seq_idx").on(table.threadId, table.seq),
+    index("queued_thread_messages_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const events = sqliteTable(
   "events",
   {

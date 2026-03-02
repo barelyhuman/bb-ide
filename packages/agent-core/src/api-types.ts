@@ -5,7 +5,11 @@ import type {
 } from "./shared-types.js";
 import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
-import type { ThreadStatus, ThreadWorkStatus } from "./types.js";
+import type {
+  ThreadQueuedMessage,
+  ThreadStatus,
+  ThreadWorkStatus,
+} from "./types.js";
 export type {
   PromptInput,
   ReasoningLevel,
@@ -48,6 +52,22 @@ export interface TellThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   mode?: TellThreadMode;
+}
+
+export interface EnqueueThreadMessageRequest {
+  input: PromptInput[];
+  model?: string;
+  reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
+}
+
+export interface SendQueuedThreadMessageRequest {
+  mode?: "auto" | "steer-if-active" | "steer";
+}
+
+export interface SendQueuedThreadMessageResponse {
+  ok: true;
+  queuedMessage: ThreadQueuedMessage;
 }
 
 export interface UpdateThreadRequest {

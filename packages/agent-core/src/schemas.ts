@@ -47,6 +47,19 @@ export const tellThreadSchema = z.object({
   mode: z.enum(["auto", "start", "steer"]).optional(),
 });
 
+export const enqueueThreadMessageSchema = z.object({
+  input: z.array(promptInputSchema).min(1),
+  model: z.string().optional(),
+  reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+  sandboxMode: z
+    .enum(["read-only", "workspace-write", "danger-full-access"])
+    .optional(),
+});
+
+export const sendQueuedThreadMessageSchema = z.object({
+  mode: z.enum(["auto", "steer-if-active", "steer"]).optional(),
+});
+
 export const updateThreadSchema = z
   .object({
     title: z.string().min(1).optional(),

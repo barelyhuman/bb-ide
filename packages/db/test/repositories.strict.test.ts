@@ -118,4 +118,44 @@ describe("repository strict normalization", () => {
     expect(marked!.lastReadAt).toBe(before!.updatedAt);
     expect(marked!.updatedAt).toBe(before!.updatedAt);
   });
+
+  it("persists queued follow-up messages in FIFO order", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({ projectId });
+
+    const first = threads.enqueueQueuedMessage(thread.id, {
+      input: [{ type: "text", text: "first" }],
+      reasoningLevel: "medium",
+      sandboxMode: "danger-full-access",
+    });
+    const second = threads.enqueueQueuedMessage(thread.id, {
+      input: [{ type: "text", text: "second" }],
+      reasoningLevel: "high",
+      sandboxMode: "workspace-write",
+    });
+
+    expect(threads.listQueuedMessages(thread.id).map((queued) => queued.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+
+    expect(threads.getById(thread.id)?.queuedMessages?.map((queued) => queued.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+  });
+
+  it("deletes queued follow-up messages by id", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({ projectId });
+    const queued = threads.enqueueQueuedMessage(thread.id, {
+      input: [{ type: "text", text: "queued item" }],
+      reasoningLevel: "medium",
+      sandboxMode: "danger-full-access",
+    });
+
+    expect(threads.deleteQueuedMessage(thread.id, queued.id)).toBe(true);
+    expect(threads.deleteQueuedMessage(thread.id, queued.id)).toBe(false);
+    expect(threads.listQueuedMessages(thread.id)).toHaveLength(0);
+  });
 });

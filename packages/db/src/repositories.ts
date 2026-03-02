@@ -1,10 +1,14 @@
 import { eq, and, sql, gt, isNull, desc, inArray, notInArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
+  PromptInput,
   Project,
+  ReasoningLevel,
+  SandboxMode,
   Thread,
   ThreadAgentDiffStats,
   ThreadAgentDiffSource,
+  ThreadQueuedMessage,
   ThreadStatus,
   ThreadEvent,
   ThreadEventData,
@@ -17,12 +21,14 @@ import {
   extractTurnIdFromPersistedEventData,
   getStringField,
   normalizeThreadEventType,
+  promptInputSchema,
   toRecord,
 } from "@beanbag/agent-core";
 import type { DbConnection } from "./connection.js";
 import {
   projects,
   threads,
+  queuedThreadMessages,
   events,
 } from "./schema.js";
 
@@ -145,6 +151,43 @@ function toThreadAgentDiffSource(
   throw new Error(`Invalid persisted thread agent diff source: ${value}`);
 }
 
+function parseQueuedPromptInput(rawInput: string): PromptInput[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawInput);
+  } catch {
+    throw new Error("Invalid persisted queued thread input JSON");
+  }
+  const validationResult = promptInputSchema.array().safeParse(parsed);
+  if (!validationResult.success) {
+    throw new Error("Invalid persisted queued thread input payload");
+  }
+  return validationResult.data;
+}
+
+function toReasoningLevel(value: string): ReasoningLevel {
+  if (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  ) {
+    return value;
+  }
+  throw new Error(`Invalid persisted reasoning level: ${value}`);
+}
+
+function toSandboxMode(value: string): SandboxMode {
+  if (
+    value === "read-only" ||
+    value === "workspace-write" ||
+    value === "danger-full-access"
+  ) {
+    return value;
+  }
+  throw new Error(`Invalid persisted sandbox mode: ${value}`);
+}
+
 // ---------------------------------------------------------------------------
 // ProjectRepository
 // ---------------------------------------------------------------------------
@@ -244,7 +287,7 @@ export class ThreadRepository {
       updatedAt: now,
     };
     this.db.insert(threads).values(row).run();
-    return this.rowToThread(row);
+    return this.rowToThread(row, []);
   }
 
   getById(id: string): Thread | undefined {
@@ -254,7 +297,7 @@ export class ThreadRepository {
       .where(eq(threads.id, id))
       .get();
     if (!row) return undefined;
-    return this.rowToThread(row);
+    return this.rowToThread(row, this.listQueuedMessages(id));
   }
 
   list(filters?: {
@@ -282,7 +325,10 @@ export class ThreadRepository {
       query = query.where(and(...conditions)) as typeof query;
     }
     const rows = query.all();
-    return rows.map((row) => this.rowToThread(row));
+    const queueByThreadId = this.listQueuedMessagesByThreadIds(rows.map((row) => row.id));
+    return rows.map((row) =>
+      this.rowToThread(row, queueByThreadId.get(row.id) ?? []),
+    );
   }
 
   update(
@@ -328,7 +374,77 @@ export class ThreadRepository {
   }
 
   delete(id: string): void {
+    this.db
+      .delete(queuedThreadMessages)
+      .where(eq(queuedThreadMessages.threadId, id))
+      .run();
     this.db.delete(threads).where(eq(threads.id, id)).run();
+  }
+
+  enqueueQueuedMessage(
+    threadId: string,
+    data: {
+      input: PromptInput[];
+      model?: string;
+      reasoningLevel: ReasoningLevel;
+      sandboxMode: SandboxMode;
+    },
+  ): ThreadQueuedMessage {
+    const row = {
+      id: nanoid(),
+      threadId,
+      input: JSON.stringify(data.input),
+      model: data.model ?? null,
+      reasoningLevel: data.reasoningLevel,
+      sandboxMode: data.sandboxMode,
+      createdAt: Date.now(),
+    };
+    this.db.insert(queuedThreadMessages).values(row).run();
+    return this.rowToQueuedMessage({ seq: 0, ...row });
+  }
+
+  listQueuedMessages(threadId: string): ThreadQueuedMessage[] {
+    const rows = this.db
+      .select()
+      .from(queuedThreadMessages)
+      .where(eq(queuedThreadMessages.threadId, threadId))
+      .orderBy(queuedThreadMessages.seq)
+      .all();
+    return rows.map((row) => this.rowToQueuedMessage(row));
+  }
+
+  getQueuedMessage(
+    threadId: string,
+    queuedMessageId: string,
+  ): ThreadQueuedMessage | undefined {
+    const row = this.db
+      .select()
+      .from(queuedThreadMessages)
+      .where(
+        and(
+          eq(queuedThreadMessages.threadId, threadId),
+          eq(queuedThreadMessages.id, queuedMessageId),
+        ),
+      )
+      .get();
+    if (!row) return undefined;
+    return this.rowToQueuedMessage(row);
+  }
+
+  deleteQueuedMessage(
+    threadId: string,
+    queuedMessageId: string,
+  ): boolean {
+    const result = this.db
+      .delete(queuedThreadMessages)
+      .where(
+        and(
+          eq(queuedThreadMessages.threadId, threadId),
+          eq(queuedThreadMessages.id, queuedMessageId),
+        ),
+      )
+      .run();
+    return result.changes > 0;
   }
 
   markRead(id: string, readAt: number): Thread | undefined {
@@ -345,7 +461,7 @@ export class ThreadRepository {
 
     const nextReadAt = Math.max(existing.lastReadAt, Math.floor(readAt));
     if (nextReadAt <= existing.lastReadAt) {
-      return this.rowToThread(existing);
+      return this.rowToThread(existing, this.listQueuedMessages(id));
     }
 
     this.db
@@ -356,7 +472,10 @@ export class ThreadRepository {
     return this.getById(id);
   }
 
-  private rowToThread(row: typeof threads.$inferSelect): Thread {
+  private rowToThread(
+    row: typeof threads.$inferSelect,
+    queuedMessages: ThreadQueuedMessage[],
+  ): Thread {
     const agentDiffSource = toThreadAgentDiffSource(row.agentDiffSource ?? undefined);
     const agentDiffStats =
       agentDiffSource !== undefined &&
@@ -379,11 +498,51 @@ export class ThreadRepository {
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
       agentDiffStats,
+      queuedMessages,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
       lastReadAt: row.lastReadAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+    };
+  }
+
+  private listQueuedMessagesByThreadIds(
+    threadIds: readonly string[],
+  ): Map<string, ThreadQueuedMessage[]> {
+    const queueByThreadId = new Map<string, ThreadQueuedMessage[]>();
+    if (threadIds.length === 0) return queueByThreadId;
+
+    const rows = this.db
+      .select()
+      .from(queuedThreadMessages)
+      .where(inArray(queuedThreadMessages.threadId, Array.from(new Set(threadIds))))
+      .orderBy(queuedThreadMessages.threadId, queuedThreadMessages.seq)
+      .all();
+
+    for (const row of rows) {
+      const queuedMessage = this.rowToQueuedMessage(row);
+      const existing = queueByThreadId.get(row.threadId);
+      if (existing) {
+        existing.push(queuedMessage);
+      } else {
+        queueByThreadId.set(row.threadId, [queuedMessage]);
+      }
+    }
+
+    return queueByThreadId;
+  }
+
+  private rowToQueuedMessage(
+    row: typeof queuedThreadMessages.$inferSelect,
+  ): ThreadQueuedMessage {
+    return {
+      id: row.id,
+      input: parseQueuedPromptInput(row.input),
+      model: row.model ?? undefined,
+      reasoningLevel: toReasoningLevel(row.reasoningLevel),
+      sandboxMode: toSandboxMode(row.sandboxMode),
+      createdAt: row.createdAt,
     };
   }
 }

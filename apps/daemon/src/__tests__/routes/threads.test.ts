@@ -10,6 +10,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     id: "thread-1",
     projectId: "proj-1",
     status: "active",
+    queuedMessages: [],
     archivedAt: undefined,
     createdAt: 1000,
     updatedAt: 1000,
@@ -38,6 +39,9 @@ function mockThreadManager(): ThreadManager {
   return {
     spawn: vi.fn(),
     tell: vi.fn(),
+    enqueueFollowUp: vi.fn(),
+    removeQueuedFollowUp: vi.fn(),
+    sendQueuedFollowUp: vi.fn(),
     stop: vi.fn(),
     archive: vi.fn(),
     unarchive: vi.fn(),
@@ -568,6 +572,100 @@ describe("Thread routes", () => {
         message: "Attachment path must be absolute",
       });
       expect(threadManager.tell).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("queued follow-up routes", () => {
+    it("queues a follow-up and returns the persisted queue item", async () => {
+      const thread = makeThread({
+        queuedMessages: [],
+      });
+      const queuedThread = makeThread({
+        queuedMessages: [
+          {
+            id: "queued-1",
+            input: [{ type: "text", text: "Queued item" }],
+            model: "gpt-5-codex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            createdAt: 2000,
+          },
+        ],
+      });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.enqueueFollowUp as ReturnType<typeof vi.fn>).mockReturnValue(
+        queuedThread,
+      );
+
+      const res = await app.request("/threads/thread-1/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "Queued item" }],
+          model: "gpt-5-codex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
+        id: "queued-1",
+        input: [{ type: "text", text: "Queued item" }],
+      });
+      expect(threadManager.enqueueFollowUp).toHaveBeenCalledWith("thread-1", {
+        input: [{ type: "text", text: "Queued item" }],
+        model: "gpt-5-codex",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+      });
+    });
+
+    it("sends a queued follow-up", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.sendQueuedFollowUp as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        queuedMessage: {
+          id: "queued-1",
+          input: [{ type: "text", text: "Queued item" }],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          createdAt: 2000,
+        },
+      });
+
+      const res = await app.request("/threads/thread-1/queue/queued-1/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "steer-if-active" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        ok: true,
+      });
+      expect(threadManager.sendQueuedFollowUp).toHaveBeenCalledWith(
+        "thread-1",
+        "queued-1",
+        { mode: "steer-if-active" },
+      );
+    });
+
+    it("deletes a queued follow-up", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const res = await app.request("/threads/thread-1/queue/queued-1", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(threadManager.removeQueuedFollowUp).toHaveBeenCalledWith(
+        "thread-1",
+        "queued-1",
+      );
     });
   });
 

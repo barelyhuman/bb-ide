@@ -11,6 +11,9 @@ import type {
   UpdateProjectRequest,
   SpawnThreadRequest,
   TellThreadRequest,
+  EnqueueThreadMessageRequest,
+  SendQueuedThreadMessageRequest,
+  SendQueuedThreadMessageResponse,
   SystemStatus,
   SystemRestartPolicy,
   SystemRestartAcceptedResponse,
@@ -33,6 +36,7 @@ import type {
   DemotePrimaryResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
+  ThreadQueuedMessage,
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
 import { getAutoArchivePreferences } from "../lib/auto-archive-preferences";
@@ -313,6 +317,63 @@ export function useTellThread() {
       });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function useEnqueueThreadMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      input,
+      model,
+      reasoningLevel,
+      sandboxMode,
+    }: { id: string } & EnqueueThreadMessageRequest): Promise<ThreadQueuedMessage> =>
+      api.enqueueThreadMessage(id, { input, model, reasoningLevel, sandboxMode }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+    },
+  });
+}
+
+export function useSendQueuedThreadMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      queuedMessageId,
+      mode,
+    }: {
+      id: string;
+      queuedMessageId: string;
+    } & SendQueuedThreadMessageRequest): Promise<SendQueuedThreadMessageResponse> =>
+      api.sendQueuedThreadMessage(id, queuedMessageId, { mode }),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function useDeleteQueuedThreadMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      queuedMessageId,
+    }: {
+      id: string;
+      queuedMessageId: string;
+    }) => api.deleteQueuedThreadMessage(id, queuedMessageId),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
     },
   });
 }

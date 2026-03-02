@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, CornerDownRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import {
   useThread,
   useThreadWorkStatus,
@@ -8,6 +8,9 @@ import {
   useThreadEvents,
   useThreadToolGroupMessages,
   useTellThread,
+  useEnqueueThreadMessage,
+  useSendQueuedThreadMessage,
+  useDeleteQueuedThreadMessage,
   useCommitThread,
   usePromoteThread,
   useDemotePrimaryCheckout,
@@ -28,6 +31,13 @@ import {
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -41,7 +51,12 @@ import {
   ConversationTimeline,
   PromptComposerShell,
 } from "@beanbag/ui-core";
-import { type UIMessage } from "@beanbag/agent-core";
+import {
+  toRecord,
+  type PromptInput,
+  type ThreadQueuedMessage,
+  type UIMessage,
+} from "@beanbag/agent-core";
 import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 import {
   findLatestActivityMessageId,
@@ -52,7 +67,10 @@ import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
 } from "@/lib/latestInitialExpanded";
-import { promptDraftToInput } from "@/lib/prompt-draft";
+import {
+  promptDraftToInput,
+  type PromptDraftState,
+} from "@/lib/prompt-draft";
 import { openPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
@@ -65,6 +83,261 @@ import {
   threadWorkStatusVariant,
 } from "@/lib/thread-work-status";
 import { formatWorkspaceChangeSummary } from "@/lib/workspace-change-summary";
+
+const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
+function getFileNameFromPath(path: string): string {
+  const trimmedPath = path.trim();
+  if (trimmedPath.length === 0) return "Attachment";
+  const segments = trimmedPath.split("/");
+  const lastSegment = segments[segments.length - 1];
+  return lastSegment && lastSegment.length > 0 ? lastSegment : trimmedPath;
+}
+
+function countQueuedMessageAttachments(input: PromptInput[]): number {
+  let count = 0;
+  for (const chunk of input) {
+    if (chunk.type === "localImage" || chunk.type === "localFile") {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function formatQueuedFollowUpPreview(input: PromptInput[]): string {
+  const text = input
+    .filter((chunk): chunk is Extract<PromptInput, { type: "text" }> => chunk.type === "text")
+    .map((chunk) => chunk.text.trim())
+    .filter((chunk) => chunk.length > 0)
+    .join("\n\n");
+  const trimmedText = text.trim();
+  if (trimmedText.length > 0) {
+    if (trimmedText.length <= QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS) {
+      return trimmedText;
+    }
+    return `${trimmedText.slice(0, QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS - 1)}…`;
+  }
+
+  const attachmentCount = countQueuedMessageAttachments(input);
+  if (attachmentCount === 1) {
+    const firstAttachment = input.find(
+      (chunk) => chunk.type === "localImage" || chunk.type === "localFile",
+    );
+    if (firstAttachment) {
+      if (firstAttachment.type === "localFile" && firstAttachment.name) {
+        return `Attachment only (${firstAttachment.name})`;
+      }
+      return `Attachment only (${getFileNameFromPath(firstAttachment.path)})`;
+    }
+    return "Attachment only (1 file)";
+  }
+  if (attachmentCount > 1) {
+    return `Attachment only (${attachmentCount} files)`;
+  }
+
+  return "(empty message)";
+}
+
+function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
+  const textSegments: string[] = [];
+  const attachments: PromptDraftState["attachments"] = [];
+
+  for (const chunk of input) {
+    if (chunk.type === "text") {
+      if (chunk.text.trim().length > 0) {
+        textSegments.push(chunk.text);
+      }
+      continue;
+    }
+
+    if (chunk.type === "localImage") {
+      attachments.push({
+        type: "localImage",
+        path: chunk.path,
+        name: getFileNameFromPath(chunk.path),
+        sizeBytes: 0,
+      });
+      continue;
+    }
+
+    if (chunk.type === "localFile") {
+      attachments.push({
+        type: "localFile",
+        path: chunk.path,
+        name: chunk.name ?? getFileNameFromPath(chunk.path),
+        sizeBytes: chunk.sizeBytes ?? 0,
+        ...(chunk.mimeType ? { mimeType: chunk.mimeType } : {}),
+      });
+      continue;
+    }
+
+    // Open provider/runtime input variant: URL images are intentionally ignored
+    // by the prompt draft editor because we cannot map them to local attachments.
+  }
+
+  return {
+    text: textSegments.join("\n\n"),
+    attachments,
+  };
+}
+
+function isPromptInputChunk(value: unknown): value is PromptInput {
+  const record = toRecord(value);
+  if (!record) return false;
+
+  const type = record.type;
+  if (typeof type !== "string") return false;
+  if (type === "text") {
+    return typeof record.text === "string";
+  }
+  if (type === "image") {
+    return typeof record.url === "string";
+  }
+  if (type === "localImage" || type === "localFile") {
+    return typeof record.path === "string";
+  }
+  return false;
+}
+
+function isThreadQueuedMessage(value: unknown): value is ThreadQueuedMessage {
+  const record = toRecord(value);
+  if (!record || typeof record.id !== "string") return false;
+  if (!Array.isArray(record.input)) return false;
+  return record.input.every(isPromptInputChunk);
+}
+
+function extractThreadQueuedMessages(thread: unknown): ThreadQueuedMessage[] {
+  const record = toRecord(thread);
+  const queuedMessages = record?.queuedMessages;
+  if (!Array.isArray(queuedMessages)) return [];
+  return queuedMessages.filter(isThreadQueuedMessage);
+}
+
+function QueuedFollowUpList({
+  queuedMessages,
+  isThreadActive,
+  sendDisabled,
+  actionDisabled,
+  processingMessageId,
+  onSendImmediately,
+  onEdit,
+  onDelete,
+}: {
+  queuedMessages: readonly ThreadQueuedMessage[];
+  isThreadActive: boolean;
+  sendDisabled: boolean;
+  actionDisabled: boolean;
+  processingMessageId: string | null;
+  onSendImmediately: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  if (queuedMessages.length === 0) return null;
+
+  return (
+    <section
+      aria-label="Queued follow-up messages"
+      className="mb-2 overflow-hidden rounded-xl border border-border/70 bg-background/60 shadow-sm"
+    >
+      <div className="border-b border-border/60 px-3 py-1.5">
+        <p className="text-xs text-muted-foreground">Queued ({queuedMessages.length})</p>
+      </div>
+      <ul>
+        {queuedMessages.map((queuedMessage, index) => {
+          const attachmentCount = countQueuedMessageAttachments(queuedMessage.input);
+          const isProcessing = processingMessageId === queuedMessage.id;
+          return (
+            <li
+              key={queuedMessage.id}
+              className={`px-2.5 py-2 ${index < queuedMessages.length - 1 ? "border-b border-border/60" : ""}`}
+            >
+              <div className="flex items-start gap-2">
+                <div className="mt-0.5 rounded-md border border-border/60 bg-muted/35 p-1 text-muted-foreground">
+                  <CornerDownRight className="size-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="max-h-10 overflow-hidden whitespace-pre-wrap break-words text-sm leading-5 text-foreground">
+                    {formatQueuedFollowUpPreview(queuedMessage.input)}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    <span>#{index + 1} in queue</span>
+                    {attachmentCount > 0 ? (
+                      <span>
+                        {attachmentCount === 1 ? "1 attachment" : `${attachmentCount} attachments`}
+                      </span>
+                    ) : null}
+                    {isProcessing ? <span>Sending...</span> : null}
+                  </div>
+                </div>
+                <div className="ml-1 flex shrink-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 rounded-full px-3 text-xs"
+                    disabled={sendDisabled || isProcessing}
+                    onClick={() => onSendImmediately(queuedMessage.id)}
+                  >
+                    {isProcessing ? "Sending..." : isThreadActive ? "Steer" : "Send"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 text-muted-foreground hover:text-destructive"
+                    disabled={actionDisabled || isProcessing}
+                    onClick={() => onDelete(queuedMessage.id)}
+                    aria-label={`Delete queued message ${index + 1}`}
+                    title="Delete queued message"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-muted-foreground"
+                        disabled={actionDisabled || isProcessing}
+                        aria-label={`More queued message actions for message ${index + 1}`}
+                        title="More actions"
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem
+                        disabled={actionDisabled || isProcessing}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onEdit(queuedMessage.id);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={actionDisabled || isProcessing}
+                        className="text-destructive focus:text-destructive"
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          onDelete(queuedMessage.id);
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -185,6 +458,9 @@ export function ThreadDetailView() {
     threadId ?? "",
   );
   const tellThread = useTellThread();
+  const enqueueThreadMessage = useEnqueueThreadMessage();
+  const sendQueuedThreadMessage = useSendQueuedThreadMessage();
+  const deleteQueuedThreadMessage = useDeleteQueuedThreadMessage();
   const commitThread = useCommitThread();
   const promoteThread = usePromoteThread();
   const demotePrimaryCheckout = useDemotePrimaryCheckout();
@@ -201,6 +477,9 @@ export function ThreadDetailView() {
     Record<string, UIMessage[]>
   >({});
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
+  const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<string | null>(
+    null,
+  );
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const message = promptDraft.text;
   const promptInput = useMemo(
@@ -248,10 +527,12 @@ export function ThreadDetailView() {
 
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
+  const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
 
   useEffect(() => {
     setLoadingToolGroupIds(new Set());
     setToolGroupMessagesById({});
+    setProcessingQueuedMessageId(null);
   }, [threadId]);
 
   useEffect(() => {
@@ -364,6 +645,47 @@ export function ThreadDetailView() {
     };
   }, [containerRef, threadId]);
 
+  const sendFollowUpInput = useCallback(
+    async ({
+      input,
+      mode,
+      model,
+      reasoningLevel: executionReasoningLevel,
+      sandboxMode: executionSandboxMode,
+    }: {
+      input: PromptInput[];
+      mode?: "auto" | "steer";
+      model?: string;
+      reasoningLevel?: "low" | "medium" | "high" | "xhigh";
+      sandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
+    }) => {
+      if (!threadId || input.length === 0) return;
+      if (mode !== "steer" && isThreadPrimaryCheckoutActive) {
+        await demotePrimaryCheckout.mutateAsync({ id: threadId });
+      }
+      scrollToBottom();
+      await tellThread.mutateAsync({
+        id: threadId,
+        input,
+        ...(mode ? { mode } : {}),
+        ...(mode === "steer"
+          ? {}
+          : {
+              ...(model ? { model } : {}),
+              ...(executionReasoningLevel ? { reasoningLevel: executionReasoningLevel } : {}),
+              ...(executionSandboxMode ? { sandboxMode: executionSandboxMode } : {}),
+            }),
+      });
+    },
+    [
+      demotePrimaryCheckout,
+      isThreadPrimaryCheckoutActive,
+      scrollToBottom,
+      tellThread,
+      threadId,
+    ],
+  );
+
   const handleAttachFiles = useCallback(async (files: File[]) => {
     if (!projectId || files.length === 0) return;
 
@@ -413,7 +735,15 @@ export function ThreadDetailView() {
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
   const isProvisioningFailed = thread.status === "provisioning_failed";
-  const isFollowUpSubmitting = tellThread.isPending || demotePrimaryCheckout.isPending;
+  const queuedMessages = extractThreadQueuedMessages(thread);
+  const isQueueMutationPending =
+    enqueueThreadMessage.isPending ||
+    sendQueuedThreadMessage.isPending ||
+    deleteQueuedThreadMessage.isPending;
+  const isFollowUpSubmitting =
+    tellThread.isPending ||
+    demotePrimaryCheckout.isPending ||
+    enqueueThreadMessage.isPending;
   const canSendFollowUp = !isCreated && !isProvisioning;
   const promptPlaceholder =
     isCreated
@@ -450,34 +780,109 @@ export function ThreadDetailView() {
 
   const handleSend = async () => {
     if (promptInput.length === 0) return;
-    if (isPrimaryCheckoutActive) {
+
+    if (thread.status === "active") {
       try {
-        await demotePrimaryCheckout.mutateAsync({ id: thread.id });
+        await enqueueThreadMessage.mutateAsync({
+          id: thread.id,
+          input: promptInput,
+          model: activeModel?.model ?? selectedModel,
+          reasoningLevel,
+          sandboxMode,
+        });
+        promptDraft.clear();
+        setAttachmentError(null);
       } catch (err) {
-        window.alert(
-          err instanceof Error
-            ? err.message
-            : "Failed to demote primary checkout before follow-up",
-        );
-        return;
+        window.alert(err instanceof Error ? err.message : "Failed to queue follow-up");
       }
+      return;
     }
-    scrollToBottom();
-    tellThread.mutate(
-      {
-        id: thread.id,
+
+    try {
+      await sendFollowUpInput({
         input: promptInput,
         model: activeModel?.model ?? selectedModel,
         reasoningLevel,
         sandboxMode,
-      },
-      {
-        onSuccess: () => {
-          promptDraft.clear();
-          setAttachmentError(null);
-        },
-      },
-    );
+      });
+      promptDraft.clear();
+      setAttachmentError(null);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to send follow-up");
+    }
+  };
+
+  const handleSendQueuedImmediately = (messageId: string) => {
+    const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
+    if (!queuedMessage) return;
+
+    setProcessingQueuedMessageId(messageId);
+    void sendQueuedThreadMessage
+      .mutateAsync({
+        id: thread.id,
+        queuedMessageId: messageId,
+        mode: "steer-if-active",
+      })
+      .then(() => {
+        setAttachmentError(null);
+      })
+      .catch((err) => {
+        window.alert(
+          err instanceof Error ? err.message : "Failed to send queued follow-up",
+        );
+      })
+      .finally(() => {
+        setProcessingQueuedMessageId((currentMessageId) =>
+          currentMessageId === messageId ? null : currentMessageId,
+        );
+      });
+  };
+
+  const handleEditQueuedMessage = (messageId: string) => {
+    const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
+    if (!queuedMessage) return;
+
+    setProcessingQueuedMessageId(messageId);
+    void deleteQueuedThreadMessage
+      .mutateAsync({
+        id: thread.id,
+        queuedMessageId: messageId,
+      })
+      .then(() => {
+        const restoredDraft = queuedInputToDraft(queuedMessage.input);
+        promptDraft.setText(restoredDraft.text);
+        promptDraft.setAttachments(restoredDraft.attachments);
+        setAttachmentError(null);
+      })
+      .catch((err) => {
+        window.alert(
+          err instanceof Error ? err.message : "Failed to edit queued follow-up",
+        );
+      })
+      .finally(() => {
+        setProcessingQueuedMessageId((currentMessageId) =>
+          currentMessageId === messageId ? null : currentMessageId,
+        );
+      });
+  };
+
+  const handleDeleteQueuedMessage = (messageId: string) => {
+    setProcessingQueuedMessageId(messageId);
+    void deleteQueuedThreadMessage
+      .mutateAsync({
+        id: thread.id,
+        queuedMessageId: messageId,
+      })
+      .catch((err) => {
+        window.alert(
+          err instanceof Error ? err.message : "Failed to delete queued follow-up",
+        );
+      })
+      .finally(() => {
+        setProcessingQueuedMessageId((currentMessageId) =>
+          currentMessageId === messageId ? null : currentMessageId,
+        );
+      });
   };
 
   const conversationMain = (
@@ -752,6 +1157,16 @@ export function ThreadDetailView() {
                 </div>
               </div>
             ) : null}
+            <QueuedFollowUpList
+              queuedMessages={queuedMessages}
+              isThreadActive={thread.status === "active"}
+              sendDisabled={!canSendFollowUp || isFollowUpSubmitting || isQueueMutationPending}
+              actionDisabled={isFollowUpSubmitting || isQueueMutationPending}
+              processingMessageId={processingQueuedMessageId}
+              onSendImmediately={handleSendQueuedImmediately}
+              onEdit={handleEditQueuedMessage}
+              onDelete={handleDeleteQueuedMessage}
+            />
             <PromptBox
               value={message}
               onChange={promptDraft.setText}
@@ -764,6 +1179,11 @@ export function ThreadDetailView() {
               }
               isSubmitting={isFollowUpSubmitting}
               submitDisabled={!canSendFollowUp || isFollowUpSubmitting}
+              submitTitle={
+                thread.status === "active"
+                  ? "Queue follow-up (Enter)"
+                  : "Submit (Enter)"
+              }
               isRunning={thread.status === "active"}
               placeholder={promptPlaceholder}
               submitMode="enter"

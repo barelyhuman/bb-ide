@@ -27,6 +27,15 @@ export type ThreadStatus =
   | "idle"
   | "active";
 
+export interface ThreadQueuedMessage {
+  id: string;
+  input: PromptInput[];
+  model?: string;
+  reasoningLevel: ReasoningLevel;
+  sandboxMode: SandboxMode;
+  createdAt: number;
+}
+
 export interface Thread {
   id: string;
   projectId: string;
@@ -36,6 +45,7 @@ export interface Thread {
   primaryCheckout?: ThreadPrimaryCheckoutState;
   provisioningState?: ThreadProvisioningState;
   agentDiffStats?: ThreadAgentDiffStats;
+  queuedMessages?: ThreadQueuedMessage[];
   environmentId?: string;
   parentThreadId?: string;
   archivedAt?: number;
