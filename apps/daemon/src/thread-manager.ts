@@ -113,11 +113,6 @@ const TIMELINE_NOISE_EVENT_TYPES: readonly string[] = [
   "account/rateLimits/updated",
   "thread/tokenUsage/updated",
   "item/reasoning/summaryPartAdded",
-  "codex/event/agent_message_delta",
-  "codex/event/agent_message_content_delta",
-  "codex/event/agent_reasoning_delta",
-  "codex/event/reasoning_content_delta",
-  "codex/event/exec_command_output_delta",
 ];
 
 const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [

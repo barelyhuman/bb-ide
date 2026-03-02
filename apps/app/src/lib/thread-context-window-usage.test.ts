@@ -91,32 +91,21 @@ describe("thread context window usage helpers", () => {
     });
   });
 
-  it("falls back to task_started context window when token_count has no window", () => {
+  it("falls back to cumulative usage when last usage is missing", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "codex/event/task_started",
+        method: "thread/tokenUsage/updated",
         payload: {
-          id: "turn-1",
-          msg: {
-            type: "task_started",
-            model_context_window: 128000,
-          },
-        },
-      }),
-      buildProviderEvent({
-        seq: 2,
-        method: "codex/event/token_count",
-        payload: {
-          id: "turn-1",
-          msg: {
-            type: "token_count",
-            info: {
-              total_token_usage: {
-                total_tokens: 4800,
-              },
-              model_context_window: null,
+          threadId: "provider-thread",
+          turnId: "turn-1",
+          tokenUsage: {
+            total: {
+              ...EMPTY_TOKEN_BREAKDOWN,
+              totalTokens: 4800,
             },
+            last: null,
+            modelContextWindow: 128000,
           },
         },
       }),
@@ -132,20 +121,20 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "codex/event/token_count",
+        method: "thread/tokenUsage/updated",
         payload: {
-          id: "turn-9",
-          msg: {
-            type: "token_count",
-            info: {
-              total_token_usage: {
-                total_tokens: 9000000,
-              },
-              last_token_usage: {
-                total_tokens: 120000,
-              },
-              model_context_window: 258400,
+          threadId: "provider-thread",
+          turnId: "turn-9",
+          tokenUsage: {
+            total: {
+              ...EMPTY_TOKEN_BREAKDOWN,
+              totalTokens: 9000000,
             },
+            last: {
+              ...EMPTY_TOKEN_BREAKDOWN,
+              totalTokens: 120000,
+            },
+            modelContextWindow: 258400,
           },
         },
       }),
@@ -161,12 +150,41 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
+        method: "thread/tokenUsage/updated",
+        payload: {
+          threadId: "provider-thread",
+          turnId: "turn-1",
+          tokenUsage: {
+            total: {
+              ...EMPTY_TOKEN_BREAKDOWN,
+              totalTokens: 1000,
+            },
+            last: {
+              ...EMPTY_TOKEN_BREAKDOWN,
+              totalTokens: 1000,
+            },
+            modelContextWindow: null,
+          },
+        },
+      }),
+    ]);
+
+    expect(usage).toBeNull();
+  });
+
+  it("ignores legacy codex/event token_count payloads", () => {
+    const usage = extractThreadContextWindowUsage([
+      buildProviderEvent({
+        seq: 1,
         method: "codex/event/token_count",
         payload: {
-          id: "turn-1",
+          id: "turn-legacy",
           msg: {
             type: "token_count",
-            info: null,
+            info: {
+              total_token_usage: { total_tokens: 5000 },
+              model_context_window: 128000,
+            },
           },
         },
       }),

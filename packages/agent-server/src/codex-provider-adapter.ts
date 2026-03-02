@@ -23,9 +23,7 @@ const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
 const DEFAULT_APPROVAL_POLICY = "never";
 const DEFAULT_SANDBOX_MODE = "danger-full-access";
-// Suppress only known legacy duplicates that are mirrored by v2 item lifecycle
-// notifications. We intentionally do not blanket-drop codex/event/* because
-// some legacy events can still carry unique compatibility signals.
+// Ask Codex to suppress noisy legacy notifications at source.
 const LEGACY_DUPLICATE_NOTIFICATION_METHODS = [
   "codex/event/item_started",
   "codex/event/item_completed",
@@ -314,9 +312,8 @@ export function createCodexProviderAdapter(
     },
     shouldPersistEvent(method: string): boolean {
       const normalized = normalizeProviderEventType(method);
-      return !LEGACY_DUPLICATE_NOTIFICATION_METHODS.includes(
-        normalized as (typeof LEGACY_DUPLICATE_NOTIFICATION_METHODS)[number],
-      );
+      if (normalized.startsWith("codex/event/")) return false;
+      return true;
     },
     shouldBroadcastForEvent(method: string): boolean {
       const normalized = normalizeProviderEventType(method);

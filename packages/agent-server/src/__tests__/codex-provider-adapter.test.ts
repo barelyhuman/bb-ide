@@ -62,11 +62,12 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("suppresses duplicate legacy item lifecycle notifications at ingestion", () => {
+  it("suppresses legacy codex/event notifications at ingestion", () => {
     const adapter = createCodexProviderAdapter();
 
     expect(adapter.shouldPersistEvent?.("codex/event/item_started", {})).toBe(false);
     expect(adapter.shouldPersistEvent?.("codex/event/item_completed", {})).toBe(false);
+    expect(adapter.shouldPersistEvent?.("codex/event/token_count", {})).toBe(false);
     expect(adapter.shouldPersistEvent?.("item/started", {})).toBe(true);
     expect(adapter.shouldPersistEvent?.("item/completed", {})).toBe(true);
   });

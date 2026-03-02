@@ -56,33 +56,6 @@ function decodeContextWindowSignal(event: ThreadEvent): ThreadContextWindowSigna
     };
   }
 
-  if (eventMethod === "codex/event/token_count") {
-    const msg = toRecord(payload.msg);
-    const info = toRecord(msg?.info);
-    const totalUsage = toRecord(info?.total_token_usage);
-    const lastUsage = toRecord(info?.last_token_usage);
-    const totalTokens =
-      toNonNegativeNumber(lastUsage?.total_tokens) ??
-      toNonNegativeNumber(totalUsage?.total_tokens);
-    const modelContextWindow = toPositiveNumber(info?.model_context_window);
-    if (totalTokens === undefined && modelContextWindow === undefined) {
-      return null;
-    }
-    return {
-      totalTokens,
-      modelContextWindow,
-    };
-  }
-
-  if (eventMethod === "codex/event/task_started") {
-    const msg = toRecord(payload.msg);
-    const modelContextWindow = toPositiveNumber(msg?.model_context_window);
-    if (modelContextWindow === undefined) {
-      return null;
-    }
-    return { modelContextWindow };
-  }
-
   // Provider event methods are open_external: unknown methods are intentionally ignored.
   return null;
 }
