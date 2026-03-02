@@ -65,9 +65,11 @@ export function ThreadActionsMenu({
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={disabled}
-          onSelect={(event) => {
-            event.preventDefault()
-            onRename()
+          onSelect={() => {
+            // Defer prompt-driven rename so Radix can close the menu first.
+            window.setTimeout(() => {
+              onRename()
+            }, 0)
           }}
         >
           Rename thread
