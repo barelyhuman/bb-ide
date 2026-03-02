@@ -687,11 +687,15 @@ function ToolExploringRow({
           onToggle={onToggle}
         >
           <div className="mt-0.5 space-y-0.5">
-              {detailLines.map((line, index) => (
-                <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">
-                  {line}
-                </div>
-              ))}
+            {detailLines.map((line, index) => (
+              <div
+                key={`${message.id}:${index}`}
+                className="min-w-0 truncate font-mono ui-text-sm text-foreground/80"
+                title={line}
+              >
+                {line}
+              </div>
+            ))}
           </div>
         </ExpandableEntryContainer>
       </div>
