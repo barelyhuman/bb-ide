@@ -64,16 +64,17 @@ function closeHttpServer(server: ReturnType<typeof serve> | undefined): Promise<
 }
 
 function relaunchCurrentProcess(): boolean {
-  const argv = process.argv.slice(1);
-  if (argv.length === 0) {
+  const relaunchArgv = [...process.execArgv, ...process.argv.slice(1)];
+  if (relaunchArgv.length === 0) {
     return false;
   }
 
   try {
-    const child = spawn(process.execPath, argv, {
+    const child = spawn(process.execPath, relaunchArgv, {
       detached: true,
       stdio: "ignore",
       env: process.env,
+      cwd: process.cwd(),
     });
     child.unref();
     return true;

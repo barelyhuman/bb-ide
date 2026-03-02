@@ -3685,8 +3685,16 @@ describe("ThreadManager", () => {
 
       expect(proc1.kill).toHaveBeenCalledWith("SIGTERM");
       expect(proc2.kill).toHaveBeenCalledWith("SIGTERM");
-      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", { status: "idle" });
-      expect(threadRepo.update).toHaveBeenCalledWith("thread-2", { status: "idle" });
+      expect(threadRepo.update).toHaveBeenCalledWith(
+        "thread-1",
+        { status: "idle" },
+        { touchUpdatedAt: false },
+      );
+      expect(threadRepo.update).toHaveBeenCalledWith(
+        "thread-2",
+        { status: "idle" },
+        { touchUpdatedAt: false },
+      );
       expect(manager.getActiveCount()).toBe(0);
     });
   });

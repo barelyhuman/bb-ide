@@ -1683,7 +1683,10 @@ export class ThreadManager implements ThreadOrchestrator {
       } catch {
         // Process may have already exited
       }
-      this.threadRepo.update(threadId, { status: "idle" });
+      // Shutdown/restart should not create unread noise by touching thread.updatedAt.
+      this.threadRepo.update(threadId, { status: "idle" }, {
+        touchUpdatedAt: false,
+      });
     }
     for (const runtime of this.runtimes.values()) {
       runtime.close();
