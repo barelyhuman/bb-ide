@@ -20,6 +20,10 @@ export function StatusPillCommitPopover({
   label,
   variant,
   cleanTitle,
+  showMergeBaseDetails,
+  mergeBaseBranch,
+  mergeBaseBranchOptions,
+  onMergeBaseBranchChange,
   canCommit,
   canSquashMerge,
   isCommitting,
@@ -31,6 +35,10 @@ export function StatusPillCommitPopover({
   label: string;
   variant: StatusPillVariant;
   cleanTitle?: string;
+  showMergeBaseDetails?: boolean;
+  mergeBaseBranch?: string;
+  mergeBaseBranchOptions?: string[];
+  onMergeBaseBranchChange?: (branch: string) => void;
   canCommit: boolean;
   canSquashMerge?: boolean;
   isCommitting: boolean;
@@ -40,6 +48,7 @@ export function StatusPillCommitPopover({
     commitIfNeeded: boolean;
     includeUnstaged: boolean;
     commitMessage?: string;
+    mergeBaseBranch?: string;
   }) => Promise<{ message: string; merged: boolean }>;
 }) {
   const [open, setOpen] = useState(false);
@@ -47,12 +56,30 @@ export function StatusPillCommitPopover({
   const [commitMessage, setCommitMessage] = useState("");
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const branchName = status?.currentBranch;
-  const remoteSummary = status
+  const mergeDeltaSummary = status
     ? `${status.aheadCount} ahead · ${status.behindCount} behind`
     : "unknown";
   const isClean = status?.state === "clean";
   const isUpToDate = isClean && (status?.aheadCount ?? 0) === 0 && (status?.behindCount ?? 0) === 0;
-  const hasRemoteDelta = (status?.aheadCount ?? 0) > 0 || (status?.behindCount ?? 0) > 0;
+  const hasMergeBaseDelta = (status?.aheadCount ?? 0) > 0 || (status?.behindCount ?? 0) > 0;
+  const canShowMergeBaseDetails = showMergeBaseDetails === true;
+  const mergeBaseCandidates = (() => {
+    const fromProps = mergeBaseBranchOptions ?? status?.mergeBaseBranches ?? [];
+    const selected = mergeBaseBranch ?? status?.mergeBaseBranch;
+    if (!selected || fromProps.includes(selected)) {
+      return fromProps;
+    }
+    return [selected, ...fromProps];
+  })();
+  const selectedMergeBaseBranch =
+    mergeBaseBranch ??
+    status?.mergeBaseBranch ??
+    mergeBaseCandidates[0] ??
+    status?.defaultBranch;
+  const canSelectMergeBaseBranch =
+    canShowMergeBaseDetails &&
+    Boolean(onMergeBaseBranchChange) &&
+    mergeBaseCandidates.length > 0;
   const hasWorkspaceDelta =
     (status?.workspaceChangedFiles ?? 0) > 0 ||
     (status?.workspaceInsertions ?? 0) > 0 ||
@@ -91,7 +118,7 @@ export function StatusPillCommitPopover({
     switch (status.state) {
       case "clean":
         return isUpToDate
-          ? "No local or remote differences."
+          ? "No local or merge-base differences."
           : "No local file changes in the workspace.";
       case "deleted":
         return "This workspace no longer exists on disk.";
@@ -127,9 +154,31 @@ export function StatusPillCommitPopover({
                   <span className="font-medium">{branchName}</span>
                 </DetailRow>
               ) : null}
-              {(!isUpToDate || hasRemoteDelta) ? (
-                <DetailRow label="Remote">
-                  <span className="font-medium">{remoteSummary}</span>
+              {canShowMergeBaseDetails && (canSelectMergeBaseBranch || Boolean(selectedMergeBaseBranch)) ? (
+                <DetailRow label="Merge base">
+                  {canSelectMergeBaseBranch ? (
+                    <select
+                      aria-label="Merge base branch"
+                      className="h-7 min-w-0 max-w-[220px] rounded-md border border-input bg-background px-2 text-xs"
+                      value={selectedMergeBaseBranch ?? ""}
+                      onChange={(event) => onMergeBaseBranchChange?.(event.target.value)}
+                    >
+                      {mergeBaseCandidates.map((candidate) => (
+                        <option key={candidate} value={candidate}>
+                          {candidate}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="truncate font-medium">
+                      {selectedMergeBaseBranch ?? "unknown"}
+                    </span>
+                  )}
+                </DetailRow>
+              ) : null}
+              {canShowMergeBaseDetails && (!isUpToDate || hasMergeBaseDelta || Boolean(selectedMergeBaseBranch)) ? (
+                <DetailRow label="Merge base status">
+                  <span className="font-medium">{mergeDeltaSummary}</span>
                 </DetailRow>
               ) : null}
               {(!isUpToDate || hasWorkspaceDelta) ? (
@@ -222,6 +271,7 @@ export function StatusPillCommitPopover({
                         commitIfNeeded: true,
                         includeUnstaged,
                         commitMessage: commitMessage.trim() || undefined,
+                        mergeBaseBranch: selectedMergeBaseBranch,
                       });
                       setActionMessage(result.message);
                       if (result.merged) {
@@ -246,6 +296,7 @@ export function StatusPillCommitPopover({
                   const result = await onSquashMerge({
                     commitIfNeeded: false,
                     includeUnstaged,
+                    mergeBaseBranch: selectedMergeBaseBranch,
                   });
                   setActionMessage(result.message);
                   if (result.merged) {

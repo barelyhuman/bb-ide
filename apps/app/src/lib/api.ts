@@ -432,8 +432,17 @@ export async function markThreadUnread(id: string): Promise<Thread> {
 
 export async function getThreadWorkStatus(
   id: string,
+  mergeBaseBranch?: string,
 ): Promise<ThreadWorkStatus | null> {
-  return request<ThreadWorkStatus | null>("GET", `/threads/${id}/work-status`);
+  const params = new URLSearchParams();
+  if (mergeBaseBranch) {
+    params.set("mergeBaseBranch", mergeBaseBranch);
+  }
+  const qs = params.toString();
+  return request<ThreadWorkStatus | null>(
+    "GET",
+    `/threads/${id}/work-status${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export async function commitThread(

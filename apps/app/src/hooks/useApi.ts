@@ -166,11 +166,12 @@ export function useThreadDefaultExecutionOptions(id: string) {
   });
 }
 
-export function useThreadWorkStatus(id: string) {
+export function useThreadWorkStatus(id: string, mergeBaseBranch?: string) {
   return useQuery<ThreadWorkStatus | null>({
-    queryKey: ["threadWorkStatus", id],
-    queryFn: () => api.getThreadWorkStatus(id),
+    queryKey: ["threadWorkStatus", id, mergeBaseBranch ?? null],
+    queryFn: () => api.getThreadWorkStatus(id, mergeBaseBranch),
     enabled: !!id,
+    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
   });
 }

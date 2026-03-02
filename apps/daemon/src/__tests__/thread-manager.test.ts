@@ -3287,6 +3287,70 @@ describe("ThreadManager", () => {
       ]);
     });
 
+    it("uses the requested merge base branch for squash merge", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/squash_merge" }),
+      );
+
+      const getStatus = vi
+        .fn()
+        .mockReturnValueOnce({
+          hasUncommittedChanges: false,
+          mergeBaseBranch: "release",
+        })
+        .mockReturnValueOnce({
+          hasUncommittedChanges: false,
+          mergeBaseBranch: "release",
+        });
+      const squashMergeWorktreeIntoDefaultBranch = vi.fn().mockReturnValue({
+        merged: true,
+        message: "Squash-merged into release",
+      });
+
+      (manager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        getStatus,
+        squashMergeWorktreeIntoDefaultBranch,
+        invalidate: vi.fn(),
+      };
+
+      await manager.squashMergeThread("thread-1", { mergeBaseBranch: "release" });
+
+      expect(getStatus).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          defaultBranch: "main",
+          mergeBaseBranch: "release",
+        }),
+      );
+      expect(squashMergeWorktreeIntoDefaultBranch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultBranch: "release",
+        }),
+      );
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            mergeBaseBranch: "release",
+          }),
+        }),
+      );
+    });
+
     it("auto-archives local threads after a successful commit by default", async () => {
       const thread = makeThread({
         id: "thread-1",

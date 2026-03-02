@@ -74,6 +74,8 @@ export interface ThreadWorkStatus {
   behindCount: number;
   currentBranch?: string;
   defaultBranch?: string;
+  mergeBaseBranch?: string;
+  mergeBaseBranches?: string[];
   workspaceRoot?: string;
   baseRef?: string;
   files?: ThreadWorkFileChange[];
@@ -192,6 +194,7 @@ export interface SystemWorktreeSquashMergeEventData {
   status: "merged" | "noop" | "conflict";
   message: string;
   committed?: boolean;
+  mergeBaseBranch?: string;
   conflictFiles?: string[];
 }
 

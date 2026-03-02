@@ -166,7 +166,7 @@ export interface ThreadOrchestrator {
     request?: SquashMergeThreadRequest,
   ): Promise<SquashMergeThreadResponse>;
   getById(threadId: string): Thread | undefined;
-  getWorkStatus(threadId: string): ThreadWorkStatus | undefined;
+  getWorkStatus(threadId: string, mergeBaseBranch?: string): ThreadWorkStatus | undefined;
   getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];
   getTimeline(
     threadId: string,

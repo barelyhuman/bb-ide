@@ -108,6 +108,7 @@ export interface SquashMergeThreadRequest {
   includeUnstaged?: boolean;
   commitMessage?: string;
   squashMessage?: string;
+  mergeBaseBranch?: string;
   autoArchiveThreadOnCommit?: boolean;
 }
 

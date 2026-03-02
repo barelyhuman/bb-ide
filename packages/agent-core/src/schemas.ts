@@ -84,5 +84,6 @@ export const squashMergeThreadSchema = z.object({
   includeUnstaged: z.boolean().optional(),
   commitMessage: z.string().min(1).optional(),
   squashMessage: z.string().min(1).optional(),
+  mergeBaseBranch: z.string().min(1).optional(),
   autoArchiveThreadOnCommit: z.boolean().optional(),
 });

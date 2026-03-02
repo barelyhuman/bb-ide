@@ -914,10 +914,13 @@ export class ThreadManager implements ThreadOrchestrator {
     return this.threadRepo.getById(threadId);
   }
 
-  getWorkStatus(threadId: string) {
+  getWorkStatus(threadId: string, mergeBaseBranch?: string) {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return undefined;
-    return this._hydrateThreadState(thread, { includeAttributedDiff: true }).workStatus;
+    return this._hydrateThreadState(thread, {
+      includeAttributedDiff: true,
+      mergeBaseBranch,
+    }).workStatus;
   }
 
   getDefaultExecutionOptions(
@@ -1027,11 +1030,14 @@ export class ThreadManager implements ThreadOrchestrator {
     let committed = false;
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+    const requestedMergeBaseBranch = request?.mergeBaseBranch?.trim() || undefined;
     const before = this.gitStatusService.getStatus({
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
+      mergeBaseBranch: requestedMergeBaseBranch,
     });
+    const mergeBaseBranch = before.mergeBaseBranch ?? defaultBranch;
     const commitIfNeeded = request?.commitIfNeeded === true;
     if (before.hasUncommittedChanges) {
       if (!commitIfNeeded) {
@@ -1047,7 +1053,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const mergeResult = this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
       workspaceRoot,
       projectRoot: project.rootPath,
-      defaultBranch,
+      defaultBranch: mergeBaseBranch,
       message: request?.squashMessage,
     });
     this.gitStatusService.invalidate(workspaceRoot);
@@ -1055,6 +1061,7 @@ export class ThreadManager implements ThreadOrchestrator {
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
+      mergeBaseBranch,
     });
     this._appendEvent(
       thread.id,
@@ -1067,6 +1074,7 @@ export class ThreadManager implements ThreadOrchestrator {
             : "noop",
         message: mergeResult.message,
         committed,
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
         ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
       },
       { broadcastChanges: ["events-appended", "work-status-changed"] },
@@ -1854,7 +1862,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _hydrateThreadState(
     thread: Thread,
-    opts?: { includeAttributedDiff?: boolean },
+    opts?: { includeAttributedDiff?: boolean; mergeBaseBranch?: string },
   ): Thread {
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) return thread;
@@ -1865,6 +1873,7 @@ export class ThreadManager implements ThreadOrchestrator {
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
+      mergeBaseBranch: opts?.mergeBaseBranch,
     });
     const workStatus = { ...workspaceStatus };
 

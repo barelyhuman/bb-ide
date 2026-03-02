@@ -34,6 +34,10 @@ const eventsQuerySchema = z.object({
     }),
 });
 
+const workStatusQuerySchema = z.object({
+  mergeBaseBranch: z.string().trim().min(1).optional(),
+});
+
 const timelineQuerySchema = z.object({
   limit: z
     .string()
@@ -300,13 +304,16 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
-    .get("/:id/work-status", async (c) => {
+    .get("/:id/work-status", zValidator("query", workStatusQuerySchema), async (c) => {
       try {
         const thread = threadManager.getById(c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
-        return c.json(threadManager.getWorkStatus(c.req.param("id")) ?? null);
+        const query = c.req.valid("query");
+        return c.json(
+          threadManager.getWorkStatus(c.req.param("id"), query.mergeBaseBranch) ?? null,
+        );
       } catch (err) {
         return sendRouteError(c, err);
       }

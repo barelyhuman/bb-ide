@@ -70,6 +70,49 @@ describe("ThreadGitStatusService", () => {
     expect(status.state).toBe("clean");
   });
 
+  it("computes ahead/behind against a selected merge base branch", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "checkout", "-b", "release");
+    git(repoRoot, "checkout", "main");
+    writeFileSync(join(repoRoot, "README.md"), "initial\nmain change\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "main change");
+
+    git(repoRoot, "checkout", "-b", "thread");
+    writeFileSync(join(repoRoot, "README.md"), "initial\nmain change\nthread change\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "thread change");
+
+    const service = new ThreadGitStatusService();
+    const statusAgainstMain = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+    const statusAgainstRelease = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+      mergeBaseBranch: "release",
+    });
+
+    expect(statusAgainstMain.mergeBaseBranch).toBe("main");
+    expect(statusAgainstMain.aheadCount).toBe(1);
+    expect(statusAgainstRelease.mergeBaseBranch).toBe("release");
+    expect(statusAgainstRelease.aheadCount).toBe(2);
+    expect(statusAgainstRelease.mergeBaseBranches).toContain("main");
+    expect(statusAgainstRelease.mergeBaseBranches).toContain("release");
+  });
+
   it("refuses squash merge when project root has local changes", () => {
     const repoRoot = makeTempDir();
     const threadRoot = join(makeTempDir(), "thread-worktree");
@@ -159,6 +202,37 @@ describe("ThreadGitStatusService", () => {
     expect(result.merged).toBe(true);
     expect(git(repoRoot, "status", "--porcelain")).toBe("");
     expect(git(repoRoot, "show", "--pretty=format:", "--name-only", "HEAD")).toContain("README.md");
+  });
+
+  it("can squash merge into a non-default target branch", () => {
+    const repoRoot = makeTempDir();
+    const threadRoot = join(makeTempDir(), "thread-worktree");
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+    git(repoRoot, "branch", "develop");
+
+    git(repoRoot, "worktree", "add", "-b", "thread", threadRoot, "main");
+    writeFileSync(join(threadRoot, "README.md"), "initial\nthread change\n", "utf8");
+    git(threadRoot, "add", "README.md");
+    git(threadRoot, "commit", "-m", "thread change");
+
+    const service = new ThreadGitStatusService();
+    const result = service.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot: threadRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "develop",
+    });
+
+    expect(result.merged).toBe(true);
+    expect(result.message).toContain("develop");
+    expect(git(repoRoot, "show", "develop:README.md")).toContain("thread change");
+    expect(git(repoRoot, "show", "main:README.md")).not.toContain("thread change");
   });
 
   it("lists untracked files instead of collapsing to untracked directories", () => {

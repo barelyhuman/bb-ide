@@ -7,6 +7,8 @@ import type { CommitThreadResponse, ThreadWorkStatus } from "@beanbag/agent-core
 type CacheEntry = {
   checkedAt: number;
   fingerprint: string;
+  defaultBranch?: string;
+  mergeBaseBranch?: string;
   status: ThreadWorkStatus;
 };
 
@@ -185,6 +187,63 @@ function resolveBaseRef(workspaceRoot: string, branch: string | undefined): stri
   return undefined;
 }
 
+function listMergeBaseBranches(projectRoot: string, defaultBranch: string | undefined): string[] {
+  const localBranches = runGit(projectRoot, [
+    "for-each-ref",
+    "--format=%(refname:short)",
+    "refs/heads",
+  ]);
+  if (!localBranches.ok) {
+    return defaultBranch ? [defaultBranch] : [];
+  }
+
+  const branches = Array.from(
+    new Set(
+      localBranches.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  if (!defaultBranch) {
+    return branches;
+  }
+
+  if (!branches.includes(defaultBranch)) {
+    return [defaultBranch, ...branches];
+  }
+
+  return [defaultBranch, ...branches.filter((branch) => branch !== defaultBranch)];
+}
+
+function resolveMergeBaseSelection(args: {
+  workspaceRoot: string;
+  defaultBranch: string | undefined;
+  requestedMergeBaseBranch: string | undefined;
+  mergeBaseBranches: readonly string[];
+}): { mergeBaseBranch?: string; baseRef?: string } {
+  const candidates = [
+    args.requestedMergeBaseBranch,
+    args.defaultBranch,
+    ...args.mergeBaseBranches,
+  ];
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    const baseRef = resolveBaseRef(args.workspaceRoot, candidate);
+    if (baseRef) {
+      return { mergeBaseBranch: candidate, baseRef };
+    }
+  }
+
+  return {};
+}
+
 function hasLocalWorkingChanges(repoRoot: string): boolean {
   const status = runGit(repoRoot, ["status", "--porcelain"]);
   if (!status.ok) {
@@ -239,6 +298,7 @@ export class ThreadGitStatusService {
     workspaceRoot: string;
     projectRoot: string;
     defaultBranch?: string;
+    mergeBaseBranch?: string;
   }): ThreadWorkStatus {
     if (!existsSync(args.workspaceRoot)) {
       return deletedStatus(args.workspaceRoot);
@@ -249,10 +309,18 @@ export class ThreadGitStatusService {
       return emptyStatus(args.workspaceRoot);
     }
 
+    const requestedMergeBaseBranch = args.mergeBaseBranch?.trim() || undefined;
+    const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
     const fingerprint = createFingerprint(args.workspaceRoot);
     const cached = this.cache.get(args.workspaceRoot);
     const now = Date.now();
-    if (cached && cached.fingerprint === fingerprint && now - cached.checkedAt < CACHE_TTL_MS) {
+    if (
+      cached &&
+      cached.fingerprint === fingerprint &&
+      cached.defaultBranch === defaultBranch &&
+      cached.mergeBaseBranch === requestedMergeBaseBranch &&
+      now - cached.checkedAt < CACHE_TTL_MS
+    ) {
       return cached.status;
     }
 
@@ -277,8 +345,19 @@ export class ThreadGitStatusService {
     const deletions = unstagedStat.deletions + stagedStat.deletions;
 
     const currentBranch = runGit(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
-    const baseRef = resolveBaseRef(args.workspaceRoot, defaultBranch);
+    const mergeBaseBranches = listMergeBaseBranches(args.projectRoot, defaultBranch);
+    const mergeBaseSelection = resolveMergeBaseSelection({
+      workspaceRoot: args.workspaceRoot,
+      defaultBranch,
+      requestedMergeBaseBranch,
+      mergeBaseBranches,
+    });
+    const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
+    const baseRef = mergeBaseSelection.baseRef;
+    const mergeBaseBranchOptions =
+      mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
+        ? [mergeBaseBranch, ...mergeBaseBranches]
+        : mergeBaseBranches;
 
     let aheadCount = 0;
     let behindCount = 0;
@@ -307,6 +386,8 @@ export class ThreadGitStatusService {
       behindCount,
       ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
       ...(defaultBranch ? { defaultBranch } : {}),
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+      ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
       ...(baseRef ? { baseRef } : {}),
       ...(files.length > 0 ? { files } : {}),
       workspaceRoot: args.workspaceRoot,
@@ -315,6 +396,8 @@ export class ThreadGitStatusService {
     this.cache.set(args.workspaceRoot, {
       checkedAt: now,
       fingerprint,
+      defaultBranch,
+      mergeBaseBranch: requestedMergeBaseBranch,
       status,
     });
 
@@ -385,15 +468,16 @@ export class ThreadGitStatusService {
     defaultBranch?: string;
     message?: string;
   }): { merged: boolean; message: string; conflictFiles?: string[] } {
-    const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
-    if (!defaultBranch) {
-      throw new Error("Could not determine default branch");
+    const mergeBaseBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
+    if (!mergeBaseBranch) {
+      throw new Error("Could not determine merge base branch");
     }
 
     const workspaceStatus = this.getStatus({
       workspaceRoot: args.workspaceRoot,
       projectRoot: args.projectRoot,
-      defaultBranch,
+      defaultBranch: mergeBaseBranch,
+      mergeBaseBranch,
     });
     if (workspaceStatus.hasUncommittedChanges) {
       throw new Error("Workspace has uncommitted changes; commit first");
@@ -414,9 +498,9 @@ export class ThreadGitStatusService {
     }
 
     const currentProjectBranch = runGit(args.projectRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const defaultHead = runGit(args.projectRoot, ["rev-parse", defaultBranch]);
+    const defaultHead = runGit(args.projectRoot, ["rev-parse", mergeBaseBranch]);
     if (!defaultHead.ok || !defaultHead.stdout) {
-      throw new Error(`Failed to resolve ${defaultBranch}`);
+      throw new Error(`Failed to resolve ${mergeBaseBranch}`);
     }
 
     const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
@@ -440,7 +524,7 @@ export class ThreadGitStatusService {
         return {
           merged: false,
           message:
-            `Squash merge has conflicts against ${defaultBranch}. Ask the thread agent to rebase/merge ${defaultBranch} into its worktree, resolve conflicts, and retry.`,
+            `Squash merge has conflicts against ${mergeBaseBranch}. Ask the thread agent to rebase/merge ${mergeBaseBranch} into its worktree, resolve conflicts, and retry.`,
           ...(conflictFiles.ok && conflictFiles.stdout
             ? {
                 conflictFiles: conflictFiles.stdout
@@ -470,26 +554,26 @@ export class ThreadGitStatusService {
 
       const updateRef = runGit(args.projectRoot, [
         "update-ref",
-        `refs/heads/${defaultBranch}`,
+        `refs/heads/${mergeBaseBranch}`,
         mergedHead.stdout,
         defaultHead.stdout,
       ]);
       if (!updateRef.ok) {
         throw new Error(
-          updateRef.stderr || `${defaultBranch} moved during squash merge; please retry`,
+          updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
         );
       }
 
-      if (currentProjectBranch.ok && currentProjectBranch.stdout === defaultBranch) {
+      if (currentProjectBranch.ok && currentProjectBranch.stdout === mergeBaseBranch) {
         const resetResult = runGit(args.projectRoot, ["reset", "--hard", mergedHead.stdout]);
         if (!resetResult.ok) {
           throw new Error(
-            resetResult.stderr || `Squash merged into ${defaultBranch}, but failed to refresh checkout`,
+            resetResult.stderr || `Squash merged into ${mergeBaseBranch}, but failed to refresh checkout`,
           );
         }
       }
 
-      return { merged: true, message: `Squash-merged into ${defaultBranch}` };
+      return { merged: true, message: `Squash-merged into ${mergeBaseBranch}` };
     } finally {
       runGit(args.projectRoot, ["worktree", "remove", "--force", tempWorkspaceRoot]);
       rmSync(tempRoot, { recursive: true, force: true });

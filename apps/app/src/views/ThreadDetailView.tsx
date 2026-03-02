@@ -163,8 +163,14 @@ export function ThreadDetailView() {
     projectId: string;
     threadId: string;
   }>();
+  const [selectedMergeBaseBranch, setSelectedMergeBaseBranch] = useState<string | undefined>(
+    undefined,
+  );
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
-  const { data: threadWorkStatus } = useThreadWorkStatus(threadId ?? "");
+  const { data: threadWorkStatus } = useThreadWorkStatus(
+    threadId ?? "",
+    selectedMergeBaseBranch,
+  );
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
@@ -243,6 +249,27 @@ export function ThreadDetailView() {
     setLoadingToolGroupIds(new Set());
     setToolGroupMessagesById({});
   }, [threadId]);
+
+  useEffect(() => {
+    setSelectedMergeBaseBranch(undefined);
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!threadWorkStatus) return;
+    const mergeBaseBranches = threadWorkStatus.mergeBaseBranches ?? [];
+    const fallbackBranch = threadWorkStatus.mergeBaseBranch ?? mergeBaseBranches[0];
+    if (!fallbackBranch) return;
+    if (
+      selectedMergeBaseBranch &&
+      (
+        selectedMergeBaseBranch === threadWorkStatus.mergeBaseBranch ||
+        mergeBaseBranches.includes(selectedMergeBaseBranch)
+      )
+    ) {
+      return;
+    }
+    setSelectedMergeBaseBranch(fallbackBranch);
+  }, [selectedMergeBaseBranch, threadWorkStatus]);
 
   useEffect(() => {
     if (!thread) return;
@@ -476,6 +503,14 @@ export function ThreadDetailView() {
                   })}
                   variant={threadWorkStatusVariant(threadWorkStatus)}
                   cleanTitle={thread.environmentId === "worktree" ? "Clean, Up to date" : undefined}
+                  showMergeBaseDetails={thread.environmentId === "worktree"}
+                  mergeBaseBranch={selectedMergeBaseBranch ?? threadWorkStatus.mergeBaseBranch}
+                  mergeBaseBranchOptions={threadWorkStatus.mergeBaseBranches}
+                  onMergeBaseBranchChange={
+                    thread.environmentId === "worktree"
+                      ? setSelectedMergeBaseBranch
+                      : undefined
+                  }
                   canCommit={threadWorkStatus.hasUncommittedChanges}
                   canSquashMerge={
                     thread.environmentId === "worktree" &&
@@ -494,16 +529,27 @@ export function ThreadDetailView() {
                       ...(message ? { message } : {}),
                     });
                   }}
-                  onSquashMerge={async ({ commitIfNeeded, includeUnstaged, commitMessage }) => {
+                  onSquashMerge={async ({
+                    commitIfNeeded,
+                    includeUnstaged,
+                    commitMessage,
+                    mergeBaseBranch,
+                  }) => {
                     if (!threadId) return { message: "Thread unavailable", merged: false };
                     const result = await squashMergeThread.mutateAsync({
                       id: threadId,
                       commitIfNeeded,
                       includeUnstaged,
                       ...(commitMessage ? { commitMessage } : {}),
+                      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
                     });
                     if (result.conflictFiles && result.conflictFiles.length > 0) {
-                      const branch = threadWorkStatus.defaultBranch ?? "main";
+                      const branch =
+                        result.workStatus.mergeBaseBranch ??
+                        mergeBaseBranch ??
+                        threadWorkStatus.mergeBaseBranch ??
+                        threadWorkStatus.defaultBranch ??
+                        "main";
                       const fileList = result.conflictFiles.slice(0, 12).join(", ");
                       await tellThread.mutateAsync({
                         id: threadId,
