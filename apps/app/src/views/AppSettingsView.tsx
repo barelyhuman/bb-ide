@@ -93,16 +93,22 @@ export function AppSettingsView() {
           label="File open command"
           description='Leave blank for system default. Saves on blur.'
         >
-          <input
-            id="file-command"
-            value={fileCommand}
-            onChange={(event) => {
-              setFileCommand(event.target.value);
-            }}
-            onBlur={saveOpenPathSettings}
-            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
-            placeholder='e.g. "code -r"'
-          />
+          <div className="w-full">
+            <input
+              id="file-command"
+              value={fileCommand}
+              onChange={(event) => {
+                setFileCommand(event.target.value);
+              }}
+              onBlur={saveOpenPathSettings}
+              className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
+              placeholder='e.g. "code -r"'
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Use <code className="rounded bg-muted px-1 py-0.5">{`{path}`}</code> to place the
+              file/folder path explicitly.
+            </p>
+          </div>
         </SettingsWithControl>
         <SettingsWithControl
           label="Auto-archive on commit"
@@ -137,10 +143,6 @@ export function AppSettingsView() {
             <option value="dark">Dark</option>
           </select>
         </SettingsWithControl>
-        <p className="text-xs text-muted-foreground">
-          Use <code className="rounded bg-muted px-1 py-0.5">{`{path}`}</code> to place the
-          file/folder path explicitly.
-        </p>
       </div>
     </PageShell>
   );
