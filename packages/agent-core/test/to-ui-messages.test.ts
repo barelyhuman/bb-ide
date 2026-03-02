@@ -456,6 +456,149 @@ describe("toUIMessages replay coverage", () => {
     expect(exploringRows[0]?.status).toBe("completed");
   });
 
+  it("updates a flushed exploring cell when completion arrives later", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "exec_command_begin",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "cat README.md"],
+          cwd: "/repo",
+          parsed_cmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          source: "agent",
+          status: "pending",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread-title/updated",
+        data: {
+          turnId: "turn-1",
+          title: "daemon restart bug",
+          previousTitle: "threads - why is that?",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "exec_command_end",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "cat README.md"],
+          cwd: "/repo",
+          parsed_cmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          source: "agent",
+          aggregated_output: "README",
+          exit_code: 0,
+          duration: "10ms",
+          status: "completed",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "active" });
+
+    const exploringRows = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "tool-exploring" }> =>
+        message.kind === "tool-exploring",
+    );
+    expect(exploringRows).toHaveLength(1);
+    expect(exploringRows[0]?.status).toBe("completed");
+    expect(exploringRows[0]?.sourceSeqStart).toBe(1);
+    expect(exploringRows[0]?.sourceSeqEnd).toBe(3);
+    expect(exploringRows[0]?.calls).toHaveLength(1);
+    expect(exploringRows[0]?.calls[0]?.status).toBe("completed");
+    expect(exploringRows[0]?.calls[0]?.sourceSeqEnd).toBe(3);
+  });
+
+  it("updates a flushed tool-call cell when completion arrives later", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "exec_command_begin",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "pnpm test"],
+          cwd: "/repo",
+          parsed_cmd: [{ type: "unknown", cmd: "pnpm test" }],
+          source: "agent",
+          status: "pending",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread-title/updated",
+        data: {
+          turnId: "turn-1",
+          title: "new thread name",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "exec_command_end",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: ["/bin/zsh", "-lc", "pnpm test"],
+          cwd: "/repo",
+          parsed_cmd: [{ type: "unknown", cmd: "pnpm test" }],
+          source: "agent",
+          aggregated_output: "ok",
+          exit_code: 0,
+          duration: "23ms",
+          status: "completed",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "active" });
+
+    const toolCalls = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0]?.status).toBe("completed");
+    expect(toolCalls[0]?.sourceSeqStart).toBe(1);
+    expect(toolCalls[0]?.sourceSeqEnd).toBe(3);
+    expect(toolCalls[0]?.output).toBe("ok");
+  });
+
   it("flushes completed non-exploring exec cells before assistant text", () => {
     const events: ThreadEvent[] = [
       {

@@ -1755,6 +1755,31 @@ function findCallInActiveCell(
   return activeCell.calls.find((call) => call.callId === callId) ?? null;
 }
 
+function findCallInHistoryCells(
+  state: ProjectionState,
+  callId: string,
+):
+  | {
+      cell: UIToolExploringMessage | UIToolCallMessage;
+      call: UIToolCallSummary | UIToolCallMessage;
+    }
+  | null {
+  for (let index = state.toolActivity.historyCells.length - 1; index >= 0; index -= 1) {
+    const cell = state.toolActivity.historyCells[index];
+    if (!cell || cell.kind === "web-search") continue;
+
+    const call = findCallInActiveCell(cell, callId);
+    if (!call) continue;
+
+    return {
+      cell,
+      call,
+    };
+  }
+
+  return null;
+}
+
 function mergeCallSummary(
   target: UIToolCallSummary | UIToolCallMessage,
   incoming: ExecCallPartial,
@@ -1940,6 +1965,21 @@ function onExecOutput(
       );
     }
   }
+
+  const historyMatch = findCallInHistoryCells(state, incoming.callId);
+  if (!historyMatch) return;
+
+  mergeCallSummary(historyMatch.call, incoming, { appendOutput });
+  historyMatch.cell.sourceSeqEnd = Math.max(historyMatch.cell.sourceSeqEnd, event.seq);
+  historyMatch.cell.createdAt = Math.max(historyMatch.cell.createdAt, event.createdAt);
+
+  if (historyMatch.cell.kind === "tool-exploring") {
+    syncExploringStatus(historyMatch.cell);
+  } else if (historyMatch.cell.kind === "tool-call") {
+    historyMatch.cell.status =
+      mergeCallStatus(historyMatch.cell.status, incoming.status) ??
+      historyMatch.cell.status;
+  }
 }
 
 function onExecEnd(
@@ -1977,6 +2017,33 @@ function onExecEnd(
   }
 
   if (state.toolActivity.finalizedExecCallIds.has(incoming.callId)) {
+    return;
+  }
+
+  const historyMatch = findCallInHistoryCells(state, incoming.callId);
+  if (historyMatch) {
+    mergeCallSummary(historyMatch.call, merged);
+    historyMatch.cell.sourceSeqEnd = Math.max(
+      historyMatch.cell.sourceSeqEnd,
+      merged.sourceSeqEnd,
+    );
+    historyMatch.cell.createdAt = Math.max(
+      historyMatch.cell.createdAt,
+      merged.createdAt,
+    );
+
+    if (historyMatch.cell.kind === "tool-exploring") {
+      syncExploringStatus(historyMatch.cell);
+    } else {
+      historyMatch.cell.status =
+        mergeCallStatus(historyMatch.cell.status, merged.status) ??
+        historyMatch.cell.status;
+      historyMatch.cell.output = merged.output ?? historyMatch.cell.output;
+      historyMatch.cell.exitCode = merged.exitCode ?? historyMatch.cell.exitCode;
+      historyMatch.cell.duration = merged.duration ?? historyMatch.cell.duration;
+    }
+
+    state.toolActivity.finalizedExecCallIds.add(incoming.callId);
     return;
   }
 
