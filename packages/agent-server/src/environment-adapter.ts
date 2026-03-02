@@ -103,6 +103,26 @@ function localSession(context: EnvironmentPrepareContext): EnvironmentSession {
   };
 }
 
+type WorktreeFallbackReason = "missing-git-root" | "worktree-add-failed";
+
+function localFallbackSession(
+  context: EnvironmentPrepareContext,
+  reason: WorktreeFallbackReason,
+): EnvironmentSession {
+  const fallback = localSession(context);
+  return {
+    ...fallback,
+    env: {
+      ...(fallback.env ?? {}),
+      BB_WORKSPACE_MODE: "local-fallback",
+    },
+    metadata: {
+      ...(fallback.metadata ?? {}),
+      fallbackReason: reason,
+    },
+  };
+}
+
 export function createLocalEnvironmentAdapter(): EnvironmentAdapter {
   return {
     info: { ...LOCAL_ENVIRONMENT_INFO },
@@ -152,21 +172,10 @@ export function createWorktreeEnvironmentAdapter(
   return {
     info: { ...WORKTREE_ENVIRONMENT_INFO },
     prepare(context: EnvironmentPrepareContext): EnvironmentSession {
-      const fallback = localSession(context);
       const projectRoot = context.projectRootPath;
       const gitDir = join(projectRoot, ".git");
       if (!existsSync(gitDir)) {
-        return {
-          ...fallback,
-          env: {
-            ...(fallback.env ?? {}),
-            BB_WORKSPACE_MODE: "local-fallback",
-          },
-          metadata: {
-            ...(fallback.metadata ?? {}),
-            fallbackReason: "missing-git-root",
-          },
-        };
+        return localFallbackSession(context, "missing-git-root");
       }
 
       const { root: configuredWorktreeRoot, isGlobalRoot } =
@@ -211,17 +220,7 @@ export function createWorktreeEnvironmentAdapter(
               },
             );
         if (addResult.status !== 0) {
-          return {
-            ...fallback,
-            env: {
-              ...(fallback.env ?? {}),
-              BB_WORKSPACE_MODE: "local-fallback",
-            },
-            metadata: {
-              ...(fallback.metadata ?? {}),
-              fallbackReason: "worktree-add-failed",
-            },
-          };
+          return localFallbackSession(context, "worktree-add-failed");
         }
       }
 

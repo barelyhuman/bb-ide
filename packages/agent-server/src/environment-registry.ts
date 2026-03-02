@@ -11,6 +11,10 @@ export interface CreateEnvironmentAdapterOptions {
 const SUPPORTED_ENVIRONMENT_IDS = ["local", "worktree"] as const;
 type SupportedEnvironmentId = (typeof SUPPORTED_ENVIRONMENT_IDS)[number];
 
+function isSupportedEnvironmentId(value: string): value is SupportedEnvironmentId {
+  return SUPPORTED_ENVIRONMENT_IDS.includes(value as SupportedEnvironmentId);
+}
+
 function createEnvironmentForId(
   environmentId: SupportedEnvironmentId,
 ) {
@@ -35,7 +39,7 @@ export function listAvailableEnvironmentInfos(): SystemEnvironmentInfo[] {
 }
 
 export function createEnvironmentAdapter(opts?: CreateEnvironmentAdapterOptions) {
-  const environmentId = (
+  const normalizedEnvironmentId = (
     opts?.environmentId ??
     process.env.BEANBAG_ENVIRONMENT ??
     "local"
@@ -43,11 +47,11 @@ export function createEnvironmentAdapter(opts?: CreateEnvironmentAdapterOptions)
     .trim()
     .toLowerCase();
 
-  if (!SUPPORTED_ENVIRONMENT_IDS.includes(environmentId as SupportedEnvironmentId)) {
+  if (!isSupportedEnvironmentId(normalizedEnvironmentId)) {
     throw new Error(
-      `Unsupported environment "${environmentId}". Supported environments: ${SUPPORTED_ENVIRONMENT_IDS.join(", ")}.`,
+      `Unsupported environment "${normalizedEnvironmentId}". Supported environments: ${SUPPORTED_ENVIRONMENT_IDS.join(", ")}.`,
     );
   }
 
-  return createEnvironmentForId(environmentId as SupportedEnvironmentId);
+  return createEnvironmentForId(normalizedEnvironmentId);
 }
