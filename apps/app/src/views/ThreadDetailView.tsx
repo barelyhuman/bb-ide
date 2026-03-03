@@ -1925,7 +1925,10 @@ export function ThreadDetailView() {
       ) : null}
       <ConversationTimeline>
         {isTimelineLoading && threadDetailRows.length === 0 ? (
-          <ConversationEmptyState message="Loading events..." />
+          <ConversationEmptyState
+            message="Loading thread..."
+            className="w-full rounded-md px-2 py-1 text-left"
+          />
         ) : threadDetailRows.length === 0 ? (
           <ConversationEmptyState message="No events yet" />
         ) : (
