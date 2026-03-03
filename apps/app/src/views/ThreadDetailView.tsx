@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ChevronDown, CornerDownRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, CornerDownRight, Pencil, Trash2 } from "lucide-react";
 import {
   useThread,
   useThreadWorkStatus,
@@ -32,12 +32,6 @@ import { ConversationWorkingIndicator } from "@/components/messages/Conversation
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -282,11 +276,23 @@ function QueuedFollowUpList({
                     type="button"
                     size="sm"
                     variant="link"
-                    className="h-auto px-0 text-xs text-muted-foreground underline"
+                    className="h-auto px-0 pr-1 text-xs text-muted-foreground underline"
                     disabled={sendDisabled || isProcessing}
                     onClick={() => onSendImmediately(queuedMessage.id)}
                   >
                     {isProcessing ? "Sending..." : "Send now"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="size-7 text-muted-foreground"
+                    disabled={actionDisabled || isProcessing}
+                    onClick={() => onEdit(queuedMessage.id)}
+                    aria-label={`Edit queued message ${index + 1}`}
+                    title="Edit queued message"
+                  >
+                    <Pencil className="size-3.5" />
                   </Button>
                   <Button
                     type="button"
@@ -300,44 +306,6 @@ function QueuedFollowUpList({
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-7 text-muted-foreground data-[state=open]:bg-accent"
-                        disabled={actionDisabled || isProcessing}
-                        aria-label={`More queued message actions for message ${index + 1}`}
-                        title="More actions"
-                      >
-                        <MoreHorizontal className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem
-                        disabled={actionDisabled || isProcessing}
-                        onSelect={(event) => {
-                          event.preventDefault();
-                          onEdit(queuedMessage.id);
-                        }}
-                      >
-                        <Pencil className="size-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={actionDisabled || isProcessing}
-                        className="text-destructive focus:text-destructive"
-                        onSelect={(event) => {
-                          event.preventDefault();
-                          onDelete(queuedMessage.id);
-                        }}
-                      >
-                        <Trash2 className="size-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </div>
               </div>
             </li>
