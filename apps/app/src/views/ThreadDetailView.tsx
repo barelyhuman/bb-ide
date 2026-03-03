@@ -749,6 +749,14 @@ export function ThreadDetailView() {
   const primaryCheckoutStatusPillClassName = isPrimaryCheckoutActive
     ? "border-transparent bg-foreground text-background"
     : undefined;
+  const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
+  const primaryCheckoutActionLabel = isPrimaryCheckoutActive
+    ? demotePrimaryCheckout.isPending
+      ? "Demoting..."
+      : "Demote"
+    : promoteThread.isPending
+    ? "Promoting..."
+    : "Promote";
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
     !(thread.archivedAt !== undefined && thread.environmentId === "local");
@@ -914,13 +922,14 @@ export function ThreadDetailView() {
                   >
                     {primaryCheckoutStatusLabel}
                   </StatusPill>
-                  <button
+                  <Button
                     type="button"
-                    className="inline-flex shrink-0 items-center rounded-md border border-border/70 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    variant="link"
+                    size="sm"
+                    className="h-auto px-0 py-0 ui-text-xs underline"
                     disabled={
                       thread.archivedAt !== undefined ||
-                      promoteThread.isPending ||
-                      demotePrimaryCheckout.isPending
+                      isPrimaryCheckoutMutationPending
                     }
                     onClick={() => {
                       const action = isPrimaryCheckoutActive
@@ -935,8 +944,8 @@ export function ThreadDetailView() {
                       });
                     }}
                   >
-                    {isPrimaryCheckoutActive ? "Demote" : "Promote"}
-                  </button>
+                    {primaryCheckoutActionLabel}
+                  </Button>
                 </div>
               </DetailRow>
             ) : null}

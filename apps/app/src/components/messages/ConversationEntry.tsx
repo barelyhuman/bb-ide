@@ -1176,13 +1176,25 @@ function OperationRow({
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
     const hasDetails = detailLines.length > 0;
+    const shouldUseSubtlePrimaryCheckoutTitle =
+      message.title === "Promoted to primary checkout" ||
+      message.title === "Demoted from primary checkout";
+    const primaryCheckoutTitleClassName = shouldUseSubtlePrimaryCheckoutTitle
+      ? "text-muted-foreground/70"
+      : undefined;
+    const primaryCheckoutSummaryContentClassName = primaryCheckoutTitleClassName
+      ? `min-w-0 ${primaryCheckoutTitleClassName}`
+      : "min-w-0";
+    const primaryCheckoutStaticTitleClassName = primaryCheckoutTitleClassName
+      ? `py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS} ${primaryCheckoutTitleClassName}`
+      : `py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`;
 
     if (!hasDetails) {
       return (
         <div className="group w-full" style={{ overflowAnchor: "none" }}>
           <div className="mr-auto w-full">
             <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-              <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+              <div className={primaryCheckoutStaticTitleClassName}>
                 {message.title}
               </div>
             </div>
@@ -1197,7 +1209,7 @@ function OperationRow({
           <ExpandableEntryContainer
             isExpanded={isExpanded}
             summaryContent={message.title}
-            summaryContentClassName="min-w-0"
+            summaryContentClassName={primaryCheckoutSummaryContentClassName}
             headerToneClass={headerToneClass}
             onToggle={onToggle}
           >

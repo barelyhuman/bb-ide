@@ -256,9 +256,7 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
     }
 
     active.push(message);
-    if (classified.phase !== "started") {
-      flush();
-    }
+    flush();
   }
 
   flush();

@@ -513,6 +513,32 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
+  it("renders completed primary-checkout operation titles with a subtler tone", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "primary-checkout",
+      title: "Promoted to primary checkout",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Promoted to primary checkout");
+    expect(html).toContain("text-muted-foreground/70");
+  });
+
+  it("keeps in-progress primary-checkout operation titles at the default tone", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "primary-checkout",
+      title: "Promoting primary checkout",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Promoting primary checkout");
+    expect(html).not.toContain("text-muted-foreground/70");
+  });
+
   it("renders worktree commit summaries without commit hash until expanded", () => {
     const message: UIMessage = {
       ...baseMessage(),
