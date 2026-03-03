@@ -8,6 +8,11 @@ function isTheme(value: string | null): value is Theme {
   return value === "light" || value === "dark"
 }
 
+function applyThemeClass(theme: Theme): void {
+  if (typeof document === "undefined") return
+  document.documentElement.classList.toggle("dark", theme === "dark")
+}
+
 export function getPreferredTheme(): Theme {
   if (typeof window === "undefined") return "light"
 
@@ -21,7 +26,7 @@ export function getPreferredTheme(): Theme {
 
 export function setPreferredTheme(theme: Theme): void {
   if (typeof window === "undefined") return
-  document.documentElement.classList.toggle("dark", theme === "dark")
+  applyThemeClass(theme)
   window.localStorage.setItem(THEME_STORAGE_KEY, theme)
   emitTheme()
 }
@@ -32,6 +37,7 @@ let initialized = false
 
 function emitTheme() {
   const nextTheme = getPreferredTheme()
+  applyThemeClass(nextTheme)
   if (nextTheme === currentTheme) return
   currentTheme = nextTheme
   subscribers.forEach((listener) => listener())
@@ -41,6 +47,7 @@ function ensureThemeObserver() {
   if (initialized || typeof window === "undefined") return
   initialized = true
   currentTheme = getPreferredTheme()
+  applyThemeClass(currentTheme)
 
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
   const observer = new MutationObserver(() => {
@@ -57,6 +64,10 @@ function ensureThemeObserver() {
     attributes: true,
     attributeFilter: ["class"],
   })
+}
+
+export function initializePreferredTheme(): void {
+  ensureThemeObserver()
 }
 
 function subscribePreferredTheme(listener: () => void): () => void {

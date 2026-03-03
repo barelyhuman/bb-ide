@@ -5,6 +5,7 @@ import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { Toaster } from "./components/ui/sonner";
+import { initializePreferredTheme } from "./hooks/useTheme";
 import "./app.css";
 
 const DIFF_WORKER_POOL_MAX_SIZE = 8;
@@ -37,6 +38,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+initializePreferredTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
