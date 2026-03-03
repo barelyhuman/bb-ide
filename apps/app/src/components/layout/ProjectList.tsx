@@ -29,6 +29,11 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
+  isRunningThreadStatus,
+  isUnreadDoneThread,
+  isVisibleProjectThread,
+} from "@/lib/thread-activity"
+import {
   deriveProjectNameFromPath,
   requestProjectRootPath,
 } from "@/lib/projectPathInput"
@@ -422,8 +427,8 @@ export function ProjectList({
                     ) : projectThreads.length > 0 ? (
                       <div className="space-y-1 group-data-[collapsible=icon]:hidden">
                         {projectThreads.map((thread) => {
-                          const isBusyThread = isBusyThreadStatus(thread.status)
-                          const showUnreadBadge = isCompletedUnreadThread(thread)
+                          const isBusyThread = isRunningThreadStatus(thread.status)
+                          const showUnreadBadge = isUnreadDoneThread(thread)
                           const isThreadActionsOpen = openThreadActionsThreadId === thread.id
                           const isThreadActive = selectedThreadId === thread.id
 
@@ -617,24 +622,6 @@ export function ProjectList({
   )
 }
 
-function isBusyThreadStatus(status: Thread["status"]): boolean {
-  switch (status) {
-    case "active":
-    case "created":
-    case "provisioning":
-      return true
-    case "idle":
-    case "provisioning_failed":
-      return false
-    default:
-      return assertNever(status)
-  }
-}
-
-function isVisibleProjectThread(thread: Thread): boolean {
-  return thread.archivedAt === undefined && thread.parentThreadId === undefined
-}
-
 function requiresArchiveConfirmation(
   workStatus: Thread["workStatus"] | null | undefined,
 ): boolean {
@@ -651,19 +638,5 @@ function requiresArchiveConfirmation(
       return true
     default:
       return assertNever(workStatus.state)
-  }
-}
-
-function isCompletedUnreadThread(thread: Thread): boolean {
-  switch (thread.status) {
-    case "idle":
-      return (thread.lastReadAt ?? 0) < thread.updatedAt
-    case "active":
-    case "created":
-    case "provisioning":
-    case "provisioning_failed":
-      return false
-    default:
-      return assertNever(thread.status)
   }
 }

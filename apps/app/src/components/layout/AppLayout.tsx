@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive,
@@ -31,6 +31,7 @@ import {
   useMarkThreadUnread,
   useProjects,
   useThread,
+  useThreads,
   useThreadWorkStatusLookup,
   useUnarchiveThread,
   useUpdateThread,
@@ -42,6 +43,11 @@ import {
 } from "@/components/thread/ThreadRenameDialog"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { cn } from "@/lib/utils"
+import {
+  formatThreadActivitySummaryForTitle,
+  getThreadStatusLabelForTitle,
+  summarizeThreadActivity,
+} from "@/lib/thread-activity"
 import {
   isThreadGitDiffPanelOpen,
   withThreadGitDiffPanelOpen,
@@ -189,6 +195,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
+  const { data: threads } = useThreads()
   const archiveThread = useArchiveThread()
   const unarchiveThread = useUnarchiveThread()
   const markThreadRead = useMarkThreadRead()
@@ -234,6 +241,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
     projectName ??
     (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
   const { data: thread } = useThread(threadId)
+  const threadDisplayTitle = thread
+    ? getThreadDisplayTitle(thread)
+    : threadId
+      ? `Thread ${threadId.slice(0, 8)}`
+      : "Thread"
+  const projectThreads = useMemo(
+    () =>
+      projectId
+        ? (threads ?? []).filter((candidate) => candidate.projectId === projectId)
+        : [],
+    [projectId, threads]
+  )
+  const projectThreadSummary = useMemo(
+    () => formatThreadActivitySummaryForTitle(summarizeThreadActivity(projectThreads)),
+    [projectThreads]
+  )
+  const allThreadsSummary = useMemo(
+    () => formatThreadActivitySummaryForTitle(summarizeThreadActivity(threads ?? [])),
+    [threads]
+  )
+  const threadStatusLabel = thread ? getThreadStatusLabelForTitle(thread) : undefined
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return
@@ -385,6 +413,43 @@ export function AppLayout({ children }: { children: ReactNode }) {
         }
       : (routeTitles[location.pathname] ?? { title: "" })
 
+  const documentTitle = (() => {
+    const parts: string[] = []
+
+    if (threadMatch) {
+      parts.push(threadDisplayTitle)
+      parts.push(projectLabel ?? projectThreadMatch?.[1] ?? "Project")
+      if (threadStatusLabel) {
+        parts.push(threadStatusLabel)
+      }
+    } else if (projectSettingsMatch) {
+      parts.push(projectLabel ?? projectSettingsMatch[1])
+      parts.push("Settings")
+      if (projectThreadSummary) {
+        parts.push(projectThreadSummary)
+      }
+    } else if (projectArchivedMatch) {
+      parts.push(projectLabel ?? projectArchivedMatch[1])
+      parts.push("Archived")
+      if (projectThreadSummary) {
+        parts.push(projectThreadSummary)
+      }
+    } else if (projectMatch) {
+      parts.push(projectLabel ?? projectMatch[1])
+      if (projectThreadSummary) {
+        parts.push(projectThreadSummary)
+      }
+    } else {
+      const routeTitle = routeTitles[location.pathname]?.title
+      parts.push(routeTitle && routeTitle.length > 0 ? routeTitle : "Beanbag")
+      if (allThreadsSummary) {
+        parts.push(allThreadsSummary)
+      }
+    }
+
+    return `bb | ${parts.join(" · ")}`
+  })()
+
   const handleResizeMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       event.preventDefault()
@@ -454,6 +519,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     providerRef.current?.style.setProperty("--sidebar-width", `${sidebarWidth}px`)
     window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth))
   }, [sidebarWidth])
+
+  useEffect(() => {
+    if (typeof document === "undefined") return
+    document.title = documentTitle
+  }, [documentTitle])
 
   return (
     <SidebarProvider
