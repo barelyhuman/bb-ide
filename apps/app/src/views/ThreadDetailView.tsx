@@ -31,7 +31,6 @@ import {
   useThreadWorkStatus,
   useThreadTimeline,
   useThreadGitDiff,
-  useThreadEvents,
   useThreadToolGroupMessages,
   useTellThread,
   useEnqueueThreadMessage,
@@ -106,7 +105,6 @@ import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPi
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
-import { extractThreadContextWindowUsage } from "@/lib/thread-context-window-usage";
 import {
   threadWorktreeCleanLabel,
   threadWorkStatusLabel,
@@ -755,9 +753,6 @@ export function ThreadDetailView() {
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
   );
-  const { data: threadEvents } = useThreadEvents(threadId ?? "", {
-    enabled: Boolean(threadId),
-  });
   const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
@@ -849,10 +844,7 @@ export function ThreadDetailView() {
   );
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
-  const contextWindowUsage = useMemo(
-    () => extractThreadContextWindowUsage(threadEvents ?? []),
-    [threadEvents],
-  );
+  const contextWindowUsage = timeline?.contextWindowUsage ?? null;
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],

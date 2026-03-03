@@ -3,7 +3,6 @@ import type {
   Thread,
   ThreadQueuedMessage,
   ThreadStatus,
-  ThreadEvent,
   CreateProjectRequest,
   UpdateProjectRequest,
   SpawnThreadRequest,
@@ -497,18 +496,6 @@ export async function demotePrimaryCheckout(
   id: string,
 ): Promise<DemotePrimaryResponse> {
   return request<DemotePrimaryResponse>("POST", `/threads/${id}/demote-primary`);
-}
-
-export async function getThreadEvents(
-  id: string,
-  afterSeq?: number,
-  limit?: number,
-): Promise<ThreadEvent[]> {
-  const params = new URLSearchParams();
-  if (afterSeq !== undefined) params.set("afterSeq", String(afterSeq));
-  if (limit !== undefined) params.set("limit", String(limit));
-  const qs = params.toString();
-  return request<ThreadEvent[]>("GET", `/threads/${id}/events${qs ? `?${qs}` : ""}`);
 }
 
 export async function getThreadTimeline(

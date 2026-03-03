@@ -4,10 +4,8 @@ import {
   assertNever,
   type Thread,
   type ThreadChangeKind,
-  type ThreadEvent,
 } from "@beanbag/agent-core";
 import { wsManager } from "../lib/ws";
-import { getThreadEvents } from "../lib/api";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
 const INVALIDATION_MAX_WAIT_MS = 1500;
@@ -18,7 +16,6 @@ interface ThreadChangeFlags {
   threadChanged: boolean;
   timelineChanged: boolean;
   workStatusChanged: boolean;
-  eventsAppended: boolean;
   statusChanged: boolean;
 }
 
@@ -28,7 +25,6 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
     threadChanged: false,
     timelineChanged: false,
     workStatusChanged: false,
-    eventsAppended: false,
     statusChanged: false,
   };
 
@@ -63,7 +59,6 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
         // without emitting a dedicated thread change kind. Keep thread detail
         // metadata fresh when new events arrive.
         flags.threadChanged = true;
-        flags.eventsAppended = true;
         flags.timelineChanged = true;
         break;
       default:
@@ -106,50 +101,11 @@ export function useWebSocket(): void {
     const lastTimelineRefetchAtByThread = new Map<string, number>();
     let shouldInvalidateThreads = false;
     let shouldInvalidateStatus = false;
-    let shouldInvalidateAllThreadEvents = false;
     let shouldInvalidateAllThreadTimeline = false;
     let shouldInvalidateAllThreadsById = false;
     let shouldInvalidateAllThreadWorkStatus = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const appendThreadEventDelta = async (threadId: string) => {
-      const queryKey = ["threadEvents", threadId] as const;
-      const cachedEvents = queryClient.getQueryData<ThreadEvent[]>(queryKey);
-
-      if (!cachedEvents || cachedEvents.length === 0) {
-        queryClient.invalidateQueries({ queryKey });
-        return;
-      }
-
-      const afterSeq = cachedEvents[cachedEvents.length - 1]?.seq;
-      if (typeof afterSeq !== "number" || !Number.isFinite(afterSeq)) {
-        queryClient.invalidateQueries({ queryKey });
-        return;
-      }
-
-      try {
-        const delta = await getThreadEvents(threadId, afterSeq);
-        if (delta.length === 0) return;
-
-        queryClient.setQueryData<ThreadEvent[]>(queryKey, (prev) => {
-          const existing = prev ?? [];
-          let lastSeq = existing.length > 0 ? existing[existing.length - 1].seq : -1;
-
-          const next = [...existing];
-          for (const event of delta) {
-            if (event.seq > lastSeq) {
-              next.push(event);
-              lastSeq = event.seq;
-            }
-          }
-          return next;
-        });
-      } catch {
-        // Fall back to a full refetch on transient network/server failures.
-        queryClient.invalidateQueries({ queryKey });
-      }
-    };
 
     const mergeThreadChanges = (threadId: string, changes: readonly ThreadChangeKind[]) => {
       let entry = changedThreadKinds.get(threadId);
@@ -218,19 +174,6 @@ export function useWebSocket(): void {
         }
       }
 
-      if (shouldInvalidateAllThreadEvents) {
-        queryClient.invalidateQueries({ queryKey: ["threadEvents"] });
-      } else if (changedIds.length > 0) {
-        const eventDeltaIds = changedIds.filter((id) => {
-          const changeKinds = changedThreadKinds.get(id);
-          if (!changeKinds) return false;
-          return toThreadChangeFlags(Array.from(changeKinds)).eventsAppended;
-        });
-        if (eventDeltaIds.length > 0) {
-          void Promise.all(eventDeltaIds.map((id) => appendThreadEventDelta(id)));
-        }
-      }
-
       if (shouldInvalidateStatus) {
         queryClient.invalidateQueries({ queryKey: ["status"] });
       }
@@ -239,7 +182,6 @@ export function useWebSocket(): void {
       globalChangeKinds.clear();
       shouldInvalidateThreads = false;
       shouldInvalidateStatus = false;
-      shouldInvalidateAllThreadEvents = false;
       shouldInvalidateAllThreadTimeline = false;
       shouldInvalidateAllThreadsById = false;
       shouldInvalidateAllThreadWorkStatus = false;
@@ -285,7 +227,6 @@ export function useWebSocket(): void {
             shouldInvalidateAllThreadsById = globalFlags.threadChanged;
             shouldInvalidateAllThreadWorkStatus = globalFlags.workStatusChanged;
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
-            shouldInvalidateAllThreadEvents = globalFlags.eventsAppended;
           }
           scheduleInvalidations();
           break;

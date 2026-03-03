@@ -7,7 +7,6 @@ import {
 import type {
   Project,
   Thread,
-  ThreadEvent,
   CreateProjectRequest,
   UpdateProjectRequest,
   SpawnThreadRequest,
@@ -40,7 +39,6 @@ import type {
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
 
-const DEFAULT_THREAD_EVENTS_LIMIT = 120;
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
 const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
 type ThreadScopedQueryKeyPrefix =
@@ -338,18 +336,6 @@ export function useThreadTimeline(
   });
 }
 
-export function useThreadEvents(
-  id: string,
-  options?: { enabled?: boolean },
-) {
-  return useQuery<ThreadEvent[]>({
-    queryKey: ["threadEvents", id],
-    queryFn: () => api.getThreadEvents(id, undefined, DEFAULT_THREAD_EVENTS_LIMIT),
-    enabled: (options?.enabled ?? true) && !!id,
-    refetchOnWindowFocus: false,
-  });
-}
-
 export function useThreadToolGroupMessages() {
   return useMutation({
     mutationFn: ({
@@ -514,7 +500,6 @@ export function useTellThread() {
       }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({
         queryKey: ["threadDefaultExecutionOptions", variables.id],
@@ -557,7 +542,6 @@ export function useSendQueuedThreadMessage() {
       api.sendQueuedThreadMessage(id, queuedMessageId, { mode }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
@@ -741,7 +725,6 @@ export function useRequestThreadOperation() {
       api.requestThreadOperation(id, req),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
@@ -759,7 +742,6 @@ export function usePromoteThread() {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });
@@ -774,7 +756,6 @@ export function useDemotePrimaryCheckout() {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

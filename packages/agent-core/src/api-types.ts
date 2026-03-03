@@ -94,8 +94,14 @@ export interface ThreadToolGroupMessagesResponse {
   messages: UIMessage[];
 }
 
+export interface ThreadContextWindowUsage {
+  totalTokens: number;
+  modelContextWindow: number;
+}
+
 export interface ThreadTimelineResponse {
   rows: ThreadDetailRow[];
+  contextWindowUsage?: ThreadContextWindowUsage | null;
 }
 
 export interface ThreadGitDiffCommitSummary {

@@ -721,15 +721,20 @@ describe("toUIMessages replay coverage", () => {
     ]);
   });
 
-  it("projects web search begin/end as dedicated web-search cells", () => {
+  it("projects item web search lifecycle as dedicated web-search cells", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "web_search_begin",
+        type: "item/started",
         data: {
-          call_id: "web-1",
+          item: {
+            type: "webSearch",
+            id: "web-1",
+            query: "",
+            action: { type: "other" },
+          },
         },
         createdAt: 1,
       },
@@ -737,11 +742,14 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "web_search_end",
+        type: "item/completed",
         data: {
-          call_id: "web-1",
-          query: "react suspense",
-          action: { type: "search", query: "react suspense" },
+          item: {
+            type: "webSearch",
+            id: "web-1",
+            query: "react suspense",
+            action: { type: "search", query: "react suspense" },
+          },
         },
         createdAt: 2,
       },
@@ -758,92 +766,20 @@ describe("toUIMessages replay coverage", () => {
     expect(search?.query).toBe("react suspense");
   });
 
-  it("deduplicates duplicate web-search lifecycle events from item and codex streams", () => {
-    const events: ThreadEvent[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "item/started",
-        data: {
-          item: {
-            type: "webSearch",
-            id: "web-1",
-            query: "",
-            action: { type: "other" },
-          },
-          turnId: "turn-1",
-        },
-        createdAt: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "codex/event/web_search_begin",
-        data: {
-          msg: {
-            type: "web_search_begin",
-            call_id: "web-1",
-          },
-        },
-        createdAt: 2,
-      },
-      {
-        id: "evt-3",
-        threadId: "thread-1",
-        seq: 3,
-        type: "item/completed",
-        data: {
-          item: {
-            type: "webSearch",
-            id: "web-1",
-            query: "react suspense",
-            action: { type: "search", query: "react suspense" },
-          },
-          turnId: "turn-1",
-        },
-        createdAt: 3,
-      },
-      {
-        id: "evt-4",
-        threadId: "thread-1",
-        seq: 4,
-        type: "codex/event/web_search_end",
-        data: {
-          msg: {
-            type: "web_search_end",
-            call_id: "web-1",
-            query: "react suspense",
-            action: { type: "search", query: "react suspense" },
-          },
-        },
-        createdAt: 4,
-      },
-    ];
-
-    const projected = toUIMessages(events, { threadStatus: "idle" });
-    const searches = projected.filter(
-      (message): message is Extract<UIMessage, { kind: "web-search" }> =>
-        message.kind === "web-search",
-    );
-
-    expect(searches).toHaveLength(1);
-    expect(searches[0]?.status).toBe("completed");
-    expect(searches[0]?.query).toBe("react suspense");
-  });
-
   it("preserves unknown provider web-search action types", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "web_search_end",
+        type: "item/completed",
         data: {
-          call_id: "web-2",
-          query: "new runtime action",
-          action: { type: "providerCustomAction" },
+          item: {
+            type: "webSearch",
+            id: "web-2",
+            query: "new runtime action",
+            action: { type: "providerCustomAction" },
+          },
         },
         createdAt: 1,
       },
@@ -2140,7 +2076,7 @@ describe("toUIMessages replay coverage", () => {
     expect(user?.attachments?.localFilePaths).toEqual(["/tmp/notes.md"]);
   });
 
-  it("deduplicates client start input when codex user_message exists", () => {
+  it("ignores legacy codex/event user_message rows", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",

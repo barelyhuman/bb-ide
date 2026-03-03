@@ -49,15 +49,8 @@ function getEventTypeCandidates(eventType: string): Set<string> {
   const normalized = normalizeThreadEventType(eventType);
   const candidates = new Set<string>([normalized]);
 
-  if (normalized.startsWith("codex/event/")) {
-    const stripped = normalized.slice("codex/event/".length);
-    candidates.add(stripped);
-    candidates.add(stripped.replaceAll("_", "/"));
-    candidates.add(stripped.replaceAll("/", "_"));
-  } else {
-    candidates.add(normalized.replaceAll("_", "/"));
-    candidates.add(normalized.replaceAll("/", "_"));
-  }
+  candidates.add(normalized.replaceAll("_", "/"));
+  candidates.add(normalized.replaceAll("/", "_"));
 
   if (eventTypeCandidatesCache.size >= EVENT_TYPE_CANDIDATES_CACHE_LIMIT) {
     eventTypeCandidatesCache.clear();
@@ -456,51 +449,6 @@ function parseUserFromItemEvent(
       ...(imageUrls.length > 0 ? { imageUrls } : {}),
       ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
       ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
-    },
-  };
-}
-
-function parseUserFromUserMessageEvent(
-  event: ThreadEvent,
-  eventType: string,
-): UIUserMessage | null {
-  if (!eventTypeMatches(eventType, "user_message")) {
-    return null;
-  }
-
-  const payload = getEventPayloadRecord(event.data);
-  if (!payload) return null;
-
-  const text = getStringField(payload, "message") ?? "";
-  const imageUrls = getStringArrayField(payload, "images");
-  const localImagePaths = getStringArrayField(payload, "local_images");
-
-  const webImages = imageUrls.length;
-  const localImages = localImagePaths.length;
-  const localFiles = 0;
-
-  if (!text && webImages === 0 && localImages === 0) {
-    return null;
-  }
-
-  const turnId = getTurnId(event.data);
-  const itemId = getItemId(event.data) ?? `${event.seq}`;
-
-  return {
-    kind: "user",
-    id: messageId(event.threadId, "user", itemId),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    ...(turnId ? { turnId } : {}),
-    text,
-    attachments: {
-      webImages,
-      localImages,
-      localFiles,
-      ...(imageUrls.length > 0 ? { imageUrls } : {}),
-      ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
     },
   };
 }
@@ -906,19 +854,6 @@ function parseWebSearchLifecycleEvent(
       callId,
       query: getFirstStringField(item, ["query"]),
       action: parseWebSearchAction(item?.action),
-    };
-  }
-
-  if (eventTypeMatchesAny(eventType, ["web_search_begin", "web_search_end"])) {
-    const payload = getEventPayloadRecord(event.data);
-    const callId = getFirstStringField(payload, ["call_id"]);
-    if (!callId) return null;
-
-    return {
-      kind: eventTypeMatches(eventType, "web_search_begin") ? "begin" : "end",
-      callId,
-      query: getFirstStringField(payload, ["query"]),
-      action: parseWebSearchAction(payload?.action),
     };
   }
 
@@ -2421,9 +2356,7 @@ export function toUIMessages(
       continue;
     }
 
-    const userFromItem = parseUserFromItemEvent(event, eventType);
-    const userFromEvent = parseUserFromUserMessageEvent(event, eventType);
-    const userMessage = userFromItem ?? userFromEvent;
+    const userMessage = parseUserFromItemEvent(event, eventType);
     if (userMessage) {
       const signature = userMessageSignature({
         text: userMessage.text,

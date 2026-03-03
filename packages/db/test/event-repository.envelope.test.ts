@@ -156,7 +156,7 @@ describe("event repository provider envelope indexing", () => {
     ]);
   });
 
-  it("prunes legacy codex noise types that are not needed for timeline rendering", () => {
+  it("retains legacy codex rows when pruning standardized noise event sets", () => {
     events.create({
       threadId,
       seq: 1,
@@ -188,17 +188,19 @@ describe("event repository provider envelope indexing", () => {
     });
 
     const removed = events.pruneHistoricalNoiseByThread(threadId, 2);
-    expect(removed).toBe(2);
+    expect(removed).toBe(0);
 
     const remaining = events.listByThread(threadId);
-    expect(remaining.map((event) => event.seq)).toEqual([3, 4]);
+    expect(remaining.map((event) => event.seq)).toEqual([1, 2, 3, 4]);
     expect(remaining.map((event) => event.type)).toEqual([
+      "codex/event/turn_diff",
+      "codex/event/agent_reasoning",
       "codex/event/user_message",
       "item/completed",
     ]);
   });
 
-  it("prunes legacy assistant deltas and resolved item deltas regardless of recency cutoff", () => {
+  it("prunes resolved item deltas regardless of recency cutoff", () => {
     events.create({
       threadId,
       seq: 1,
@@ -220,29 +222,8 @@ describe("event repository provider envelope indexing", () => {
         },
       },
     });
-    events.create({
-      threadId,
-      seq: 3,
-      type: "codex/event/agent_message_delta",
-      data: {
-        msg: { type: "agent_message_delta", delta: "chunk" },
-      },
-    });
-    events.create({
-      threadId,
-      seq: 4,
-      type: "codex/event/agent_message_content_delta",
-      data: {
-        msg: {
-          type: "agent_message_content_delta",
-          item_id: "msg-1",
-          delta: "chunk",
-        },
-      },
-    });
-
     const removed = events.pruneHistoricalNoiseByThread(threadId, 10_000);
-    expect(removed).toBe(3);
+    expect(removed).toBe(1);
 
     const remaining = events.listByThread(threadId);
     expect(remaining.map((event) => event.type)).toEqual([

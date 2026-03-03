@@ -86,6 +86,7 @@ export type {
   UploadedPromptAttachment,
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,
+  ThreadContextWindowUsage,
   ThreadTimelineResponse,
   ThreadGitDiffCommitSummary,
   ThreadGitDiffSelection,
@@ -157,6 +158,7 @@ export type {
 
 export { toUIMessages } from "./to-ui-messages.js";
 export { buildThreadDetailRows } from "./thread-detail-rows.js";
+export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 export {
   buildThreadOperationInstruction,
   type ThreadOperationPromptTarget,

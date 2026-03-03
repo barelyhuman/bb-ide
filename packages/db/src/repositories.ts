@@ -74,24 +74,9 @@ const PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
   "thread/tokenusage/updated",
   "item/reasoning/summarypartadded",
   "turn/diff/updated",
-  "codex/event/token_count",
-  "codex/event/agent_reasoning",
-  "codex/event/agent_reasoning_section_break",
-  "codex/event/context_compacted",
-  "codex/event/mcp_startup_complete",
-  "codex/event/patch_apply_begin",
-  "codex/event/patch_apply_end",
-  "codex/event/plan_update",
-  "codex/event/task_complete",
-  "codex/event/task_started",
-  "codex/event/terminal_interaction",
-  "codex/event/turn_diff",
 ];
 
-const ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
-  "codex/event/agent_message_delta",
-  "codex/event/agent_message_content_delta",
-];
+const ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [];
 
 const STORAGE_RECLAIM_MIN_INTERVAL_MS = 60_000;
 const STORAGE_RECLAIM_MIN_FREE_PAGES = 2_048;
@@ -785,16 +770,18 @@ export class EventRepository {
       totalRemoved += historical.changes ?? 0;
     }
 
-    const alwaysPrunable = this.db
-      .delete(events)
-      .where(
-        and(
-          eq(events.threadId, threadId),
-          inArray(events.normType, [...ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES]),
-        ),
-      )
-      .run() as { changes?: number };
-    totalRemoved += alwaysPrunable.changes ?? 0;
+    if (ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES.length > 0) {
+      const alwaysPrunable = this.db
+        .delete(events)
+        .where(
+          and(
+            eq(events.threadId, threadId),
+            inArray(events.normType, [...ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES]),
+          ),
+        )
+        .run() as { changes?: number };
+      totalRemoved += alwaysPrunable.changes ?? 0;
+    }
 
     const resolvedAssistantDeltas = this.db
       .delete(events)
