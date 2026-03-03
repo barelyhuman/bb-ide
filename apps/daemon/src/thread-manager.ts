@@ -2646,6 +2646,11 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _resolvePersistedActiveTurnId(threadId: string): string | undefined {
+    const thread = this.threadRepo.getById(threadId);
+    if (thread && thread.status !== "active") {
+      return undefined;
+    }
+
     const latestLifecycle =
       typeof this.eventRepo.getLatestTurnLifecycle === "function"
         ? this.eventRepo.getLatestTurnLifecycle(threadId)

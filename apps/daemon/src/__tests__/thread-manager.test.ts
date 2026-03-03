@@ -2741,6 +2741,39 @@ describe("ThreadManager", () => {
       expect(msg.method).toBe("turn/steer");
     });
 
+    it("auto mode falls back to turn/start when persisted thread status is idle", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
+      (eventRepo as any).getLatestTurnLifecycle = vi.fn(() => ({
+        turnId: "turn-stale",
+        normType: "turn/started",
+      }));
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+
+      await manager.tell("thread-1", {
+        input: [{ type: "text", text: "Keep going" }],
+      });
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.method).toBe("turn/start");
+    });
+
     it("auto mode falls back to turn/start when sandbox override is provided", async () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread(),
