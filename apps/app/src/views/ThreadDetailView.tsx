@@ -952,7 +952,9 @@ export function ThreadDetailView() {
                     cleanLabel:
                       thread.environmentId === "worktree" ? "Clean, Up to date" : undefined,
                   })}
-                  variant={threadWorkStatusVariant(threadWorkStatus)}
+                  variant={threadWorkStatusVariant(threadWorkStatus, {
+                    isArchivedThread: thread.archivedAt !== undefined,
+                  })}
                   cleanTitle={thread.environmentId === "worktree" ? "Clean, Up to date" : undefined}
                   showMergeBaseDetails={thread.environmentId === "worktree"}
                   mergeBaseBranch={selectedMergeBaseBranch ?? threadWorkStatus.mergeBaseBranch}

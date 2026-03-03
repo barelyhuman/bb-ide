@@ -23,14 +23,17 @@ export function threadWorkStatusLabel(
   }
 }
 
-export function threadWorkStatusVariant(status: ThreadWorkStatus | undefined): StatusPillVariant {
+export function threadWorkStatusVariant(
+  status: ThreadWorkStatus | undefined,
+  options?: { isArchivedThread?: boolean },
+): StatusPillVariant {
   if (!status) return "outline";
 
   switch (status.state) {
     case "clean":
       return "outline";
     case "deleted":
-      return "destructive";
+      return options?.isArchivedThread ? "outline" : "destructive";
     case "dirty_uncommitted":
       return "secondary";
     case "committed_unmerged":
