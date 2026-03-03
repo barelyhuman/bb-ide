@@ -680,6 +680,14 @@ export class EventRepository {
     };
   }
 
+  updateData(id: string, data: ThreadEventData): void {
+    this.db
+      .update(events)
+      .set({ data: JSON.stringify(data) })
+      .where(eq(events.id, id))
+      .run();
+  }
+
   listByThread(
     threadId: string,
     afterSeq?: number,

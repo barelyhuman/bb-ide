@@ -2104,13 +2104,14 @@ export class ThreadManager implements ThreadOrchestrator {
         projectId: req.projectId,
       }),
     );
-    this._persistOutboundStartEvent(
+    const startSource = opts?.reason === "tell-after-provisioning-failure" ? "tell" : "spawn";
+    const persistedThreadStartEvent = this._persistOutboundStartEvent(
       threadId,
       "client/thread/start",
       preProvisionThreadStartParams,
       requestedInput,
       {
-        source: opts?.reason === "tell-after-provisioning-failure" ? "tell" : "spawn",
+        source: startSource,
         initiator: "agent",
       },
     );
@@ -2190,6 +2191,17 @@ export class ThreadManager implements ThreadOrchestrator {
         threadId,
         projectId: req.projectId,
       }),
+    );
+    this._amendOutboundStartEvent(
+      threadId,
+      persistedThreadStartEvent.id,
+      "client/thread/start",
+      threadStartParams,
+      requestedInput,
+      {
+        source: startSource,
+        initiator: "agent",
+      },
     );
     const providerThreadId = await this._sendRequestAndAwaitThreadId(
       threadId,
@@ -3131,7 +3143,7 @@ export class ThreadManager implements ThreadOrchestrator {
     params: Record<string, unknown>,
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
-  ): void {
+  ): ThreadEvent {
     if (type === "client/thread/start" && !this.titleFallbackByThreadId.has(threadId)) {
       const fallback = this._derivePromptFallbackTitle(input);
       if (fallback) {
@@ -3139,6 +3151,16 @@ export class ThreadManager implements ThreadOrchestrator {
       }
     }
 
+    const eventData = this._buildOutboundStartEventData(type, params, input, meta);
+    return this._appendEvent(threadId, type, eventData);
+  }
+
+  private _buildOutboundStartEventData(
+    type: "client/thread/start" | "client/turn/start",
+    params: Record<string, unknown>,
+    input: PromptInput[] | undefined,
+    meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
+  ): ThreadEventData {
     const eventData: ThreadEventData = {
       direction: "outbound",
       source: meta.source,
@@ -3151,7 +3173,21 @@ export class ThreadManager implements ThreadOrchestrator {
       execution: this._extractExecutionOptionsFromParams(type, params),
     };
 
-    this._appendEvent(threadId, type, eventData);
+    return eventData;
+  }
+
+  private _amendOutboundStartEvent(
+    threadId: string,
+    eventId: string | undefined,
+    type: "client/thread/start" | "client/turn/start",
+    params: Record<string, unknown>,
+    input: PromptInput[] | undefined,
+    meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
+  ): void {
+    if (!eventId) return;
+    const eventData = this._buildOutboundStartEventData(type, params, input, meta);
+    this.eventRepo.updateData(eventId, eventData);
+    this.timelineByThread.delete(threadId);
   }
 
   private _maybeNotifyParentOnChildTurnCompletion(

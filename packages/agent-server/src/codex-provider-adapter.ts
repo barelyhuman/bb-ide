@@ -104,6 +104,23 @@ function withThreadEnvironmentPolicy(
   });
 }
 
+function resolveBaseInstructions(developerInstructions?: string): string {
+  const trimmed = developerInstructions?.trim();
+  if (!trimmed) {
+    return DEFAULT_BASE_INSTRUCTIONS;
+  }
+
+  // Preserve existing prompts that already include the default prelude.
+  if (
+    trimmed === DEFAULT_BASE_INSTRUCTIONS ||
+    trimmed.startsWith(`${DEFAULT_BASE_INSTRUCTIONS}\n`)
+  ) {
+    return trimmed;
+  }
+
+  return `${DEFAULT_BASE_INSTRUCTIONS}\n\n${trimmed}`;
+}
+
 function resolveSandboxMode(sandboxMode?: SandboxMode): SandboxMode {
   return sandboxMode ?? DEFAULT_SANDBOX_MODE;
 }
@@ -222,10 +239,7 @@ export function createCodexProviderAdapter(
       req: SpawnThreadRequest,
       context: ProviderThreadContext,
     ): Record<string, unknown> {
-      const baseInstructions =
-        req.developerInstructions !== undefined
-          ? req.developerInstructions
-          : DEFAULT_BASE_INSTRUCTIONS;
+      const baseInstructions = resolveBaseInstructions(req.developerInstructions);
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
           {

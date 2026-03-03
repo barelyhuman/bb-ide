@@ -8,6 +8,9 @@ vi.mock("../codex-models.js", () => ({
 import { listCodexModels } from "../codex-models.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 
+const DEFAULT_BASE_INSTRUCTIONS =
+  "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
+
 type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
   type?: string;
   data?: unknown;
@@ -279,7 +282,10 @@ describe("codex provider adapter", () => {
     );
 
     expect(params).toMatchObject({
-      baseInstructions: "[bb system] test developer instructions",
+      baseInstructions: [
+        DEFAULT_BASE_INSTRUCTIONS,
+        "[bb system] test developer instructions",
+      ].join("\n\n"),
     });
     expect(params).not.toHaveProperty("developerInstructions");
   });

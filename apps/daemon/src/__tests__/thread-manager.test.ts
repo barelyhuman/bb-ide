@@ -36,6 +36,8 @@ vi.mock("node:child_process", async (importOriginal) => {
 import { spawn as spawnMock } from "node:child_process";
 
 const CODEX_THREAD_ID = "codex-thread-abc-123";
+const DEFAULT_BASE_INSTRUCTIONS =
+  "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
 
 interface ParsedRpcMessage {
   jsonrpc?: string;
@@ -180,6 +182,7 @@ function createMocks() {
 
   const eventRepo = {
     create: vi.fn(),
+    updateData: vi.fn(),
     listByThread: vi.fn(),
     getLatestSeq: vi.fn(),
     getLatestByType: vi.fn(),
@@ -253,6 +256,7 @@ describe("ThreadManager", () => {
 
       const bootEventRepo = {
         create: vi.fn(),
+        updateData: vi.fn(),
         listByThread: vi.fn(),
         getLatestSeq: vi.fn(),
       } as unknown as EventRepository;
@@ -743,7 +747,10 @@ describe("ThreadManager", () => {
       });
       const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
       expect(startMsg.params.baseInstructions).toBe(
-        "[bb system] test developer instructions",
+        [
+          DEFAULT_BASE_INSTRUCTIONS,
+          "[bb system] test developer instructions",
+        ].join("\n\n"),
       );
       expect(startMsg.params.developerInstructions).toBeUndefined();
       expect(eventRepo.create).toHaveBeenCalledWith(
@@ -752,7 +759,10 @@ describe("ThreadManager", () => {
           data: expect.objectContaining({
             request: expect.objectContaining({
               params: expect.objectContaining({
-                baseInstructions: "[bb system] test developer instructions",
+                baseInstructions: [
+                  DEFAULT_BASE_INSTRUCTIONS,
+                  "[bb system] test developer instructions",
+                ].join("\n\n"),
               }),
             }),
           }),
@@ -836,6 +846,7 @@ describe("ThreadManager", () => {
       const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
       expect(startMsg.params.baseInstructions).toBe(
         [
+          DEFAULT_BASE_INSTRUCTIONS,
           "[project workflow] keep CI green",
           "[request instructions] add tests",
           "[bb worktree] commit work often",
