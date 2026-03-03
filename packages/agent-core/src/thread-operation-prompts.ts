@@ -23,16 +23,16 @@ function buildCommitInstruction(
   const commitMessageHint = options?.message?.trim();
 
   const steps = [
-    `You are handling a commit request in ${formatPromptTarget(target)}.`,
-    "Review git status and the diff before committing.",
+    `Please commit the changes in ${formatPromptTarget(target)}.`,
+    "Please review git status and the diff before committing.",
     includeUnstaged
-      ? "Stage all relevant tracked and untracked changes before committing."
-      : "Commit only currently staged changes and leave unstaged edits untouched.",
+      ? "Please stage relevant tracked and untracked changes before committing."
+      : "Please commit only currently staged changes and leave unstaged edits untouched.",
     commitMessageHint
-      ? `Use this commit message exactly: "${commitMessageHint}".`
-      : "If no commit message is provided, create a concise conventional commit message.",
-    "Create at most one commit for this request.",
-    "Reply with whether a commit was created, the commit SHA if present, and any blockers.",
+      ? `Please use this commit message exactly: "${commitMessageHint}".`
+      : "If no commit message is provided, please create a concise conventional commit message.",
+    "Please create at most one commit.",
+    "Please reply with whether a commit was created, the commit SHA if present, and any blockers.",
   ];
   return steps.join("\n");
 }
@@ -49,23 +49,23 @@ function buildSquashMergeInstruction(
   const commitIfNeeded = options?.commitIfNeeded === true;
 
   const steps = [
-    `You are handling a squash-merge request in ${formatPromptTarget(target)}.`,
+    `Please squash-merge the changes in ${formatPromptTarget(target)}.`,
     mergeBaseBranch
-      ? `Use "${mergeBaseBranch}" as the merge base/target branch.`
-      : "Use the default merge-base branch reported by git.",
+      ? `Please use "${mergeBaseBranch}" as the merge base/target branch.`
+      : "Please use the default merge-base branch reported by git.",
     commitIfNeeded
       ? includeUnstaged
-        ? "If the workspace is dirty, stage relevant changes and create a prep commit before squash merging."
-        : "If the workspace is dirty, create a prep commit from currently staged changes before squash merging."
-      : "Do not create a prep commit unless explicitly required to complete the merge.",
+        ? "If the workspace is dirty, please stage relevant changes and create a prep commit before squash merging."
+        : "If the workspace is dirty, please create a prep commit from currently staged changes before squash merging."
+      : "Please do not create a prep commit unless explicitly required to complete the merge.",
     commitMessage
-      ? `If a prep commit is required, use this commit message: "${commitMessage}".`
-      : "If a prep commit is required and no message is provided, generate a concise commit message.",
+      ? `If a prep commit is required, please use this commit message: "${commitMessage}".`
+      : "If a prep commit is required and no message is provided, please generate a concise commit message.",
     squashMessage
-      ? `Use this squash-merge message: "${squashMessage}".`
-      : "If no squash message is provided, write a concise squash-merge message.",
-    "If conflicts occur, resolve them, run relevant checks, and summarize what was resolved.",
-    "Reply with whether the squash merge completed and list any blockers.",
+      ? `Please use this squash-merge message: "${squashMessage}".`
+      : "If no squash message is provided, please write a concise squash-merge message.",
+    "If conflicts occur, please resolve them, run relevant checks, and summarize what was resolved.",
+    "Please reply with whether the squash merge completed and list any blockers.",
   ];
   return steps.join("\n");
 }

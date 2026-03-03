@@ -11,8 +11,8 @@ describe("buildThreadOperationInstruction", () => {
       },
     });
 
-    expect(prompt).toContain("commit request");
-    expect(prompt).toContain("Commit only currently staged changes");
+    expect(prompt).toContain("Please commit the changes");
+    expect(prompt).toContain("Please commit only currently staged changes");
     expect(prompt).toContain("feat: add tests");
   });
 
@@ -30,6 +30,6 @@ describe("buildThreadOperationInstruction", () => {
 
     expect(prompt).toContain("project primary checkout");
     expect(prompt).toContain("release");
-    expect(prompt).toContain("squash-merge request");
+    expect(prompt).toContain("Please squash-merge the changes");
   });
 });
