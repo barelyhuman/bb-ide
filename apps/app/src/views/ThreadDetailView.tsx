@@ -58,6 +58,7 @@ import { ConversationWorkingIndicator } from "@/components/messages/Conversation
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -129,6 +130,16 @@ const GIT_DIFF_PANEL_MAX_SIZE_PERCENT = 70;
 const GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
+const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 980;
+const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;
+const GIT_DIFF_PARSE_INITIAL_BATCH_SIZE = 6;
+const GIT_DIFF_PARSE_BATCH_SIZE = 18;
+const GIT_DIFF_PARSE_BATCH_DELAY_MS = 24;
+const GIT_DIFF_FILE_INITIAL_RENDER_COUNT = 4;
+const GIT_DIFF_FILE_RENDER_BATCH_SIZE = 6;
+const GIT_DIFF_FILE_INITIAL_DELAY_MS = 30;
+const GIT_DIFF_FILE_RENDER_BATCH_DELAY_MS = 70;
+const GIT_DIFF_PANEL_SKELETON_FILE_COUNT = 3;
 const GIT_DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   diffStyle: "unified",
@@ -149,6 +160,47 @@ function parseGitDiffFiles(diff: string): ReturnType<typeof parsePatchFiles>[num
 }
 
 type ParsedGitDiffFile = ReturnType<typeof parsePatchFiles>[number]["files"][number];
+
+function splitGitDiffIntoPatchChunks(diff: string): string[] {
+  const trimmedDiff = diff.trim();
+  if (trimmedDiff.length === 0) return [];
+
+  const lines = diff.split("\n");
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+  let hasGitPatchHeader = false;
+
+  for (const line of lines) {
+    const startsPatch = line.startsWith("diff --git ");
+    if (startsPatch) {
+      hasGitPatchHeader = true;
+    }
+    if (startsPatch && currentChunk.length > 0) {
+      chunks.push(currentChunk.join("\n"));
+      currentChunk = [line];
+      continue;
+    }
+    currentChunk.push(line);
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join("\n"));
+  }
+
+  if (!hasGitPatchHeader) {
+    return [diff];
+  }
+
+  return chunks.filter((chunk) => chunk.trim().length > 0);
+}
+
+function parseGitDiffPatchChunks(patchChunks: readonly string[]): ParsedGitDiffFile[] {
+  const files: ParsedGitDiffFile[] = [];
+  for (const chunk of patchChunks) {
+    files.push(...parseGitDiffFiles(chunk));
+  }
+  return files;
+}
 
 interface GitDiffStats {
   files: number;
@@ -171,7 +223,12 @@ function summarizeGitDiff(files: ParsedGitDiffFile[], diff: string): GitDiffStat
 
   let additions = 0;
   let deletions = 0;
+  let fileCount = 0;
   for (const line of diff.split("\n")) {
+    if (line.startsWith("diff --git ")) {
+      fileCount += 1;
+      continue;
+    }
     if (line.startsWith("+++ ")) continue;
     if (line.startsWith("--- ")) continue;
     if (line.startsWith("+")) {
@@ -183,7 +240,7 @@ function summarizeGitDiff(files: ParsedGitDiffFile[], diff: string): GitDiffStat
     }
   }
   return {
-    files: additions > 0 || deletions > 0 ? 1 : 0,
+    files: fileCount > 0 ? fileCount : additions > 0 || deletions > 0 ? 1 : 0,
     additions,
     deletions,
   };
@@ -253,6 +310,39 @@ function getOpenableGitDiffPath(file: ParsedGitDiffFile): string | null {
 interface GitDiffSelectionOption {
   value: string;
   label: string;
+}
+
+function GitDiffPanelSkeleton({
+  count = GIT_DIFF_PANEL_SKELETON_FILE_COUNT,
+}: {
+  count?: number;
+}) {
+  return (
+    <div className="space-y-2 pt-2">
+      {Array.from({ length: count }).map((_, index) => (
+        <div
+          key={`git-diff-skeleton-${index}`}
+          className="rounded-md border border-border/70 bg-muted/35"
+        >
+          <div className="border-b border-border/60 bg-background px-2.5 py-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <Skeleton className="size-4 shrink-0 rounded-sm" />
+                <Skeleton className="h-3 w-48 max-w-full rounded-sm" />
+              </div>
+              <Skeleton className="h-3 w-14 shrink-0 rounded-sm" />
+            </div>
+          </div>
+          <div className="space-y-1.5 px-2.5 py-2">
+            <Skeleton className="h-3 w-full rounded-sm" />
+            <Skeleton className="h-3 w-[94%] rounded-sm" />
+            <Skeleton className="h-3 w-[90%] rounded-sm" />
+            <Skeleton className="h-3 w-[86%] rounded-sm" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function GitDiffSelector({
@@ -694,17 +784,24 @@ export function ThreadDetailView() {
   const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"unified" | "split">(
     "unified",
   );
+  const [hasExplicitGitDiffDisplayMode, setHasExplicitGitDiffDisplayMode] = useState(false);
   const [isGitDiffPanelResizing, setIsGitDiffPanelResizing] = useState(false);
+  const [gitDiffPanelWidth, setGitDiffPanelWidth] = useState<number | null>(null);
   const [collapsedGitDiffFileKeys, setCollapsedGitDiffFileKeys] = useState<Set<string>>(
     () => new Set(),
   );
   const [loadingGitDiffFileKeys, setLoadingGitDiffFileKeys] = useState<Set<string>>(
     () => new Set(),
   );
+  const [parsedGitDiffFiles, setParsedGitDiffFiles] = useState<ParsedGitDiffFile[]>([]);
+  const [isParsingGitDiffFiles, setIsParsingGitDiffFiles] = useState(false);
   const [pendingGitDiffScrollPath, setPendingGitDiffScrollPath] = useState<string | null>(
     null,
   );
+  const gitDiffPanelRef = useRef<HTMLElement | null>(null);
+  const lastGitDiffWideEnoughRef = useRef<boolean | null>(null);
   const gitDiffFileRenderTimersRef = useRef<Map<string, number>>(new Map());
+  const queuedGitDiffFileRenderKeysRef = useRef<Set<string>>(new Set());
   const gitDiffFileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const message = promptDraft.text;
@@ -779,10 +876,6 @@ export function ThreadDetailView() {
     selection: gitDiffSelection,
     mergeBaseBranch: selectedMergeBaseBranch,
   });
-  const parsedGitDiffFiles = useMemo(
-    () => parseGitDiffFiles(threadGitDiff?.diff ?? ""),
-    [threadGitDiff?.diff],
-  );
   const parsedGitDiffFileEntries = useMemo(
     () =>
       parsedGitDiffFiles.map((fileDiff, index) => ({
@@ -791,6 +884,146 @@ export function ThreadDetailView() {
       })),
     [parsedGitDiffFiles],
   );
+  const isGitDiffPanelWideEnough =
+    gitDiffPanelWidth !== null && gitDiffPanelWidth >= GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX;
+
+  useLayoutEffect(() => {
+    if (!isGitDiffPanelOpen) {
+      return;
+    }
+
+    const panelElement = gitDiffPanelRef.current;
+    if (!panelElement) {
+      return;
+    }
+
+    const updateWidth = (nextWidth: number) => {
+      const roundedWidth = Math.round(nextWidth);
+      setGitDiffPanelWidth((currentWidth) =>
+        currentWidth === roundedWidth ? currentWidth : roundedWidth,
+      );
+    };
+
+    updateWidth(panelElement.getBoundingClientRect().width);
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? panelElement.getBoundingClientRect().width;
+      updateWidth(width);
+    });
+    observer.observe(panelElement);
+    return () => {
+      observer.disconnect();
+    };
+  }, [isGitDiffPanelOpen]);
+
+  useEffect(() => {
+    if (!isGitDiffPanelOpen) {
+      setHasExplicitGitDiffDisplayMode(false);
+      setGitDiffPanelWidth(null);
+      lastGitDiffWideEnoughRef.current = null;
+      return;
+    }
+    if (gitDiffPanelWidth === null) {
+      return;
+    }
+
+    const previousWideEnough = lastGitDiffWideEnoughRef.current;
+    const crossedBreakpoint =
+      previousWideEnough !== null &&
+      previousWideEnough !== isGitDiffPanelWideEnough;
+    if (crossedBreakpoint && hasExplicitGitDiffDisplayMode) {
+      setHasExplicitGitDiffDisplayMode(false);
+    }
+
+    if (!hasExplicitGitDiffDisplayMode || crossedBreakpoint) {
+      const nextMode = isGitDiffPanelWideEnough ? "split" : "unified";
+      setGitDiffDisplayMode((currentMode) =>
+        currentMode === nextMode ? currentMode : nextMode,
+      );
+    }
+
+    lastGitDiffWideEnoughRef.current = isGitDiffPanelWideEnough;
+  }, [
+    gitDiffPanelWidth,
+    hasExplicitGitDiffDisplayMode,
+    isGitDiffPanelOpen,
+    isGitDiffPanelWideEnough,
+  ]);
+
+  useEffect(() => {
+    const gitDiff = threadGitDiff?.diff ?? "";
+    if (!isGitDiffPanelOpen || gitDiff.trim().length === 0) {
+      setParsedGitDiffFiles([]);
+      setIsParsingGitDiffFiles(false);
+      return;
+    }
+
+    const patchChunks = splitGitDiffIntoPatchChunks(gitDiff);
+    if (patchChunks.length === 0) {
+      setParsedGitDiffFiles([]);
+      setIsParsingGitDiffFiles(false);
+      return;
+    }
+
+    if (patchChunks.length <= GIT_DIFF_PARSE_BATCH_THRESHOLD) {
+      setParsedGitDiffFiles(parseGitDiffFiles(gitDiff));
+      setIsParsingGitDiffFiles(false);
+      return;
+    }
+
+    let cancelled = false;
+    let timerId: number | null = null;
+    let nextPatchIndex = 0;
+    let appliedFirstBatch = false;
+
+    const parseNextBatch = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const batchSize =
+        nextPatchIndex === 0
+          ? GIT_DIFF_PARSE_INITIAL_BATCH_SIZE
+          : GIT_DIFF_PARSE_BATCH_SIZE;
+      const batchChunks = patchChunks.slice(nextPatchIndex, nextPatchIndex + batchSize);
+      if (batchChunks.length === 0) {
+        setIsParsingGitDiffFiles(false);
+        return;
+      }
+
+      const parsedBatchFiles = parseGitDiffPatchChunks(batchChunks);
+      if (cancelled) {
+        return;
+      }
+
+      nextPatchIndex += batchChunks.length;
+      setParsedGitDiffFiles((currentFiles) =>
+        appliedFirstBatch ? [...currentFiles, ...parsedBatchFiles] : parsedBatchFiles,
+      );
+      appliedFirstBatch = true;
+
+      if (nextPatchIndex >= patchChunks.length || cancelled) {
+        setIsParsingGitDiffFiles(false);
+        return;
+      }
+
+      timerId = window.setTimeout(parseNextBatch, GIT_DIFF_PARSE_BATCH_DELAY_MS);
+    };
+
+    setIsParsingGitDiffFiles(true);
+    parseNextBatch();
+
+    return () => {
+      cancelled = true;
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, [isGitDiffPanelOpen, threadGitDiff?.diff]);
 
   useEffect(() => {
     setLoadingToolGroupIds(new Set());
@@ -814,6 +1047,10 @@ export function ThreadDetailView() {
     setCollapsedGitDiffFileKeys(new Set());
     setLoadingGitDiffFileKeys(new Set());
   }, [threadId, threadGitDiff?.diff]);
+
+  useEffect(() => {
+    queuedGitDiffFileRenderKeysRef.current.clear();
+  }, [threadId]);
 
   useEffect(() => {
     setPendingGitDiffScrollPath(null);
@@ -858,6 +1095,7 @@ export function ThreadDetailView() {
         window.clearTimeout(timerId);
       }
       gitDiffFileRenderTimersRef.current.clear();
+      queuedGitDiffFileRenderKeysRef.current.clear();
     },
     [],
   );
@@ -876,6 +1114,11 @@ export function ThreadDetailView() {
       },
     });
   }, [markThreadRead, thread]);
+
+  const handleGitDiffDisplayModeChange = useCallback((nextMode: "unified" | "split") => {
+    setHasExplicitGitDiffDisplayMode(true);
+    setGitDiffDisplayMode(nextMode);
+  }, []);
 
   const handleLoadToolGroupMessages = useCallback(
     (entry: ThreadDetailToolGroupRow) => {
@@ -912,34 +1155,101 @@ export function ThreadDetailView() {
     ],
   );
 
-  const scheduleGitDiffFileRender = useCallback((fileKeys: readonly string[]) => {
-    if (fileKeys.length === 0) return;
+  const scheduleGitDiffFileRender = useCallback(
+    (
+      fileKeys: readonly string[],
+      options?: {
+        initialBatchSize?: number;
+        initialDelayMs?: number;
+        batchSize?: number;
+        batchDelayMs?: number;
+      },
+    ) => {
+      if (fileKeys.length === 0) return;
 
-    setLoadingGitDiffFileKeys((currentKeys) => {
-      const nextKeys = new Set(currentKeys);
-      for (const key of fileKeys) {
-        nextKeys.add(key);
-      }
-      return nextKeys;
-    });
+      const initialBatchSize = Math.max(
+        1,
+        Math.min(options?.initialBatchSize ?? fileKeys.length, fileKeys.length),
+      );
+      const batchSize = Math.max(1, options?.batchSize ?? fileKeys.length);
+      const initialDelayMs = Math.max(0, options?.initialDelayMs ?? GIT_DIFF_FILE_RENDER_SPINNER_MS);
+      const batchDelayMs = Math.max(0, options?.batchDelayMs ?? GIT_DIFF_FILE_RENDER_SPINNER_MS);
 
-    for (const key of fileKeys) {
-      const existingTimer = gitDiffFileRenderTimersRef.current.get(key);
-      if (existingTimer !== undefined) {
-        window.clearTimeout(existingTimer);
+      setLoadingGitDiffFileKeys((currentKeys) => {
+        const nextKeys = new Set(currentKeys);
+        for (const key of fileKeys) {
+          nextKeys.add(key);
+        }
+        return nextKeys;
+      });
+
+      for (let index = 0; index < fileKeys.length; index += 1) {
+        const key = fileKeys[index]!;
+        const existingTimer = gitDiffFileRenderTimersRef.current.get(key);
+        if (existingTimer !== undefined) {
+          window.clearTimeout(existingTimer);
+        }
+        const delay =
+          index < initialBatchSize
+            ? initialDelayMs
+            : initialDelayMs + (Math.floor((index - initialBatchSize) / batchSize) + 1) * batchDelayMs;
+        const timerId = window.setTimeout(() => {
+          setLoadingGitDiffFileKeys((currentKeys) => {
+            if (!currentKeys.has(key)) return currentKeys;
+            const nextKeys = new Set(currentKeys);
+            nextKeys.delete(key);
+            return nextKeys;
+          });
+          gitDiffFileRenderTimersRef.current.delete(key);
+        }, delay);
+        gitDiffFileRenderTimersRef.current.set(key, timerId);
       }
-      const timerId = window.setTimeout(() => {
-        setLoadingGitDiffFileKeys((currentKeys) => {
-          if (!currentKeys.has(key)) return currentKeys;
-          const nextKeys = new Set(currentKeys);
-          nextKeys.delete(key);
-          return nextKeys;
-        });
-        gitDiffFileRenderTimersRef.current.delete(key);
-      }, GIT_DIFF_FILE_RENDER_SPINNER_MS);
-      gitDiffFileRenderTimersRef.current.set(key, timerId);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isGitDiffPanelOpen || parsedGitDiffFileEntries.length === 0) {
+      return;
     }
-  }, []);
+
+    const newKeysToRender: string[] = [];
+    for (const { key } of parsedGitDiffFileEntries) {
+      if (queuedGitDiffFileRenderKeysRef.current.has(key)) {
+        continue;
+      }
+      queuedGitDiffFileRenderKeysRef.current.add(key);
+      if (!collapsedGitDiffFileKeys.has(key)) {
+        newKeysToRender.push(key);
+      }
+    }
+
+    if (newKeysToRender.length === 0) {
+      return;
+    }
+
+    const shouldBatchRender =
+      parsedGitDiffFileEntries.length > GIT_DIFF_PARSE_BATCH_THRESHOLD ||
+      isParsingGitDiffFiles ||
+      newKeysToRender.length > GIT_DIFF_FILE_INITIAL_RENDER_COUNT;
+    scheduleGitDiffFileRender(
+      newKeysToRender,
+      shouldBatchRender
+        ? {
+            initialBatchSize: GIT_DIFF_FILE_INITIAL_RENDER_COUNT,
+            initialDelayMs: GIT_DIFF_FILE_INITIAL_DELAY_MS,
+            batchSize: GIT_DIFF_FILE_RENDER_BATCH_SIZE,
+            batchDelayMs: GIT_DIFF_FILE_RENDER_BATCH_DELAY_MS,
+          }
+        : undefined,
+    );
+  }, [
+    collapsedGitDiffFileKeys,
+    isGitDiffPanelOpen,
+    isParsingGitDiffFiles,
+    parsedGitDiffFileEntries,
+    scheduleGitDiffFileRender,
+  ]);
 
   const toggleGitDiffFileCollapsed = useCallback((fileKey: string) => {
     const isExpandingFile = collapsedGitDiffFileKeys.has(fileKey);
@@ -1026,7 +1336,7 @@ export function ThreadDetailView() {
       doesGitDiffFileMatchPath(fileDiff, pendingGitDiffScrollPath)
     ));
     if (!targetEntry) {
-      if (!isGitDiffLoading) {
+      if (!isGitDiffLoading && !isParsingGitDiffFiles) {
         setPendingGitDiffScrollPath(null);
       }
       return;
@@ -1064,6 +1374,7 @@ export function ThreadDetailView() {
   }, [
     collapsedGitDiffFileKeys,
     isGitDiffLoading,
+    isParsingGitDiffFiles,
     isGitDiffPanelOpen,
     parsedGitDiffFileEntries,
     pendingGitDiffScrollPath,
@@ -1811,12 +2122,16 @@ export function ThreadDetailView() {
           value: "combined",
           label: "Uncommitted changes",
         }];
-  const gitDiffStats = summarizeGitDiff(parsedGitDiffFiles, threadGitDiff?.diff ?? "");
+  const gitDiffStats = summarizeGitDiff(
+    isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
+    threadGitDiff?.diff ?? "",
+  );
   const gitDiffStatsLabel =
     gitDiffStats.files === 0 && gitDiffStats.additions === 0 && gitDiffStats.deletions === 0
       ? "No changes"
       : `${gitDiffStats.files} ${gitDiffStats.files === 1 ? "file" : "files"} · +${gitDiffStats.additions} -${gitDiffStats.deletions}`;
   const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
+  const isPreparingGitDiff = !hasParsedGitDiffFiles && (isGitDiffLoading || isParsingGitDiffFiles);
   const areAllGitDiffFilesCollapsed =
     hasParsedGitDiffFiles &&
     parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));
@@ -1860,8 +2175,8 @@ export function ThreadDetailView() {
           maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
           className="min-w-0 bg-background"
         >
-          <aside className="flex min-h-0 h-full min-w-0 flex-1 flex-col">
-            <div className="border-b border-border/70 px-3 py-2">
+          <aside ref={gitDiffPanelRef} className="flex min-h-0 h-full min-w-0 flex-1 flex-col">
+            <div className="px-3 py-2">
               <div className="flex min-w-0 items-center gap-1.5">
                 <div className="min-w-0 max-w-[48%] flex-1">
                   <GitDiffSelector
@@ -1874,6 +2189,12 @@ export function ThreadDetailView() {
                   />
                 </div>
                 <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
+                  {isParsingGitDiffFiles ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2 className="size-3 animate-spin" />
+                      Parsing…
+                    </span>
+                  ) : null}
                   <span
                     className="max-w-[110px] truncate whitespace-nowrap text-xs text-muted-foreground"
                     title={gitDiffStatsLabel}
@@ -1905,7 +2226,7 @@ export function ThreadDetailView() {
                         "h-6 w-6 p-0",
                         gitDiffDisplayMode === "unified" ? "bg-accent text-foreground" : "text-muted-foreground",
                       )}
-                      onClick={() => setGitDiffDisplayMode("unified")}
+                      onClick={() => handleGitDiffDisplayModeChange("unified")}
                       aria-label="Stacked diff view"
                       title="Stacked diff view"
                     >
@@ -1919,7 +2240,7 @@ export function ThreadDetailView() {
                         "h-6 w-6 p-0",
                         gitDiffDisplayMode === "split" ? "bg-accent text-foreground" : "text-muted-foreground",
                       )}
-                      onClick={() => setGitDiffDisplayMode("split")}
+                      onClick={() => handleGitDiffDisplayModeChange("split")}
                       aria-label="Split diff view"
                       title="Split diff view"
                     >
@@ -1930,10 +2251,8 @@ export function ThreadDetailView() {
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-2 pt-0">
-              {isGitDiffLoading ? (
-                <p className="py-2 text-xs text-muted-foreground">
-                  Loading git diff...
-                </p>
+              {isPreparingGitDiff ? (
+                <GitDiffPanelSkeleton />
               ) : gitDiffError ? (
                 <p className="py-2 text-xs text-destructive">
                   {gitDiffError instanceof Error
@@ -2005,9 +2324,13 @@ export function ThreadDetailView() {
                             </div>
                             {!isCollapsed ? (
                               isRendering ? (
-                                <div className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-muted-foreground">
-                                  <Loader2 className="size-3.5 animate-spin" />
-                                  Rendering diff…
+                                <div className="space-y-1.5 px-2.5 py-2">
+                                  <Skeleton className="h-3 w-full rounded-sm" />
+                                  <Skeleton className="h-3 w-[96%] rounded-sm" />
+                                  <Skeleton className="h-3 w-[93%] rounded-sm" />
+                                  <Skeleton className="h-3 w-[90%] rounded-sm" />
+                                  <Skeleton className="h-3 w-[87%] rounded-sm" />
+                                  <Skeleton className="h-3 w-[84%] rounded-sm" />
                                 </div>
                               ) : (
                                 <div className="overflow-x-auto">
@@ -2023,6 +2346,14 @@ export function ThreadDetailView() {
                           </div>
                         );
                       })}
+                      {isParsingGitDiffFiles ? (
+                        <div className="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
+                            <Skeleton className="h-3 w-5/6 rounded-sm" />
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <pre className="overflow-auto whitespace-pre rounded-md border border-border/70 bg-muted/35 p-2 font-mono text-xs text-foreground">

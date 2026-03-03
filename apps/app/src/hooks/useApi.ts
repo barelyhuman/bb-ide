@@ -252,6 +252,7 @@ export function useThreadGitDiff(
     ],
     queryFn: () => api.getThreadGitDiff(id, options?.selection, options?.mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
+    placeholderData: (previousData) => previousData,
     refetchOnWindowFocus: false,
     staleTime: 5_000,
   });
