@@ -203,6 +203,10 @@ function parseGitDiffPatchChunks(patchChunks: readonly string[]): ParsedGitDiffF
   return files;
 }
 
+function getGitDiffParseKey(diff: string): string {
+  return `${diff.length}:${diff.slice(0, 120)}:${diff.slice(-120)}`;
+}
+
 interface GitDiffStats {
   files: number;
   additions: number;
@@ -796,6 +800,7 @@ export function ThreadDetailView() {
   );
   const [parsedGitDiffFiles, setParsedGitDiffFiles] = useState<ParsedGitDiffFile[]>([]);
   const [isParsingGitDiffFiles, setIsParsingGitDiffFiles] = useState(false);
+  const [lastParsedGitDiffKey, setLastParsedGitDiffKey] = useState("");
   const [pendingGitDiffScrollPath, setPendingGitDiffScrollPath] = useState<string | null>(
     null,
   );
@@ -957,22 +962,27 @@ export function ThreadDetailView() {
 
   useEffect(() => {
     const gitDiff = threadGitDiff?.diff ?? "";
+    const gitDiffKey = getGitDiffParseKey(gitDiff);
     if (!isGitDiffPanelOpen || gitDiff.trim().length === 0) {
       setParsedGitDiffFiles([]);
       setIsParsingGitDiffFiles(false);
+      setLastParsedGitDiffKey("");
       return;
     }
 
+    setParsedGitDiffFiles([]);
     const patchChunks = splitGitDiffIntoPatchChunks(gitDiff);
     if (patchChunks.length === 0) {
       setParsedGitDiffFiles([]);
       setIsParsingGitDiffFiles(false);
+      setLastParsedGitDiffKey(gitDiffKey);
       return;
     }
 
     if (patchChunks.length <= GIT_DIFF_PARSE_BATCH_THRESHOLD) {
       setParsedGitDiffFiles(parseGitDiffFiles(gitDiff));
       setIsParsingGitDiffFiles(false);
+      setLastParsedGitDiffKey(gitDiffKey);
       return;
     }
 
@@ -993,6 +1003,7 @@ export function ThreadDetailView() {
       const batchChunks = patchChunks.slice(nextPatchIndex, nextPatchIndex + batchSize);
       if (batchChunks.length === 0) {
         setIsParsingGitDiffFiles(false);
+        setLastParsedGitDiffKey(gitDiffKey);
         return;
       }
 
@@ -1009,6 +1020,7 @@ export function ThreadDetailView() {
 
       if (nextPatchIndex >= patchChunks.length || cancelled) {
         setIsParsingGitDiffFiles(false);
+        setLastParsedGitDiffKey(gitDiffKey);
         return;
       }
 
@@ -1051,7 +1063,7 @@ export function ThreadDetailView() {
 
   useEffect(() => {
     queuedGitDiffFileRenderKeysRef.current.clear();
-  }, [threadId]);
+  }, [threadId, threadGitDiff?.diff]);
 
   useEffect(() => {
     setPendingGitDiffScrollPath(null);
@@ -2117,16 +2129,23 @@ export function ThreadDetailView() {
           value: "combined",
           label: "Uncommitted changes",
         }];
+  const currentGitDiff = threadGitDiff?.diff ?? "";
+  const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
+  const currentGitDiffKey = getGitDiffParseKey(currentGitDiff);
   const gitDiffStats = summarizeGitDiff(
     isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
-    threadGitDiff?.diff ?? "",
+    currentGitDiff,
   );
   const gitDiffStatsLabel =
     gitDiffStats.files === 0 && gitDiffStats.additions === 0 && gitDiffStats.deletions === 0
       ? "No changes"
       : `${gitDiffStats.files} ${gitDiffStats.files === 1 ? "file" : "files"} · +${gitDiffStats.additions} -${gitDiffStats.deletions}`;
   const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
-  const isPreparingGitDiff = !hasParsedGitDiffFiles && (isGitDiffLoading || isParsingGitDiffFiles);
+  const isAwaitingCurrentGitDiffParse =
+    hasCurrentGitDiff && lastParsedGitDiffKey !== currentGitDiffKey;
+  const isPreparingGitDiff =
+    !hasParsedGitDiffFiles &&
+    (isGitDiffLoading || isParsingGitDiffFiles || isAwaitingCurrentGitDiffParse);
   const areAllGitDiffFilesCollapsed =
     hasParsedGitDiffFiles &&
     parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));
@@ -2254,13 +2273,14 @@ export function ThreadDetailView() {
                     ? gitDiffError.message
                     : "Failed to load git diff"}
                 </p>
-              ) : threadGitDiff && threadGitDiff.diff.trim().length > 0 ? (
+              ) : threadGitDiff && hasCurrentGitDiff ? (
                 <>
                   {parsedGitDiffFileEntries.length > 0 ? (
                     <div className="space-y-2 pt-2">
                       {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
                         const isCollapsed = collapsedGitDiffFileKeys.has(key);
-                        const isRendering = loadingGitDiffFileKeys.has(key);
+                        const hasQueuedFileRender = queuedGitDiffFileRenderKeysRef.current.has(key);
+                        const isRendering = !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
                         const fileDiffStats = summarizeGitDiffFile(fileDiff);
                         const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
                         const openablePath = getOpenableGitDiffPath(fileDiff);
