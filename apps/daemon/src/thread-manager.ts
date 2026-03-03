@@ -155,7 +155,8 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
 ];
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
-const HISTORICAL_NOISE_EVENT_KEEP_RECENT = 800;
+const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
+const ARCHIVED_NOISE_EVENT_KEEP_RECENT = 120;
 
 function checkoutSnapshotsMatch(
   left: GitCheckoutSnapshot,
@@ -1149,7 +1150,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
-    this._pruneHistoricalNoiseEvents(threadId);
+    this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
     this._scheduleQueuedFollowUpDispatch(threadId);
   }
@@ -1196,7 +1197,7 @@ export class ThreadManager implements ThreadOrchestrator {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
     });
-    this._pruneHistoricalNoiseEvents(threadId);
+    this._pruneHistoricalNoiseEvents(threadId, ARCHIVED_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, [
       ...THREAD_STATUS_CHANGE_KINDS,
       "archived-changed",
@@ -3598,7 +3599,10 @@ export class ThreadManager implements ThreadOrchestrator {
     return true;
   }
 
-  private _pruneHistoricalNoiseEvents(threadId: string): void {
+  private _pruneHistoricalNoiseEvents(
+    threadId: string,
+    keepRecent: number = IDLE_NOISE_EVENT_KEEP_RECENT,
+  ): void {
     const repoMaintenance = (this.eventRepo as {
       pruneHistoricalNoiseByThread?: (threadId: string, keepRecent?: number) => number;
       reclaimStorageIfNeeded?: (opts?: {
@@ -3612,7 +3616,7 @@ export class ThreadManager implements ThreadOrchestrator {
       const removed = repoMaintenance.call(
         this.eventRepo,
         threadId,
-        HISTORICAL_NOISE_EVENT_KEEP_RECENT,
+        keepRecent,
       );
       if (removed > 0) {
         this.timelineByThread.delete(threadId);

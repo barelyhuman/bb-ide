@@ -115,15 +115,39 @@ async function main(): Promise<void> {
   const eventRepo = new EventRepository(db);
 
   try {
-    const storageReclaim = eventRepo.reclaimStorageIfNeeded({
+    const bootstrapReclaim = eventRepo.reclaimStorageIfNeeded({
       ensureIncrementalAutoVacuum: true,
-      minFreelistPages: 2_048,
-      maxIncrementalPages: 8_192,
+      minFreelistPages: 16_384,
+      maxIncrementalPages: 4_096,
       minIntervalMs: 0,
     });
-    if (storageReclaim.fullVacuum) {
+    if (bootstrapReclaim.fullVacuum) {
       console.log("Enabled incremental auto-vacuum and compacted database.");
-    } else if (storageReclaim.incrementalPages > 0) {
+    }
+
+    const threads = threadRepo.list({ includeArchived: true });
+    let prunedNoiseRows = 0;
+    for (const thread of threads) {
+      if (thread.status === "active") continue;
+      const keepRecent = thread.archivedAt !== undefined ? 120 : 300;
+      prunedNoiseRows += eventRepo.pruneHistoricalNoiseByThread(
+        thread.id,
+        keepRecent,
+      );
+    }
+    if (prunedNoiseRows > 0) {
+      console.log(
+        `Pruned ${prunedNoiseRows} historical high-frequency event rows from inactive threads.`,
+      );
+    }
+
+    const storageReclaim = eventRepo.reclaimStorageIfNeeded({
+      force: prunedNoiseRows > 0,
+      minFreelistPages: 1_024,
+      maxIncrementalPages: 24_576,
+      minIntervalMs: 0,
+    });
+    if (storageReclaim.incrementalPages > 0) {
       console.log(
         `Reclaimed SQLite free pages: ${storageReclaim.incrementalPages} (remaining freelist ${storageReclaim.freelistPages}).`,
       );
