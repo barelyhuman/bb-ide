@@ -2,6 +2,17 @@ import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
 import type { StatusPillVariant } from "@/components/shared/StatusPill";
 import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
 
+export function threadWorktreeCleanLabel(
+  status: ThreadWorkStatus | undefined,
+): string {
+  if (!status || status.state !== "clean") {
+    return "Clean";
+  }
+
+  const isUpToDate = status.aheadCount === 0 && status.behindCount === 0;
+  return isUpToDate ? "Clean, Up to date" : "Clean";
+}
+
 export function threadWorkStatusLabel(
   status: ThreadWorkStatus | undefined,
   options?: { cleanLabel?: string },

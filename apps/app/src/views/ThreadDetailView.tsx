@@ -107,6 +107,7 @@ import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampActi
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
 import { extractThreadContextWindowUsage } from "@/lib/thread-context-window-usage";
 import {
+  threadWorktreeCleanLabel,
   threadWorkStatusLabel,
   threadWorkStatusVariant,
 } from "@/lib/thread-work-status";
@@ -1467,12 +1468,18 @@ export function ThreadDetailView() {
                   status={threadWorkStatus}
                   label={threadWorkStatusLabel(threadWorkStatus, {
                     cleanLabel:
-                      thread.environmentId === "worktree" ? "Clean, Up to date" : undefined,
+                      thread.environmentId === "worktree"
+                        ? threadWorktreeCleanLabel(threadWorkStatus)
+                        : undefined,
                   })}
                   variant={threadWorkStatusVariant(threadWorkStatus, {
                     isArchivedThread: thread.archivedAt !== undefined,
                   })}
-                  cleanTitle={thread.environmentId === "worktree" ? "Clean, Up to date" : undefined}
+                  cleanTitle={
+                    thread.environmentId === "worktree"
+                      ? threadWorktreeCleanLabel(threadWorkStatus)
+                      : undefined
+                  }
                   showMergeBaseDetails={thread.environmentId === "worktree"}
                   mergeBaseBranch={selectedMergeBaseBranch ?? threadWorkStatus.mergeBaseBranch}
                   mergeBaseBranchOptions={threadWorkStatus.mergeBaseBranches}

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadWorkStatus } from "@beanbag/agent-core";
-import { threadWorkStatusVariant } from "./thread-work-status";
+import {
+  threadWorkStatusVariant,
+  threadWorktreeCleanLabel,
+} from "./thread-work-status";
 
 function makeStatus(state: ThreadWorkStatus["state"]): ThreadWorkStatus {
   return {
@@ -27,5 +30,18 @@ describe("thread-work-status", () => {
     expect(
       threadWorkStatusVariant(makeStatus("deleted"), { isArchivedThread: true }),
     ).toBe("outline");
+  });
+
+  it("shows up-to-date clean label when branch is clean and synchronized", () => {
+    expect(threadWorktreeCleanLabel(makeStatus("clean"))).toBe("Clean, Up to date");
+  });
+
+  it("shows clean label when branch is clean but behind merge base", () => {
+    expect(
+      threadWorktreeCleanLabel({
+        ...makeStatus("clean"),
+        behindCount: 4,
+      }),
+    ).toBe("Clean");
   });
 });
