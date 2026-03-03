@@ -8,7 +8,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Check,
   ChevronsDown,
@@ -114,7 +114,11 @@ import {
   formatChangeSummary,
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
-import { isThreadGitDiffPanelOpen } from "@/lib/thread-git-diff-panel";
+import {
+  isThreadGitDiffPanelOpen,
+  withThreadGitDiffPanelOpen,
+} from "@/lib/thread-git-diff-panel";
+import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 import { cn } from "@/lib/utils";
 
 const SCROLL_THRESHOLD = 40;
@@ -203,6 +207,46 @@ function formatGitDiffFileLabel(file: ParsedGitDiffFile): string {
 
 function getParsedGitDiffFileKey(file: ParsedGitDiffFile, index: number): string {
   return `${file.name}:${file.prevName ?? ""}:${index}`;
+}
+
+function getGitDiffPathAliases(path: string | undefined): string[] {
+  if (!path || path === "/dev/null") return [];
+  const normalizedPath = path.startsWith("./")
+    ? path.slice(2)
+    : path;
+  if (normalizedPath.length === 0) return [];
+  const aliases = [normalizedPath];
+  if (normalizedPath.startsWith("a/") || normalizedPath.startsWith("b/")) {
+    aliases.push(normalizedPath.slice(2));
+  }
+  return Array.from(new Set(aliases.filter((alias) => alias.length > 0)));
+}
+
+function doesGitDiffFileMatchPath(
+  file: ParsedGitDiffFile,
+  targetPath: string,
+): boolean {
+  const targetAliases = new Set(getGitDiffPathAliases(targetPath));
+  if (targetAliases.size === 0) return false;
+
+  for (const candidatePath of [file.name, file.prevName]) {
+    for (const alias of getGitDiffPathAliases(candidatePath)) {
+      if (targetAliases.has(alias)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function getOpenableGitDiffPath(file: ParsedGitDiffFile): string | null {
+  for (const candidatePath of [file.name, file.prevName]) {
+    const aliases = getGitDiffPathAliases(candidatePath);
+    if (aliases.length > 0) {
+      return aliases[aliases.length - 1] ?? null;
+    }
+  }
+  return null;
 }
 
 interface GitDiffSelectionOption {
@@ -596,6 +640,7 @@ export function ThreadDetailView() {
     threadId: string;
   }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const isGitDiffPanelOpen = useMemo(
     () => isThreadGitDiffPanelOpen(location.search),
     [location.search],
@@ -655,7 +700,11 @@ export function ThreadDetailView() {
   const [loadingGitDiffFileKeys, setLoadingGitDiffFileKeys] = useState<Set<string>>(
     () => new Set(),
   );
+  const [pendingGitDiffScrollPath, setPendingGitDiffScrollPath] = useState<string | null>(
+    null,
+  );
   const gitDiffFileRenderTimersRef = useRef<Map<string, number>>(new Map());
+  const gitDiffFileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const message = promptDraft.text;
   const promptInput = useMemo(
@@ -764,6 +813,10 @@ export function ThreadDetailView() {
     setCollapsedGitDiffFileKeys(new Set());
     setLoadingGitDiffFileKeys(new Set());
   }, [threadId, threadGitDiff?.diff]);
+
+  useEffect(() => {
+    setPendingGitDiffScrollPath(null);
+  }, [threadId]);
 
   useEffect(() => {
     if (!threadWorkStatus) return;
@@ -931,6 +984,84 @@ export function ThreadDetailView() {
     setCollapsedGitDiffFileKeys(new Set(allFileKeys));
     setLoadingGitDiffFileKeys(new Set());
   }, [collapsedGitDiffFileKeys, parsedGitDiffFileEntries, scheduleGitDiffFileRender]);
+  const setGitDiffFileRef = useCallback((fileKey: string, element: HTMLDivElement | null) => {
+    if (element) {
+      gitDiffFileRefs.current.set(fileKey, element);
+      return;
+    }
+    gitDiffFileRefs.current.delete(fileKey);
+  }, []);
+  const handlePromptBannerFileClick = useCallback(
+    (file: { path: string }) => {
+      setSelectedGitDiffCommitSha(null);
+      setPendingGitDiffScrollPath(file.path);
+      if (isGitDiffPanelOpen) {
+        return;
+      }
+      const nextSearch = withThreadGitDiffPanelOpen(location.search, true);
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+        },
+        { replace: true },
+      );
+    },
+    [isGitDiffPanelOpen, location.pathname, location.search, navigate],
+  );
+
+  useEffect(() => {
+    if (!pendingGitDiffScrollPath || !isGitDiffPanelOpen) {
+      return;
+    }
+
+    const targetEntry = parsedGitDiffFileEntries.find(({ fileDiff }) => (
+      doesGitDiffFileMatchPath(fileDiff, pendingGitDiffScrollPath)
+    ));
+    if (!targetEntry) {
+      if (!isGitDiffLoading) {
+        setPendingGitDiffScrollPath(null);
+      }
+      return;
+    }
+
+    if (collapsedGitDiffFileKeys.has(targetEntry.key)) {
+      setCollapsedGitDiffFileKeys((currentKeys) => {
+        if (!currentKeys.has(targetEntry.key)) {
+          return currentKeys;
+        }
+        const nextKeys = new Set(currentKeys);
+        nextKeys.delete(targetEntry.key);
+        return nextKeys;
+      });
+      scheduleGitDiffFileRender([targetEntry.key]);
+    }
+
+    const scrollTarget = gitDiffFileRefs.current.get(targetEntry.key);
+    if (scrollTarget) {
+      scrollTarget.scrollIntoView({ block: "start", behavior: "smooth" });
+      setPendingGitDiffScrollPath(null);
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      const deferredTarget = gitDiffFileRefs.current.get(targetEntry.key);
+      if (deferredTarget) {
+        deferredTarget.scrollIntoView({ block: "start", behavior: "smooth" });
+      }
+      setPendingGitDiffScrollPath(null);
+    });
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [
+    collapsedGitDiffFileKeys,
+    isGitDiffLoading,
+    isGitDiffPanelOpen,
+    parsedGitDiffFileEntries,
+    pendingGitDiffScrollPath,
+    scheduleGitDiffFileRender,
+  ]);
 
   const { containerRef, handleScroll: baseHandleScroll } = useAutoScroll(
     threadDetailRows,
@@ -1544,6 +1675,7 @@ export function ThreadDetailView() {
                     <WorkspaceChangesList
                       files={threadWorkStatus.files}
                       workspaceRoot={threadWorkStatus.workspaceRoot}
+                      onFileClick={handlePromptBannerFileClick}
                     />
                   </div>
                 ) : null}
@@ -1788,34 +1920,60 @@ export function ThreadDetailView() {
                         const isCollapsed = collapsedGitDiffFileKeys.has(key);
                         const isRendering = loadingGitDiffFileKeys.has(key);
                         const fileDiffStats = summarizeGitDiffFile(fileDiff);
+                        const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
+                        const openablePath = getOpenableGitDiffPath(fileDiff);
+                        const canOpenFile = Boolean(openablePath && threadGitDiff.workspaceRoot);
                         return (
                           <div
                             key={key}
+                            ref={(element) => setGitDiffFileRef(key, element)}
                             className="rounded-md border border-border/70 bg-muted/35"
                           >
                             <div className="sticky top-0 z-20 border-b border-border/60 bg-background px-2.5 py-1 text-xs font-medium text-foreground">
-                              <button
-                                type="button"
-                                className="flex w-full min-w-0 items-center justify-between gap-2 text-left"
-                                onClick={() => toggleGitDiffFileCollapsed(key)}
-                                aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${formatGitDiffFileLabel(fileDiff)}`}
-                                aria-expanded={!isCollapsed}
-                              >
+                              <div className="flex w-full min-w-0 items-center justify-between gap-2">
                                 <span className="flex min-w-0 items-center gap-1.5">
-                                  <ChevronRight
-                                    className={cn(
-                                      "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
-                                      !isCollapsed && "rotate-90",
-                                    )}
-                                  />
-                                  <span className="block min-w-0 truncate" title={formatGitDiffFileLabel(fileDiff)}>
-                                    {formatGitDiffFileLabel(fileDiff)}
-                                  </span>
+                                  <button
+                                    type="button"
+                                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
+                                    onClick={() => toggleGitDiffFileCollapsed(key)}
+                                    aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${fileDiffLabel}`}
+                                    aria-expanded={!isCollapsed}
+                                  >
+                                    <ChevronRight
+                                      className={cn(
+                                        "size-3.5 shrink-0 transition-transform duration-150",
+                                        !isCollapsed && "rotate-90",
+                                      )}
+                                    />
+                                  </button>
+                                  {canOpenFile && openablePath ? (
+                                    <button
+                                      type="button"
+                                      className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
+                                      title={fileDiffLabel}
+                                      onClick={() => {
+                                        const absolutePath = resolveWorkspaceAbsolutePath(
+                                          threadGitDiff.workspaceRoot,
+                                          openablePath,
+                                        );
+                                        void openPathInEditor(absolutePath, {
+                                          target: "file",
+                                          command: getPathCommandForTarget("file"),
+                                        });
+                                      }}
+                                    >
+                                      {fileDiffLabel}
+                                    </button>
+                                  ) : (
+                                    <span className="block min-w-0 truncate" title={fileDiffLabel}>
+                                      {fileDiffLabel}
+                                    </span>
+                                  )}
                                 </span>
                                 <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
                                   +{fileDiffStats.additions} -{fileDiffStats.deletions}
                                 </span>
-                              </button>
+                              </div>
                             </div>
                             {!isCollapsed ? (
                               isRendering ? (
