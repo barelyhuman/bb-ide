@@ -114,6 +114,25 @@ async function main(): Promise<void> {
   const threadRepo = new ThreadRepository(db);
   const eventRepo = new EventRepository(db);
 
+  try {
+    const storageReclaim = eventRepo.reclaimStorageIfNeeded({
+      ensureIncrementalAutoVacuum: true,
+      minFreelistPages: 2_048,
+      maxIncrementalPages: 8_192,
+      minIntervalMs: 0,
+    });
+    if (storageReclaim.fullVacuum) {
+      console.log("Enabled incremental auto-vacuum and compacted database.");
+    } else if (storageReclaim.incrementalPages > 0) {
+      console.log(
+        `Reclaimed SQLite free pages: ${storageReclaim.incrementalPages} (remaining freelist ${storageReclaim.freelistPages}).`,
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`Database storage maintenance skipped: ${message}`);
+  }
+
   let httpServer: ReturnType<typeof serve> | undefined;
   let shutdownStarted = false;
   let restartRequested = false;

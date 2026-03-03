@@ -410,8 +410,20 @@ export function createThreadRoutes(
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
         const query = c.req.valid("query");
+        const asyncWorkStatusAccessor = threadManager as ThreadOrchestrator & {
+          getWorkStatusAsync?: (
+            threadId: string,
+            mergeBaseBranch?: string,
+          ) => Promise<ReturnType<ThreadOrchestrator["getWorkStatus"]>>;
+        };
+        const workStatus = asyncWorkStatusAccessor.getWorkStatusAsync
+          ? await asyncWorkStatusAccessor.getWorkStatusAsync(
+              c.req.param("id"),
+              query.mergeBaseBranch,
+            )
+          : threadManager.getWorkStatus(c.req.param("id"), query.mergeBaseBranch);
         return c.json(
-          threadManager.getWorkStatus(c.req.param("id"), query.mergeBaseBranch) ?? null,
+          workStatus ?? null,
         );
       } catch (err) {
         return sendRouteError(c, err);

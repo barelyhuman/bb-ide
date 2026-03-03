@@ -268,8 +268,8 @@ export function createProjectRoutes(
         if (!project) {
           return c.json({ error: "Project not found" }, 404);
         }
-        const defaultBranch = gitStatusService.detectDefaultBranch(project.rootPath);
-        const status = gitStatusService.getStatus({
+        const defaultBranch = await gitStatusService.detectDefaultBranchAsync(project.rootPath);
+        const status = await gitStatusService.getStatusAsync({
           workspaceRoot: project.rootPath,
           projectRoot: project.rootPath,
           defaultBranch,

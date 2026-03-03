@@ -113,4 +113,46 @@ describe("event repository provider envelope indexing", () => {
       "legacy-provider-thread",
     );
   });
+
+  it("prunes historical high-frequency noise while preserving recent and non-noise events", () => {
+    events.create({
+      threadId,
+      seq: 1,
+      type: "item/agentMessage/delta",
+      data: { delta: "old chunk" },
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/tokenUsage/updated",
+      data: { totalTokens: 123 },
+    });
+    events.create({
+      threadId,
+      seq: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          text: "final response",
+        },
+      },
+    });
+    events.create({
+      threadId,
+      seq: 4,
+      type: "item/agentMessage/delta",
+      data: { delta: "recent chunk" },
+    });
+
+    const removed = events.pruneHistoricalNoiseByThread(threadId, 2);
+    expect(removed).toBe(2);
+
+    const remaining = events.listByThread(threadId);
+    expect(remaining.map((event) => event.seq)).toEqual([3, 4]);
+    expect(remaining.map((event) => event.type)).toEqual([
+      "item/completed",
+      "item/agentMessage/delta",
+    ]);
+  });
 });

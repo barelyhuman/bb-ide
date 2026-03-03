@@ -1,4 +1,16 @@
-import { eq, and, sql, gt, isNull, desc, inArray, notInArray } from "drizzle-orm";
+import {
+  eq,
+  and,
+  or,
+  sql,
+  gt,
+  lte,
+  like,
+  isNull,
+  desc,
+  inArray,
+  notInArray,
+} from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
   PromptInput,
@@ -55,6 +67,57 @@ function deriveEventLookupFields(type: string, data: unknown): {
     isTurnLifecycle,
     isThreadIdentity: Boolean(providerThreadId),
   };
+}
+
+const PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
+  "account/ratelimits/updated",
+  "thread/tokenusage/updated",
+  "item/reasoning/summarypartadded",
+  "turn/diff/updated",
+];
+
+const STORAGE_RECLAIM_MIN_INTERVAL_MS = 60_000;
+const STORAGE_RECLAIM_MIN_FREE_PAGES = 2_048;
+const STORAGE_RECLAIM_MAX_INCREMENTAL_PAGES = 8_192;
+
+interface SqlitePragmaClient {
+  pragma(sql: string): unknown;
+  exec(sql: string): unknown;
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "bigint") {
+    const asNumber = Number(value);
+    return Number.isFinite(asNumber) ? asNumber : undefined;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function readPragmaNumber(
+  sqlite: SqlitePragmaClient,
+  pragma: string,
+): number | undefined {
+  const raw = sqlite.pragma(pragma);
+  const direct = toFiniteNumber(raw);
+  if (direct !== undefined) return direct;
+
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+
+  const first = raw[0];
+  if (!first || typeof first !== "object" || Array.isArray(first)) {
+    return undefined;
+  }
+  const value = Object.values(first as Record<string, unknown>)[0];
+  return toFiniteNumber(value);
 }
 
 function parseThreadExecutionOptions(
@@ -552,7 +615,21 @@ export class ThreadRepository {
 // ---------------------------------------------------------------------------
 
 export class EventRepository {
+  private lastStorageReclaimAt = 0;
+
   constructor(private db: DbConnection) {}
+
+  private _sqliteClient(): SqlitePragmaClient | null {
+    const candidate = (this.db as { $client?: unknown }).$client;
+    if (!candidate || typeof candidate !== "object") {
+      return null;
+    }
+    const client = candidate as Partial<SqlitePragmaClient>;
+    if (typeof client.pragma !== "function" || typeof client.exec !== "function") {
+      return null;
+    }
+    return client as SqlitePragmaClient;
+  }
 
   create(data: {
     threadId: string;
@@ -650,6 +727,122 @@ export class EventRepository {
       type: row.type,
       data: JSON.parse(row.data),
       createdAt: row.createdAt,
+    };
+  }
+
+  pruneHistoricalNoiseByThread(
+    threadId: string,
+    keepRecent: number = 600,
+  ): number {
+    const latestSeq = this.getLatestSeq(threadId);
+    if (latestSeq <= 0) return 0;
+    const normalizedKeepRecent = Number.isFinite(keepRecent)
+      ? Math.max(0, Math.floor(keepRecent))
+      : 600;
+    const cutoffSeq = latestSeq - normalizedKeepRecent;
+    if (cutoffSeq <= 0) return 0;
+
+    const result = this.db
+      .delete(events)
+      .where(
+        and(
+          eq(events.threadId, threadId),
+          lte(events.seq, cutoffSeq),
+          or(
+            like(events.normType, "%delta%"),
+            inArray(events.normType, [...PRUNABLE_NOISE_EVENT_NORM_TYPES]),
+          ),
+        ),
+      )
+      .run() as { changes?: number };
+    return result.changes ?? 0;
+  }
+
+  reclaimStorageIfNeeded(opts?: {
+    force?: boolean;
+    ensureIncrementalAutoVacuum?: boolean;
+    minFreelistPages?: number;
+    maxIncrementalPages?: number;
+    minIntervalMs?: number;
+  }): {
+    ran: boolean;
+    fullVacuum: boolean;
+    incrementalPages: number;
+    freelistPages: number;
+    autoVacuumMode: number;
+  } {
+    const sqlite = this._sqliteClient();
+    if (!sqlite) {
+      return {
+        ran: false,
+        fullVacuum: false,
+        incrementalPages: 0,
+        freelistPages: 0,
+        autoVacuumMode: 0,
+      };
+    }
+
+    const now = Date.now();
+    const minIntervalCandidate = opts?.minIntervalMs;
+    const minIntervalMs =
+      typeof minIntervalCandidate === "number" && Number.isFinite(minIntervalCandidate)
+      ? Math.max(0, Math.floor(minIntervalCandidate))
+      : STORAGE_RECLAIM_MIN_INTERVAL_MS;
+    if (!opts?.force && now - this.lastStorageReclaimAt < minIntervalMs) {
+      const autoVacuumMode = Math.floor(readPragmaNumber(sqlite, "auto_vacuum") ?? 0);
+      const freelistPages = Math.floor(readPragmaNumber(sqlite, "freelist_count") ?? 0);
+      return {
+        ran: false,
+        fullVacuum: false,
+        incrementalPages: 0,
+        freelistPages,
+        autoVacuumMode,
+      };
+    }
+    this.lastStorageReclaimAt = now;
+
+    let autoVacuumMode = Math.floor(readPragmaNumber(sqlite, "auto_vacuum") ?? 0);
+    let fullVacuum = false;
+    if (opts?.ensureIncrementalAutoVacuum && autoVacuumMode === 0) {
+      sqlite.pragma("auto_vacuum = INCREMENTAL");
+      sqlite.exec("VACUUM");
+      sqlite.pragma("journal_mode = WAL");
+      autoVacuumMode = Math.floor(readPragmaNumber(sqlite, "auto_vacuum") ?? 0);
+      fullVacuum = true;
+    }
+
+    const minFreelistCandidate = opts?.minFreelistPages;
+    const maxIncrementalCandidate = opts?.maxIncrementalPages;
+    const minFreelistPages =
+      typeof minFreelistCandidate === "number" && Number.isFinite(minFreelistCandidate)
+      ? Math.max(0, Math.floor(minFreelistCandidate))
+      : STORAGE_RECLAIM_MIN_FREE_PAGES;
+    const maxIncrementalPages =
+      typeof maxIncrementalCandidate === "number" && Number.isFinite(maxIncrementalCandidate)
+      ? Math.max(1, Math.floor(maxIncrementalCandidate))
+      : STORAGE_RECLAIM_MAX_INCREMENTAL_PAGES;
+
+    let freelistPages = Math.floor(readPragmaNumber(sqlite, "freelist_count") ?? 0);
+    let incrementalPages = 0;
+    if (
+      autoVacuumMode === 2 &&
+      (opts?.force || freelistPages >= minFreelistPages)
+    ) {
+      incrementalPages = opts?.force
+        ? freelistPages
+        : Math.min(freelistPages, maxIncrementalPages);
+      if (incrementalPages > 0) {
+        sqlite.exec(`PRAGMA incremental_vacuum(${incrementalPages})`);
+        freelistPages = Math.floor(readPragmaNumber(sqlite, "freelist_count") ?? 0);
+      }
+    }
+
+    return {
+      ran: fullVacuum || incrementalPages > 0,
+      fullVacuum,
+      incrementalPages,
+      freelistPages,
+      autoVacuumMode,
     };
   }
 

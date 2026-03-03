@@ -37,6 +37,7 @@ import {
   type ThreadOrchestrator,
   type ThreadTurnInitiator,
   type ThreadExecutionOptions,
+  type ThreadWorkStatus,
   type Thread,
   type ThreadEvent,
   type ThreadEventData,
@@ -154,6 +155,7 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
 ];
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
+const HISTORICAL_NOISE_EVENT_KEEP_RECENT = 800;
 
 function checkoutSnapshotsMatch(
   left: GitCheckoutSnapshot,
@@ -1147,6 +1149,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
+    this._pruneHistoricalNoiseEvents(threadId);
     this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
     this._scheduleQueuedFollowUpDispatch(threadId);
   }
@@ -1193,6 +1196,7 @@ export class ThreadManager implements ThreadOrchestrator {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
     });
+    this._pruneHistoricalNoiseEvents(threadId);
     this._broadcastThreadChanged(threadId, [
       ...THREAD_STATUS_CHANGE_KINDS,
       "archived-changed",
@@ -1484,6 +1488,47 @@ export class ThreadManager implements ThreadOrchestrator {
     }).workStatus;
   }
 
+  async getWorkStatusAsync(
+    threadId: string,
+    mergeBaseBranch?: string,
+  ): Promise<ThreadWorkStatus | undefined> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return undefined;
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) return undefined;
+
+    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) return undefined;
+
+    const defaultBranch = await this.gitStatusService.detectDefaultBranchAsync(project.rootPath);
+    const workspaceStatus = await this.gitStatusService.getStatusAsync({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+      mergeBaseBranch,
+    });
+    const workStatus = { ...workspaceStatus };
+
+    if (thread.environmentId !== "worktree" && thread.agentDiffStats) {
+      workStatus.changedFiles = thread.agentDiffStats.changedFiles;
+      workStatus.insertions = thread.agentDiffStats.insertions;
+      workStatus.deletions = thread.agentDiffStats.deletions;
+    } else {
+      const shouldComputeFallback =
+        thread.environmentId !== "worktree" && thread.status === "active";
+      if (shouldComputeFallback) {
+        const events = this.eventRepo.listByThread(thread.id);
+        const attributedDiff = this.attributedDiffService.compute(events);
+        workStatus.changedFiles = attributedDiff.changedFiles;
+        workStatus.insertions = attributedDiff.insertions;
+        workStatus.deletions = attributedDiff.deletions;
+        workStatus.files = attributedDiff.files;
+      }
+    }
+
+    return workStatus;
+  }
+
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {
     this._ensurePrimaryPromotionStateIsCurrent(projectId);
     const active = this.primaryPromotionByProjectId.get(projectId);
@@ -1740,7 +1785,7 @@ export class ThreadManager implements ThreadOrchestrator {
       }
 
       const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-      if (workspaceRoot === project.rootPath) {
+      if (!workspaceRoot || workspaceRoot === project.rootPath) {
         throw invalidRequestError(
           "Thread worktree path is unavailable (workspace resolved to project root); reprovision before promoting",
         );
@@ -3553,6 +3598,39 @@ export class ThreadManager implements ThreadOrchestrator {
     return true;
   }
 
+  private _pruneHistoricalNoiseEvents(threadId: string): void {
+    const repoMaintenance = (this.eventRepo as {
+      pruneHistoricalNoiseByThread?: (threadId: string, keepRecent?: number) => number;
+      reclaimStorageIfNeeded?: (opts?: {
+        minFreelistPages?: number;
+      }) => {
+        ran: boolean;
+      };
+    }).pruneHistoricalNoiseByThread;
+    if (!repoMaintenance) return;
+    try {
+      const removed = repoMaintenance.call(
+        this.eventRepo,
+        threadId,
+        HISTORICAL_NOISE_EVENT_KEEP_RECENT,
+      );
+      if (removed > 0) {
+        this.timelineByThread.delete(threadId);
+        const reclaim = (this.eventRepo as {
+          reclaimStorageIfNeeded?: (opts?: {
+            minFreelistPages?: number;
+          }) => {
+            ran: boolean;
+          };
+        }).reclaimStorageIfNeeded;
+        reclaim?.call(this.eventRepo, { minFreelistPages: 2_048 });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`[thread ${threadId}] failed to prune historical noise events: ${message}`);
+    }
+  }
+
   private _setThreadStatus(
     threadId: string,
     nextStatus: Thread["status"],
@@ -3582,6 +3660,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     if (thread.status === "active" && nextStatus === "idle") {
       this._captureAgentDiffStats(thread);
+      this._pruneHistoricalNoiseEvents(threadId);
     }
 
     if (opts?.touchUpdatedAt !== undefined) {

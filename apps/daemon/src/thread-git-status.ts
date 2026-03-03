@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -29,6 +29,7 @@ type CacheEntry = {
 const CACHE_TTL_MS = 1_500;
 const MAX_DIFF_RESPONSE_CHARS = 220_000;
 const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
+const GIT_COMMAND_TIMEOUT_MS = 20_000;
 
 export interface GitCheckoutSnapshot {
   branch?: string;
@@ -51,11 +52,19 @@ function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; std
     cwd,
     encoding: "utf-8",
     stdio: "pipe",
+    timeout: GIT_COMMAND_TIMEOUT_MS,
   });
+  const timeoutMessage = `git ${args.join(" ")} timed out after ${GIT_COMMAND_TIMEOUT_MS}ms`;
+  const stderr =
+    typeof result.error?.message === "string" && result.error.message.length > 0
+      ? result.error.message
+      : result.signal === "SIGTERM" || result.signal === "SIGKILL"
+        ? timeoutMessage
+        : result.stderr?.trimEnd() ?? "";
   return {
     ok: result.status === 0,
     stdout: result.stdout?.trimEnd() ?? "",
-    stderr: result.stderr?.trimEnd() ?? "",
+    stderr,
     code: result.status,
   };
 }
@@ -65,13 +74,119 @@ function runGitRaw(cwd: string, args: string[]): { ok: boolean; stdout: string; 
     cwd,
     encoding: "utf-8",
     stdio: "pipe",
+    timeout: GIT_COMMAND_TIMEOUT_MS,
   });
+  const timeoutMessage = `git ${args.join(" ")} timed out after ${GIT_COMMAND_TIMEOUT_MS}ms`;
+  const stderr =
+    typeof result.error?.message === "string" && result.error.message.length > 0
+      ? result.error.message
+      : result.signal === "SIGTERM" || result.signal === "SIGKILL"
+        ? timeoutMessage
+        : result.stderr?.trimEnd() ?? "";
   return {
     ok: result.status === 0,
     stdout: result.stdout ?? "",
-    stderr: result.stderr?.trimEnd() ?? "",
+    stderr,
     code: result.status,
   };
+}
+
+function runGitAsync(
+  cwd: string,
+  args: string[],
+): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
+  return new Promise((resolve) => {
+    const child = spawn("git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, GIT_COMMAND_TIMEOUT_MS);
+
+    child.stdout.setEncoding("utf-8");
+    child.stderr.setEncoding("utf-8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      resolve({
+        ok: false,
+        stdout: stdout.trimEnd(),
+        stderr: error.message,
+        code: null,
+      });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve({
+        ok: !timedOut && code === 0,
+        stdout: stdout.trimEnd(),
+        stderr: timedOut
+          ? `git ${args.join(" ")} timed out after ${GIT_COMMAND_TIMEOUT_MS}ms`
+          : stderr.trimEnd(),
+        code,
+      });
+    });
+  });
+}
+
+function runGitRawAsync(
+  cwd: string,
+  args: string[],
+): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
+  return new Promise((resolve) => {
+    const child = spawn("git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, GIT_COMMAND_TIMEOUT_MS);
+
+    child.stdout.setEncoding("utf-8");
+    child.stderr.setEncoding("utf-8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      resolve({
+        ok: false,
+        stdout,
+        stderr: error.message,
+        code: null,
+      });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve({
+        ok: !timedOut && code === 0,
+        stdout,
+        stderr: timedOut
+          ? `git ${args.join(" ")} timed out after ${GIT_COMMAND_TIMEOUT_MS}ms`
+          : stderr.trimEnd(),
+        code,
+      });
+    });
+  });
 }
 
 function parseShortstat(value: string): { files: number; insertions: number; deletions: number } {
@@ -130,6 +245,34 @@ function resolveMergeBaseDiffCounts(args: {
   };
 }
 
+async function resolveMergeBaseDiffCountsAsync(args: {
+  workspaceRoot: string;
+  mergeBaseDiffRef: string | undefined;
+  statusLines: readonly string[];
+  fallback: DiffCounts;
+}): Promise<DiffCounts> {
+  if (!args.mergeBaseDiffRef) {
+    return args.fallback;
+  }
+
+  const shortstatResult = await runGitAsync(args.workspaceRoot, [
+    "diff",
+    "--shortstat",
+    args.mergeBaseDiffRef,
+  ]);
+  if (!shortstatResult.ok) {
+    return args.fallback;
+  }
+
+  const parsed = parseShortstat(shortstatResult.stdout);
+  const untrackedFiles = countUntrackedFiles(args.statusLines);
+  return {
+    changedFiles: parsed.files + untrackedFiles,
+    insertions: parsed.insertions,
+    deletions: parsed.deletions,
+  };
+}
+
 function resolveMergeBaseDiffRef(
   workspaceRoot: string,
   baseRef: string | undefined,
@@ -139,6 +282,22 @@ function resolveMergeBaseDiffRef(
   }
 
   const mergeBaseResult = runGit(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
+  if (!mergeBaseResult.ok || !mergeBaseResult.stdout) {
+    return undefined;
+  }
+
+  return mergeBaseResult.stdout;
+}
+
+async function resolveMergeBaseDiffRefAsync(
+  workspaceRoot: string,
+  baseRef: string | undefined,
+): Promise<string | undefined> {
+  if (!baseRef) {
+    return undefined;
+  }
+
+  const mergeBaseResult = await runGitAsync(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
   if (!mergeBaseResult.ok || !mergeBaseResult.stdout) {
     return undefined;
   }
@@ -166,6 +325,46 @@ function countUnmergedAheadCommits(
   }
 
   const cherryResult = runGit(workspaceRoot, ["cherry", baseRef, "HEAD"]);
+  if (!cherryResult.ok) {
+    return aheadCount;
+  }
+
+  const lines = cherryResult.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return 0;
+  }
+
+  let unmergedCount = 0;
+  for (const line of lines) {
+    if (line.startsWith("+")) {
+      unmergedCount += 1;
+      continue;
+    }
+    if (line.startsWith("-")) {
+      continue;
+    }
+
+    // Unknown output format from git (open_external); fall back to graph-based ahead count.
+    return aheadCount;
+  }
+
+  return unmergedCount;
+}
+
+async function countUnmergedAheadCommitsAsync(
+  workspaceRoot: string,
+  baseRef: string,
+  aheadCount: number,
+): Promise<number> {
+  if (aheadCount <= 0) {
+    return 0;
+  }
+
+  const cherryResult = await runGitAsync(workspaceRoot, ["cherry", baseRef, "HEAD"]);
   if (!cherryResult.ok) {
     return aheadCount;
   }
@@ -278,6 +477,50 @@ function resolveMergeBaseFileChanges(args: {
   return mergeBaseFiles.slice(0, 60);
 }
 
+async function resolveMergeBaseFileChangesAsync(args: {
+  workspaceRoot: string;
+  mergeBaseDiffRef: string | undefined;
+  workspaceFiles: ReadonlyArray<{ status: string; path: string }>;
+}): Promise<Array<{ status: string; path: string }>> {
+  const fallback = args.workspaceFiles.slice(0, 60);
+  if (!args.mergeBaseDiffRef) {
+    return fallback;
+  }
+
+  const diffResult = await runGitAsync(args.workspaceRoot, [
+    "diff",
+    "--name-status",
+    "--find-renames",
+    args.mergeBaseDiffRef,
+  ]);
+  if (!diffResult.ok) {
+    return fallback;
+  }
+
+  const workspaceStatusByPath = new Map(
+    args.workspaceFiles.map((item) => [item.path, item.status]),
+  );
+  const mergeBaseFiles = diffResult.stdout
+    .split("\n")
+    .map((line) => parseNameStatusLine(line.trimEnd()))
+    .filter((item): item is { status: string; path: string } => Boolean(item))
+    .map((item) => ({
+      ...item,
+      status: workspaceStatusByPath.get(item.path) ?? item.status,
+    }));
+
+  const knownPaths = new Set(mergeBaseFiles.map((item) => item.path));
+  for (const workspaceFile of args.workspaceFiles) {
+    if (knownPaths.has(workspaceFile.path)) {
+      continue;
+    }
+    mergeBaseFiles.push(workspaceFile);
+    knownPaths.add(workspaceFile.path);
+  }
+
+  return mergeBaseFiles.slice(0, 60);
+}
+
 function safeMtime(path: string): number {
   try {
     return statSync(path).mtimeMs;
@@ -329,6 +572,42 @@ function resolveDefaultBranch(projectRoot: string): string | undefined {
   return undefined;
 }
 
+async function resolveDefaultBranchAsync(
+  projectRoot: string,
+): Promise<string | undefined> {
+  const remoteHead = await runGitAsync(projectRoot, [
+    "symbolic-ref",
+    "--quiet",
+    "refs/remotes/origin/HEAD",
+  ]);
+  if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
+    return remoteHead.stdout.slice("refs/remotes/origin/".length);
+  }
+
+  const hasMain = await runGitAsync(projectRoot, [
+    "show-ref",
+    "--verify",
+    "--quiet",
+    "refs/heads/main",
+  ]);
+  if (hasMain.ok) return "main";
+
+  const hasMaster = await runGitAsync(projectRoot, [
+    "show-ref",
+    "--verify",
+    "--quiet",
+    "refs/heads/master",
+  ]);
+  if (hasMaster.ok) return "master";
+
+  const head = await runGitAsync(projectRoot, ["symbolic-ref", "--short", "HEAD"]);
+  if (head.ok && head.stdout.length > 0) {
+    return head.stdout;
+  }
+
+  return undefined;
+}
+
 function resolveBaseRef(workspaceRoot: string, branch: string | undefined): string | undefined {
   if (!branch) return undefined;
 
@@ -345,8 +624,78 @@ function resolveBaseRef(workspaceRoot: string, branch: string | undefined): stri
   return undefined;
 }
 
+async function resolveBaseRefAsync(
+  workspaceRoot: string,
+  branch: string | undefined,
+): Promise<string | undefined> {
+  if (!branch) return undefined;
+
+  const localRef = `refs/heads/${branch}`;
+  if (
+    (
+      await runGitAsync(workspaceRoot, [
+        "show-ref",
+        "--verify",
+        "--quiet",
+        localRef,
+      ])
+    ).ok
+  ) {
+    return branch;
+  }
+
+  const remoteRef = `refs/remotes/origin/${branch}`;
+  if (
+    (
+      await runGitAsync(workspaceRoot, [
+        "show-ref",
+        "--verify",
+        "--quiet",
+        remoteRef,
+      ])
+    ).ok
+  ) {
+    return `origin/${branch}`;
+  }
+
+  return undefined;
+}
+
 function listMergeBaseBranches(projectRoot: string, defaultBranch: string | undefined): string[] {
   const localBranches = runGit(projectRoot, [
+    "for-each-ref",
+    "--format=%(refname:short)",
+    "refs/heads",
+  ]);
+  if (!localBranches.ok) {
+    return defaultBranch ? [defaultBranch] : [];
+  }
+
+  const branches = Array.from(
+    new Set(
+      localBranches.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  if (!defaultBranch) {
+    return branches;
+  }
+
+  if (!branches.includes(defaultBranch)) {
+    return [defaultBranch, ...branches];
+  }
+
+  return [defaultBranch, ...branches.filter((branch) => branch !== defaultBranch)];
+}
+
+async function listMergeBaseBranchesAsync(
+  projectRoot: string,
+  defaultBranch: string | undefined,
+): Promise<string[]> {
+  const localBranches = await runGitAsync(projectRoot, [
     "for-each-ref",
     "--format=%(refname:short)",
     "refs/heads",
@@ -394,6 +743,33 @@ function resolveMergeBaseSelection(args: {
     }
     seen.add(candidate);
     const baseRef = resolveBaseRef(args.workspaceRoot, candidate);
+    if (baseRef) {
+      return { mergeBaseBranch: candidate, baseRef };
+    }
+  }
+
+  return {};
+}
+
+async function resolveMergeBaseSelectionAsync(args: {
+  workspaceRoot: string;
+  defaultBranch: string | undefined;
+  requestedMergeBaseBranch: string | undefined;
+  mergeBaseBranches: readonly string[];
+}): Promise<{ mergeBaseBranch?: string; baseRef?: string }> {
+  const candidates = [
+    args.requestedMergeBaseBranch,
+    args.defaultBranch,
+    ...args.mergeBaseBranches,
+  ];
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    const baseRef = await resolveBaseRefAsync(args.workspaceRoot, candidate);
     if (baseRef) {
       return { mergeBaseBranch: candidate, baseRef };
     }
@@ -589,6 +965,16 @@ export class ThreadGitStatusService {
     return branch;
   }
 
+  async detectDefaultBranchAsync(projectRoot: string): Promise<string | undefined> {
+    if (this.defaultBranchCache.has(projectRoot)) {
+      return this.defaultBranchCache.get(projectRoot);
+    }
+
+    const branch = await resolveDefaultBranchAsync(projectRoot);
+    this.defaultBranchCache.set(projectRoot, branch);
+    return branch;
+  }
+
   isCleanWorkspace(repoRoot: string): boolean {
     return !hasLocalWorkingChanges(repoRoot);
   }
@@ -756,6 +1142,136 @@ export class ThreadGitStatusService {
       if (aheadBehind.ok) {
         const parsed = parseAheadBehind(aheadBehind.stdout);
         aheadCount = countUnmergedAheadCommits(args.workspaceRoot, baseRef, parsed.ahead);
+        behindCount = parsed.behind;
+      }
+    }
+
+    const hasUncommittedChanges = workspaceChangedFiles > 0;
+    const hasCommittedUnmergedChanges = aheadCount > 0;
+    const status: ThreadWorkStatus = {
+      state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
+      changedFiles: mergeBaseDiff.changedFiles,
+      insertions: mergeBaseDiff.insertions,
+      deletions: mergeBaseDiff.deletions,
+      workspaceChangedFiles,
+      workspaceInsertions,
+      workspaceDeletions,
+      hasUncommittedChanges,
+      hasCommittedUnmergedChanges,
+      aheadCount,
+      behindCount,
+      ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
+      ...(defaultBranch ? { defaultBranch } : {}),
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+      ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
+      ...(baseRef ? { baseRef } : {}),
+      ...(files.length > 0 ? { files } : {}),
+      workspaceRoot: args.workspaceRoot,
+    };
+
+    this.cache.set(args.workspaceRoot, {
+      checkedAt: now,
+      fingerprint,
+      defaultBranch,
+      mergeBaseBranch: requestedMergeBaseBranch,
+      status,
+    });
+
+    return status;
+  }
+
+  async getStatusAsync(args: {
+    workspaceRoot: string;
+    projectRoot: string;
+    defaultBranch?: string;
+    mergeBaseBranch?: string;
+  }): Promise<ThreadWorkStatus> {
+    if (!existsSync(args.workspaceRoot)) {
+      return deletedStatus(args.workspaceRoot);
+    }
+
+    const isGitRepo = await runGitAsync(args.workspaceRoot, ["rev-parse", "--is-inside-work-tree"]);
+    if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
+      return emptyStatus(args.workspaceRoot);
+    }
+
+    const requestedMergeBaseBranch = args.mergeBaseBranch?.trim() || undefined;
+    const defaultBranch = args.defaultBranch ?? await this.detectDefaultBranchAsync(args.projectRoot);
+    const fingerprint = createFingerprint(args.workspaceRoot);
+    const cached = this.cache.get(args.workspaceRoot);
+    const now = Date.now();
+    if (
+      cached &&
+      cached.fingerprint === fingerprint &&
+      cached.defaultBranch === defaultBranch &&
+      cached.mergeBaseBranch === requestedMergeBaseBranch &&
+      now - cached.checkedAt < CACHE_TTL_MS
+    ) {
+      return cached.status;
+    }
+
+    const statusResult = await runGitAsync(args.workspaceRoot, [
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+    ]);
+    const statusLines = statusResult.ok
+      ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
+      : [];
+    const workspaceFiles = statusLines
+      .map((line) => parsePorcelainLine(line))
+      .filter((item): item is { status: string; path: string } => Boolean(item))
+      .slice(0, 60);
+    const workspaceChangedFiles = statusLines.length;
+
+    const unstagedShortstat = await runGitAsync(args.workspaceRoot, ["diff", "--shortstat"]);
+    const stagedShortstat = await runGitAsync(args.workspaceRoot, ["diff", "--cached", "--shortstat"]);
+    const unstagedStat = parseShortstat(unstagedShortstat.stdout);
+    const stagedStat = parseShortstat(stagedShortstat.stdout);
+    const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
+    const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
+
+    const currentBranch = await runGitAsync(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
+    const mergeBaseBranches = await listMergeBaseBranchesAsync(args.projectRoot, defaultBranch);
+    const mergeBaseSelection = await resolveMergeBaseSelectionAsync({
+      workspaceRoot: args.workspaceRoot,
+      defaultBranch,
+      requestedMergeBaseBranch,
+      mergeBaseBranches,
+    });
+    const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
+    const baseRef = mergeBaseSelection.baseRef;
+    const mergeBaseDiffRef = await resolveMergeBaseDiffRefAsync(args.workspaceRoot, baseRef);
+    const mergeBaseBranchOptions =
+      mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
+        ? [mergeBaseBranch, ...mergeBaseBranches]
+        : mergeBaseBranches;
+    const mergeBaseDiff = await resolveMergeBaseDiffCountsAsync({
+      workspaceRoot: args.workspaceRoot,
+      mergeBaseDiffRef,
+      statusLines,
+      fallback: {
+        changedFiles: workspaceChangedFiles,
+        insertions: workspaceInsertions,
+        deletions: workspaceDeletions,
+      },
+    });
+    const files = await resolveMergeBaseFileChangesAsync({
+      workspaceRoot: args.workspaceRoot,
+      mergeBaseDiffRef,
+      workspaceFiles,
+    });
+
+    let aheadCount = 0;
+    let behindCount = 0;
+    if (baseRef) {
+      const aheadBehind = await runGitAsync(
+        args.workspaceRoot,
+        ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`],
+      );
+      if (aheadBehind.ok) {
+        const parsed = parseAheadBehind(aheadBehind.stdout);
+        aheadCount = await countUnmergedAheadCommitsAsync(args.workspaceRoot, baseRef, parsed.ahead);
         behindCount = parsed.behind;
       }
     }
