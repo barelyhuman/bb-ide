@@ -835,7 +835,11 @@ export class ThreadGitStatusService {
     if (!baseRef) {
       return { diff: "", truncated: false };
     }
-    const diffResult = runGitRaw(args.workspaceRoot, ["diff", "--binary", `${baseRef}...HEAD`]);
+    const mergeBaseDiffRef = resolveMergeBaseDiffRef(args.workspaceRoot, baseRef);
+    if (!mergeBaseDiffRef) {
+      return { diff: "", truncated: false };
+    }
+    const diffResult = runGitRaw(args.workspaceRoot, ["diff", "--binary", mergeBaseDiffRef]);
     if (!diffResult.ok) {
       throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
     }

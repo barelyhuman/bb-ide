@@ -992,23 +992,29 @@ export function ThreadDetailView() {
     }
     gitDiffFileRefs.current.delete(fileKey);
   }, []);
+  const openThreadGitDiffPanel = useCallback(() => {
+    if (isGitDiffPanelOpen) {
+      return;
+    }
+    const nextSearch = withThreadGitDiffPanelOpen(location.search, true);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+      },
+      { replace: true },
+    );
+  }, [isGitDiffPanelOpen, location.pathname, location.search, navigate]);
+  const handlePromptGitStatsBannerClick = useCallback(() => {
+    openThreadGitDiffPanel();
+  }, [openThreadGitDiffPanel]);
   const handlePromptBannerFileClick = useCallback(
     (file: { path: string }) => {
       setSelectedGitDiffCommitSha(null);
       setPendingGitDiffScrollPath(file.path);
-      if (isGitDiffPanelOpen) {
-        return;
-      }
-      const nextSearch = withThreadGitDiffPanelOpen(location.search, true);
-      navigate(
-        {
-          pathname: location.pathname,
-          search: nextSearch.length > 0 ? `?${nextSearch}` : "",
-        },
-        { replace: true },
-      );
+      openThreadGitDiffPanel();
     },
-    [isGitDiffPanelOpen, location.pathname, location.search, navigate],
+    [openThreadGitDiffPanel],
   );
 
   useEffect(() => {
@@ -1643,13 +1649,22 @@ export function ThreadDetailView() {
               onClick={scrollToBottom}
             />
             {showPromptGitStatsBanner ? (
-              <div className="mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+              <div
+                className={cn(
+                  "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
+                  !isGitDiffPanelOpen && "cursor-pointer transition-colors hover:bg-muted/55",
+                )}
+                onClick={handlePromptGitStatsBannerClick}
+              >
                 <div className="flex items-center justify-between gap-3">
                   {canExpandPromptChangeList ? (
                     <button
                       type="button"
                       className="flex min-w-0 items-center gap-2 truncate text-left"
-                      onClick={() => setIsChangeListExpanded((prev) => !prev)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setIsChangeListExpanded((prev) => !prev);
+                      }}
                     >
                       <span className="truncate">{promptBannerSummary}</span>
                       <ChevronDown
@@ -1678,6 +1693,9 @@ export function ThreadDetailView() {
                     className={`overflow-hidden transition-all duration-200 ${
                       isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
                     }`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
                   >
                     <WorkspaceChangesList
                       files={threadWorkStatus.files}
@@ -1780,7 +1798,7 @@ export function ThreadDetailView() {
   const gitDiffSelectOptions: GitDiffSelectionOption[] =
     threadGitDiff?.mode === "worktree_commits"
       ? [
-          { value: "combined", label: "All commits combined" },
+          { value: "combined", label: "All changes combined" },
           ...threadGitDiff.commits.map((commit) => ({
             value: commit.sha,
             label: `${commit.shortSha} · ${commit.subject}`,

@@ -184,6 +184,76 @@ describe("ThreadGitStatusService", () => {
     expect(status.files?.some((entry) => entry.path === "BASE_ONLY.md")).toBe(false);
   });
 
+  it("includes uncommitted worktree changes in combined diff output", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "checkout", "-b", "thread");
+    writeFileSync(join(repoRoot, "README.md"), "initial\nthread draft\n", "utf8");
+
+    const service = new ThreadGitStatusService();
+    const status = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+    const diffResult = service.getCombinedDiffSinceRef({
+      workspaceRoot: repoRoot,
+      baseRef: status.baseRef,
+    });
+
+    expect(diffResult.diff).toContain("diff --git a/README.md b/README.md");
+    expect(diffResult.diff).toContain("+thread draft");
+  });
+
+  it("combined diff excludes merge-base branch-only commits and keeps uncommitted edits", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "checkout", "-b", "thread");
+    writeFileSync(join(repoRoot, "THREAD.md"), "thread committed\n", "utf8");
+    git(repoRoot, "add", "THREAD.md");
+    git(repoRoot, "commit", "-m", "thread committed");
+
+    git(repoRoot, "checkout", "main");
+    writeFileSync(join(repoRoot, "BASE_ONLY.md"), "main only\n", "utf8");
+    git(repoRoot, "add", "BASE_ONLY.md");
+    git(repoRoot, "commit", "-m", "main change");
+
+    git(repoRoot, "checkout", "thread");
+    writeFileSync(join(repoRoot, "THREAD.md"), "thread committed\nthread uncommitted\n", "utf8");
+
+    const service = new ThreadGitStatusService();
+    const status = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+    const diffResult = service.getCombinedDiffSinceRef({
+      workspaceRoot: repoRoot,
+      baseRef: status.baseRef,
+    });
+
+    expect(diffResult.diff).toContain("THREAD.md");
+    expect(diffResult.diff).toContain("+thread committed");
+    expect(diffResult.diff).toContain("+thread uncommitted");
+    expect(diffResult.diff).not.toContain("BASE_ONLY.md");
+  });
+
   it("refuses squash merge when project root has local changes", () => {
     const repoRoot = makeTempDir();
     const threadRoot = join(makeTempDir(), "thread-worktree");
