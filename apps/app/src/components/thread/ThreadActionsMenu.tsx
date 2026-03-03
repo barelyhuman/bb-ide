@@ -66,7 +66,7 @@ export function ThreadActionsMenu({
         <DropdownMenuItem
           disabled={disabled}
           onSelect={() => {
-            // Defer prompt-driven rename so Radix can close the menu first.
+            // Defer opening the rename dialog until Radix closes the menu.
             window.setTimeout(() => {
               onRename()
             }, 0)

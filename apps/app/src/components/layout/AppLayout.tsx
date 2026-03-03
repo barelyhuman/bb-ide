@@ -35,6 +35,10 @@ import {
   useUpdateThread,
 } from "@/hooks/useApi"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
+import {
+  ThreadRenameDialog,
+  type ThreadRenameDialogTarget,
+} from "@/components/thread/ThreadRenameDialog"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
@@ -200,6 +204,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const startWidthRef = useRef(0)
   const liveWidthRef = useRef(sidebarWidth)
   const animationFrameRef = useRef<number | null>(null)
+  const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
+    null
+  )
 
   const projectMatch = location.pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
   const projectThreadMatch = location.pathname.match(
@@ -224,21 +231,28 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return
-    const currentTitle = getThreadDisplayTitle(thread)
-    const typedName = window.prompt("Enter a new thread name:", currentTitle)
-    if (typedName == null) return
-
-    const nextName = typedName.trim()
-    if (!nextName) {
-      window.alert("Thread name cannot be empty.")
-      return
-    }
-
-    updateThread.mutate({
+    setThreadRenameTarget({
       id: thread.id,
-      title: nextName,
+      currentTitle: getThreadDisplayTitle(thread),
     })
-  }, [thread, updateThread])
+  }, [thread, updateThread.isPending])
+
+  const submitThreadRename = useCallback(
+    (threadId: string, title: string) => {
+      updateThread.mutate(
+        {
+          id: threadId,
+          title,
+        },
+        {
+          onSuccess: () => {
+            setThreadRenameTarget(null)
+          },
+        }
+      )
+    },
+    [updateThread]
+  )
 
   const toggleArchiveThread = useCallback(async () => {
     if (!thread) return
@@ -434,6 +448,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </SidebarInset>
+      <ThreadRenameDialog
+        target={threadRenameTarget}
+        pending={updateThread.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setThreadRenameTarget(null)
+          }
+        }}
+        onRename={submitThreadRename}
+      />
     </SidebarProvider>
   )
 }

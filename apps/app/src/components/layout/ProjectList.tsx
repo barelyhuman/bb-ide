@@ -50,6 +50,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 import {
+  ThreadRenameDialog,
+  type ThreadRenameDialogTarget,
+} from "@/components/thread/ThreadRenameDialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -102,6 +106,9 @@ export function ProjectList({
   )
   const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
   const [openThreadActionsThreadId, setOpenThreadActionsThreadId] = useState<string | null>(null)
+  const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
+    null
+  )
 
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
@@ -228,23 +235,27 @@ export function ProjectList({
     archiveThread.mutate({ id: thread.id })
   }
 
-  const renameThread = (thread: Thread) => {
+  const requestRenameThread = (thread: Thread) => {
     if (updateThread.isPending) return
 
-    const currentTitle = getThreadDisplayTitle(thread)
-    const typedName = window.prompt("Enter a new thread name:", currentTitle)
-    if (typedName == null) return
-
-    const nextName = typedName.trim()
-    if (!nextName) {
-      window.alert("Thread name cannot be empty.")
-      return
-    }
-
-    updateThread.mutate({
+    setThreadRenameTarget({
       id: thread.id,
-      title: nextName,
+      currentTitle: getThreadDisplayTitle(thread),
     })
+  }
+
+  const submitThreadRename = (threadId: string, title: string) => {
+    updateThread.mutate(
+      {
+        id: threadId,
+        title,
+      },
+      {
+        onSuccess: () => {
+          setThreadRenameTarget(null)
+        },
+      }
+    )
   }
 
   return (
@@ -495,7 +506,7 @@ export function ProjectList({
                                       markThreadRead.mutate(thread.id)
                                     }}
                                     onRename={() => {
-                                      renameThread(thread)
+                                      requestRenameThread(thread)
                                     }}
                                     onToggleArchive={() => {
                                       if (thread.archivedAt !== undefined) {
@@ -608,6 +619,16 @@ export function ProjectList({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ThreadRenameDialog
+        target={threadRenameTarget}
+        pending={updateThread.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setThreadRenameTarget(null)
+          }
+        }}
+        onRename={submitThreadRename}
+      />
     </SidebarGroup>
   )
 }
