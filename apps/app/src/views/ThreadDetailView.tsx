@@ -1,10 +1,36 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ChevronDown, CornerDownRight, Pencil, Trash2 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
+import {
+  Check,
+  ChevronsDown,
+  ChevronsUp,
+  ChevronDown,
+  ChevronRight,
+  Columns2,
+  CornerDownRight,
+  GripVertical,
+  Loader2,
+  Pencil,
+  Rows2,
+  Trash2,
+} from "lucide-react";
+import { parsePatchFiles } from "@pierre/diffs";
+import { FileDiff } from "@pierre/diffs/react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   useThread,
   useThreadWorkStatus,
   useThreadTimeline,
+  useThreadGitDiff,
   useThreadEvents,
   useThreadToolGroupMessages,
   useTellThread,
@@ -32,11 +58,18 @@ import { ConversationWorkingIndicator } from "@/components/messages/Conversation
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
+import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
@@ -81,9 +114,153 @@ import {
   formatChangeSummary,
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
+import { isThreadGitDiffPanelOpen } from "@/lib/thread-git-diff-panel";
+import { cn } from "@/lib/utils";
 
 const SCROLL_THRESHOLD = 40;
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
+const GIT_DIFF_PANEL_MIN_SIZE_PERCENT = 24;
+const GIT_DIFF_PANEL_MAX_SIZE_PERCENT = 70;
+const GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT = 50;
+const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
+const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
+const GIT_DIFF_VIEW_BASE_OPTIONS = {
+  overflow: "scroll",
+  diffStyle: "unified",
+  disableFileHeader: false,
+} as const;
+const GIT_DIFF_VIEW_STYLE = {
+  "--diffs-font-size": "12px",
+  "--diffs-line-height": "18px",
+} as CSSProperties;
+
+function parseGitDiffFiles(diff: string): ReturnType<typeof parsePatchFiles>[number]["files"] {
+  if (diff.trim().length === 0) return [];
+  try {
+    return parsePatchFiles(diff).flatMap((patch) => patch.files);
+  } catch {
+    return [];
+  }
+}
+
+type ParsedGitDiffFile = ReturnType<typeof parsePatchFiles>[number]["files"][number];
+
+interface GitDiffStats {
+  files: number;
+  additions: number;
+  deletions: number;
+}
+
+function summarizeGitDiff(files: ParsedGitDiffFile[], diff: string): GitDiffStats {
+  if (files.length > 0) {
+    let additions = 0;
+    let deletions = 0;
+    for (const file of files) {
+      for (const hunk of file.hunks) {
+        additions += hunk.additionCount;
+        deletions += hunk.deletionCount;
+      }
+    }
+    return { files: files.length, additions, deletions };
+  }
+
+  let additions = 0;
+  let deletions = 0;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++ ")) continue;
+    if (line.startsWith("--- ")) continue;
+    if (line.startsWith("+")) {
+      additions += 1;
+      continue;
+    }
+    if (line.startsWith("-")) {
+      deletions += 1;
+    }
+  }
+  return {
+    files: additions > 0 || deletions > 0 ? 1 : 0,
+    additions,
+    deletions,
+  };
+}
+
+function summarizeGitDiffFile(file: ParsedGitDiffFile): Pick<GitDiffStats, "additions" | "deletions"> {
+  let additions = 0;
+  let deletions = 0;
+  for (const hunk of file.hunks) {
+    additions += hunk.additionCount;
+    deletions += hunk.deletionCount;
+  }
+  return { additions, deletions };
+}
+
+function formatGitDiffFileLabel(file: ParsedGitDiffFile): string {
+  if (file.prevName && file.prevName !== file.name) {
+    return `${file.prevName} → ${file.name}`;
+  }
+  return file.name;
+}
+
+function getParsedGitDiffFileKey(file: ParsedGitDiffFile, index: number): string {
+  return `${file.name}:${file.prevName ?? ""}:${index}`;
+}
+
+interface GitDiffSelectionOption {
+  value: string;
+  label: string;
+}
+
+function GitDiffSelector({
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  options: readonly GitDiffSelectionOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const selectedOption = options.find((option) => option.value === value);
+  const selectedLabel = selectedOption?.label ?? value;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={disabled}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          className={cn(
+            "h-8 w-full min-w-0 justify-between gap-2 px-2 text-xs font-normal",
+            disabled && "opacity-60",
+          )}
+        >
+          <span className="truncate">{selectedLabel}</span>
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[var(--radix-dropdown-menu-trigger-width)]"
+      >
+        {options.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            onSelect={() => onChange(option.value)}
+            className="flex items-center justify-between gap-2"
+          >
+            <span className="truncate" title={option.label}>
+              {option.label}
+            </span>
+            <Check className={cn("size-3.5", option.value === value ? "opacity-100" : "opacity-0")} />
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function getFileNameFromPath(path: string): string {
   const trimmedPath = path.trim();
@@ -418,8 +595,16 @@ export function ThreadDetailView() {
     projectId: string;
     threadId: string;
   }>();
+  const location = useLocation();
+  const isGitDiffPanelOpen = useMemo(
+    () => isThreadGitDiffPanelOpen(location.search),
+    [location.search],
+  );
   const [selectedMergeBaseBranch, setSelectedMergeBaseBranch] = useState<string | undefined>(
     undefined,
+  );
+  const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<string | null>(
+    null,
   );
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
   const { data: threadWorkStatus } = useThreadWorkStatus(
@@ -460,6 +645,17 @@ export function ThreadDetailView() {
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<string | null>(
     null,
   );
+  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"unified" | "split">(
+    "unified",
+  );
+  const [isGitDiffPanelResizing, setIsGitDiffPanelResizing] = useState(false);
+  const [collapsedGitDiffFileKeys, setCollapsedGitDiffFileKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [loadingGitDiffFileKeys, setLoadingGitDiffFileKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const gitDiffFileRenderTimersRef = useRef<Map<string, number>>(new Map());
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const message = promptDraft.text;
   const promptInput = useMemo(
@@ -490,6 +686,15 @@ export function ThreadDetailView() {
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
     initialEnvironmentId: thread?.environmentId,
   });
+  const preferredTheme = usePreferredTheme();
+  const gitDiffViewOptions = useMemo(
+    () => ({
+      ...GIT_DIFF_VIEW_BASE_OPTIONS,
+      diffStyle: gitDiffDisplayMode,
+      themeType: preferredTheme,
+    }),
+    [gitDiffDisplayMode, preferredTheme],
+  );
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = useMemo(
@@ -508,6 +713,34 @@ export function ThreadDetailView() {
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
+  const gitDiffSelection = useMemo(
+    () =>
+      selectedGitDiffCommitSha
+        ? { type: "commit" as const, sha: selectedGitDiffCommitSha }
+        : { type: "combined" as const },
+    [selectedGitDiffCommitSha],
+  );
+  const {
+    data: threadGitDiff,
+    isLoading: isGitDiffLoading,
+    error: gitDiffError,
+  } = useThreadGitDiff(threadId ?? "", {
+    enabled: Boolean(threadId) && isGitDiffPanelOpen,
+    selection: gitDiffSelection,
+    mergeBaseBranch: selectedMergeBaseBranch,
+  });
+  const parsedGitDiffFiles = useMemo(
+    () => parseGitDiffFiles(threadGitDiff?.diff ?? ""),
+    [threadGitDiff?.diff],
+  );
+  const parsedGitDiffFileEntries = useMemo(
+    () =>
+      parsedGitDiffFiles.map((fileDiff, index) => ({
+        key: getParsedGitDiffFileKey(fileDiff, index),
+        fileDiff,
+      })),
+    [parsedGitDiffFiles],
+  );
 
   useEffect(() => {
     setLoadingToolGroupIds(new Set());
@@ -518,6 +751,19 @@ export function ThreadDetailView() {
   useEffect(() => {
     setSelectedMergeBaseBranch(undefined);
   }, [threadId]);
+
+  useEffect(() => {
+    setSelectedGitDiffCommitSha(null);
+  }, [threadId]);
+
+  useEffect(() => {
+    for (const timerId of gitDiffFileRenderTimersRef.current.values()) {
+      window.clearTimeout(timerId);
+    }
+    gitDiffFileRenderTimersRef.current.clear();
+    setCollapsedGitDiffFileKeys(new Set());
+    setLoadingGitDiffFileKeys(new Set());
+  }, [threadId, threadGitDiff?.diff]);
 
   useEffect(() => {
     if (!threadWorkStatus) return;
@@ -535,6 +781,32 @@ export function ThreadDetailView() {
     }
     setSelectedMergeBaseBranch(fallbackBranch);
   }, [selectedMergeBaseBranch, threadWorkStatus]);
+
+  useEffect(() => {
+    if (!threadGitDiff) return;
+    if (threadGitDiff.mode !== "worktree_commits") {
+      if (selectedGitDiffCommitSha !== null) {
+        setSelectedGitDiffCommitSha(null);
+      }
+      return;
+    }
+    if (
+      selectedGitDiffCommitSha &&
+      !threadGitDiff.commits.some((commit) => commit.sha === selectedGitDiffCommitSha)
+    ) {
+      setSelectedGitDiffCommitSha(null);
+    }
+  }, [selectedGitDiffCommitSha, threadGitDiff]);
+
+  useEffect(
+    () => () => {
+      for (const timerId of gitDiffFileRenderTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
+      gitDiffFileRenderTimersRef.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!thread) return;
@@ -585,6 +857,80 @@ export function ThreadDetailView() {
       toolGroupMessagesById,
     ],
   );
+
+  const scheduleGitDiffFileRender = useCallback((fileKeys: readonly string[]) => {
+    if (fileKeys.length === 0) return;
+
+    setLoadingGitDiffFileKeys((currentKeys) => {
+      const nextKeys = new Set(currentKeys);
+      for (const key of fileKeys) {
+        nextKeys.add(key);
+      }
+      return nextKeys;
+    });
+
+    for (const key of fileKeys) {
+      const existingTimer = gitDiffFileRenderTimersRef.current.get(key);
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer);
+      }
+      const timerId = window.setTimeout(() => {
+        setLoadingGitDiffFileKeys((currentKeys) => {
+          if (!currentKeys.has(key)) return currentKeys;
+          const nextKeys = new Set(currentKeys);
+          nextKeys.delete(key);
+          return nextKeys;
+        });
+        gitDiffFileRenderTimersRef.current.delete(key);
+      }, GIT_DIFF_FILE_RENDER_SPINNER_MS);
+      gitDiffFileRenderTimersRef.current.set(key, timerId);
+    }
+  }, []);
+
+  const toggleGitDiffFileCollapsed = useCallback((fileKey: string) => {
+    const isExpandingFile = collapsedGitDiffFileKeys.has(fileKey);
+    setCollapsedGitDiffFileKeys((currentKeys) => {
+      const nextKeys = new Set(currentKeys);
+      if (isExpandingFile) {
+        nextKeys.delete(fileKey);
+      } else {
+        nextKeys.add(fileKey);
+      }
+      return nextKeys;
+    });
+    if (isExpandingFile) {
+      scheduleGitDiffFileRender([fileKey]);
+      return;
+    }
+    const existingTimer = gitDiffFileRenderTimersRef.current.get(fileKey);
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer);
+      gitDiffFileRenderTimersRef.current.delete(fileKey);
+    }
+    setLoadingGitDiffFileKeys((currentKeys) => {
+      if (!currentKeys.has(fileKey)) return currentKeys;
+      const nextKeys = new Set(currentKeys);
+      nextKeys.delete(fileKey);
+      return nextKeys;
+    });
+  }, [collapsedGitDiffFileKeys, scheduleGitDiffFileRender]);
+
+  const toggleAllGitDiffFilesCollapsed = useCallback(() => {
+    if (parsedGitDiffFileEntries.length === 0) return;
+    const allFileKeys = parsedGitDiffFileEntries.map(({ key }) => key);
+    const areAllCollapsed = allFileKeys.every((key) => collapsedGitDiffFileKeys.has(key));
+    if (areAllCollapsed) {
+      setCollapsedGitDiffFileKeys(new Set());
+      scheduleGitDiffFileRender(allFileKeys);
+      return;
+    }
+    for (const timerId of gitDiffFileRenderTimersRef.current.values()) {
+      window.clearTimeout(timerId);
+    }
+    gitDiffFileRenderTimersRef.current.clear();
+    setCollapsedGitDiffFileKeys(new Set(allFileKeys));
+    setLoadingGitDiffFileKeys(new Set());
+  }, [collapsedGitDiffFileKeys, parsedGitDiffFileEntries, scheduleGitDiffFileRender]);
 
   const { containerRef, handleScroll: baseHandleScroll } = useAutoScroll(
     threadDetailRows,
@@ -1144,10 +1490,11 @@ export function ThreadDetailView() {
     </>
   );
 
-  return (
+  const conversationShell = (
     <PageShell
       scrollRef={containerRef}
       onScroll={handleScroll}
+      shellClassName={isGitDiffPanelOpen ? "!mx-0 !mt-0 md:!mx-0 md:!mt-0" : undefined}
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
@@ -1280,5 +1627,237 @@ export function ThreadDetailView() {
     >
       {conversationMain}
     </PageShell>
+  );
+
+  if (!isGitDiffPanelOpen) {
+    return conversationShell;
+  }
+
+  const selectedDiffCommitSha =
+    threadGitDiff?.selection.type === "commit"
+      ? threadGitDiff.selection.sha
+      : null;
+  const gitDiffSelectValue = selectedDiffCommitSha ?? "combined";
+  const gitDiffSelectOptions: GitDiffSelectionOption[] =
+    threadGitDiff?.mode === "worktree_commits"
+      ? [
+          { value: "combined", label: "All commits combined" },
+          ...threadGitDiff.commits.map((commit) => ({
+            value: commit.sha,
+            label: `${commit.shortSha} · ${commit.subject}`,
+          })),
+        ]
+      : [{
+          value: "combined",
+          label: "Uncommitted changes",
+        }];
+  const gitDiffStats = summarizeGitDiff(parsedGitDiffFiles, threadGitDiff?.diff ?? "");
+  const gitDiffStatsLabel =
+    gitDiffStats.files === 0 && gitDiffStats.additions === 0 && gitDiffStats.deletions === 0
+      ? "No changes"
+      : `${gitDiffStats.files} ${gitDiffStats.files === 1 ? "file" : "files"} · +${gitDiffStats.additions} -${gitDiffStats.deletions}`;
+  const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
+  const areAllGitDiffFilesCollapsed =
+    hasParsedGitDiffFiles &&
+    parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));
+
+  return (
+    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
+      <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
+        <Panel
+          defaultSize={TIMELINE_PANEL_DEFAULT_SIZE_PERCENT}
+          minSize={100 - GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
+          className="min-w-0 overflow-hidden"
+        >
+          {conversationShell}
+        </Panel>
+        <PanelResizeHandle
+          onDragging={setIsGitDiffPanelResizing}
+          className={cn(
+            "group relative w-3 shrink-0 cursor-col-resize bg-transparent transition-colors",
+            isGitDiffPanelResizing && "bg-accent/25",
+          )}
+          aria-label="Resize thread and git diff panels"
+        >
+          <span
+            className={cn(
+              "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors",
+              isGitDiffPanelResizing ? "bg-accent-foreground/55" : "group-hover:bg-accent-foreground/40",
+            )}
+          />
+          <span
+            className={cn(
+              "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
+              isGitDiffPanelResizing ? "opacity-100" : "group-hover:opacity-100",
+            )}
+          >
+            <GripVertical className="size-3 text-muted-foreground" />
+          </span>
+        </PanelResizeHandle>
+        <Panel
+          defaultSize={GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT}
+          minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
+          maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
+          className="min-w-0 bg-background"
+        >
+          <aside className="flex min-h-0 h-full min-w-0 flex-1 flex-col">
+            <div className="border-b border-border/70 px-3 py-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <div className="min-w-0 max-w-[48%] flex-1">
+                  <GitDiffSelector
+                    value={gitDiffSelectValue}
+                    options={gitDiffSelectOptions}
+                    onChange={(value) => {
+                      setSelectedGitDiffCommitSha(value === "combined" ? null : value);
+                    }}
+                    disabled={isGitDiffLoading || threadGitDiff === undefined}
+                  />
+                </div>
+                <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
+                  <span
+                    className="max-w-[110px] truncate whitespace-nowrap text-xs text-muted-foreground"
+                    title={gitDiffStatsLabel}
+                  >
+                    {gitDiffStatsLabel}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-muted-foreground"
+                    onClick={toggleAllGitDiffFilesCollapsed}
+                    disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
+                    aria-label={areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"}
+                    title={areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"}
+                  >
+                    {areAllGitDiffFilesCollapsed ? (
+                      <ChevronsDown className="size-3.5" />
+                    ) : (
+                      <ChevronsUp className="size-3.5" />
+                    )}
+                  </Button>
+                  <div className="inline-flex items-center rounded-md border border-border/70 p-0.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "h-6 w-6 p-0",
+                        gitDiffDisplayMode === "unified" ? "bg-accent text-foreground" : "text-muted-foreground",
+                      )}
+                      onClick={() => setGitDiffDisplayMode("unified")}
+                      aria-label="Stacked diff view"
+                      title="Stacked diff view"
+                    >
+                      <Rows2 className="size-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "h-6 w-6 p-0",
+                        gitDiffDisplayMode === "split" ? "bg-accent text-foreground" : "text-muted-foreground",
+                      )}
+                      onClick={() => setGitDiffDisplayMode("split")}
+                      aria-label="Split diff view"
+                      title="Split diff view"
+                    >
+                      <Columns2 className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-2 pt-0">
+              {isGitDiffLoading ? (
+                <p className="py-2 text-xs text-muted-foreground">
+                  Loading git diff...
+                </p>
+              ) : gitDiffError ? (
+                <p className="py-2 text-xs text-destructive">
+                  {gitDiffError instanceof Error
+                    ? gitDiffError.message
+                    : "Failed to load git diff"}
+                </p>
+              ) : threadGitDiff && threadGitDiff.diff.trim().length > 0 ? (
+                <>
+                  {parsedGitDiffFileEntries.length > 0 ? (
+                    <div className="space-y-2 pt-2">
+                      {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
+                        const isCollapsed = collapsedGitDiffFileKeys.has(key);
+                        const isRendering = loadingGitDiffFileKeys.has(key);
+                        const fileDiffStats = summarizeGitDiffFile(fileDiff);
+                        return (
+                          <div
+                            key={key}
+                            className="rounded-md border border-border/70 bg-muted/35"
+                          >
+                            <div className="sticky top-0 z-20 border-b border-border/60 bg-background px-2.5 py-1 text-xs font-medium text-foreground">
+                              <button
+                                type="button"
+                                className="flex w-full min-w-0 items-center justify-between gap-2 text-left"
+                                onClick={() => toggleGitDiffFileCollapsed(key)}
+                                aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${formatGitDiffFileLabel(fileDiff)}`}
+                                aria-expanded={!isCollapsed}
+                              >
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <ChevronRight
+                                    className={cn(
+                                      "size-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+                                      !isCollapsed && "rotate-90",
+                                    )}
+                                  />
+                                  <span className="block min-w-0 truncate" title={formatGitDiffFileLabel(fileDiff)}>
+                                    {formatGitDiffFileLabel(fileDiff)}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                                  +{fileDiffStats.additions} -{fileDiffStats.deletions}
+                                </span>
+                              </button>
+                            </div>
+                            {!isCollapsed ? (
+                              isRendering ? (
+                                <div className="flex items-center gap-1.5 px-2.5 py-2 text-xs text-muted-foreground">
+                                  <Loader2 className="size-3.5 animate-spin" />
+                                  Rendering diff…
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto">
+                                  <div className="w-full max-w-full" style={GIT_DIFF_VIEW_STYLE}>
+                                    <FileDiff
+                                      fileDiff={fileDiff}
+                                      options={{ ...gitDiffViewOptions, disableFileHeader: true }}
+                                    />
+                                  </div>
+                                </div>
+                              )
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <pre className="overflow-auto whitespace-pre rounded-md border border-border/70 bg-muted/35 p-2 font-mono text-xs text-foreground">
+                      {threadGitDiff.diff}
+                    </pre>
+                  )}
+                  {threadGitDiff.truncated ? (
+                    <p className="pt-2 text-xs text-muted-foreground">
+                      Diff output was truncated for display.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="py-2 text-xs text-muted-foreground">
+                  No diff to display.
+                </p>
+              )}
+            </div>
+          </aside>
+        </Panel>
+      </PanelGroup>
+    </div>
   );
 }

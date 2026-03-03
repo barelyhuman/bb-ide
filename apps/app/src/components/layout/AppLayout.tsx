@@ -5,6 +5,7 @@ import {
   Archive,
   ChevronRight,
   MoreHorizontal,
+  PanelRight,
   PencilLine,
   Settings,
   X,
@@ -40,6 +41,11 @@ import {
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
+import { cn } from "@/lib/utils"
+import {
+  isThreadGitDiffPanelOpen,
+  withThreadGitDiffPanelOpen,
+} from "@/lib/thread-git-diff-panel"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -295,7 +301,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
     })
   }, [archiveThread, navigate, thread, threadWorkStatusLookup, unarchiveThread])
 
-  const threadTitleActions = threadMatch && thread ? (
+  const gitDiffPanelOpen = threadMatch
+    ? isThreadGitDiffPanelOpen(location.search)
+    : false
+
+  const toggleGitDiffPanel = useCallback(() => {
+    if (!threadMatch) return
+    const nextSearch = withThreadGitDiffPanelOpen(location.search, !gitDiffPanelOpen)
+    navigate({
+      pathname: location.pathname,
+      search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+    }, { replace: true })
+  }, [gitDiffPanelOpen, location.pathname, location.search, navigate, threadMatch])
+
+  const threadActionsMenu = thread ? (
     <ThreadActionsMenu
       triggerClassName="h-7 w-7 text-muted-foreground"
       disabled={
@@ -320,6 +339,26 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }}
       isArchived={thread.archivedAt !== undefined}
     />
+  ) : null
+
+  const threadTitleActions = threadMatch ? (
+    <div className="flex items-center gap-1">
+      {threadActionsMenu}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-7 w-7 text-muted-foreground",
+          gitDiffPanelOpen && "bg-accent/60 text-foreground hover:bg-accent/70"
+        )}
+        aria-label={gitDiffPanelOpen ? "Hide git diff panel" : "Show git diff panel"}
+        title={gitDiffPanelOpen ? "Hide git diff panel" : "Show git diff panel"}
+        onClick={toggleGitDiffPanel}
+      >
+        <PanelRight className="size-4" />
+      </Button>
+    </div>
   ) : null
 
   const meta = threadMatch

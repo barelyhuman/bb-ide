@@ -16,6 +16,8 @@ import type {
   SystemProviderInfo,
   TellThreadRequest,
   ThreadExecutionOptions,
+  ThreadGitDiffResponse,
+  ThreadGitDiffSelection,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,
@@ -223,6 +225,11 @@ export interface ThreadOrchestrator {
     threadId: string,
     request: ThreadToolGroupMessagesRequest,
   ): ThreadToolGroupMessagesResponse;
+  getGitDiff(
+    threadId: string,
+    selection?: ThreadGitDiffSelection,
+    mergeBaseBranch?: string,
+  ): ThreadGitDiffResponse;
   getOutput(threadId: string): string | undefined;
   getDefaultExecutionOptions(
     threadId: string,

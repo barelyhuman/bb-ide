@@ -30,6 +30,8 @@ import type {
   CommitProjectResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
+  ThreadGitDiffSelection,
+  ThreadGitDiffResponse,
   OpenPathTarget,
   SystemRestartPolicy,
   SystemRestartAcceptedResponse,
@@ -548,6 +550,28 @@ export async function getThreadToolGroupMessages(
   return request<ThreadToolGroupMessagesResponse>(
     "GET",
     `/threads/${id}/tool-group-messages?${params.toString()}`,
+  );
+}
+
+export async function getThreadGitDiff(
+  id: string,
+  selection?: ThreadGitDiffSelection,
+  mergeBaseBranch?: string,
+): Promise<ThreadGitDiffResponse> {
+  const params = new URLSearchParams();
+  if (selection?.type === "commit") {
+    params.set("selection", "commit");
+    params.set("commitSha", selection.sha);
+  } else if (selection?.type === "combined") {
+    params.set("selection", "combined");
+  }
+  if (mergeBaseBranch) {
+    params.set("mergeBaseBranch", mergeBaseBranch);
+  }
+  const qs = params.toString();
+  return request<ThreadGitDiffResponse>(
+    "GET",
+    `/threads/${id}/git-diff${qs ? `?${qs}` : ""}`,
   );
 }
 

@@ -97,6 +97,32 @@ export interface ThreadTimelineResponse {
   rows: ThreadDetailRow[];
 }
 
+export interface ThreadGitDiffCommitSummary {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  authorName?: string;
+  authoredAt?: number;
+}
+
+export type ThreadGitDiffSelection =
+  | { type: "combined" }
+  | { type: "commit"; sha: string };
+
+export type ThreadGitDiffMode = "local_uncommitted" | "worktree_commits";
+
+export interface ThreadGitDiffResponse {
+  mode: ThreadGitDiffMode;
+  workspaceRoot: string;
+  currentBranch?: string;
+  mergeBaseBranch?: string;
+  mergeBaseRef?: string;
+  commits: ThreadGitDiffCommitSummary[];
+  selection: ThreadGitDiffSelection;
+  diff: string;
+  truncated: boolean;
+}
+
 // Project endpoints
 export interface CreateProjectRequest {
   name: string;

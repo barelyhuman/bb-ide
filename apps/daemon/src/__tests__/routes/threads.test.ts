@@ -55,6 +55,7 @@ function mockThreadManager(): ThreadManager {
     list: vi.fn(),
     getTimeline: vi.fn(),
     getToolGroupMessages: vi.fn(),
+    getGitDiff: vi.fn(),
     getEvents: vi.fn(),
     getOutput: vi.fn(),
     isActive: vi.fn(),
@@ -1006,6 +1007,40 @@ describe("Thread routes", () => {
         sourceSeqStart: 3,
         sourceSeqEnd: 8,
       });
+    });
+  });
+
+  describe("GET /threads/:id/git-diff", () => {
+    it("returns git diff payload for combined selection", async () => {
+      const thread = makeThread({ status: "idle" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getGitDiff as ReturnType<typeof vi.fn>).mockReturnValue({
+        mode: "local_uncommitted",
+        workspaceRoot: "/tmp/workspace",
+        commits: [],
+        selection: { type: "combined" },
+        diff: "diff --git a/file b/file",
+        truncated: false,
+      });
+
+      const res = await app.request("/threads/thread-1/git-diff");
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getGitDiff).toHaveBeenCalledWith(
+        "thread-1",
+        { type: "combined" },
+        undefined,
+      );
+    });
+
+    it("returns 400 when commit selection is missing commitSha", async () => {
+      const thread = makeThread({ status: "idle" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const res = await app.request("/threads/thread-1/git-diff?selection=commit");
+
+      expect(res.status).toBe(400);
+      expect(threadManager.getGitDiff).not.toHaveBeenCalled();
     });
   });
 

@@ -9,6 +9,7 @@ import {
   tellThreadSchema,
   updateThreadSchema,
   type PromptInput,
+  type ThreadGitDiffSelection,
   type ThreadOrchestrator,
 } from "@beanbag/agent-core";
 import { z } from "zod";
@@ -66,6 +67,12 @@ const toolGroupMessagesQuerySchema = z.object({
     .string()
     .transform((value) => Number.parseInt(value, 10))
     .pipe(z.number().int().positive()),
+});
+
+const gitDiffQuerySchema = z.object({
+  selection: z.enum(["combined", "commit"]).optional(),
+  commitSha: z.string().trim().min(1).optional(),
+  mergeBaseBranch: z.string().trim().min(1).optional(),
 });
 
 const archiveThreadBodySchema = z.object({
@@ -437,6 +444,41 @@ export function createThreadRoutes(
             },
           );
           return c.json(messages);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .get(
+      "/:id/git-diff",
+      zValidator("query", gitDiffQuerySchema),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const query = c.req.valid("query");
+          const selectionType =
+            query.selection ??
+            (query.commitSha ? "commit" : "combined");
+          let selection: ThreadGitDiffSelection;
+          if (selectionType === "commit") {
+            if (!query.commitSha) {
+              throw invalidRequestError(
+                "commitSha is required when selection=commit",
+              );
+            }
+            selection = { type: "commit", sha: query.commitSha };
+          } else {
+            selection = { type: "combined" };
+          }
+          const result = threadManager.getGitDiff(
+            c.req.param("id"),
+            selection,
+            query.mergeBaseBranch,
+          );
+          return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);
         }

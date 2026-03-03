@@ -12,7 +12,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import type { CommitThreadResponse, ThreadWorkStatus } from "@beanbag/agent-core";
+import type {
+  CommitThreadResponse,
+  ThreadGitDiffCommitSummary,
+  ThreadWorkStatus,
+} from "@beanbag/agent-core";
 
 type CacheEntry = {
   checkedAt: number;
@@ -23,6 +27,8 @@ type CacheEntry = {
 };
 
 const CACHE_TTL_MS = 1_500;
+const MAX_DIFF_RESPONSE_CHARS = 220_000;
+const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
 
 export interface GitCheckoutSnapshot {
   branch?: string;
@@ -33,6 +39,11 @@ export interface GitCheckoutSnapshot {
 export interface PromoteWorktreeResult {
   previousCheckout: GitCheckoutSnapshot;
   promotedCheckout: GitCheckoutSnapshot;
+}
+
+export interface GitDiffResult {
+  diff: string;
+  truncated: boolean;
 }
 
 function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
@@ -429,6 +440,39 @@ function parseNulSeparatedList(value: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
+function trimDiffForResponse(diff: string): GitDiffResult {
+  if (diff.length <= MAX_DIFF_RESPONSE_CHARS) {
+    return { diff, truncated: false };
+  }
+  return {
+    diff: `${diff.slice(0, MAX_DIFF_RESPONSE_CHARS)}\n\n... diff truncated ...\n`,
+    truncated: true,
+  };
+}
+
+function parseCommitSummaries(raw: string): ThreadGitDiffCommitSummary[] {
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [sha, shortSha, authoredAtRaw, authorName, ...subjectParts] =
+        line.split(COMMIT_SUMMARY_FIELD_SEPARATOR);
+      if (!sha || !shortSha) return null;
+      const subject = subjectParts.join(COMMIT_SUMMARY_FIELD_SEPARATOR).trim();
+      const authoredAt = Number.parseInt(authoredAtRaw ?? "", 10);
+      return {
+        sha,
+        shortSha,
+        subject: subject.length > 0 ? subject : "(no subject)",
+        ...(authorName ? { authorName } : {}),
+        ...(Number.isFinite(authoredAt) ? { authoredAt } : {}),
+      } satisfies ThreadGitDiffCommitSummary;
+    })
+    .filter((entry): entry is ThreadGitDiffCommitSummary => entry !== null);
+}
+
 function copyFileSystemEntry(sourcePath: string, targetPath: string): void {
   const stat = lstatSync(sourcePath);
   if (stat.isDirectory()) {
@@ -727,6 +771,74 @@ export class ThreadGitStatusService {
     });
 
     return status;
+  }
+
+  getWorkingTreeDiff(workspaceRoot: string): GitDiffResult {
+    const diffResult = runGitRaw(workspaceRoot, ["diff", "--binary", "HEAD"]);
+    if (diffResult.ok) {
+      return trimDiffForResponse(diffResult.stdout);
+    }
+    const fallbackDiffResult = runGitRaw(workspaceRoot, ["diff", "--binary"]);
+    if (!fallbackDiffResult.ok) {
+      throw new Error(
+        fallbackDiffResult.stderr || diffResult.stderr || "Failed to compute working tree diff",
+      );
+    }
+    return trimDiffForResponse(fallbackDiffResult.stdout);
+  }
+
+  listCommitsSinceRef(args: {
+    workspaceRoot: string;
+    baseRef?: string;
+  }): ThreadGitDiffCommitSummary[] {
+    const baseRef = args.baseRef?.trim();
+    if (!baseRef) return [];
+    const logResult = runGit(args.workspaceRoot, [
+      "log",
+      "--reverse",
+      "--max-count=120",
+      `--format=%H${COMMIT_SUMMARY_FIELD_SEPARATOR}%h${COMMIT_SUMMARY_FIELD_SEPARATOR}%ct${COMMIT_SUMMARY_FIELD_SEPARATOR}%an${COMMIT_SUMMARY_FIELD_SEPARATOR}%s`,
+      `${baseRef}..HEAD`,
+    ]);
+    if (!logResult.ok || !logResult.stdout) {
+      return [];
+    }
+    return parseCommitSummaries(logResult.stdout);
+  }
+
+  getCombinedDiffSinceRef(args: {
+    workspaceRoot: string;
+    baseRef?: string;
+  }): GitDiffResult {
+    const baseRef = args.baseRef?.trim();
+    if (!baseRef) {
+      return { diff: "", truncated: false };
+    }
+    const diffResult = runGitRaw(args.workspaceRoot, ["diff", "--binary", `${baseRef}...HEAD`]);
+    if (!diffResult.ok) {
+      throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
+    }
+    return trimDiffForResponse(diffResult.stdout);
+  }
+
+  getCommitDiff(args: {
+    workspaceRoot: string;
+    commitSha: string;
+  }): GitDiffResult {
+    const commitSha = args.commitSha.trim();
+    if (commitSha.length === 0) {
+      throw new Error("Commit SHA is required");
+    }
+    const showResult = runGitRaw(args.workspaceRoot, [
+      "show",
+      "--binary",
+      "--format=",
+      commitSha,
+    ]);
+    if (!showResult.ok) {
+      throw new Error(showResult.stderr || "Failed to compute commit diff");
+    }
+    return trimDiffForResponse(showResult.stdout);
   }
 
   commit(args: {

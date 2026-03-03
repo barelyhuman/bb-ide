@@ -55,6 +55,8 @@ import {
   type SendQueuedThreadMessageRequest,
   type SendQueuedThreadMessageResponse,
   type ThreadTimelineResponse,
+  type ThreadGitDiffResponse,
+  type ThreadGitDiffSelection,
   type ThreadQueuedMessage,
   type ThreadToolGroupMessagesRequest,
   type ThreadToolGroupMessagesResponse,
@@ -1197,6 +1199,72 @@ export class ThreadManager implements ThreadOrchestrator {
       .filter((entry) => entry.kind !== "assistant-text");
     return {
       messages,
+    };
+  }
+
+  getGitDiff(
+    threadId: string,
+    selection: ThreadGitDiffSelection = { type: "combined" },
+    mergeBaseBranch?: string,
+  ): ThreadGitDiffResponse {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (thread.environmentId === "worktree") {
+      const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+      const status = this.gitStatusService.getStatus({
+        workspaceRoot,
+        projectRoot: project.rootPath,
+        defaultBranch,
+        mergeBaseBranch,
+      });
+      const commits = this.gitStatusService.listCommitsSinceRef({
+        workspaceRoot,
+        baseRef: status.baseRef,
+      });
+      const hasSelectedCommit =
+        selection.type === "commit" &&
+        commits.some((commit) => commit.sha === selection.sha);
+      const normalizedSelection: ThreadGitDiffSelection = hasSelectedCommit
+        ? selection
+        : { type: "combined" };
+      const diffResult =
+        normalizedSelection.type === "commit"
+          ? this.gitStatusService.getCommitDiff({
+              workspaceRoot,
+              commitSha: normalizedSelection.sha,
+            })
+          : this.gitStatusService.getCombinedDiffSinceRef({
+              workspaceRoot,
+              baseRef: status.baseRef,
+            });
+      return {
+        mode: "worktree_commits",
+        workspaceRoot,
+        commits,
+        selection: normalizedSelection,
+        diff: diffResult.diff,
+        truncated: diffResult.truncated,
+        ...(status.currentBranch ? { currentBranch: status.currentBranch } : {}),
+        ...(status.mergeBaseBranch ? { mergeBaseBranch: status.mergeBaseBranch } : {}),
+        ...(status.baseRef ? { mergeBaseRef: status.baseRef } : {}),
+      };
+    }
+
+    const diffResult = this.gitStatusService.getWorkingTreeDiff(workspaceRoot);
+    return {
+      mode: "local_uncommitted",
+      workspaceRoot,
+      commits: [],
+      selection: { type: "combined" },
+      diff: diffResult.diff,
+      truncated: diffResult.truncated,
     };
   }
 

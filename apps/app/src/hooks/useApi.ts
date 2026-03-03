@@ -36,6 +36,8 @@ import type {
   DemotePrimaryResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
+  ThreadGitDiffSelection,
+  ThreadGitDiffResponse,
   ThreadQueuedMessage,
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
@@ -225,6 +227,33 @@ export function useThreadToolGroupMessages() {
       sourceSeqEnd: number;
     }): Promise<ThreadToolGroupMessagesResponse> =>
       api.getThreadToolGroupMessages(id, turnId, sourceSeqStart, sourceSeqEnd),
+  });
+}
+
+export function useThreadGitDiff(
+  id: string,
+  options?: {
+    enabled?: boolean;
+    selection?: ThreadGitDiffSelection;
+    mergeBaseBranch?: string;
+  },
+) {
+  const selectionKey =
+    options?.selection?.type === "commit"
+      ? options.selection.sha
+      : "combined";
+  return useQuery<ThreadGitDiffResponse>({
+    queryKey: [
+      "threadGitDiff",
+      id,
+      options?.selection?.type ?? "combined",
+      selectionKey,
+      options?.mergeBaseBranch ?? null,
+    ],
+    queryFn: () => api.getThreadGitDiff(id, options?.selection, options?.mergeBaseBranch),
+    enabled: (options?.enabled ?? true) && !!id,
+    refetchOnWindowFocus: false,
+    staleTime: 5_000,
   });
 }
 
