@@ -9,7 +9,7 @@ Establish a safe default workflow where agent iteration happens in per-thread wo
 - `packages/agent-core`
   - Add typed contracts/events for promotion status and timeline rendering
 - `packages/agent-server`
-  - Worktree environment lifecycle integration with optional setup hook (`.bb-env-setup.ts`)
+  - Worktree environment lifecycle integration with optional setup hook (`.bb-env-setup.sh`)
   - Environment adapter support for adding/customizing agent instructions
 - `apps/daemon`
   - Promotion/demotion orchestration for the primary checkout
@@ -42,7 +42,7 @@ Out of scope for this phase:
 2. **Extend environment adapter capabilities**
    - Add an adapter-level hook to contribute guidance/instructions to the agent runtime.
    - Implement worktree adapter guidance that explicitly tells agents to commit work regularly to avoid loss and follow the guided promote/test/squash workflow.
-   - Add optional `.bb-env-setup.ts` execution during environment preparation:
+   - Add optional `.bb-env-setup.sh` execution during environment preparation:
      - non-interactive, idempotent execution contract
      - hard timeout of 10 minutes
      - clear success/failure logging and surfaced error detail
@@ -96,7 +96,7 @@ Out of scope for this phase:
   - Promotion applies full worktree state, including uncommitted and untracked files.
   - Promotion + demotion roundtrip restores prior branch/commit.
   - Demotion resets/cleans primary checkout and restores the pre-promotion branch/commit snapshot.
-  - Optional `.bb-env-setup.ts` hook timeout/failure/idempotency behavior (10-minute timeout).
+  - Optional `.bb-env-setup.sh` hook timeout/failure/idempotency behavior (10-minute timeout).
   - Boot-time reconstruction rebuilds active promotion status from git state.
   - Promotion/demotion system events appear in thread timeline rendering.
 - UI checks:

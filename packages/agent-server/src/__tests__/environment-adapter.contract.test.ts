@@ -204,20 +204,19 @@ describe("environment adapter contract", () => {
     expect(session.metadata?.fallbackReason).toBe("worktree-add-failed");
   });
 
-  it("runs optional .bb-env-setup.ts and emits provisioning events", () => {
+  it("runs optional .bb-env-setup.sh and emits provisioning events", () => {
     const projectRoot = makeTempDir("bb-env-contract-env-setup-");
     initGitRepo(projectRoot);
 
     writeFileSync(
-      join(projectRoot, ".bb-env-setup.ts"),
+      join(projectRoot, ".bb-env-setup.sh"),
       [
-        'import { appendFileSync } from "node:fs";',
-        'import { join } from "node:path";',
-        'appendFileSync(join(process.cwd(), "env-setup.log"), `${process.env.BB_THREAD_ID}|${process.env.BB_WORKSPACE_MODE}\\n`, "utf-8");',
+        '#!/usr/bin/env sh',
+        'printf "%s|%s\\n" "$BB_THREAD_ID" "$BB_WORKSPACE_MODE" >> env-setup.log',
       ].join("\n"),
       "utf-8",
     );
-    git(projectRoot, "add", ".bb-env-setup.ts");
+    git(projectRoot, "add", ".bb-env-setup.sh");
     git(projectRoot, "commit", "-m", "add env setup hook");
 
     const events: EnvironmentProvisioningEvent[] = [];
@@ -242,29 +241,29 @@ describe("environment adapter contract", () => {
       expect.objectContaining({
         type: "env-setup",
         status: "started",
-        scriptPath: ".bb-env-setup.ts",
+        scriptPath: ".bb-env-setup.sh",
       }),
     );
     expect(events[1]).toEqual(
       expect.objectContaining({
         type: "env-setup",
         status: "completed",
-        scriptPath: ".bb-env-setup.ts",
+        scriptPath: ".bb-env-setup.sh",
       }),
     );
     session.cleanup?.();
   });
 
-  it("surfaces .bb-env-setup.ts failures and emits a failed event", () => {
+  it("surfaces .bb-env-setup.sh failures and emits a failed event", () => {
     const projectRoot = makeTempDir("bb-env-contract-env-setup-failed-");
     initGitRepo(projectRoot);
 
     writeFileSync(
-      join(projectRoot, ".bb-env-setup.ts"),
-      'throw new Error("setup failed for test");\n',
+      join(projectRoot, ".bb-env-setup.sh"),
+      '#!/usr/bin/env sh\necho "setup failed for test" >&2\nexit 1\n',
       "utf-8",
     );
-    git(projectRoot, "add", ".bb-env-setup.ts");
+    git(projectRoot, "add", ".bb-env-setup.sh");
     git(projectRoot, "commit", "-m", "add failing env setup hook");
 
     const events: EnvironmentProvisioningEvent[] = [];
@@ -281,19 +280,19 @@ describe("environment adapter contract", () => {
             events.push(event);
           },
         }),
-      )).toThrow(".bb-env-setup.ts failed");
+      )).toThrow(".bb-env-setup.sh failed");
     expect(events[0]).toEqual(
       expect.objectContaining({
         type: "env-setup",
         status: "started",
-        scriptPath: ".bb-env-setup.ts",
+        scriptPath: ".bb-env-setup.sh",
       }),
     );
     expect(events[1]).toEqual(
       expect.objectContaining({
         type: "env-setup",
         status: "failed",
-        scriptPath: ".bb-env-setup.ts",
+        scriptPath: ".bb-env-setup.sh",
       }),
     );
   });

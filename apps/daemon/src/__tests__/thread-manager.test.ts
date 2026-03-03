@@ -754,13 +754,13 @@ describe("ThreadManager", () => {
           context.onProvisioningEvent?.({
             type: "env-setup",
             status: "started",
-            scriptPath: ".bb-env-setup.ts",
+            scriptPath: ".bb-env-setup.sh",
             timeoutMs: 600000,
           });
           context.onProvisioningEvent?.({
             type: "env-setup",
             status: "completed",
-            scriptPath: ".bb-env-setup.ts",
+            scriptPath: ".bb-env-setup.sh",
             timeoutMs: 600000,
             durationMs: 42,
           });
@@ -811,7 +811,7 @@ describe("ThreadManager", () => {
           type: "system/provisioning/env_setup",
           data: expect.objectContaining({
             status: "started",
-            scriptPath: ".bb-env-setup.ts",
+            scriptPath: ".bb-env-setup.sh",
             timeoutMs: 600000,
           }),
         }),
@@ -822,7 +822,7 @@ describe("ThreadManager", () => {
           type: "system/provisioning/env_setup",
           data: expect.objectContaining({
             status: "completed",
-            scriptPath: ".bb-env-setup.ts",
+            scriptPath: ".bb-env-setup.sh",
             durationMs: 42,
           }),
         }),

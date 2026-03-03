@@ -1215,7 +1215,7 @@ describe("toUIMessages replay coverage", () => {
         type: "system/provisioning/env_setup",
         data: {
           status: "started",
-          scriptPath: ".bb-env-setup.ts",
+          scriptPath: ".bb-env-setup.sh",
           timeoutMs: 600000,
         },
         createdAt: 1,
@@ -1227,7 +1227,7 @@ describe("toUIMessages replay coverage", () => {
         type: "system/provisioning/env_setup",
         data: {
           status: "completed",
-          scriptPath: ".bb-env-setup.ts",
+          scriptPath: ".bb-env-setup.sh",
           durationMs: 125,
         },
         createdAt: 2,
@@ -1243,7 +1243,7 @@ describe("toUIMessages replay coverage", () => {
     expect(ops).toHaveLength(2);
     expect(ops[0]?.opType).toBe("provisioning-env-setup");
     expect(ops[0]?.title).toBe("Environment setup started");
-    expect(ops[0]?.detail).toContain(".bb-env-setup.ts");
+    expect(ops[0]?.detail).toContain(".bb-env-setup.sh");
     expect(ops[1]?.opType).toBe("provisioning-env-setup");
     expect(ops[1]?.title).toBe("Environment setup completed");
     expect(ops[1]?.detail).toContain("Duration 125ms");

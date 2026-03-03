@@ -34,7 +34,7 @@ const WORKTREE_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   },
 };
 
-const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.ts";
+const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
 const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 const WORKTREE_GUIDED_WORKFLOW_INSTRUCTIONS =
   [
@@ -196,15 +196,6 @@ function truncateDetail(message: string, maxLength = 400): string {
   return `${normalized.slice(0, maxLength - 1)}…`;
 }
 
-function resolveTsxRunnerPath(workspaceRoot: string): string | undefined {
-  const candidates = [
-    resolve(workspaceRoot, "node_modules", ".bin", "tsx"),
-    resolve(import.meta.dirname, "..", "node_modules", ".bin", "tsx"),
-    resolve(import.meta.dirname, "..", "..", "..", "node_modules", ".bin", "tsx"),
-  ];
-  return candidates.find((candidate) => existsSync(candidate));
-}
-
 function runOptionalEnvSetupHook(context: EnvironmentPrepareContext, workspaceRoot: string): void {
   const scriptPath = resolve(workspaceRoot, ENV_SETUP_SCRIPT_NAME);
   if (!existsSync(scriptPath)) return;
@@ -217,11 +208,8 @@ function runOptionalEnvSetupHook(context: EnvironmentPrepareContext, workspaceRo
     timeoutMs: ENV_SETUP_TIMEOUT_MS,
   });
 
-  const tsxRunner = resolveTsxRunnerPath(workspaceRoot);
-  const command = tsxRunner ?? "pnpm";
-  const args = tsxRunner
-    ? [scriptPath]
-    : ["exec", "tsx", scriptPath];
+  const command = "sh";
+  const args = [scriptPath];
 
   const result = spawnSync(command, args, {
     cwd: workspaceRoot,
