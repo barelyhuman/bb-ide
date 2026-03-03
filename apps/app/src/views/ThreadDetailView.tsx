@@ -73,6 +73,7 @@ import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
+import { OpenPathButton } from "@/components/shared/OpenPathButton";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import {
   ConversationEmptyState,
@@ -1869,22 +1870,16 @@ export function ThreadDetailView() {
                 valueClassName="min-w-0"
                 align="center"
               >
-                <button
-                  type="button"
-                  className="w-full truncate text-left text-xs underline underline-offset-2"
+                <OpenPathButton
+                  path={threadWorkStatus.workspaceRoot}
+                  target="directory"
                   title={threadWorkStatus.workspaceRoot}
-                  onClick={() => {
-                    void openPathInEditor(threadWorkStatus.workspaceRoot!, {
-                      target: "directory",
-                      command: getPathCommandForTarget("directory"),
-                    });
-                  }}
                 >
                   {threadWorkStatus.workspaceRoot}
                   {threadWorkStatus.currentBranch
                     ? ` (${threadWorkStatus.currentBranch})`
                     : ""}
-                </button>
+                </OpenPathButton>
               </DetailRow>
             ) : null}
             {thread.archivedAt !== undefined ? (

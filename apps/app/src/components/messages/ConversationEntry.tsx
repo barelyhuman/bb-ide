@@ -29,6 +29,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
+import { OpenPathButton } from "@/components/shared/OpenPathButton";
+import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
 import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
@@ -42,6 +44,7 @@ import {
 } from "@/components/messages/CollapsibleHeader";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { ansiToHtml } from "@/lib/ansi";
+import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 import { ConversationMarkdown } from "./ConversationMarkdown";
 
 interface ConversationEntryProps {
@@ -1087,6 +1090,34 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
   };
 }
 
+function normalizeProvisioningEnvironmentLabel(environment: string | undefined): string | undefined {
+  const value = environment?.trim();
+  if (!value) return undefined;
+
+  const normalized = value.toLowerCase();
+  if (normalized.includes("worktree")) return "worktree";
+  if (normalized.includes("local")) return "local";
+
+  // Environment labels in provisioning events are open_external; keep unknown values as-is.
+  return value;
+}
+
+function provisioningSetupTimedOut(setupAttempt: ProvisioningSetupAttempt | undefined): boolean {
+  if (!setupAttempt?.timeout) return false;
+  return setupAttempt.outputLines.some((line) => /\btimed out\b/i.test(line));
+}
+
+function resolveProvisioningSetupScriptPath(
+  setupAttempt: ProvisioningSetupAttempt | undefined,
+): string | undefined {
+  const scriptPath = setupAttempt?.scriptPath?.trim();
+  if (!scriptPath) return undefined;
+  if (isWorkspaceRootToken(scriptPath)) return scriptPath;
+  const workspaceRoot = setupAttempt?.workspaceRoot?.trim();
+  if (!workspaceRoot) return undefined;
+  return resolveWorkspaceAbsolutePath(workspaceRoot, scriptPath);
+}
+
 function formatDurationLabel(durationMs: number): string {
   if (durationMs < 1_000) return `${durationMs}ms`;
   const seconds = durationMs / 1_000;
@@ -1179,24 +1210,30 @@ function OperationRow({
     const actionLabel = isCompleted ? "Provisioned" : "Provisioning";
     const setupAttempt = parsedDetails?.setupAttempt;
     const setupStatus = getProvisioningSetupStatus(setupAttempt, isCompleted);
+    const setupTimedOut = provisioningSetupTimedOut(setupAttempt);
     const outputText = setupAttempt?.outputLines.join("\n").trim();
     const additionalDetailsText = parsedDetails?.additionalLines.join("\n").trim();
+    const setupScriptPath = resolveProvisioningSetupScriptPath(setupAttempt);
+    const setupScriptLabel = setupScriptPath ?? setupAttempt?.scriptPath;
     const setupTimeLabel = setupAttempt
       ? setupAttempt.durationMs !== undefined
-        ? `${formatDurationLabel(setupAttempt.durationMs)} (${setupAttempt.durationMs}ms)${
-          setupAttempt.timeout ? ` / timeout ${setupAttempt.timeout}` : ""
+        ? `${formatDurationLabel(setupAttempt.durationMs)}${
+          setupTimedOut && setupAttempt.timeout ? ` / timeout ${setupAttempt.timeout}` : ""
         }`
-        : setupAttempt.timeout
-          ? `Timeout ${setupAttempt.timeout}`
+        : setupTimedOut && setupAttempt.timeout
+          ? `timeout ${setupAttempt.timeout}`
           : undefined
       : undefined;
-    const environmentValue = parsedDetails?.environment || environmentLabel || undefined;
-    const setupStatusClassName =
+    const environmentValue = normalizeProvisioningEnvironmentLabel(
+      parsedDetails?.environment || environmentLabel || undefined,
+    );
+    const setupStatusVariant: StatusPillVariant =
       setupStatus === "Failed"
-        ? "border-transparent bg-destructive text-destructive-foreground shadow"
-        : setupStatus === "Completed"
-          ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700 shadow-none dark:text-emerald-300"
-          : "border-border/80 bg-background/70 text-muted-foreground shadow-none";
+        ? "destructive"
+        : "outline";
+    const setupStatusClassName = setupStatus === "Completed"
+      ? "border-transparent bg-foreground text-background"
+      : undefined;
     const collapsedSummaryContent =
       actionLabel === "Provisioned" && environmentLabel ? (
         <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -1235,22 +1272,34 @@ function OperationRow({
               <DetailCard className="mt-0.5 border-border/60 bg-background/50">
                 {environmentValue ? (
                   <DetailRow label="Environment">
-                    <span className="font-mono ui-text-sm text-foreground/90">{environmentValue}</span>
+                    <span>{environmentValue}</span>
                   </DetailRow>
                 ) : null}
-                {setupAttempt?.scriptPath ? (
+                {setupScriptLabel ? (
                   <DetailRow label="Setup script">
-                    <span className="font-mono ui-text-sm text-foreground/90">{setupAttempt.scriptPath}</span>
+                    {setupScriptPath ? (
+                      <OpenPathButton
+                        path={setupScriptPath}
+                        target="file"
+                        title={setupScriptLabel}
+                      >
+                        {setupScriptLabel}
+                      </OpenPathButton>
+                    ) : (
+                      <span
+                        className="block truncate text-xs text-muted-foreground/90"
+                        title={setupScriptLabel}
+                      >
+                        {setupScriptLabel}
+                      </span>
+                    )}
                   </DetailRow>
                 ) : null}
                 {setupStatus ? (
                   <DetailRow label="Setup status">
-                    <Badge
-                      variant="outline"
-                      className={`h-5 rounded px-1.5 font-mono ui-text-2xs ${setupStatusClassName}`}
-                    >
+                    <StatusPill variant={setupStatusVariant} className={setupStatusClassName}>
                       {setupStatus}
-                    </Badge>
+                    </StatusPill>
                   </DetailRow>
                 ) : null}
                 {setupTimeLabel ? (
@@ -1260,12 +1309,13 @@ function OperationRow({
                 ) : null}
                 {setupAttempt?.workspaceRoot ? (
                   <DetailRow label="Workspace">
-                    <span
-                      className="block truncate font-mono ui-text-sm text-muted-foreground/90"
+                    <OpenPathButton
+                      path={setupAttempt.workspaceRoot}
+                      target="directory"
                       title={setupAttempt.workspaceRoot}
                     >
                       {setupAttempt.workspaceRoot}
-                    </span>
+                    </OpenPathButton>
                   </DetailRow>
                 ) : null}
                 {outputText ? (

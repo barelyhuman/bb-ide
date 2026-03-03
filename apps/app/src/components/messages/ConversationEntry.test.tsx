@@ -579,16 +579,37 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment");
-    expect(html).toContain("Git Worktree Workspace");
+    expect(html).toContain(">worktree<");
+    expect(html).not.toContain("Git Worktree Workspace");
     expect(html).toContain("Setup script");
-    expect(html).toContain(".bb-env-setup.sh");
+    expect(html).toContain("/tmp/worktree/.bb-env-setup.sh");
     expect(html).toContain("Setup status");
     expect(html).toContain("Failed");
     expect(html).toContain("Setup time");
-    expect(html).toContain("5988ms");
+    expect(html).toContain("5.99s");
+    expect(html).not.toContain("timeout 600s");
+    expect(html).not.toContain("5988ms");
     expect(html).toContain("Output");
     expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
     expect(html).not.toContain(".bb-env-setup.sh • /tmp/worktree • Timeout 600s");
+  });
+
+  it("shows timeout in setup time when setup timed out", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioning Git Worktree Workspace...",
+      detail:
+        "Environment: Git Worktree Workspace\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 600000ms • .bb-env-setup.sh timed out after 10 minutes",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Setup time");
+    expect(html).toContain("10m 0s");
+    expect(html).toContain("timeout 600s");
   });
 
   it("renders completed primary-checkout operation titles with a subtler tone", () => {
