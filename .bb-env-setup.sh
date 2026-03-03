@@ -2,3 +2,4 @@
 set -eu
 
 pnpm i
+pnpm build
