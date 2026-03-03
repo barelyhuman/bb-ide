@@ -532,7 +532,13 @@ export function ProjectList({
                           )
                         })}
                       </div>
-                    ) : null
+                    ) : (
+                      <div className="group-data-[collapsible=icon]:hidden">
+                        <p className="py-0.5 pl-8 pr-2 text-xs leading-4 text-sidebar-foreground/60">
+                          No threads
+                        </p>
+                      </div>
+                    )
                   ) : null}
                 </SidebarMenuItem>
               )
