@@ -45,6 +45,7 @@ export const tellThreadSchema = z.object({
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .optional(),
   mode: z.enum(["auto", "start", "steer"]).optional(),
+  demotePrimaryIfNeeded: z.boolean().optional(),
 });
 
 export const enqueueThreadMessageSchema = z.object({

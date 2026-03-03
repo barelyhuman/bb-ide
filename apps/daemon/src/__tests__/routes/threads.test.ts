@@ -456,6 +456,66 @@ describe("Thread routes", () => {
       );
     });
 
+    it("demotes active primary checkout before telling when requested", async () => {
+      const thread = makeThread({
+        status: "idle",
+        primaryCheckout: { isActive: true, promotedAt: 123 },
+      });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        demoted: true,
+        message: "Primary checkout demoted",
+        primaryStatus: { projectId: "proj-1" },
+      });
+
+      const res = await app.request("/threads/thread-1/tell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "Do more stuff" }],
+          demotePrimaryIfNeeded: true,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.demotePrimaryCheckout).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.tell).toHaveBeenCalledWith(
+        "thread-1",
+        { input: [{ type: "text", text: "Do more stuff" }] },
+      );
+      const demoteCallOrder = (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>)
+        .mock.invocationCallOrder[0];
+      const tellCallOrder = (threadManager.tell as ReturnType<typeof vi.fn>)
+        .mock.invocationCallOrder[0];
+      expect(demoteCallOrder).toBeLessThan(tellCallOrder);
+    });
+
+    it("does not demote when tell mode is steer", async () => {
+      const thread = makeThread({
+        status: "active",
+        primaryCheckout: { isActive: true, promotedAt: 123 },
+      });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const res = await app.request("/threads/thread-1/tell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "Do more stuff" }],
+          mode: "steer",
+          demotePrimaryIfNeeded: true,
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.demotePrimaryCheckout).not.toHaveBeenCalled();
+      expect(threadManager.tell).toHaveBeenCalledWith(
+        "thread-1",
+        { input: [{ type: "text", text: "Do more stuff" }], mode: "steer" },
+      );
+    });
+
     it("returns 404 when thread not found", async () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         undefined,

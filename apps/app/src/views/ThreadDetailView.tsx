@@ -1462,14 +1462,16 @@ export function ThreadDetailView() {
       sandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
     }) => {
       if (!threadId || input.length === 0) return;
-      if (mode !== "steer" && isThreadPrimaryCheckoutActive) {
-        await demotePrimaryCheckout.mutateAsync({ id: threadId });
-      }
+      const shouldDemotePrimaryIfNeeded =
+        mode !== "steer" && isThreadPrimaryCheckoutActive;
       scrollToBottom();
       await tellThread.mutateAsync({
         id: threadId,
         input,
         ...(mode ? { mode } : {}),
+        ...(shouldDemotePrimaryIfNeeded
+          ? { demotePrimaryIfNeeded: true }
+          : {}),
         ...(mode === "steer"
           ? {}
           : {
@@ -1480,7 +1482,6 @@ export function ThreadDetailView() {
       });
     },
     [
-      demotePrimaryCheckout,
       isThreadPrimaryCheckoutActive,
       scrollToBottom,
       tellThread,

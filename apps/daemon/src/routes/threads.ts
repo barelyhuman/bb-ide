@@ -207,11 +207,25 @@ export function createThreadRoutes(
       zValidator("json", tellThreadSchema),
       async (c) => {
         try {
-          const { input, model, reasoningLevel, sandboxMode, mode } = c.req.valid("json");
+          const {
+            input,
+            model,
+            reasoningLevel,
+            sandboxMode,
+            mode,
+            demotePrimaryIfNeeded,
+          } = c.req.valid("json");
           validatePromptInputAttachments(input);
           const thread = threadManager.getById(c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          if (
+            demotePrimaryIfNeeded === true &&
+            mode !== "steer" &&
+            thread.primaryCheckout?.isActive === true
+          ) {
+            await threadManager.demotePrimaryCheckout(c.req.param("id"));
           }
           const tellRequest = mode ? { input, mode } : { input };
           const options =

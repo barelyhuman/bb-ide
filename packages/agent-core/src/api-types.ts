@@ -52,6 +52,7 @@ export interface TellThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   mode?: TellThreadMode;
+  demotePrimaryIfNeeded?: boolean;
 }
 
 export interface EnqueueThreadMessageRequest {
