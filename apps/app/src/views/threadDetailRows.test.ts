@@ -350,7 +350,22 @@ describe("buildThreadDetailRows", () => {
         detail: "Environment: Local Workspace",
       },
       {
-        ...baseMessage("provisioning-completed-1", 2),
+        ...baseMessage("provisioning-env-setup-1", 2),
+        kind: "operation",
+        opType: "provisioning-env-setup",
+        title: "Environment setup started",
+        detail: ".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s",
+      },
+      {
+        ...baseMessage("provisioning-env-setup-2", 3),
+        kind: "operation",
+        opType: "provisioning-env-setup",
+        title: "Environment setup completed",
+        detail:
+          ".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s • Duration 3074ms",
+      },
+      {
+        ...baseMessage("provisioning-completed-1", 4),
         kind: "operation",
         opType: "provisioning-completed",
         title: "Provisioning ready",
@@ -367,6 +382,10 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.opType).toBe("provisioning");
     expect(rows[0].message.title).toBe("Provisioned Local Workspace");
     expect(rows[0].message.detail).toContain("Environment: Local Workspace");
+    expect(rows[0].message.detail).toContain(".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s");
+    expect(rows[0].message.detail).toContain(
+      ".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s • Duration 3074ms",
+    );
     expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
   });
 

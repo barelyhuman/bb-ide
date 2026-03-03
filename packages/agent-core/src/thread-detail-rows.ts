@@ -47,6 +47,7 @@ function isProvisioningOperation(
   // opType is open/external; unknown values are intentionally ignored.
   return (
     message.opType === "provisioning-started" ||
+    message.opType === "provisioning-env-setup" ||
     message.opType === "provisioning-fallback" ||
     message.opType === "provisioning-completed" ||
     message.opType === "provisioning-cleanup-failed"
@@ -90,6 +91,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
     const uniqueDetailLines = [...new Set(details)];
     const environment =
       active
+        .filter((message) => message.opType !== "provisioning-env-setup")
         .map((message) => parseProvisioningEnvironment(message.detail))
         .find((value): value is string => Boolean(value)) ?? "environment";
 
