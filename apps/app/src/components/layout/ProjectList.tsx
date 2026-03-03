@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { assertNever, type Thread } from "@beanbag/agent-core"
 import {
-  Archive,
   AlertTriangle,
   ChevronRight,
   Folder,
@@ -61,6 +60,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { StatusPill } from "@/components/shared/StatusPill"
 
 interface ProjectListProps {
   onNewProject: () => void
@@ -454,36 +454,36 @@ export function ProjectList({
                               <span className="min-w-0 flex-1 truncate">
                                 {getThreadDisplayTitle(thread)}
                               </span>
-                              <span className="relative h-7 w-14 shrink-0">
-                                <span
-                                  className={cn(
-                                    "absolute inset-0 flex items-center justify-end transition-opacity",
-                                    isThreadActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0"
-                                  )}
-                                >
+                              <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
+                                {thread.primaryCheckout?.isActive ? (
+                                  <StatusPill
+                                    variant="outline"
+                                    className="border-transparent bg-foreground text-background"
+                                  >
+                                    active
+                                  </StatusPill>
+                                ) : null}
+                                <span className="relative h-7 w-7 shrink-0">
                                   {thread.environmentId === "worktree" ? (
-                                    <span className="relative inline-flex h-7 w-7 items-center justify-center">
+                                    <span
+                                      className={cn(
+                                        "absolute inset-0 flex items-center justify-center transition-opacity",
+                                        isThreadActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0"
+                                      )}
+                                    >
                                       <FolderGit2
                                         className="size-4 text-sidebar-foreground/70"
                                         aria-label="Worktree thread"
                                       />
-                                      {thread.primaryCheckout?.isActive ? (
-                                        <span
-                                          className="absolute -bottom-0.5 -right-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-sidebar-background bg-foreground"
-                                          aria-label="Primary checkout active"
-                                          title="Active in primary checkout"
-                                        />
-                                      ) : null}
                                     </span>
                                   ) : null}
-                                </span>
-                                <div
-                                  className={cn(
-                                    "absolute inset-0 flex items-center justify-end transition-opacity",
-                                    isThreadActionsOpen
-                                      ? "pointer-events-auto opacity-100"
-                                      : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
-                                  )}
+                                  <div
+                                    className={cn(
+                                      "absolute inset-0 flex items-center justify-end transition-opacity",
+                                      isThreadActionsOpen
+                                        ? "pointer-events-auto opacity-100"
+                                        : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
+                                    )}
                                 >
                                   <ThreadActionsMenu
                                     triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
@@ -517,27 +517,8 @@ export function ProjectList({
                                     }}
                                     isArchived={thread.archivedAt !== undefined}
                                   />
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
-                                    title="Archive thread"
-                                    aria-label="Archive thread"
-                                    disabled={
-                                      archiveThread.isPending ||
-                                      unarchiveThread.isPending ||
-                                      updateThread.isPending ||
-                                      markThreadRead.isPending ||
-                                      markThreadUnread.isPending
-                                    }
-                                    onClick={(event) => {
-                                      event.preventDefault()
-                                      event.stopPropagation()
-                                      void requestArchiveThread(thread)
-                                    }}
-                                  >
-                                    <Archive className="size-4" />
-                                  </button>
-                                </div>
+                                  </div>
+                                </span>
                               </span>
                             </NavLink>
                           )
