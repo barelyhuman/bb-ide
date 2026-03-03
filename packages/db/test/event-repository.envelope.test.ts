@@ -155,4 +155,46 @@ describe("event repository provider envelope indexing", () => {
       "item/agentMessage/delta",
     ]);
   });
+
+  it("prunes legacy codex noise types that are not needed for timeline rendering", () => {
+    events.create({
+      threadId,
+      seq: 1,
+      type: "codex/event/turn_diff",
+      data: { diff: "old diff payload" },
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "codex/event/agent_reasoning",
+      data: { text: "old reasoning chunk" },
+    });
+    events.create({
+      threadId,
+      seq: 3,
+      type: "codex/event/user_message",
+      data: { message: "keep user message for legacy rendering" },
+    });
+    events.create({
+      threadId,
+      seq: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          text: "final response",
+        },
+      },
+    });
+
+    const removed = events.pruneHistoricalNoiseByThread(threadId, 2);
+    expect(removed).toBe(2);
+
+    const remaining = events.listByThread(threadId);
+    expect(remaining.map((event) => event.seq)).toEqual([3, 4]);
+    expect(remaining.map((event) => event.type)).toEqual([
+      "codex/event/user_message",
+      "item/completed",
+    ]);
+  });
 });

@@ -166,6 +166,17 @@ const PRUNABLE_NOISE_EVENT_TYPES: readonly string[] = [
   "item/reasoning/summarypartadded",
   "turn/diff/updated",
   "codex/event/token_count",
+  "codex/event/agent_reasoning",
+  "codex/event/agent_reasoning_section_break",
+  "codex/event/context_compacted",
+  "codex/event/mcp_startup_complete",
+  "codex/event/patch_apply_begin",
+  "codex/event/patch_apply_end",
+  "codex/event/plan_update",
+  "codex/event/task_complete",
+  "codex/event/task_started",
+  "codex/event/terminal_interaction",
+  "codex/event/turn_diff",
 ];
 
 function checkoutSnapshotsMatch(
