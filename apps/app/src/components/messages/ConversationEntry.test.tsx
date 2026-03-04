@@ -294,6 +294,45 @@ describe("ConversationEntry", () => {
     expect(html).toContain("2 lists");
   });
 
+  it("caps expanded exploring details in a scroll container", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-exploring",
+      status: "pending",
+      calls: [
+        {
+          callId: "call-read-1",
+          command: "cat src/a.ts",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat src/a.ts",
+              name: "src/a.ts",
+              path: "/repo/src/a.ts",
+            },
+          ],
+          status: "completed",
+        },
+        {
+          callId: "call-read-2",
+          command: "cat src/b.ts",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat src/b.ts",
+              name: "src/b.ts",
+              path: "/repo/src/b.ts",
+            },
+          ],
+          status: "completed",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("max-h-[220px] space-y-0.5 overflow-auto");
+  });
+
   it("renders web-search rows with pending/completed labels", () => {
     const pending: UIMessage = {
       ...baseMessage(),

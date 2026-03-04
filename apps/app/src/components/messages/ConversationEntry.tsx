@@ -651,6 +651,7 @@ function ToolExploringRow({
   preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const detailRef = useRef<HTMLDivElement | null>(null);
   const detailLines = useMemo(
     () => buildExploringDetailLines(message.calls),
     [message.calls],
@@ -675,6 +676,13 @@ function ToolExploringRow({
         </span>
       </span>
     );
+
+  useEffect(() => {
+    if (!isExpanded || message.status !== "pending") return;
+    const detailElement = detailRef.current;
+    if (!detailElement) return;
+    detailElement.scrollTop = detailElement.scrollHeight;
+  }, [detailLines, isExpanded, message.status]);
 
   if (!hasDetails) {
     return (
@@ -702,7 +710,7 @@ function ToolExploringRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div className="mt-0.5 space-y-0.5">
+          <div ref={detailRef} className="mt-0.5 max-h-[220px] space-y-0.5 overflow-auto">
             {detailLines.map((line, index) => (
               <div
                 key={`${message.id}:${index}`}
