@@ -46,8 +46,9 @@ next-env.d.ts
 data/
 output.txt
 
-# claude code
+# codex, claude code
 .claude/settings.local.json
+.codex
 
 # turborepo
 .turbo
