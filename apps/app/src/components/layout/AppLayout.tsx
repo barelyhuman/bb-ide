@@ -71,7 +71,11 @@ interface AppHeaderProps {
   isProjectMainView: boolean
   projectMatch: RegExpMatchArray | null
   projectName?: string
-  meta: { title: string; subtitle?: string; breadcrumbs?: string[] }
+  meta: {
+    title: string
+    subtitle?: string
+    breadcrumbs?: Array<{ label: string; to?: string }>
+  }
   titleEndSlot?: ReactNode
 }
 
@@ -91,7 +95,7 @@ function AppHeader({
       ? (projectName ?? projectMatch[1])
       : undefined
   const headerBreadcrumbs = collapsedProjectLabel
-    ? ["Projects", collapsedProjectLabel]
+    ? [{ label: "Projects" }, { label: collapsedProjectLabel }]
     : (showProjectNameInHeader ? meta.breadcrumbs : undefined)
   const headerTitle =
     headerBreadcrumbs ? undefined : (showProjectNameInHeader ? meta.title : undefined)
@@ -112,19 +116,28 @@ function AppHeader({
                 {headerBreadcrumbs.map((segment, index) => {
                   const isLast = index === headerBreadcrumbs.length - 1
                   return (
-                    <Fragment key={`${segment}-${index}`}>
+                    <Fragment key={`${segment.label}-${index}`}>
                       {index > 0 ? (
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" />
                       ) : null}
-                      <span
-                        className={
-                          isLast
-                            ? "min-w-0 truncate"
-                            : "shrink-0 text-muted-foreground"
-                        }
-                      >
-                        {segment}
-                      </span>
+                      {!isLast && segment.to ? (
+                        <Link
+                          to={segment.to}
+                          className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          {segment.label}
+                        </Link>
+                      ) : (
+                        <span
+                          className={
+                            isLast
+                              ? "min-w-0 truncate"
+                              : "shrink-0 text-muted-foreground"
+                          }
+                        >
+                          {segment.label}
+                        </span>
+                      )}
                     </Fragment>
                   )
                 })}
@@ -399,13 +412,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
       ? {
           title: "",
           subtitle: undefined,
-          breadcrumbs: ["Projects", projectLabel ?? projectSettingsMatch[1], "Settings"],
+          breadcrumbs: [
+            { label: "Projects" },
+            {
+              label: projectLabel ?? projectSettingsMatch[1],
+              to: `/projects/${projectSettingsMatch[1]}`,
+            },
+            { label: "Settings" },
+          ],
         }
     : projectArchivedMatch
       ? {
           title: "",
           subtitle: undefined,
-          breadcrumbs: ["Projects", projectLabel ?? projectArchivedMatch[1], "Archived"],
+          breadcrumbs: [
+            { label: "Projects" },
+            {
+              label: projectLabel ?? projectArchivedMatch[1],
+              to: `/projects/${projectArchivedMatch[1]}`,
+            },
+            { label: "Archived" },
+          ],
         }
     : projectMatch
       ? {
