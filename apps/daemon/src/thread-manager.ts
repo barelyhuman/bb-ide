@@ -1570,6 +1570,8 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!thread || thread.archivedAt === undefined) return;
     this.threadRepo.update(threadId, {
       archivedAt: null,
+    }, {
+      touchUpdatedAt: false,
     });
     this._broadcastThreadChanged(threadId, ["archived-changed"]);
     this._scheduleQueuedFollowUpDispatch(threadId);

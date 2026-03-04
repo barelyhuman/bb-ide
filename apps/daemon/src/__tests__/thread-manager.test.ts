@@ -3239,6 +3239,8 @@ describe("ThreadManager", () => {
 
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         archivedAt: null,
+      }, {
+        touchUpdatedAt: false,
       });
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
         "archived-changed",
