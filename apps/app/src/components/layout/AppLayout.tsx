@@ -45,7 +45,6 @@ import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { cn } from "@/lib/utils"
 import {
   formatThreadActivitySummaryForTitle,
-  getThreadStatusLabelForTitle,
   summarizeThreadActivity,
 } from "@/lib/thread-activity"
 import {
@@ -274,8 +273,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     () => formatThreadActivitySummaryForTitle(summarizeThreadActivity(threads ?? [])),
     [threads]
   )
-  const threadStatusLabel = thread ? getThreadStatusLabelForTitle(thread) : undefined
-
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return
     setThreadRenameTarget({
@@ -446,10 +443,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
     if (threadMatch) {
       parts.push(threadDisplayTitle)
-      parts.push(projectLabel ?? projectThreadMatch?.[1] ?? "Project")
-      if (threadStatusLabel) {
-        parts.push(threadStatusLabel)
-      }
     } else if (projectSettingsMatch) {
       parts.push(projectLabel ?? projectSettingsMatch[1])
       parts.push("Settings")
