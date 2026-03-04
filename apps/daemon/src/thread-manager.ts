@@ -456,6 +456,8 @@ export class ThreadManager implements ThreadOrchestrator {
   private operationDispatchInFlight = new Set<string>();
   /** Ensures only one deterministic git operation mutates a project at a time. */
   private projectOperationTransitionsInFlight = new Set<string>();
+  /** Tracks threads whose workspace deletion is in progress. */
+  private workspaceCleanupInFlightThreadIds = new Set<string>();
   private operationIdCounter = 0;
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
@@ -1872,6 +1874,9 @@ export class ThreadManager implements ThreadOrchestrator {
 
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
     if (!workspaceRoot) return undefined;
+    if (this._shouldForceDeletedWorkStatus(thread)) {
+      return this._buildDeletedWorkStatus(workspaceRoot);
+    }
 
     const defaultBranch = await this.gitStatusService.detectDefaultBranchAsync(project.rootPath);
     const workspaceStatus = await this.gitStatusService.getStatusAsync({
@@ -2662,33 +2667,23 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!runtime) return;
     this.environmentRuntimes.delete(threadId);
     if (!opts?.destroyWorkspace) return;
+    this.workspaceCleanupInFlightThreadIds.add(threadId);
     const { adapter, session } = runtime;
-    if (!session.cleanup) return;
-    try {
-      const maybePromise = session.cleanup();
-      if (
-        maybePromise &&
-        typeof maybePromise === "object" &&
-        "then" in maybePromise &&
-        typeof maybePromise.then === "function"
-      ) {
-        void maybePromise.catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn(
-            `[thread ${threadId}] environment cleanup failed (${adapter.info.id}): ${message}`,
-          );
-          this._appendEvent(
-            threadId,
-            "system/provisioning/cleanup_failed",
-            {
-              environmentId: adapter.info.id,
-              message: "Environment cleanup failed",
-              detail: message,
-            },
-          );
-        });
-      }
-    } catch (err) {
+    const refreshWorkStatusAfterCleanup = () => {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return;
+      this._invalidateThreadWorkStatus(thread);
+      this._broadcastThreadChanged(threadId, ["work-status-changed"]);
+    };
+    const markWorkspaceCleanupSettled = () => {
+      this.workspaceCleanupInFlightThreadIds.delete(threadId);
+    };
+    if (!session.cleanup) {
+      markWorkspaceCleanupSettled();
+      refreshWorkStatusAfterCleanup();
+      return;
+    }
+    const reportCleanupFailure = (err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
         `[thread ${threadId}] environment cleanup failed (${adapter.info.id}): ${message}`,
@@ -2702,6 +2697,29 @@ export class ThreadManager implements ThreadOrchestrator {
           detail: message,
         },
       );
+    };
+    try {
+      const maybePromise = session.cleanup();
+      if (
+        maybePromise &&
+        typeof maybePromise === "object" &&
+        "then" in maybePromise &&
+        typeof maybePromise.then === "function"
+      ) {
+        void maybePromise
+          .catch(reportCleanupFailure)
+          .finally(() => {
+            markWorkspaceCleanupSettled();
+            refreshWorkStatusAfterCleanup();
+          });
+        return;
+      }
+      markWorkspaceCleanupSettled();
+      refreshWorkStatusAfterCleanup();
+    } catch (err) {
+      reportCleanupFailure(err);
+      markWorkspaceCleanupSettled();
+      refreshWorkStatusAfterCleanup();
     }
   }
 
@@ -3292,6 +3310,14 @@ export class ThreadManager implements ThreadOrchestrator {
       };
       return this._withPrimaryCheckoutState(hydrated);
     }
+    if (this._shouldForceDeletedWorkStatus(thread)) {
+      const hydrated: Thread = {
+        ...thread,
+        workStatus: this._buildDeletedWorkStatus(workspaceRoot),
+        provisioningState: this._readProvisioningState(thread.id),
+      };
+      return this._withPrimaryCheckoutState(hydrated);
+    }
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     const workspaceStatus = this.gitStatusService.getStatus({
       workspaceRoot,
@@ -3326,6 +3352,27 @@ export class ThreadManager implements ThreadOrchestrator {
       provisioningState: this._readProvisioningState(thread.id),
     };
     return this._withPrimaryCheckoutState(hydrated);
+  }
+
+  private _shouldForceDeletedWorkStatus(thread: Thread): boolean {
+    return this.workspaceCleanupInFlightThreadIds.has(thread.id);
+  }
+
+  private _buildDeletedWorkStatus(workspaceRoot?: string): ThreadWorkStatus {
+    return {
+      state: "deleted",
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      workspaceChangedFiles: 0,
+      workspaceInsertions: 0,
+      workspaceDeletions: 0,
+      hasUncommittedChanges: false,
+      hasCommittedUnmergedChanges: false,
+      aheadCount: 0,
+      behindCount: 0,
+      ...(workspaceRoot ? { workspaceRoot } : {}),
+    };
   }
 
   private _withPrimaryCheckoutState(thread: Thread): Thread {

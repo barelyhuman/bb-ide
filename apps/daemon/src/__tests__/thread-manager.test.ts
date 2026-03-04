@@ -3227,6 +3227,56 @@ describe("ThreadManager", () => {
 
       expect(cleanup).toHaveBeenCalledTimes(1);
     });
+
+    it("rebroadcasts work status after async workspace cleanup settles", async () => {
+      let resolveCleanup: (() => void) | undefined;
+      const cleanup = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveCleanup = resolve;
+          }),
+      );
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "idle", environmentId: "worktree" }),
+      );
+      (manager as any).environmentRuntimes.set("thread-1", {
+        adapter: {
+          info: {
+            id: "worktree",
+            displayName: "Git Worktree Workspace",
+            description: "",
+            capabilities: {
+              isolatedFilesystem: true,
+              ephemeralWorkspace: true,
+              supportsCleanup: true,
+            },
+          },
+          prepare: vi.fn(),
+        },
+        session: { cwd: "/tmp/worktree", cleanup },
+      });
+
+      manager.archive("thread-1");
+
+      expect(resolveCleanup).toBeTypeOf("function");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+        "archived-changed",
+      ]);
+
+      resolveCleanup?.();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "work-status-changed",
+      ]);
+      expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual([
+        "thread",
+        "thread-1",
+        ["work-status-changed"],
+      ]);
+    });
   });
 
   describe("unarchive()", () => {
@@ -3582,6 +3632,91 @@ describe("ThreadManager", () => {
         }),
       );
       expect(resolvedResult).toStrictEqual(mockedStatus);
+    });
+
+    it("returns deleted while workspace cleanup is in progress", () => {
+      let resolveCleanup: (() => void) | undefined;
+      const projectRoot = "/tmp/proj-1";
+      const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      const getStatus = vi.fn().mockReturnValue({
+        state: "dirty_uncommitted",
+        changedFiles: 1,
+        insertions: 2,
+        deletions: 1,
+        workspaceChangedFiles: 1,
+        workspaceInsertions: 2,
+        workspaceDeletions: 1,
+        hasUncommittedChanges: true,
+        hasCommittedUnmergedChanges: false,
+        aheadCount: 0,
+        behindCount: 0,
+        workspaceRoot,
+      });
+      const detectDefaultBranch = vi.fn().mockReturnValue("main");
+      const invalidate = vi.fn();
+      (manager as any).gitStatusService = {
+        getStatus,
+        detectDefaultBranch,
+        invalidate,
+      };
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: projectRoot,
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, type: string) =>
+          type === "system/provisioning/completed"
+            ? makeEvent({
+                type: "system/provisioning/completed",
+                data: { workspaceRoot },
+              })
+            : undefined,
+      );
+      (manager as any).environmentRuntimes.set("thread-1", {
+        adapter: {
+          info: {
+            id: "worktree",
+            displayName: "Git Worktree Workspace",
+            description: "",
+            capabilities: {
+              isolatedFilesystem: true,
+              ephemeralWorkspace: true,
+              supportsCleanup: true,
+            },
+          },
+          prepare: vi.fn(),
+        },
+        session: {
+          cwd: workspaceRoot,
+          cleanup: () =>
+            new Promise<void>((resolve) => {
+              resolveCleanup = resolve;
+            }),
+        },
+      });
+
+      manager.archive("thread-1");
+      const result = manager.getWorkStatus("thread-1");
+
+      expect(result).toMatchObject({
+        state: "deleted",
+        changedFiles: 0,
+        workspaceChangedFiles: 0,
+        hasUncommittedChanges: false,
+      });
+      expect(getStatus).not.toHaveBeenCalled();
+
+      resolveCleanup?.();
     });
   });
 
