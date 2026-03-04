@@ -1452,11 +1452,19 @@ export class ThreadManager implements ThreadOrchestrator {
       committed = commitResult.commitCreated;
     }
 
-    const mergeResult = this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
+    const commitMessageGenerator = this.provider.generateCommitMessage;
+    const mergeResult = await this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch: mergeBaseBranch,
       message: options.squashMessage,
+      resolveMessage: commitMessageGenerator
+        ? async ({ tempWorkspaceRoot }) =>
+            commitMessageGenerator({
+              cwd: tempWorkspaceRoot,
+              includeUnstaged: false,
+            })
+        : undefined,
     });
     this.gitStatusService.invalidate(workspaceRoot);
     this._appendEvent(

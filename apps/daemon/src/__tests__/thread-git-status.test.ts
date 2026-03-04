@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadGitStatusService } from "../thread-git-status.js";
 
 const tempDirs: string[] = [];
@@ -15,6 +15,25 @@ function makeTempDir(): string {
 
 function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+}
+
+function createRepoWithThreadAheadOfMain(): string {
+  const repoRoot = makeTempDir();
+  git(repoRoot, "init");
+  git(repoRoot, "config", "user.name", "Beanbag Test");
+  git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+  git(repoRoot, "checkout", "-b", "main");
+
+  writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+  git(repoRoot, "add", "README.md");
+  git(repoRoot, "commit", "-m", "initial");
+
+  git(repoRoot, "checkout", "-b", "thread");
+  writeFileSync(join(repoRoot, "README.md"), "initial\nthread change\n", "utf8");
+  git(repoRoot, "add", "README.md");
+  git(repoRoot, "commit", "-m", "thread change");
+
+  return repoRoot;
 }
 
 afterEach(() => {
@@ -220,6 +239,69 @@ describe("ThreadGitStatusService", () => {
     expect(status.files?.some((entry) => entry.path === "FEATURE.md" && entry.status === "A")).toBe(true);
     expect(status.hasCommittedUnmergedChanges).toBe(true);
     expect(status.state).toBe("committed_unmerged");
+  });
+
+  it("uses a resolved squash message when no explicit message is provided", async () => {
+    const repoRoot = createRepoWithThreadAheadOfMain();
+    const service = new ThreadGitStatusService();
+    const resolveMessage = vi
+      .fn()
+      .mockImplementation(async ({ tempWorkspaceRoot }: { tempWorkspaceRoot: string }) => {
+        expect(git(tempWorkspaceRoot, "diff", "--cached", "--name-only")).toContain("README.md");
+        return "feat: integrate thread updates";
+      });
+
+    const result = await service.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+      resolveMessage,
+    });
+
+    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
+    expect(resolveMessage).toHaveBeenCalledTimes(1);
+    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
+      "feat: integrate thread updates",
+    );
+  });
+
+  it("falls back to default squash message when message resolution fails", async () => {
+    const repoRoot = createRepoWithThreadAheadOfMain();
+    const service = new ThreadGitStatusService();
+    const resolveMessage = vi.fn().mockRejectedValue(new Error("generation failed"));
+
+    const result = await service.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+      resolveMessage,
+    });
+
+    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
+    expect(resolveMessage).toHaveBeenCalledTimes(1);
+    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
+      "chore: squash merge from thread",
+    );
+  });
+
+  it("prefers explicit squash messages over resolved messages", async () => {
+    const repoRoot = createRepoWithThreadAheadOfMain();
+    const service = new ThreadGitStatusService();
+    const resolveMessage = vi.fn();
+
+    const result = await service.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+      message: "feat: custom squash message",
+      resolveMessage,
+    });
+
+    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
+    expect(resolveMessage).not.toHaveBeenCalled();
+    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
+      "feat: custom squash message",
+    );
   });
 
   it("ignores merge-base branch-only commits when reporting thread diff stats", () => {

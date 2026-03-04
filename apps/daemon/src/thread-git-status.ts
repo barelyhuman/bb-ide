@@ -67,6 +67,17 @@ export interface WorktreeSquashMergeResult {
   conflictFiles?: string[];
 }
 
+export interface WorktreeSquashMergeMessageContext {
+  tempWorkspaceRoot: string;
+  mergeBaseBranch: string;
+  sourceBranch?: string;
+  defaultMessage: string;
+}
+
+export type WorktreeSquashMergeMessageResolver = (
+  context: WorktreeSquashMergeMessageContext,
+) => Promise<string | undefined> | string | undefined;
+
 function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
   const result = spawnSync("git", args, {
     cwd,
@@ -1641,12 +1652,13 @@ export class ThreadGitStatusService {
     };
   }
 
-  squashMergeWorktreeIntoDefaultBranch(args: {
+  async squashMergeWorktreeIntoDefaultBranch(args: {
     workspaceRoot: string;
     projectRoot: string;
     defaultBranch?: string;
     message?: string;
-  }): WorktreeSquashMergeResult {
+    resolveMessage?: WorktreeSquashMergeMessageResolver;
+  }): Promise<WorktreeSquashMergeResult> {
     const mergeBaseBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
     if (!mergeBaseBranch) {
       throw new Error("Could not determine merge base branch");
@@ -1720,8 +1732,26 @@ export class ThreadGitStatusService {
         return { merged: false, message: "No changes to merge after squash" };
       }
 
-      const message = args.message?.trim() || `chore: squash merge from ${workspaceStatus.currentBranch ?? "worktree"}`;
-      const commitResult = runGit(tempWorkspaceRoot, ["commit", "-m", message]);
+      const defaultMessage = `chore: squash merge from ${workspaceStatus.currentBranch ?? "worktree"}`;
+      let message = args.message?.trim();
+      if (!message && args.resolveMessage) {
+        try {
+          const resolved = await args.resolveMessage({
+            tempWorkspaceRoot,
+            mergeBaseBranch,
+            sourceBranch: workspaceStatus.currentBranch,
+            defaultMessage,
+          });
+          const trimmed = resolved?.trim();
+          if (trimmed) {
+            message = trimmed;
+          }
+        } catch {
+          // Fall back to the default message when generation fails.
+        }
+      }
+      const finalMessage = message || defaultMessage;
+      const commitResult = runGit(tempWorkspaceRoot, ["commit", "-m", finalMessage]);
       if (!commitResult.ok) {
         throw new Error(commitResult.stderr || "Failed to commit squashed merge");
       }
