@@ -582,6 +582,116 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain("Squash merged into main");
   });
 
+  it("prefers a single canonical commit row when lifecycle and worktree outcomes overlap", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("commit-running-1", 1),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Committing changes",
+        detail: "Running commit operation",
+      },
+      {
+        ...baseMessage("commit-worktree-1", 2),
+        kind: "operation",
+        opType: "worktree-commit",
+        title: "Committed changes",
+        detail: "Committed changes",
+      },
+      {
+        ...baseMessage("commit-completed-1", 3),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Commit completed",
+        detail: "Committed changes",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.opType).toBe("worktree-commit");
+    expect(rows[0].message.title).toBe("Committed changes");
+    expect(rows[0].message.detail).toContain("Committed changes");
+  });
+
+  it("collapses in-flight commit lifecycle updates when no worktree outcome exists yet", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("commit-running-1", 1),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Committing changes",
+        detail: "Running commit operation",
+      },
+      {
+        ...baseMessage("commit-completed-1", 2),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Commit completed",
+        detail: "Committed changes",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.opType).toBe("thread-operation-intent");
+    expect(rows[0].message.title).toBe("Commit completed");
+    expect(rows[0].message.sourceSeqStart).toBe(1);
+    expect(rows[0].message.sourceSeqEnd).toBe(2);
+    expect(rows[0].message.detail).toContain("Committed changes");
+  });
+
+  it("does not merge commit lifecycle updates across different operation ids", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("commit-running-1", 1),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Committing changes",
+        detail: "Running commit operation for first request",
+        threadOperation: {
+          action: "commit",
+          phase: "running",
+          operationId: "op-1",
+        },
+      },
+      {
+        ...baseMessage("commit-completed-2", 2),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Commit completed",
+        detail: "Committed changes for second request",
+        threadOperation: {
+          action: "commit",
+          phase: "completed",
+          operationId: "op-2",
+        },
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.title).toBe("Committing changes");
+
+    expect(rows[1]?.kind).toBe("message");
+    if (rows[1]?.kind !== "message") return;
+    expect(rows[1].message.kind).toBe("operation");
+    if (rows[1].message.kind !== "operation") return;
+    expect(rows[1].message.title).toBe("Commit completed");
+  });
+
   it("keeps compaction and thread title updates visible outside tool groups", () => {
     const messages: UIMessage[] = [
       {

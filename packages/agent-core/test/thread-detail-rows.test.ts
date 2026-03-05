@@ -46,6 +46,11 @@ function threadOperationIntent(
   seq: number,
   title: string,
   detail?: string,
+  options?: {
+    action?: "commit" | "squash_merge";
+    phase?: "requested" | "queued" | "running" | "completed" | "failed" | "update";
+    operationId?: string;
+  },
 ): Extract<UIMessage, { kind: "operation" }> {
   return {
     kind: "operation",
@@ -56,6 +61,15 @@ function threadOperationIntent(
     createdAt: seq,
     opType: "thread-operation-intent",
     title,
+    ...(options?.action && options?.phase
+      ? {
+          threadOperation: {
+            action: options.action,
+            phase: options.phase,
+            ...(options.operationId ? { operationId: options.operationId } : {}),
+          },
+        }
+      : {}),
     ...(detail ? { detail } : {}),
   };
 }
@@ -132,6 +146,38 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
     expect(rows[0]?.title).toBe("Promoting primary checkout");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(1);
+  });
+
+  it("uses primary-checkout metadata for collapse boundaries instead of title text", () => {
+    const rows = getOperationRows([
+      {
+        ...primaryCheckoutOperation(
+          1,
+          "Primary checkout promotion update",
+          "Promoting thread worktree into primary checkout",
+        ),
+        primaryCheckout: {
+          action: "promote",
+          phase: "started",
+        },
+      },
+      {
+        ...primaryCheckoutOperation(
+          2,
+          "Primary checkout promotion update",
+          "Primary checkout now reflects this thread worktree",
+        ),
+        primaryCheckout: {
+          action: "promote",
+          phase: "completed",
+        },
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.title).toBe("Primary checkout promotion update");
+    expect(rows[0]?.sourceSeqStart).toBe(1);
+    expect(rows[0]?.sourceSeqEnd).toBe(2);
   });
 });
 
@@ -246,5 +292,152 @@ describe("buildThreadDetailRows squash merge operation collapsing", () => {
     expect(rows[0]?.title).toBe("Squash merging changes");
     expect(rows[0]?.detail).toContain("Running squash-merge operation");
     expect(rows[0]?.detail).toContain("Prompt:");
+  });
+});
+
+describe("buildThreadDetailRows commit operation collapsing", () => {
+  it("prefers the canonical worktree commit outcome over duplicate lifecycle updates", () => {
+    const rows = getOperationRows([
+      threadOperationIntent(
+        1,
+        "Commit requested",
+        "Commit operation requested",
+      ),
+      threadOperationIntent(
+        2,
+        "Commit queued",
+        "Commit operation queued for deterministic execution",
+      ),
+      threadOperationIntent(
+        3,
+        "Committing changes",
+        "Running commit operation",
+      ),
+      worktreeOperation(
+        4,
+        "worktree-commit",
+        "Committed changes",
+        "Committed changes",
+      ),
+      threadOperationIntent(
+        5,
+        "Commit completed",
+        "Committed changes",
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("worktree-commit");
+    expect(rows[0]?.title).toBe("Committed changes");
+    expect(rows[0]?.detail).toContain("Committed changes");
+  });
+
+  it("collapses in-flight commit lifecycle updates when no canonical outcome exists yet", () => {
+    const rows = getOperationRows([
+      threadOperationIntent(
+        1,
+        "Committing changes",
+        "Running commit operation",
+        {
+          action: "commit",
+          phase: "running",
+          operationId: "op-1",
+        },
+      ),
+      threadOperationIntent(
+        2,
+        "Commit completed",
+        "Committed changes",
+        {
+          action: "commit",
+          phase: "completed",
+          operationId: "op-1",
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("thread-operation-intent");
+    expect(rows[0]?.title).toBe("Commit completed");
+    expect(rows[0]?.sourceSeqStart).toBe(1);
+    expect(rows[0]?.sourceSeqEnd).toBe(2);
+    expect(rows[0]?.detail).toContain("Committed changes");
+  });
+
+  it("does not merge commit lifecycle updates across different operation ids", () => {
+    const rows = getOperationRows([
+      threadOperationIntent(
+        1,
+        "Committing changes",
+        "Running commit operation for first request",
+        {
+          action: "commit",
+          phase: "running",
+          operationId: "op-1",
+        },
+      ),
+      threadOperationIntent(
+        2,
+        "Commit completed",
+        "Committed changes for second request",
+        {
+          action: "commit",
+          phase: "completed",
+          operationId: "op-2",
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.title).toBe("Committing changes");
+    expect(rows[1]?.title).toBe("Commit completed");
+  });
+
+  it("keeps earlier completed lifecycle rows when a later operation has the canonical outcome", () => {
+    const rows = getOperationRows([
+      threadOperationIntent(
+        1,
+        "Commit completed",
+        "Committed changes from op-1",
+        {
+          action: "commit",
+          phase: "completed",
+          operationId: "op-1",
+        },
+      ),
+      threadOperationIntent(
+        2,
+        "Committing changes",
+        "Running commit operation for op-2",
+        {
+          action: "commit",
+          phase: "running",
+          operationId: "op-2",
+        },
+      ),
+      worktreeOperation(
+        3,
+        "worktree-commit",
+        "Committed changes",
+        "Committed changes from op-2",
+      ),
+      threadOperationIntent(
+        4,
+        "Commit completed",
+        "Committed changes from op-2",
+        {
+          action: "commit",
+          phase: "completed",
+          operationId: "op-2",
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.opType).toBe("thread-operation-intent");
+    expect(rows[0]?.title).toBe("Commit completed");
+    expect(rows[0]?.detail).toContain("op-1");
+    expect(rows[1]?.opType).toBe("worktree-commit");
+    expect(rows[1]?.detail).toContain("op-2");
   });
 });

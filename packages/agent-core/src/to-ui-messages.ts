@@ -15,10 +15,16 @@ import type {
   UIFileEditMessage,
   UIMessage,
   UIOperationMessage,
+  UIPrimaryCheckoutAction,
+  UIPrimaryCheckoutMetadata,
+  UIPrimaryCheckoutPhase,
   UIToolCallMessage,
   UIToolCallSummary,
   UIToolExploringMessage,
   UIToolParsedIntent,
+  UIThreadOperationIntentAction,
+  UIThreadOperationIntentMetadata,
+  UIThreadOperationIntentPhase,
   UIWebSearchMessage,
   UIUserMessage,
 } from "./ui-message.js";
@@ -325,6 +331,178 @@ function parsePromptInput(input: unknown): {
     localImagePaths,
     localFilePaths,
   };
+}
+
+function parseThreadOperationIntentAction(
+  operation: string | undefined,
+): UIThreadOperationIntentAction | null {
+  switch (operation) {
+    case "commit":
+      return "commit";
+    case "squash_merge":
+      return "squash_merge";
+    default:
+      return null;
+  }
+}
+
+function parsePrimaryCheckoutAction(action: string | undefined): UIPrimaryCheckoutAction | null {
+  switch (action) {
+    case "promote":
+      return "promote";
+    case "demote":
+      return "demote";
+    default:
+      return null;
+  }
+}
+
+function parsePrimaryCheckoutPhase(status: string | undefined): UIPrimaryCheckoutPhase {
+  switch (status) {
+    case "started":
+      return "started";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "noop":
+      return "noop";
+    default:
+      // Persisted event payloads are open_external at read-time; unknown statuses map to generic updates.
+      return "update";
+  }
+}
+
+function toPrimaryCheckoutMetadata(
+  payload: Record<string, unknown> | null,
+): UIPrimaryCheckoutMetadata | null {
+  const action = parsePrimaryCheckoutAction(getStringField(payload, "action"));
+  if (!action) return null;
+  return {
+    action,
+    phase: parsePrimaryCheckoutPhase(getStringField(payload, "status")),
+  };
+}
+
+function primaryCheckoutTitle(metadata: UIPrimaryCheckoutMetadata | null): string {
+  if (!metadata) {
+    return "Primary checkout update";
+  }
+
+  switch (metadata.action) {
+    case "promote":
+      switch (metadata.phase) {
+        case "started":
+          return "Promoting primary checkout";
+        case "completed":
+          return "Promoted to primary checkout";
+        case "failed":
+          return "Primary checkout promotion failed";
+        case "noop":
+          return "Primary checkout already promoted";
+        case "update":
+          return "Primary checkout promotion update";
+        default:
+          return assertNever(metadata.phase);
+      }
+    case "demote":
+      switch (metadata.phase) {
+        case "started":
+          return "Demoting primary checkout";
+        case "completed":
+          return "Demoted from primary checkout";
+        case "failed":
+          return "Primary checkout demotion failed";
+        case "noop":
+          return "Primary checkout already demoted";
+        case "update":
+          return "Primary checkout demotion update";
+        default:
+          return assertNever(metadata.phase);
+      }
+    default:
+      return assertNever(metadata.action);
+  }
+}
+
+function parseThreadOperationIntentPhase(
+  status: string | undefined,
+): UIThreadOperationIntentPhase {
+  switch (status) {
+    case "requested":
+      return "requested";
+    case "queued":
+      return "queued";
+    case "running":
+      return "running";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    default:
+      // Persisted event payloads are open_external at read-time; unknown statuses map to generic updates.
+      return "update";
+  }
+}
+
+function toThreadOperationIntentMetadata(
+  payload: Record<string, unknown> | null,
+): UIThreadOperationIntentMetadata | null {
+  const action = parseThreadOperationIntentAction(getStringField(payload, "operation"));
+  if (!action) return null;
+
+  const phase = parseThreadOperationIntentPhase(getStringField(payload, "status"));
+  const operationId = getStringField(payload, "operationId");
+  return {
+    action,
+    phase,
+    ...(operationId ? { operationId } : {}),
+  };
+}
+
+function threadOperationIntentTitle(metadata: UIThreadOperationIntentMetadata | null): string {
+  if (!metadata) {
+    return "Thread operation update";
+  }
+
+  switch (metadata.action) {
+    case "commit":
+      switch (metadata.phase) {
+        case "requested":
+          return "Commit requested";
+        case "queued":
+          return "Commit queued";
+        case "running":
+          return "Committing changes";
+        case "completed":
+          return "Commit completed";
+        case "failed":
+          return "Commit failed";
+        case "update":
+          return "Commit operation update";
+        default:
+          return assertNever(metadata.phase);
+      }
+    case "squash_merge":
+      switch (metadata.phase) {
+        case "requested":
+          return "Squash merge requested";
+        case "queued":
+          return "Squash merge queued";
+        case "running":
+          return "Squash merging changes";
+        case "completed":
+          return "Squash merge completed";
+        case "failed":
+          return "Squash merge failed";
+        case "update":
+          return "Squash merge operation update";
+        default:
+          return assertNever(metadata.phase);
+      }
+    default:
+      return assertNever(metadata.action);
+  }
 }
 
 function userMessageSignature(value: {
@@ -1209,48 +1387,14 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/primary_checkout/updated")) {
     const payload = toEventRecord(event.data);
-    const action = getStringField(payload, "action");
-    const status = getStringField(payload, "status");
+    const primaryCheckout = toPrimaryCheckoutMetadata(payload);
     const message = getStringField(payload, "message");
     const branch = getStringField(payload, "branch");
     const detailParts = [
       message,
       branch ? `Branch: ${branch}` : undefined,
     ].filter((value): value is string => Boolean(value));
-    const title = (() => {
-      if (action === "promote") {
-        switch (status) {
-          case "started":
-            return "Promoting primary checkout";
-          case "completed":
-            return "Promoted to primary checkout";
-          case "failed":
-            return "Primary checkout promotion failed";
-          case "noop":
-            return "Primary checkout already promoted";
-          default:
-            // Historical/unknown persisted statuses are open_external; keep a generic fallback.
-            return "Primary checkout promotion update";
-        }
-      }
-      if (action === "demote") {
-        switch (status) {
-          case "started":
-            return "Demoting primary checkout";
-          case "completed":
-            return "Demoted from primary checkout";
-          case "failed":
-            return "Primary checkout demotion failed";
-          case "noop":
-            return "Primary checkout already demoted";
-          default:
-            // Historical/unknown persisted statuses are open_external; keep a generic fallback.
-            return "Primary checkout demotion update";
-        }
-      }
-      // Persisted event payloads are open_external at read-time; tolerate unknown action values.
-      return "Primary checkout update";
-    })();
+    const title = primaryCheckoutTitle(primaryCheckout);
 
     return {
       kind: "operation",
@@ -1263,37 +1407,16 @@ function parseOperationMessage(
       opType: "primary-checkout",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      ...(primaryCheckout ? { primaryCheckout } : {}),
     };
   }
 
   if (eventTypeMatches(eventType, "system/thread_operation")) {
     const payload = toEventRecord(event.data);
-    const operation = getStringField(payload, "operation");
-    const status = getStringField(payload, "status");
+    const threadOperation = toThreadOperationIntentMetadata(payload);
     // Keep lifecycle naming aligned with thread-detail-rows collapsing so operation timelines
     // remain familiar and mergeable across projections (requested → queued → running → terminal).
-    const title = (() => {
-      if (operation === "commit") {
-        if (status === "requested") return "Commit requested";
-        if (status === "queued") return "Commit queued";
-        if (status === "running") return "Committing changes";
-        if (status === "completed") return "Commit completed";
-        if (status === "failed") return "Commit failed";
-        // Persisted event payloads are open_external at read-time; keep generic fallback.
-        return "Commit operation update";
-      }
-      if (operation === "squash_merge") {
-        if (status === "requested") return "Squash merge requested";
-        if (status === "queued") return "Squash merge queued";
-        if (status === "running") return "Squash merging changes";
-        if (status === "completed") return "Squash merge completed";
-        if (status === "failed") return "Squash merge failed";
-        // Persisted event payloads are open_external at read-time; keep generic fallback.
-        return "Squash merge operation update";
-      }
-      // Persisted event payloads are open_external at read-time; keep generic fallback.
-      return "Thread operation update";
-    })();
+    const title = threadOperationIntentTitle(threadOperation);
 
     const detailParts = [
       getStringField(payload, "message"),
@@ -1310,6 +1433,7 @@ function parseOperationMessage(
       opType: "thread-operation-intent",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      ...(threadOperation ? { threadOperation } : {}),
     };
   }
 

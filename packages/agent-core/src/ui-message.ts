@@ -129,11 +129,38 @@ export interface UIFileEditMessage extends UIMessageBase {
   >;
 }
 
+export type UIThreadOperationIntentAction = "commit" | "squash_merge";
+
+export type UIThreadOperationIntentPhase =
+  | "requested"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "update";
+
+export interface UIThreadOperationIntentMetadata {
+  action: UIThreadOperationIntentAction;
+  phase: UIThreadOperationIntentPhase;
+  operationId?: string;
+}
+
+export type UIPrimaryCheckoutAction = "promote" | "demote";
+
+export type UIPrimaryCheckoutPhase = "started" | "completed" | "failed" | "noop" | "update";
+
+export interface UIPrimaryCheckoutMetadata {
+  action: UIPrimaryCheckoutAction;
+  phase: UIPrimaryCheckoutPhase;
+}
+
 export interface UIOperationMessage extends UIMessageBase {
   kind: "operation";
   opType: string;
   title: string;
   detail?: string;
+  primaryCheckout?: UIPrimaryCheckoutMetadata;
+  threadOperation?: UIThreadOperationIntentMetadata;
 }
 
 export interface UIErrorMessage extends UIMessageBase {
