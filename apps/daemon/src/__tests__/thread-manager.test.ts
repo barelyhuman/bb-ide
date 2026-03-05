@@ -97,6 +97,10 @@ interface ThreadManagerTestHarness {
     code: number | null,
     signal: string | null,
   ) => void;
+  _resolveCommitMessage: (args: {
+    workspaceRoot: string;
+    includeUnstaged?: boolean;
+  }) => Promise<string>;
 }
 
 function asThreadManagerHarness(manager: ThreadManager): ThreadManagerTestHarness {
@@ -304,7 +308,7 @@ describe("ThreadManager", () => {
       >;
       generateCommitMessage.mockResolvedValue("feat: support commit generation");
 
-      const resolved = await (manager as any)._resolveCommitMessage({
+      const resolved = await asThreadManagerHarness(manager)._resolveCommitMessage({
         workspaceRoot: "/tmp/workspace",
         includeUnstaged: true,
       });
@@ -323,7 +327,7 @@ describe("ThreadManager", () => {
       generateCommitMessage.mockResolvedValue(undefined);
 
       await expect(
-        (manager as any)._resolveCommitMessage({
+        asThreadManagerHarness(manager)._resolveCommitMessage({
           workspaceRoot: "/tmp/workspace",
         }),
       ).rejects.toThrow("Failed to auto-generate commit message (Mock LLM)");
