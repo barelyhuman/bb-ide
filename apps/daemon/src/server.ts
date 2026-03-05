@@ -11,10 +11,9 @@ import type {
   EventRepository,
 } from "@beanbag/db";
 import {
+  createCodexLlmCompletionService,
   createEnvironmentAdapter,
   createProviderAdapter,
-  generateCodexCommitMessage,
-  generateCodexThreadTitle,
   listAvailableEnvironmentInfos,
   listAvailableProviderInfos,
 } from "@beanbag/agent-server";
@@ -47,18 +46,9 @@ export function createServer(deps: ServerDeps) {
 
   // Create managers
   const wsManager = new WSManager();
-  const provider = createProviderAdapter({
-    codexTitleGenerator: async ({ input, cwd }) =>
-      generateCodexThreadTitle({ input, cwd }),
-    codexCommitMessageGenerator: async ({ cwd, includeUnstaged }) =>
-      generateCodexCommitMessage({ cwd, includeUnstaged }),
-  });
-  const providerCatalog = listAvailableProviderInfos({
-    codexTitleGenerator: async ({ input, cwd }) =>
-      generateCodexThreadTitle({ input, cwd }),
-    codexCommitMessageGenerator: async ({ cwd, includeUnstaged }) =>
-      generateCodexCommitMessage({ cwd, includeUnstaged }),
-  });
+  const provider = createProviderAdapter();
+  const providerCatalog = listAvailableProviderInfos();
+  const llmCompletion = createCodexLlmCompletionService();
   const environmentAdapter = createEnvironmentAdapter();
   const environmentCatalog = listAvailableEnvironmentInfos();
   const scheduler = new InMemorySchedulerService();
@@ -75,6 +65,7 @@ export function createServer(deps: ServerDeps) {
     environmentCatalog,
     scheduler,
     gitStatusService,
+    llmCompletion,
   );
 
   // WebSocket handler

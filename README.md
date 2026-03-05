@@ -139,10 +139,9 @@ Agent-driven git operation commands:
 
 Provider and environment selection:
 
-- `BEANBAG_PROVIDER` selects the active provider adapter (`codex`, `pi-mono`, `claude-code`).
+- `BEANBAG_PROVIDER` selects the active provider adapter (`codex`).
 - `BEANBAG_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
 - `BEANBAG_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.beanbag/worktrees`; absolute roots are scoped by project id).
-- `BEANBAG_PI_PROVIDER_COMMAND` overrides the Pi executable used by the `pi-mono` adapter bridge (default: `pi`).
 - `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
 ## Typed Codex Event Schema
