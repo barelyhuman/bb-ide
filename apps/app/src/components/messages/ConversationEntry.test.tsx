@@ -351,6 +351,7 @@ describe("ConversationEntry", () => {
     const pendingHtml = renderToStaticMarkup(<ConversationEntry message={pending} />);
     const completedHtml = renderToStaticMarkup(<ConversationEntry message={completed} />);
     expect(pendingHtml).toContain("Searching the web");
+    expect(pendingHtml).toContain("animate-shine");
     expect(completedHtml).toContain("Searched react suspense");
   });
 
@@ -403,6 +404,26 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Edited");
     expect(html).toContain("ConversationEntry.tsx");
     expect(html).not.toContain("Edited 1 file");
+  });
+
+  it("renders pending file-edit summaries with shimmer feedback", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-pending-1",
+      status: "pending",
+      changes: [
+        {
+          path: "/repo/src/thread.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Applying");
+    expect(html).toContain("animate-shine");
   });
 
   it("uses unique files for collapsed '+N more' file-edit summaries", () => {
@@ -826,6 +847,19 @@ describe("ConversationEntry", () => {
     expect(html).toContain("timeout 600s");
   });
 
+  it("renders in-progress provisioning summaries with shimmer feedback", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioning Git Worktree Workspace...",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Provisioning Git Worktree Workspace...");
+    expect(html).toContain("animate-shine");
+  });
+
   it("renders completed primary-checkout operation titles with a subtler tone", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -862,6 +896,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("Promoting primary checkout");
+    expect(html).toContain("animate-shine");
     expect(html).not.toContain("text-muted-foreground/70");
   });
 
@@ -925,6 +960,39 @@ describe("ConversationEntry", () => {
     expect(expandedHtml).toContain(promptText);
     expect(expandedHtml).not.toContain(">Prompt<");
     expect(expandedHtml).not.toContain("Squash-merge operation queued for deterministic execution");
+  });
+
+  it("renders running thread-operation intent summaries with shimmer feedback", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "thread-operation-intent",
+      title: "Committing changes",
+      detail: "Running commit operation",
+      threadOperation: {
+        action: "commit",
+        phase: "running",
+        operationId: "op-1",
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Committing changes");
+    expect(html).toContain("animate-shine");
+  });
+
+  it("renders mcp progress operations with shimmer feedback", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "mcp-progress",
+      title: "MCP tool progress",
+      detail: "Fetching server capabilities",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("MCP tool progress");
+    expect(html).toContain("animate-shine");
   });
 
   it("renders plan-updated operations as expandable rows", () => {

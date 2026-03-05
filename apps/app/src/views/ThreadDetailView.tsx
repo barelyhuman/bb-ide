@@ -702,7 +702,7 @@ function ToolGroupEntry({
               <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
                 {isLoadingMessages ? (
                   <div className="px-3 py-2 text-xs text-muted-foreground">
-                    Loading details...
+                    <span className="animate-shine">Loading details...</span>
                   </div>
                 ) : null}
                 {messages.map((message) => {

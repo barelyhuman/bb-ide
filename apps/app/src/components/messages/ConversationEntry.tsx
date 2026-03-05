@@ -235,6 +235,9 @@ const DIFF_VIEW_STYLE = {
   "--diffs-line-height": "18px",
 } as CSSProperties;
 
+type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
+type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];
+
 function toSyntheticPatch(
   change: UIFileEditMessage["changes"][number],
   action: FileChangeAction,
@@ -720,6 +723,110 @@ function renderShimmeringSummary(text: string, shouldShimmer: boolean): ReactNod
   return <span className="animate-shine">{text}</span>;
 }
 
+function isShimmeringThreadOperationIntentPhase(
+  phase: ThreadOperationIntentPhase,
+): boolean {
+  switch (phase) {
+    case "requested":
+    case "queued":
+    case "running":
+      return true;
+    case "completed":
+    case "failed":
+    case "update":
+      return false;
+    default:
+      return assertNever(phase);
+  }
+}
+
+function isShimmeringPrimaryCheckoutPhase(phase: PrimaryCheckoutPhase): boolean {
+  switch (phase) {
+    case "started":
+      return true;
+    case "completed":
+    case "failed":
+    case "noop":
+    case "update":
+      return false;
+    default:
+      return assertNever(phase);
+  }
+}
+
+function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolean {
+  if (message.title.startsWith("Provisioning ")) return true;
+  if (message.title.startsWith("Provisioned ")) return false;
+  // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
+  return message.title.endsWith("...");
+}
+
+function shouldShimmerThreadOperationIntent(message: UIOperationMessage): boolean {
+  if (message.threadOperation) {
+    return isShimmeringThreadOperationIntentPhase(message.threadOperation.phase);
+  }
+
+  switch (message.title) {
+    case "Commit requested":
+    case "Commit queued":
+    case "Committing changes":
+    case "Squash merge requested":
+    case "Squash merge queued":
+    case "Squash merging changes":
+      return true;
+    case "Commit completed":
+    case "Commit failed":
+    case "Commit operation update":
+    case "Squash merge completed":
+    case "Squash merge failed":
+    case "Squash merge operation update":
+    case "Thread operation update":
+      return false;
+    default:
+      // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
+      return false;
+  }
+}
+
+function shouldShimmerPrimaryCheckoutOperation(message: UIOperationMessage): boolean {
+  if (message.primaryCheckout) {
+    return isShimmeringPrimaryCheckoutPhase(message.primaryCheckout.phase);
+  }
+
+  switch (message.title) {
+    case "Promoting primary checkout":
+    case "Demoting primary checkout":
+      return true;
+    case "Promoted to primary checkout":
+    case "Primary checkout promotion failed":
+    case "Primary checkout already promoted":
+    case "Demoted from primary checkout":
+    case "Primary checkout demotion failed":
+    case "Primary checkout already demoted":
+    case "Promoted then demoted as primary checkout":
+      return false;
+    default:
+      // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
+      return false;
+  }
+}
+
+function shouldShimmerOperationTitle(message: UIOperationMessage): boolean {
+  switch (message.opType) {
+    case "mcp-progress":
+      return true;
+    case "provisioning":
+      return shouldShimmerProvisioningOperation(message);
+    case "thread-operation-intent":
+      return shouldShimmerThreadOperationIntent(message);
+    case "primary-checkout":
+      return shouldShimmerPrimaryCheckoutOperation(message);
+    default:
+      // Operation types are persisted/read-time open_external; unknown values are intentionally tolerated.
+      return false;
+  }
+}
+
 function ToolExploringRow({
   message,
   initialExpanded = false,
@@ -873,8 +980,9 @@ function WebSearchRow({
   message: UIWebSearchMessage;
   preferOngoingLabels?: boolean;
 }) {
+  const isSearching = message.status === "pending" || preferOngoingLabels;
   const summary =
-    message.status === "pending" || preferOngoingLabels
+    isSearching
       ? "Searching the web"
       : message.query
         ? `Searched ${message.query}`
@@ -884,7 +992,9 @@ function WebSearchRow({
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-          <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{summary}</div>
+          <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+            {renderShimmeringSummary(summary, isSearching)}
+          </div>
         </div>
       </div>
     </div>
@@ -947,8 +1057,9 @@ function FileEditRow({
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
   }, [message.changes, message.status, preferOngoingLabels]);
+  const isApplying = actionLabel === "Applying";
   const title = isExpanded
-    ? message.status === "pending" || preferOngoingLabels
+    ? isApplying
       ? "Applying file changes"
       : message.status === "error"
         ? "Failed to apply file changes"
@@ -956,7 +1067,9 @@ function FileEditRow({
           ? "Declined file changes"
           : `${actionLabel} ${uniqueFileCount === 1 ? "file" : "files"}`
     : `${actionLabel} ${collapsedFileLabel}`;
-  const collapsedSummaryContent = isExpanded ? (
+  const collapsedSummaryContent = isApplying ? (
+    renderShimmeringSummary(title, true)
+  ) : isExpanded ? (
     title
   ) : (
     <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -1401,6 +1514,7 @@ function OperationRow({
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
+  const shimmeringTitle = renderShimmeringSummary(message.title, shouldShimmerOperationTitle(message));
 
   if (message.opType === "plan-updated") {
     const detailLines = (message.detail ?? "")
@@ -1493,8 +1607,11 @@ function OperationRow({
           <span className="truncate font-semibold text-foreground/95">{environmentLabel}</span>
         </span>
       ) : (
-        message.title
+        shimmeringTitle
       );
+    const expandedSummaryContent = isCompleted
+      ? actionLabel
+      : renderShimmeringSummary(actionLabel, true);
 
     if (!hasDetails) {
       return (
@@ -1515,7 +1632,7 @@ function OperationRow({
         <div className="mr-auto w-full">
           <ExpandableEntryContainer
             isExpanded={isExpanded}
-            summaryContent={isExpanded ? actionLabel : collapsedSummaryContent}
+            summaryContent={isExpanded ? expandedSummaryContent : collapsedSummaryContent}
             summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
             headerToneClass={headerToneClass}
             onToggle={onToggle}
@@ -1607,7 +1724,7 @@ function OperationRow({
         <div className="group w-full" style={{ overflowAnchor: "none" }}>
           <div className="mr-auto w-full rounded-md px-2 py-1 text-sm text-muted-foreground">
             <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
-              {message.title}
+              {shimmeringTitle}
             </div>
           </div>
         </div>
@@ -1621,7 +1738,7 @@ function OperationRow({
         <div className="group w-full" style={{ overflowAnchor: "none" }}>
           <div className="mr-auto w-full">
             <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground/80">{message.title}</span>
+              <span className="font-medium text-foreground/80">{shimmeringTitle}</span>
               <span className="ml-2 text-muted-foreground/80">{detailText}</span>
             </div>
           </div>
@@ -1637,7 +1754,7 @@ function OperationRow({
         <div className="group w-full" style={{ overflowAnchor: "none" }}>
           <div className="mr-auto w-full">
             <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground/80">{message.title}</span>
+              <span className="font-medium text-foreground/80">{shimmeringTitle}</span>
               {operationDetailText ? (
                 <span className="ml-2 text-muted-foreground/80">{operationDetailText}</span>
               ) : null}
@@ -1652,7 +1769,7 @@ function OperationRow({
         <div className="mr-auto w-full">
           <ExpandableEntryContainer
             isExpanded={isExpanded}
-            summaryContent={message.title}
+            summaryContent={shimmeringTitle}
             summaryContentClassName="min-w-0"
             headerToneClass={headerToneClass}
             onToggle={onToggle}
@@ -1817,7 +1934,7 @@ function OperationRow({
           <div className="mr-auto w-full">
             <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
               <div className={primaryCheckoutStaticTitleClassName}>
-                {message.title}
+                {shimmeringTitle}
               </div>
             </div>
           </div>
@@ -1830,7 +1947,7 @@ function OperationRow({
         <div className="mr-auto w-full">
           <ExpandableEntryContainer
             isExpanded={isExpanded}
-            summaryContent={message.title}
+            summaryContent={shimmeringTitle}
             summaryContentClassName={primaryCheckoutSummaryContentClassName}
             headerToneClass={headerToneClass}
             onToggle={onToggle}
@@ -1852,7 +1969,7 @@ function OperationRow({
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground/80">{message.title}</span>
+          <span className="font-medium text-foreground/80">{shimmeringTitle}</span>
           {message.detail ? <span className="ml-2 text-muted-foreground/80">{message.detail}</span> : null}
         </div>
       </div>
