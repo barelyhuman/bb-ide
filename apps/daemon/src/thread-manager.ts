@@ -1333,11 +1333,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
     if (!workspaceRoot) {
-      throw invalidRequestError(
-        thread.environmentId === "worktree"
-          ? "Thread worktree is unavailable; reprovision the thread first"
-          : "Thread workspace is unavailable",
-      );
+      throw invalidRequestError("Thread workspace is unavailable");
     }
 
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
@@ -1400,13 +1396,14 @@ export class ThreadManager implements ThreadOrchestrator {
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
-    if (thread.environmentId !== "worktree") {
-      throw invalidRequestError("Squash merge is only available for worktree threads");
-    }
 
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) {
       throw projectNotFoundError(thread.projectId);
+    }
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
+      throw invalidRequestError("Squash merge is not supported for this environment");
     }
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
     if (!workspaceRoot) {
@@ -1416,10 +1413,6 @@ export class ThreadManager implements ThreadOrchestrator {
     const options = request ?? {};
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     const requestedMergeBaseBranch = options.mergeBaseBranch?.trim() || undefined;
-    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-    if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
-      throw invalidRequestError("Squash merge is not supported for this environment");
-    }
     const before = this.gitStatusService.getStatus({
       workspaceRoot,
       projectRoot: project.rootPath,
@@ -1924,17 +1917,6 @@ export class ThreadManager implements ThreadOrchestrator {
       workStatus.changedFiles = thread.agentDiffStats.changedFiles;
       workStatus.insertions = thread.agentDiffStats.insertions;
       workStatus.deletions = thread.agentDiffStats.deletions;
-    } else {
-      const shouldComputeFallback =
-        thread.environmentId !== "worktree" && thread.status === "active";
-      if (shouldComputeFallback) {
-        const events = this.eventRepo.listByThread(thread.id);
-        const attributedDiff = this.attributedDiffService.compute(events);
-        workStatus.changedFiles = attributedDiff.changedFiles;
-        workStatus.insertions = attributedDiff.insertions;
-        workStatus.deletions = attributedDiff.deletions;
-        workStatus.files = attributedDiff.files;
-      }
     }
 
     return workStatus;
@@ -1988,8 +1970,15 @@ export class ThreadManager implements ThreadOrchestrator {
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
-    if (request.operation === "squash_merge" && thread.environmentId !== "worktree") {
-      throw invalidRequestError("Squash merge operations are only available for worktree threads");
+    if (request.operation === "squash_merge") {
+      const project = this.projectRepo.getById(thread.projectId);
+      if (!project) {
+        throw projectNotFoundError(thread.projectId);
+      }
+      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+      if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
+        throw invalidRequestError("Squash merge is not supported for this environment");
+      }
     }
 
     const primaryPromotion = this.primaryPromotionByProjectId.get(thread.projectId);
@@ -2073,9 +2062,6 @@ export class ThreadManager implements ThreadOrchestrator {
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
-    if (thread.environmentId !== "worktree") {
-      throw invalidRequestError("Promotion is only available for worktree threads");
-    }
 
     const policyDecision = evaluateThreadOperationPolicy("promote", {
       status: thread.status,
@@ -2089,6 +2075,10 @@ export class ThreadManager implements ThreadOrchestrator {
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) {
       throw projectNotFoundError(thread.projectId);
+    }
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment || !environment.supportsPromoteToActiveWorkspace()) {
+      throw invalidRequestError("Promotion is not supported for this environment");
     }
     return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
@@ -2123,7 +2113,6 @@ export class ThreadManager implements ThreadOrchestrator {
         };
       }
 
-      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
       const workspaceRoot = environment?.getWorkspaceRoot();
       if (!environment || !workspaceRoot || workspaceRoot === project.rootPath) {
         throw invalidRequestError(
@@ -3504,17 +3493,6 @@ export class ThreadManager implements ThreadOrchestrator {
         workStatus.changedFiles = thread.agentDiffStats.changedFiles;
         workStatus.insertions = thread.agentDiffStats.insertions;
         workStatus.deletions = thread.agentDiffStats.deletions;
-      } else {
-        const shouldComputeFallback =
-          thread.environmentId !== "worktree" && thread.status === "active";
-        if (shouldComputeFallback) {
-          const events = this.eventRepo.listByThread(thread.id);
-          const attributedDiff = this.attributedDiffService.compute(events);
-          workStatus.changedFiles = attributedDiff.changedFiles;
-          workStatus.insertions = attributedDiff.insertions;
-          workStatus.deletions = attributedDiff.deletions;
-          workStatus.files = attributedDiff.files;
-        }
       }
     }
 
@@ -3598,13 +3576,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _resolveThreadWorkspaceRoot(thread: Thread, projectRoot: string): string | undefined {
     const environment = this._restoreThreadEnvironment(thread, projectRoot);
-    if (environment) {
-      return environment.getWorkspaceRoot();
-    }
-    if (thread.environmentId === "worktree") {
-      return undefined;
-    }
-    return projectRoot;
+    return environment?.getWorkspaceRoot();
   }
 
   private _readProvisioningState(threadId: string): ThreadProvisioningState | undefined {

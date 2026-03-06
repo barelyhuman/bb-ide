@@ -4102,6 +4102,7 @@ describe("ThreadManager", () => {
     });
 
     it("forces freshness validation before promote thread operations", async () => {
+      const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
       const thread = makeThread({
         id: "thread-1",
         projectId: "proj-1",
@@ -4115,6 +4116,48 @@ describe("ThreadManager", () => {
         rootPath: "/tmp/proj-1",
         createdAt: 1000,
         updatedAt: 1000,
+      });
+      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: {
+          kind: "worktree",
+          info: {
+            id: "worktree",
+            displayName: "Git Worktree Workspace",
+            description: "",
+          },
+          serialize() {
+            return {};
+          },
+          dispose() {},
+          getWorkspaceRoot() {
+            return workspaceRoot;
+          },
+          getExecutionContext() {
+            return { cwd: workspaceRoot, env: {} };
+          },
+          shouldRunSetupScript() {
+            return false;
+          },
+          supportsPromoteToActiveWorkspace() {
+            return true;
+          },
+          supportsDemoteFromActiveWorkspace() {
+            return false;
+          },
+          supportsSquashMergeIntoDefaultBranch() {
+            return false;
+          },
+          promoteToActiveWorkspace() {
+            throw new Error("not implemented");
+          },
+          demoteFromActiveWorkspace() {
+            throw new Error("not implemented");
+          },
+          async squashMergeIntoDefaultBranch() {
+            throw new Error("not implemented");
+          },
+          run: vi.fn(),
+        },
       });
       (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
       (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
@@ -4189,6 +4232,7 @@ describe("ThreadManager", () => {
     });
 
     it("rejects promote when another primary-checkout transition is already in flight", async () => {
+      const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
       const thread = makeThread({
         id: "thread-1",
         projectId: "proj-1",
@@ -4202,6 +4246,48 @@ describe("ThreadManager", () => {
         rootPath: "/tmp/proj-1",
         createdAt: 1000,
         updatedAt: 1000,
+      });
+      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: {
+          kind: "worktree",
+          info: {
+            id: "worktree",
+            displayName: "Git Worktree Workspace",
+            description: "",
+          },
+          serialize() {
+            return {};
+          },
+          dispose() {},
+          getWorkspaceRoot() {
+            return workspaceRoot;
+          },
+          getExecutionContext() {
+            return { cwd: workspaceRoot, env: {} };
+          },
+          shouldRunSetupScript() {
+            return false;
+          },
+          supportsPromoteToActiveWorkspace() {
+            return true;
+          },
+          supportsDemoteFromActiveWorkspace() {
+            return false;
+          },
+          supportsSquashMergeIntoDefaultBranch() {
+            return false;
+          },
+          promoteToActiveWorkspace() {
+            throw new Error("not implemented");
+          },
+          demoteFromActiveWorkspace() {
+            throw new Error("not implemented");
+          },
+          async squashMergeIntoDefaultBranch() {
+            throw new Error("not implemented");
+          },
+          run: vi.fn(),
+        },
       });
       asThreadManagerHarness(manager).primaryCheckoutTransitionsInFlight.add("proj-1");
 
@@ -4334,13 +4420,64 @@ describe("ThreadManager", () => {
       });
 
       it("queues squash operations when a thread is active", async () => {
+        const projectRoot = "/tmp/proj-1";
         const thread = makeThread({
           id: "thread-1",
+          projectId: "proj-1",
           status: "active",
           environmentId: "worktree",
           queuedMessages: [],
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Project",
+          rootPath: projectRoot,
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+          environment: {
+            kind: "worktree",
+            info: {
+              id: "worktree",
+              displayName: "Git Worktree Workspace",
+              description: "",
+            },
+            serialize() {
+              return {};
+            },
+            dispose() {},
+            getWorkspaceRoot() {
+              return "/tmp/worktrees/proj-1/thread-1";
+            },
+            getExecutionContext() {
+              return { cwd: "/tmp/worktrees/proj-1/thread-1", env: {} };
+            },
+            shouldRunSetupScript() {
+              return false;
+            },
+            supportsPromoteToActiveWorkspace() {
+              return false;
+            },
+            supportsDemoteFromActiveWorkspace() {
+              return false;
+            },
+            supportsSquashMergeIntoDefaultBranch() {
+              return true;
+            },
+            promoteToActiveWorkspace() {
+              throw new Error("not implemented");
+            },
+            demoteFromActiveWorkspace() {
+              throw new Error("not implemented");
+            },
+            async squashMergeIntoDefaultBranch() {
+              throw new Error("not implemented");
+            },
+            run: vi.fn(),
+          },
+        });
         (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
         (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
           makeEvent({
