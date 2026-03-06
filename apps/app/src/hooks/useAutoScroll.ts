@@ -1,7 +1,6 @@
 import { useRef, useCallback, useEffect, useState } from "react"
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
-  getScrollAnimationBehavior,
 } from "@beanbag/ui-core";
 
 export function useAutoScroll(dep: unknown, resetDep?: unknown) {
@@ -15,20 +14,26 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
       currentElement === element ? currentElement : element)
   }, [])
 
+  const scrollToBottom = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    // Manual/programmatic scroll requests should restore sticky-bottom mode.
+    // Use an immediate jump so follow-up renders can't outrun a smooth animation.
+    stickRef.current = true
+    el.scrollTop = el.scrollHeight
+  }, [])
+
   const scrollToBottomIfSticking = useCallback(() => {
     const el = containerRef.current
     if (!el || !stickRef.current) return
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: getScrollAnimationBehavior(),
-    })
+    el.scrollTop = el.scrollHeight
   }, [])
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    stickRef.current = distanceFromBottom < DEFAULT_SCROLL_STICK_THRESHOLD_PX
+    stickRef.current = distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX
   }, [])
 
   useEffect(() => {
@@ -57,6 +62,7 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
         subtree: true,
         childList: true,
         characterData: true,
+        attributes: true,
       })
     }
 
@@ -82,15 +88,8 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
 
   useEffect(() => {
     if (resetDep === undefined) return
-    stickRef.current = true
-    const el = containerRef.current
-    if (el) {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: getScrollAnimationBehavior(),
-      })
-    }
-  }, [containerElement, resetDep])
+    scrollToBottom()
+  }, [containerElement, resetDep, scrollToBottom])
 
-  return { containerRef, containerElement, setContainerRef, handleScroll }
+  return { containerRef, containerElement, setContainerRef, handleScroll, scrollToBottom }
 }

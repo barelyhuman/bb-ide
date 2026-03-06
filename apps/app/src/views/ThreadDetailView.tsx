@@ -221,7 +221,7 @@ interface TimelineScrollAnchor {
 function isNearBottom(container: HTMLDivElement): boolean {
   const distanceFromBottom =
     container.scrollHeight - container.scrollTop - container.clientHeight;
-  return distanceFromBottom < DEFAULT_SCROLL_STICK_THRESHOLD_PX;
+  return distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX;
 }
 
 function captureTimelineScrollAnchor(
@@ -1465,6 +1465,7 @@ export function ThreadDetailView() {
     containerElement,
     setContainerRef,
     handleScroll: baseHandleScroll,
+    scrollToBottom: baseScrollToBottom,
   } = useAutoScroll(
     threadDetailRows,
     threadId,
@@ -1478,6 +1479,7 @@ export function ThreadDetailView() {
       containerRef,
       containerElement,
       onBaseScroll: baseHandleScroll,
+      onBaseScrollToBottom: baseScrollToBottom,
       resetDep: threadId,
     });
   const syncTimelineScrollAnchor = useCallback(() => {

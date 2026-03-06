@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type RefObject } from "react";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
-  getScrollAnimationBehavior,
 } from "@beanbag/ui-core";
 
 function shouldShowIndicator(el: HTMLDivElement): boolean {
@@ -17,11 +16,13 @@ export function useScrollToBottomIndicator({
   containerRef,
   containerElement,
   onBaseScroll,
+  onBaseScrollToBottom,
   resetDep,
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
   containerElement?: HTMLDivElement | null;
   onBaseScroll?: () => void;
+  onBaseScrollToBottom?: () => void;
   resetDep?: unknown;
 }) {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -46,17 +47,18 @@ export function useScrollToBottomIndicator({
   }, [onBaseScroll, syncVisibility]);
 
   const scrollToBottom = useCallback(() => {
-    const el = containerElement ?? containerRef.current;
-    if (!el) return;
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: getScrollAnimationBehavior(),
-    });
-    // Keep upstream auto-scroll "stick to bottom" state in sync even when a
-    // programmatic scroll does not fire a scroll event (or does not change).
-    onBaseScroll?.();
+    if (onBaseScrollToBottom) {
+      onBaseScrollToBottom();
+    } else {
+      const el = containerElement ?? containerRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+      // Keep upstream auto-scroll "stick to bottom" state in sync even when a
+      // programmatic scroll does not fire a scroll event (or does not change).
+      onBaseScroll?.();
+    }
     setShowScrollToBottom(false);
-  }, [containerElement, containerRef, onBaseScroll]);
+  }, [containerElement, containerRef, onBaseScroll, onBaseScrollToBottom]);
 
   useEffect(() => {
     const el = containerElement ?? containerRef.current;
