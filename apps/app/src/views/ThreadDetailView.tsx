@@ -42,6 +42,7 @@ import {
   useStopThread,
   useMarkThreadRead,
   useSystemEnvironments,
+  useSystemWorkflows,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
@@ -816,6 +817,7 @@ export function ThreadDetailView() {
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const environmentCatalog = useSystemEnvironments();
+  const workflowCatalog = useSystemWorkflows();
   const fileMentions = usePromptFileMentions(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [loadingToolGroupIds, setLoadingToolGroupIds] = useState<Set<string>>(new Set());
@@ -908,6 +910,10 @@ export function ThreadDetailView() {
     () =>
       environmentCatalog.data?.find((environment) => environment.id === thread?.environmentId),
     [environmentCatalog.data, thread?.environmentId],
+  );
+  const workflowInfo = useMemo(
+    () => workflowCatalog.data?.find((workflow) => workflow.kind === thread?.workflowId),
+    [thread?.workflowId, workflowCatalog.data],
   );
   const supportsPrimaryCheckout = Boolean(
     environmentInfo?.capabilities.promote_primary_checkout &&
@@ -1902,7 +1908,7 @@ export function ThreadDetailView() {
                 label="Workflow"
                 valueClassName="min-w-0 truncate"
               >
-                <span>{thread.workflowId}</span>
+                <span>{workflowInfo?.displayName ?? thread.workflowId}</span>
               </DetailRow>
             ) : null}
             {thread.workflowState ? (

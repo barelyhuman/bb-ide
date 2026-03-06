@@ -1,8 +1,23 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type {
   PersistedEnvironmentRecord,
-  SystemEnvironmentInfo,
 } from "@beanbag/agent-core";
+
+export type EnvironmentCapability =
+  | "host_filesystem"
+  | "isolated_workspace"
+  | "promote_primary_checkout"
+  | "demote_primary_checkout"
+  | "squash_merge";
+
+export type EnvironmentCapabilities = Record<EnvironmentCapability, boolean>;
+
+export interface EnvironmentInfo {
+  id: string;
+  displayName: string;
+  description?: string;
+  capabilities: EnvironmentCapabilities;
+}
 
 export interface CreateEnvironmentContext {
   projectId: string;
@@ -40,7 +55,7 @@ export interface EnvironmentSpawnOptions {
 
 export interface IEnvironment {
   readonly kind: string;
-  readonly info: SystemEnvironmentInfo;
+  readonly info: EnvironmentInfo;
 
   serialize(): unknown;
   dispose(): void;
@@ -212,7 +227,7 @@ export interface EnvironmentSquashMergeResult {
 
 export interface EnvironmentDefinition<TState = unknown> {
   readonly kind: string;
-  readonly info: SystemEnvironmentInfo;
+  readonly info: EnvironmentInfo;
   create(context: CreateEnvironmentContext): IEnvironment;
   restore(state: TState, context: CreateEnvironmentContext): IEnvironment;
   isState(value: unknown): value is TState;
@@ -259,7 +274,7 @@ export class EnvironmentRegistry {
     return definition.restore(record.state, context);
   }
 
-  list(): SystemEnvironmentInfo[] {
+  list(): EnvironmentInfo[] {
     return [...this.#definitions.values()].map((definition) => ({
       ...definition.info,
     }));

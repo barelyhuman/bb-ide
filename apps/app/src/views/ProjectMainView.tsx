@@ -70,16 +70,16 @@ export function ProjectMainView() {
   const environmentSelectorOptions = useMemo(
     () =>
       environmentOptions.map((option) => {
-        const normalized = option.label.toLowerCase();
-        if (normalized.includes("isolated") || normalized.includes("worktree")) {
+        const environment = environments?.find((item) => item.id === option.value);
+        if (environment?.capabilities.isolated_workspace) {
           return { ...option, icon: FolderGit2 };
         }
-        if (normalized.includes("direct") || normalized.includes("local")) {
+        if (environment?.capabilities.host_filesystem) {
           return { ...option, icon: Laptop };
         }
         return option;
       }),
-    [environmentOptions],
+    [environmentOptions, environments],
   );
   const workflowSelectorOptions = useMemo(
     () => workflowOptions.map((option) => ({ ...option, icon: GitBranchPlus })),

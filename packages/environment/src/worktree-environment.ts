@@ -2,7 +2,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -11,6 +10,7 @@ import type {
   EnvironmentSpawnOptions,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
+  EnvironmentInfo,
   EnvironmentWorkspaceCommitOptions,
   EnvironmentWorkspaceCommitResult,
   EnvironmentWorkspaceCommitsOptions,
@@ -41,7 +41,7 @@ export interface CreateWorktreeEnvironmentDefinitionOptions {
   worktreeRootName?: string;
 }
 
-const WORKTREE_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
+const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
   id: "worktree",
   displayName: "Git Worktree Workspace",
   description:

@@ -1,7 +1,7 @@
-import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import {
   EnvironmentRegistry,
   type CreateEnvironmentContext,
+  type EnvironmentInfo,
   type IEnvironment,
 } from "./contracts.js";
 import { createLocalEnvironmentDefinition } from "./local-environment.js";
@@ -24,7 +24,7 @@ export function createDefaultEnvironmentRegistry(
 
 export function listAvailableEnvironmentInfos(
   registry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
-): SystemEnvironmentInfo[] {
+): EnvironmentInfo[] {
   return registry.list();
 }
 

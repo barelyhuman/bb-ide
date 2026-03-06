@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -8,6 +7,7 @@ import type {
   EnvironmentSpawnOptions,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
+  EnvironmentInfo,
   EnvironmentWorkspaceCommitOptions,
   EnvironmentWorkspaceCommitResult,
   EnvironmentWorkspaceCommitsOptions,
@@ -31,7 +31,7 @@ import { runCommand, spawnCommand } from "./process.js";
 
 interface LocalEnvironmentState {}
 
-const LOCAL_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
+const LOCAL_ENVIRONMENT_INFO: EnvironmentInfo = {
   id: "local",
   displayName: "Direct Workspace",
   description: "Run directly in the project root on the host machine.",
