@@ -123,7 +123,7 @@ export class EnvironmentRegistry {
   }
 
   get(kind: string): EnvironmentDefinition<unknown> {
-    const definition = this.#definitions.get(normalizeEnvironmentKind(kind));
+    const definition = this.#definitions.get(kind);
     if (!definition) {
       throw new Error(`Unknown environment: ${kind}`);
     }
@@ -131,7 +131,7 @@ export class EnvironmentRegistry {
   }
 
   has(kind: string): boolean {
-    return this.#definitions.has(normalizeEnvironmentKind(kind));
+    return this.#definitions.has(kind);
   }
 
   create(kind: string, context: CreateEnvironmentContext): IEnvironment {
@@ -154,9 +154,4 @@ export class EnvironmentRegistry {
       ...definition.info,
     }));
   }
-}
-
-export function normalizeEnvironmentKind(kind: string): string {
-  const normalized = kind.trim().toLowerCase();
-  return normalized === "direct" ? "local" : normalized;
 }

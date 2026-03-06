@@ -25,7 +25,6 @@ import {
   unwrapProviderEventPayload,
   type AvailableModel,
   type EnvironmentProvisioningEvent,
-  type PersistedEnvironmentRecord,
   type ProviderAdapter,
   type ProviderExecutionOptions,
   type ProviderThreadContext,
@@ -67,7 +66,6 @@ import {
 import {
   EnvironmentRegistry,
   createDefaultEnvironmentRegistry,
-  normalizeEnvironmentKind,
   type CreateEnvironmentContext,
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
@@ -2796,22 +2794,6 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!project) {
       return;
     }
-    if (!thread.environmentRecord && normalizeEnvironmentKind(thread.environmentId ?? "") === "worktree") {
-      const completedProvisioning = this._readCompletedProvisioningDetails(threadId);
-      const workspaceRoot = completedProvisioning?.workspaceRoot;
-      if (
-        !workspaceRoot ||
-        (completedProvisioning.mode !== undefined && completedProvisioning.mode !== "worktree") ||
-        resolve(workspaceRoot) === resolve(project.rootPath)
-      ) {
-        return;
-      }
-      this.gitStatusService.removeWorktreeWorkspace({
-        projectRoot: project.rootPath,
-        workspaceRoot,
-      });
-      return;
-    }
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
     if (!environment || resolve(environment.getWorkspaceRoot()) === resolve(project.rootPath)) {
       return;
@@ -3146,7 +3128,7 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _resolveRequestedEnvironmentId(value?: string): string {
-    const normalized = normalizeEnvironmentKind(value ?? process.env.BEANBAG_ENVIRONMENT ?? "local");
+    const normalized = (value ?? process.env.BEANBAG_ENVIRONMENT ?? "local").trim();
     if (!normalized) return "local";
     if (!this.environmentRegistry.has(normalized)) {
       throw invalidRequestError(`Unsupported environment "${normalized}"`);
@@ -3162,9 +3144,7 @@ export class ThreadManager implements ThreadOrchestrator {
     if (runtime) {
       return runtime.environment;
     }
-    const environmentRecord =
-      thread.environmentRecord ??
-      this._buildLegacyEnvironmentRecord(thread, projectRootPath);
+    const environmentRecord = thread.environmentRecord;
     if (!environmentRecord) {
       return undefined;
     }
@@ -3176,30 +3156,6 @@ export class ThreadManager implements ThreadOrchestrator {
     } catch {
       return undefined;
     }
-  }
-
-  private _buildLegacyEnvironmentRecord(
-    thread: Thread,
-    projectRootPath: string,
-  ): PersistedEnvironmentRecord | undefined {
-    const environmentId = normalizeEnvironmentKind(thread.environmentId ?? "local");
-    if (environmentId === "local") {
-      return { kind: "local", state: {} };
-    }
-    if (environmentId !== "worktree") {
-      return undefined;
-    }
-    const workspaceRoot = this._readCompletedProvisioningWorkspaceRoot(thread.id);
-    if (!workspaceRoot || resolve(workspaceRoot) === resolve(projectRootPath)) {
-      return undefined;
-    }
-    return {
-      kind: "worktree",
-      state: {
-        workspaceRoot,
-        branchName: `bb/thread-${thread.id}`,
-      },
-    };
   }
 
   private _toErrorMessage(err: unknown): string {
@@ -3645,35 +3601,10 @@ export class ThreadManager implements ThreadOrchestrator {
     if (environment) {
       return environment.getWorkspaceRoot();
     }
-    if (normalizeEnvironmentKind(thread.environmentId ?? "") === "worktree") {
-      return this._readCompletedProvisioningWorkspaceRoot(thread.id);
-    }
-    return projectRoot;
-  }
-
-  private _readCompletedProvisioningWorkspaceRoot(threadId: string): string | undefined {
-    const data = this._readCompletedProvisioningDetails(threadId);
-    return data?.workspaceRoot;
-  }
-
-  private _readCompletedProvisioningDetails(
-    threadId: string,
-  ): { workspaceRoot?: string; mode?: string } | undefined {
-    const provisioningEvent = this.eventRepo.getLatestByType(
-      threadId,
-      "system/provisioning/completed",
-    );
-    if (!provisioningEvent) return undefined;
-    const data = toRecord(provisioningEvent.data);
-    const workspaceRoot = getStringField(data, "workspaceRoot");
-    const mode = getStringField(data, "mode");
-    if (!workspaceRoot && !mode) {
+    if (thread.environmentId === "worktree") {
       return undefined;
     }
-    return {
-      ...(workspaceRoot ? { workspaceRoot } : {}),
-      ...(mode ? { mode } : {}),
-    };
+    return projectRoot;
   }
 
   private _readProvisioningState(threadId: string): ThreadProvisioningState | undefined {

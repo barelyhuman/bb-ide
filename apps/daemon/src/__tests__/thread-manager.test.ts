@@ -3331,7 +3331,7 @@ describe("ThreadManager", () => {
       expect(cleanup).toHaveBeenCalledTimes(1);
     });
 
-    it("cleans persisted worktree when archive has no active runtime session", () => {
+    it("does not attempt legacy worktree cleanup when archive has no environment record", () => {
       const projectRoot = "/tmp/proj-1";
       const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -3356,49 +3356,6 @@ describe("ThreadManager", () => {
                 data: {
                   workspaceRoot,
                   mode: "worktree",
-                },
-              })
-            : undefined,
-      );
-      const removeWorktreeWorkspace = vi.fn();
-      const invalidate = vi.fn();
-      asThreadManagerHarness(manager).gitStatusService = {
-        invalidate,
-        removeWorktreeWorkspace,
-      };
-
-      manager.archive("thread-1");
-
-      expect(removeWorktreeWorkspace).toHaveBeenCalledWith({
-        projectRoot,
-        workspaceRoot,
-      });
-    });
-
-    it("skips persisted cleanup when worktree provisioning fell back to local mode", () => {
-      const projectRoot = "/tmp/proj-1";
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({
-          id: "thread-1",
-          status: "idle",
-          environmentId: "worktree",
-        }),
-      );
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Project",
-        rootPath: projectRoot,
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
-        (_threadId: string, type: string) =>
-          type === "system/provisioning/completed"
-            ? makeEvent({
-                type: "system/provisioning/completed",
-                data: {
-                  workspaceRoot: projectRoot,
-                  mode: "local",
                 },
               })
             : undefined,
@@ -3752,6 +3709,7 @@ describe("ThreadManager", () => {
     it("keeps worktree status unknown until provisioning completes", () => {
       const projectRoot = "/tmp/proj-1";
       const envSetupWorkspaceRoot = "/tmp/worktrees/proj-1/thread-1";
+      mkdirSync(envSetupWorkspaceRoot, { recursive: true });
       const thread = makeThread({
         id: "thread-1",
         projectId: "proj-1",
@@ -3795,15 +3753,16 @@ describe("ThreadManager", () => {
       expect(detectDefaultBranch).not.toHaveBeenCalled();
       expect(getStatus).not.toHaveBeenCalled();
 
-      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
-        (_threadId: string, type: string) => {
-          if (type !== "system/provisioning/completed") return undefined;
-          return makeEvent({
-            type: "system/provisioning/completed",
-            data: { workspaceRoot: envSetupWorkspaceRoot },
-          });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        ...thread,
+        environmentRecord: {
+          kind: "worktree",
+          state: {
+            workspaceRoot: envSetupWorkspaceRoot,
+            branchName: "bb/thread-1",
+          },
         },
-      );
+      });
       const resolvedResult = manager.getWorkStatus("thread-1");
       expect(detectDefaultBranch).toHaveBeenCalledWith(projectRoot);
       expect(getStatus).toHaveBeenCalledWith(
@@ -3820,11 +3779,19 @@ describe("ThreadManager", () => {
       let resolveCleanup: (() => void) | undefined;
       const projectRoot = "/tmp/proj-1";
       const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
+      mkdirSync(workspaceRoot, { recursive: true });
       const thread = makeThread({
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
         environmentId: "worktree",
+        environmentRecord: {
+          kind: "worktree",
+          state: {
+            workspaceRoot,
+            branchName: "bb/thread-1",
+          },
+        },
       });
       const getStatus = vi.fn().mockReturnValue({
         state: "dirty_uncommitted",
@@ -3865,20 +3832,51 @@ describe("ThreadManager", () => {
             : undefined,
       );
       asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
-        adapter: {
+        environment: {
+          kind: "worktree",
           info: {
             id: "worktree",
             displayName: "Git Worktree Workspace",
             description: "",
           },
-          prepare: vi.fn(),
-        },
-        session: {
-          cwd: workspaceRoot,
-          cleanup: () =>
+          serialize() {
+            return {
+              workspaceRoot,
+              branchName: "bb/thread-1",
+            };
+          },
+          dispose: () =>
             new Promise<void>((resolve) => {
               resolveCleanup = resolve;
             }),
+          getWorkspaceRoot() {
+            return workspaceRoot;
+          },
+          getExecutionContext() {
+            return { cwd: workspaceRoot, env: {} };
+          },
+          shouldRunSetupScript() {
+            return false;
+          },
+          supportsPromoteToActiveWorkspace() {
+            return false;
+          },
+          supportsDemoteFromActiveWorkspace() {
+            return false;
+          },
+          supportsSquashMergeIntoDefaultBranch() {
+            return false;
+          },
+          promoteToActiveWorkspace() {
+            throw new Error("not implemented");
+          },
+          demoteFromActiveWorkspace() {
+            throw new Error("not implemented");
+          },
+          async squashMergeIntoDefaultBranch() {
+            throw new Error("not implemented");
+          },
+          run: vi.fn(),
         },
       });
 

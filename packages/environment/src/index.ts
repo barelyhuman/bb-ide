@@ -15,7 +15,6 @@ export type {
 } from "./contracts.js";
 export {
   EnvironmentRegistry,
-  normalizeEnvironmentKind,
 } from "./contracts.js";
 export {
   createDefaultEnvironmentRegistry,

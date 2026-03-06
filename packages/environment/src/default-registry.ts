@@ -1,7 +1,6 @@
 import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import {
   EnvironmentRegistry,
-  normalizeEnvironmentKind,
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "./contracts.js";
@@ -34,8 +33,6 @@ export function createEnvironment(
   context: CreateEnvironmentContext,
   registry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
 ): IEnvironment {
-  const resolvedKind = normalizeEnvironmentKind(
-    kind ?? process.env.BEANBAG_ENVIRONMENT ?? "local",
-  );
+  const resolvedKind = (kind ?? process.env.BEANBAG_ENVIRONMENT ?? "local").trim();
   return registry.create(resolvedKind, context);
 }
