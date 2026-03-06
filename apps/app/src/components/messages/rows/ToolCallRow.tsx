@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { ExpandablePanel } from "@beanbag/ui-core";
 import type { UIToolCallMessage } from "@beanbag/agent-core";
 import { getCollapsibleHeaderToneClass } from "@/components/messages/CollapsibleHeader";
@@ -10,6 +10,12 @@ import {
   useLatestInitialExpanded,
   useStickyBottomAutoScroll,
 } from "./shared";
+
+const COMMAND_LINE_CLAMP_STYLE: CSSProperties = {
+  display: "-webkit-box",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+};
 
 export function ToolCallRow({
   message,
@@ -53,7 +59,13 @@ export function ToolCallRow({
         >
           <div className={`${EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS} overflow-hidden rounded-lg border border-border bg-card`}>
             <div className="px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
-              <div className="whitespace-pre-wrap break-words leading-tight">$ {command}</div>
+              <div
+                className="overflow-hidden whitespace-pre-wrap break-words leading-tight"
+                style={COMMAND_LINE_CLAMP_STYLE}
+                title={`$ ${command}`}
+              >
+                $ {command}
+              </div>
               <pre
                 ref={outputRef}
                 onScroll={handleOutputScroll}

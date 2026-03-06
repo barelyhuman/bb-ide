@@ -189,6 +189,23 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("[32m");
   });
 
+  it("clamps expanded tool-call command lines to two lines", () => {
+    const longCommand = "python -c \"print('this is a very long command that should wrap across more than two lines in the UI display')\" --flag-one --flag-two --flag-three --flag-four";
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-long-command",
+      command: longCommand,
+      status: "completed",
+      output: "done",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("-webkit-line-clamp:2");
+    expect(html).toContain("title=\"$ python -c &quot;print(");
+  });
+
   it("renders exploring rows with collapsed count summary", () => {
     const message: UIMessage = {
       ...baseMessage(),
