@@ -10,7 +10,6 @@ import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import {
   assertNever,
-  createProviderEventEnvelope,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
   getStringField,
@@ -74,12 +73,11 @@ import type {
   ProjectRepository,
 } from "@beanbag/db";
 import {
-  createCodexProviderAdapter,
+  AgentServer,
+  type AgentServerNotification,
+  AgentServerSessionError,
   type LlmCompletionService,
-  ProviderRuntime,
-  ProviderRuntimeRpcError,
-  ProviderRuntimeTimeoutError,
-  ProviderRuntimeUnavailableError,
+  createCodexProviderAdapter,
 } from "@beanbag/agent-server";
 import { WSManager } from "./ws.js";
 import {
@@ -118,6 +116,7 @@ interface TellContext {
 interface ActiveEnvironmentRuntime {
   environment: IEnvironment;
   stopWatchingWorkspaceStatus?: () => void;
+  spawnProcess?: () => ChildProcess;
 }
 
 interface ThreadTimelineCacheEntry {
@@ -395,21 +394,11 @@ function isAutoArchiveOnSuccessEnabled(args: {
 }
 
 export class ThreadManager implements ThreadOrchestrator {
-  private processes = new Map<string, ChildProcess>();
-  private runtimes = new Map<string, ProviderRuntime>();
   private environmentRuntimes = new Map<string, ActiveEnvironmentRuntime>();
-  /** Maps our internal thread ID to the provider thread ID */
-  private providerThreadIds = new Map<string, string>();
-  /** Tracks the currently active provider turn ID for each thread (when known). */
-  private activeTurnIds = new Map<string, string>();
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
   /** Ensure automatic title generation is attempted at most once per thread. */
   private autoTitleAttemptedThreadIds = new Set<string>();
-  /** Emit at most one refresh-token warning per thread process lifecycle. */
-  private authRefreshWarningThreadIds = new Set<string>();
-  /** Suppresses multiline JSON auth error payloads already summarized above. */
-  private suppressedAuthStderrDepth = new Map<string, number>();
   /** Tracks in-flight provisioning operations by thread ID. */
   private provisioningTasks = new Map<string, Promise<void>>();
   /** Monotonic sequence counter per thread for persisted events (inbound + outbound). */
@@ -454,10 +443,9 @@ export class ThreadManager implements ThreadOrchestrator {
   private projectOperationTransitionsInFlight = new Set<string>();
   /** Tracks threads whose workspace deletion is in progress. */
   private workspaceCleanupInFlightThreadIds = new Set<string>();
+  private agentServer: AgentServer;
   private operationIdCounter = 0;
-  private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
-  private providerCatalog: SystemProviderInfo[];
   private environmentCatalog: SystemEnvironmentInfo[];
 
   constructor(
@@ -466,7 +454,7 @@ export class ThreadManager implements ThreadOrchestrator {
     private projectRepo: ProjectRepository,
     private ws: WSManager,
     private llmCompletionService: LlmCompletionService,
-    private provider: ProviderAdapter = createCodexProviderAdapter(),
+    agentServerOrProvider?: AgentServer | ProviderAdapter,
     private runtimeEnv: NodeJS.ProcessEnv = process.env,
     private environmentRegistry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
     providerCatalog?: SystemProviderInfo[],
@@ -474,18 +462,27 @@ export class ThreadManager implements ThreadOrchestrator {
     private scheduler: SchedulerService = new InMemorySchedulerService(),
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
-    this.providerCatalog =
-      providerCatalog ??
-      [
-        {
-          id: this.provider.id,
-          displayName: this.provider.displayName,
-          capabilities: { ...this.provider.capabilities },
-        },
-      ];
     this.environmentCatalog =
       environmentCatalog ??
       this.environmentRegistry.list();
+    const provider =
+      agentServerOrProvider instanceof AgentServer
+        ? undefined
+        : agentServerOrProvider;
+    this.agentServer =
+      agentServerOrProvider instanceof AgentServer
+        ? agentServerOrProvider
+        : new AgentServer({
+        provider: provider ?? createCodexProviderAdapter(),
+        ...(providerCatalog ? { providerCatalog } : {}),
+        onNotification: (threadId, event) => {
+          this._handleAgentServerNotification(threadId, event);
+        },
+        onSessionExit: (threadId, event) => {
+          this._handleProcessExit(threadId, event.code, event.signal);
+        },
+        logger: console,
+      });
   }
 
   /**
@@ -580,24 +577,27 @@ export class ThreadManager implements ThreadOrchestrator {
       const environmentKind = this._resolveRequestedEnvironmentId(
         thread.environmentRecord?.kind ?? thread.environmentId,
       );
-      await this._spawnProcess(thread.id, project.rootPath, environmentKind);
-      this._sendInitialize(thread.id);
-      const resumedThreadId = await this._sendRequestAndAwaitThreadId(
+      const environmentRuntime = await this._spawnProcess(
         thread.id,
-        this.provider.threadResumeMethod,
-        this.provider.createThreadResumeParams(
-          providerThreadId,
-          this._buildProviderThreadContext({
-            threadId: thread.id,
-            projectId: thread.projectId,
-          }),
-        ),
+        project.rootPath,
+        environmentKind,
       );
-      this.providerThreadIds.set(thread.id, resumedThreadId);
+      const resumed = await this.agentServer.resumeSession({
+        threadId: thread.id,
+        spawnProcess: environmentRuntime.spawnProcess!,
+        providerThreadId,
+        context: this._buildProviderThreadContext({
+          threadId: thread.id,
+          projectId: thread.projectId,
+        }),
+      });
 
       const activeTurnId = this._resolvePersistedActiveTurnId(thread.id);
       if (activeTurnId) {
-        this.activeTurnIds.set(thread.id, activeTurnId);
+        this.agentServer.hydrateSessionState(thread.id, {
+          providerThreadId: resumed.providerThreadId,
+          activeTurnId,
+        });
       }
     } catch {
       this._cleanupThreadRuntime(thread.id);
@@ -969,13 +969,11 @@ export class ThreadManager implements ThreadOrchestrator {
 
     const providerThreadId = await this._ensureProviderSession(threadId, options);
     const tellMode = request.mode ?? "auto";
-    const hasExecutionOverrides = Boolean(
-      options?.model || options?.reasoningLevel || options?.sandboxMode,
-    );
     const activeTurnId =
-      this.activeTurnIds.get(threadId) ?? this._resolvePersistedActiveTurnId(threadId);
+      this.agentServer.getSessionState(threadId).activeTurnId ??
+      this._resolvePersistedActiveTurnId(threadId);
     if (activeTurnId) {
-      this.activeTurnIds.set(threadId, activeTurnId);
+      this.agentServer.hydrateSessionState(threadId, { activeTurnId });
     }
 
     const project = this.projectRepo.getById(thread.projectId);
@@ -990,69 +988,21 @@ export class ThreadManager implements ThreadOrchestrator {
 
     this._setThreadStatus(threadId, "active");
 
-    const steerSupported = Boolean(
-      this.provider.turnSteerMethod && this.provider.createTurnSteerParams,
-    );
-    const shouldUseSteer =
-      steerSupported &&
-      activeTurnId &&
-      (
-        tellMode === "steer" ||
-        (tellMode === "auto" && !hasExecutionOverrides)
-      );
-
-    if (tellMode === "steer") {
-      if (!steerSupported) {
-        throw unsupportedOperationError(
-          `${this.provider.displayName} does not support turn/steer`,
-        );
-      }
-      if (!activeTurnId) {
-        throw noActiveTurnError(threadId);
-      }
-      if (hasExecutionOverrides) {
-        throw invalidRequestError(
-          "Tell mode 'steer' does not support model or reasoning overrides",
-        );
-      }
-    }
-
-    if (shouldUseSteer && activeTurnId) {
-      const steerMsg = {
-        jsonrpc: "2.0",
-        method: this.provider.turnSteerMethod!,
-        id: ++this.rpcIdCounter,
-        params: this.provider.createTurnSteerParams!(
-          providerThreadId,
-          activeTurnId,
-          providerInput,
-        ),
-      };
-      this._sendToProcess(threadId, steerMsg);
-      return;
-    }
-
-    const turnStartMsg = {
-      jsonrpc: "2.0",
-      method: this.provider.turnStartMethod,
-      id: ++this.rpcIdCounter,
-      params: this.provider.createTurnStartParams(
-        providerThreadId,
-        providerInput,
+    const turnParams = this._buildTurnStartParams(providerThreadId, providerInput, options);
+    this._persistOutboundStartEvent(threadId, "client/turn/start", turnParams, requestedInput, {
+      source: "tell",
+      initiator: context.initiator,
+    });
+    try {
+      await this.agentServer.sendTurn({
+        threadId,
+        input: providerInput,
         options,
-      ),
-    };
-    this._persistOutboundStartEvent(
-      threadId,
-      "client/turn/start",
-      turnStartMsg.params,
-      requestedInput,
-      {
-        source: "tell",
-        initiator: context.initiator,
-      },
-    );
-    this._sendToProcess(threadId, turnStartMsg);
+        mode: tellMode === "steer" ? "steer" : tellMode === "auto" ? "auto" : "start",
+      });
+    } catch (error) {
+      this._rethrowAgentServerError(threadId, error);
+    }
   }
 
   private async _sendQueuedFollowUpMessage(
@@ -1333,26 +1283,7 @@ export class ThreadManager implements ThreadOrchestrator {
    * Stop an active thread by killing its process.
    */
   stop(threadId: string): void {
-    const child = this.processes.get(threadId);
-    if (child) {
-      child.kill("SIGTERM");
-      // Give it a moment, then force kill
-      setTimeout(() => {
-        if (child.exitCode === null) {
-          child.kill("SIGKILL");
-        }
-      }, 5000);
-    }
-
-    const runtime = this.runtimes.get(threadId);
-    if (runtime) {
-      runtime.close(new Error(`[thread ${threadId}] Stopping thread`));
-      this.runtimes.delete(threadId);
-    }
-
-    this.activeTurnIds.delete(threadId);
-    this.authRefreshWarningThreadIds.delete(threadId);
-    this.suppressedAuthStderrDepth.delete(threadId);
+    this.agentServer.stopSession(threadId, `[thread ${threadId}] Stopping thread`);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
@@ -1374,28 +1305,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
 
-    const child = this.processes.get(threadId);
-    if (child) {
-      child.kill("SIGTERM");
-      // Give it a moment, then force kill
-      setTimeout(() => {
-        if (child.exitCode === null) {
-          child.kill("SIGKILL");
-        }
-      }, 5000);
-      this.processes.delete(threadId);
-    }
-
-    const runtime = this.runtimes.get(threadId);
-    if (runtime) {
-      runtime.close(new Error(`[thread ${threadId}] Archiving thread`));
-      this.runtimes.delete(threadId);
-    }
-
-    this.providerThreadIds.delete(threadId);
-    this.activeTurnIds.delete(threadId);
-    this.authRefreshWarningThreadIds.delete(threadId);
-    this.suppressedAuthStderrDepth.delete(threadId);
+    this.agentServer.stopSession(threadId, `[thread ${threadId}] Archiving thread`);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
@@ -1454,7 +1364,7 @@ export class ThreadManager implements ThreadOrchestrator {
       this.threadRepo.update(threadId, { title: nextTitle });
       this.titleFallbackByThreadId.delete(threadId);
       this.lockedTitleThreadIds.add(threadId);
-      const providerThreadId = this.providerThreadIds.get(threadId);
+      const providerThreadId = this.agentServer.getSessionState(threadId).providerThreadId;
       if (providerThreadId) {
         this._sendThreadNameSet(threadId, providerThreadId, nextTitle);
       }
@@ -1729,7 +1639,7 @@ export class ThreadManager implements ThreadOrchestrator {
         ...allEvents[i],
         data: unwrapProviderEventPayload(allEvents[i].data) as ThreadEvent["data"],
       };
-      const output = this.provider.outputFromEvent(hydratedEvent);
+      const output = this.agentServer.outputFromEvent(hydratedEvent);
       if (output !== undefined) return output;
     }
     return undefined;
@@ -2180,14 +2090,14 @@ export class ThreadManager implements ThreadOrchestrator {
    * Check if a thread's process is currently active.
    */
   isActive(threadId: string): boolean {
-    return this.processes.has(threadId);
+    return this.agentServer.isSessionActive(threadId);
   }
 
   /**
    * Get count of currently active (running) thread processes.
    */
   getActiveCount(): number {
-    return this.processes.size;
+    return this.agentServer.getActiveSessionCount();
   }
 
   /**
@@ -2201,25 +2111,15 @@ export class ThreadManager implements ThreadOrchestrator {
    * List available models from the active provider.
    */
   async listModels(): Promise<AvailableModel[]> {
-    if (!this.provider.capabilities.supportsModelList) {
-      return [];
-    }
-    return this.provider.listModels();
+    return this.agentServer.listModels();
   }
 
   getProviderInfo(): SystemProviderInfo {
-    return {
-      id: this.provider.id,
-      displayName: this.provider.displayName,
-      capabilities: { ...this.provider.capabilities },
-    };
+    return this.agentServer.getProviderInfo();
   }
 
   listProviders(): SystemProviderInfo[] {
-    return this.providerCatalog.map((provider) => ({
-      ...provider,
-      capabilities: { ...provider.capabilities },
-    }));
+    return this.agentServer.listProviders();
   }
 
   getEnvironmentInfo(): SystemEnvironmentInfo {
@@ -2242,32 +2142,24 @@ export class ThreadManager implements ThreadOrchestrator {
    * Stop all active processes. Called during graceful shutdown.
    */
   stopAll(): void {
-    for (const [threadId, child] of this.processes) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // Process may have already exited
-      }
+    const threadIds = new Set<string>(this.agentServer.listActiveSessionIds());
+    const activeThreads = this.threadRepo.list({ includeArchived: true }) ?? [];
+    for (const thread of activeThreads) {
+      threadIds.add(thread.id);
+    }
+    for (const threadId of threadIds) {
       // Shutdown/restart should not create unread noise by touching thread.updatedAt.
       this.threadRepo.update(threadId, { status: "idle" }, {
         touchUpdatedAt: false,
       });
     }
-    for (const runtime of this.runtimes.values()) {
-      runtime.close();
-    }
-    this.runtimes.clear();
-    this.processes.clear();
+    this.agentServer.stopAllSessions("Beanbag daemon shutdown");
     for (const [threadId] of this.environmentRuntimes) {
       this._cleanupEnvironmentRuntime(threadId);
     }
     this.environmentRuntimes.clear();
-    this.providerThreadIds.clear();
-    this.activeTurnIds.clear();
     this.autoTitleAttemptedThreadIds.clear();
     this.titleFallbackByThreadId.clear();
-    this.authRefreshWarningThreadIds.clear();
-    this.suppressedAuthStderrDepth.clear();
     this.provisioningTasks.clear();
     this.eventSeqCounters.clear();
     this.lastNotifiedCompletionTurnIds.clear();
@@ -2350,10 +2242,11 @@ export class ThreadManager implements ThreadOrchestrator {
       projectWorkflowInstructions: project.workflowInstructions,
       requestDeveloperInstructions: req.developerInstructions,
     });
-    const preProvisionThreadStartParams = this.provider.createThreadStartParams(
-      preProvisionDeveloperInstructions
-        ? { ...req, developerInstructions: preProvisionDeveloperInstructions }
-        : req,
+    const preProvisionRequest = preProvisionDeveloperInstructions
+      ? { ...req, developerInstructions: preProvisionDeveloperInstructions }
+      : req;
+    const preProvisionThreadStartParams = this._buildThreadStartParams(
+      preProvisionRequest,
       this._buildProviderThreadContext({
         threadId,
         projectId: req.projectId,
@@ -2401,7 +2294,6 @@ export class ThreadManager implements ThreadOrchestrator {
         state: environmentRuntime.environment.serialize(),
       },
     });
-    this._sendInitialize(threadId);
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
     });
@@ -2416,14 +2308,16 @@ export class ThreadManager implements ThreadOrchestrator {
       requestDeveloperInstructions: req.developerInstructions,
       environmentKind: environmentRuntime.environment.kind,
     });
-    const threadStartParams = this.provider.createThreadStartParams(
-      effectiveDeveloperInstructions
-        ? { ...req, developerInstructions: effectiveDeveloperInstructions }
-        : req,
-      this._buildProviderThreadContext({
-        threadId,
-        projectId: req.projectId,
-      }),
+    const effectiveRequest = effectiveDeveloperInstructions
+      ? { ...req, developerInstructions: effectiveDeveloperInstructions }
+      : req;
+    const providerContext = this._buildProviderThreadContext({
+      threadId,
+      projectId: req.projectId,
+    });
+    const threadStartParams = this._buildThreadStartParams(
+      effectiveRequest,
+      providerContext,
     );
     this._amendOutboundStartEvent(
       threadId,
@@ -2436,22 +2330,19 @@ export class ThreadManager implements ThreadOrchestrator {
         initiator: "agent",
       },
     );
-    const providerThreadId = await this._sendRequestAndAwaitThreadId(
+    const started = await this.agentServer.startSession({
       threadId,
-      this.provider.threadStartMethod,
-      threadStartParams,
-    );
-    this.providerThreadIds.set(threadId, providerThreadId);
+      spawnProcess: environmentRuntime.spawnProcess!,
+      request: effectiveRequest,
+      context: providerContext,
+    });
+    const providerThreadId = started.providerThreadId;
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
     if (
       hydratedThreadAfterStart?.title &&
       this.lockedTitleThreadIds.has(threadId)
     ) {
-      this._sendThreadNameSet(
-        threadId,
-        providerThreadId,
-        hydratedThreadAfterStart.title,
-      );
+      this._sendThreadNameSet(threadId, providerThreadId, hydratedThreadAfterStart.title);
     }
 
     this._maybeAutogenerateThreadTitle(
@@ -2463,11 +2354,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
     if (requestedInput.length > 0) {
       this._setThreadStatus(threadId, "active");
-      const turnStartParams = this.provider.createTurnStartParams(
-        providerThreadId,
-        providerInput,
-        req,
-      );
+      const turnStartParams = this._buildTurnStartParams(providerThreadId, providerInput, req);
       this._persistOutboundStartEvent(
         threadId,
         "client/turn/start",
@@ -2478,13 +2365,12 @@ export class ThreadManager implements ThreadOrchestrator {
           initiator: "agent",
         },
       );
-      const turnMsg = {
-        jsonrpc: "2.0",
-        method: this.provider.turnStartMethod,
-        id: ++this.rpcIdCounter,
-        params: turnStartParams,
-      };
-      this._sendToProcess(threadId, turnMsg);
+      await this.agentServer.sendTurn({
+        threadId,
+        input: providerInput,
+        options: req,
+        mode: "start",
+      });
       return;
     }
 
@@ -2492,26 +2378,7 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _cleanupThreadRuntime(threadId: string): void {
-    const child = this.processes.get(threadId);
-    if (child) {
-      try {
-        child.kill("SIGTERM");
-      } catch {
-        // ignore shutdown errors
-      }
-    }
-    this.processes.delete(threadId);
-
-    const runtime = this.runtimes.get(threadId);
-    if (runtime) {
-      runtime.close();
-    }
-    this.runtimes.delete(threadId);
-
-    this.providerThreadIds.delete(threadId);
-    this.activeTurnIds.delete(threadId);
-    this.authRefreshWarningThreadIds.delete(threadId);
-    this.suppressedAuthStderrDepth.delete(threadId);
+    this.agentServer.stopSession(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -2731,66 +2598,21 @@ export class ThreadManager implements ThreadOrchestrator {
     this._setEnvironmentRuntime(threadId, environment);
     const thread = this.threadRepo.getById(threadId);
     const projectId = thread?.projectId;
-    const child = environment.spawn(this.provider.processCommand, this.provider.processArgs, {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: {
-        ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-        ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
-        BB_THREAD_ID: threadId,
-        BB_ENVIRONMENT_ID: environment.kind,
-      },
-    });
-
-    this.processes.set(threadId, child);
-    const runtime = new ProviderRuntime({
-      threadId,
-      child,
-      onNotification: (msg) => {
-        this._handleProviderNotification(threadId, msg);
-      },
-      onUnmatchedRpcError: (requestId, errorMessage) => {
-        console.error(
-          `[thread ${threadId}] Provider RPC error (request ${requestId}):`,
-          errorMessage,
-        );
-      },
-      onStderrLine: (line) => {
-        this._handleProviderStderrLine(threadId, line);
-      },
-    });
-    this.runtimes.set(threadId, runtime);
-
-    child.on("exit", (code, signal) => {
-      this._handleProcessExit(threadId, code, signal);
-    });
-
-    child.on("error", (err) => {
-      console.error(`[thread ${threadId}] Process error:`, err.message);
-      runtime.close(
-        new Error(`[thread ${threadId}] Process error: ${err.message}`),
-      );
-      this._handleProcessExit(threadId, 1, null);
-    });
+    const spawnSpec = this.agentServer.getSpawnSpec();
 
     return {
       environment,
+      spawnProcess: () =>
+        environment.spawn(spawnSpec.command, spawnSpec.args, {
+          stdio: ["pipe", "pipe", "pipe"],
+          env: {
+            ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+            ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
+            BB_THREAD_ID: threadId,
+            BB_ENVIRONMENT_ID: environment.kind,
+          },
+        }),
     };
-  }
-
-  private _sendInitialize(threadId: string): void {
-    const defaultParams = {
-      clientInfo: this.provider.clientInfo,
-    };
-    const params =
-      this.provider.createInitializeParams?.(this.provider.clientInfo) ??
-      defaultParams;
-    const initMsg = {
-      jsonrpc: "2.0",
-      method: this.provider.initializeMethod,
-      id: ++this.rpcIdCounter,
-      params,
-    };
-    this._sendToProcess(threadId, initMsg);
   }
 
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {
@@ -2807,11 +2629,6 @@ export class ThreadManager implements ThreadOrchestrator {
         event.data,
       );
       if (normalizedProviderThreadId) return normalizedProviderThreadId;
-
-      const providerThreadId = this.provider.extractThreadIdFromEventData(
-        unwrapProviderEventPayload(event.data),
-      );
-      if (providerThreadId) return providerThreadId;
     }
     return undefined;
   }
@@ -2838,7 +2655,7 @@ export class ThreadManager implements ThreadOrchestrator {
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       const method = resolveProviderEventMethod(event.type, event.data);
-      const normalizedType = this.provider.normalizeEventType(method);
+      const normalizedType = this.agentServer.normalizeEventType(method);
       const state = toTurnLifecycleState(normalizedType);
       if (state === "idle") return undefined;
       if (state === "active") {
@@ -2856,22 +2673,25 @@ export class ThreadManager implements ThreadOrchestrator {
     threadId: string,
     options?: PromptExecutionOptions,
   ): Promise<string> {
-    const hasActiveProcess = this.processes.has(threadId);
-    const inMemoryThreadId = this.providerThreadIds.get(threadId);
+    const sessionState = this.agentServer.getSessionState(threadId);
+    const hasActiveProcess = sessionState.hasActiveRuntime;
+    const inMemoryThreadId = sessionState.providerThreadId;
     const persistedThreadId =
       inMemoryThreadId ?? this._resolvePersistedProviderThreadId(threadId);
 
     if (hasActiveProcess) {
       if (inMemoryThreadId) return inMemoryThreadId;
       if (persistedThreadId) {
-        this.providerThreadIds.set(threadId, persistedThreadId);
+        this.agentServer.hydrateSessionState(threadId, {
+          providerThreadId: persistedThreadId,
+        });
         return persistedThreadId;
       }
-      throw inactiveSessionError(this.provider.inactiveSessionErrorMessage(threadId));
+      throw inactiveSessionError(this.agentServer.getInactiveSessionMessage(threadId));
     }
 
     if (!persistedThreadId) {
-      throw inactiveSessionError(this.provider.inactiveSessionErrorMessage(threadId));
+      throw inactiveSessionError(this.agentServer.getInactiveSessionMessage(threadId));
     }
 
     const thread = this.threadRepo.getById(threadId);
@@ -2891,25 +2711,26 @@ export class ThreadManager implements ThreadOrchestrator {
       const environmentKind = this._resolveRequestedEnvironmentId(
         thread.environmentRecord?.kind ?? thread.environmentId,
       );
-      await this._spawnProcess(threadId, project.rootPath, environmentKind);
-      this._sendInitialize(threadId);
-      const resumedThreadId = await this._sendRequestAndAwaitThreadId(
+      const environmentRuntime = await this._spawnProcess(
         threadId,
-        this.provider.threadResumeMethod,
-        this.provider.createThreadResumeParams(
-          persistedThreadId,
-          this._buildProviderThreadContext({
-            threadId,
-            projectId: thread.projectId,
-          }),
-          options,
-        ),
+        project.rootPath,
+        environmentKind,
       );
-      this.providerThreadIds.set(threadId, resumedThreadId);
-      return resumedThreadId;
+      const resumed = await this.agentServer.resumeSession({
+        threadId,
+        spawnProcess: environmentRuntime.spawnProcess!,
+        providerThreadId: persistedThreadId,
+        context: this._buildProviderThreadContext({
+          threadId,
+          projectId: thread.projectId,
+        }),
+        options,
+      });
+      return resumed.providerThreadId;
     } catch (err) {
       this._cleanupThreadRuntime(threadId);
-      if (!this._isMissingProviderThreadError(err)) {
+      if (!this.agentServer.isMissingProviderThreadError(err)) {
+        this._rethrowAgentServerError(threadId, err);
         throw err;
       }
 
@@ -2926,7 +2747,7 @@ export class ThreadManager implements ThreadOrchestrator {
         },
         { rootPathHint: project.rootPath },
       );
-      const reprovisionedThreadId = this.providerThreadIds.get(threadId);
+      const reprovisionedThreadId = this.agentServer.getSessionState(threadId).providerThreadId;
       if (reprovisionedThreadId) return reprovisionedThreadId;
 
       throw err;
@@ -2942,6 +2763,70 @@ export class ThreadManager implements ThreadOrchestrator {
       projectId: args.projectId,
       threadId: args.threadId,
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
+    };
+  }
+
+  private _buildThreadStartParams(
+    request: SpawnThreadRequest,
+    context: ProviderThreadContext,
+  ): Record<string, unknown> {
+    const defaultBaseInstructions =
+      "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
+    const baseInstructions = request.developerInstructions?.trim()
+      ? request.developerInstructions.startsWith(defaultBaseInstructions)
+        ? request.developerInstructions
+        : `${defaultBaseInstructions}\n\n${request.developerInstructions}`
+      : defaultBaseInstructions;
+    return {
+      approvalPolicy: "never",
+      sandbox: request.sandboxMode ?? "danger-full-access",
+      baseInstructions,
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.reasoningLevel
+        ? { config: { model_reasoning_effort: request.reasoningLevel } }
+        : {}),
+      ...(context.path
+        ? {
+            config: {
+              ...(request.reasoningLevel
+                ? { model_reasoning_effort: request.reasoningLevel }
+                : {}),
+              "shell_environment_policy.set.BB_PROJECT_ID": context.projectId,
+              "shell_environment_policy.set.BB_THREAD_ID": context.threadId,
+              "shell_environment_policy.set.PATH": context.path,
+            },
+          }
+        : {}),
+    };
+  }
+
+  private _buildTurnStartParams(
+    providerThreadId: string,
+    input: PromptInput[],
+    options?: ProviderExecutionOptions,
+  ): Record<string, unknown> {
+    const sandboxMode = options?.sandboxMode ?? "danger-full-access";
+    const sandboxPolicy =
+      sandboxMode === "read-only"
+        ? { type: "readOnly" }
+        : sandboxMode === "workspace-write"
+          ? {
+              type: "workspaceWrite",
+              writableRoots: [],
+              networkAccess: true,
+              excludeTmpdirEnvVar: false,
+              excludeSlashTmp: false,
+            }
+          : { type: "dangerFullAccess" };
+    return {
+      threadId: providerThreadId,
+      input,
+      approvalPolicy: "never",
+      sandboxPolicy,
+      ...(options?.model ? { model: options.model } : {}),
+      ...(options?.reasoningLevel
+        ? { config: { model_reasoning_effort: options.reasoningLevel } }
+        : {}),
     };
   }
 
@@ -3004,12 +2889,6 @@ export class ThreadManager implements ThreadOrchestrator {
     return customized.length > 0 ? customized : undefined;
   }
 
-  private _isMissingProviderThreadError(err: unknown): boolean {
-    if (!isDomainError(err) || err.code !== "provider_rpc_error") return false;
-    const normalized = err.message.toLowerCase();
-    return normalized.includes("no rollout found for thread id");
-  }
-
   private _createProvisioningFailureEventData(
     err: unknown,
     projectId: string,
@@ -3033,58 +2912,41 @@ export class ThreadManager implements ThreadOrchestrator {
     };
   }
 
-  private _handleProviderNotification(
+  private _handleAgentServerNotification(
     threadId: string,
-    msg: { method: unknown; params: unknown },
+    event: AgentServerNotification,
   ): void {
-    if (typeof msg.method !== "string") {
-      return;
-    }
-
-    const eventType = toProviderEventType(msg.method);
-    const normalizedType = this.provider.normalizeEventType(msg.method);
-    const providerPayload = msg.params ?? {};
-    const eventData: ThreadEventData = createProviderEventEnvelope({
-      providerId: this.provider.id,
-      method: msg.method,
-      payload: providerPayload,
-    });
-
-    const shouldBroadcast = this.provider.shouldBroadcastForEvent(msg.method);
     const changes: ThreadChangeKind[] = [];
-    const shouldPersistEvent =
-      this.provider.shouldPersistEvent?.(msg.method, msg.params) !== false;
     let persistedEvent: ThreadEvent | undefined;
 
-    if (shouldPersistEvent) {
-      if (shouldBroadcast) {
+    if (event.shouldPersist) {
+      if (event.shouldBroadcast) {
         changes.push("events-appended");
       }
-      persistedEvent = this._appendEvent(threadId, eventType, eventData, {
+      persistedEvent = this._appendEvent(threadId, event.eventType, event.eventData, {
         broadcastChanges: false,
       });
       this._maybePruneActiveThreadNoise(
         threadId,
-        normalizedType,
+        event.normalizedMethod,
         persistedEvent.seq,
       );
     }
 
-    const titleChanged = this._syncTitleFromEvent(threadId, msg.method, providerPayload);
-    if (shouldBroadcast && titleChanged) {
+    const titleChanged = this._syncTitleFromEvent(threadId, event);
+    if (event.shouldBroadcast && titleChanged) {
       changes.push("title-changed");
     }
 
-    const statusChanged = this._syncStatusFromEvent(threadId, msg.method);
-    if (shouldBroadcast && statusChanged) {
+    const statusChanged = this._syncStatusFromEvent(threadId, event);
+    if (event.shouldBroadcast && statusChanged) {
       changes.push(...THREAD_STATUS_CHANGE_KINDS);
     }
 
-    this._syncActiveTurnFromEvent(threadId, msg.method, providerPayload);
+    this._syncActiveTurnFromEvent(threadId, event);
     if (persistedEvent) {
       this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
     }
-    const thread = this.threadRepo.getById(threadId);
     if (changes.length > 0) {
       this._enqueueProviderThreadChanged(threadId, changes);
     }
@@ -3485,7 +3347,7 @@ export class ThreadManager implements ThreadOrchestrator {
     event: ThreadEvent,
   ): void {
     const eventMethod = resolveProviderEventMethod(event.type, event.data);
-    const normalizedType = this.provider.normalizeEventType(eventMethod);
+    const normalizedType = this.agentServer.normalizeEventType(eventMethod);
     if (normalizedType !== "turn/completed" && normalizedType !== "turn/end") {
       return;
     }
@@ -3563,23 +3425,10 @@ export class ThreadManager implements ThreadOrchestrator {
    */
   private _handleProcessExit(
     threadId: string,
-    code: number | null,
-    signal: string | null,
+    _code: number | null,
+    _signal: string | null,
   ): void {
-    this.processes.delete(threadId);
-    const runtime = this.runtimes.get(threadId);
-    if (runtime) {
-      runtime.close(
-        new Error(
-          `[thread ${threadId}] Process exited (${signal ?? code ?? "unknown"})`,
-        ),
-      );
-      this.runtimes.delete(threadId);
-    }
-    this.providerThreadIds.delete(threadId);
-    this.activeTurnIds.delete(threadId);
-    this.authRefreshWarningThreadIds.delete(threadId);
-    this.suppressedAuthStderrDepth.delete(threadId);
+    this.agentServer.stopSession(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -3601,164 +3450,38 @@ export class ThreadManager implements ThreadOrchestrator {
     }
   }
 
-  private _handleProviderStderrLine(threadId: string, line: string): void {
-    if (this._consumeSuppressedAuthStderrLine(threadId, line)) {
-      return;
-    }
-
-    const normalized = line.toLowerCase();
-    const isRefreshTokenConflict =
-      normalized.includes("refresh_token_reused") ||
-      normalized.includes("refresh token has already been used") ||
-      normalized.includes("your access token could not be refreshed");
-    const isRefreshTokenFailure = normalized.includes("failed to refresh token");
-
-    if (isRefreshTokenFailure || isRefreshTokenConflict) {
-      if (!this.authRefreshWarningThreadIds.has(threadId)) {
-        this.authRefreshWarningThreadIds.add(threadId);
-        console.warn(
-          `[thread ${threadId}] provider auth refresh conflict (refresh token reused). ` +
-            "Another Codex process likely refreshed credentials first. " +
-            "If requests start failing, re-authenticate with `codex login` and restart Beanbag daemon.",
-        );
-      }
-
-      if (isRefreshTokenFailure && line.includes("{")) {
-        const depth = this._braceDepthDelta(line);
-        if (depth > 0) {
-          this.suppressedAuthStderrDepth.set(threadId, depth);
-        }
-      }
-      return;
-    }
-
-    console.error(`[thread ${threadId}] stderr: ${line}`);
-  }
-
-  private _consumeSuppressedAuthStderrLine(threadId: string, line: string): boolean {
-    const currentDepth = this.suppressedAuthStderrDepth.get(threadId);
-    if (!currentDepth || currentDepth <= 0) return false;
-
-    const nextDepth = currentDepth + this._braceDepthDelta(line);
-    if (nextDepth > 0) {
-      this.suppressedAuthStderrDepth.set(threadId, nextDepth);
-    } else {
-      this.suppressedAuthStderrDepth.delete(threadId);
-    }
-    return true;
-  }
-
-  private _braceDepthDelta(line: string): number {
-    let delta = 0;
-    for (const ch of line) {
-      if (ch === "{") delta += 1;
-      else if (ch === "}") delta -= 1;
-    }
-    return delta;
-  }
-
-  /**
-   * Send a JSON-RPC message to a thread's process stdin.
-   */
-  private _sendToProcess(threadId: string, msg: object): void {
-    const runtime = this.runtimes.get(threadId);
-    if (runtime) {
-      try {
-        runtime.send(msg);
-      } catch (err) {
-        if (err instanceof ProviderRuntimeUnavailableError) {
-          throw providerUnavailableError(err.message);
-        }
-        throw err;
-      }
-      return;
-    }
-
-    // Compatibility fallback for tests and edge cases where a process exists
-    // but a runtime has not been registered.
-    const child = this.processes.get(threadId);
-    if (!child || !child.stdin) {
-      throw inactiveSessionError(
-        this.provider.inactiveSessionErrorMessage(threadId),
-      );
-    }
-    child.stdin.write(JSON.stringify(msg) + "\n");
-  }
-
-  private async _sendRequestAndAwaitThreadId(
+  private _syncStatusFromEvent(
     threadId: string,
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<string> {
-    const runtime = this.runtimes.get(threadId);
-    if (!runtime) {
-      throw providerUnavailableError(
-        `[thread ${threadId}] No active provider runtime`,
-      );
-    }
-
-    const requestId = ++this.rpcIdCounter;
-    let result: unknown;
-    try {
-      result = await runtime.request({
-        jsonrpc: "2.0",
-        method,
-        id: requestId,
-        params,
-      });
-    } catch (err) {
-      if (err instanceof ProviderRuntimeTimeoutError) {
-        throw providerTimeoutError(err.message);
-      }
-      if (err instanceof ProviderRuntimeRpcError) {
-        throw providerRpcError(err.message);
-      }
-      if (err instanceof ProviderRuntimeUnavailableError) {
-        throw providerUnavailableError(err.message);
-      }
-      throw err;
-    }
-
-    const providerThreadId = this.provider.extractThreadIdFromResult(result);
-    if (!providerThreadId) {
-      throw providerRpcError(
-        `[thread ${threadId}] RPC response missing thread ID. Response: ${JSON.stringify(result)}`,
-      );
-    }
-
-    return providerThreadId;
-  }
-
-  private _syncStatusFromEvent(threadId: string, method: string): boolean {
-    const nextStatus = this.provider.statusForEvent(method);
+    event: AgentServerNotification,
+  ): boolean {
+    const nextStatus = event.nextStatus;
     if (!nextStatus) return false;
     return this._setThreadStatus(threadId, nextStatus, false);
   }
 
   private _syncActiveTurnFromEvent(
     threadId: string,
-    method: string,
-    data: unknown,
+    event: AgentServerNotification,
   ): void {
-    const state = toTurnLifecycleState(this.provider.normalizeEventType(method));
+    const state = event.turnState;
     if (state === "active") {
       const nextEpoch = (this.turnLifecycleEpochs.get(threadId) ?? 0) + 1;
       this.turnLifecycleEpochs.set(threadId, nextEpoch);
-      const turnId = this._extractTurnIdFromEventData(data);
-      if (turnId) this.activeTurnIds.set(threadId, turnId);
+      if (event.turnId) {
+        this.agentServer.hydrateSessionState(threadId, { activeTurnId: event.turnId });
+      }
       return;
     }
     if (state === "idle") {
-      this.activeTurnIds.delete(threadId);
+      this.agentServer.hydrateSessionState(threadId, { activeTurnId: undefined });
     }
   }
 
   private _syncTitleFromEvent(
     threadId: string,
-    method: string,
-    data: unknown,
+    event: AgentServerNotification,
   ): boolean {
-    const title = this.provider.titleFromEvent(method, data);
+    const title = event.title;
     if (!title) return false;
     const thread = this.threadRepo.getById(threadId);
     const changed = this._setThreadTitle(threadId, title, {
@@ -3774,11 +3497,34 @@ export class ThreadManager implements ThreadOrchestrator {
         title,
         ...(thread?.title ? { previousTitle: thread.title } : {}),
         source: "provider",
-        providerMethod: method,
+        providerMethod: event.method,
       },
       { broadcastChanges: false },
     );
     return true;
+  }
+
+  private _rethrowAgentServerError(threadId: string, error: unknown): never {
+    if (!(error instanceof AgentServerSessionError)) {
+      throw error;
+    }
+    switch (error.code) {
+      case "inactive_session":
+        throw inactiveSessionError(error.message);
+      case "no_active_turn":
+        throw noActiveTurnError(threadId);
+      case "unsupported_operation":
+        throw unsupportedOperationError(error.message);
+      case "provider_rpc_error":
+      case "missing_provider_thread":
+        throw providerRpcError(error.message);
+      case "provider_timeout":
+        throw providerTimeoutError(error.message);
+      case "provider_unavailable":
+        throw providerUnavailableError(error.message);
+      default:
+        return assertNever(error.code);
+    }
   }
 
   private _setThreadTitle(
@@ -3977,7 +3723,7 @@ export class ThreadManager implements ThreadOrchestrator {
       if (!threadBeforeUpdate) return;
 
       const fallbackTitle =
-        this.provider.deriveThreadTitle(input) ?? this._derivePromptFallbackTitle(input);
+        this.agentServer.deriveThreadTitle(input) ?? this._derivePromptFallbackTitle(input);
       if (
         threadBeforeUpdate.title &&
         (
@@ -4006,28 +3752,10 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _sendThreadNameSet(
     threadId: string,
-    providerThreadId: string,
+    _providerThreadId: string,
     title: string,
   ): void {
-    if (!this.provider.threadNameSetMethod) return;
-    if (!this.provider.createThreadNameSetParams) return;
-
-    const child = this.processes.get(threadId);
-    if (!child) return;
-
-    try {
-      this._sendToProcess(threadId, {
-        jsonrpc: "2.0",
-        method: this.provider.threadNameSetMethod,
-        id: ++this.rpcIdCounter,
-        params: this.provider.createThreadNameSetParams(providerThreadId, title),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      console.error(
-        `[thread ${threadId}] Failed to send ${this.provider.threadNameSetMethod}: ${message}`,
-      );
-    }
+    this.agentServer.renameSession(threadId, title);
   }
 
   private _normalizeThreadTitle(value: unknown): string | undefined {
@@ -4040,46 +3768,7 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _normalizePromptInputForProvider(input: PromptInput[]): PromptInput[] {
-    const normalized: PromptInput[] = [];
-    for (const chunk of input) {
-      switch (chunk.type) {
-        case "text":
-          normalized.push(chunk);
-          break;
-        case "localFile":
-          // No currently integrated runtime supports native local file prompt parts.
-          // Preserve intent via deterministic text annotations.
-          normalized.push({
-            type: "text",
-            text: `Attached local file: ${chunk.path}`,
-          });
-          break;
-        case "image":
-          if (this.provider.capabilities.supportsMultimodalInput) {
-            normalized.push(chunk);
-          } else {
-            normalized.push({
-              type: "text",
-              text: `Attached image URL: ${chunk.url}`,
-            });
-          }
-          break;
-        case "localImage":
-          if (this.provider.capabilities.supportsMultimodalInput) {
-            normalized.push(chunk);
-          } else {
-            normalized.push({
-              type: "text",
-              text: `Attached local image: ${chunk.path}`,
-            });
-          }
-          break;
-        default:
-          assertNever(chunk);
-      }
-    }
-
-    return normalized;
+    return this.agentServer.normalizePromptInput(input);
   }
 
   private _latestTurnLifecycleStatus(
@@ -4097,7 +3786,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const method = resolveProviderEventMethod(events[i].type, events[i].data);
-      const normalizedType = this.provider.normalizeEventType(method);
+      const normalizedType = this.agentServer.normalizeEventType(method);
       const state = toTurnLifecycleState(normalizedType);
       if (state) return state;
     }

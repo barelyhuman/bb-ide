@@ -33,6 +33,17 @@ export {
   createProviderAdapter,
   listAvailableProviderInfos,
 } from "./provider-registry.js";
+export type {
+  AgentServerOptions,
+  AgentServerNotification,
+  AgentServerSessionExit,
+  AgentServerSessionState,
+  AgentServerSessionErrorCode,
+} from "./agent-server.js";
+export {
+  AgentServer,
+  AgentServerSessionError,
+} from "./agent-server.js";
 
 export {
   ProviderRuntime,

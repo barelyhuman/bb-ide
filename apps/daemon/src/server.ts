@@ -11,6 +11,7 @@ import type {
   EventRepository,
 } from "@beanbag/db";
 import {
+  AgentServer,
   createCodexLlmCompletionService,
   createProviderAdapter,
   listAvailableProviderInfos,
@@ -49,6 +50,7 @@ export function createServer(deps: ServerDeps) {
   const wsManager = new WSManager();
   const provider = createProviderAdapter();
   const providerCatalog = listAvailableProviderInfos();
+  const agentServer = new AgentServer({ provider, providerCatalog, logger: console });
   const environmentRegistry = createDefaultEnvironmentRegistry();
   const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
   const scheduler = new InMemorySchedulerService();
@@ -59,7 +61,7 @@ export function createServer(deps: ServerDeps) {
     deps.projectRepo,
     wsManager,
     llmCompletionService,
-    provider,
+    agentServer,
     process.env,
     environmentRegistry,
     providerCatalog,

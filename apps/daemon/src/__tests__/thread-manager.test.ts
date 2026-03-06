@@ -272,7 +272,116 @@ interface ThreadManagerTestHarness {
 }
 
 function asThreadManagerHarness(manager: ThreadManager): ThreadManagerTestHarness {
-  return manager as unknown as ThreadManagerTestHarness;
+  const rawManager = manager as unknown as {
+    agentServer: {
+      sessions: Map<string, {
+        child: unknown;
+        runtime: {
+          send?: (msg: object) => void;
+          close?: (error?: Error) => void;
+        };
+        providerThreadId?: string;
+        activeTurnId?: string;
+      }>;
+      opts: {
+        provider: {
+          listModels: (...args: unknown[]) => unknown;
+        };
+      };
+    };
+  } & ThreadManagerTestHarness;
+  const sessions = rawManager.agentServer.sessions;
+
+  const ensureSession = (threadId: string) => {
+    let session = sessions.get(threadId);
+    if (!session) {
+      const child: any = {
+        stdin: {
+          write: vi.fn(),
+        },
+        kill: vi.fn(),
+        exitCode: null,
+      };
+      session = {
+        child,
+        runtime: {
+          send(msg: object) {
+            child.stdin?.write?.(`${JSON.stringify(msg)}\n`);
+          },
+          close: vi.fn(),
+        },
+      };
+      sessions.set(threadId, session);
+    }
+    return session;
+  };
+
+  const processes = new Map<string, unknown>() as Map<string, unknown>;
+  processes.get = (threadId: string) => sessions.get(threadId)?.child;
+  processes.set = (threadId: string, child: unknown) => {
+    const runtime = {
+      send(msg: object) {
+        const writable = (child as any)?.stdin;
+        writable?.write?.(`${JSON.stringify(msg)}\n`);
+      },
+      close: vi.fn(),
+    };
+    sessions.set(threadId, {
+      child,
+      runtime,
+      providerThreadId: sessions.get(threadId)?.providerThreadId,
+      activeTurnId: sessions.get(threadId)?.activeTurnId,
+    });
+    return processes;
+  };
+  processes.has = (threadId: string) => sessions.has(threadId);
+  processes.delete = (threadId: string) => sessions.delete(threadId);
+  processes.clear = () => sessions.clear();
+
+  const providerThreadIds = new Map<string, string>() as Map<string, string>;
+  providerThreadIds.get = (threadId: string) => sessions.get(threadId)?.providerThreadId;
+  providerThreadIds.set = (threadId: string, providerThreadId: string) => {
+    ensureSession(threadId).providerThreadId = providerThreadId;
+    return providerThreadIds;
+  };
+  providerThreadIds.has = (threadId: string) => Boolean(sessions.get(threadId)?.providerThreadId);
+  providerThreadIds.delete = (threadId: string) => {
+    const session = sessions.get(threadId);
+    if (!session) return false;
+    delete session.providerThreadId;
+    return true;
+  };
+  providerThreadIds.clear = () => {
+    for (const session of sessions.values()) {
+      delete session.providerThreadId;
+    }
+  };
+
+  const activeTurnIds = new Map<string, string>() as Map<string, string>;
+  activeTurnIds.get = (threadId: string) => sessions.get(threadId)?.activeTurnId;
+  activeTurnIds.set = (threadId: string, activeTurnId: string) => {
+    ensureSession(threadId).activeTurnId = activeTurnId;
+    return activeTurnIds;
+  };
+  activeTurnIds.has = (threadId: string) => Boolean(sessions.get(threadId)?.activeTurnId);
+  activeTurnIds.delete = (threadId: string) => {
+    const session = sessions.get(threadId);
+    if (!session) return false;
+    delete session.activeTurnId;
+    return true;
+  };
+  activeTurnIds.clear = () => {
+    for (const session of sessions.values()) {
+      delete session.activeTurnId;
+    }
+  };
+  Object.assign(rawManager, {
+    processes,
+    providerThreadIds,
+    activeTurnIds,
+    provider: rawManager.agentServer.opts.provider,
+  });
+  return rawManager as ThreadManagerTestHarness;
 }
 
 function parseRpcMessage(raw: string): ParsedRpcMessage {
