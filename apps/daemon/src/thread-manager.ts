@@ -106,6 +106,11 @@ import {
   resolveProjectCheckoutSnapshot,
   resolveProjectDefaultBranchCheckout,
 } from "./git-project.js";
+import {
+  EnvironmentService,
+  type ActiveEnvironmentRuntime,
+  type PrimaryPromotionState,
+} from "./environment-service.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
@@ -113,25 +118,10 @@ interface TellContext {
   initiator: ThreadTurnInitiator;
 }
 
-interface ActiveEnvironmentRuntime {
-  environment: IEnvironment;
-  stopWatchingWorkspaceStatus?: () => void;
-  spawnProcess?: () => ChildProcess;
-}
-
 interface ThreadTimelineCacheEntry {
   latestSeq: number;
   threadStatus: Thread["status"] | undefined;
   byRequestKey: Map<string, ThreadTimelineResponse>;
-}
-
-interface PrimaryPromotionState {
-  projectId: string;
-  threadId: string;
-  promotedAt: number;
-  previousCheckout?: EnvironmentCheckoutSnapshot;
-  promotedCheckout: EnvironmentCheckoutSnapshot;
-  reconstructed: boolean;
 }
 
 interface QueuedThreadOperation {
@@ -394,7 +384,8 @@ function isAutoArchiveOnSuccessEnabled(args: {
 }
 
 export class ThreadManager implements ThreadOrchestrator {
-  private environmentRuntimes = new Map<string, ActiveEnvironmentRuntime>();
+  private environmentService: EnvironmentService;
+  private environmentRuntimes: Map<string, ActiveEnvironmentRuntime>;
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
   /** Ensure automatic title generation is attempted at most once per thread. */
@@ -426,11 +417,11 @@ export class ThreadManager implements ThreadOrchestrator {
   /** Cached prompt-derived fallback titles for untitled threads. */
   private titleFallbackByThreadId = new Map<string, string | null>();
   /** Per-project in-memory primary-checkout promotion status. */
-  private primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
+  private primaryPromotionByProjectId: Map<string, PrimaryPromotionState>;
   /** Last successful external validation timestamp for active primary-checkout state. */
-  private primaryPromotionValidatedAtByProjectId = new Map<string, number>();
+  private primaryPromotionValidatedAtByProjectId: Map<string, number>;
   /** Filesystem watchers keyed by project while primary checkout is active. */
-  private primaryPromotionWatchersByProjectId = new Map<string, () => void>();
+  private primaryPromotionWatchersByProjectId: Map<string, () => void>;
   /** Per-project mutex for promote/demote transitions. */
   private primaryCheckoutTransitionsInFlight = new Set<string>();
   /** Prevents concurrent queued follow-up dispatch loops per thread. */
@@ -442,7 +433,7 @@ export class ThreadManager implements ThreadOrchestrator {
   /** Ensures only one deterministic git operation mutates a project at a time. */
   private projectOperationTransitionsInFlight = new Set<string>();
   /** Tracks threads whose workspace deletion is in progress. */
-  private workspaceCleanupInFlightThreadIds = new Set<string>();
+  private workspaceCleanupInFlightThreadIds: Set<string>;
   private agentServer: AgentServer;
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
@@ -465,6 +456,72 @@ export class ThreadManager implements ThreadOrchestrator {
     this.environmentCatalog =
       environmentCatalog ??
       this.environmentRegistry.list();
+    this.environmentService = new EnvironmentService(
+      this.threadRepo,
+      this.projectRepo,
+      this.environmentRegistry,
+      {
+        createContext: (threadId, projectRootPath) =>
+          this._createEnvironmentContext(threadId, projectRootPath),
+        onProvisioningEvent: (threadId, event) =>
+          this._appendEnvironmentProvisioningEvent(threadId, event),
+        onThreadChanged: (threadId, changes) =>
+          this._broadcastThreadChanged(threadId, changes),
+        onCleanupFailure: (threadId, environmentId, error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[thread ${threadId}] environment cleanup failed (${environmentId}): ${message}`,
+          );
+          this._appendEvent(
+            threadId,
+            "system/provisioning/cleanup_failed",
+            {
+              environmentId,
+              message: "Environment cleanup failed",
+              detail: message,
+            },
+          );
+        },
+        onPrimaryCheckoutDemoted: ({ projectId, threadId, currentCheckout }) => {
+          this._appendEvent(
+            threadId,
+            "system/primary_checkout/updated",
+            {
+              action: "demote",
+              status: "completed",
+              message: "Primary checkout changed outside Beanbag; marked as demoted",
+              projectId,
+              activeThreadId: threadId,
+              ...(currentCheckout.branch ? { branch: currentCheckout.branch } : {}),
+            },
+            { broadcastChanges: ["events-appended"] },
+          );
+          this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+        },
+        runOptionalSetup: (threadId, environment) =>
+          this._runOptionalEnvironmentSetup(threadId, environment),
+        spawnProviderProcess: ({ threadId, projectId, environment }) => {
+          const spawnSpec = this.agentServer.getSpawnSpec();
+          return environment.spawn(spawnSpec.command, spawnSpec.args, {
+            stdio: ["pipe", "pipe", "pipe"],
+            env: {
+              ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+              ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
+              BB_THREAD_ID: threadId,
+              BB_ENVIRONMENT_ID: environment.kind,
+            },
+          });
+        },
+      },
+    );
+    this.environmentRuntimes = this.environmentService.environmentRuntimes;
+    this.primaryPromotionByProjectId = this.environmentService.primaryPromotionByProjectId;
+    this.primaryPromotionValidatedAtByProjectId =
+      this.environmentService.primaryPromotionValidatedAtByProjectId;
+    this.primaryPromotionWatchersByProjectId =
+      this.environmentService.primaryPromotionWatchersByProjectId;
+    this.workspaceCleanupInFlightThreadIds =
+      this.environmentService.workspaceCleanupInFlightThreadIds;
     const provider =
       agentServerOrProvider instanceof AgentServer
         ? undefined
@@ -606,157 +663,40 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _rebuildPrimaryPromotionStateFromGit(): void {
-    this._stopAllPrimaryPromotionWatches();
-    this.primaryPromotionByProjectId.clear();
-    this.primaryPromotionValidatedAtByProjectId.clear();
-    const projects = this.projectRepo.list();
-    if (!Array.isArray(projects) || projects.length === 0) return;
-    const allThreads = this.threadRepo.list({ includeArchived: true });
-    if (!Array.isArray(allThreads) || allThreads.length === 0) return;
-
-    for (const project of projects) {
-      let projectCheckout: EnvironmentCheckoutSnapshot;
-      try {
-        projectCheckout = resolveProjectCheckoutSnapshot(project.rootPath);
-      } catch {
-        continue;
-      }
-
-      const projectThreads = allThreads.filter((thread) => (
-        thread.projectId === project.id &&
-        thread.archivedAt === undefined
-      ));
-      if (projectThreads.length === 0) continue;
-
-      for (const thread of projectThreads) {
-        const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-        if (
-          !environment ||
-          !environment.exists() ||
-          !environment.isIsolatedWorkspace()
-        ) {
-          continue;
-        }
-
-        let workspaceCheckout: EnvironmentCheckoutSnapshot;
-        try {
-          workspaceCheckout = environment.getCheckoutSnapshot();
-        } catch {
-          continue;
-        }
-
-        if (!checkoutSnapshotsMatch(projectCheckout, workspaceCheckout)) {
-          continue;
-        }
-
-        this._setPrimaryPromotionState(project.id, {
-          projectId: project.id,
-          threadId: thread.id,
-          promotedAt: Date.now(),
-          promotedCheckout: workspaceCheckout,
-          reconstructed: true,
-        });
-        break;
-      }
-    }
+    this.environmentService.rebuildPrimaryPromotionStateFromGit();
   }
 
   private _setPrimaryPromotionState(
     projectId: string,
     state: PrimaryPromotionState,
   ): void {
-    this.primaryPromotionByProjectId.set(projectId, state);
-    this.primaryPromotionValidatedAtByProjectId.set(projectId, Date.now());
-    this._startPrimaryPromotionWatch(projectId);
+    this.environmentService.setPrimaryPromotionState(projectId, state);
   }
 
   private _clearPrimaryPromotionState(projectId: string): PrimaryPromotionState | undefined {
-    const existing = this.primaryPromotionByProjectId.get(projectId);
-    this.primaryPromotionByProjectId.delete(projectId);
-    this.primaryPromotionValidatedAtByProjectId.delete(projectId);
-    this._stopPrimaryPromotionWatch(projectId);
-    return existing;
+    return this.environmentService.clearPrimaryPromotionState(projectId);
   }
 
   private _startPrimaryPromotionWatch(projectId: string): void {
-    if (this.primaryPromotionWatchersByProjectId.has(projectId)) {
-      return;
-    }
-    const project = this.projectRepo.getById(projectId);
-    if (!project) return;
-    const environment = this.environmentRegistry.create(
-      "local",
-      this._createEnvironmentContext(`primary-checkout-watch:${projectId}`, project.rootPath),
-    );
-    const stopWatching = environment.watchWorkspaceStatus(() => {
-      this._ensurePrimaryPromotionStateIsCurrent(projectId, { force: true });
-    });
-    this.primaryPromotionWatchersByProjectId.set(projectId, stopWatching);
+    void projectId;
   }
 
   private _stopPrimaryPromotionWatch(projectId: string): void {
-    const watcher = this.primaryPromotionWatchersByProjectId.get(projectId);
-    if (!watcher) {
-      return;
-    }
-    watcher();
-    this.primaryPromotionWatchersByProjectId.delete(projectId);
+    void projectId;
   }
 
   private _stopAllPrimaryPromotionWatches(): void {
-    for (const watcher of this.primaryPromotionWatchersByProjectId.values()) {
-      watcher();
-    }
-    this.primaryPromotionWatchersByProjectId.clear();
+    this.environmentService.stopPrimaryPromotionWatches();
   }
 
   private _ensurePrimaryPromotionStateIsCurrent(
     projectId: string,
     opts?: { force?: boolean },
   ): void {
-    const active = this.primaryPromotionByProjectId.get(projectId);
-    if (!active) return;
-
-    const now = Date.now();
-    const lastValidatedAt = this.primaryPromotionValidatedAtByProjectId.get(projectId) ?? 0;
-    if (!opts?.force && now - lastValidatedAt < PRIMARY_CHECKOUT_VALIDATION_TTL_MS) {
-      return;
-    }
-    this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
-
-    const project = this.projectRepo.getById(projectId);
-    if (!project) {
-      this._clearPrimaryPromotionState(projectId);
-      return;
-    }
-
-    let currentCheckout: EnvironmentCheckoutSnapshot;
-    try {
-      currentCheckout = resolveProjectCheckoutSnapshot(project.rootPath);
-    } catch {
-      return;
-    }
-
-    if (checkoutSnapshotsMatch(currentCheckout, active.promotedCheckout)) {
-      return;
-    }
-
-    const cleared = this._clearPrimaryPromotionState(projectId);
-    const demotedThreadId = cleared?.threadId ?? active.threadId;
-    this._appendEvent(
-      demotedThreadId,
-      "system/primary_checkout/updated",
-      {
-        action: "demote",
-        status: "completed",
-        message: "Primary checkout changed outside Beanbag; marked as demoted",
-        projectId,
-        activeThreadId: demotedThreadId,
-        ...(currentCheckout.branch ? { branch: currentCheckout.branch } : {}),
-      },
-      { broadcastChanges: ["events-appended"] },
-    );
-    this._broadcastThreadChanged(demotedThreadId, THREAD_STATUS_CHANGE_KINDS);
+    this.environmentService.ensurePrimaryPromotionStateIsCurrent(projectId, {
+      force: opts?.force,
+      ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
+    });
   }
 
   /**
@@ -1216,7 +1156,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
     if (!environment) {
-      throw invalidRequestError("Thread workspace is unavailable");
+      throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
     }
     const defaultBranch = detectProjectDefaultBranch(project.rootPath);
     const result = await environment.commitWorkspace({
@@ -1542,7 +1482,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
     if (!environment) {
-      throw invalidRequestError("Thread workspace is unavailable");
+      throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
     }
     if (environment.isIsolatedWorkspace()) {
       const defaultBranch = detectProjectDefaultBranch(project.rootPath);
@@ -1603,7 +1543,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
     if (!environment) {
-      throw invalidRequestError("Thread workspace is unavailable");
+      throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
     }
     if (!environment.supportsHostFilesystemAccess()) {
       throw invalidRequestError("Thread path is not available on the host filesystem");
@@ -1681,6 +1621,10 @@ export class ThreadManager implements ThreadOrchestrator {
       mergeBaseBranch,
     });
     return { ...workspaceStatus };
+  }
+
+  getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {
+    return this.environmentService.getProjectWorkspaceStatus(projectId, rootPath);
   }
 
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {
@@ -2032,7 +1976,7 @@ export class ThreadManager implements ThreadOrchestrator {
           ? this._restoreThreadEnvironment(activeThread, project.rootPath)
           : undefined;
         if (!activeThreadEnvironment) {
-          throw invalidRequestError("Thread environment is unavailable; reprovision before demoting");
+          throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(active.threadId));
         }
         if (!activeThreadEnvironment.supportsDemoteFromActiveWorkspace()) {
           throw invalidRequestError("Demotion is not supported for this environment");
@@ -2123,19 +2067,11 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   getEnvironmentInfo(): SystemEnvironmentInfo {
-    const [firstEnvironment] = this.environmentCatalog;
-    if (!firstEnvironment) {
-      throw new Error("No environments are registered");
-    }
-    return {
-      ...firstEnvironment,
-    };
+    return this.environmentService.getEnvironmentInfo();
   }
 
   listEnvironments(): SystemEnvironmentInfo[] {
-    return this.environmentCatalog.map((environment) => ({
-      ...environment,
-    }));
+    return this.environmentService.listEnvironments();
   }
 
   /**
@@ -2154,10 +2090,7 @@ export class ThreadManager implements ThreadOrchestrator {
       });
     }
     this.agentServer.stopAllSessions("Beanbag daemon shutdown");
-    for (const [threadId] of this.environmentRuntimes) {
-      this._cleanupEnvironmentRuntime(threadId);
-    }
-    this.environmentRuntimes.clear();
+    this.environmentService.stopAll();
     this.autoTitleAttemptedThreadIds.clear();
     this.titleFallbackByThreadId.clear();
     this.provisioningTasks.clear();
@@ -2165,9 +2098,6 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.clear();
     this.turnLifecycleEpochs.clear();
     this.lastNotifiedCompletionEpochs.clear();
-    this._stopAllPrimaryPromotionWatches();
-    this.primaryPromotionByProjectId.clear();
-    this.primaryPromotionValidatedAtByProjectId.clear();
     this.queueDispatchInFlight.clear();
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
@@ -2387,108 +2317,25 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
-    this._cleanupEnvironmentRuntime(threadId);
+    this.environmentService.cleanupEnvironmentRuntime(threadId);
   }
 
   private _setEnvironmentRuntime(
     threadId: string,
     environment: IEnvironment,
   ): void {
-    this._cleanupEnvironmentRuntime(threadId);
-    const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
-      if (!this.threadRepo.getById(threadId)) {
-        return;
-      }
-      this._broadcastThreadChanged(threadId, ["work-status-changed"]);
-    });
-    this.environmentRuntimes.set(threadId, { environment, stopWatchingWorkspaceStatus });
+    this.environmentService.setEnvironmentRuntime(threadId, environment);
   }
 
   private _cleanupEnvironmentRuntime(
     threadId: string,
     opts?: { destroyWorkspace?: boolean },
   ): void {
-    const runtime = this.environmentRuntimes.get(threadId);
-    if (runtime) {
-      runtime.stopWatchingWorkspaceStatus?.();
-      this.environmentRuntimes.delete(threadId);
-    }
-    if (!opts?.destroyWorkspace) return;
-    this.workspaceCleanupInFlightThreadIds.add(threadId);
-    const refreshWorkStatusAfterCleanup = () => {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread) return;
-      this._broadcastThreadChanged(threadId, ["work-status-changed"]);
-    };
-    const markWorkspaceCleanupSettled = () => {
-      this.workspaceCleanupInFlightThreadIds.delete(threadId);
-    };
-    const reportCleanupFailure = (environmentId: string, err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(
-        `[thread ${threadId}] environment cleanup failed (${environmentId}): ${message}`,
-      );
-      this._appendEvent(
-        threadId,
-        "system/provisioning/cleanup_failed",
-        {
-          environmentId,
-          message: "Environment cleanup failed",
-          detail: message,
-        },
-      );
-    };
-
-    if (!runtime) {
-      const thread = this.threadRepo.getById(threadId);
-      try {
-        this._cleanupPersistedWorkspace(threadId);
-      } catch (err) {
-        reportCleanupFailure(thread?.environmentId ?? "worktree", err);
-      }
-      markWorkspaceCleanupSettled();
-      refreshWorkStatusAfterCleanup();
-      return;
-    }
-
-    const environmentId =
-      runtime.environment.kind ??
-      this.threadRepo.getById(threadId)?.environmentId ??
-      "unknown";
-    try {
-      void Promise.resolve(runtime.environment.dispose())
-        .catch((err: unknown) => {
-          reportCleanupFailure(environmentId, err);
-        })
-        .finally(() => {
-          markWorkspaceCleanupSettled();
-          refreshWorkStatusAfterCleanup();
-        });
-      return;
-    } catch (err) {
-      reportCleanupFailure(environmentId, err);
-      markWorkspaceCleanupSettled();
-      refreshWorkStatusAfterCleanup();
-    }
+    this.environmentService.cleanupEnvironmentRuntime(threadId, opts);
   }
 
   private _cleanupPersistedWorkspace(threadId: string): void {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      return;
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      return;
-    }
-    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-    if (
-      !environment ||
-      !environment.isIsolatedWorkspace()
-    ) {
-      return;
-    }
-    environment.dispose();
+    this.environmentService.cleanupPersistedWorkspace(threadId);
   }
 
   private _appendEnvironmentProvisioningEvent(
@@ -2590,29 +2437,11 @@ export class ThreadManager implements ThreadOrchestrator {
     projectRootPath: string,
     environmentKind: string,
   ): Promise<ActiveEnvironmentRuntime> {
-    const environment = this.environmentRegistry.create(
+    return this.environmentService.provisionThreadEnvironment(
+      threadId,
+      projectRootPath,
       environmentKind,
-      this._createEnvironmentContext(threadId, projectRootPath),
     );
-    this._runOptionalEnvironmentSetup(threadId, environment);
-    this._setEnvironmentRuntime(threadId, environment);
-    const thread = this.threadRepo.getById(threadId);
-    const projectId = thread?.projectId;
-    const spawnSpec = this.agentServer.getSpawnSpec();
-
-    return {
-      environment,
-      spawnProcess: () =>
-        environment.spawn(spawnSpec.command, spawnSpec.args, {
-          stdio: ["pipe", "pipe", "pipe"],
-          env: {
-            ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-            ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
-            BB_THREAD_ID: threadId,
-            BB_ENVIRONMENT_ID: environment.kind,
-          },
-        }),
-    };
   }
 
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {
@@ -2831,31 +2660,19 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _resolveRequestedEnvironmentId(value?: string): string {
-    const normalized = (value ?? process.env.BEANBAG_ENVIRONMENT ?? "local").trim();
-    if (!normalized) return "local";
-    if (!this.environmentRegistry.has(normalized)) {
-      throw invalidRequestError(`Unsupported environment "${normalized}"`);
+    try {
+      return this.environmentService.resolveRequestedEnvironmentId(value);
+    } catch (error) {
+      throw invalidRequestError(error instanceof Error ? error.message : String(error));
     }
-    return normalized;
   }
 
   private _restoreThreadEnvironment(
     thread: Thread,
     projectRootPath: string,
   ): IEnvironment | undefined {
-    const runtime = this.environmentRuntimes.get(thread.id);
-    if (runtime) {
-      return runtime.environment;
-    }
-    const environmentRecord = thread.environmentRecord;
-    if (!environmentRecord) {
-      return undefined;
-    }
     try {
-      return this.environmentRegistry.restore(
-        environmentRecord,
-        this._createEnvironmentContext(thread.id, projectRootPath),
-      );
+      return this.environmentService.restoreThreadEnvironment(thread, projectRootPath);
     } catch {
       return undefined;
     }
@@ -2863,6 +2680,11 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _toErrorMessage(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+  }
+
+  private _restoreEnvironmentUnavailableMessage(threadId: string): string {
+    return this.environmentService.getRestoreFailure(threadId) ??
+      "Thread workspace is unavailable";
   }
 
   private _buildDeveloperInstructions(args: {
@@ -3252,6 +3074,14 @@ export class ThreadManager implements ThreadOrchestrator {
   private _readProvisioningState(threadId: string): ThreadProvisioningState | undefined {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return undefined;
+    const restoreFailure = this.environmentService.getRestoreFailure(threadId);
+    if (restoreFailure) {
+      return {
+        readiness: "failed",
+        message: "Environment restore failed",
+        fallbackReason: restoreFailure,
+      };
+    }
     if (thread.status === "provisioning_failed") {
       return {
         readiness: "failed",

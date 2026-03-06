@@ -29,6 +29,9 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
+        getProjectWorkspaceStatus: (projectId, rootPath) =>
+          (deps.threadManager as { getProjectWorkspaceStatus?: (projectId: string, rootPath: string) => unknown })
+            .getProjectWorkspaceStatus?.(projectId, rootPath) as import("@beanbag/agent-core").ThreadWorkStatus,
       }),
     )
     .route("/threads", createThreadRoutes(deps.threadManager))

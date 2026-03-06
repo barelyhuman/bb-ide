@@ -8,9 +8,9 @@ import {
   updateProjectSchema,
   type Project,
   type ProjectFileSuggestion,
+  type ThreadWorkStatus,
   type UploadedPromptAttachment,
 } from "@beanbag/agent-core";
-import { createEnvironment } from "@beanbag/environment";
 import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
@@ -165,6 +165,7 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
+    getProjectWorkspaceStatus?: (projectId: string, rootPath: string) => ThreadWorkStatus;
   },
 ) {
   return new Hono()
@@ -255,13 +256,11 @@ export function createProjectRoutes(
         if (!project) {
           return c.json({ error: "Project not found" }, 404);
         }
-        const environment = createEnvironment("local", {
-          projectId: project.id,
-          threadId: `project-status:${project.id}`,
-          projectRootPath: project.rootPath,
-          runtimeEnv: process.env,
-        });
-        const status = environment.getWorkspaceStatus();
+        const getProjectWorkspaceStatus = deps?.getProjectWorkspaceStatus;
+        if (!getProjectWorkspaceStatus) {
+          return c.json({ error: "Project workspace status is unavailable" }, 500);
+        }
+        const status = getProjectWorkspaceStatus(project.id, project.rootPath);
         return c.json(status);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
