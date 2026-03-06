@@ -72,6 +72,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import {
+  DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   ConversationEmptyState,
   ConversationTimeline,
   ExpandablePanel,
@@ -137,6 +138,7 @@ const GIT_DIFF_FILE_RENDER_BATCH_SIZE = 6;
 const GIT_DIFF_FILE_INITIAL_DELAY_MS = 30;
 const GIT_DIFF_FILE_RENDER_BATCH_DELAY_MS = 70;
 const GIT_DIFF_PANEL_SKELETON_FILE_COUNT = 3;
+const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
 const GIT_DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   diffStyle: "unified",
@@ -207,6 +209,51 @@ interface GitDiffStats {
   files: number;
   additions: number;
   deletions: number;
+}
+
+interface TimelineScrollAnchor {
+  rowId: string;
+  offsetTop: number;
+}
+
+function isNearBottom(container: HTMLDivElement): boolean {
+  const distanceFromBottom =
+    container.scrollHeight - container.scrollTop - container.clientHeight;
+  return distanceFromBottom < DEFAULT_SCROLL_STICK_THRESHOLD_PX;
+}
+
+function captureTimelineScrollAnchor(
+  container: HTMLDivElement,
+): TimelineScrollAnchor | null {
+  if (isNearBottom(container)) return null;
+
+  const containerRect = container.getBoundingClientRect();
+  const rows = Array.from(
+    container.querySelectorAll<HTMLElement>(TIMELINE_ROW_SELECTOR),
+  );
+
+  for (const row of rows) {
+    const rowRect = row.getBoundingClientRect();
+    if (rowRect.bottom <= containerRect.top + 1) continue;
+    const rowId = row.dataset.threadRowId;
+    if (!rowId) continue;
+    return {
+      rowId,
+      offsetTop: rowRect.top - containerRect.top,
+    };
+  }
+
+  return null;
+}
+
+function findTimelineRowElement(
+  container: HTMLDivElement,
+  rowId: string,
+): HTMLElement | null {
+  const rows = Array.from(
+    container.querySelectorAll<HTMLElement>(TIMELINE_ROW_SELECTOR),
+  );
+  return rows.find((row) => row.dataset.threadRowId === rowId) ?? null;
 }
 
 function summarizeGitDiff(files: ParsedGitDiffFile[], diff: string): GitDiffStats {
@@ -1401,6 +1448,8 @@ export function ThreadDetailView() {
   );
   const promptComposerRef = useRef<HTMLDivElement>(null);
   const promptComposerHeightRef = useRef<number | null>(null);
+  const timelineScrollAnchorRef = useRef<TimelineScrollAnchor | null>(null);
+  const timelineContainerWidthRef = useRef<number | null>(null);
   const { showScrollToBottom, handleScroll, scrollToBottom } =
     useScrollToBottomIndicator({
       containerRef,
@@ -1408,6 +1457,73 @@ export function ThreadDetailView() {
       onBaseScroll: baseHandleScroll,
       resetDep: threadId,
     });
+  const syncTimelineScrollAnchor = useCallback(() => {
+    const scrollContainer = containerElement;
+    if (!scrollContainer) return;
+    timelineScrollAnchorRef.current = captureTimelineScrollAnchor(scrollContainer);
+    timelineContainerWidthRef.current = scrollContainer.clientWidth;
+  }, [containerElement]);
+  const handleTimelineScroll = useCallback(() => {
+    handleScroll();
+    syncTimelineScrollAnchor();
+  }, [handleScroll, syncTimelineScrollAnchor]);
+
+  useLayoutEffect(() => {
+    syncTimelineScrollAnchor();
+  }, [syncTimelineScrollAnchor, threadDetailRows, isGitDiffPanelOpen]);
+
+  useLayoutEffect(() => {
+    const scrollContainer = containerElement;
+    if (!scrollContainer || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    timelineContainerWidthRef.current = scrollContainer.clientWidth;
+
+    let frameId: number | null = null;
+    const observer = new ResizeObserver((entries) => {
+      const nextWidth =
+        entries[0]?.contentRect.width ?? scrollContainer.getBoundingClientRect().width;
+      const previousWidth = timelineContainerWidthRef.current;
+      timelineContainerWidthRef.current = nextWidth;
+
+      if (previousWidth === null || Math.abs(nextWidth - previousWidth) < 0.5) {
+        return;
+      }
+
+      const anchor = timelineScrollAnchorRef.current;
+      if (!anchor) {
+        return;
+      }
+
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameId = window.requestAnimationFrame(() => {
+        const targetRow = findTimelineRowElement(scrollContainer, anchor.rowId);
+        if (!targetRow) {
+          syncTimelineScrollAnchor();
+          return;
+        }
+
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const targetRect = targetRow.getBoundingClientRect();
+        const offsetDelta = targetRect.top - containerRect.top - anchor.offsetTop;
+        if (Math.abs(offsetDelta) >= 0.5) {
+          scrollContainer.scrollTop += offsetDelta;
+        }
+        syncTimelineScrollAnchor();
+      });
+    });
+
+    observer.observe(scrollContainer);
+    return () => {
+      observer.disconnect();
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [containerElement, syncTimelineScrollAnchor]);
 
   useLayoutEffect(() => {
     const scrollContainer = containerElement;
@@ -1896,24 +2012,26 @@ export function ThreadDetailView() {
           threadDetailRows.map((entry) => {
             const isLatestActivity =
               shouldHighlightLatest && entry.id === latestActivityRowId;
-            return entry.kind === "tool-group" ? (
-              <ToolGroupEntry
-                key={`${threadId}:${entry.id}`}
-                projectId={projectId}
-                entry={entry}
-                messages={toolGroupMessagesById[entry.id] ?? entry.messages}
-                isLoadingMessages={loadingToolGroupIds.has(entry.id)}
-                onLoadMessages={() => handleLoadToolGroupMessages(entry)}
-                isLatestActivity={isLatestActivity}
-              />
-            ) : (
-              <ConversationEntry
-                key={`${threadId}:${entry.id}`}
-                message={entry.message}
-                projectId={projectId}
-                initialExpanded={isLatestActivity}
-                preferOngoingLabels={isLatestActivity}
-              />
+            return (
+              <div key={`${threadId}:${entry.id}`} data-thread-row-id={entry.id}>
+                {entry.kind === "tool-group" ? (
+                  <ToolGroupEntry
+                    projectId={projectId}
+                    entry={entry}
+                    messages={toolGroupMessagesById[entry.id] ?? entry.messages}
+                    isLoadingMessages={loadingToolGroupIds.has(entry.id)}
+                    onLoadMessages={() => handleLoadToolGroupMessages(entry)}
+                    isLatestActivity={isLatestActivity}
+                  />
+                ) : (
+                  <ConversationEntry
+                    message={entry.message}
+                    projectId={projectId}
+                    initialExpanded={isLatestActivity}
+                    preferOngoingLabels={isLatestActivity}
+                  />
+                )}
+              </div>
             );
           })
         )}
@@ -1927,8 +2045,8 @@ export function ThreadDetailView() {
   const conversationShell = (
     <PageShell
       scrollRef={setContainerRef}
-      onScroll={handleScroll}
-      shellClassName={isGitDiffPanelOpen ? "!mx-0 !mt-0 md:!mx-0 md:!mt-0" : undefined}
+      onScroll={handleTimelineScroll}
+      shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
@@ -2083,10 +2201,6 @@ export function ThreadDetailView() {
     </PageShell>
   );
 
-  if (!isGitDiffPanelOpen) {
-    return conversationShell;
-  }
-
   const selectedDiffCommitSha =
     threadGitDiff?.selection.type === "commit"
       ? threadGitDiff.selection.sha
@@ -2136,36 +2250,39 @@ export function ThreadDetailView() {
         >
           {conversationShell}
         </Panel>
-        <PanelResizeHandle
-          onDragging={handleGitDiffPanelDragging}
-          className={cn(
-            "group relative w-3 shrink-0 cursor-col-resize bg-transparent transition-colors",
-            isGitDiffPanelResizing && "bg-accent/25",
-          )}
-          aria-label="Resize thread and git diff panels"
-        >
-          <span
+        {isGitDiffPanelOpen ? (
+          <PanelResizeHandle
+            onDragging={handleGitDiffPanelDragging}
             className={cn(
-              "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors",
-              isGitDiffPanelResizing ? "bg-accent-foreground/55" : "group-hover:bg-accent-foreground/40",
+              "group relative w-3 shrink-0 cursor-col-resize bg-transparent transition-colors",
+              isGitDiffPanelResizing && "bg-accent/25",
             )}
-          />
-          <span
-            className={cn(
-              "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
-              isGitDiffPanelResizing ? "opacity-100" : "group-hover:opacity-100",
-            )}
+            aria-label="Resize thread and git diff panels"
           >
-            <GripVertical className="size-3 text-muted-foreground" />
-          </span>
-        </PanelResizeHandle>
-        <Panel
-          defaultSize={GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT}
-          minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
-          maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
-          className="min-w-0 bg-background"
-        >
-          <aside ref={gitDiffPanelRef} className="flex min-h-0 h-full min-w-0 flex-1 flex-col">
+            <span
+              className={cn(
+                "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors",
+                isGitDiffPanelResizing ? "bg-accent-foreground/55" : "group-hover:bg-accent-foreground/40",
+              )}
+            />
+            <span
+              className={cn(
+                "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
+                isGitDiffPanelResizing ? "opacity-100" : "group-hover:opacity-100",
+              )}
+            >
+              <GripVertical className="size-3 text-muted-foreground" />
+            </span>
+          </PanelResizeHandle>
+        ) : null}
+        {isGitDiffPanelOpen ? (
+          <Panel
+            defaultSize={GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT}
+            minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
+            maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
+            className="min-w-0 bg-background"
+          >
+            <aside ref={gitDiffPanelRef} className="flex min-h-0 h-full min-w-0 flex-1 flex-col">
             <div className="px-3 py-2">
               <div className="flex min-w-0 items-center gap-1.5">
                 <div className="min-w-0 max-w-[48%] flex-1">
@@ -2360,8 +2477,9 @@ export function ThreadDetailView() {
                 </p>
               )}
             </div>
-          </aside>
-        </Panel>
+            </aside>
+          </Panel>
+        ) : null}
       </PanelGroup>
     </div>
   );
