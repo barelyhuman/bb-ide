@@ -1,7 +1,8 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type {
   EnvironmentCommandOptions,
   EnvironmentCommandResult,
+  EnvironmentSpawnOptions,
 } from "./contracts.js";
 
 function toChildEnv(
@@ -36,4 +37,19 @@ export function runCommand(
     stdout,
     stderr,
   };
+}
+
+export function spawnCommand(
+  command: string,
+  args: string[],
+  options: EnvironmentSpawnOptions & {
+    cwd: string;
+    env: Record<string, string | undefined>;
+  },
+) {
+  return spawn(command, args, {
+    cwd: options.cwd,
+    env: toChildEnv(options.env),
+    stdio: options.stdio,
+  });
 }

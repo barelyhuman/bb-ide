@@ -1,18 +1,33 @@
+import { existsSync } from "node:fs";
 import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
   DemoteEnvironmentResult,
   EnvironmentCommandOptions,
+  EnvironmentSpawnOptions,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
+  EnvironmentWorkspaceCommitOptions,
+  EnvironmentWorkspaceCommitResult,
+  EnvironmentWorkspaceCommitsOptions,
+  EnvironmentWorkspaceDiffOptions,
+  EnvironmentWorkspaceDiffResult,
+  EnvironmentWorkspaceStatusOptions,
   EnvironmentSquashMergeOptions,
   EnvironmentSquashMergeResult,
   IEnvironment,
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
 } from "./contracts.js";
-import { runCommand } from "./process.js";
+import {
+  commitGitWorkspace,
+  getGitWorkspaceDiff,
+  getGitWorkspaceStatus,
+  listGitWorkspaceCommitsSinceRef,
+  watchGitWorkspaceStatus,
+} from "./git-workspace.js";
+import { runCommand, spawnCommand } from "./process.js";
 
 interface LocalEnvironmentState {}
 
@@ -27,10 +42,12 @@ class LocalEnvironment implements IEnvironment {
   readonly info = { ...LOCAL_ENVIRONMENT_INFO };
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
+  private readonly services: CreateEnvironmentContext["services"];
 
   constructor(context: CreateEnvironmentContext) {
     this.rootPath = context.projectRootPath;
-    this.env = {};
+    this.env = { ...context.runtimeEnv };
+    this.services = context.services;
   }
 
   serialize(): LocalEnvironmentState {
@@ -39,15 +56,101 @@ class LocalEnvironment implements IEnvironment {
 
   dispose(): void {}
 
-  getWorkspaceRoot(): string {
+  exists(): boolean {
+    return existsSync(this.rootPath);
+  }
+
+  supportsHostFilesystemAccess(): boolean {
+    return true;
+  }
+
+  isIsolatedWorkspace(): boolean {
+    return false;
+  }
+
+  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
+    const headResult = this.run("git", ["rev-parse", "HEAD"]);
+    if (headResult.exitCode !== 0 || !headResult.stdout) {
+      throw new Error("Failed to resolve HEAD");
+    }
+
+    const branchResult = this.run("git", ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    if (branchResult.exitCode === 0 && branchResult.stdout) {
+      return {
+        branch: branchResult.stdout,
+        head: headResult.stdout,
+        detached: false,
+      };
+    }
+
+    return {
+      head: headResult.stdout,
+      detached: true,
+    };
+  }
+
+  getWorkspaceRootUnsafe(): string {
     return this.rootPath;
   }
 
-  getExecutionContext(): { cwd: string; env: Record<string, string | undefined> } {
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
+    return getGitWorkspaceStatus(this, args);
+  }
+
+  watchWorkspaceStatus(onChange: () => void): () => void {
+    return watchGitWorkspaceStatus(this, onChange);
+  }
+
+  commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult> {
+    return commitGitWorkspace(
+      this,
+      args,
+      this.services?.llmCompletion,
+      (result) =>
+        this.services?.appendEvent?.(
+          "system/worktree/commit",
+          {
+            status: result.commitCreated ? "committed" : "noop",
+            message: result.message,
+            ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+            ...(result.includeUnstaged !== undefined
+              ? { includeUnstaged: result.includeUnstaged }
+              : {}),
+          },
+          { broadcastChanges: ["events-appended", "work-status-changed"] },
+        ),
+    );
+  }
+
+  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions) {
+    return listGitWorkspaceCommitsSinceRef(this, args);
+  }
+
+  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
+    return getGitWorkspaceDiff(this, args);
+  }
+
+  private _executionContext(): { cwd: string; env: Record<string, string | undefined> } {
     return {
       cwd: this.rootPath,
       env: { ...this.env },
     };
+  }
+
+  spawn(
+    command: string,
+    args: string[],
+    options?: EnvironmentSpawnOptions,
+  ) {
+    const executionContext = this._executionContext();
+    return spawnCommand(command, args, {
+      cwd: options?.cwd ?? executionContext.cwd,
+      env: {
+        ...executionContext.env,
+        ...(options?.env ?? {}),
+      },
+      stdio: options?.stdio,
+    });
   }
 
   shouldRunSetupScript(): boolean {
@@ -85,7 +188,7 @@ class LocalEnvironment implements IEnvironment {
     args: string[],
     options?: EnvironmentCommandOptions,
   ) {
-    const executionContext = this.getExecutionContext();
+    const executionContext = this._executionContext();
     return runCommand(command, args, {
       cwd: options?.cwd ?? executionContext.cwd,
       env: {

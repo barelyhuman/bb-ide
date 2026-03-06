@@ -38,8 +38,6 @@ export interface ProviderThreadContext {
   projectId: string;
   threadId: string;
   path?: string;
-  workspaceRoot?: string;
-  environmentId?: string;
 }
 
 export interface ProviderTitleGeneratorArgs {
@@ -117,7 +115,6 @@ export type EnvironmentProvisioningEvent =
       type: "env-setup";
       status: "started" | "completed" | "failed";
       scriptPath: string;
-      workspaceRoot?: string;
       timeoutMs?: number;
       durationMs?: number;
       detail?: string;
@@ -156,6 +153,7 @@ export interface ThreadOrchestrator {
   stop(threadId: string): void;
   archive(threadId: string): void;
   unarchive(threadId: string): void;
+  requiresForceArchive(threadId: string): boolean;
   updateThread(threadId: string, request: { title?: string }): Thread;
   markRead(threadId: string): Thread;
   markUnread(threadId: string): Thread;
@@ -183,6 +181,7 @@ export interface ThreadOrchestrator {
     selection?: ThreadGitDiffSelection,
     mergeBaseBranch?: string,
   ): ThreadGitDiffResponse;
+  resolveThreadOpenPath(threadId: string, relativePath: string): string;
   getOutput(threadId: string): string | undefined;
   getDefaultExecutionOptions(
     threadId: string,

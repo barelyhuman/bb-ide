@@ -10,11 +10,11 @@ import {
   type ProjectFileSuggestion,
   type UploadedPromptAttachment,
 } from "@beanbag/agent-core";
+import { createEnvironment } from "@beanbag/environment";
 import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
 import { invalidRequestError } from "../domain-errors.js";
-import { ThreadGitStatusService } from "../thread-git-status.js";
 
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
@@ -165,10 +165,8 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
-    gitStatusService?: ThreadGitStatusService;
   },
 ) {
-  const gitStatusService = deps?.gitStatusService ?? new ThreadGitStatusService();
   return new Hono()
     .post("/", zValidator("json", createProjectSchema), async (c) => {
       try {
@@ -257,12 +255,13 @@ export function createProjectRoutes(
         if (!project) {
           return c.json({ error: "Project not found" }, 404);
         }
-        const defaultBranch = await gitStatusService.detectDefaultBranchAsync(project.rootPath);
-        const status = await gitStatusService.getStatusAsync({
-          workspaceRoot: project.rootPath,
-          projectRoot: project.rootPath,
-          defaultBranch,
+        const environment = createEnvironment("local", {
+          projectId: project.id,
+          threadId: `project-status:${project.id}`,
+          projectRootPath: project.rootPath,
+          runtimeEnv: process.env,
         });
+        const status = environment.getWorkspaceStatus();
         return c.json(status);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";

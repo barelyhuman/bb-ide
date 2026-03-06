@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
+  type OpenPathRequest,
   enqueueThreadMessageSchema,
   sendQueuedThreadMessageSchema,
   spawnThreadSchema,
@@ -15,6 +16,7 @@ import { z } from "zod";
 import { isAbsolute } from "node:path";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
+import { openPathInEditor } from "./system.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
@@ -78,6 +80,15 @@ const archiveThreadBodySchema = z.object({
   force: z.boolean().optional(),
 });
 
+const openThreadPathBodySchema = z.object({
+  relativePath: z.string().min(1),
+  target: z.enum(["file", "directory"]).optional(),
+  editor: z.enum(["system_default", "vscode", "cursor", "zed", "windsurf"]).optional(),
+  command: z.string().min(1).optional(),
+});
+
+type OpenPathFn = (args: OpenPathRequest) => void;
+
 const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
 function validatePromptInputAttachments(input: PromptInput[]): void {
@@ -105,7 +116,11 @@ function validatePromptInputAttachments(input: PromptInput[]): void {
 
 export function createThreadRoutes(
   threadManager: ThreadOrchestrator,
+  opts?: {
+    openPath?: OpenPathFn;
+  },
 ) {
+  const openPath = opts?.openPath ?? openPathInEditor;
   return new Hono()
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
       try {
@@ -131,6 +146,28 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .post(
+      "/:id/open-path",
+      zValidator("json", openThreadPathBodySchema),
+      async (c) => {
+        try {
+          const body = c.req.valid("json");
+          const path = threadManager.resolveThreadOpenPath(
+            c.req.param("id"),
+            body.relativePath,
+          );
+          openPath({
+            path,
+            ...(body.target ? { target: body.target } : {}),
+            ...(body.editor ? { editor: body.editor } : {}),
+            ...(body.command ? { command: body.command } : {}),
+          });
+          return c.json({ ok: true });
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
     .get("/", zValidator("query", listThreadsQuerySchema), async (c) => {
       try {
         const filters = c.req.valid("query");
@@ -332,7 +369,7 @@ export function createThreadRoutes(
           throw invalidRequestError("Invalid archive request body");
         }
         const force = parsedBody.data.force === true;
-        if (!force && thread.environmentId === "worktree") {
+        if (!force && threadManager.requiresForceArchive(thread.id)) {
           const workStatus = threadManager.getWorkStatus(thread.id);
           if (
             workStatus &&

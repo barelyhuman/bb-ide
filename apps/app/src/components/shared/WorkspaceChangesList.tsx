@@ -1,19 +1,18 @@
 import type { ThreadWorkStatus } from "@beanbag/agent-core";
-import { openPathInEditor } from "@/lib/api";
+import { openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
 import { formatWorkspaceFileStatus } from "@/lib/workspace-change-summary";
-import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 
 export function WorkspaceChangesList({
   files,
-  workspaceRoot,
+  threadId,
   maxHeightClassName = "max-h-32",
   emptyMessage = "No changed files detected.",
   onFileClick,
 }: {
   files: ThreadWorkStatus["files"];
-  workspaceRoot?: string;
+  threadId?: string;
   maxHeightClassName?: string;
   emptyMessage?: string;
   onFileClick?: (file: NonNullable<ThreadWorkStatus["files"]>[number]) => void;
@@ -31,7 +30,7 @@ export function WorkspaceChangesList({
           <span className="w-8 shrink-0 text-xs uppercase text-muted-foreground/80">
             {formatWorkspaceFileStatus(file.status)}
           </span>
-          {workspaceRoot || onFileClick ? (
+          {threadId || onFileClick ? (
             <button
               type="button"
               className="truncate text-left text-xs underline-offset-2 hover:underline"
@@ -41,9 +40,9 @@ export function WorkspaceChangesList({
                   onFileClick(file);
                   return;
                 }
-                if (!workspaceRoot) return;
-                const absolutePath = resolveWorkspaceAbsolutePath(workspaceRoot, file.path);
-                void openPathInEditor(absolutePath, {
+                if (!threadId) return;
+                void openThreadPathInEditor(threadId, {
+                  relativePath: file.path,
                   target: "file",
                   command: getPathCommandForTarget("file"),
                 });

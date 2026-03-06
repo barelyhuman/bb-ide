@@ -120,7 +120,6 @@ export type ThreadGitDiffMode = "local_uncommitted" | "worktree_commits";
 
 export interface ThreadGitDiffResponse {
   mode: ThreadGitDiffMode;
-  workspaceRoot: string;
   currentBranch?: string;
   mergeBaseBranch?: string;
   mergeBaseRef?: string;
@@ -224,6 +223,13 @@ export type OpenPathEditor =
 
 export interface OpenPathRequest {
   path: string;
+  target?: OpenPathTarget;
+  editor?: OpenPathEditor;
+  command?: string;
+}
+
+export interface OpenThreadPathRequest {
+  relativePath: string;
   target?: OpenPathTarget;
   editor?: OpenPathEditor;
   command?: string;

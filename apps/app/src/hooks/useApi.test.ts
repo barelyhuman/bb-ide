@@ -24,7 +24,6 @@ function makeStatus(state: ThreadWorkStatus["state"]): ThreadWorkStatus {
 function makeGitDiffResponse(): ThreadGitDiffResponse {
   return {
     mode: "worktree_commits",
-    workspaceRoot: "/tmp/worktree",
     currentBranch: "feat/test",
     mergeBaseBranch: "main",
     mergeBaseRef: "origin/main",

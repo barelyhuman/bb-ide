@@ -1,7 +1,12 @@
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type {
-  EnvironmentProvisioningEvent,
   PersistedEnvironmentRecord,
   SystemEnvironmentInfo,
+  ThreadChangeKind,
+  ThreadEventDataForType,
+  ThreadEventType,
+  ThreadGitDiffCommitSummary,
+  ThreadWorkStatus,
 } from "@beanbag/agent-core";
 
 export interface CreateEnvironmentContext {
@@ -9,7 +14,19 @@ export interface CreateEnvironmentContext {
   threadId: string;
   projectRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
-  onProvisioningEvent?: (event: EnvironmentProvisioningEvent) => void;
+  services?: EnvironmentServices;
+}
+
+export interface EnvironmentServices {
+  appendEvent?<TType extends ThreadEventType>(
+    type: TType,
+    data: ThreadEventDataForType<TType>,
+    opts?: { broadcastChanges?: readonly ThreadChangeKind[] | false },
+  ): void;
+  llmCompletion?(args: {
+    cwd: string;
+    includeUnstaged?: boolean;
+  }): Promise<string | undefined>;
 }
 
 export interface EnvironmentCommandResult {
@@ -25,17 +42,33 @@ export interface EnvironmentCommandOptions {
   rawOutput?: boolean;
 }
 
+export interface EnvironmentSpawnOptions {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  stdio?: SpawnOptions["stdio"];
+}
+
 export interface IEnvironment {
   readonly kind: string;
   readonly info: SystemEnvironmentInfo;
 
   serialize(): unknown;
   dispose(): void;
-  getWorkspaceRoot(): string;
-  getExecutionContext(): {
-    cwd: string;
-    env: Record<string, string | undefined>;
-  };
+  exists(): boolean;
+  supportsHostFilesystemAccess(): boolean;
+  isIsolatedWorkspace(): boolean;
+  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
+  getWorkspaceRootUnsafe(): string;
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): ThreadWorkStatus;
+  watchWorkspaceStatus(onChange: () => void): () => void;
+  commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult>;
+  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions): ThreadGitDiffCommitSummary[];
+  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult;
+  spawn(
+    command: string,
+    args: string[],
+    options?: EnvironmentSpawnOptions,
+  ): ChildProcess;
   shouldRunSetupScript(): boolean;
   supportsPromoteToActiveWorkspace(): boolean;
   supportsDemoteFromActiveWorkspace(): boolean;
@@ -56,6 +89,48 @@ export interface EnvironmentCheckoutSnapshot {
   branch?: string;
   head: string;
   detached: boolean;
+}
+
+export interface EnvironmentWorkspaceStatusOptions {
+  defaultBranch?: string;
+  mergeBaseBranch?: string;
+}
+
+export interface EnvironmentWorkspaceCommitsOptions {
+  baseRef?: string;
+}
+
+export interface EnvironmentWorkspaceCommitOptions {
+  defaultBranch?: string;
+  message?: string;
+  includeUnstaged?: boolean;
+}
+
+export interface EnvironmentWorkspaceCommitResult {
+  ok: true;
+  commitCreated: boolean;
+  message: string;
+  workStatus: ThreadWorkStatus;
+  commitSha?: string;
+  includeUnstaged?: boolean;
+}
+
+export type EnvironmentWorkspaceDiffOptions =
+  | {
+      type: "working_tree";
+    }
+  | {
+      type: "combined";
+      baseRef?: string;
+    }
+  | {
+      type: "commit";
+      commitSha: string;
+    };
+
+export interface EnvironmentWorkspaceDiffResult {
+  diff: string;
+  truncated: boolean;
 }
 
 export interface PromoteEnvironmentResult {
@@ -91,12 +166,16 @@ export interface EnvironmentSquashMergeOptions {
   activeWorkspaceRoot: string;
   defaultBranch?: string;
   message?: string;
+  commitIfNeeded?: boolean;
+  commitMessage?: string;
+  includeUnstaged?: boolean;
   resolveMessage?: EnvironmentSquashMergeMessageResolver;
 }
 
 export interface EnvironmentSquashMergeResult {
   merged: boolean;
   message: string;
+  committed?: boolean;
   conflictFiles?: string[];
 }
 

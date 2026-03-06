@@ -127,6 +127,13 @@
       "when": 1772899200000,
       "tag": "0017_thread_environment_records",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1772937600000,
+      "tag": "0018_drop_thread_agent_diff_stats",
+      "breakpoints": true
     }
   ]
 }

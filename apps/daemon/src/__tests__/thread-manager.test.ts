@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { execFileSync } from "node:child_process";
 import { EventEmitter, Readable, Writable } from "node:stream";
 import {
   accessSync,
@@ -19,6 +20,7 @@ import {
   type SystemEnvironmentInfo,
   type Thread,
   type ThreadEvent,
+  type ThreadWorkStatus,
 } from "@beanbag/agent-core";
 import {
   EnvironmentRegistry,
@@ -36,6 +38,31 @@ import {
 } from "@beanbag/agent-server";
 import { ThreadManager } from "../thread-manager.js";
 import { WSManager } from "../ws.js";
+
+function makeWorkspaceStatus(): ThreadWorkStatus {
+  return {
+    state: "clean",
+    changedFiles: 0,
+    insertions: 0,
+    deletions: 0,
+    workspaceChangedFiles: 0,
+    workspaceInsertions: 0,
+    workspaceDeletions: 0,
+    hasUncommittedChanges: false,
+    hasCommittedUnmergedChanges: false,
+    aheadCount: 0,
+    behindCount: 0,
+    files: [],
+  };
+}
+
+function git(repoRoot: string, ...args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
 
 function createTestEnvironmentRegistry(args: {
   kind?: string;
@@ -55,45 +82,25 @@ function createTestEnvironmentRegistry(args: {
     info,
     create(context: CreateEnvironmentContext): IEnvironment {
       args.onCreate?.(context);
-      return {
+      return makeRuntimeEnvironment({
         kind,
-        info,
-        serialize() {
-          return { rootPath: args.rootPath };
+        rootPath: args.rootPath,
+        overrides: {
+          info,
+          serialize() {
+            return { rootPath: args.rootPath };
+          },
+          promoteToActiveWorkspace() {
+            throw new Error("not implemented in test environment");
+          },
+          demoteFromActiveWorkspace() {
+            throw new Error("not implemented in test environment");
+          },
+          async squashMergeIntoDefaultBranch() {
+            throw new Error("not implemented in test environment");
+          },
         },
-        dispose() {},
-        getWorkspaceRoot() {
-          return args.rootPath;
-        },
-        getExecutionContext() {
-          return {
-            cwd: args.rootPath,
-            env: {},
-          };
-        },
-        shouldRunSetupScript() {
-          return false;
-        },
-        supportsPromoteToActiveWorkspace() {
-          return false;
-        },
-        supportsDemoteFromActiveWorkspace() {
-          return false;
-        },
-        supportsSquashMergeIntoDefaultBranch() {
-          return false;
-        },
-        promoteToActiveWorkspace() {
-          throw new Error("not implemented in test environment");
-        },
-        demoteFromActiveWorkspace() {
-          throw new Error("not implemented in test environment");
-        },
-        async squashMergeIntoDefaultBranch() {
-          throw new Error("not implemented in test environment");
-        },
-        run: vi.fn(),
-      };
+      });
     },
     restore(_state: unknown, context: CreateEnvironmentContext): IEnvironment {
       return this.create(context);
@@ -102,6 +109,100 @@ function createTestEnvironmentRegistry(args: {
       return true;
     },
   });
+}
+
+function makeRuntimeEnvironment(args: {
+  kind?: string;
+  rootPath: string;
+  dispose?: () => Promise<void> | void;
+  overrides?: Partial<IEnvironment>;
+}): IEnvironment {
+  const kind = args.kind ?? "worktree";
+  const info: SystemEnvironmentInfo = {
+    id: kind,
+    displayName: kind === "worktree" ? "Git Worktree Workspace" : "Direct Workspace",
+    description: "",
+  };
+
+  return {
+    kind,
+    info,
+    serialize() {
+      return {};
+    },
+    dispose() {
+      return args.dispose?.();
+    },
+    exists() {
+      return true;
+    },
+    supportsHostFilesystemAccess() {
+      return true;
+    },
+    isIsolatedWorkspace() {
+      return kind === "worktree";
+    },
+    getCheckoutSnapshot() {
+      return {
+        branch: "bb/thread-1",
+        head: "abc123",
+        detached: false,
+      };
+    },
+    getWorkspaceRootUnsafe() {
+      return args.rootPath;
+    },
+    getWorkspaceStatus() {
+      return makeWorkspaceStatus();
+    },
+    watchWorkspaceStatus() {
+      return () => {};
+    },
+    async commitWorkspace() {
+      return {
+        ok: true,
+        commitCreated: false,
+        message: "Working directory is clean",
+        workStatus: makeWorkspaceStatus(),
+      };
+    },
+    listWorkspaceCommitsSinceRef() {
+      return [];
+    },
+    getWorkspaceDiff() {
+      return { diff: "", truncated: false };
+    },
+    spawn(command: string, commandArgs: string[], options?: { stdio?: unknown; env?: Record<string, string | undefined>; cwd?: string }) {
+      return (spawnMock as unknown as (...args: unknown[]) => FakeChildProcess)(
+        command,
+        commandArgs,
+        options,
+      );
+    },
+    shouldRunSetupScript() {
+      return false;
+    },
+    supportsPromoteToActiveWorkspace() {
+      return false;
+    },
+    supportsDemoteFromActiveWorkspace() {
+      return false;
+    },
+    supportsSquashMergeIntoDefaultBranch() {
+      return false;
+    },
+    promoteToActiveWorkspace() {
+      throw new Error("not implemented");
+    },
+    demoteFromActiveWorkspace() {
+      throw new Error("not implemented");
+    },
+    async squashMergeIntoDefaultBranch() {
+      throw new Error("not implemented");
+    },
+    run: vi.fn(),
+    ...args.overrides,
+  };
 }
 
 // Mock child_process.spawn while preserving other exports.
@@ -146,7 +247,6 @@ interface ThreadManagerTestHarness {
   providerThreadIds: Map<string, string>;
   activeTurnIds: Map<string, string>;
   environmentRuntimes: Map<string, unknown>;
-  gitStatusService: unknown;
   provider: {
     listModels: (...args: unknown[]) => unknown;
   };
@@ -169,10 +269,6 @@ interface ThreadManagerTestHarness {
     code: number | null,
     signal: string | null,
   ) => void;
-  _resolveCommitMessage: (args: {
-    workspaceRoot: string;
-    includeUnstaged?: boolean;
-  }) => Promise<string>;
 }
 
 function asThreadManagerHarness(manager: ThreadManager): ThreadManagerTestHarness {
@@ -373,36 +469,65 @@ describe("ThreadManager", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
   });
 
-  describe("commit message generation", () => {
-    it("resolves commit messages via the injected llm completion service", async () => {
+  describe("environment services", () => {
+    it("injects llm completion into environment creation context", async () => {
       const generateCommitMessage = llmCompletionService.generateCommitMessage as ReturnType<
         typeof vi.fn
       >;
       generateCommitMessage.mockResolvedValue("feat: support commit generation");
-
-      const resolved = await asThreadManagerHarness(manager)._resolveCommitMessage({
-        workspaceRoot: "/tmp/workspace",
-        includeUnstaged: true,
+      let capturedContext: CreateEnvironmentContext | undefined;
+      const customEnvironmentRegistry = createTestEnvironmentRegistry({
+        rootPath: "/tmp/worktrees/proj-1/thread-1",
+        onCreate(context) {
+          capturedContext = context;
+        },
+      });
+      manager = new ThreadManager(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        createCodexProviderAdapter(),
+        process.env,
+        customEnvironmentRegistry,
+      );
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+          environmentRecord: {
+            kind: "worktree",
+            state: {
+              workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
+              branchName: "bb/thread-1",
+            },
+          },
+        }),
+      );
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
       });
 
+      manager.getWorkStatus("thread-1");
+
+      expect(capturedContext?.services?.llmCompletion).toBeTypeOf("function");
+      await expect(
+        capturedContext?.services?.llmCompletion?.({
+          cwd: "/tmp/workspace",
+          includeUnstaged: true,
+        }),
+      ).resolves.toBe("feat: support commit generation");
       expect(generateCommitMessage).toHaveBeenCalledWith({
         cwd: "/tmp/workspace",
         includeUnstaged: true,
       });
-      expect(resolved).toBe("feat: support commit generation");
-    });
-
-    it("surfaces llm generator failures when no commit message is produced", async () => {
-      const generateCommitMessage = llmCompletionService.generateCommitMessage as ReturnType<
-        typeof vi.fn
-      >;
-      generateCommitMessage.mockResolvedValue(undefined);
-
-      await expect(
-        asThreadManagerHarness(manager)._resolveCommitMessage({
-          workspaceRoot: "/tmp/workspace",
-        }),
-      ).rejects.toThrow("Failed to auto-generate commit message (Mock LLM)");
     });
   });
 
@@ -994,14 +1119,12 @@ describe("ThreadManager", () => {
       const customEnvironmentRegistry = createTestEnvironmentRegistry({
         rootPath: "/tmp/thread-worktree",
         onCreate: (context) => {
-          context.onProvisioningEvent?.({
-            type: "env-setup",
+          context.services?.appendEvent?.("system/provisioning/env_setup", {
             status: "started",
             scriptPath: ".bb-env-setup.sh",
             timeoutMs: 600000,
           });
-          context.onProvisioningEvent?.({
-            type: "env-setup",
+          context.services?.appendEvent?.("system/provisioning/env_setup", {
             status: "completed",
             scriptPath: ".bb-env-setup.sh",
             timeoutMs: 600000,
@@ -1118,7 +1241,6 @@ describe("ThreadManager", () => {
         titleLlmCompletionService,
         createCodexProviderAdapter(),
         process.env,
-        undefined,
         undefined,
         undefined,
         undefined,
@@ -3315,15 +3437,10 @@ describe("ThreadManager", () => {
         makeThread({ id: "thread-1", status: "idle" }),
       );
       asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
-        adapter: {
-          info: {
-            id: "worktree",
-            displayName: "Git Worktree Workspace",
-            description: "",
-          },
-          prepare: vi.fn(),
-        },
-        session: { cwd: "/tmp/worktree", cleanup },
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          dispose: cleanup,
+        }),
       });
 
       manager.archive("thread-1");
@@ -3353,23 +3470,11 @@ describe("ThreadManager", () => {
           type === "system/provisioning/completed"
             ? makeEvent({
                 type: "system/provisioning/completed",
-                data: {
-                  workspaceRoot,
-                  mode: "worktree",
-                },
+                data: {},
               })
             : undefined,
       );
-      const removeWorktreeWorkspace = vi.fn();
-      const invalidate = vi.fn();
-      asThreadManagerHarness(manager).gitStatusService = {
-        invalidate,
-        removeWorktreeWorkspace,
-      };
-
       manager.archive("thread-1");
-
-      expect(removeWorktreeWorkspace).not.toHaveBeenCalled();
     });
 
     it("rebroadcasts work status after async workspace cleanup settles", async () => {
@@ -3384,15 +3489,10 @@ describe("ThreadManager", () => {
         makeThread({ id: "thread-1", status: "idle", environmentId: "worktree" }),
       );
       asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
-        adapter: {
-          info: {
-            id: "worktree",
-            displayName: "Git Worktree Workspace",
-            description: "",
-          },
-          prepare: vi.fn(),
-        },
-        session: { cwd: "/tmp/worktree", cleanup },
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          dispose: cleanup,
+        }),
       });
 
       manager.archive("thread-1");
@@ -3709,7 +3809,19 @@ describe("ThreadManager", () => {
     it("keeps worktree status unknown until provisioning completes", () => {
       const projectRoot = "/tmp/proj-1";
       const envSetupWorkspaceRoot = "/tmp/worktrees/proj-1/thread-1";
-      mkdirSync(envSetupWorkspaceRoot, { recursive: true });
+      const customEnvironmentRegistry = createTestEnvironmentRegistry({
+        rootPath: envSetupWorkspaceRoot,
+      });
+      const managerWithCustomEnvironment = new ThreadManager(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        createCodexProviderAdapter(),
+        process.env,
+        customEnvironmentRegistry,
+      );
       const thread = makeThread({
         id: "thread-1",
         projectId: "proj-1",
@@ -3717,26 +3829,7 @@ describe("ThreadManager", () => {
         environmentId: "worktree",
         title: "Provisioning failure repro",
       });
-      const mockedStatus = {
-        state: "clean",
-        changedFiles: 0,
-        insertions: 0,
-        deletions: 0,
-        workspaceChangedFiles: 0,
-        workspaceInsertions: 0,
-        workspaceDeletions: 0,
-        hasUncommittedChanges: false,
-        hasCommittedUnmergedChanges: false,
-        aheadCount: 0,
-        behindCount: 0,
-        workspaceRoot: envSetupWorkspaceRoot,
-      };
-      const getStatus = vi.fn().mockReturnValue(mockedStatus);
-      const detectDefaultBranch = vi.fn().mockReturnValue("main");
-      asThreadManagerHarness(manager).gitStatusService = {
-        getStatus,
-        detectDefaultBranch,
-      };
+      const mockedStatus = makeWorkspaceStatus();
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
         id: "proj-1",
@@ -3747,11 +3840,9 @@ describe("ThreadManager", () => {
       });
       (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
 
-      const result = manager.getWorkStatus("thread-1");
+      const result = managerWithCustomEnvironment.getWorkStatus("thread-1");
 
       expect(result).toBeUndefined();
-      expect(detectDefaultBranch).not.toHaveBeenCalled();
-      expect(getStatus).not.toHaveBeenCalled();
 
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
         ...thread,
@@ -3763,15 +3854,7 @@ describe("ThreadManager", () => {
           },
         },
       });
-      const resolvedResult = manager.getWorkStatus("thread-1");
-      expect(detectDefaultBranch).toHaveBeenCalledWith(projectRoot);
-      expect(getStatus).toHaveBeenCalledWith(
-        expect.objectContaining({
-          workspaceRoot: envSetupWorkspaceRoot,
-          projectRoot,
-          defaultBranch: "main",
-        }),
-      );
+      const resolvedResult = managerWithCustomEnvironment.getWorkStatus("thread-1");
       expect(resolvedResult).toStrictEqual(mockedStatus);
     });
 
@@ -3793,27 +3876,6 @@ describe("ThreadManager", () => {
           },
         },
       });
-      const getStatus = vi.fn().mockReturnValue({
-        state: "dirty_uncommitted",
-        changedFiles: 1,
-        insertions: 2,
-        deletions: 1,
-        workspaceChangedFiles: 1,
-        workspaceInsertions: 2,
-        workspaceDeletions: 1,
-        hasUncommittedChanges: true,
-        hasCommittedUnmergedChanges: false,
-        aheadCount: 0,
-        behindCount: 0,
-        workspaceRoot,
-      });
-      const detectDefaultBranch = vi.fn().mockReturnValue("main");
-      const invalidate = vi.fn();
-      asThreadManagerHarness(manager).gitStatusService = {
-        getStatus,
-        detectDefaultBranch,
-        invalidate,
-      };
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
         id: "proj-1",
@@ -3827,7 +3889,7 @@ describe("ThreadManager", () => {
           type === "system/provisioning/completed"
             ? makeEvent({
                 type: "system/provisioning/completed",
-                data: { workspaceRoot },
+                data: {},
               })
             : undefined,
       );
@@ -3849,11 +3911,44 @@ describe("ThreadManager", () => {
             new Promise<void>((resolve) => {
               resolveCleanup = resolve;
             }),
-          getWorkspaceRoot() {
+          exists() {
+            return true;
+          },
+          supportsHostFilesystemAccess() {
+            return true;
+          },
+          isIsolatedWorkspace() {
+            return true;
+          },
+          getCheckoutSnapshot() {
+            return {
+              branch: "bb/thread-1",
+              head: "abc123",
+              detached: false,
+            };
+          },
+          getWorkspaceRootUnsafe() {
             return workspaceRoot;
           },
-          getExecutionContext() {
-            return { cwd: workspaceRoot, env: {} };
+          getWorkspaceStatus() {
+            return makeWorkspaceStatus();
+          },
+          watchWorkspaceStatus() {
+            return () => {};
+          },
+          async commitWorkspace() {
+            return {
+              ok: true,
+              commitCreated: false,
+              message: "Working directory is clean",
+              workStatus: makeWorkspaceStatus(),
+            };
+          },
+          listWorkspaceCommitsSinceRef() {
+            return [];
+          },
+          getWorkspaceDiff() {
+            return { diff: "", truncated: false };
           },
           shouldRunSetupScript() {
             return false;
@@ -3889,7 +3984,6 @@ describe("ThreadManager", () => {
         workspaceChangedFiles: 0,
         hasUncommittedChanges: false,
       });
-      expect(getStatus).not.toHaveBeenCalled();
 
       resolveCleanup?.();
     });
@@ -3989,10 +4083,18 @@ describe("ThreadManager", () => {
         environmentId: "worktree",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      git(projectRoot, "init");
+      git(projectRoot, "config", "user.name", "Beanbag Test");
+      git(projectRoot, "config", "user.email", "beanbag-test@example.com");
+      git(projectRoot, "checkout", "-b", "main");
+      writeFileSync(join(projectRoot, "README.md"), "hello\n", "utf8");
+      git(projectRoot, "add", "README.md");
+      git(projectRoot, "commit", "-m", "initial");
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
         id: "proj-1",
         name: "Test",
-        rootPath: "/tmp/proj-1",
+        rootPath: projectRoot,
         createdAt: 1000,
         updatedAt: 1000,
       });
@@ -4013,20 +4115,11 @@ describe("ThreadManager", () => {
         reconstructed: false,
       });
       asThreadManagerHarness(manager).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
-      const resolveCheckoutSnapshot = vi.fn().mockReturnValue({
-        branch: "main",
-        head: "def456",
-        detached: false,
-      });
-      asThreadManagerHarness(manager).gitStatusService = {
-        resolveCheckoutSnapshot,
-      };
 
       const result = manager.getById("thread-1");
 
       expect(result?.primaryCheckout).toBeUndefined();
       expect(asThreadManagerHarness(manager).primaryPromotionByProjectId.get("proj-1")).toBeUndefined();
-      expect(resolveCheckoutSnapshot).toHaveBeenCalledTimes(1);
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "thread-1",
@@ -4064,10 +4157,19 @@ describe("ThreadManager", () => {
           environmentId: "worktree",
         }),
       ]);
+      const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      git(projectRoot, "init");
+      git(projectRoot, "config", "user.name", "Beanbag Test");
+      git(projectRoot, "config", "user.email", "beanbag-test@example.com");
+      git(projectRoot, "checkout", "-b", "feature/thread-1");
+      writeFileSync(join(projectRoot, "README.md"), "hello\n", "utf8");
+      git(projectRoot, "add", "README.md");
+      git(projectRoot, "commit", "-m", "initial");
+      const head = git(projectRoot, "rev-parse", "HEAD");
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
         id: "proj-1",
         name: "Test",
-        rootPath: "/tmp/proj-1",
+        rootPath: projectRoot,
         createdAt: 1000,
         updatedAt: 1000,
       });
@@ -4078,26 +4180,17 @@ describe("ThreadManager", () => {
         promotedAt: 1000,
         promotedCheckout: {
           branch: "feature/thread-1",
-          head: "abc123",
+          head,
           detached: false,
         },
         reconstructed: false,
       });
       asThreadManagerHarness(manager).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
-      const resolveCheckoutSnapshot = vi.fn().mockReturnValue({
-        branch: "feature/thread-1",
-        head: "abc123",
-        detached: false,
-      });
-      asThreadManagerHarness(manager).gitStatusService = {
-        resolveCheckoutSnapshot,
-      };
 
       const result = manager.list({ projectId: "proj-1" });
 
       expect(result[0]?.primaryCheckout?.isActive).toBe(true);
       expect(result[1]?.primaryCheckout).toBeUndefined();
-      expect(resolveCheckoutSnapshot).toHaveBeenCalledTimes(1);
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
@@ -4129,11 +4222,44 @@ describe("ThreadManager", () => {
             return {};
           },
           dispose() {},
-          getWorkspaceRoot() {
+          exists() {
+            return true;
+          },
+          supportsHostFilesystemAccess() {
+            return true;
+          },
+          isIsolatedWorkspace() {
+            return true;
+          },
+          getCheckoutSnapshot() {
+            return {
+              branch: "bb/thread-1",
+              head: "abc123",
+              detached: false,
+            };
+          },
+          getWorkspaceRootUnsafe() {
             return workspaceRoot;
           },
-          getExecutionContext() {
-            return { cwd: workspaceRoot, env: {} };
+          getWorkspaceStatus() {
+            return makeWorkspaceStatus();
+          },
+          watchWorkspaceStatus() {
+            return () => {};
+          },
+          async commitWorkspace() {
+            return {
+              ok: true,
+              commitCreated: false,
+              message: "Working directory is clean",
+              workStatus: makeWorkspaceStatus(),
+            };
+          },
+          listWorkspaceCommitsSinceRef() {
+            return [];
+          },
+          getWorkspaceDiff() {
+            return { diff: "", truncated: false };
           },
           shouldRunSetupScript() {
             return false;
@@ -4259,11 +4385,44 @@ describe("ThreadManager", () => {
             return {};
           },
           dispose() {},
-          getWorkspaceRoot() {
+          exists() {
+            return true;
+          },
+          supportsHostFilesystemAccess() {
+            return true;
+          },
+          isIsolatedWorkspace() {
+            return true;
+          },
+          getCheckoutSnapshot() {
+            return {
+              branch: "bb/thread-1",
+              head: "abc123",
+              detached: false,
+            };
+          },
+          getWorkspaceRootUnsafe() {
             return workspaceRoot;
           },
-          getExecutionContext() {
-            return { cwd: workspaceRoot, env: {} };
+          getWorkspaceStatus() {
+            return makeWorkspaceStatus();
+          },
+          watchWorkspaceStatus() {
+            return () => {};
+          },
+          async commitWorkspace() {
+            return {
+              ok: true,
+              commitCreated: false,
+              message: "Working directory is clean",
+              workStatus: makeWorkspaceStatus(),
+            };
+          },
+          listWorkspaceCommitsSinceRef() {
+            return [];
+          },
+          getWorkspaceDiff() {
+            return { diff: "", truncated: false };
           },
           shouldRunSetupScript() {
             return false;
@@ -4364,7 +4523,7 @@ describe("ThreadManager", () => {
           if (type !== "system/provisioning/completed") return undefined;
           return makeEvent({
             type: "system/provisioning/completed",
-            data: { workspaceRoot: "/tmp/proj-1" },
+            data: {},
           });
         },
       );
@@ -4448,11 +4607,44 @@ describe("ThreadManager", () => {
               return {};
             },
             dispose() {},
-            getWorkspaceRoot() {
+            exists() {
+              return true;
+            },
+            supportsHostFilesystemAccess() {
+              return true;
+            },
+            isIsolatedWorkspace() {
+              return true;
+            },
+            getCheckoutSnapshot() {
+              return {
+                branch: "bb/thread-1",
+                head: "abc123",
+                detached: false,
+              };
+            },
+            getWorkspaceRootUnsafe() {
               return "/tmp/worktrees/proj-1/thread-1";
             },
-            getExecutionContext() {
-              return { cwd: "/tmp/worktrees/proj-1/thread-1", env: {} };
+            getWorkspaceStatus() {
+              return makeWorkspaceStatus();
+            },
+            watchWorkspaceStatus() {
+              return () => {};
+            },
+            async commitWorkspace() {
+              return {
+                ok: true,
+                commitCreated: false,
+                message: "Working directory is clean",
+                workStatus: makeWorkspaceStatus(),
+              };
+            },
+            listWorkspaceCommitsSinceRef() {
+              return [];
+            },
+            getWorkspaceDiff() {
+              return { diff: "", truncated: false };
             },
             shouldRunSetupScript() {
               return false;
@@ -4787,7 +4979,6 @@ describe("ThreadManager", () => {
           data: {
             status: "started",
             scriptPath: ".bb-env-setup.sh",
-            workspaceRoot: "/tmp/worktree",
             timeoutMs: 600000,
           },
         }),
@@ -4797,7 +4988,6 @@ describe("ThreadManager", () => {
           data: {
             status: "failed",
             scriptPath: ".bb-env-setup.sh",
-            workspaceRoot: "/tmp/worktree",
             timeoutMs: 600000,
             durationMs: 1593,
             detail: "pnpm build failed",

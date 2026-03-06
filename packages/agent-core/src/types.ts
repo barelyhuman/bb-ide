@@ -45,7 +45,6 @@ export interface Thread {
   workStatus?: ThreadWorkStatus;
   primaryCheckout?: ThreadPrimaryCheckoutState;
   provisioningState?: ThreadProvisioningState;
-  agentDiffStats?: ThreadAgentDiffStats;
   queuedMessages?: ThreadQueuedMessage[];
   environmentId?: string;
   environmentRecord?: PersistedEnvironmentRecord;
@@ -59,16 +58,6 @@ export interface Thread {
 export interface PersistedEnvironmentRecord {
   kind: string;
   state: unknown;
-}
-
-export type ThreadAgentDiffSource = "worktree_snapshot" | "local_tally";
-
-export interface ThreadAgentDiffStats {
-  source: ThreadAgentDiffSource;
-  changedFiles: number;
-  insertions: number;
-  deletions: number;
-  capturedAt: number;
 }
 
 export type ThreadWorkState =
@@ -95,7 +84,6 @@ export interface ThreadWorkStatus {
   defaultBranch?: string;
   mergeBaseBranch?: string;
   mergeBaseBranches?: string[];
-  workspaceRoot?: string;
   baseRef?: string;
   files?: ThreadWorkFileChange[];
 }
@@ -115,7 +103,6 @@ export type ThreadProvisioningReadiness = "ready" | "degraded" | "failed";
 export interface ThreadProvisioningState {
   readiness: ThreadProvisioningReadiness;
   message?: string;
-  mode?: string;
   fallbackReason?: string;
 }
 
@@ -210,7 +197,6 @@ export interface SystemProvisioningStartedEventData {
 export interface SystemProvisioningEnvSetupEventData {
   status: "started" | "completed" | "failed";
   scriptPath: string;
-  workspaceRoot?: string;
   timeoutMs?: number;
   durationMs?: number;
   detail?: string;
@@ -225,8 +211,6 @@ export interface SystemProvisioningFallbackEventData {
 
 export interface SystemProvisioningCompletedEventData {
   environmentId: string;
-  workspaceRoot?: string;
-  mode?: string;
   fallbackReason?: string;
 }
 

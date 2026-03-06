@@ -44,7 +44,11 @@ function createRepoWithThreadAheadOfMain() {
   });
   environments.push(environment);
 
-  writeFileSync(join(environment.getWorkspaceRoot(), "README.md"), "initial\nthread change\n", "utf8");
+  writeFileSync(
+    join(environment.getWorkspaceRootUnsafe(), "README.md"),
+    "initial\nthread change\n",
+    "utf8",
+  );
   environment.run("git", ["add", "README.md"]);
   environment.run("git", ["commit", "-m", "thread change"]);
 
@@ -78,7 +82,11 @@ describe("WorktreeEnvironment", () => {
   it("rejects promotion when the worktree is dirty", () => {
     const { repoRoot, environment } = createRepoWithThreadAheadOfMain();
 
-    writeFileSync(join(environment.getWorkspaceRoot(), "README.md"), "initial\nthread dirty change\n", "utf8");
+    writeFileSync(
+      join(environment.getWorkspaceRootUnsafe(), "README.md"),
+      "initial\nthread dirty change\n",
+      "utf8",
+    );
 
     expect(() =>
       environment.promoteToActiveWorkspace({
@@ -104,7 +112,7 @@ describe("WorktreeEnvironment", () => {
       resolveMessage,
     });
 
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
+    expect(result).toEqual({ merged: true, message: "Squash-merged into main", committed: false });
     expect(resolveMessage).toHaveBeenCalledTimes(1);
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
       "feat: integrate thread updates",
@@ -121,7 +129,7 @@ describe("WorktreeEnvironment", () => {
       resolveMessage,
     });
 
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
+    expect(result).toEqual({ merged: true, message: "Squash-merged into main", committed: false });
     expect(resolveMessage).toHaveBeenCalledTimes(1);
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toContain(
       "chore: squash merge from bb/thread-thread-",
@@ -139,7 +147,7 @@ describe("WorktreeEnvironment", () => {
       resolveMessage,
     });
 
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
+    expect(result).toEqual({ merged: true, message: "Squash-merged into main", committed: false });
     expect(resolveMessage).not.toHaveBeenCalled();
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
       "feat: custom squash message",

@@ -227,14 +227,12 @@ export function ProjectList({
   const requestArchiveThread = async (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    if (thread.environmentId === "worktree") {
-      const workStatus =
-        thread.workStatus ??
-        (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
-      if (requiresArchiveConfirmation(workStatus)) {
-        setArchiveConfirmationThread(thread)
-        return
-      }
+    const workStatus =
+      thread.workStatus ??
+      (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
+    if (requiresArchiveConfirmation(workStatus)) {
+      setArchiveConfirmationThread(thread)
+      return
     }
 
     archiveThread.mutate({ id: thread.id })

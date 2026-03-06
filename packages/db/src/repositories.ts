@@ -19,8 +19,6 @@ import type {
   ReasoningLevel,
   SandboxMode,
   Thread,
-  ThreadAgentDiffStats,
-  ThreadAgentDiffSource,
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadEvent,
@@ -207,16 +205,6 @@ function toThreadExecutionSource(
   throw new Error(`Invalid persisted thread execution source: ${value}`);
 }
 
-function toThreadAgentDiffSource(
-  value: string | undefined,
-): ThreadAgentDiffSource | undefined {
-  if (value === undefined) return undefined;
-  if (value === "worktree_snapshot" || value === "local_tally") {
-    return value;
-  }
-  throw new Error(`Invalid persisted thread agent diff source: ${value}`);
-}
-
 function parseQueuedPromptInput(rawInput: string): PromptInput[] {
   let parsed: unknown;
   try {
@@ -345,11 +333,6 @@ export class ThreadRepository {
       environmentRecord: data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null,
-      agentDiffSource: null,
-      agentChangedFiles: null,
-      agentInsertions: null,
-      agentDeletions: null,
-      agentDiffCapturedAt: null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       lastReadAt: now,
@@ -408,7 +391,6 @@ export class ThreadRepository {
       title?: string;
       environmentId?: string | null;
       environmentRecord?: PersistedEnvironmentRecord | null;
-      agentDiffStats?: ThreadAgentDiffStats | null;
       archivedAt?: number | null;
       lastReadAt?: number;
     },
@@ -434,13 +416,6 @@ export class ThreadRepository {
       updates.environmentRecord = data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null;
-    }
-    if (data.agentDiffStats !== undefined) {
-      updates.agentDiffSource = data.agentDiffStats?.source ?? null;
-      updates.agentChangedFiles = data.agentDiffStats?.changedFiles ?? null;
-      updates.agentInsertions = data.agentDiffStats?.insertions ?? null;
-      updates.agentDeletions = data.agentDiffStats?.deletions ?? null;
-      updates.agentDiffCapturedAt = data.agentDiffStats?.capturedAt ?? null;
     }
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
     if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
@@ -552,21 +527,6 @@ export class ThreadRepository {
     row: typeof threads.$inferSelect,
     queuedMessages: ThreadQueuedMessage[],
   ): Thread {
-    const agentDiffSource = toThreadAgentDiffSource(row.agentDiffSource ?? undefined);
-    const agentDiffStats =
-      agentDiffSource !== undefined &&
-      row.agentChangedFiles !== null &&
-      row.agentInsertions !== null &&
-      row.agentDeletions !== null &&
-      row.agentDiffCapturedAt !== null
-        ? {
-            source: agentDiffSource,
-            changedFiles: row.agentChangedFiles,
-            insertions: row.agentInsertions,
-            deletions: row.agentDeletions,
-            capturedAt: row.agentDiffCapturedAt,
-          }
-        : undefined;
     return {
       id: row.id,
       projectId: row.projectId,
@@ -574,7 +534,6 @@ export class ThreadRepository {
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
       environmentRecord: parseEnvironmentRecord(row.environmentRecord),
-      agentDiffStats,
       queuedMessages,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,

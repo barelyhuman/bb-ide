@@ -1,0 +1,841 @@
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  statSync,
+  watch,
+} from "node:fs";
+import { join, resolve } from "node:path";
+import type {
+  ThreadGitDiffCommitSummary,
+  ThreadWorkStatus,
+} from "@beanbag/agent-core";
+import type {
+  EnvironmentWorkspaceCommitOptions,
+  EnvironmentWorkspaceCommitResult,
+  EnvironmentWorkspaceCommitsOptions,
+  EnvironmentWorkspaceDiffOptions,
+  EnvironmentWorkspaceDiffResult,
+  EnvironmentWorkspaceStatusOptions,
+  IEnvironment,
+} from "./contracts.js";
+
+const MAX_DIFF_RESPONSE_CHARS = 220_000;
+const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
+
+type DiffCounts = {
+  changedFiles: number;
+  insertions: number;
+  deletions: number;
+};
+
+type WorkspaceFile = {
+  status: string;
+  path: string;
+};
+
+type GitRunResult = {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  code: number | null;
+};
+
+function runGit(
+  environment: IEnvironment,
+  args: string[],
+  options?: { rawOutput?: boolean },
+): GitRunResult {
+  const result = environment.run("git", args, {
+    ...(options?.rawOutput ? { rawOutput: true } : {}),
+  });
+  return {
+    ok: result.exitCode === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    code: result.exitCode,
+  };
+}
+
+function parseShortstat(value: string): { files: number; insertions: number; deletions: number } {
+  if (!value) {
+    return { files: 0, insertions: 0, deletions: 0 };
+  }
+
+  const filesMatch = value.match(/(\d+) files? changed/);
+  const insertionsMatch = value.match(/(\d+) insertions?\(\+\)/);
+  const deletionsMatch = value.match(/(\d+) deletions?\(-\)/);
+
+  return {
+    files: filesMatch ? Number.parseInt(filesMatch[1], 10) : 0,
+    insertions: insertionsMatch ? Number.parseInt(insertionsMatch[1], 10) : 0,
+    deletions: deletionsMatch ? Number.parseInt(deletionsMatch[1], 10) : 0,
+  };
+}
+
+function countUntrackedFiles(statusLines: readonly string[]): number {
+  return statusLines.reduce((count, line) => (
+    line.startsWith("?? ") ? count + 1 : count
+  ), 0);
+}
+
+function resolveMergeBaseDiffRef(
+  environment: IEnvironment,
+  baseRef: string | undefined,
+): string | undefined {
+  if (!baseRef) return undefined;
+  const mergeBaseResult = runGit(environment, ["merge-base", baseRef, "HEAD"]);
+  if (!mergeBaseResult.ok || !mergeBaseResult.stdout) {
+    return undefined;
+  }
+  return mergeBaseResult.stdout;
+}
+
+function resolveMergeBaseDiffCounts(args: {
+  environment: IEnvironment;
+  mergeBaseDiffRef: string | undefined;
+  statusLines: readonly string[];
+  fallback: DiffCounts;
+}): DiffCounts {
+  if (!args.mergeBaseDiffRef) {
+    return args.fallback;
+  }
+
+  const shortstatResult = runGit(args.environment, [
+    "diff",
+    "--shortstat",
+    args.mergeBaseDiffRef,
+  ]);
+  if (!shortstatResult.ok) {
+    return args.fallback;
+  }
+
+  const parsed = parseShortstat(shortstatResult.stdout);
+  const untrackedFiles = countUntrackedFiles(args.statusLines);
+  return {
+    changedFiles: parsed.files + untrackedFiles,
+    insertions: parsed.insertions,
+    deletions: parsed.deletions,
+  };
+}
+
+function parseAheadBehind(value: string): { behind: number; ahead: number } {
+  const [behindRaw, aheadRaw] = value.split("\t");
+  const behind = Number.parseInt(behindRaw ?? "0", 10);
+  const ahead = Number.parseInt(aheadRaw ?? "0", 10);
+  return {
+    behind: Number.isFinite(behind) ? behind : 0,
+    ahead: Number.isFinite(ahead) ? ahead : 0,
+  };
+}
+
+function countUnmergedAheadCommits(
+  environment: IEnvironment,
+  baseRef: string,
+  aheadCount: number,
+): number {
+  if (aheadCount <= 0) {
+    return 0;
+  }
+
+  const cherryResult = runGit(environment, ["cherry", baseRef, "HEAD"]);
+  if (!cherryResult.ok) {
+    return aheadCount;
+  }
+
+  const lines = cherryResult.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return 0;
+  }
+
+  let unmergedCount = 0;
+  for (const line of lines) {
+    if (line.startsWith("+")) {
+      unmergedCount += 1;
+      continue;
+    }
+    if (line.startsWith("-")) {
+      continue;
+    }
+    return aheadCount;
+  }
+
+  return unmergedCount;
+}
+
+const COMMITTED_CONTENT_DIFF_CHUNK_SIZE = 120;
+
+function parseNulSeparatedList(value: string): string[] {
+  return value
+    .split("\u0000")
+    .filter((entry) => entry.length > 0);
+}
+
+function hasCommittedContentDeltaByPaths(args: {
+  environment: IEnvironment;
+  baseRef: string;
+  paths: readonly string[];
+}): boolean | undefined {
+  for (let index = 0; index < args.paths.length; index += COMMITTED_CONTENT_DIFF_CHUNK_SIZE) {
+    const chunk = args.paths.slice(index, index + COMMITTED_CONTENT_DIFF_CHUNK_SIZE);
+    const diffResult = runGit(args.environment, [
+      "diff",
+      "--quiet",
+      `${args.baseRef}..HEAD`,
+      "--",
+      ...chunk,
+    ]);
+    if (diffResult.code === 1) {
+      return true;
+    }
+    if (diffResult.code !== 0) {
+      return undefined;
+    }
+  }
+  return false;
+}
+
+function resolveCommittedUnmergedChanges(args: {
+  environment: IEnvironment;
+  baseRef: string | undefined;
+  mergeBaseDiffRef: string | undefined;
+  aheadCount: number;
+}): boolean {
+  if (!args.baseRef || !args.mergeBaseDiffRef) {
+    return args.aheadCount > 0;
+  }
+
+  const changedPathsResult = runGit(args.environment, [
+    "diff",
+    "--name-only",
+    "--find-renames",
+    "-z",
+    `${args.mergeBaseDiffRef}..HEAD`,
+  ], { rawOutput: true });
+  if (!changedPathsResult.ok) {
+    return args.aheadCount > 0;
+  }
+
+  const changedPaths = parseNulSeparatedList(changedPathsResult.stdout);
+  if (changedPaths.length === 0) {
+    return false;
+  }
+
+  const hasContentDelta = hasCommittedContentDeltaByPaths({
+    environment: args.environment,
+    baseRef: args.baseRef,
+    paths: changedPaths,
+  });
+  if (hasContentDelta === undefined) {
+    return args.aheadCount > 0;
+  }
+  return hasContentDelta;
+}
+
+function parsePorcelainLine(line: string): WorkspaceFile | undefined {
+  if (line.length < 3) return undefined;
+  const rawStatus = line.slice(0, 2);
+  const indexStatus = rawStatus[0] ?? " ";
+  const worktreeStatus = rawStatus[1] ?? " ";
+  const status = (() => {
+    if (indexStatus === "?" && worktreeStatus === "?") {
+      return "A?";
+    }
+    if (indexStatus === " " && worktreeStatus !== " ") {
+      return `${worktreeStatus}?`;
+    }
+    if (indexStatus !== " " && worktreeStatus === " ") {
+      return indexStatus;
+    }
+    return `${indexStatus}${worktreeStatus}`;
+  })();
+  const rawPath = line.slice(2).trimStart();
+  if (rawPath.length === 0) return undefined;
+  const path = rawPath.includes(" -> ")
+    ? rawPath.slice(rawPath.lastIndexOf(" -> ") + 4)
+    : rawPath;
+  return { status, path };
+}
+
+function parseNameStatusLine(line: string): WorkspaceFile | undefined {
+  const segments = line.split("\t");
+  if (segments.length < 2) return undefined;
+  const rawStatus = segments[0]?.trim() ?? "";
+  if (!rawStatus) return undefined;
+  const isRenameOrCopy = rawStatus.startsWith("R") || rawStatus.startsWith("C");
+  const path = (isRenameOrCopy ? segments[2] : segments[1])?.trim();
+  if (!path) return undefined;
+  return { status: rawStatus, path };
+}
+
+function resolveMergeBaseFileChanges(args: {
+  environment: IEnvironment;
+  mergeBaseDiffRef: string | undefined;
+  workspaceFiles: ReadonlyArray<WorkspaceFile>;
+}): WorkspaceFile[] {
+  const fallback = args.workspaceFiles.slice(0, 60);
+  if (!args.mergeBaseDiffRef) {
+    return fallback;
+  }
+
+  const diffResult = runGit(args.environment, [
+    "diff",
+    "--name-status",
+    "--find-renames",
+    args.mergeBaseDiffRef,
+  ]);
+  if (!diffResult.ok) {
+    return fallback;
+  }
+
+  const workspaceStatusByPath = new Map(
+    args.workspaceFiles.map((item) => [item.path, item.status]),
+  );
+  const mergeBaseFiles = diffResult.stdout
+    .split("\n")
+    .map((line) => parseNameStatusLine(line.trimEnd()))
+    .filter((item): item is WorkspaceFile => Boolean(item))
+    .map((item) => ({
+      ...item,
+      status: workspaceStatusByPath.get(item.path) ?? item.status,
+    }));
+
+  const knownPaths = new Set(mergeBaseFiles.map((item) => item.path));
+  for (const workspaceFile of args.workspaceFiles) {
+    if (knownPaths.has(workspaceFile.path)) {
+      continue;
+    }
+    mergeBaseFiles.push(workspaceFile);
+    knownPaths.add(workspaceFile.path);
+  }
+
+  return mergeBaseFiles.slice(0, 60);
+}
+
+function safeMtime(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function resolveGitDirectory(workspaceRoot: string): string | undefined {
+  const dotGitPath = join(workspaceRoot, ".git");
+  try {
+    const dotGitStat = lstatSync(dotGitPath);
+    if (dotGitStat.isDirectory()) {
+      return dotGitPath;
+    }
+    if (!dotGitStat.isFile()) {
+      return undefined;
+    }
+
+    const gitFileContents = readFileSync(dotGitPath, "utf-8");
+    const firstLine = gitFileContents.split("\n")[0]?.trim() ?? "";
+    if (!firstLine.toLowerCase().startsWith("gitdir:")) {
+      return undefined;
+    }
+    const relativeGitDir = firstLine.slice("gitdir:".length).trim();
+    if (relativeGitDir.length === 0) {
+      return undefined;
+    }
+    return resolve(workspaceRoot, relativeGitDir);
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveGitMetadataPaths(workspaceRoot: string): string[] {
+  const dotGitPath = join(workspaceRoot, ".git");
+  const gitDirPath = resolveGitDirectory(workspaceRoot);
+  const metadataRoot = gitDirPath ?? dotGitPath;
+  return [
+    dotGitPath,
+    join(metadataRoot, "HEAD"),
+    join(metadataRoot, "index"),
+    join(metadataRoot, "packed-refs"),
+    join(metadataRoot, "refs", "heads"),
+    join(metadataRoot, "refs", "remotes", "origin"),
+    ...(gitDirPath ? [gitDirPath] : []),
+  ];
+}
+
+function resolveDefaultBranch(environment: IEnvironment): string | undefined {
+  const remoteHead = runGit(environment, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+  if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
+    return remoteHead.stdout.slice("refs/remotes/origin/".length);
+  }
+
+  const hasMain = runGit(environment, ["show-ref", "--verify", "--quiet", "refs/heads/main"]);
+  if (hasMain.ok) return "main";
+
+  const hasMaster = runGit(environment, ["show-ref", "--verify", "--quiet", "refs/heads/master"]);
+  if (hasMaster.ok) return "master";
+
+  return undefined;
+}
+
+function resolveBaseRef(environment: IEnvironment, branch: string | undefined): string | undefined {
+  if (!branch) return undefined;
+
+  const localRef = `refs/heads/${branch}`;
+  if (runGit(environment, ["show-ref", "--verify", "--quiet", localRef]).ok) {
+    return branch;
+  }
+
+  const remoteRef = `refs/remotes/origin/${branch}`;
+  if (runGit(environment, ["show-ref", "--verify", "--quiet", remoteRef]).ok) {
+    return `origin/${branch}`;
+  }
+
+  return undefined;
+}
+
+function listMergeBaseBranches(
+  environment: IEnvironment,
+  defaultBranch: string | undefined,
+): string[] {
+  const localBranches = runGit(environment, [
+    "for-each-ref",
+    "--format=%(refname:short)",
+    "refs/heads",
+  ]);
+  if (!localBranches.ok) {
+    return defaultBranch ? [defaultBranch] : [];
+  }
+
+  const branches = Array.from(
+    new Set(
+      localBranches.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  if (!defaultBranch) {
+    return branches;
+  }
+
+  if (!branches.includes(defaultBranch)) {
+    return [defaultBranch, ...branches];
+  }
+
+  return [defaultBranch, ...branches.filter((branch) => branch !== defaultBranch)];
+}
+
+function resolveMergeBaseSelection(args: {
+  environment: IEnvironment;
+  defaultBranch: string | undefined;
+  requestedMergeBaseBranch: string | undefined;
+}): { mergeBaseBranch?: string; baseRef?: string } {
+  const candidates = [
+    args.requestedMergeBaseBranch,
+    args.defaultBranch,
+  ];
+  const seen = new Set<string>();
+
+  for (const candidate of candidates) {
+    if (!candidate || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    const baseRef = resolveBaseRef(args.environment, candidate);
+    if (baseRef) {
+      return { mergeBaseBranch: candidate, baseRef };
+    }
+  }
+
+  return {};
+}
+
+function toState(args: {
+  hasUncommittedChanges: boolean;
+  hasCommittedUnmergedChanges: boolean;
+}): ThreadWorkStatus["state"] {
+  if (args.hasUncommittedChanges && args.hasCommittedUnmergedChanges) {
+    return "dirty_and_committed_unmerged";
+  }
+  if (args.hasUncommittedChanges) {
+    return "dirty_uncommitted";
+  }
+  if (args.hasCommittedUnmergedChanges) {
+    return "committed_unmerged";
+  }
+  return "clean";
+}
+
+function trimDiffForResponse(diff: string): EnvironmentWorkspaceDiffResult {
+  if (diff.length <= MAX_DIFF_RESPONSE_CHARS) {
+    return { diff, truncated: false };
+  }
+  return {
+    diff: `${diff.slice(0, MAX_DIFF_RESPONSE_CHARS)}\n\n... diff truncated ...\n`,
+    truncated: true,
+  };
+}
+
+function parseCommitSummaries(raw: string): ThreadGitDiffCommitSummary[] {
+  if (!raw) return [];
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [sha, shortSha, authoredAtRaw, authorName, ...subjectParts] =
+        line.split(COMMIT_SUMMARY_FIELD_SEPARATOR);
+      if (!sha || !shortSha) return null;
+      const subject = subjectParts.join(COMMIT_SUMMARY_FIELD_SEPARATOR).trim();
+      const authoredAt = Number.parseInt(authoredAtRaw ?? "", 10);
+      return {
+        sha,
+        shortSha,
+        subject: subject.length > 0 ? subject : "(no subject)",
+        ...(authorName ? { authorName } : {}),
+        ...(Number.isFinite(authoredAt) ? { authoredAt } : {}),
+      } satisfies ThreadGitDiffCommitSummary;
+    })
+    .filter((entry): entry is ThreadGitDiffCommitSummary => entry !== null);
+}
+
+function cleanStatus(workspaceRoot: string): ThreadWorkStatus {
+  return {
+    state: "clean",
+    changedFiles: 0,
+    insertions: 0,
+    deletions: 0,
+    workspaceChangedFiles: 0,
+    workspaceInsertions: 0,
+    workspaceDeletions: 0,
+    hasUncommittedChanges: false,
+    hasCommittedUnmergedChanges: false,
+    aheadCount: 0,
+    behindCount: 0,
+    workspaceRoot,
+    files: [],
+  };
+}
+
+function untrackedStatus(workspaceRoot: string): ThreadWorkStatus {
+  return {
+    ...cleanStatus(workspaceRoot),
+    state: "untracked",
+  };
+}
+
+function deletedStatus(workspaceRoot: string): ThreadWorkStatus {
+  return {
+    ...cleanStatus(workspaceRoot),
+    state: "deleted",
+  };
+}
+
+export function getGitWorkspaceStatus(
+  environment: IEnvironment,
+  args?: EnvironmentWorkspaceStatusOptions,
+): ThreadWorkStatus {
+  const workspaceRoot = environment.getWorkspaceRootUnsafe();
+  const workspaceExists = environment.exists();
+  if (!workspaceExists) {
+    return deletedStatus(workspaceRoot);
+  }
+
+  const isGitRepo = runGit(environment, ["rev-parse", "--is-inside-work-tree"]);
+  if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
+    return untrackedStatus(workspaceRoot);
+  }
+
+  const requestedMergeBaseBranch = args?.mergeBaseBranch?.trim() || undefined;
+  const defaultBranch = args?.defaultBranch ?? resolveDefaultBranch(environment);
+
+  const statusResult = runGit(environment, [
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+  ]);
+  const statusLines = statusResult.ok
+    ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
+    : [];
+  const workspaceFiles = statusLines
+    .map((line) => parsePorcelainLine(line))
+    .filter((item): item is WorkspaceFile => Boolean(item))
+    .slice(0, 60);
+  const workspaceChangedFiles = statusLines.length;
+
+  const unstagedStat = parseShortstat(runGit(environment, ["diff", "--shortstat"]).stdout);
+  const stagedStat = parseShortstat(runGit(environment, ["diff", "--cached", "--shortstat"]).stdout);
+  const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
+  const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
+
+  const currentBranch = runGit(environment, ["symbolic-ref", "--short", "HEAD"]);
+  const mergeBaseBranches = listMergeBaseBranches(environment, defaultBranch);
+  const mergeBaseSelection = resolveMergeBaseSelection({
+    environment,
+    defaultBranch,
+    requestedMergeBaseBranch,
+  });
+  const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
+  const baseRef = mergeBaseSelection.baseRef;
+  const mergeBaseDiffRef = resolveMergeBaseDiffRef(environment, baseRef);
+  const mergeBaseBranchOptions =
+    mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
+      ? [mergeBaseBranch, ...mergeBaseBranches]
+      : mergeBaseBranches;
+  const mergeBaseDiff = resolveMergeBaseDiffCounts({
+    environment,
+    mergeBaseDiffRef,
+    statusLines,
+    fallback: {
+      changedFiles: workspaceChangedFiles,
+      insertions: workspaceInsertions,
+      deletions: workspaceDeletions,
+    },
+  });
+  const files = resolveMergeBaseFileChanges({
+    environment,
+    mergeBaseDiffRef,
+    workspaceFiles,
+  });
+
+  let aheadCount = 0;
+  let behindCount = 0;
+  if (baseRef) {
+    const aheadBehind = runGit(environment, ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`]);
+    if (aheadBehind.ok) {
+      const parsed = parseAheadBehind(aheadBehind.stdout);
+      aheadCount = countUnmergedAheadCommits(environment, baseRef, parsed.ahead);
+      behindCount = parsed.behind;
+    }
+  }
+
+  const hasUncommittedChanges = workspaceChangedFiles > 0;
+  const hasCommittedUnmergedChanges = resolveCommittedUnmergedChanges({
+    environment,
+    baseRef,
+    mergeBaseDiffRef,
+    aheadCount,
+  });
+
+  return {
+    state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
+    changedFiles: mergeBaseDiff.changedFiles,
+    insertions: mergeBaseDiff.insertions,
+    deletions: mergeBaseDiff.deletions,
+    workspaceChangedFiles,
+    workspaceInsertions,
+    workspaceDeletions,
+    hasUncommittedChanges,
+    hasCommittedUnmergedChanges,
+    aheadCount,
+    behindCount,
+    ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
+    ...(defaultBranch ? { defaultBranch } : {}),
+    ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+    ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
+    ...(baseRef ? { baseRef } : {}),
+    files,
+    workspaceRoot,
+  };
+}
+
+export function watchGitWorkspaceStatus(
+  environment: IEnvironment,
+  onChange: () => void,
+): () => void {
+  if (!environment.supportsHostFilesystemAccess()) {
+    return () => {};
+  }
+
+  const workspaceRoot = environment.getWorkspaceRootUnsafe();
+  const watchTargets = Array.from(new Set(resolveGitMetadataPaths(workspaceRoot)));
+  const watchers = watchTargets.flatMap((target) => {
+    if (!existsSync(target)) {
+      return [];
+    }
+    try {
+      const watcher = watch(target, { persistent: false }, () => {
+        onChange();
+      });
+      watcher.on("error", () => {
+        onChange();
+      });
+      return [watcher];
+    } catch {
+      return [];
+    }
+  });
+
+  return () => {
+    for (const watcher of watchers) {
+      try {
+        watcher.close();
+      } catch {
+        // Ignore close failures.
+      }
+    }
+  };
+}
+
+export function listGitWorkspaceCommitsSinceRef(
+  environment: IEnvironment,
+  args: EnvironmentWorkspaceCommitsOptions,
+): ThreadGitDiffCommitSummary[] {
+  const baseRef = args.baseRef?.trim();
+  if (!baseRef) return [];
+  const logResult = runGit(environment, [
+    "log",
+    "--reverse",
+    "--max-count=120",
+    `--format=%H${COMMIT_SUMMARY_FIELD_SEPARATOR}%h${COMMIT_SUMMARY_FIELD_SEPARATOR}%ct${COMMIT_SUMMARY_FIELD_SEPARATOR}%an${COMMIT_SUMMARY_FIELD_SEPARATOR}%s`,
+    `${baseRef}..HEAD`,
+  ]);
+  if (!logResult.ok || !logResult.stdout) {
+    return [];
+  }
+  return parseCommitSummaries(logResult.stdout);
+}
+
+export function commitGitWorkspace(
+  environment: IEnvironment,
+  args: EnvironmentWorkspaceCommitOptions,
+  generateCommitMessage?: (args: {
+    cwd: string;
+    includeUnstaged?: boolean;
+  }) => Promise<string | undefined>,
+  appendEvent?: (result: EnvironmentWorkspaceCommitResult) => void,
+): Promise<EnvironmentWorkspaceCommitResult> {
+  const before = getGitWorkspaceStatus(environment, {
+    ...(args.defaultBranch ? { defaultBranch: args.defaultBranch } : {}),
+  });
+  if (!before.hasUncommittedChanges) {
+    const result = {
+      ok: true,
+      commitCreated: false,
+      message: "Working directory is clean",
+      workStatus: before,
+      ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
+    } satisfies EnvironmentWorkspaceCommitResult;
+    appendEvent?.(result);
+    return Promise.resolve(result);
+  }
+
+  const includeUnstaged = args.includeUnstaged ?? true;
+  if (includeUnstaged) {
+    const addResult = runGit(environment, ["add", "-A"]);
+    if (!addResult.ok) {
+      throw new Error(addResult.stderr || "Failed to stage changes");
+    }
+  }
+
+  const hasStagedChanges = runGit(environment, ["diff", "--cached", "--quiet"]);
+  if (hasStagedChanges.ok) {
+    const afterNoop = getGitWorkspaceStatus(environment, {
+      ...(args.defaultBranch ? { defaultBranch: args.defaultBranch } : {}),
+    });
+    const result = {
+      ok: true,
+      commitCreated: false,
+      message: "No staged changes to commit",
+      workStatus: afterNoop,
+      ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
+    } satisfies EnvironmentWorkspaceCommitResult;
+    appendEvent?.(result);
+    return Promise.resolve(result);
+  }
+
+  return (async () => {
+    let commitMessage = args.message?.trim();
+    if (!commitMessage) {
+      commitMessage = (await generateCommitMessage?.({
+        cwd: environment.getWorkspaceRootUnsafe(),
+        includeUnstaged: args.includeUnstaged,
+      }))?.trim();
+    }
+    if (!commitMessage) {
+      throw new Error("Commit message is required");
+    }
+    const commitResult = runGit(environment, ["commit", "-m", commitMessage]);
+    if (!commitResult.ok) {
+      throw new Error(commitResult.stderr || "Commit failed");
+    }
+
+    const after = getGitWorkspaceStatus(environment, {
+      ...(args.defaultBranch ? { defaultBranch: args.defaultBranch } : {}),
+    });
+    const shaResult = runGit(environment, ["rev-parse", "HEAD"]);
+
+    const result = {
+      ok: true,
+      commitCreated: true,
+      message: "Committed changes",
+      workStatus: after,
+      ...(shaResult.ok && shaResult.stdout ? { commitSha: shaResult.stdout } : {}),
+      ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
+    } satisfies EnvironmentWorkspaceCommitResult;
+    appendEvent?.(result);
+    return result;
+  })();
+}
+
+export function getGitWorkspaceDiff(
+  environment: IEnvironment,
+  args: EnvironmentWorkspaceDiffOptions,
+): EnvironmentWorkspaceDiffResult {
+  switch (args.type) {
+    case "working_tree": {
+      const diffResult = runGit(environment, ["diff", "--binary", "HEAD"], { rawOutput: true });
+      if (diffResult.ok) {
+        return trimDiffForResponse(diffResult.stdout);
+      }
+      const fallbackDiffResult = runGit(environment, ["diff", "--binary"], { rawOutput: true });
+      if (!fallbackDiffResult.ok) {
+        throw new Error(
+          fallbackDiffResult.stderr || diffResult.stderr || "Failed to compute working tree diff",
+        );
+      }
+      return trimDiffForResponse(fallbackDiffResult.stdout);
+    }
+    case "combined": {
+      const baseRef = args.baseRef?.trim();
+      if (!baseRef) {
+        return { diff: "", truncated: false };
+      }
+      const mergeBaseDiffRef = resolveMergeBaseDiffRef(environment, baseRef);
+      if (!mergeBaseDiffRef) {
+        return { diff: "", truncated: false };
+      }
+      const diffResult = runGit(environment, ["diff", "--binary", mergeBaseDiffRef], {
+        rawOutput: true,
+      });
+      if (!diffResult.ok) {
+        throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
+      }
+      return trimDiffForResponse(diffResult.stdout);
+    }
+    case "commit": {
+      const commitSha = args.commitSha.trim();
+      if (commitSha.length === 0) {
+        throw new Error("Commit SHA is required");
+      }
+      const showResult = runGit(environment, [
+        "show",
+        "--binary",
+        "--format=",
+        commitSha,
+      ], { rawOutput: true });
+      if (!showResult.ok) {
+        throw new Error(showResult.stderr || "Failed to compute commit diff");
+      }
+      return trimDiffForResponse(showResult.stdout);
+    }
+    default: {
+      const _exhaustive: never = args;
+      return _exhaustive;
+    }
+  }
+}

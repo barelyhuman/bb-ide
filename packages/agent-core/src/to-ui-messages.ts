@@ -1317,7 +1317,6 @@ function parseOperationMessage(
     const durationMs = getNumberField(payload, "durationMs");
     const detailParts = [
       getStringField(payload, "scriptPath"),
-      getStringField(payload, "workspaceRoot"),
       timeoutMs !== undefined ? `Timeout ${Math.round(timeoutMs / 1000)}s` : undefined,
       durationMs !== undefined ? `Duration ${durationMs}ms` : undefined,
       getStringField(payload, "detail"),
@@ -1522,7 +1521,6 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const detailParts = [
       getStringField(payload, "environmentId"),
-      getStringField(payload, "workspaceRoot"),
       getStringField(payload, "fallbackReason"),
     ].filter((value): value is string => Boolean(value));
     return {

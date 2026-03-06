@@ -71,7 +71,6 @@ import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
-import { OpenPathButton } from "@/components/shared/OpenPathButton";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import {
   ConversationEmptyState,
@@ -98,7 +97,7 @@ import {
   promptDraftToInput,
   type PromptDraftState,
 } from "@/lib/prompt-draft";
-import { openPathInEditor } from "@/lib/api";
+import { openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
@@ -119,7 +118,6 @@ import {
   isThreadGitDiffPanelOpen,
   withThreadGitDiffPanelOpen,
 } from "@/lib/thread-git-diff-panel";
-import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 import { cn } from "@/lib/utils";
 
 const SCROLL_THRESHOLD = 40;
@@ -1578,8 +1576,7 @@ export function ThreadDetailView() {
     : promoteThread.isPending
     ? "Promoting..."
     : "Promote";
-  const isArchivedWorktreeThread =
-    thread.environmentId === "worktree" && thread.archivedAt !== undefined;
+  const isArchivedThread = thread.archivedAt !== undefined;
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
     !(thread.archivedAt !== undefined && thread.environmentId === "local");
@@ -1596,9 +1593,13 @@ export function ThreadDetailView() {
       : isProvisioning
       ? "Provisioning..."
       : undefined;
-  const isWorktreeThread = thread.environmentId === "worktree";
+  const showBranchComparisonUi = Boolean(
+    threadWorkStatus?.mergeBaseBranch ||
+      threadWorkStatus?.defaultBranch ||
+      (threadWorkStatus?.mergeBaseBranches?.length ?? 0) > 0,
+  );
   const promptBannerSummary = threadWorkStatus
-    ? isWorktreeThread
+    ? showBranchComparisonUi
       ? formatChangeSummary({
           changedFiles: threadWorkStatus.changedFiles,
           insertions: threadWorkStatus.insertions,
@@ -1609,7 +1610,7 @@ export function ThreadDetailView() {
   const showPromptGitStatsBanner = Boolean(
     threadWorkStatus &&
     (
-      isWorktreeThread
+      showBranchComparisonUi
         ? threadWorkStatus.changedFiles > 0
         : threadWorkStatus.workspaceChangedFiles > 0
     ),
@@ -1758,7 +1759,7 @@ export function ThreadDetailView() {
                 <span>{thread.environmentId}</span>
               </DetailRow>
             ) : null}
-            {thread.environmentId === "worktree" && !isArchivedWorktreeThread ? (
+            {thread.environmentId === "worktree" && !isArchivedThread ? (
               <DetailRow
                 label="Primary checkout"
                 valueClassName="min-w-0"
@@ -1805,10 +1806,11 @@ export function ThreadDetailView() {
                 align="center"
               >
                 <StatusPillCommitPopover
+                  threadId={thread.id}
                   status={threadWorkStatus}
                   label={threadWorkStatusLabel(threadWorkStatus, {
                     cleanLabel:
-                      thread.environmentId === "worktree"
+                      showBranchComparisonUi
                         ? threadWorktreeCleanLabel(threadWorkStatus)
                         : undefined,
                   })}
@@ -1816,15 +1818,15 @@ export function ThreadDetailView() {
                     isArchivedThread: thread.archivedAt !== undefined,
                   })}
                   cleanTitle={
-                    thread.environmentId === "worktree"
+                    showBranchComparisonUi
                       ? threadWorktreeCleanLabel(threadWorkStatus)
                       : undefined
                   }
-                  showMergeBaseDetails={thread.environmentId === "worktree"}
+                  showMergeBaseDetails={showBranchComparisonUi}
                   mergeBaseBranch={selectedMergeBaseBranch ?? threadWorkStatus.mergeBaseBranch}
                   mergeBaseBranchOptions={threadWorkStatus.mergeBaseBranches}
                   onMergeBaseBranchChange={
-                    thread.environmentId === "worktree"
+                    showBranchComparisonUi
                       ? setSelectedMergeBaseBranch
                       : undefined
                   }
@@ -1872,26 +1874,6 @@ export function ThreadDetailView() {
                     });
                   }}
                 />
-              </DetailRow>
-            ) : null}
-            {thread.environmentId === "worktree" &&
-            !isArchivedWorktreeThread &&
-            threadWorkStatus?.workspaceRoot ? (
-              <DetailRow
-                label="Worktree"
-                valueClassName="min-w-0"
-                align="center"
-              >
-                <OpenPathButton
-                  path={threadWorkStatus.workspaceRoot}
-                  target="directory"
-                  title={threadWorkStatus.workspaceRoot}
-                >
-                  {threadWorkStatus.workspaceRoot}
-                  {threadWorkStatus.currentBranch
-                    ? ` (${threadWorkStatus.currentBranch})`
-                    : ""}
-                </OpenPathButton>
               </DetailRow>
             ) : null}
             {thread.archivedAt !== undefined ? (
@@ -1997,7 +1979,7 @@ export function ThreadDetailView() {
                   ) : (
                     <span className="truncate">{promptBannerSummary}</span>
                   )}
-                  {isWorktreeThread ? (
+                  {showBranchComparisonUi ? (
                     <span className="shrink-0 text-xs text-muted-foreground/90">
                       {promptBannerMergeBaseBranch
                         ? `Merge base: ${promptBannerMergeBaseBranch}`
@@ -2020,7 +2002,7 @@ export function ThreadDetailView() {
                   >
                     <WorkspaceChangesList
                       files={threadWorkStatus.files}
-                      workspaceRoot={threadWorkStatus.workspaceRoot}
+                      threadId={thread.id}
                       onFileClick={handlePromptBannerFileClick}
                     />
                   </div>
@@ -2287,7 +2269,7 @@ export function ThreadDetailView() {
                         const fileDiffStats = summarizeGitDiffFile(fileDiff);
                         const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
                         const openablePath = getOpenableGitDiffPath(fileDiff);
-                        const canOpenFile = Boolean(openablePath && threadGitDiff.workspaceRoot);
+                        const canOpenFile = Boolean(openablePath);
                         return (
                           <div
                             key={key}
@@ -2317,11 +2299,8 @@ export function ThreadDetailView() {
                                       className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
                                       title={fileDiffLabel}
                                       onClick={() => {
-                                        const absolutePath = resolveWorkspaceAbsolutePath(
-                                          threadGitDiff.workspaceRoot,
-                                          openablePath,
-                                        );
-                                        void openPathInEditor(absolutePath, {
+                                        void openThreadPathInEditor(thread.id, {
+                                          relativePath: openablePath,
                                           target: "file",
                                           command: getPathCommandForTarget("file"),
                                         });

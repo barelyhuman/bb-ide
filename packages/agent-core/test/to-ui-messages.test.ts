@@ -1712,7 +1712,6 @@ describe("toUIMessages replay coverage", () => {
         data: {
           status: "started",
           scriptPath: ".bb-env-setup.sh",
-          workspaceRoot: "/tmp/worktree",
           timeoutMs: 600000,
         },
         createdAt: 3,
@@ -1725,7 +1724,6 @@ describe("toUIMessages replay coverage", () => {
         data: {
           status: "failed",
           scriptPath: ".bb-env-setup.sh",
-          workspaceRoot: "/tmp/worktree",
           timeoutMs: 600000,
           durationMs: 1593,
           detail: "pnpm build failed",
@@ -1987,8 +1985,6 @@ describe("toUIMessages replay coverage", () => {
         type: "system/provisioning/completed",
         data: {
           environmentId: "worktree",
-          workspaceRoot: "/tmp/worktree",
-          mode: "worktree",
         },
         createdAt: 3,
       },

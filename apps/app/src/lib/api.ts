@@ -29,6 +29,7 @@ import type {
   ThreadGitDiffSelection,
   ThreadGitDiffResponse,
   OpenPathTarget,
+  OpenThreadPathRequest,
   SystemRestartPolicy,
   SystemRestartAcceptedResponse,
   SystemRestartRequest,
@@ -356,6 +357,13 @@ export async function openPathInEditor(
     ...(options?.editor ? { editor: options.editor } : {}),
     ...(options?.command ? { command: options.command } : {}),
   });
+}
+
+export async function openThreadPathInEditor(
+  threadId: string,
+  req: OpenThreadPathRequest,
+): Promise<void> {
+  return request<void>("POST", `/threads/${threadId}/open-path`, req);
 }
 
 // --- Threads ---

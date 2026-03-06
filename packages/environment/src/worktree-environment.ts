@@ -8,15 +8,29 @@ import type {
   DemoteEnvironmentOptions,
   DemoteEnvironmentResult,
   EnvironmentCommandOptions,
+  EnvironmentSpawnOptions,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
+  EnvironmentWorkspaceCommitOptions,
+  EnvironmentWorkspaceCommitResult,
+  EnvironmentWorkspaceCommitsOptions,
+  EnvironmentWorkspaceDiffOptions,
+  EnvironmentWorkspaceDiffResult,
+  EnvironmentWorkspaceStatusOptions,
   EnvironmentSquashMergeOptions,
   EnvironmentSquashMergeResult,
   IEnvironment,
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
 } from "./contracts.js";
-import { runCommand } from "./process.js";
+import {
+  commitGitWorkspace,
+  getGitWorkspaceDiff,
+  getGitWorkspaceStatus,
+  listGitWorkspaceCommitsSinceRef,
+  watchGitWorkspaceStatus,
+} from "./git-workspace.js";
+import { runCommand, spawnCommand } from "./process.js";
 
 export interface WorktreeEnvironmentState {
   workspaceRoot: string;
@@ -180,13 +194,17 @@ class WorktreeEnvironment implements IEnvironment {
   readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
+  private readonly services: CreateEnvironmentContext["services"];
 
   constructor(
     private readonly projectRoot: string,
     private readonly state: WorktreeEnvironmentState,
+    runtimeEnv: Record<string, string | undefined>,
+    services?: CreateEnvironmentContext["services"],
   ) {
     this.rootPath = state.workspaceRoot;
-    this.env = {};
+    this.env = { ...runtimeEnv };
+    this.services = services;
   }
 
   serialize(): WorktreeEnvironmentState {
@@ -205,15 +223,84 @@ class WorktreeEnvironment implements IEnvironment {
     rmSync(this.state.workspaceRoot, { recursive: true, force: true });
   }
 
-  getWorkspaceRoot(): string {
+  exists(): boolean {
+    return existsSync(this.state.workspaceRoot);
+  }
+
+  supportsHostFilesystemAccess(): boolean {
+    return true;
+  }
+
+  isIsolatedWorkspace(): boolean {
+    return true;
+  }
+
+  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
+    return resolveCheckoutSnapshot(this.rootPath);
+  }
+
+  getWorkspaceRootUnsafe(): string {
     return this.rootPath;
   }
 
-  getExecutionContext(): { cwd: string; env: Record<string, string | undefined> } {
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
+    return getGitWorkspaceStatus(this, args);
+  }
+
+  watchWorkspaceStatus(onChange: () => void): () => void {
+    return watchGitWorkspaceStatus(this, onChange);
+  }
+
+  commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult> {
+    return commitGitWorkspace(
+      this,
+      args,
+      this.services?.llmCompletion,
+      (result) =>
+        this.services?.appendEvent?.(
+          "system/worktree/commit",
+          {
+            status: result.commitCreated ? "committed" : "noop",
+            message: result.message,
+            ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+            ...(result.includeUnstaged !== undefined
+              ? { includeUnstaged: result.includeUnstaged }
+              : {}),
+          },
+          { broadcastChanges: ["events-appended", "work-status-changed"] },
+        ),
+    );
+  }
+
+  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions) {
+    return listGitWorkspaceCommitsSinceRef(this, args);
+  }
+
+  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
+    return getGitWorkspaceDiff(this, args);
+  }
+
+  private _executionContext(): { cwd: string; env: Record<string, string | undefined> } {
     return {
       cwd: this.rootPath,
       env: { ...this.env },
     };
+  }
+
+  spawn(
+    command: string,
+    args: string[],
+    options?: EnvironmentSpawnOptions,
+  ) {
+    const executionContext = this._executionContext();
+    return spawnCommand(command, args, {
+      cwd: options?.cwd ?? executionContext.cwd,
+      env: {
+        ...executionContext.env,
+        ...(options?.env ?? {}),
+      },
+      stdio: options?.stdio,
+    });
   }
 
   shouldRunSetupScript(): boolean {
@@ -295,8 +382,17 @@ class WorktreeEnvironment implements IEnvironment {
     if (statusResult.exitCode !== 0) {
       throw new Error(statusResult.stderr || "Failed to inspect worktree status");
     }
+    let committed = false;
     if (statusResult.stdout.trim().length > 0) {
-      throw new Error("Workspace has uncommitted changes; commit first");
+      if (args.commitIfNeeded !== true) {
+        throw new Error("Workspace has uncommitted changes; commit first");
+      }
+      const commitResult = await this.commitWorkspace({
+        defaultBranch: mergeBaseBranch,
+        message: args.commitMessage?.trim(),
+        includeUnstaged: args.includeUnstaged,
+      });
+      committed = commitResult.commitCreated;
     }
     if (hasLocalWorkingChanges(args.activeWorkspaceRoot)) {
       throw new Error(
@@ -325,7 +421,18 @@ class WorktreeEnvironment implements IEnvironment {
       const [, aheadRaw] = aheadResult.stdout.split("\t");
       const aheadCount = Number.parseInt(aheadRaw ?? "0", 10);
       if (!Number.isNaN(aheadCount) && aheadCount <= 0) {
-        return { merged: false, message: "No commits to merge" };
+        const result = { merged: false, message: "No commits to merge", committed };
+        this.services?.appendEvent?.(
+          "system/worktree/squash_merge",
+          {
+            status: "noop",
+            message: result.message,
+            committed,
+            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          },
+          { broadcastChanges: ["events-appended", "work-status-changed"] },
+        );
+        return result;
       }
     }
 
@@ -356,10 +463,11 @@ class WorktreeEnvironment implements IEnvironment {
           "--diff-filter=U",
         ]);
         runGitAtPath(tempWorkspaceRoot, ["reset", "--hard"]);
-        return {
+        const result = {
           merged: false,
           message:
             `Squash merge has conflicts against ${mergeBaseBranch}. Rebase/merge ${mergeBaseBranch} into the worktree, resolve conflicts, and retry.`,
+          committed,
           ...(conflictFiles.ok && conflictFiles.stdout
             ? {
                 conflictFiles: conflictFiles.stdout
@@ -369,6 +477,18 @@ class WorktreeEnvironment implements IEnvironment {
               }
             : {}),
         };
+        this.services?.appendEvent?.(
+          "system/worktree/squash_merge",
+          {
+            status: "conflict",
+            message: result.message,
+            committed,
+            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+            ...(result.conflictFiles ? { conflictFiles: result.conflictFiles } : {}),
+          },
+          { broadcastChanges: ["events-appended", "work-status-changed"] },
+        );
+        return result;
       }
 
       const hasSquashedChanges = runGitAtPath(tempWorkspaceRoot, [
@@ -377,7 +497,18 @@ class WorktreeEnvironment implements IEnvironment {
         "--quiet",
       ]);
       if (hasSquashedChanges.ok) {
-        return { merged: false, message: "No changes to merge after squash" };
+        const result = { merged: false, message: "No changes to merge after squash", committed };
+        this.services?.appendEvent?.(
+          "system/worktree/squash_merge",
+          {
+            status: "noop",
+            message: result.message,
+            committed,
+            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          },
+          { broadcastChanges: ["events-appended", "work-status-changed"] },
+        );
+        return result;
       }
 
       const sourceBranch = runGitAtPath(this.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
@@ -439,7 +570,22 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
 
-      return { merged: true, message: `Squash-merged into ${mergeBaseBranch}` };
+      const result = {
+        merged: true,
+        message: `Squash-merged into ${mergeBaseBranch}`,
+        committed,
+      };
+      this.services?.appendEvent?.(
+        "system/worktree/squash_merge",
+        {
+          status: "merged",
+          message: result.message,
+          committed,
+          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        },
+        { broadcastChanges: ["events-appended", "work-status-changed"] },
+      );
+      return result;
     } finally {
       runGitAtPath(args.activeWorkspaceRoot, [
         "worktree",
@@ -456,7 +602,7 @@ class WorktreeEnvironment implements IEnvironment {
     args: string[],
     options?: EnvironmentCommandOptions,
   ) {
-    const executionContext = this.getExecutionContext();
+    const executionContext = this._executionContext();
     return runCommand(command, args, {
       cwd: options?.cwd ?? executionContext.cwd,
       env: {
@@ -517,16 +663,26 @@ export function createWorktreeEnvironmentDefinition(
         }
       }
 
-      return new WorktreeEnvironment(projectRoot, {
-        workspaceRoot,
-        branchName,
-      });
+      return new WorktreeEnvironment(
+        projectRoot,
+        {
+          workspaceRoot,
+          branchName,
+        },
+        context.runtimeEnv,
+        context.services,
+      );
     },
     restore(state: WorktreeEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
       if (!existsSync(state.workspaceRoot)) {
         throw new Error(`Worktree workspace is unavailable: ${state.workspaceRoot}`);
       }
-      return new WorktreeEnvironment(context.projectRootPath, state);
+      return new WorktreeEnvironment(
+        context.projectRootPath,
+        state,
+        context.runtimeEnv,
+        context.services,
+      );
     },
     isState(value: unknown): value is WorktreeEnvironmentState {
       return (

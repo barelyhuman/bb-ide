@@ -64,6 +64,7 @@ function mockThreadManager(): ThreadManager {
     stop: vi.fn(),
     archive: vi.fn(),
     unarchive: vi.fn(),
+    requiresForceArchive: vi.fn(),
     promoteThread: vi.fn(),
     demotePrimaryCheckout: vi.fn(),
     requestThreadOperation: vi.fn(),
@@ -76,6 +77,7 @@ function mockThreadManager(): ThreadManager {
     getTimeline: vi.fn(),
     getToolGroupMessages: vi.fn(),
     getGitDiff: vi.fn(),
+    resolveThreadOpenPath: vi.fn(),
     getEvents: vi.fn(),
     getOutput: vi.fn(),
     isActive: vi.fn(),
@@ -914,6 +916,7 @@ describe("Thread routes", () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         thread,
       );
+      (threadManager.requiresForceArchive as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockReturnValue({
         state: "dirty_uncommitted",
       });
@@ -937,6 +940,7 @@ describe("Thread routes", () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         thread,
       );
+      (threadManager.requiresForceArchive as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockReturnValue({
         state: "dirty_and_committed_unmerged",
       });
@@ -1154,7 +1158,6 @@ describe("Thread routes", () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (threadManager.getGitDiff as ReturnType<typeof vi.fn>).mockReturnValue({
         mode: "local_uncommitted",
-        workspaceRoot: "/tmp/workspace",
         commits: [],
         selection: { type: "combined" },
         diff: "diff --git a/file b/file",
@@ -1179,6 +1182,40 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(400);
       expect(threadManager.getGitDiff).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /threads/:id/open-path", () => {
+    it("resolves the thread path and opens it", async () => {
+      const openPath = vi.fn();
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, { openPath }),
+      );
+      (threadManager.resolveThreadOpenPath as ReturnType<typeof vi.fn>).mockReturnValue(
+        "/tmp/worktrees/thread-1/src/file.ts",
+      );
+
+      const res = await app.request("/threads/thread-1/open-path", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          relativePath: "src/file.ts",
+          target: "file",
+          editor: "cursor",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.resolveThreadOpenPath).toHaveBeenCalledWith(
+        "thread-1",
+        "src/file.ts",
+      );
+      expect(openPath).toHaveBeenCalledWith({
+        path: "/tmp/worktrees/thread-1/src/file.ts",
+        target: "file",
+        editor: "cursor",
+      });
     });
   });
 

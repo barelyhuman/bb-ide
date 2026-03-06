@@ -35,7 +35,7 @@ describe("EnvironmentRegistry", () => {
     });
 
     expect(environment.kind).toBe("local");
-    expect(environment.getWorkspaceRoot()).toBe("/tmp/project");
+    expect(environment.getWorkspaceRootUnsafe()).toBe("/tmp/project");
     expect(registry.list().map((item) => item.id)).toEqual(["local"]);
   });
 
@@ -76,7 +76,7 @@ describe("EnvironmentRegistry", () => {
       );
 
       expect(restored.kind).toBe("worktree");
-      expect(restored.getWorkspaceRoot()).toBe(join(worktreeRoot, "thread-1"));
+      expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, "thread-1"));
 
       restored.dispose();
     } finally {

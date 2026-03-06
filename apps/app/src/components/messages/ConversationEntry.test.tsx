@@ -751,8 +751,6 @@ describe("ConversationEntry", () => {
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment");
     expect(html).toContain(">worktree<");
-    expect(html).toContain("Workspace");
-    expect(html).toContain("/tmp/worktree");
     expect(html).not.toContain("Setup status");
     expect(html).not.toContain("Additional details");
   });
@@ -769,8 +767,6 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Workspace");
-    expect(html).toContain("/tmp/worktree");
     expect(html).toContain("Additional details");
     expect(html).toContain("fallback because worktree bootstrap was unavailable");
     expect(html).not.toContain("worktree • /tmp/worktree •");
@@ -789,8 +785,6 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Workspace");
-    expect(html).toContain("/tmp/worktree");
     expect(html).toContain("Setup status");
     expect(html).toContain("Completed");
     expect(html).toContain("Setup time");
@@ -817,7 +811,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain(">worktree<");
     expect(html).not.toContain("Git Worktree Workspace");
     expect(html).toContain("Setup script");
-    expect(html).toContain("/tmp/worktree/.bb-env-setup.sh");
+    expect(html).toContain(".bb-env-setup.sh");
     expect(html).toContain("Setup status");
     expect(html).toContain("Failed");
     expect(html).toContain("Setup time");

@@ -44,7 +44,6 @@ import {
 } from "@/components/messages/CollapsibleHeader";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { ansiToHtml } from "@/lib/ansi";
-import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 import { ConversationMarkdown } from "./ConversationMarkdown";
 
 interface ConversationEntryProps {
@@ -1228,7 +1227,6 @@ function FileEditRow({
 
 interface ProvisioningSetupAttempt {
   scriptPath?: string;
-  workspaceRoot?: string;
   timeout?: string;
   durationMs?: number;
   outputLines: string[];
@@ -1236,7 +1234,6 @@ interface ProvisioningSetupAttempt {
 
 interface ParsedProvisioningDetails {
   environment?: string;
-  workspaceRoot?: string;
   setupAttempt?: ProvisioningSetupAttempt;
   additionalLines: string[];
 }
@@ -1261,7 +1258,7 @@ function parseProvisioningTimeout(part: string): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
-function isWorkspaceRootToken(part: string): boolean {
+function isAbsolutePathToken(part: string): boolean {
   return part.startsWith("/") || part.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(part);
 }
 
@@ -1275,7 +1272,6 @@ function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | nu
   }
 
   let scriptPath: string | undefined;
-  let workspaceRoot: string | undefined;
   let timeout: string | undefined;
   let durationMs: number | undefined;
   const outputLines: string[] = [];
@@ -1286,8 +1282,7 @@ function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | nu
       continue;
     }
 
-    if (!workspaceRoot && isWorkspaceRootToken(part)) {
-      workspaceRoot = part;
+    if (isAbsolutePathToken(part)) {
       continue;
     }
 
@@ -1312,7 +1307,6 @@ function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | nu
 
   return {
     scriptPath,
-    workspaceRoot,
     timeout,
     durationMs,
     outputLines,
@@ -1326,7 +1320,7 @@ function isLikelyProvisioningEnvironmentToken(value: string): boolean {
 
 function parseProvisioningSummaryLine(
   line: string,
-): { environment?: string; workspaceRoot?: string; remainingLine?: string } | null {
+): { environment?: string; remainingLine?: string } | null {
   const parts = line
     .split("•")
     .map((part) => part.trim())
@@ -1336,28 +1330,25 @@ function parseProvisioningSummaryLine(
   }
 
   let environment: string | undefined;
-  let workspaceRoot: string | undefined;
   const remainingParts: string[] = [];
 
   for (const [index, part] of parts.entries()) {
-    if (!workspaceRoot && isWorkspaceRootToken(part)) {
-      workspaceRoot = part;
-      continue;
-    }
     if (!environment && index === 0 && isLikelyProvisioningEnvironmentToken(part)) {
       environment = part;
+      continue;
+    }
+    if (isAbsolutePathToken(part)) {
       continue;
     }
     remainingParts.push(part);
   }
 
-  if (!environment && !workspaceRoot) {
+  if (!environment) {
     return null;
   }
 
   return {
     environment,
-    workspaceRoot,
     remainingLine: remainingParts.length > 0 ? remainingParts.join(" • ") : undefined,
   };
 }
@@ -1380,7 +1371,6 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
   if (lines.length === 0) return null;
 
   let environment: string | undefined;
-  let workspaceRoot: string | undefined;
   const attempts: ProvisioningSetupAttempt[] = [];
   let currentAttempt: ProvisioningSetupAttempt | undefined;
   const additionalLines: string[] = [];
@@ -1407,9 +1397,6 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
         if (!environment && parsedSummary.environment) {
           environment = parsedSummary.environment;
         }
-        if (!workspaceRoot && parsedSummary.workspaceRoot) {
-          workspaceRoot = parsedSummary.workspaceRoot;
-        }
         if (parsedSummary.remainingLine) {
           additionalLines.push(parsedSummary.remainingLine);
         }
@@ -1422,9 +1409,6 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
       if (parsedSummary) {
         if (!environment && parsedSummary.environment) {
           environment = parsedSummary.environment;
-        }
-        if (!workspaceRoot && parsedSummary.workspaceRoot) {
-          workspaceRoot = parsedSummary.workspaceRoot;
         }
         if (parsedSummary.remainingLine) {
           additionalLines.push(parsedSummary.remainingLine);
@@ -1450,7 +1434,6 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
 
   return {
     environment,
-    workspaceRoot,
     setupAttempt,
     additionalLines,
   };
@@ -1478,10 +1461,7 @@ function resolveProvisioningSetupScriptPath(
 ): string | undefined {
   const scriptPath = setupAttempt?.scriptPath?.trim();
   if (!scriptPath) return undefined;
-  if (isWorkspaceRootToken(scriptPath)) return scriptPath;
-  const workspaceRoot = setupAttempt?.workspaceRoot?.trim();
-  if (!workspaceRoot) return undefined;
-  return resolveWorkspaceAbsolutePath(workspaceRoot, scriptPath);
+  return isAbsolutePathToken(scriptPath) ? scriptPath : undefined;
 }
 
 function formatDurationLabel(durationMs: number): string {
@@ -1580,7 +1560,6 @@ function OperationRow({
     const additionalDetailsText = parsedDetails?.additionalLines.join("\n").trim();
     const setupScriptPath = resolveProvisioningSetupScriptPath(setupAttempt);
     const setupScriptLabel = setupScriptPath ?? setupAttempt?.scriptPath;
-    const workspacePath = setupAttempt?.workspaceRoot ?? parsedDetails?.workspaceRoot;
     const setupTimeLabel = setupAttempt
       ? setupAttempt.durationMs !== undefined
         ? `${formatDurationLabel(setupAttempt.durationMs)}${
@@ -1674,17 +1653,6 @@ function OperationRow({
                 {setupTimeLabel ? (
                   <DetailRow label="Setup time">
                     <span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span>
-                  </DetailRow>
-                ) : null}
-                {workspacePath ? (
-                  <DetailRow label="Workspace">
-                    <OpenPathButton
-                      path={workspacePath}
-                      target="directory"
-                      title={workspacePath}
-                    >
-                      {workspacePath}
-                    </OpenPathButton>
                   </DetailRow>
                 ) : null}
                 {outputText ? (

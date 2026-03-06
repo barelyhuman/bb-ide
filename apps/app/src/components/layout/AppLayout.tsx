@@ -305,32 +305,30 @@ export function AppLayout({ children }: { children: ReactNode }) {
       return
     }
 
-    if (thread.environmentId === "worktree") {
-      const workStatus =
-        thread.workStatus ??
-        (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
-      if (
-        workStatus &&
-        (
-          workStatus.state === "untracked" ||
-          workStatus.state === "dirty_uncommitted" ||
-          workStatus.state === "committed_unmerged" ||
-          workStatus.state === "dirty_and_committed_unmerged"
-        )
-      ) {
-        const confirmed = window.confirm(
-          "This thread has uncommitted or unmerged work. Archive anyway?"
-        )
-        if (!confirmed) {
-          return
-        }
-        archiveThread.mutate({ id: thread.id, force: true }, {
-          onSuccess: () => {
-            navigate(`/projects/${thread.projectId}`)
-          },
-        })
+    const workStatus =
+      thread.workStatus ??
+      (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
+    if (
+      workStatus &&
+      (
+        workStatus.state === "untracked" ||
+        workStatus.state === "dirty_uncommitted" ||
+        workStatus.state === "committed_unmerged" ||
+        workStatus.state === "dirty_and_committed_unmerged"
+      )
+    ) {
+      const confirmed = window.confirm(
+        "This thread has uncommitted or unmerged work. Archive anyway?"
+      )
+      if (!confirmed) {
         return
       }
+      archiveThread.mutate({ id: thread.id, force: true }, {
+        onSuccess: () => {
+          navigate(`/projects/${thread.projectId}`)
+        },
+      })
+      return
     }
 
     archiveThread.mutate({ id: thread.id }, {

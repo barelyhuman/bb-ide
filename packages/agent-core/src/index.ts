@@ -7,8 +7,6 @@ export type {
   ThreadPrimaryCheckoutState,
   ThreadProvisioningReadiness,
   ThreadProvisioningState,
-  ThreadAgentDiffSource,
-  ThreadAgentDiffStats,
   ThreadQueuedMessage,
   PersistedEnvironmentRecord,
   ThreadTurnInitiator,
@@ -95,6 +93,7 @@ export type {
   OpenPathTarget,
   OpenPathEditor,
   OpenPathRequest,
+  OpenThreadPathRequest,
 } from "./api-types.js";
 
 export {

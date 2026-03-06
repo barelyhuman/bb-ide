@@ -17,6 +17,7 @@ import { StatusPill, type StatusPillVariant } from "./StatusPill";
 import { WorkspaceChangesList } from "./WorkspaceChangesList";
 
 export function StatusPillCommitPopover({
+  threadId,
   status,
   label,
   variant,
@@ -32,6 +33,7 @@ export function StatusPillCommitPopover({
   onCommit,
   onSquashMerge,
 }: {
+  threadId?: string;
   status: ThreadWorkStatus | undefined;
   label: string;
   variant: StatusPillVariant;
@@ -236,7 +238,7 @@ export function StatusPillCommitPopover({
               <span className="text-xs text-muted-foreground">Changed files</span>
               <WorkspaceChangesList
                 files={status?.files}
-                workspaceRoot={status?.workspaceRoot}
+                threadId={threadId}
                 maxHeightClassName="max-h-36"
                 emptyMessage="No changed files in the current workspace."
               />

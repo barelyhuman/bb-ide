@@ -115,7 +115,7 @@ function toEditorCommand(editor: OpenPathEditor): string | null {
   }
 }
 
-function openPathInEditor(request: OpenPathRequest): void {
+export function openPathInEditor(request: OpenPathRequest): void {
   const path = request.path;
   const customCommand = request.command?.trim();
 
