@@ -7,9 +7,7 @@ import {
   COLLAPSIBLE_HEADER_TEXT_CLASS,
   getCollapsibleHeaderToneClass,
 } from "@/components/messages/CollapsibleHeader";
-import { OpenPathButton } from "@/components/shared/OpenPathButton";
 import { usePreferredTheme } from "@/hooks/useTheme";
-import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 import {
   renderShimmeringSummary,
   useLatestInitialExpanded,
@@ -275,7 +273,6 @@ export function FileEditRow({
             {message.changes.map((change, index) => {
               const stats = diffStats(change);
               const fileName = fileNameFromPath(change.path);
-              const pathDetail = change.movePath ? `${change.path} → ${change.movePath}` : change.path;
               const patch = getRenderablePatch(change);
               const changeKey = changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
               const isChangeExpanded = !isAggregatedChanges || expandedChangeKeys.has(changeKey);
@@ -294,10 +291,10 @@ export function FileEditRow({
               return (
                 <div
                   key={`${change.path}:${change.movePath ?? ""}:${index}`}
-                  className={index === 0 ? "" : "mt-1.5"}
+                  className={index === 0 ? "" : "mt-0.5"}
                 >
                   <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
-                    <div className="px-3 pb-0.5 pt-2">
+                    <div className="px-2.5 py-1">
                       {isAggregatedChanges ? (
                         <CollapsibleHeader
                           isExpanded={isChangeExpanded}
@@ -315,7 +312,7 @@ export function FileEditRow({
                           summaryContent={changeSummaryContent}
                         />
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <span
                             className="min-w-0 flex-1 truncate font-mono ui-text-sm text-foreground/90"
                             title={change.path}
@@ -328,9 +325,6 @@ export function FileEditRow({
                           </span>
                         </div>
                       )}
-                    </div>
-                    <div className="break-all px-3 pb-1 pt-0.5 font-mono ui-text-2xs text-muted-foreground/75">
-                      {pathDetail}
                     </div>
                     {isChangeExpanded ? (
                       <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">

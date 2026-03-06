@@ -643,6 +643,26 @@ describe("ConversationEntry", () => {
     expect(html).toContain("new-name.ts");
   });
 
+  it("hides directory paths in expanded file-edit rows", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-absolute-path",
+      status: "completed",
+      changes: [
+        {
+          path: "/Users/michael/.beanbag/worktrees/0KRGoBTf5G77qg2nmCE1o/5BQkMcxpll79LsS9Bf4sl/apps/app/src/hooks/useApi.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-export const foo = 1;\n+export const foo = 2;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain(">useApi.ts<");
+    expect(html).not.toContain("ui-text-2xs text-muted-foreground/75");
+  });
+
   it("renders collapsed error rows with normalized provisioning title", () => {
     const message: UIMessage = {
       ...baseMessage(),
