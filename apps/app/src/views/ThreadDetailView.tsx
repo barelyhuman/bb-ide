@@ -49,7 +49,6 @@ import {
   ConversationEntry,
 } from "@/components/messages/ConversationEntry";
 import {
-  CollapsibleHeader,
   getCollapsibleHeaderToneClass,
 } from "@/components/messages/CollapsibleHeader";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
@@ -75,6 +74,7 @@ import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import {
   ConversationEmptyState,
   ConversationTimeline,
+  ExpandablePanel,
   PromptComposerShell,
 } from "@beanbag/ui-core";
 import {
@@ -686,41 +686,36 @@ function ToolGroupEntry({
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
-        <div className="rounded-md text-muted-foreground">
-          <div className="px-2 py-1">
-            <CollapsibleHeader
-              isExpanded={isExpanded}
-              onToggle={handleToggle}
-              toneClassName={headerToneClass}
-              summaryContent={summaryContent}
-            />
-          </div>
-          {isExpanded ? (
-            <div className="animate-in fade-in-0 slide-in-from-top-1 px-2 pb-1 duration-200">
-              <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
-                {isLoadingMessages ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">
-                    <span className="animate-shine">Loading details...</span>
-                  </div>
-                ) : null}
-                {messages.map((message) => {
-                  const isLatestMessage =
-                    isLatestActivity &&
-                    message.id === latestActivityMessageId;
-                  return (
-                    <ConversationEntry
-                      key={message.id}
-                      message={message}
-                      projectId={projectId}
-                      initialExpanded={isLatestMessage}
-                      preferOngoingLabels={isLatestMessage}
-                    />
-                  );
-                })}
+        <ExpandablePanel
+          isExpanded={isExpanded}
+          onToggle={handleToggle}
+          headerToneClass={headerToneClass}
+          summaryContent={summaryContent}
+          bodyClassName="duration-300"
+          contentClassName="pb-1 duration-300"
+        >
+          <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
+            {isLoadingMessages ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                <span className="animate-shine">Loading details...</span>
               </div>
-            </div>
-          ) : null}
-        </div>
+            ) : null}
+            {messages.map((message) => {
+              const isLatestMessage =
+                isLatestActivity &&
+                message.id === latestActivityMessageId;
+              return (
+                <ConversationEntry
+                  key={message.id}
+                  message={message}
+                  projectId={projectId}
+                  initialExpanded={isLatestMessage}
+                  preferOngoingLabels={isLatestMessage}
+                />
+              );
+            })}
+          </div>
+        </ExpandablePanel>
       </div>
     </div>
   );
@@ -1993,18 +1988,22 @@ export function ThreadDetailView() {
                 </div>
                 {canExpandPromptChangeList && threadWorkStatus ? (
                   <div
-                    className={`overflow-hidden transition-all duration-200 ${
-                      isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
+                    className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out ${
+                      isChangeListExpanded
+                        ? "mt-2 grid-rows-[1fr] border-t border-border/50 pt-1 opacity-100"
+                        : "grid-rows-[0fr] border-t border-transparent pt-0 opacity-0"
                     }`}
                     onClick={(event) => {
                       event.stopPropagation();
                     }}
                   >
-                    <WorkspaceChangesList
-                      files={threadWorkStatus.files}
-                      threadId={thread.id}
-                      onFileClick={handlePromptBannerFileClick}
-                    />
+                    <div className="overflow-hidden">
+                      <WorkspaceChangesList
+                        files={threadWorkStatus.files}
+                        threadId={thread.id}
+                        onFileClick={handlePromptBannerFileClick}
+                      />
+                    </div>
                   </div>
                 ) : null}
               </div>

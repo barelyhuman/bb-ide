@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
+import { EventMetaItem, EventMetaList } from "@beanbag/ui-core";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +13,6 @@ import {
   formatWorkspaceChangedFilesLabel,
   hasWorkspaceLineChanges,
 } from "@/lib/workspace-change-summary";
-import { DetailCard, DetailRow } from "./DetailCard";
 import { StatusPill, type StatusPillVariant } from "./StatusPill";
 import { WorkspaceChangesList } from "./WorkspaceChangesList";
 
@@ -161,14 +161,14 @@ export function StatusPillCommitPopover({
           </div>
 
           {showStatusCard ? (
-            <DetailCard>
+            <EventMetaList className="border-border/80 bg-background/40">
               {branchName ? (
-                <DetailRow label="Branch" valueClassName="truncate">
+                <EventMetaItem label="Branch" valueClassName="truncate">
                   <span className="font-medium">{branchName}</span>
-                </DetailRow>
+                </EventMetaItem>
               ) : null}
               {canShowMergeBaseDetails && (canSelectMergeBaseBranch || Boolean(selectedMergeBaseBranch)) ? (
-                <DetailRow label="Merge base">
+                <EventMetaItem label="Merge base">
                   {canSelectMergeBaseBranch ? (
                     mergeBaseBranchPickerValue ? (
                       <PromptOptionPicker
@@ -184,15 +184,15 @@ export function StatusPillCommitPopover({
                       {selectedMergeBaseBranch ?? "unknown"}
                     </span>
                   )}
-                </DetailRow>
+                </EventMetaItem>
               ) : null}
               {canShowMergeBaseDetails && (!isUpToDate || hasMergeBaseDelta || Boolean(selectedMergeBaseBranch)) ? (
-                <DetailRow label="Merge base status">
+                <EventMetaItem label="Merge base status">
                   <span className="font-medium">{mergeDeltaSummary}</span>
-                </DetailRow>
+                </EventMetaItem>
               ) : null}
               {(!isUpToDate || hasWorkspaceDelta) ? (
-                <DetailRow label="Changes">
+                <EventMetaItem label="Changes">
                   <span className="font-medium">
                     <span className="text-foreground">
                       {formatWorkspaceChangedFilesLabel(status?.workspaceChangedFiles ?? 0)}
@@ -209,11 +209,11 @@ export function StatusPillCommitPopover({
                       </>
                     ) : null}
                   </span>
-                </DetailRow>
+                </EventMetaItem>
               ) : null}
               {canCommit ? (
                 <>
-                  <DetailRow label="Include unstaged">
+                  <EventMetaItem label="Include unstaged">
                     <label className="inline-flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
@@ -221,7 +221,7 @@ export function StatusPillCommitPopover({
                         onChange={(event) => setIncludeUnstaged(event.target.checked)}
                       />
                     </label>
-                  </DetailRow>
+                  </EventMetaItem>
                   <div className="px-1 pb-1">
                     <div className="rounded-md border border-border/70 bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
                       Include all unstaged edits in this commit. Turn off to commit only currently
@@ -230,7 +230,7 @@ export function StatusPillCommitPopover({
                   </div>
                 </>
               ) : null}
-            </DetailCard>
+            </EventMetaList>
           ) : null}
 
           {canShowChangedFiles ? (

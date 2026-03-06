@@ -516,7 +516,6 @@ function cleanStatus(workspaceRoot: string): ThreadWorkStatus {
     hasCommittedUnmergedChanges: false,
     aheadCount: 0,
     behindCount: 0,
-    workspaceRoot,
     files: [],
   };
 }
@@ -639,7 +638,6 @@ export function getGitWorkspaceStatus(
     ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
     ...(baseRef ? { baseRef } : {}),
     files,
-    workspaceRoot,
   };
 }
 

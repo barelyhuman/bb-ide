@@ -1,13 +1,8 @@
 import { useRef, useCallback, useEffect, useState } from "react"
-
-const SCROLL_THRESHOLD = 40
-
-function getScrollAnimationBehavior(): ScrollBehavior {
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return "auto"
-  }
-  return "smooth"
-}
+import {
+  DEFAULT_SCROLL_STICK_THRESHOLD_PX,
+  getScrollAnimationBehavior,
+} from "@beanbag/ui-core";
 
 export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -33,7 +28,7 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     const el = containerRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    stickRef.current = distanceFromBottom < SCROLL_THRESHOLD
+    stickRef.current = distanceFromBottom < DEFAULT_SCROLL_STICK_THRESHOLD_PX
   }, [])
 
   useEffect(() => {

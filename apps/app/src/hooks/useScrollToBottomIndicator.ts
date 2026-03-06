@@ -1,21 +1,16 @@
 import { useCallback, useEffect, useState, type RefObject } from "react";
-
-const SCROLL_THRESHOLD = 40;
-
-function getScrollAnimationBehavior(): ScrollBehavior {
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return "auto";
-  }
-  return "smooth";
-}
+import {
+  DEFAULT_SCROLL_STICK_THRESHOLD_PX,
+  getScrollAnimationBehavior,
+} from "@beanbag/ui-core";
 
 function shouldShowIndicator(el: HTMLDivElement): boolean {
   const maxScrollOffset = el.scrollHeight - el.clientHeight;
-  if (maxScrollOffset <= SCROLL_THRESHOLD) {
+  if (maxScrollOffset <= DEFAULT_SCROLL_STICK_THRESHOLD_PX) {
     return false;
   }
   const distanceFromBottom = maxScrollOffset - el.scrollTop;
-  return distanceFromBottom > SCROLL_THRESHOLD;
+  return distanceFromBottom > DEFAULT_SCROLL_STICK_THRESHOLD_PX;
 }
 
 export function useScrollToBottomIndicator({
