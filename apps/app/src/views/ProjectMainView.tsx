@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderGit2, GitBranchPlus, Laptop } from "lucide-react";
+import { FolderGit2, Laptop } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { buildThreadOperationInstruction } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
@@ -80,10 +80,6 @@ export function ProjectMainView() {
         return option;
       }),
     [environmentOptions, environments],
-  );
-  const workflowSelectorOptions = useMemo(
-    () => workflowOptions.map((option) => ({ ...option, icon: GitBranchPlus })),
-    [workflowOptions],
   );
   const projectOptions = useMemo(() => {
     const knownOptions =
@@ -270,22 +266,22 @@ export function ProjectMainView() {
                 options={sandboxOptions}
                 onChange={setSandboxMode}
               />
-              <PromptOptionPicker
-                label="Workflow"
-                value={workflowId}
-                options={workflowSelectorOptions}
-                onChange={setWorkflowId}
-              />
             </>
           }
         />
         <div className="flex items-center px-3.5">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <PromptOptionPicker
               label="Environment"
               value={environmentId}
               options={environmentSelectorOptions}
               onChange={setEnvironmentId}
+            />
+            <PromptOptionPicker
+              label="Workflow"
+              value={workflowId}
+              options={workflowOptions}
+              onChange={setWorkflowId}
             />
             {!threadsLoading &&
             workflowId === "noop" &&
