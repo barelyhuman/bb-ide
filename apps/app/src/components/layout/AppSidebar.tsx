@@ -89,6 +89,12 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
       "bg-red-500 ring-red-500/25 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]",
   }[daemonStatus]
 
+  const daemonStatusLabel = {
+    "up-to-date": "Connected",
+    reconnecting: "Reconnecting...",
+    "out-of-date": "Restart required",
+  }[daemonStatus]
+
   const requestRestart = () => {
     if (isRestartDisabled) return
     restartDaemon.mutate({ force: true }, {
@@ -136,25 +142,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
-                onClick={requestRestart}
-                disabled={isRestartDisabled}
-                className="w-8 justify-center p-0"
-                tooltip={restartTooltip}
-                aria-label={restartTooltip}
-                title={restartTooltip}
-              >
-                <span
-                  className={cn(
-                    "size-3 rounded-full ring-1 ring-inset transition-all",
-                    daemonIndicatorClassName,
-                  )}
-                  aria-hidden
-                />
-                <span className="sr-only">{restartTooltip}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
                 asChild
                 className="w-8 justify-center p-0"
                 tooltip="App settings"
@@ -163,6 +150,29 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 <Link to="/settings">
                   <Settings />
                 </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                onClick={requestRestart}
+                disabled={isRestartDisabled}
+                className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none hover:bg-sidebar-accent/40 hover:text-sidebar-foreground active:bg-sidebar-accent/55"
+                tooltip={restartTooltip}
+                aria-label={restartTooltip}
+                title={restartTooltip}
+              >
+                <span
+                  className={cn(
+                    "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
+                    daemonIndicatorClassName,
+                  )}
+                  aria-hidden
+                />
+                <span
+                  className="truncate text-xs font-medium leading-none"
+                >
+                  {daemonStatusLabel}
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

@@ -2,12 +2,12 @@ import { Check, ChevronDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { PromptOption } from "./PromptOptionPicker";
 
@@ -48,7 +48,9 @@ export function PromptModelPicker({
           )}
         >
           <span className="flex min-w-0 items-center gap-1.5">
-            {fastModeEnabled ? <Zap className="size-3.5 shrink-0 text-amber-500" /> : null}
+            {fastModeEnabled ? (
+              <Zap className="size-3.5 shrink-0 fill-current text-muted-foreground/75" />
+            ) : null}
             <span className="truncate">{selectedLabel}</span>
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -70,15 +72,17 @@ export function PromptModelPicker({
         {showFastModeToggle ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={fastModeEnabled}
-              onCheckedChange={(checked) => onFastModeChange(checked === true)}
-            >
-              <span className="flex items-center gap-2">
-                <Zap className="size-4 text-amber-500" />
+            <div className="flex items-center justify-between gap-3 rounded-sm px-2 py-[0.3125rem] text-xs">
+              <span className="flex min-w-0 items-center gap-2">
+                <Zap className="size-4 fill-current text-muted-foreground" />
                 <span>Fast mode</span>
               </span>
-            </DropdownMenuCheckboxItem>
+              <Switch
+                checked={fastModeEnabled}
+                onCheckedChange={onFastModeChange}
+                aria-label="Fast mode"
+              />
+            </div>
           </>
         ) : null}
       </DropdownMenuContent>
