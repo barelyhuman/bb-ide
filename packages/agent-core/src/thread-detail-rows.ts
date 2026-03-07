@@ -136,6 +136,12 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
     }
 
     const hasCompleted = active.some((message) => message.opType === "provisioning-completed");
+    const hasLifecycleUpdate = active.some(
+      (message) => message.opType !== "provisioning-env-setup",
+    );
+    const lastSetupUpdate = [...active]
+      .reverse()
+      .find((message) => message.opType === "provisioning-env-setup");
     const details = active
       .map((message) => message.detail?.trim())
       .filter((value): value is string => Boolean(value));
@@ -149,6 +155,20 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       (acc, message) => mergeProvisioningSetup(acc, message.provisioning?.setup),
       undefined,
     );
+    const title = (() => {
+      if (!hasLifecycleUpdate && lastSetupUpdate) {
+        switch (lastSetupUpdate.title) {
+          case "Environment setup completed":
+            return "Environment setup completed";
+          case "Environment setup failed":
+            return "Environment setup failed";
+          default:
+            return "Environment setup...";
+        }
+      }
+
+      return hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`;
+    })();
 
     merged.push({
       kind: "operation",
@@ -159,7 +179,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       createdAt: Math.max(...active.map((message) => message.createdAt)),
       turnId: first.turnId ?? last.turnId,
       opType: "provisioning",
-      title: hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`,
+      title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
       ...(setup ? { provisioning: { setup } } : {}),
     });

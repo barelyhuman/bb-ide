@@ -2619,6 +2619,11 @@ export class Orchestrator implements ThreadOrchestrator {
       durationMs: Date.now() - startedAt,
       reason,
     });
+    if (this.threadRepo.getById(threadId)?.status !== "provisioning") {
+      this._appendEvent(threadId, "system/provisioning/completed", {
+        environmentId: environment.kind,
+      });
+    }
   }
 
   private async _spawnProcess(

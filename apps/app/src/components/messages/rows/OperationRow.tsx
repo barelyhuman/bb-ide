@@ -305,6 +305,12 @@ function isShimmeringPrimaryCheckoutPhase(phase: PrimaryCheckoutPhase): boolean 
 function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolean {
   if (message.title.startsWith("Provisioning ")) return true;
   if (message.title.startsWith("Provisioned ")) return false;
+  if (
+    message.title === "Environment setup completed" ||
+    message.title === "Environment setup failed"
+  ) {
+    return false;
+  }
   return message.title.endsWith("...");
 }
 
@@ -390,13 +396,26 @@ export function OperationRow({
     const hasStructuredProvisioningDetails = hasParsedDetails || Boolean(setupMetadata);
     const hasProvisioningOutput = Boolean(message.provisioning?.setup?.output?.trim());
     const hasDetails = hasStructuredProvisioningDetails || fallbackDetailLines.length > 0 || hasProvisioningOutput;
-    const isCompleted = message.title.startsWith("Provisioned ");
-    const environmentLabel = isCompleted
-      ? message.title.slice("Provisioned ".length).trim()
-      : message.title.startsWith("Provisioning ")
-        ? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim()
-        : "";
-    const actionLabel = isCompleted ? "Provisioned" : "Provisioning";
+    const titleKind = (() => {
+      if (message.title.startsWith("Provisioned ")) return "provisioned" as const;
+      if (message.title.startsWith("Provisioning ")) return "provisioning" as const;
+      switch (message.title) {
+        case "Environment setup completed":
+          return "setup-completed" as const;
+        case "Environment setup failed":
+          return "setup-failed" as const;
+        default:
+          return "setup-running" as const;
+      }
+    })();
+    const isCompleted =
+      titleKind === "provisioned" || titleKind === "setup-completed";
+    const environmentLabel =
+      titleKind === "provisioned"
+        ? message.title.slice("Provisioned ".length).trim()
+        : titleKind === "provisioning"
+          ? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim()
+          : "";
     const setupAttempt = parsedDetails?.setupAttempt;
     const setupStatus = getProvisioningSetupStatus(setupMetadata, setupAttempt, isCompleted);
     const outputText = (
@@ -426,10 +445,15 @@ export function OperationRow({
         : setupStatus === "Completed"
         ? "emphasis"
         : "outline";
-    const collapsedSummaryContent = actionLabel === "Provisioned" && environmentLabel ? (
+    const collapsedSummaryContent = titleKind === "provisioned" && environmentLabel ? (
       <span className="inline-flex min-w-0 items-center gap-1.5"><span className="shrink-0 text-muted-foreground/90">Provisioned</span><span className="truncate font-semibold text-foreground/95">{environmentLabel}</span></span>
     ) : shimmeringTitle;
-    const expandedSummaryContent = isCompleted ? actionLabel : renderShimmeringSummary(actionLabel, true);
+    const expandedSummaryContent =
+      titleKind === "provisioned"
+        ? "Provisioned"
+        : titleKind === "provisioning"
+          ? renderShimmeringSummary("Provisioning", true)
+          : message.title;
 
     if (!hasDetails) {
       return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{collapsedSummaryContent}</div></div></div></div>;

@@ -933,6 +933,24 @@ describe("ConversationEntry", () => {
     expect(html).toContain("animate-shine");
   });
 
+  it("renders setup-only provisioning summaries as completed when env setup finished", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Environment setup completed",
+      detail:
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Environment setup completed");
+    expect(html).toContain("Setup status");
+    expect(html).toContain("Completed");
+    expect(html).not.toContain("animate-shine");
+  });
+
   it("renders completed primary-checkout operation titles with a subtler tone", () => {
     const message: UIMessage = {
       ...baseMessage(),

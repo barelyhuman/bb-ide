@@ -227,7 +227,9 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.sourceSeqEnd).toBe(4);
     expect(rows[0]?.detail).toContain("Environment: Git Worktree Workspace");
     expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
-    expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms");
+    expect(rows[0]?.detail).toContain(
+      ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
+    );
     expect(rows[0]?.detail).toContain("worktree • /tmp/worktree");
   });
 
@@ -336,7 +338,36 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.title).toBe("Provisioning Worktree...");
     expect(rows[0]?.provisioning?.setup?.status).toBe("running");
     expect(rows[0]?.provisioning?.setup?.output).toBe("+ pnpm install\nDone in 3.2s");
-    expect(rows[0]?.detail).toBe("Environment: Git Worktree Workspace\n.bb-env-setup.sh • Timeout 600s");
+    expect(rows[0]?.detail).toBe(
+      "Environment: Git Worktree Workspace\n.bb-env-setup.sh • Timeout 600s",
+    );
+  });
+
+  it("collapses env-setup-only updates without looking stuck in provisioning", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-env-setup",
+        "Environment setup started",
+        ".bb-env-setup.ts • /tmp/worktree • Timeout 600s",
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup completed",
+        ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.title).toBe("Environment setup completed");
+    expect(rows[0]?.sourceSeqStart).toBe(1);
+    expect(rows[0]?.sourceSeqEnd).toBe(2);
+    expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
+    expect(rows[0]?.detail).toContain(
+      ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
+    );
   });
 });
 

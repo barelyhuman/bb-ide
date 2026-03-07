@@ -3318,6 +3318,148 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("records provisioning completion when resumed threads need fresh env setup", async () => {
+      const workspaceRoot = mkdtempSync(join(tmpdir(), "beanbag-resume-env-setup-"));
+      writeFileSync(join(workspaceRoot, ".bb-env-setup.sh"), "#!/bin/sh\nexit 0\n", "utf8");
+      try {
+        const info: SystemEnvironmentInfo = {
+          id: "worktree",
+          displayName: "Git Worktree Workspace",
+          description: "",
+          capabilities: {
+            host_filesystem: true,
+            isolated_workspace: true,
+            promote_primary_checkout: true,
+            demote_primary_checkout: true,
+            squash_merge: true,
+          },
+        };
+        const customEnvironmentRegistry = new EnvironmentRegistry().register({
+          kind: "worktree",
+          info,
+          create(): IEnvironment {
+            return makeRuntimeEnvironment({
+              kind: "worktree",
+              rootPath: workspaceRoot,
+              overrides: {
+                info,
+                exists() {
+                  return false;
+                },
+                shouldRunSetupScript() {
+                  return true;
+                },
+                runAsync: vi.fn().mockResolvedValue({
+                  exitCode: 0,
+                  stdout: "",
+                  stderr: "",
+                }),
+                run: vi.fn().mockReturnValue({
+                  exitCode: 0,
+                  stdout: "",
+                  stderr: "",
+                }),
+              },
+            });
+          },
+          restore(_state: unknown): IEnvironment {
+            return this.create({
+              projectId: "proj-1",
+              threadId: "thread-1",
+              projectRootPath: "/test",
+              runtimeEnv: {},
+            });
+          },
+          isState(_value: unknown): _value is unknown {
+            return true;
+          },
+        });
+        manager = new Orchestrator(
+          threadRepo,
+          eventRepo,
+          projectRepo,
+          ws,
+          llmCompletionService,
+          createCodexProviderAdapter(),
+          process.env,
+          customEnvironmentRegistry,
+        );
+        const input = [{ type: "text" as const, text: "Resume and continue" }];
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+          makeThread({
+            id: "thread-1",
+            projectId: "proj-1",
+            status: "idle",
+            environmentId: "worktree",
+            environmentRecord: {
+              kind: "worktree",
+              state: {
+                workspaceRoot,
+                branchName: "bb/thread-1",
+              },
+            },
+          }),
+        );
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Test",
+          rootPath: "/test",
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        (eventRepo).getLatestProviderThreadId = vi.fn().mockReturnValue("persisted-thread-1");
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          }),
+        );
+
+        const resumeChild = createFakeChildProcess({ autoRespond: false });
+        resumeChild.stdin = new Writable({
+          write(chunk: Buffer, _encoding: string, callback: () => void) {
+            const data = chunk.toString();
+            resumeChild._stdinData.push(data);
+            try {
+              const msg = JSON.parse(data.trim());
+              if (msg.method === "thread/resume" && msg.id) {
+                process.nextTick(() => {
+                  resumeChild.stdout!.push(
+                    JSON.stringify({
+                      id: msg.id,
+                      result: {
+                        thread: { id: "persisted-thread-1" },
+                        model: "test-model",
+                      },
+                    }) + "\n",
+                  );
+                });
+              }
+            } catch {}
+            callback();
+          },
+        });
+        (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(resumeChild);
+
+        await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
+
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "thread-1",
+            type: "system/provisioning/completed",
+            data: expect.objectContaining({
+              environmentId: "worktree",
+            }),
+          }),
+        );
+      } finally {
+        rmSync(workspaceRoot, { recursive: true, force: true });
+      }
+    });
+
     it("throws if thread has no active process", async () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread(),
