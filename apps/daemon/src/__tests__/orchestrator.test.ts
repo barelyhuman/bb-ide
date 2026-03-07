@@ -37,6 +37,7 @@ import {
   type LlmCompletionService,
 } from "@beanbag/agent-server";
 import { Orchestrator } from "../orchestrator.js";
+import type { EnvironmentService } from "../environment-service.js";
 import { WSManager } from "../ws.js";
 
 function makeWorkspaceStatus(): ThreadWorkStatus {
@@ -4745,6 +4746,208 @@ describe("Orchestrator", () => {
         ok: true,
         demoted: false,
       });
+    });
+
+    it("switches primary checkout when promoting a different thread", async () => {
+      const activeThread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      const targetThread = makeThread({
+        id: "thread-2",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
+        if (id === "thread-1") return activeThread;
+        if (id === "thread-2") return targetThread;
+        return undefined;
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+        makeEvent({
+          threadId: event.threadId,
+          seq: event.seq,
+          type: event.type as string,
+          data: event.data,
+        })
+      );
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-2", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktrees/proj-1/thread-2",
+        }),
+      });
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+        promotedAt: 1000,
+        previousCheckout: {
+          branch: "main",
+          head: "aaa111",
+          detached: false,
+        },
+        promotedCheckout: {
+          branch: "bb/thread-1",
+          head: "bbb222",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+
+      const environmentService = (
+        manager as unknown as {
+          environmentService: Pick<
+            EnvironmentService,
+            "demotePrimaryCheckout" | "promoteThreadEnvironment"
+          >;
+        }
+      ).environmentService;
+      const demoteSpy = vi
+        .spyOn(environmentService, "demotePrimaryCheckout")
+        .mockResolvedValue({
+          demoted: true,
+          status: { projectId: "proj-1" },
+          snapshot: {
+            branch: "main",
+            head: "aaa111",
+            detached: false,
+          },
+          activeThreadId: "thread-1",
+        });
+      const promoteSpy = vi
+        .spyOn(environmentService, "promoteThreadEnvironment")
+        .mockResolvedValue({
+          promoted: true,
+          status: {
+            projectId: "proj-1",
+            activeThreadId: "thread-2",
+            promotedAt: 1001,
+          },
+          state: {
+            projectId: "proj-1",
+            threadId: "thread-2",
+            promotedAt: 1001,
+            previousCheckout: {
+              branch: "main",
+              head: "aaa111",
+              detached: false,
+            },
+            promotedCheckout: {
+              branch: "bb/thread-2",
+              head: "ccc333",
+              detached: false,
+            },
+            reconstructed: false,
+          },
+        });
+
+      const result = await manager.promoteThread("thread-2");
+
+      expect(demoteSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thread: activeThread,
+        }),
+      );
+      expect(promoteSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          thread: targetThread,
+        }),
+      );
+      expect(demoteSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        promoteSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      );
+      expect(result).toMatchObject({
+        ok: true,
+        promoted: true,
+        primaryStatus: {
+          projectId: "proj-1",
+          activeThreadId: "thread-2",
+        },
+      });
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "system/primary_checkout/updated",
+          data: expect.objectContaining({
+            action: "demote",
+            status: "started",
+            projectId: "proj-1",
+          }),
+        }),
+      );
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "system/primary_checkout/updated",
+          data: expect.objectContaining({
+            action: "demote",
+            status: "completed",
+            projectId: "proj-1",
+          }),
+        }),
+      );
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-2",
+          type: "system/primary_checkout/updated",
+          data: expect.objectContaining({
+            action: "promote",
+            status: "completed",
+            projectId: "proj-1",
+          }),
+        }),
+      );
+    });
+
+    it("keeps promote action available when another thread is currently promoted", () => {
+      const targetThread = makeThread({
+        id: "thread-2",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(targetThread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-2", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktrees/proj-1/thread-2",
+        }),
+      });
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+        promotedAt: 1000,
+        promotedCheckout: {
+          head: "abc123",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+
+      const hydrated = manager.getById("thread-2");
+      const promoteAction = hydrated?.builtInActions?.find((action) => action.id === "promote");
+
+      expect(promoteAction).toMatchObject({
+        id: "promote",
+        available: true,
+      });
+      expect(promoteAction?.disabledReason).toBeUndefined();
     });
 
     it("rejects promote when another primary-checkout transition is already in flight", async () => {

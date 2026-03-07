@@ -1813,16 +1813,92 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
+      const existingPromotion = this.primaryPromotionByProjectId.get(project.id);
+
+      if (existingPromotion?.threadId === thread.id) {
+        this._appendEvent(
+          thread.id,
+          "system/primary_checkout/updated",
+          {
+            action: "promote",
+            status: "noop",
+            message: "Primary checkout is already promoted to this thread",
+            projectId: project.id,
+            activeThreadId: thread.id,
+            ...(existingPromotion.promotedCheckout.branch
+              ? { branch: existingPromotion.promotedCheckout.branch }
+              : {}),
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        return {
+          ok: true,
+          promoted: false,
+          message: "Primary checkout is already promoted to this thread",
+          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+        };
+      }
+
+      if (existingPromotion) {
+        const activeThread = this.threadRepo.getById(existingPromotion.threadId);
+        if (!activeThread) {
+          throw invalidRequestError(
+            `Thread ${existingPromotion.threadId} is currently promoted in primary checkout`,
+          );
+        }
+        this._appendEvent(
+          activeThread.id,
+          "system/primary_checkout/updated",
+          {
+            action: "demote",
+            status: "started",
+            message: "Demoting primary checkout back to pre-promotion state",
+            projectId: project.id,
+            activeThreadId: activeThread.id,
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        try {
+          const demoteResult = await this.environmentService.demotePrimaryCheckout({
+            thread: activeThread,
+            ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
+          });
+          this._appendEvent(
+            activeThread.id,
+            "system/primary_checkout/updated",
+            {
+              action: "demote",
+              status: "completed",
+              message: "Primary checkout restored from promoted state",
+              projectId: project.id,
+              ...(demoteResult.snapshot?.branch ? { branch: demoteResult.snapshot.branch } : {}),
+            },
+            { broadcastChanges: ["events-appended"] },
+          );
+          this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
+        } catch (err) {
+          const message = this._toErrorMessage(err);
+          this._appendEvent(
+            activeThread.id,
+            "system/primary_checkout/updated",
+            {
+              action: "demote",
+              status: "failed",
+              message,
+              projectId: project.id,
+              activeThreadId: activeThread.id,
+            },
+            { broadcastChanges: ["events-appended"] },
+          );
+          this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
+          throw invalidRequestError(message);
+        }
+      }
+
       const result = await this.environmentService.promoteThreadEnvironment({
         thread,
         ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
       });
-
-      if (result.reason === "already-promoted-other-thread" && result.state) {
-        throw invalidRequestError(
-          `Thread ${result.state.threadId} is already promoted in the primary checkout for this project`,
-        );
-      }
 
       if (result.reason === "already-promoted-same-thread" && result.state) {
         this._appendEvent(
@@ -2913,10 +2989,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this._ensurePrimaryPromotionStateIsCurrent(args.thread.projectId);
     const activePromotion = this.primaryPromotionByProjectId.get(args.thread.projectId);
     const primaryCheckoutActive = activePromotion?.threadId === args.thread.id;
-    const anotherThreadPromoted =
-      activePromotion && activePromotion.threadId !== args.thread.id
-        ? activePromotion.threadId
-        : undefined;
     const requiresDemoteFirst = primaryCheckoutActive;
     const archivedReason =
       args.thread.archivedAt !== undefined ? "Archived threads cannot run built-in actions" : undefined;
@@ -2958,9 +3030,6 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!environment) return environmentReason;
       if (!environment.isIsolatedWorkspace() || !environment.supportsPromoteToActiveWorkspace()) {
         return "Promotion is only available for isolated thread workspaces";
-      }
-      if (anotherThreadPromoted) {
-        return `Thread ${anotherThreadPromoted} is currently promoted in primary checkout`;
       }
       if (primaryCheckoutActive) {
         return "Primary checkout is already promoted to this thread";
