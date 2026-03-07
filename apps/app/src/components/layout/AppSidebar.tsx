@@ -60,7 +60,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const blockingThreadCount =
     threads?.filter((thread) => shutdownBlockingStatuses.includes(thread.status)).length ??
     0
-  const cannotRestart = blockingThreadCount > 0
   const shouldRestart = restartPolicy?.shouldRestart === true
   const daemonStatus = resolveDaemonStatusIndicatorState({
     connectionState: daemonConnectionState,
@@ -68,14 +67,13 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     shouldRestart,
   })
   const isRestartDisabled =
-    cannotRestart ||
     restartDaemon.isPending ||
     daemonStatus === "reconnecting"
 
   const restartTooltip = restartDaemon.isPending
     ? "Requesting daemon restart…"
-    : cannotRestart
-      ? `Cannot restart while ${blockingThreadCount} thread${blockingThreadCount === 1 ? "" : "s"} ${blockingThreadCount === 1 ? "is" : "are"} active`
+    : blockingThreadCount > 0
+      ? `Force restart daemon. ${blockingThreadCount} active thread${blockingThreadCount === 1 ? "" : "s"} will reconnect if possible`
       : daemonStatus === "reconnecting"
         ? "Daemon reconnecting"
         : daemonStatus === "out-of-date"
@@ -93,9 +91,13 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
 
   const requestRestart = () => {
     if (isRestartDisabled) return
-    restartDaemon.mutate({}, {
+    restartDaemon.mutate({ force: true }, {
       onSuccess: () => {
-        toast.success("Daemon restart requested")
+        toast.success(
+          blockingThreadCount > 0
+            ? "Daemon restart requested. Active threads will reconnect if possible."
+            : "Daemon restart requested",
+        )
       },
       onError: (error) => {
         toast.error(

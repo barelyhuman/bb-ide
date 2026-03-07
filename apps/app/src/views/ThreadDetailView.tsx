@@ -100,7 +100,7 @@ import {
   promptDraftToInput,
   type PromptDraftState,
 } from "@/lib/prompt-draft";
-import { openThreadPathInEditor } from "@/lib/api";
+import { HttpError, openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
@@ -1663,9 +1663,14 @@ export function ThreadDetailView() {
       </PageShell>
     );
   }
+  const isTransientThreadLoadError =
+    Boolean(thread) &&
+    Boolean(error) &&
+    (!(error instanceof HttpError) || error.status >= 500);
   if (
-    error ||
+    (!thread && Boolean(error)) ||
     !thread ||
+    (!isTransientThreadLoadError && Boolean(error)) ||
     thread.projectId !== projectId
   ) {
     return (
@@ -1876,6 +1881,11 @@ export function ThreadDetailView() {
 
   const conversationMain = (
     <>
+      {isTransientThreadLoadError ? (
+        <div className="mb-2 rounded-md border border-border/80 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          Daemon temporarily unavailable. Showing cached thread state while reconnecting.
+        </div>
+      ) : null}
       {showThreadMetadata ? (
         <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
           <DetailCard>
