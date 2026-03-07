@@ -24,6 +24,12 @@ function git(cwd: string, ...args: string[]): string {
   }).trim();
 }
 
+function commitReadme(cwd: string, contents: string, message: string): void {
+  writeFileSync(join(cwd, "README.md"), contents, "utf8");
+  git(cwd, "add", "README.md");
+  git(cwd, "commit", "-m", message);
+}
+
 async function createRepoWithThreadAheadOfMain() {
   const repoRoot = makeTempDir();
   const suffix = randomUUID();
@@ -32,9 +38,7 @@ async function createRepoWithThreadAheadOfMain() {
   git(repoRoot, "config", "user.email", "beanbag-test@example.com");
   git(repoRoot, "checkout", "-b", "main");
 
-  writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
-  git(repoRoot, "add", "README.md");
-  git(repoRoot, "commit", "-m", "initial");
+  commitReadme(repoRoot, "initial\n", "initial");
 
   const environment = createWorktreeEnvironmentDefinition().create({
     projectId: `project-${suffix}`,
@@ -45,15 +49,23 @@ async function createRepoWithThreadAheadOfMain() {
   await environment.prepare?.();
   environments.push(environment);
 
-  writeFileSync(
-    join(environment.getWorkspaceRootUnsafe(), "README.md"),
+  commitReadme(
+    environment.getWorkspaceRootUnsafe(),
     "initial\nthread change\n",
-    "utf8",
+    "thread change",
   );
-  environment.run("git", ["add", "README.md"]);
-  environment.run("git", ["commit", "-m", "thread change"]);
 
   return { repoRoot, environment };
+}
+
+async function createRepoWithThreadTwoCommits() {
+  const setup = await createRepoWithThreadAheadOfMain();
+  commitReadme(
+    setup.environment.getWorkspaceRootUnsafe(),
+    "initial\nthread change\nthread follow-up\n",
+    "thread follow-up",
+  );
+  return setup;
 }
 
 afterEach(async () => {
@@ -153,5 +165,48 @@ describe("WorktreeEnvironment", () => {
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
       "feat: custom squash message",
     );
+  });
+
+  it("reports committed branch work before the thread is merged", async () => {
+    const { environment } = await createRepoWithThreadAheadOfMain();
+
+    const status = environment.getWorkspaceStatus({ defaultBranch: "main" });
+
+    expect(status.aheadCount).toBe(1);
+    expect(status.behindCount).toBe(0);
+    expect(status.hasCommittedUnmergedChanges).toBe(true);
+    expect(status.state).toBe("committed_unmerged");
+  });
+
+  it("treats multi-commit squash merges as merged even when cherry still sees ahead commits", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadTwoCommits();
+
+    await environment.squashMergeIntoDefaultBranch({
+      activeWorkspaceRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    const status = environment.getWorkspaceStatus({ defaultBranch: "main" });
+
+    expect(status.aheadCount).toBeGreaterThan(0);
+    expect(status.hasCommittedUnmergedChanges).toBe(false);
+    expect(status.state).toBe("clean");
+  });
+
+  it("keeps squash-merged branches clean after main later changes the same file", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
+
+    await environment.squashMergeIntoDefaultBranch({
+      activeWorkspaceRoot: repoRoot,
+      defaultBranch: "main",
+    });
+    commitReadme(repoRoot, "initial\nthread change\nmain follow-up\n", "main follow-up");
+
+    const status = environment.getWorkspaceStatus({ defaultBranch: "main" });
+
+    expect(status.aheadCount).toBe(0);
+    expect(status.behindCount).toBe(2);
+    expect(status.hasCommittedUnmergedChanges).toBe(false);
+    expect(status.state).toBe("clean");
   });
 });

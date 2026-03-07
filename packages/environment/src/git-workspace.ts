@@ -1,10 +1,14 @@
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
+  mkdtempSync,
   readFileSync,
+  rmSync,
   statSync,
   watch,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type {
   EnvironmentCommitSummary,
@@ -20,6 +24,7 @@ import type {
 
 const MAX_DIFF_RESPONSE_CHARS = 220_000;
 const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
+const COMMITTED_DIFF_INDEX_DIR_PREFIX = "beanbag-committed-diff-check-";
 
 type DiffCounts = {
   changedFiles: number;
@@ -165,36 +170,51 @@ function countUnmergedAheadCommits(
   return unmergedCount;
 }
 
-const COMMITTED_CONTENT_DIFF_CHUNK_SIZE = 120;
-
-function parseNulSeparatedList(value: string): string[] {
-  return value
-    .split("\u0000")
-    .filter((entry) => entry.length > 0);
-}
-
-function hasCommittedContentDeltaByPaths(args: {
+function baseRefContainsCommittedDiff(args: {
   environment: IEnvironment;
   baseRef: string;
-  paths: readonly string[];
+  diffPatch: string;
 }): boolean | undefined {
-  for (let index = 0; index < args.paths.length; index += COMMITTED_CONTENT_DIFF_CHUNK_SIZE) {
-    const chunk = args.paths.slice(index, index + COMMITTED_CONTENT_DIFF_CHUNK_SIZE);
-    const diffResult = runGit(args.environment, [
-      "diff",
-      "--quiet",
-      `${args.baseRef}..HEAD`,
-      "--",
-      ...chunk,
-    ]);
-    if (diffResult.code === 1) {
-      return true;
-    }
-    if (diffResult.code !== 0) {
+  const workspaceRoot = args.environment.getWorkspaceRootUnsafe();
+  const tempDir = mkdtempSync(join(tmpdir(), COMMITTED_DIFF_INDEX_DIR_PREFIX));
+  const indexPath = join(tempDir, "index");
+  const gitEnv = {
+    ...process.env,
+    GIT_INDEX_FILE: indexPath,
+  };
+
+  try {
+    const readTreeResult = spawnSync("git", ["read-tree", args.baseRef], {
+      cwd: workspaceRoot,
+      env: gitEnv,
+      stdio: "pipe",
+      encoding: "utf-8",
+    });
+    if (readTreeResult.status !== 0) {
       return undefined;
     }
+
+    const reverseApplyResult = spawnSync(
+      "git",
+      ["apply", "--cached", "--reverse", "--check", "--unidiff-zero", "-"],
+      {
+        cwd: workspaceRoot,
+        env: gitEnv,
+        stdio: "pipe",
+        encoding: "utf-8",
+        input: args.diffPatch,
+      },
+    );
+    if (reverseApplyResult.status === 0) {
+      return true;
+    }
+    if (reverseApplyResult.status === 1) {
+      return false;
+    }
+    return undefined;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
   }
-  return false;
 }
 
 function resolveCommittedUnmergedChanges(args: {
@@ -203,35 +223,42 @@ function resolveCommittedUnmergedChanges(args: {
   mergeBaseDiffRef: string | undefined;
   aheadCount: number;
 }): boolean {
-  if (!args.baseRef || !args.mergeBaseDiffRef) {
-    return args.aheadCount > 0;
-  }
-
-  const changedPathsResult = runGit(args.environment, [
-    "diff",
-    "--name-only",
-    "--find-renames",
-    "-z",
-    `${args.mergeBaseDiffRef}..HEAD`,
-  ], { rawOutput: true });
-  if (!changedPathsResult.ok) {
-    return args.aheadCount > 0;
-  }
-
-  const changedPaths = parseNulSeparatedList(changedPathsResult.stdout);
-  if (changedPaths.length === 0) {
+  if (args.aheadCount <= 0) {
     return false;
   }
 
-  const hasContentDelta = hasCommittedContentDeltaByPaths({
+  if (!args.baseRef || !args.mergeBaseDiffRef) {
+    return true;
+  }
+
+  /**
+   * Check whether the cumulative branch diff can be cleanly reverse-applied to the
+   * current base tree. Using zero-context hunks keeps this tolerant of later edits
+   * that build on top of already-squashed branch changes.
+   */
+  const committedDiffResult = runGit(args.environment, [
+    "diff",
+    "--binary",
+    "--find-renames",
+    "--unified=0",
+    `${args.mergeBaseDiffRef}..HEAD`,
+  ], { rawOutput: true });
+  if (!committedDiffResult.ok) {
+    return true;
+  }
+  if (committedDiffResult.stdout.length === 0) {
+    return false;
+  }
+
+  const baseContainsDiff = baseRefContainsCommittedDiff({
     environment: args.environment,
     baseRef: args.baseRef,
-    paths: changedPaths,
+    diffPatch: committedDiffResult.stdout,
   });
-  if (hasContentDelta === undefined) {
-    return args.aheadCount > 0;
+  if (baseContainsDiff === undefined) {
+    return true;
   }
-  return hasContentDelta;
+  return !baseContainsDiff;
 }
 
 function parsePorcelainLine(line: string): WorkspaceFile | undefined {
