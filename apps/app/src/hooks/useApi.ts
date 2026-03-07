@@ -2,6 +2,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
@@ -95,6 +96,45 @@ export function resolveThreadGitDiffPlaceholder(
     nextThreadId,
     THREAD_GIT_DIFF_QUERY_KEY,
   );
+}
+
+function updateCachedThread(
+  queryClient: QueryClient,
+  threadId: string,
+  updater: (thread: Thread) => Thread,
+): void {
+  queryClient.setQueryData<Thread>(["thread", threadId], (thread) => {
+    if (!thread) return thread;
+    return updater(thread);
+  });
+}
+
+function appendQueuedThreadMessage(
+  thread: Thread,
+  queuedMessage: ThreadQueuedMessage,
+): Thread {
+  const existingQueue = thread.queuedMessages ?? [];
+  if (existingQueue.some((entry) => entry.id === queuedMessage.id)) {
+    return thread;
+  }
+  return {
+    ...thread,
+    queuedMessages: [...existingQueue, queuedMessage],
+  };
+}
+
+function removeQueuedThreadMessage(
+  thread: Thread,
+  queuedMessageId: string,
+): Thread {
+  const existingQueue = thread.queuedMessages ?? [];
+  if (!existingQueue.some((entry) => entry.id === queuedMessageId)) {
+    return thread;
+  }
+  return {
+    ...thread,
+    queuedMessages: existingQueue.filter((entry) => entry.id !== queuedMessageId),
+  };
 }
 
 interface ThreadListFilters {
@@ -521,9 +561,10 @@ export function useEnqueueThreadMessage() {
       sandboxMode,
     }: { id: string } & EnqueueThreadMessageRequest): Promise<ThreadQueuedMessage> =>
       api.enqueueThreadMessage(id, { input, model, reasoningLevel, sandboxMode }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
+    onSuccess: (queuedMessage, variables) => {
+      updateCachedThread(queryClient, variables.id, (thread) =>
+        appendQueuedThreadMessage(thread, queuedMessage),
+      );
     },
   });
 }
@@ -560,8 +601,9 @@ export function useDeleteQueuedThreadMessage() {
       queuedMessageId: string;
     }) => api.deleteQueuedThreadMessage(id, queuedMessageId),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      updateCachedThread(queryClient, variables.id, (thread) =>
+        removeQueuedThreadMessage(thread, variables.queuedMessageId),
+      );
     },
   });
 }

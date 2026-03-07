@@ -1612,6 +1612,26 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   /**
+   * Lightweight thread lookup for route guards and internal checks that do not
+   * need hydrated work status or built-in action state.
+   */
+  getRawById(threadId: string): Thread | undefined {
+    return this.threadRepo.getById(threadId);
+  }
+
+  /**
+   * Cheap primary-checkout activity check for request paths that only need to
+   * know whether a demotion should be attempted.
+   */
+  isPrimaryCheckoutActive(threadId: string): boolean {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return false;
+    this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
+    const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
+    return activePromotion?.threadId === threadId;
+  }
+
+  /**
    * Get the thread record by id.
    */
   getById(threadId: string): Thread | undefined {

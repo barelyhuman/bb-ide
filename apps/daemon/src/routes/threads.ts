@@ -9,6 +9,7 @@ import {
   tellThreadSchema,
   updateThreadSchema,
   type PromptInput,
+  type Thread,
   type ThreadGitDiffSelection,
   type ThreadOrchestrator,
 } from "@beanbag/agent-core";
@@ -91,6 +92,11 @@ type OpenPathFn = (args: OpenPathRequest) => void;
 
 const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
+type RouteThreadLookupCapableOrchestrator = ThreadOrchestrator & {
+  getRawById?: (threadId: string) => Thread | undefined;
+  isPrimaryCheckoutActive?: (threadId: string) => boolean;
+};
+
 function validatePromptInputAttachments(input: PromptInput[]): void {
   let attachmentCount = 0;
   for (const chunk of input) {
@@ -112,6 +118,28 @@ function validatePromptInputAttachments(input: PromptInput[]): void {
       `A single request can include at most ${MAX_PROMPT_ATTACHMENT_INPUTS} local attachments`,
     );
   }
+}
+
+function getThreadForRouteLookup(
+  threadManager: ThreadOrchestrator,
+  threadId: string,
+): Thread | undefined {
+  const routeLookupManager = threadManager as RouteThreadLookupCapableOrchestrator;
+  if (routeLookupManager.getRawById) {
+    return routeLookupManager.getRawById(threadId);
+  }
+  return threadManager.getById(threadId);
+}
+
+function isThreadPrimaryCheckoutActiveForRoute(
+  threadManager: ThreadOrchestrator,
+  thread: Thread,
+): boolean {
+  const routeLookupManager = threadManager as RouteThreadLookupCapableOrchestrator;
+  if (routeLookupManager.isPrimaryCheckoutActive) {
+    return routeLookupManager.isPrimaryCheckoutActive(thread.id);
+  }
+  return thread.primaryCheckout?.isActive === true;
 }
 
 export function createThreadRoutes(
@@ -243,6 +271,7 @@ export function createThreadRoutes(
       zValidator("json", tellThreadSchema),
       async (c) => {
         try {
+          const threadId = c.req.param("id");
           const {
             input,
             model,
@@ -252,16 +281,16 @@ export function createThreadRoutes(
             demotePrimaryIfNeeded,
           } = c.req.valid("json");
           validatePromptInputAttachments(input);
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
-            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
           if (
             demotePrimaryIfNeeded === true &&
             mode !== "steer" &&
-            thread.primaryCheckout?.isActive === true
+            isThreadPrimaryCheckoutActiveForRoute(threadManager, thread)
           ) {
-            await threadManager.demotePrimaryCheckout(c.req.param("id"));
+            await threadManager.demotePrimaryCheckout(threadId);
           }
           const tellRequest = mode ? { input, mode } : { input };
           const options =
@@ -269,9 +298,9 @@ export function createThreadRoutes(
               ? { model, reasoningLevel, sandboxMode }
               : undefined;
           if (options) {
-            await threadManager.tell(c.req.param("id"), tellRequest, options);
+            await threadManager.tell(threadId, tellRequest, options);
           } else {
-            await threadManager.tell(c.req.param("id"), tellRequest);
+            await threadManager.tell(threadId, tellRequest);
           }
           return c.json({ ok: true });
         } catch (err) {
@@ -284,14 +313,15 @@ export function createThreadRoutes(
       zValidator("json", enqueueThreadMessageSchema),
       async (c) => {
         try {
+          const threadId = c.req.param("id");
           const { input, model, reasoningLevel, sandboxMode } = c.req.valid("json");
           validatePromptInputAttachments(input);
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
-            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
 
-          const updatedThread = threadManager.enqueueFollowUp(c.req.param("id"), {
+          const updatedThread = threadManager.enqueueFollowUp(threadId, {
             input,
             model,
             reasoningLevel,
@@ -314,13 +344,14 @@ export function createThreadRoutes(
       zValidator("json", sendQueuedThreadMessageSchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
-            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
           const body = c.req.valid("json");
           const response = await threadManager.sendQueuedFollowUp(
-            c.req.param("id"),
+            threadId,
             c.req.param("queuedMessageId"),
             body,
           );
@@ -332,12 +363,13 @@ export function createThreadRoutes(
     )
     .delete("/:id/queue/:queuedMessageId", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
         threadManager.removeQueuedFollowUp(
-          c.req.param("id"),
+          threadId,
           c.req.param("queuedMessageId"),
         );
         return c.json({ ok: true });
@@ -347,11 +379,12 @@ export function createThreadRoutes(
     })
     .post("/:id/stop", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
-        threadManager.stop(c.req.param("id"));
+        threadManager.stop(threadId);
         return c.json({ ok: true });
       } catch (err) {
         return sendRouteError(c, err);
@@ -359,9 +392,10 @@ export function createThreadRoutes(
     })
     .post("/:id/archive", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
         const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
         const parsedBody = archiveThreadBodySchema.safeParse(bodyRaw);
@@ -388,7 +422,7 @@ export function createThreadRoutes(
             }, 409);
           }
         }
-        threadManager.archive(c.req.param("id"));
+        threadManager.archive(threadId);
         return c.json({ ok: true });
       } catch (err) {
         return sendRouteError(c, err);
@@ -396,11 +430,12 @@ export function createThreadRoutes(
     })
     .post("/:id/unarchive", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
-        threadManager.unarchive(c.req.param("id"));
+        threadManager.unarchive(threadId);
         return c.json({ ok: true });
       } catch (err) {
         return sendRouteError(c, err);
@@ -408,11 +443,12 @@ export function createThreadRoutes(
     })
     .post("/:id/read", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
-        const updated = threadManager.markRead(c.req.param("id"));
+        const updated = threadManager.markRead(threadId);
         return c.json(updated);
       } catch (err) {
         return sendRouteError(c, err);
@@ -420,11 +456,12 @@ export function createThreadRoutes(
     })
     .post("/:id/unread", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
-        const updated = threadManager.markUnread(c.req.param("id"));
+        const updated = threadManager.markUnread(threadId);
         return c.json(updated);
       } catch (err) {
         return sendRouteError(c, err);
@@ -432,9 +469,10 @@ export function createThreadRoutes(
     })
     .get("/:id/work-status", zValidator("query", workStatusQuerySchema), async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          return sendRouteError(c, threadNotFoundError(threadId));
         }
         const query = c.req.valid("query");
         const asyncWorkStatusAccessor = threadManager as ThreadOrchestrator & {
@@ -445,10 +483,10 @@ export function createThreadRoutes(
         };
         const workStatus = asyncWorkStatusAccessor.getWorkStatusAsync
           ? await asyncWorkStatusAccessor.getWorkStatusAsync(
-              c.req.param("id"),
+              threadId,
               query.mergeBaseBranch,
             )
-          : threadManager.getWorkStatus(c.req.param("id"), query.mergeBaseBranch);
+          : threadManager.getWorkStatus(threadId, query.mergeBaseBranch);
         return c.json(
           workStatus ?? null,
         );
@@ -458,7 +496,7 @@ export function createThreadRoutes(
     })
     .get("/:id/primary-status", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
@@ -472,7 +510,7 @@ export function createThreadRoutes(
       zValidator("query", timelineQuerySchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
@@ -493,7 +531,7 @@ export function createThreadRoutes(
       zValidator("query", toolGroupMessagesQuerySchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
@@ -517,7 +555,7 @@ export function createThreadRoutes(
       zValidator("query", gitDiffQuerySchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
@@ -551,11 +589,12 @@ export function createThreadRoutes(
       "/:id/promote",
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
-            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
-          const result = await threadManager.promoteThread(c.req.param("id"));
+          const result = await threadManager.promoteThread(threadId);
           return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);
@@ -566,11 +605,12 @@ export function createThreadRoutes(
       "/:id/demote-primary",
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
-            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
-          const result = await threadManager.demotePrimaryCheckout(c.req.param("id"));
+          const result = await threadManager.demotePrimaryCheckout(threadId);
           return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);
@@ -582,12 +622,13 @@ export function createThreadRoutes(
       zValidator("json", threadOperationSchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
-            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
           const body = c.req.valid("json");
-          const result = await threadManager.requestThreadOperation(c.req.param("id"), body);
+          const result = await threadManager.requestThreadOperation(threadId, body);
           return c.json(result, 202);
         } catch (err) {
           return sendRouteError(c, err);
@@ -599,7 +640,7 @@ export function createThreadRoutes(
       zValidator("query", eventsQuerySchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }

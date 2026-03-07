@@ -659,6 +659,49 @@ describe("Thread routes", () => {
   });
 
   describe("queued follow-up routes", () => {
+    it("uses lightweight raw lookup when the orchestrator exposes it", async () => {
+      const thread = makeThread({
+        queuedMessages: [],
+      });
+      const queuedThread = makeThread({
+        queuedMessages: [
+          {
+            id: "queued-1",
+            input: [{ type: "text", text: "Queued item" }],
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            createdAt: 2000,
+          },
+        ],
+      });
+      const getRawById = vi.fn().mockReturnValue(thread);
+      (
+        threadManager as unknown as {
+          getRawById?: ReturnType<typeof vi.fn>;
+        }
+      ).getRawById = getRawById;
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error("Expected route to use raw thread lookup");
+      });
+      (threadManager.enqueueFollowUp as ReturnType<typeof vi.fn>).mockReturnValue(
+        queuedThread,
+      );
+
+      const res = await app.request("/threads/thread-1/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "Queued item" }],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(getRawById).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.getById).not.toHaveBeenCalled();
+    });
+
     it("queues a follow-up and returns the persisted queue item", async () => {
       const thread = makeThread({
         queuedMessages: [],
