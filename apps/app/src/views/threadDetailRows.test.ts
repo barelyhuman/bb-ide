@@ -500,6 +500,57 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
   });
 
+  it("keeps streamed provisioning output on the merged provisioning row", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("provisioning-started-1", 1),
+        kind: "operation",
+        opType: "provisioning-started",
+        title: "Provisioning started",
+        detail: "Environment: Local Workspace",
+      },
+      {
+        ...baseMessage("provisioning-env-setup-1", 2),
+        kind: "operation",
+        opType: "provisioning-env-setup",
+        title: "Environment setup started",
+        detail: ".bb-env-setup.sh • Timeout 600s",
+        provisioning: {
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+          },
+        },
+      },
+      {
+        ...baseMessage("provisioning-env-setup-2", 3),
+        kind: "operation",
+        opType: "provisioning-env-setup",
+        title: "Environment setup running",
+        detail: ".bb-env-setup.sh • Timeout 600s",
+        provisioning: {
+          setup: {
+            status: "running",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+            output: "+ pnpm install",
+          },
+        },
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.opType).toBe("provisioning");
+    expect(rows[0].message.provisioning?.setup?.status).toBe("running");
+    expect(rows[0].message.provisioning?.setup?.output).toBe("+ pnpm install");
+  });
+
   it("merges squash operation intent request/prompt/lifecycle into one row", () => {
     const promptText =
       "Please squash-merge the changes in this thread workspace.\n" +

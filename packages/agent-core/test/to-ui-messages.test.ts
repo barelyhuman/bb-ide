@@ -1221,11 +1221,24 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/env_setup",
         data: {
+          status: "running",
+          scriptPath: ".bb-env-setup.sh",
+          timeoutMs: 600000,
+          detail: "pnpm install",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/provisioning/env_setup",
+        data: {
           status: "completed",
           scriptPath: ".bb-env-setup.sh",
           durationMs: 125,
         },
-        createdAt: 2,
+        createdAt: 3,
       },
     ];
 
@@ -1235,13 +1248,17 @@ describe("toUIMessages replay coverage", () => {
         message.kind === "operation",
     );
 
-    expect(ops).toHaveLength(2);
+    expect(ops).toHaveLength(3);
     expect(ops[0]?.opType).toBe("provisioning-env-setup");
     expect(ops[0]?.title).toBe("Environment setup started");
     expect(ops[0]?.detail).toContain(".bb-env-setup.sh");
     expect(ops[1]?.opType).toBe("provisioning-env-setup");
-    expect(ops[1]?.title).toBe("Environment setup completed");
-    expect(ops[1]?.detail).toContain("Duration 125ms");
+    expect(ops[1]?.title).toBe("Environment setup running");
+    expect(ops[1]?.detail).toBe(".bb-env-setup.sh • Timeout 600s");
+    expect(ops[1]?.provisioning?.setup?.output).toBe("pnpm install");
+    expect(ops[2]?.opType).toBe("provisioning-env-setup");
+    expect(ops[2]?.title).toBe("Environment setup completed");
+    expect(ops[2]?.detail).toContain("Duration 125ms");
   });
 
   it("projects primary-checkout lifecycle events with stable metadata", () => {

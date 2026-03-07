@@ -45,6 +45,8 @@ export interface EnvironmentCommandOptions {
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
   rawOutput?: boolean;
+  onStdoutLine?: (line: string) => void;
+  onStderrLine?: (line: string) => void;
 }
 
 export interface EnvironmentSpawnOptions {

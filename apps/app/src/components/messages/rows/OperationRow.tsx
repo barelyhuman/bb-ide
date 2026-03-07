@@ -3,6 +3,7 @@ import {
   assertNever,
   formatEnvironmentDisplayName,
   type UIOperationMessage,
+  type UIProvisioningSetupMetadata,
 } from "@beanbag/agent-core";
 import { OpenPathButton } from "@/components/shared/OpenPathButton";
 import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
@@ -17,6 +18,7 @@ import {
   renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
+import { TerminalOutputBlock } from "./TerminalOutputBlock";
 
 type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
 type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];
@@ -207,15 +209,35 @@ function provisioningSetupTimedOut(setupAttempt: ProvisioningSetupAttempt | unde
   return setupAttempt.outputLines.some((line) => /\btimed out\b/i.test(line));
 }
 
+function formatTimeoutLabel(timeoutMs: number | undefined): string | undefined {
+  if (timeoutMs === undefined || timeoutMs < 0) return undefined;
+  return `${Math.round(timeoutMs / 1000)}s`;
+}
+
 function resolveProvisioningSetupScriptPath(
-  setupAttempt: ProvisioningSetupAttempt | undefined,
+  scriptPath: string | undefined,
+  workspaceRoot: string | undefined,
 ): string | undefined {
-  const scriptPath = setupAttempt?.scriptPath?.trim();
-  if (!scriptPath) return undefined;
-  if (isWorkspaceRootToken(scriptPath)) return scriptPath;
-  const workspaceRoot = setupAttempt?.workspaceRoot?.trim();
-  if (!workspaceRoot) return undefined;
-  return resolveWorkspaceAbsolutePath(workspaceRoot, scriptPath);
+  const normalizedScriptPath = scriptPath?.trim();
+  if (!normalizedScriptPath) return undefined;
+  if (isWorkspaceRootToken(normalizedScriptPath)) return normalizedScriptPath;
+  const normalizedWorkspaceRoot = workspaceRoot?.trim();
+  if (!normalizedWorkspaceRoot) return undefined;
+  return resolveWorkspaceAbsolutePath(normalizedWorkspaceRoot, normalizedScriptPath);
+}
+
+function formatProvisioningSetupCommand(scriptPath: string | undefined): string | undefined {
+  const value = scriptPath?.trim();
+  if (!value) return undefined;
+  if (
+    value.startsWith("./") ||
+    value.startsWith("~/") ||
+    value.startsWith("/") ||
+    /^[A-Za-z]:[\\/]/.test(value)
+  ) {
+    return `bash -x ${value}`;
+  }
+  return `bash -x ./${value}`;
 }
 
 function formatDurationLabel(durationMs: number): string {
@@ -228,9 +250,23 @@ function formatDurationLabel(durationMs: number): string {
 }
 
 function getProvisioningSetupStatus(
+  setup: UIProvisioningSetupMetadata | undefined,
   setupAttempt: ProvisioningSetupAttempt | undefined,
   isProvisioningCompleted: boolean,
 ): "Failed" | "Completed" | "Running" | undefined {
+  if (setup) {
+    switch (setup.status) {
+      case "failed":
+        return "Failed";
+      case "completed":
+        return "Completed";
+      case "started":
+      case "running":
+        return "Running";
+      default:
+        return assertNever(setup.status);
+    }
+  }
   if (!setupAttempt) return undefined;
   if (setupAttempt.outputLines.length > 0) return "Failed";
   if (setupAttempt.durationMs !== undefined || isProvisioningCompleted) return "Completed";
@@ -349,8 +385,11 @@ export function OperationRow({
   if (message.opType === "provisioning") {
     const parsedDetails = parseProvisioningDetails(message.detail);
     const fallbackDetailLines = splitNonEmptyLines(message.detail);
+    const setupMetadata = message.provisioning?.setup;
     const hasParsedDetails = Boolean(parsedDetails);
-    const hasDetails = hasParsedDetails || fallbackDetailLines.length > 0;
+    const hasStructuredProvisioningDetails = hasParsedDetails || Boolean(setupMetadata);
+    const hasProvisioningOutput = Boolean(message.provisioning?.setup?.output?.trim());
+    const hasDetails = hasStructuredProvisioningDetails || fallbackDetailLines.length > 0 || hasProvisioningOutput;
     const isCompleted = message.title.startsWith("Provisioned ");
     const environmentLabel = isCompleted
       ? message.title.slice("Provisioned ".length).trim()
@@ -359,20 +398,27 @@ export function OperationRow({
         : "";
     const actionLabel = isCompleted ? "Provisioned" : "Provisioning";
     const setupAttempt = parsedDetails?.setupAttempt;
-    const setupStatus = getProvisioningSetupStatus(setupAttempt, isCompleted);
-    const setupTimedOut = provisioningSetupTimedOut(setupAttempt);
-    const outputText = setupAttempt?.outputLines.join("\n").trim();
+    const setupStatus = getProvisioningSetupStatus(setupMetadata, setupAttempt, isCompleted);
+    const outputText = (
+      setupMetadata?.output ??
+      setupAttempt?.outputLines.join("\n")
+    ) || undefined;
+    const timeoutLabel = formatTimeoutLabel(setupMetadata?.timeoutMs) ?? setupAttempt?.timeout;
+    const setupTimedOut = outputText ? /\btimed out\b/i.test(outputText) : provisioningSetupTimedOut(setupAttempt);
     const additionalDetailsText = parsedDetails?.additionalLines.join("\n").trim();
-    const setupScriptPath = resolveProvisioningSetupScriptPath(setupAttempt);
-    const setupScriptLabel = setupScriptPath ?? setupAttempt?.scriptPath;
     const workspacePath = setupAttempt?.workspaceRoot ?? parsedDetails?.workspaceRoot;
-    const setupTimeLabel = setupAttempt
-      ? setupAttempt.durationMs !== undefined
-        ? `${formatDurationLabel(setupAttempt.durationMs)}${setupTimedOut && setupAttempt.timeout ? ` / timeout ${setupAttempt.timeout}` : ""}`
-        : setupTimedOut && setupAttempt.timeout
-          ? `timeout ${setupAttempt.timeout}`
-          : undefined
-      : undefined;
+    const setupScriptPath = resolveProvisioningSetupScriptPath(
+      setupMetadata?.scriptPath ?? setupAttempt?.scriptPath,
+      workspacePath,
+    );
+    const setupScriptLabel = setupMetadata?.scriptPath ?? setupScriptPath ?? setupAttempt?.scriptPath;
+    const setupCommand = formatProvisioningSetupCommand(setupMetadata?.scriptPath ?? setupAttempt?.scriptPath);
+    const setupDurationMs = setupMetadata?.durationMs ?? setupAttempt?.durationMs;
+    const setupTimeLabel = setupDurationMs !== undefined
+      ? `${formatDurationLabel(setupDurationMs)}${setupTimedOut && timeoutLabel ? ` / timeout ${timeoutLabel}` : ""}`
+      : setupTimedOut && timeoutLabel
+        ? `timeout ${timeoutLabel}`
+        : undefined;
     const environmentValue = normalizeProvisioningEnvironmentLabel(parsedDetails?.environment || environmentLabel || undefined);
     const setupStatusVariant: StatusPillVariant =
       setupStatus === "Failed"
@@ -393,14 +439,14 @@ export function OperationRow({
       <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="mr-auto w-full">
           <ExpandablePanel isExpanded={isExpanded} summaryContent={isExpanded ? expandedSummaryContent : collapsedSummaryContent} summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"} headerToneClass={headerToneClass} onToggle={onToggle}>
-            {hasParsedDetails ? (
+            {hasStructuredProvisioningDetails ? (
               <EventMetaList className="mt-0.5">
                 {environmentValue ? <EventMetaItem label="Environment"><span>{environmentValue}</span></EventMetaItem> : null}
                 {setupScriptLabel ? <EventMetaItem label="Setup script">{setupScriptPath ? <OpenPathButton path={setupScriptPath} target="file" title={setupScriptLabel}>{setupScriptLabel}</OpenPathButton> : <span className="block truncate text-xs text-muted-foreground/90" title={setupScriptLabel}>{setupScriptLabel}</span>}</EventMetaItem> : null}
                 {setupStatus ? <EventMetaItem label="Setup status"><StatusPill variant={setupStatusVariant}>{setupStatus}</StatusPill></EventMetaItem> : null}
                 {setupTimeLabel ? <EventMetaItem label="Setup time"><span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span></EventMetaItem> : null}
                 {workspacePath ? <EventMetaItem label="Workspace"><OpenPathButton path={workspacePath} target="directory" title={workspacePath}>{workspacePath}</OpenPathButton></EventMetaItem> : null}
-                {outputText ? <EventMetaItem label="Output" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{outputText}</EventCodeBlock></EventMetaItem> : null}
+                {outputText ? <EventMetaItem label="Output" align="start"><TerminalOutputBlock command={setupCommand} outputText={outputText} isExpanded={isExpanded} /></EventMetaItem> : null}
                 {additionalDetailsText ? <EventMetaItem label="Additional details" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{additionalDetailsText}</EventCodeBlock></EventMetaItem> : null}
               </EventMetaList>
             ) : (

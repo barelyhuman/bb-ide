@@ -214,6 +214,8 @@ class LocalEnvironment implements IEnvironment {
       },
       ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
       ...(options?.rawOutput ? { rawOutput: true } : {}),
+      ...(options?.onStdoutLine ? { onStdoutLine: options.onStdoutLine } : {}),
+      ...(options?.onStderrLine ? { onStderrLine: options.onStderrLine } : {}),
     });
   }
 }

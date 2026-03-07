@@ -56,9 +56,35 @@ export function runCommandAsync(
 
     let stdout = "";
     let stderr = "";
+    let stdoutLineBuffer = "";
+    let stderrLineBuffer = "";
     let settled = false;
     let timedOut = false;
     let hardKillTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const emitCompletedLines = (
+      buffer: string,
+      chunk: string,
+      onLine?: (line: string) => void,
+    ): string => {
+      const combined = buffer + chunk;
+      const lines = combined.split(/\r\n|\n|\r/g);
+      const remainder = lines.pop() ?? "";
+      for (const line of lines) {
+        onLine?.(line);
+      }
+      return remainder;
+    };
+
+    const flushBufferedLine = (
+      buffer: string,
+      onLine?: (line: string) => void,
+    ): string => {
+      if (buffer.length > 0) {
+        onLine?.(buffer);
+      }
+      return "";
+    };
 
     const clearTimers = () => {
       if (timeout !== null) {
@@ -78,6 +104,8 @@ export function runCommandAsync(
       if (settled) return;
       settled = true;
       clearTimers();
+      stdoutLineBuffer = flushBufferedLine(stdoutLineBuffer, options.onStdoutLine);
+      stderrLineBuffer = flushBufferedLine(stderrLineBuffer, options.onStderrLine);
       const normalizedStdout = options.rawOutput ? stdout : stdout.trimEnd();
       const mergedStderr = extra?.stderr ?? stderr;
       const normalizedStderr = options.rawOutput
@@ -91,11 +119,15 @@ export function runCommandAsync(
     };
 
     child.stdout?.on("data", (chunk: Buffer | string) => {
-      stdout += chunk.toString();
+      const text = chunk.toString();
+      stdout += text;
+      stdoutLineBuffer = emitCompletedLines(stdoutLineBuffer, text, options.onStdoutLine);
     });
 
     child.stderr?.on("data", (chunk: Buffer | string) => {
-      stderr += chunk.toString();
+      const text = chunk.toString();
+      stderr += text;
+      stderrLineBuffer = emitCompletedLines(stderrLineBuffer, text, options.onStderrLine);
     });
 
     child.once("error", (error) => {

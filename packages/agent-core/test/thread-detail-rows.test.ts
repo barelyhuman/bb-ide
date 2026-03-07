@@ -28,6 +28,15 @@ function provisioningOperation(
     | "provisioning-completed",
   title: string,
   detail?: string,
+  options?: {
+    setup?: {
+      status: "started" | "running" | "completed" | "failed";
+      scriptPath?: string;
+      timeoutMs?: number;
+      durationMs?: number;
+      output?: string;
+    };
+  },
 ): Extract<UIMessage, { kind: "operation" }> {
   return {
     kind: "operation",
@@ -38,6 +47,7 @@ function provisioningOperation(
     createdAt: seq,
     opType,
     title,
+    ...(options?.setup ? { provisioning: { setup: { ...options.setup } } } : {}),
     ...(detail ? { detail } : {}),
   };
 }
@@ -219,6 +229,65 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
     expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms");
     expect(rows[0]?.detail).toContain("worktree • /tmp/worktree");
+  });
+
+  it("preserves streamed env-setup output when collapsing provisioning rows", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        "Environment: Git Worktree Workspace",
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup started",
+        ".bb-env-setup.sh • Timeout 600s",
+        {
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+          },
+        },
+      ),
+      provisioningOperation(
+        3,
+        "provisioning-env-setup",
+        "Environment setup running",
+        ".bb-env-setup.sh • Timeout 600s",
+        {
+          setup: {
+            status: "running",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+            output: "+ pnpm install",
+          },
+        },
+      ),
+      provisioningOperation(
+        4,
+        "provisioning-env-setup",
+        "Environment setup running",
+        ".bb-env-setup.sh • Timeout 600s",
+        {
+          setup: {
+            status: "running",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+            output: "Done in 3.2s",
+          },
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.title).toBe("Provisioning Worktree...");
+    expect(rows[0]?.provisioning?.setup?.status).toBe("running");
+    expect(rows[0]?.provisioning?.setup?.output).toBe("+ pnpm install\nDone in 3.2s");
+    expect(rows[0]?.detail).toBe("Environment: Git Worktree Workspace\n.bb-env-setup.sh • Timeout 600s");
   });
 });
 

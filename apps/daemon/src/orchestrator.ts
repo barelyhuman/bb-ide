@@ -2388,6 +2388,7 @@ export class Orchestrator implements ThreadOrchestrator {
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
     });
+    let sawSetupOutput = false;
     const runEnvironmentCommand =
       typeof environment.runAsync === "function"
         ? environment.runAsync.bind(environment)
@@ -2402,6 +2403,28 @@ export class Orchestrator implements ThreadOrchestrator {
           BB_THREAD_ID: threadId,
           BB_ENV_SETUP_TIMEOUT_MS: String(ENV_SETUP_TIMEOUT_MS),
         },
+        onStdoutLine: (line) => {
+          if (line.length === 0) return;
+          sawSetupOutput = true;
+          this._appendEnvironmentProvisioningEvent(threadId, {
+            type: "env-setup",
+            status: "running",
+            scriptPath: ENV_SETUP_SCRIPT_NAME,
+            timeoutMs: ENV_SETUP_TIMEOUT_MS,
+            detail: line,
+          });
+        },
+        onStderrLine: (line) => {
+          if (line.length === 0) return;
+          sawSetupOutput = true;
+          this._appendEnvironmentProvisioningEvent(threadId, {
+            type: "env-setup",
+            status: "running",
+            scriptPath: ENV_SETUP_SCRIPT_NAME,
+            timeoutMs: ENV_SETUP_TIMEOUT_MS,
+            detail: line,
+          });
+        },
       },
     );
     if (result.exitCode !== 0) {
@@ -2412,7 +2435,7 @@ export class Orchestrator implements ThreadOrchestrator {
         scriptPath: ENV_SETUP_SCRIPT_NAME,
         timeoutMs: ENV_SETUP_TIMEOUT_MS,
         durationMs: Date.now() - startedAt,
-        detail,
+        ...(sawSetupOutput ? {} : { detail }),
       });
       throw new Error(`${ENV_SETUP_SCRIPT_NAME} failed: ${detail}`);
     }

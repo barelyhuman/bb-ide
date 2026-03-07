@@ -4,6 +4,7 @@ import type {
   UIMessage,
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutPhase,
+  UIProvisioningSetupMetadata,
   UIThreadOperationIntentAction,
   UIThreadOperationIntentPhase,
 } from "./ui-message.js";
@@ -81,6 +82,40 @@ function parseProvisioningEnvironment(detail: string | undefined): string | unde
   return formatEnvironmentDisplayName({ id: value, displayName: value });
 }
 
+function appendProvisioningOutput(
+  existing: string | undefined,
+  incoming: string | undefined,
+): string | undefined {
+  if (!incoming) return existing;
+  if (!existing) return incoming;
+  if (existing.endsWith("\n") || incoming.startsWith("\n")) {
+    return `${existing}${incoming}`;
+  }
+  return `${existing}\n${incoming}`;
+}
+
+function mergeProvisioningSetup(
+  existing: UIProvisioningSetupMetadata | undefined,
+  incoming: UIProvisioningSetupMetadata | undefined,
+): UIProvisioningSetupMetadata | undefined {
+  if (!incoming) {
+    return existing ? { ...existing } : undefined;
+  }
+  if (!existing) {
+    return {
+      ...incoming,
+    };
+  }
+
+  return {
+    status: incoming.status,
+    scriptPath: incoming.scriptPath ?? existing.scriptPath,
+    timeoutMs: incoming.timeoutMs ?? existing.timeoutMs,
+    durationMs: incoming.durationMs ?? existing.durationMs,
+    output: appendProvisioningOutput(existing.output, incoming.output),
+  };
+}
+
 function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   const merged: UIMessage[] = [];
   let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
@@ -110,6 +145,10 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
         .filter((message) => message.opType !== "provisioning-env-setup")
         .map((message) => parseProvisioningEnvironment(message.detail))
         .find((value): value is string => Boolean(value)) ?? "environment";
+    const setup = active.reduce<UIProvisioningSetupMetadata | undefined>(
+      (acc, message) => mergeProvisioningSetup(acc, message.provisioning?.setup),
+      undefined,
+    );
 
     merged.push({
       kind: "operation",
@@ -122,6 +161,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       opType: "provisioning",
       title: hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      ...(setup ? { provisioning: { setup } } : {}),
     });
 
     active = [];

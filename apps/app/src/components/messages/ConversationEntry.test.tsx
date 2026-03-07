@@ -859,6 +859,32 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain(".bb-env-setup.sh • /tmp/worktree • Timeout 600s");
   });
 
+  it("renders streamed provisioning output with the terminal-style command block", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioning Worktree...",
+      detail:
+        "Environment: Worktree\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s",
+      provisioning: {
+        setup: {
+          status: "running",
+          scriptPath: ".bb-env-setup.sh",
+          timeoutMs: 600000,
+          output: "+ pnpm install\nDone in 3.2s",
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Output");
+    expect(html).toContain("$ bash -x ./.bb-env-setup.sh");
+    expect(html).toContain("+ pnpm install");
+    expect(html).toContain("Done in 3.2s");
+  });
+
   it("shows timeout in setup time when setup timed out", () => {
     const message: UIMessage = {
       ...baseMessage(),

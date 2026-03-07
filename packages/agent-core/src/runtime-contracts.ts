@@ -113,7 +113,7 @@ export interface ProviderAdapter {
 export type EnvironmentProvisioningEvent =
   | {
       type: "env-setup";
-      status: "started" | "completed" | "failed";
+      status: "started" | "running" | "completed" | "failed";
       scriptPath: string;
       timeoutMs?: number;
       durationMs?: number;

@@ -154,11 +154,30 @@ export interface UIPrimaryCheckoutMetadata {
   phase: UIPrimaryCheckoutPhase;
 }
 
+export type UIProvisioningSetupStatus =
+  | "started"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface UIProvisioningSetupMetadata {
+  status: UIProvisioningSetupStatus;
+  scriptPath?: string;
+  timeoutMs?: number;
+  durationMs?: number;
+  output?: string;
+}
+
+export interface UIProvisioningMetadata {
+  setup?: UIProvisioningSetupMetadata;
+}
+
 export interface UIOperationMessage extends UIMessageBase {
   kind: "operation";
   opType: string;
   title: string;
   detail?: string;
+  provisioning?: UIProvisioningMetadata;
   primaryCheckout?: UIPrimaryCheckoutMetadata;
   threadOperation?: UIThreadOperationIntentMetadata;
 }

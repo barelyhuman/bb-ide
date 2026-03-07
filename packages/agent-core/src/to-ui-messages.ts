@@ -19,6 +19,7 @@ import type {
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutMetadata,
   UIPrimaryCheckoutPhase,
+  UIProvisioningSetupStatus,
   UIToolCallMessage,
   UIToolCallSummary,
   UIToolExploringMessage,
@@ -760,6 +761,30 @@ function toToolStatus(value: unknown): UIToolCallMessage["status"] | undefined {
   return undefined;
 }
 
+function toProvisioningSetupStatus(
+  value: unknown,
+): UIProvisioningSetupStatus | undefined {
+  if (typeof value !== "string") return undefined;
+  const token = normalizeToken(value);
+  switch (token) {
+    case "started":
+      return "started";
+    case "running":
+    case "progress":
+    case "inprogress":
+      return "running";
+    case "completed":
+    case "complete":
+    case "success":
+      return "completed";
+    case "failed":
+    case "error":
+      return "failed";
+    default:
+      return undefined;
+  }
+}
+
 function extractShellCommand(value: unknown): string | undefined {
   if (typeof value === "string" && value.length > 0) return value;
 
@@ -1300,11 +1325,14 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/env_setup")) {
     const payload = toEventRecord(event.data);
-    const status = getStringField(payload, "status");
+    const rawStatus = getStringField(payload, "status");
+    const status = toProvisioningSetupStatus(rawStatus);
     const title = (() => {
       switch (status) {
         case "started":
           return "Environment setup started";
+        case "running":
+          return "Environment setup running";
         case "completed":
           return "Environment setup completed";
         case "failed":
@@ -1315,13 +1343,14 @@ function parseOperationMessage(
       }
     })();
 
+    const scriptPath = getStringField(payload, "scriptPath");
     const timeoutMs = getNumberField(payload, "timeoutMs");
     const durationMs = getNumberField(payload, "durationMs");
+    const output = getStringField(payload, "detail");
     const detailParts = [
-      getStringField(payload, "scriptPath"),
+      scriptPath,
       timeoutMs !== undefined ? `Timeout ${Math.round(timeoutMs / 1000)}s` : undefined,
       durationMs !== undefined ? `Duration ${durationMs}ms` : undefined,
-      getStringField(payload, "detail"),
     ].filter((value): value is string => Boolean(value));
 
     return {
@@ -1335,6 +1364,19 @@ function parseOperationMessage(
       opType: "provisioning-env-setup",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      ...(status
+        ? {
+            provisioning: {
+              setup: {
+                status,
+                ...(scriptPath ? { scriptPath } : {}),
+                ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                ...(durationMs !== undefined ? { durationMs } : {}),
+                ...(output ? { output } : {}),
+              },
+            },
+          }
+        : {}),
     };
   }
 

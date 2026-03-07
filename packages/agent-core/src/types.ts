@@ -220,7 +220,7 @@ export interface SystemProvisioningStartedEventData {
 }
 
 export interface SystemProvisioningEnvSetupEventData {
-  status: "started" | "completed" | "failed";
+  status: "started" | "running" | "completed" | "failed";
   scriptPath: string;
   timeoutMs?: number;
   durationMs?: number;
