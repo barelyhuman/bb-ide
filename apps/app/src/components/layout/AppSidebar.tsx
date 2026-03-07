@@ -1,7 +1,7 @@
 import type { ThreadStatus } from "@beanbag/agent-core"
 import { cn } from "@/lib/utils"
 import { Link, useLocation } from "react-router-dom"
-import { Moon, RotateCcw, Settings, Sun } from "lucide-react"
+import { Moon, Settings, Sun } from "lucide-react"
 import { toast } from "sonner"
 import {
   Sidebar,
@@ -19,7 +19,9 @@ import {
   useSystemRestartPolicy,
   useThreads,
 } from "@/hooks/useApi"
+import { useDaemonConnectionState } from "@/hooks/useWebSocket"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
+import { resolveDaemonStatusIndicatorState } from "@/lib/daemon-status-indicator"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -39,6 +41,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const { data: threads } = useThreads()
   const { data: restartPolicy } = useSystemRestartPolicy()
   const restartDaemon = useRestartDaemon()
+  const daemonConnectionState = useDaemonConnectionState()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -58,16 +61,35 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     threads?.filter((thread) => shutdownBlockingStatuses.includes(thread.status)).length ??
     0
   const cannotRestart = blockingThreadCount > 0
-  const isRestartDisabled = cannotRestart || restartDaemon.isPending
   const shouldRestart = restartPolicy?.shouldRestart === true
+  const daemonStatus = resolveDaemonStatusIndicatorState({
+    connectionState: daemonConnectionState,
+    isRestartPending: restartDaemon.isPending,
+    shouldRestart,
+  })
+  const isRestartDisabled =
+    cannotRestart ||
+    restartDaemon.isPending ||
+    daemonStatus === "reconnecting"
 
   const restartTooltip = restartDaemon.isPending
     ? "Requesting daemon restart…"
     : cannotRestart
       ? `Cannot restart while ${blockingThreadCount} thread${blockingThreadCount === 1 ? "" : "s"} ${blockingThreadCount === 1 ? "is" : "are"} active`
-      : shouldRestart
-        ? "Daemon code changed. Restart recommended"
-        : "Restart daemon"
+      : daemonStatus === "reconnecting"
+        ? "Daemon reconnecting"
+        : daemonStatus === "out-of-date"
+          ? "Daemon connected but out of date. Click to restart"
+          : "Daemon connected and up to date. Click to restart"
+
+  const daemonIndicatorClassName = {
+    "up-to-date":
+      "bg-emerald-500 ring-emerald-500/25 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]",
+    reconnecting:
+      "bg-amber-400 ring-amber-400/30 shadow-[0_0_0_4px_rgba(251,191,36,0.18)] animate-pulse",
+    "out-of-date":
+      "bg-red-500 ring-red-500/25 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]",
+  }[daemonStatus]
 
   const requestRestart = () => {
     if (isRestartDisabled) return
@@ -117,15 +139,17 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 className="w-8 justify-center p-0"
                 tooltip={restartTooltip}
                 aria-label={restartTooltip}
+                title={restartTooltip}
               >
-                <RotateCcw className={cn(restartDaemon.isPending && "animate-spin")} />
-              </SidebarMenuButton>
-              {shouldRestart ? (
                 <span
-                  className="pointer-events-none absolute right-1 top-1 inline-flex size-2 rounded-full bg-destructive"
+                  className={cn(
+                    "size-3 rounded-full ring-1 ring-inset transition-all",
+                    daemonIndicatorClassName,
+                  )}
                   aria-hidden
                 />
-              ) : null}
+                <span className="sr-only">{restartTooltip}</span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton

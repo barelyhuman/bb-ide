@@ -7,15 +7,22 @@ import type {
 
 export type ChangeCallback = (message: ChangedMessage) => void;
 export type ConnectedCallback = (event: { reconnected: boolean }) => void;
+export type ConnectionStateCallback = () => void;
+export type WebSocketConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting";
 
 class WebSocketManager {
   private socket: WebSocket | null = null;
   private subscriptions = new Set<string>();
   private callbacks = new Set<ChangeCallback>();
   private connectedCallbacks = new Set<ConnectedCallback>();
+  private connectionStateCallbacks = new Set<ConnectionStateCallback>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connected = false;
   private hasConnected = false;
+  private connectionState: WebSocketConnectionState = "connecting";
 
   connect(): void {
     if (this.socket) return;
@@ -26,6 +33,7 @@ class WebSocketManager {
     try {
       this.socket = new WebSocket(url);
     } catch {
+      this.setConnectionState(this.hasConnected ? "reconnecting" : "connecting");
       this.scheduleReconnect();
       return;
     }
@@ -34,6 +42,7 @@ class WebSocketManager {
       const reconnected = this.hasConnected;
       this.connected = true;
       this.hasConnected = true;
+      this.setConnectionState("connected");
       // Re-subscribe to all active subscriptions
       for (const key of this.subscriptions) {
         const parsed = parseSubKey(key);
@@ -61,6 +70,7 @@ class WebSocketManager {
     this.socket.onclose = () => {
       this.connected = false;
       this.socket = null;
+      this.setConnectionState(this.hasConnected ? "reconnecting" : "connecting");
       this.scheduleReconnect();
     };
 
@@ -79,6 +89,7 @@ class WebSocketManager {
       this.socket = null;
     }
     this.connected = false;
+    this.setConnectionState("connecting");
   }
 
   subscribe(entity: RealtimeEntity, id?: string): void {
@@ -111,6 +122,17 @@ class WebSocketManager {
     };
   }
 
+  onConnectionStateChange(callback: ConnectionStateCallback): () => void {
+    this.connectionStateCallbacks.add(callback);
+    return () => {
+      this.connectionStateCallbacks.delete(callback);
+    };
+  }
+
+  getConnectionState(): WebSocketConnectionState {
+    return this.connectionState;
+  }
+
   private sendMessage(msg: ClientMessage): void {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(msg));
@@ -123,6 +145,16 @@ class WebSocketManager {
       this.reconnectTimer = null;
       this.connect();
     }, 3000);
+  }
+
+  private setConnectionState(nextState: WebSocketConnectionState): void {
+    if (this.connectionState === nextState) {
+      return;
+    }
+    this.connectionState = nextState;
+    for (const callback of this.connectionStateCallbacks) {
+      callback();
+    }
   }
 }
 
