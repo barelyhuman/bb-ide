@@ -153,7 +153,6 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
 ];
 const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
 const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
-const ENV_SETUP_NOT_FOUND_EXIT_CODE = 42;
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
 const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
@@ -2366,35 +2365,45 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  private _runOptionalEnvironmentSetup(
+  private async _runOptionalEnvironmentSetup(
     threadId: string,
     environment: IEnvironment,
-  ): void {
+  ): Promise<void> {
     if (!environment.shouldRunSetupScript()) {
       return;
     }
-    const startedAt = Date.now();
-    const thread = this.threadRepo.getById(threadId);
-    const result = environment.run("bash", [
-      "-c",
-      `if [ -f "${ENV_SETUP_SCRIPT_NAME}" ]; then chmod +x "${ENV_SETUP_SCRIPT_NAME}" && bash -x "./${ENV_SETUP_SCRIPT_NAME}"; else exit ${ENV_SETUP_NOT_FOUND_EXIT_CODE}; fi`,
-    ], {
-      timeoutMs: ENV_SETUP_TIMEOUT_MS,
-      env: {
-        ...(thread?.projectId ? { BB_PROJECT_ID: thread.projectId } : {}),
-        BB_THREAD_ID: threadId,
-        BB_ENV_SETUP_TIMEOUT_MS: String(ENV_SETUP_TIMEOUT_MS),
-      },
-    });
-    if (result.exitCode === ENV_SETUP_NOT_FOUND_EXIT_CODE) {
+    const scriptPath = join(
+      environment.getWorkspaceRootUnsafe(),
+      ENV_SETUP_SCRIPT_NAME,
+    );
+    if (!existsSync(scriptPath)) {
       return;
     }
+
+    const startedAt = Date.now();
+    const thread = this.threadRepo.getById(threadId);
     this._appendEnvironmentProvisioningEvent(threadId, {
       type: "env-setup",
       status: "started",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
     });
+    const runEnvironmentCommand =
+      typeof environment.runAsync === "function"
+        ? environment.runAsync.bind(environment)
+        : async (...args: Parameters<IEnvironment["run"]>) => environment.run(...args);
+    const result = await runEnvironmentCommand(
+      "bash",
+      ["-x", `./${ENV_SETUP_SCRIPT_NAME}`],
+      {
+        timeoutMs: ENV_SETUP_TIMEOUT_MS,
+        env: {
+          ...(thread?.projectId ? { BB_PROJECT_ID: thread.projectId } : {}),
+          BB_THREAD_ID: threadId,
+          BB_ENV_SETUP_TIMEOUT_MS: String(ENV_SETUP_TIMEOUT_MS),
+        },
+      },
+    );
     if (result.exitCode !== 0) {
       const detail = (result.stderr || result.stdout || "unknown error").trim();
       this._appendEnvironmentProvisioningEvent(threadId, {

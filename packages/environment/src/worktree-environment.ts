@@ -30,7 +30,7 @@ import {
   listGitWorkspaceCommitsSinceRef,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
-import { runCommand, spawnCommand } from "./process.js";
+import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 
 export interface WorktreeEnvironmentState {
   workspaceRoot: string;
@@ -62,16 +62,6 @@ const WORKTREE_AGENT_INSTRUCTIONS = [
   "- Use the primary checkout only for manual verification when needed, then demote back to the thread worktree.",
 ].join("\n");
 
-function toChildEnv(
-  env: Record<string, string | undefined>,
-): NodeJS.ProcessEnv {
-  return env;
-}
-
-function normalizeDetail(message: string | Buffer): string {
-  return (typeof message === "string" ? message : message.toString("utf8")).trim();
-}
-
 function runGitAtPath(
   cwd: string,
   args: string[],
@@ -88,14 +78,51 @@ function runGitAtPath(
   };
 }
 
+async function runGitAtPathAsync(
+  cwd: string,
+  args: string[],
+  env: Record<string, string | undefined>,
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  const result = await runCommandAsync("git", args, {
+    cwd,
+    env,
+  });
+  return {
+    ok: result.exitCode === 0,
+    stdout: result.stdout,
+    stderr: result.stderr,
+  };
+}
+
 function hasLocalBranch(projectRoot: string, branch: string): boolean {
   return runGitAtPath(projectRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).ok;
 }
 
-function resolveWorktreeStartRef(projectRoot: string): string | undefined {
-  if (hasLocalBranch(projectRoot, "main")) return "main";
-  if (hasLocalBranch(projectRoot, "master")) return "master";
-  const headBranch = runGitAtPath(projectRoot, ["symbolic-ref", "--short", "HEAD"]);
+async function hasLocalBranchAsync(
+  projectRoot: string,
+  branch: string,
+  env: Record<string, string | undefined>,
+): Promise<boolean> {
+  return (
+    await runGitAtPathAsync(
+      projectRoot,
+      ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+      env,
+    )
+  ).ok;
+}
+
+async function resolveWorktreeStartRefAsync(
+  projectRoot: string,
+  env: Record<string, string | undefined>,
+): Promise<string | undefined> {
+  if (await hasLocalBranchAsync(projectRoot, "main", env)) return "main";
+  if (await hasLocalBranchAsync(projectRoot, "master", env)) return "master";
+  const headBranch = await runGitAtPathAsync(
+    projectRoot,
+    ["symbolic-ref", "--short", "HEAD"],
+    env,
+  );
   return headBranch.ok && headBranch.stdout.length > 0 ? headBranch.stdout : undefined;
 }
 
@@ -106,27 +133,6 @@ function toWorktreeBranchName(threadId: string): string {
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return `bb/thread-${normalized.length > 0 ? normalized : "thread"}`;
-}
-
-function summarizeSpawnSyncFailure(result: {
-  error?: Error;
-  stderr?: string | Buffer;
-  stdout?: string | Buffer;
-  status?: number | null;
-  signal?: NodeJS.Signals | null;
-}): string {
-  if (result.error?.message) return normalizeDetail(result.error.message);
-  if (result.stderr !== undefined) {
-    const stderr = normalizeDetail(result.stderr);
-    if (stderr.length > 0) return stderr;
-  }
-  if (result.stdout !== undefined) {
-    const stdout = normalizeDetail(result.stdout);
-    if (stdout.length > 0) return stdout;
-  }
-  if (result.signal) return `terminated by signal ${result.signal}`;
-  if (typeof result.status === "number") return `exited with status ${result.status}`;
-  return "unknown error";
 }
 
 function expandHomeDirectory(path: string): string {
@@ -208,6 +214,7 @@ class WorktreeEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private preparePromise: Promise<void> | null = null;
 
   constructor(
     private readonly projectRoot: string,
@@ -222,6 +229,60 @@ class WorktreeEnvironment implements IEnvironment {
 
   serialize(): WorktreeEnvironmentState {
     return { ...this.state };
+  }
+
+  async prepare(): Promise<void> {
+    if (existsSync(this.state.workspaceRoot)) {
+      return;
+    }
+    if (this.preparePromise) {
+      return this.preparePromise;
+    }
+
+    this.preparePromise = this._prepareWorkspace().finally(() => {
+      this.preparePromise = null;
+    });
+    return this.preparePromise;
+  }
+
+  private async _prepareWorkspace(): Promise<void> {
+    if (existsSync(this.state.workspaceRoot)) {
+      return;
+    }
+
+    const startRef = await resolveWorktreeStartRefAsync(this.projectRoot, this.env);
+    const branchExists = await hasLocalBranchAsync(
+      this.projectRoot,
+      this.state.branchName,
+      this.env,
+    );
+    const branchAddArgs = branchExists
+      ? ["worktree", "add", this.state.workspaceRoot, this.state.branchName]
+      : [
+          "worktree",
+          "add",
+          "-b",
+          this.state.branchName,
+          this.state.workspaceRoot,
+          ...(startRef ? [startRef] : []),
+        ];
+    const branchAddResult = await runGitAtPathAsync(
+      this.projectRoot,
+      branchAddArgs,
+      this.env,
+    );
+    const addResult = branchAddResult.ok
+      ? branchAddResult
+      : await runGitAtPathAsync(
+          this.projectRoot,
+          ["worktree", "add", "--detach", this.state.workspaceRoot],
+          this.env,
+        );
+    if (!addResult.ok) {
+      throw new Error(
+        `Failed to create worktree: ${addResult.stderr || addResult.stdout || "unknown error"}`,
+      );
+    }
   }
 
   dispose(): void {
@@ -572,6 +633,23 @@ class WorktreeEnvironment implements IEnvironment {
       ...(options?.rawOutput ? { rawOutput: true } : {}),
     });
   }
+
+  runAsync(
+    command: string,
+    args: string[],
+    options?: EnvironmentCommandOptions,
+  ) {
+    const executionContext = this._executionContext();
+    return runCommandAsync(command, args, {
+      cwd: options?.cwd ?? executionContext.cwd,
+      env: {
+        ...executionContext.env,
+        ...(options?.env ?? {}),
+      },
+      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options?.rawOutput ? { rawOutput: true } : {}),
+    });
+  }
 }
 
 export function createWorktreeEnvironmentDefinition(
@@ -599,28 +677,6 @@ export function createWorktreeEnvironmentDefinition(
       const workspaceRoot = resolve(worktreeRoot, context.threadId);
       const branchName = toWorktreeBranchName(context.threadId);
       mkdirSync(worktreeRoot, { recursive: true });
-
-      if (!existsSync(workspaceRoot)) {
-        const startRef = resolveWorktreeStartRef(projectRoot);
-        const branchAddArgs = hasLocalBranch(projectRoot, branchName)
-          ? ["worktree", "add", workspaceRoot, branchName]
-          : ["worktree", "add", "-b", branchName, workspaceRoot, ...(startRef ? [startRef] : [])];
-        const branchAddResult = spawnSync("git", branchAddArgs, {
-          cwd: projectRoot,
-          env: toChildEnv(context.runtimeEnv),
-          stdio: "pipe",
-        });
-        const addResult = branchAddResult.status === 0
-          ? branchAddResult
-          : spawnSync("git", ["worktree", "add", "--detach", workspaceRoot], {
-              cwd: projectRoot,
-              env: toChildEnv(context.runtimeEnv),
-              stdio: "pipe",
-            });
-        if (addResult.status !== 0) {
-          throw new Error(`Failed to create worktree: ${summarizeSpawnSyncFailure(addResult)}`);
-        }
-      }
 
       return new WorktreeEnvironment(
         projectRoot,

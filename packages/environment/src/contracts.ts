@@ -58,6 +58,7 @@ export interface IEnvironment {
   readonly info: EnvironmentInfo;
 
   serialize(): unknown;
+  prepare?(): Promise<void>;
   dispose(): void;
   exists(): boolean;
   supportsHostFilesystemAccess(): boolean;
@@ -89,6 +90,11 @@ export interface IEnvironment {
     args: string[],
     options?: EnvironmentCommandOptions,
   ): EnvironmentCommandResult;
+  runAsync?(
+    command: string,
+    args: string[],
+    options?: EnvironmentCommandOptions,
+  ): Promise<EnvironmentCommandResult>;
 }
 
 export interface EnvironmentCheckoutSnapshot {

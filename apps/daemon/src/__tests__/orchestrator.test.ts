@@ -921,6 +921,162 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("emits env-setup started before optional setup finishes", async () => {
+      const workspaceRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-env-setup-"));
+      writeFileSync(
+        join(workspaceRoot, ".bb-env-setup.sh"),
+        "#!/usr/bin/env sh\nsleep 0\n",
+        "utf8",
+      );
+
+      let resolveSetup:
+        | ((result: { exitCode: number; stdout: string; stderr: string }) => void)
+        | undefined;
+      const setupResult = new Promise<{ exitCode: number; stdout: string; stderr: string }>(
+        (resolve) => {
+          resolveSetup = resolve;
+        },
+      );
+      const info: SystemEnvironmentInfo = {
+        id: "worktree",
+        displayName: "Git Worktree Workspace",
+        description: "",
+        capabilities: {
+          host_filesystem: true,
+          isolated_workspace: true,
+          promote_primary_checkout: true,
+          demote_primary_checkout: true,
+          squash_merge: true,
+        },
+      };
+      const customEnvironmentRegistry = new EnvironmentRegistry().register({
+        kind: "worktree",
+        info,
+        create(): IEnvironment {
+          return makeRuntimeEnvironment({
+            kind: "worktree",
+            rootPath: workspaceRoot,
+            overrides: {
+              info,
+              shouldRunSetupScript() {
+                return true;
+              },
+              runAsync: vi.fn().mockImplementation(async () => setupResult),
+              run: vi.fn().mockReturnValue({
+                exitCode: 0,
+                stdout: "",
+                stderr: "",
+              }),
+            },
+          });
+        },
+        restore(_state: unknown): IEnvironment {
+          return this.create({
+            projectId: "proj-1",
+            threadId: "t-new",
+            projectRootPath: "/test",
+            runtimeEnv: {},
+          });
+        },
+        isState(_value: unknown): _value is unknown {
+          return true;
+        },
+      });
+      const managerWithCustomEnvironment = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        createCodexProviderAdapter(),
+        process.env,
+        customEnvironmentRegistry,
+      );
+
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "t-new",
+          status: "created",
+          environmentId: "worktree",
+        }),
+      );
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
+        id === "t-new"
+          ? makeThread({
+              id: "t-new",
+              projectId: "proj-1",
+              status: "provisioning",
+              environmentId: "worktree",
+            })
+          : undefined,
+      );
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+        makeEvent({
+          threadId: event.threadId,
+          seq: event.seq,
+          type: event.type as string,
+          data: event.data,
+        }),
+      );
+
+      try {
+        await managerWithCustomEnvironment.spawn({
+          projectId: "proj-1",
+          environmentId: "worktree",
+        });
+
+        await vi.waitFor(() => {
+          expect(eventRepo.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+              threadId: "t-new",
+              type: "system/provisioning/env_setup",
+              data: expect.objectContaining({
+                status: "started",
+              }),
+            }),
+          );
+        });
+
+        expect(eventRepo.create).not.toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/env_setup",
+            data: expect.objectContaining({
+              status: "completed",
+            }),
+          }),
+        );
+
+        resolveSetup?.({
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+        });
+
+        await vi.waitFor(() => {
+          expect(eventRepo.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+              threadId: "t-new",
+              type: "system/provisioning/env_setup",
+              data: expect.objectContaining({
+                status: "completed",
+              }),
+            }),
+          );
+        });
+      } finally {
+        rmSync(workspaceRoot, { recursive: true, force: true });
+      }
+    });
+
     it("prepends bb path to PATH and injects it into thread/start config", async () => {
       const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-"));
       const firstBin = join(tmpRoot, "first-bin");

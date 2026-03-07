@@ -39,7 +39,7 @@ describe("EnvironmentRegistry", () => {
     expect(registry.list().map((item) => item.id)).toEqual(["local"]);
   });
 
-  it("restores worktree environments from persisted state", () => {
+  it("restores worktree environments from persisted state", async () => {
     const projectRoot = makeTempDir("bb-env-project-");
     const worktreeRoot = join(projectRoot, ".worktrees");
 
@@ -62,6 +62,7 @@ describe("EnvironmentRegistry", () => {
         projectRootPath: projectRoot,
         runtimeEnv: {},
       });
+      await environment.prepare?.();
       const restored = registry.restore(
         {
           kind: "worktree",

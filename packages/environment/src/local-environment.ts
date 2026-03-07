@@ -27,7 +27,7 @@ import {
   listGitWorkspaceCommitsSinceRef,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
-import { runCommand, spawnCommand } from "./process.js";
+import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 
 interface LocalEnvironmentState {}
 
@@ -60,6 +60,8 @@ class LocalEnvironment implements IEnvironment {
   serialize(): LocalEnvironmentState {
     return {};
   }
+
+  async prepare(): Promise<void> {}
 
   dispose(): void {}
 
@@ -188,6 +190,23 @@ class LocalEnvironment implements IEnvironment {
   ) {
     const executionContext = this._executionContext();
     return runCommand(command, args, {
+      cwd: options?.cwd ?? executionContext.cwd,
+      env: {
+        ...executionContext.env,
+        ...(options?.env ?? {}),
+      },
+      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options?.rawOutput ? { rawOutput: true } : {}),
+    });
+  }
+
+  runAsync(
+    command: string,
+    args: string[],
+    options?: EnvironmentCommandOptions,
+  ) {
+    const executionContext = this._executionContext();
+    return runCommandAsync(command, args, {
       cwd: options?.cwd ?? executionContext.cwd,
       env: {
         ...executionContext.env,

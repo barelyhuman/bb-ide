@@ -44,7 +44,7 @@ interface EnvironmentServiceCallbacks {
     threadId: string;
     currentCheckout: EnvironmentCheckoutSnapshot;
   }) => void;
-  runOptionalSetup: (threadId: string, environment: IEnvironment) => void;
+  runOptionalSetup: (threadId: string, environment: IEnvironment) => Promise<void>;
   spawnProviderProcess: (args: {
     threadId: string;
     projectId?: string;
@@ -151,7 +151,20 @@ export class EnvironmentService {
       environmentKind,
       this.callbacks.createContext(threadId, projectRootPath),
     );
-    this.callbacks.runOptionalSetup(threadId, environment);
+    try {
+      if (typeof environment.prepare === "function") {
+        await environment.prepare();
+      }
+      await this.callbacks.runOptionalSetup(threadId, environment);
+    } catch (error) {
+      try {
+        environment.dispose();
+      } catch {
+        // Best-effort cleanup for partially provisioned environments.
+      }
+      throw error;
+    }
+
     this.setEnvironmentRuntime(threadId, environment);
     const thread = this.threadRepo.getById(threadId);
     const runtime = this.environmentRuntimes.get(threadId);

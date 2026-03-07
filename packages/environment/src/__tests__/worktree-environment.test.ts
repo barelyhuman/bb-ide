@@ -24,7 +24,7 @@ function git(cwd: string, ...args: string[]): string {
   }).trim();
 }
 
-function createRepoWithThreadAheadOfMain() {
+async function createRepoWithThreadAheadOfMain() {
   const repoRoot = makeTempDir();
   const suffix = randomUUID();
   git(repoRoot, "init");
@@ -42,6 +42,7 @@ function createRepoWithThreadAheadOfMain() {
     projectRootPath: repoRoot,
     runtimeEnv: {},
   });
+  await environment.prepare?.();
   environments.push(environment);
 
   writeFileSync(
@@ -65,8 +66,8 @@ afterEach(() => {
 });
 
 describe("WorktreeEnvironment", () => {
-  it("rejects promotion when the active workspace is dirty", () => {
-    const { repoRoot, environment } = createRepoWithThreadAheadOfMain();
+  it("rejects promotion when the active workspace is dirty", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
 
     writeFileSync(join(repoRoot, "README.md"), "initial\nmain dirty change\n", "utf8");
 
@@ -79,8 +80,8 @@ describe("WorktreeEnvironment", () => {
     );
   });
 
-  it("rejects promotion when the worktree is dirty", () => {
-    const { repoRoot, environment } = createRepoWithThreadAheadOfMain();
+  it("rejects promotion when the worktree is dirty", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
 
     writeFileSync(
       join(environment.getWorkspaceRootUnsafe(), "README.md"),
@@ -98,7 +99,7 @@ describe("WorktreeEnvironment", () => {
   });
 
   it("uses a resolved squash message when no explicit message is provided", async () => {
-    const { repoRoot, environment } = createRepoWithThreadAheadOfMain();
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
     const resolveMessage = vi
       .fn()
       .mockImplementation(async ({ tempWorkspaceRoot }: { tempWorkspaceRoot: string }) => {
@@ -120,7 +121,7 @@ describe("WorktreeEnvironment", () => {
   });
 
   it("falls back to the default squash message when resolution fails", async () => {
-    const { repoRoot, environment } = createRepoWithThreadAheadOfMain();
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
     const resolveMessage = vi.fn().mockRejectedValue(new Error("generation failed"));
 
     const result = await environment.squashMergeIntoDefaultBranch({
@@ -137,7 +138,7 @@ describe("WorktreeEnvironment", () => {
   });
 
   it("prefers explicit squash messages over resolved messages", async () => {
-    const { repoRoot, environment } = createRepoWithThreadAheadOfMain();
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
     const resolveMessage = vi.fn();
 
     const result = await environment.squashMergeIntoDefaultBranch({
