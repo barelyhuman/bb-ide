@@ -539,6 +539,21 @@ function trimDiffForResponse(diff: string): EnvironmentWorkspaceDiffResult {
   };
 }
 
+function normalizeResolvedCleanStatus(status: EnvironmentWorkStatus): EnvironmentWorkStatus {
+  if (status.hasUncommittedChanges || status.hasCommittedUnmergedChanges) {
+    return status;
+  }
+
+  return {
+    ...status,
+    state: "clean",
+    changedFiles: 0,
+    insertions: 0,
+    deletions: 0,
+    files: [],
+  };
+}
+
 function parseCommitSummaries(raw: string): EnvironmentCommitSummary[] {
   if (!raw) return [];
   return raw
@@ -679,7 +694,7 @@ export function getGitWorkspaceStatus(
     aheadCount,
   });
 
-  return {
+  return normalizeResolvedCleanStatus({
     state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
     changedFiles: mergeBaseDiff.changedFiles,
     insertions: mergeBaseDiff.insertions,
@@ -697,7 +712,7 @@ export function getGitWorkspaceStatus(
     ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
     ...(baseRef ? { baseRef } : {}),
     files,
-  };
+  });
 }
 
 export function watchGitWorkspaceStatus(

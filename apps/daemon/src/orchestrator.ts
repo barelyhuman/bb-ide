@@ -1525,7 +1525,11 @@ export class Orchestrator implements ThreadOrchestrator {
         ? selection
         : { type: "combined" };
       const diffResult =
-        normalizedSelection.type === "commit"
+        normalizedSelection.type === "combined" &&
+        !status.hasUncommittedChanges &&
+        !status.hasCommittedUnmergedChanges
+          ? { diff: "", truncated: false }
+          : normalizedSelection.type === "commit"
           ? environment.getWorkspaceDiff({
               type: "commit",
               commitSha: normalizedSelection.sha,

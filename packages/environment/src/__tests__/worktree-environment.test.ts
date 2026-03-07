@@ -191,6 +191,10 @@ describe("WorktreeEnvironment", () => {
     expect(status.aheadCount).toBeGreaterThan(0);
     expect(status.hasCommittedUnmergedChanges).toBe(false);
     expect(status.state).toBe("clean");
+    expect(status.changedFiles).toBe(0);
+    expect(status.insertions).toBe(0);
+    expect(status.deletions).toBe(0);
+    expect(status.files).toEqual([]);
   });
 
   it("keeps squash-merged branches clean after main later changes the same file", async () => {
@@ -208,5 +212,9 @@ describe("WorktreeEnvironment", () => {
     expect(status.behindCount).toBe(2);
     expect(status.hasCommittedUnmergedChanges).toBe(false);
     expect(status.state).toBe("clean");
+    expect(status.changedFiles).toBe(0);
+    expect(status.insertions).toBe(0);
+    expect(status.deletions).toBe(0);
+    expect(status.files).toEqual([]);
   });
 });

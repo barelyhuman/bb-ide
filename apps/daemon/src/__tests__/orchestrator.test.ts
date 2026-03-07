@@ -40,7 +40,9 @@ import { Orchestrator } from "../orchestrator.js";
 import type { EnvironmentService } from "../environment-service.js";
 import { WSManager } from "../ws.js";
 
-function makeWorkspaceStatus(): ThreadWorkStatus {
+function makeWorkspaceStatus(
+  overrides: Partial<ThreadWorkStatus> = {},
+): ThreadWorkStatus {
   return {
     state: "clean",
     changedFiles: 0,
@@ -54,6 +56,7 @@ function makeWorkspaceStatus(): ThreadWorkStatus {
     aheadCount: 0,
     behindCount: 0,
     files: [],
+    ...overrides,
   };
 }
 
@@ -4377,6 +4380,128 @@ describe("Orchestrator", () => {
       });
 
       resolveCleanup?.();
+    });
+  });
+
+  describe("getGitDiff()", () => {
+    it("suppresses combined diffs for squash-resolved clean worktrees", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      const getWorkspaceDiff = vi.fn().mockReturnValue({
+        diff: "diff --git a/file b/file",
+        truncated: false,
+      });
+      const environment = makeRuntimeEnvironment({
+        rootPath: "/tmp/worktrees/proj-1/thread-1",
+        overrides: {
+          getWorkspaceStatus() {
+            return makeWorkspaceStatus({
+              state: "clean",
+              changedFiles: 2,
+              insertions: 10,
+              deletions: 3,
+              hasCommittedUnmergedChanges: false,
+              hasUncommittedChanges: false,
+              aheadCount: 1,
+            });
+          },
+          listWorkspaceCommitsSinceRef() {
+            return [
+              {
+                sha: "abc123",
+                shortSha: "abc123",
+                subject: "squashed commit",
+              },
+            ];
+          },
+          getWorkspaceDiff,
+        },
+      });
+
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment,
+      });
+
+      const result = manager.getGitDiff("thread-1");
+
+      expect(result).toMatchObject({
+        mode: "worktree_commits",
+        selection: { type: "combined" },
+        diff: "",
+        truncated: false,
+      });
+      expect(getWorkspaceDiff).not.toHaveBeenCalled();
+    });
+
+    it("still returns commit diffs for explicit commit selection", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      const getWorkspaceDiff = vi.fn().mockReturnValue({
+        diff: "diff --git a/file b/file",
+        truncated: false,
+      });
+      const environment = makeRuntimeEnvironment({
+        rootPath: "/tmp/worktrees/proj-1/thread-1",
+        overrides: {
+          getWorkspaceStatus() {
+            return makeWorkspaceStatus({
+              hasCommittedUnmergedChanges: false,
+              hasUncommittedChanges: false,
+              aheadCount: 1,
+              baseRef: "main",
+            });
+          },
+          listWorkspaceCommitsSinceRef() {
+            return [
+              {
+                sha: "abc123",
+                shortSha: "abc123",
+                subject: "squashed commit",
+              },
+            ];
+          },
+          getWorkspaceDiff,
+        },
+      });
+
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment,
+      });
+
+      const result = manager.getGitDiff("thread-1", {
+        type: "commit",
+        sha: "abc123",
+      });
+
+      expect(result.diff).toBe("diff --git a/file b/file");
+      expect(getWorkspaceDiff).toHaveBeenCalledWith({
+        type: "commit",
+        commitSha: "abc123",
+      });
     });
   });
 
