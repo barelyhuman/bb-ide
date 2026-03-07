@@ -8,7 +8,8 @@ This document is the Phase 5 contract catalog for package boundaries.
 - `@beanbag/ui-core`: no internal runtime dependencies.
 - `@beanbag/agent-server` -> `@beanbag/agent-core`.
 - `@beanbag/db` -> `@beanbag/agent-core`.
-- `@beanbag/daemon` -> `@beanbag/agent-core`, `@beanbag/agent-server`, `@beanbag/db`.
+- `@beanbag/environment` -> `@beanbag/agent-core`.
+- `@beanbag/daemon` -> `@beanbag/agent-core`, `@beanbag/environment`, `@beanbag/agent-server`, `@beanbag/db`.
 - `@beanbag/app` -> `@beanbag/agent-core`, `@beanbag/ui-core`.
 - `@beanbag/cli` -> `@beanbag/agent-core`, `@beanbag/daemon`.
 
@@ -33,15 +34,19 @@ No other cross-package runtime imports are allowed.
 
 ### `@beanbag/agent-server`
 
-- Provider adapter registry and implementations (`codex`, `pi-mono`, `claude-code`).
+- Provider adapter registry and implementations (`codex`).
 - Provider runtime (`ProviderRuntime`) and RPC lifecycle errors.
+
+### `@beanbag/environment`
+
 - Environment adapter registry and implementations (`local`, `worktree`).
+- Workspace/process helpers used by daemon orchestration.
 
 ### `@beanbag/db`
 
 - Database connection and migration entrypoints.
 - Repositories: `ProjectRepository`, `ThreadRepository`, `EventRepository`.
-- Schema exports for `projects`, `threads`, `events`.
+- Schema exports for `projects`, `threads`, `queued_thread_messages`, `events`.
 
 ### `@beanbag/daemon`
 
@@ -56,11 +61,12 @@ No other cross-package runtime imports are allowed.
 ### `@beanbag/app`
 
 - Product composition shell over `agent-core` + `ui-core` contracts.
+- React app shell, thread timeline, prompt composer, and settings views.
 
 ## Boundary Ownership
 
 - `closed_internal` (Beanbag-owned, exhaustive handling expected):
-  - app-defined thread events (`client/thread/start`, `client/turn/start`, `system/error`)
+  - app-defined thread events (`client/thread/start`, `client/turn/start`, `system/*`)
   - thread status unions
   - API error code unions
 - `open_external` (provider/runtime-owned, tolerant fallback expected):

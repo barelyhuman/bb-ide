@@ -9,6 +9,7 @@ Source of truth: `packages/db/src/schema.ts` and `packages/db/src/repositories.t
 - `id` (PK)
 - `name` (not null)
 - `root_path` (not null)
+- `project_instructions` (nullable)
 - `created_at` (not null)
 - `updated_at` (not null)
 
@@ -20,14 +21,18 @@ Ownership: `ProjectRepository`.
 - `project_id` (FK -> `projects.id`)
 - `title` (nullable)
 - `status` (not null, default `created`)
+- `environment_id` (nullable)
+- `environment_record` (nullable JSON string)
 - `parent_thread_id` (nullable)
 - `archived_at` (nullable)
+- `last_read_at` (not null, default `0`)
 - `created_at` (not null)
 - `updated_at` (not null)
 
 Indexes:
 
 - `threads_project_updated_idx (project_id, updated_at)`
+- `threads_environment_idx (environment_id)`
 - `threads_parent_thread_idx (parent_thread_id)`
 
 Ownership: `ThreadRepository`.
@@ -36,6 +41,29 @@ Status invariant (`closed_internal`):
 
 - Valid values: `created`, `provisioning`, `provisioning_failed`, `idle`, `active`.
 - Invalid persisted values throw on read.
+
+## `queued_thread_messages`
+
+- `seq` (PK, auto increment)
+- `id` (unique)
+- `thread_id` (FK -> `threads.id`, cascade delete)
+- `input` (JSON string, not null)
+- `model` (nullable)
+- `reasoning_level` (not null)
+- `sandbox_mode` (not null)
+- `created_at` (not null)
+
+Indexes:
+
+- `queued_thread_messages_thread_seq_idx (thread_id, seq)`
+- `queued_thread_messages_thread_created_idx (thread_id, created_at)`
+
+Ownership: `ThreadRepository`.
+
+Invariants:
+
+- persisted `input` must decode through `promptInputSchema[]`
+- invalid persisted reasoning/sandbox values throw on read
 
 ## `events`
 

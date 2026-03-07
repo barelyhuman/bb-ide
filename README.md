@@ -9,12 +9,14 @@ and a CLI.
 ```text
 apps/
   daemon/   Hono REST + WebSocket server, provider runtime orchestration
-  web/      React + Vite frontend
+  app/      React + Vite frontend
   cli/      bb CLI for daemon/thread operations
 packages/
-  core/     Shared contracts/types/schemas + event -> UI message projection
-  ui-core/  Reusable ADE UI primitives (layout, timeline, prompt shell, panels)
-  db/       Drizzle schema, migrations, repositories (SQLite)
+  agent-core/   Shared contracts/types/schemas + event -> UI message projection
+  agent-server/ Provider adapter runtime and Codex integration
+  environment/  Execution environment adapters and workspace lifecycle
+  ui-core/      Reusable ADE UI primitives (layout, timeline, prompt shell, panels)
+  db/           Drizzle schema, migrations, repositories (SQLite)
 ```
 
 ## Quick Start
@@ -30,7 +32,7 @@ Endpoints:
 - API base: `http://localhost:3333/api/v1`
 - WebSocket: `ws://localhost:3333/ws`
 
-`apps/app` dev server proxies `/api` and `/ws` to daemon `:3333`.
+`apps/app` proxies `/api` and `/ws` to the daemon on `:3333` in development.
 
 ## CLI and Daemon Run Modes
 
@@ -57,7 +59,7 @@ pnpm bb --help
 
 Notes:
 
-- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/agent-server`, `@beanbag/ui-core`, `@beanbag/db`, `@beanbag/daemon`, and `@beanbag/cli`.
+- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/agent-server`, `@beanbag/environment`, `@beanbag/ui-core`, `@beanbag/db`, `@beanbag/daemon`, `@beanbag/app`, and `@beanbag/cli`.
 - `pnpm dev` starts the daemon on `:3333`.
 - CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
 

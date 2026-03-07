@@ -39,16 +39,22 @@ Notes:
 - `client/thread/start` -> `ClientOutboundStartEventData`
 - `client/turn/start` -> `ClientOutboundStartEventData`
 - `system/error` -> `SystemErrorEventData`
+- `system/thread-title/updated` -> `SystemThreadTitleUpdatedEventData`
 - `system/thread_operation` -> `SystemThreadOperationEventData`
 - `system/primary_checkout/updated` -> `SystemPrimaryCheckoutUpdatedEventData`
 - `system/worktree/commit` -> `SystemWorktreeCommitEventData`
 - `system/worktree/squash_merge` -> `SystemWorktreeSquashMergeEventData`
+- `system/provisioning/started` -> `SystemProvisioningStartedEventData`
+- `system/provisioning/env_setup` -> `SystemProvisioningEnvSetupEventData`
+- `system/provisioning/fallback` -> `SystemProvisioningFallbackEventData`
+- `system/provisioning/completed` -> `SystemProvisioningCompletedEventData`
+- `system/provisioning/cleanup_failed` -> `SystemProvisioningCleanupFailedEventData`
 
 These are Beanbag-owned and must stay exhaustively handled.
 
 ## Provider Notification Methods (Current Generated Set)
 
-From `ServerNotification["method"]` in generated codex schema:
+From `ServerNotification["method"]` in generated codex schema (`packages/agent-core/src/generated/codex-app-server/schema/ServerNotification.ts`):
 
 - `error`
 - `thread/started`
