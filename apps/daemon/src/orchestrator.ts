@@ -1223,6 +1223,18 @@ export class Orchestrator implements ThreadOrchestrator {
           includeUnstaged: false,
         }),
     });
+    if (mergeResult.prepCommit) {
+      this._appendEvent(thread.id, "system/worktree/commit", {
+        status: "committed",
+        message: mergeResult.prepCommit.message,
+        ...(mergeResult.prepCommit.commitSha
+          ? { commitSha: mergeResult.prepCommit.commitSha }
+          : {}),
+        ...(mergeResult.prepCommit.includeUnstaged !== undefined
+          ? { includeUnstaged: mergeResult.prepCommit.includeUnstaged }
+          : {}),
+      }, { broadcastChanges: ["events-appended", "work-status-changed"] });
+    }
     this._appendEvent(thread.id, "system/worktree/squash_merge", {
       status: mergeResult.merged
         ? "merged"

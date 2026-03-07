@@ -446,6 +446,13 @@ class WorktreeEnvironment implements IEnvironment {
       throw new Error(statusResult.stderr || "Failed to inspect worktree status");
     }
     let committed = false;
+    let prepCommit:
+      | {
+          message: string;
+          commitSha?: string;
+          includeUnstaged?: boolean;
+        }
+      | undefined;
     if (statusResult.stdout.trim().length > 0) {
       if (args.commitIfNeeded !== true) {
         throw new Error("Workspace has uncommitted changes; commit first");
@@ -456,6 +463,15 @@ class WorktreeEnvironment implements IEnvironment {
         includeUnstaged: args.includeUnstaged,
       });
       committed = commitResult.commitCreated;
+      if (commitResult.commitCreated) {
+        prepCommit = {
+          message: commitResult.message,
+          ...(commitResult.commitSha ? { commitSha: commitResult.commitSha } : {}),
+          ...(commitResult.includeUnstaged !== undefined
+            ? { includeUnstaged: commitResult.includeUnstaged }
+            : {}),
+        };
+      }
     }
     if (hasLocalWorkingChanges(args.activeWorkspaceRoot)) {
       throw new Error(
@@ -520,6 +536,7 @@ class WorktreeEnvironment implements IEnvironment {
           message:
             `Squash merge has conflicts against ${mergeBaseBranch}. Rebase/merge ${mergeBaseBranch} into the worktree, resolve conflicts, and retry.`,
           committed,
+          ...(prepCommit ? { prepCommit } : {}),
           ...(conflictFiles.ok && conflictFiles.stdout
             ? {
                 conflictFiles: conflictFiles.stdout
@@ -537,7 +554,12 @@ class WorktreeEnvironment implements IEnvironment {
         "--quiet",
       ]);
       if (hasSquashedChanges.ok) {
-        return { merged: false, message: "No changes to merge after squash", committed };
+        return {
+          merged: false,
+          message: "No changes to merge after squash",
+          committed,
+          ...(prepCommit ? { prepCommit } : {}),
+        };
       }
 
       const sourceBranch = runGitAtPath(this.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
@@ -574,18 +596,6 @@ class WorktreeEnvironment implements IEnvironment {
         throw new Error("Failed to resolve squashed merge commit");
       }
 
-      const updateRef = runGitAtPath(args.activeWorkspaceRoot, [
-        "update-ref",
-        `refs/heads/${mergeBaseBranch}`,
-        mergedHead.stdout,
-        defaultHead.stdout,
-      ]);
-      if (!updateRef.ok) {
-        throw new Error(
-          updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
-        );
-      }
-
       if (currentProjectBranch.ok && currentProjectBranch.stdout === mergeBaseBranch) {
         const resetResult = runGitAtPath(args.activeWorkspaceRoot, [
           "reset",
@@ -597,12 +607,25 @@ class WorktreeEnvironment implements IEnvironment {
             resetResult.stderr || `Squash merged into ${mergeBaseBranch}, but failed to refresh checkout`,
           );
         }
+      } else {
+        const updateRef = runGitAtPath(args.activeWorkspaceRoot, [
+          "update-ref",
+          `refs/heads/${mergeBaseBranch}`,
+          mergedHead.stdout,
+          defaultHead.stdout,
+        ]);
+        if (!updateRef.ok) {
+          throw new Error(
+            updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
+          );
+        }
       }
 
       return {
         merged: true,
         message: `Squash-merged into ${mergeBaseBranch}`,
         committed,
+        ...(prepCommit ? { prepCommit } : {}),
       };
     } finally {
       runGitAtPath(args.activeWorkspaceRoot, [

@@ -5676,6 +5676,84 @@ describe("Orchestrator", () => {
         expect(scheduleFollowUpSpy).toHaveBeenCalledWith("thread-1");
         expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
       });
+
+      it("emits a commit event when squash merge creates a prep commit", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Test",
+          rootPath: "/tmp/proj-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          threadId: "thread-1",
+          projectId: "proj-1",
+          rootPath: "/tmp/proj-1",
+          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
+          branchName: "bb/thread-1",
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-1",
+            overrides: {
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
+              async squashMergeIntoDefaultBranch() {
+                return {
+                  merged: true,
+                  message: "Squash-merged into main",
+                  committed: true,
+                  prepCommit: {
+                    message: "Committed changes",
+                    commitSha: "abc123",
+                    includeUnstaged: true,
+                  },
+                };
+              },
+            },
+          }),
+        });
+
+        await (asOrchestratorHarness(manager) as any)._runWorktreeSquashMergeOperation("thread-1", {
+          mergeBaseBranch: "main",
+        });
+
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/worktree/commit",
+            data: expect.objectContaining({
+              status: "committed",
+              message: "Committed changes",
+              commitSha: "abc123",
+              includeUnstaged: true,
+            }),
+          }),
+        );
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/worktree/squash_merge",
+            data: expect.objectContaining({
+              status: "merged",
+              message: "Squash-merged into main",
+            }),
+          }),
+        );
+      });
     });
 
   });

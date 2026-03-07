@@ -231,6 +231,11 @@ export interface EnvironmentSquashMergeResult {
   merged: boolean;
   message: string;
   committed?: boolean;
+  prepCommit?: {
+    message: string;
+    commitSha?: string;
+    includeUnstaged?: boolean;
+  };
   conflictFiles?: string[];
 }
 

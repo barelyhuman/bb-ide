@@ -167,6 +167,34 @@ describe("WorktreeEnvironment", () => {
     );
   });
 
+  it("reports the prep commit created during commit-and-squash flows", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
+    writeFileSync(
+      join(environment.getWorkspaceRootUnsafe(), "README.md"),
+      "initial\nthread change\nthread unstaged change\n",
+      "utf8",
+    );
+
+    const result = await environment.squashMergeIntoDefaultBranch({
+      activeWorkspaceRoot: repoRoot,
+      defaultBranch: "main",
+      commitIfNeeded: true,
+      commitMessage: "chore: prep thread changes",
+      includeUnstaged: true,
+    });
+
+    expect(result.merged).toBe(true);
+    expect(result.committed).toBe(true);
+    expect(result.prepCommit).toEqual(
+      expect.objectContaining({
+        message: "Committed changes",
+        includeUnstaged: true,
+        commitSha: expect.any(String),
+      }),
+    );
+    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toContain("squash merge");
+  });
+
   it("reports committed branch work before the thread is merged", async () => {
     const { environment } = await createRepoWithThreadAheadOfMain();
 

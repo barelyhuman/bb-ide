@@ -52,7 +52,8 @@ describe("buildThreadOperationInstruction", () => {
 
     expect(prompt).toContain("Squash merge to main failed with conflicts.");
     expect(prompt).toContain("Conflicted files: src/app.ts, README.md.");
-    expect(prompt).toContain("Please resolve them and try the squash merge again.");
-    expect(prompt).toContain("whether the retry succeeded");
+    expect(prompt).toContain("Please rebase this branch onto main, resolve the conflicts");
+    expect(prompt).toContain("retry the squash merge so the changes land on main");
+    expect(prompt).toContain("whether the squash-merge retry succeeded");
   });
 });
