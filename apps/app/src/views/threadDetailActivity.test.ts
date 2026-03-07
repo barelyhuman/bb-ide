@@ -159,4 +159,60 @@ describe("threadDetailActivity", () => {
 
     expect(findLatestActivityMessageId(messages)).toBe("error-1");
   });
+
+  it("treats trailing provisioning rows as latest activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "assistant-1",
+        message: {
+          ...baseMessage("assistant-1", 1),
+          kind: "assistant-text",
+          turnId: "turn-1",
+          text: "setting things up",
+          status: "completed",
+        },
+      },
+      {
+        kind: "message",
+        id: "provisioning-1",
+        message: {
+          ...baseMessage("provisioning-1", 2),
+          kind: "operation",
+          turnId: "turn-1",
+          opType: "provisioning",
+          title: "Provisioning Worktree...",
+          detail: "Environment: Git Worktree Workspace",
+        },
+      },
+    ];
+
+    const latestActivityRowId = findLatestActivityRowId(rows);
+    expect(latestActivityRowId).toBe("provisioning-1");
+    expect(shouldHighlightLatestActivity(rows, latestActivityRowId)).toBe(true);
+  });
+
+  it("returns the latest provisioning operation message id within a group", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("tool-1", 1),
+        kind: "tool-call",
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "ls",
+        status: "completed",
+      },
+      {
+        ...baseMessage("provisioning-1", 2),
+        kind: "operation",
+        turnId: "turn-1",
+        opType: "provisioning",
+        title: "Provisioning Worktree...",
+        detail: "Environment: Git Worktree Workspace",
+      },
+    ];
+
+    expect(findLatestActivityMessageId(messages)).toBe("provisioning-1");
+  });
 });

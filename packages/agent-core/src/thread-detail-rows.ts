@@ -152,7 +152,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
 
     merged.push({
       kind: "operation",
-      id: `${first.id}:provisioning:${last.id}`,
+      id: first.id,
       threadId: first.threadId,
       sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
       sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),

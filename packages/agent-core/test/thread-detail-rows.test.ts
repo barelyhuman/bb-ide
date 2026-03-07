@@ -231,6 +231,55 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.detail).toContain("worktree • /tmp/worktree");
   });
 
+  it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {
+    const startedRows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        "Environment: Git Worktree Workspace",
+      ),
+    ]);
+    const mergedRows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        "Environment: Git Worktree Workspace",
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup started",
+        ".bb-env-setup.sh • Timeout 600s",
+        {
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+          },
+        },
+      ),
+      provisioningOperation(
+        3,
+        "provisioning-env-setup",
+        "Environment setup running",
+        ".bb-env-setup.sh • Timeout 600s",
+        {
+          setup: {
+            status: "running",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+            output: "+ pnpm install",
+          },
+        },
+      ),
+    ]);
+
+    expect(startedRows[0]?.id).toBe("provisioning-1");
+    expect(mergedRows[0]?.id).toBe("provisioning-1");
+  });
+
   it("preserves streamed env-setup output when collapsing provisioning rows", () => {
     const rows = getOperationRows([
       provisioningOperation(

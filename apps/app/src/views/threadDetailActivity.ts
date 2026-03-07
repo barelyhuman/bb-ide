@@ -1,13 +1,31 @@
 import type { UIMessage } from "@beanbag/agent-core";
 import type { ThreadDetailRow } from "./threadDetailRows";
 
+function isProvisioningActivityOperation(
+  message: Extract<UIMessage, { kind: "operation" }>,
+): boolean {
+  switch (message.opType) {
+    case "provisioning":
+    case "provisioning-started":
+    case "provisioning-env-setup":
+    case "provisioning-fallback":
+    case "provisioning-completed":
+    case "provisioning-cleanup-failed":
+      return true;
+    default:
+      // opType is stringly/open_external at the UI boundary; unknown values are intentionally not highlighted.
+      return false;
+  }
+}
+
 export function isActivityMessage(message: UIMessage): boolean {
   return (
     message.kind === "tool-call" ||
     message.kind === "file-edit" ||
     message.kind === "tool-exploring" ||
     message.kind === "web-search" ||
-    message.kind === "error"
+    message.kind === "error" ||
+    (message.kind === "operation" && isProvisioningActivityOperation(message))
   );
 }
 
