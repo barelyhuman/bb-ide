@@ -302,7 +302,7 @@ export function ProjectList({
                 <SidebarMenuItem key={project.id} className="space-y-1">
                   <div
                     className={cn(
-                      "group/project-row flex h-8 w-full items-center rounded-md text-sm transition-colors",
+                      "group/project-row relative flex h-8 w-full items-center rounded-md text-sm transition-colors",
                       isProjectPathMissing
                         ? "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15"
                         : isProjectActive
@@ -311,6 +311,11 @@ export function ProjectList({
                     )}
                     title={project.rootPath}
                   >
+                    <NavLink
+                      to={`/projects/${project.id}`}
+                      onClick={onProjectSelect}
+                      className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
+                    />
                     <button
                       type="button"
                       aria-expanded={!isProjectCollapsed}
@@ -323,7 +328,7 @@ export function ProjectList({
                         isProjectCollapsed ? "Expand project threads" : "Collapse project threads"
                       }
                       onClick={() => toggleProjectCollapsed(project.id)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+                      className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
                     >
                       <span className="relative inline-flex size-4 items-center justify-center">
                         <ChevronRight
@@ -339,11 +344,7 @@ export function ProjectList({
                         )}
                       </span>
                     </button>
-                    <NavLink
-                      to={`/projects/${project.id}`}
-                      onClick={onProjectSelect}
-                      className="flex min-w-0 flex-1 items-center"
-                    >
+                    <span className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center">
                       <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
                       {isProjectPathMissing ? (
                         <AlertTriangle
@@ -351,13 +352,13 @@ export function ProjectList({
                           aria-hidden
                         />
                       ) : null}
-                    </NavLink>
+                    </span>
                     {isProjectPathMissing ? (
                       <button
                         type="button"
                         title="Project folder is missing. Choose a new folder."
                         aria-label="Repair project path"
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
                         disabled={updateProject.isPending}
                         onClick={(event) => {
                           event.preventDefault()
@@ -378,7 +379,7 @@ export function ProjectList({
                           type="button"
                           title={`${project.name} options`}
                           aria-label={`${project.name} options`}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
+                          className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
                           onClick={(event) => {
                             event.preventDefault()
                             event.stopPropagation()
@@ -430,7 +431,7 @@ export function ProjectList({
                       }}
                       title={`Open ${project.name}`}
                       aria-label={`Open ${project.name}`}
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
+                      className="relative z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
                     >
                       <SquarePen className="size-4" />
                     </NavLink>
