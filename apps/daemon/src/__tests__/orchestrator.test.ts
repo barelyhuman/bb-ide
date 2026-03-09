@@ -280,6 +280,97 @@ type FakeChildProcess = Omit<
   _emitExit: (code: number | null, signal: string | null) => void;
 };
 
+function respondToEnvironmentAgentControlMessage(
+  child: Pick<FakeChildProcess, "stdout">,
+  msg: {
+    environmentAgentMessage?: boolean;
+    requestId?: string;
+    type?: string;
+    payload?: {
+      afterSequence?: number;
+      sequence?: number;
+      threadId?: string;
+    };
+  },
+): boolean {
+  if (msg.environmentAgentMessage !== true || !msg.requestId) {
+    return false;
+  }
+
+  switch (msg.type) {
+    case "provider.ensure":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "provider.ensure.response",
+            payload: {
+              running: true,
+              launched: true,
+              pid: 12345,
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "replay":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "replay.response",
+            payload: {
+              protocolVersion: 1,
+              fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
+              toSequenceInclusive: msg.payload?.afterSequence ?? 0,
+              events: [],
+              hasMore: false,
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "ack":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "ack.response",
+            payload: {
+              protocolVersion: 1,
+              acknowledgedSequence: msg.payload?.sequence ?? 0,
+              ...(msg.payload?.threadId ? { threadId: msg.payload.threadId } : {}),
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "status":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "status.response",
+            payload: {
+              protocolVersion: 1,
+              latestSequence: 0,
+              connectedToDaemon: true,
+              pendingEventCount: 0,
+              pendingCommandCount: 0,
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    default:
+      return false;
+  }
+}
+
 interface OrchestratorTestHarness {
   processes: Map<string, unknown>;
   providerThreadIds: Map<string, string>;
@@ -472,74 +563,7 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
       const data = chunk.toString();
       try {
         const msg = JSON.parse(data.trim());
-        if (msg.environmentAgentMessage === true && msg.requestId) {
-          if (msg.type === "provider.ensure") {
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  environmentAgentMessage: true,
-                  requestId: msg.requestId,
-                  type: "provider.ensure.response",
-                  payload: {
-                    running: true,
-                    launched: true,
-                    pid: 12345,
-                  },
-                }) + "\n",
-              );
-            });
-          } else if (msg.type === "replay") {
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  environmentAgentMessage: true,
-                  requestId: msg.requestId,
-                  type: "replay.response",
-                  payload: {
-                    protocolVersion: 1,
-                    fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
-                    toSequenceInclusive: msg.payload?.afterSequence ?? 0,
-                    events: [],
-                    hasMore: false,
-                  },
-                }) + "\n",
-              );
-            });
-          } else if (msg.type === "ack") {
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  environmentAgentMessage: true,
-                  requestId: msg.requestId,
-                  type: "ack.response",
-                  payload: {
-                    protocolVersion: 1,
-                    acknowledgedSequence: msg.payload?.sequence ?? 0,
-                    ...(msg.payload?.threadId
-                      ? { threadId: msg.payload.threadId }
-                      : {}),
-                  },
-                }) + "\n",
-              );
-            });
-          } else if (msg.type === "status") {
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  environmentAgentMessage: true,
-                  requestId: msg.requestId,
-                  type: "status.response",
-                  payload: {
-                    protocolVersion: 1,
-                    latestSequence: 0,
-                    connectedToDaemon: true,
-                    pendingEventCount: 0,
-                    pendingCommandCount: 0,
-                  },
-                }) + "\n",
-              );
-            });
-          }
+        if (respondToEnvironmentAgentControlMessage(child, msg)) {
           callback();
           return;
         }
@@ -891,71 +915,7 @@ describe("Orchestrator", () => {
           resumeChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
-            if (msg.environmentAgentMessage === true && msg.requestId) {
-              if (msg.type === "provider.ensure") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "provider.ensure.response",
-                      payload: {
-                        running: true,
-                        launched: true,
-                        pid: 12345,
-                      },
-                    }) + "\n",
-                  );
-                });
-              } else if (msg.type === "replay") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "replay.response",
-                      payload: {
-                        protocolVersion: 1,
-                        fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
-                        toSequenceInclusive: msg.payload?.afterSequence ?? 0,
-                        events: [],
-                        hasMore: false,
-                      },
-                    }) + "\n",
-                  );
-                });
-              } else if (msg.type === "ack") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "ack.response",
-                      payload: {
-                        protocolVersion: 1,
-                        acknowledgedSequence: msg.payload?.sequence ?? 0,
-                      },
-                    }) + "\n",
-                  );
-                });
-              } else if (msg.type === "status") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "status.response",
-                      payload: {
-                        protocolVersion: 1,
-                        latestSequence: 0,
-                        connectedToDaemon: true,
-                        pendingEventCount: 0,
-                        pendingCommandCount: 0,
-                      },
-                    }) + "\n",
-                  );
-                });
-              }
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
               callback();
               return;
             }
@@ -1059,71 +1019,7 @@ describe("Orchestrator", () => {
           resumeChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
-            if (msg.environmentAgentMessage === true && msg.requestId) {
-              if (msg.type === "provider.ensure") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "provider.ensure.response",
-                      payload: {
-                        running: true,
-                        launched: true,
-                        pid: 12345,
-                      },
-                    }) + "\n",
-                  );
-                });
-              } else if (msg.type === "replay") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "replay.response",
-                      payload: {
-                        protocolVersion: 1,
-                        fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
-                        toSequenceInclusive: msg.payload?.afterSequence ?? 0,
-                        events: [],
-                        hasMore: false,
-                      },
-                    }) + "\n",
-                  );
-                });
-              } else if (msg.type === "ack") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "ack.response",
-                      payload: {
-                        protocolVersion: 1,
-                        acknowledgedSequence: msg.payload?.sequence ?? 0,
-                      },
-                    }) + "\n",
-                  );
-                });
-              } else if (msg.type === "status") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "status.response",
-                      payload: {
-                        protocolVersion: 1,
-                        latestSequence: 0,
-                        connectedToDaemon: true,
-                        pendingEventCount: 0,
-                        pendingCommandCount: 0,
-                      },
-                    }) + "\n",
-                  );
-                });
-              }
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
               callback();
               return;
             }
@@ -2558,23 +2454,7 @@ describe("Orchestrator", () => {
           errorChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
-            if (msg.environmentAgentMessage === true && msg.requestId) {
-              if (msg.type === "provider.ensure") {
-                process.nextTick(() => {
-                  errorChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "provider.ensure.response",
-                      payload: {
-                        running: true,
-                        launched: true,
-                        pid: 12345,
-                      },
-                    }) + "\n",
-                  );
-                });
-              }
+            if (respondToEnvironmentAgentControlMessage(errorChild, msg)) {
               callback();
               return;
             }
@@ -3796,23 +3676,7 @@ describe("Orchestrator", () => {
           resumeChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
-            if (msg.environmentAgentMessage === true && msg.requestId) {
-              if (msg.type === "provider.ensure") {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      environmentAgentMessage: true,
-                      requestId: msg.requestId,
-                      type: "provider.ensure.response",
-                      payload: {
-                        running: true,
-                        launched: true,
-                        pid: 12345,
-                      },
-                    }) + "\n",
-                  );
-                });
-              }
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
               callback();
               return;
             }
@@ -3977,22 +3841,7 @@ describe("Orchestrator", () => {
             try {
               const msg = JSON.parse(data.trim());
               if (msg.environmentAgentMessage === true && msg.requestId) {
-                if (msg.type === "provider.ensure") {
-                  process.nextTick(() => {
-                    resumeChild.stdout!.push(
-                      JSON.stringify({
-                        environmentAgentMessage: true,
-                        requestId: msg.requestId,
-                        type: "provider.ensure.response",
-                        payload: {
-                          running: true,
-                          launched: true,
-                          pid: 12345,
-                        },
-                      }) + "\n",
-                    );
-                  });
-                } else if (msg.type === "replay") {
+                if (msg.type === "replay") {
                   process.nextTick(() => {
                     resumeChild.stdout!.push(
                       JSON.stringify({
@@ -4009,6 +3858,9 @@ describe("Orchestrator", () => {
                       }) + "\n",
                     );
                   });
+                } else if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
+                  callback();
+                  return;
                 }
                 callback();
                 return;
