@@ -148,8 +148,9 @@ async function main(): Promise<void> {
 
   const shutdown = async (
     signal: string,
-    opts?: { restart?: boolean },
+    opts?: { restart?: boolean; exitCode?: number },
   ): Promise<void> => {
+    const exitCode = opts?.exitCode ?? 0;
     if (opts?.restart) {
       restartRequested = true;
     }
@@ -179,7 +180,7 @@ async function main(): Promise<void> {
         ? "Shutdown complete. Relaunch requested."
         : "Shutdown complete.",
     );
-    process.exit(0);
+    process.exit(exitCode);
   };
 
   // Create server
@@ -207,9 +208,11 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("uncaughtException", (error) => {
     console.error("Uncaught exception:", error);
+    void shutdown("uncaughtException", { exitCode: 1 });
   });
   process.on("unhandledRejection", (reason) => {
     console.error("Unhandled rejection:", reason);
+    void shutdown("unhandledRejection", { exitCode: 1 });
   });
 
   // Start listening
