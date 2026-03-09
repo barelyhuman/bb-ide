@@ -76,6 +76,10 @@ import {
 } from "@beanbag/environment";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
+  EnvironmentAgentEventEnvelope,
+  EnvironmentAgentStatusSnapshot,
+} from "@beanbag/environment-agent";
+import type {
   ThreadRepository,
   EventRepository,
   ProjectRepository,
@@ -2218,6 +2222,41 @@ export class Orchestrator implements ThreadOrchestrator {
 
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentService.listEnvironments();
+  }
+
+  async getEnvironmentAgentStatus(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    try {
+      return await this.agentServer.getEnvironmentAgentStatus(threadId);
+    } catch (error) {
+      this._rethrowAgentServerError(threadId, error);
+    }
+  }
+
+  async replayEnvironmentAgentEvents(args: {
+    threadId: string;
+    afterSequence: number;
+    limit?: number;
+  }): Promise<{
+    events: EnvironmentAgentEventEnvelope[];
+    fromSequenceExclusive: number;
+    toSequenceInclusive: number;
+    hasMore: boolean;
+  }> {
+    const thread = this.threadRepo.getById(args.threadId);
+    if (!thread) {
+      throw threadNotFoundError(args.threadId);
+    }
+    try {
+      return await this.agentServer.replayEnvironmentAgentEvents(args);
+    } catch (error) {
+      this._rethrowAgentServerError(args.threadId, error);
+    }
   }
 
   /**

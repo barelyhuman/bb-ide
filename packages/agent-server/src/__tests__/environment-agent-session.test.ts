@@ -2,9 +2,10 @@ import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "../../../environment-agent/src/index.js";
 import { AgentServer } from "../agent-server.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
+
+const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
 type FakeChildProcess = Omit<ChildProcess, "stdout" | "stderr" | "stdin"> & {
   stdin: Writable;
