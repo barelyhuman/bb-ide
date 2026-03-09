@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { createChildProcessJsonLineTransport } from "@beanbag/environment-agent";
 import {
   assertNever,
   createProviderEventEnvelope,
@@ -450,7 +451,7 @@ export class AgentServer {
     this.disposeSession(threadId);
     const runtime = new ProviderRuntime({
       threadId,
-      child,
+      transport: createChildProcessJsonLineTransport(child),
       onNotification: (msg) => {
         this.handleNotification(threadId, msg);
       },

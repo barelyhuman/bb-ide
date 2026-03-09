@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -305,6 +306,14 @@ class WorktreeEnvironment implements IEnvironment {
 
   isIsolatedWorkspace(): boolean {
     return true;
+  }
+
+  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    return {
+      transport: "host-stdio",
+      cwd: this.rootPath,
+      env: { ...this.env },
+    };
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {

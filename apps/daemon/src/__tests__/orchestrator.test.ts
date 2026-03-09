@@ -170,6 +170,13 @@ function makeRuntimeEnvironment(args: {
     isIsolatedWorkspace() {
       return kind === "worktree";
     },
+    getAgentConnectionTarget() {
+      return {
+        transport: "host-stdio" as const,
+        cwd: args.rootPath,
+        env: {},
+      };
+    },
     getCheckoutSnapshot() {
       return {
         branch: "bb/thread-1",

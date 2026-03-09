@@ -1,4 +1,4 @@
-import type { ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   accessSync,
   constants,
@@ -74,6 +74,7 @@ import {
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
 } from "@beanbag/environment";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
   ThreadRepository,
   EventRepository,
@@ -518,16 +519,13 @@ export class Orchestrator implements ThreadOrchestrator {
         },
         runOptionalSetup: (threadId, environment, reason) =>
           this._runOptionalEnvironmentSetup(threadId, environment, reason),
-        spawnProviderProcess: ({ threadId, projectId, environment }) => {
+        spawnProviderProcess: ({ threadId, projectId, agentConnectionTarget }) => {
           const spawnSpec = this.agentServer.getSpawnSpec();
-          return environment.spawn(spawnSpec.command, spawnSpec.args, {
-            stdio: ["pipe", "pipe", "pipe"],
-            env: {
-              ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-              ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
-              BB_THREAD_ID: threadId,
-              BB_ENVIRONMENT_ID: environment.kind,
-            },
+          return this._spawnEnvironmentAgentProcess({
+            threadId,
+            projectId,
+            spawnSpec,
+            agentConnectionTarget,
           });
         },
       },
@@ -2638,6 +2636,34 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentKind,
       reason,
     );
+  }
+
+  private _spawnEnvironmentAgentProcess(args: {
+    threadId: string;
+    projectId?: string;
+    spawnSpec: { command: string; args: string[] };
+    agentConnectionTarget: EnvironmentAgentConnectionTarget;
+  }): ChildProcess {
+    switch (args.agentConnectionTarget.transport) {
+      case "host-stdio":
+        return spawn(args.spawnSpec.command, args.spawnSpec.args, {
+          cwd: args.agentConnectionTarget.cwd,
+          env: {
+            ...this.runtimeEnv,
+            ...(args.agentConnectionTarget.env ?? {}),
+            ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+            ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
+            BB_THREAD_ID: args.threadId,
+          },
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+      case "http":
+        throw new Error(
+          `HTTP environment agent transport is not wired yet for thread ${args.threadId}`,
+        );
+      default:
+        assertNever(args.agentConnectionTarget);
+    }
   }
 
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {

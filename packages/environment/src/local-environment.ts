@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -75,6 +76,14 @@ class LocalEnvironment implements IEnvironment {
 
   isIsolatedWorkspace(): boolean {
     return false;
+  }
+
+  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    return {
+      transport: "host-stdio",
+      cwd: this.rootPath,
+      env: { ...this.env },
+    };
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {

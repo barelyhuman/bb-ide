@@ -66,6 +66,13 @@ function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment
     isIsolatedWorkspace() {
       return true;
     },
+    getAgentConnectionTarget() {
+      return {
+        transport: "host-stdio" as const,
+        cwd: "/tmp/thread-1",
+        env: {},
+      };
+    },
     getCheckoutSnapshot() {
       return {
         branch: "bb/thread-thread-1",

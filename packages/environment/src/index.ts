@@ -28,6 +28,7 @@ export type {
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
 } from "./contracts.js";
+export type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 export {
   EnvironmentRegistry,
 } from "./contracts.js";

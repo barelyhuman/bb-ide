@@ -14,6 +14,7 @@ import {
   type EnvironmentRegistry,
   type IEnvironment,
 } from "@beanbag/environment";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import {
   resolveProjectCheckoutSnapshot,
@@ -22,6 +23,7 @@ import {
 
 export interface ActiveEnvironmentRuntime {
   environment: IEnvironment;
+  agentConnectionTarget: EnvironmentAgentConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
   spawnProcess?: () => ChildProcess;
 }
@@ -53,7 +55,7 @@ interface EnvironmentServiceCallbacks {
   spawnProviderProcess: (args: {
     threadId: string;
     projectId?: string;
-    environment: IEnvironment;
+    agentConnectionTarget: EnvironmentAgentConnectionTarget;
   }) => ChildProcess;
 }
 
@@ -183,20 +185,25 @@ export class EnvironmentService {
     runtime.spawnProcess = () => this.callbacks.spawnProviderProcess({
       threadId,
       projectId: thread?.projectId,
-      environment,
+      agentConnectionTarget: runtime.agentConnectionTarget,
     });
     return runtime;
   }
 
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
     this.cleanupEnvironmentRuntime(threadId);
+    const agentConnectionTarget = environment.getAgentConnectionTarget();
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
       if (!this.threadRepo.getById(threadId)) {
         return;
       }
       this.callbacks.onThreadChanged(threadId, ["work-status-changed"]);
     });
-    this.environmentRuntimes.set(threadId, { environment, stopWatchingWorkspaceStatus });
+    this.environmentRuntimes.set(threadId, {
+      environment,
+      agentConnectionTarget,
+      stopWatchingWorkspaceStatus,
+    });
   }
 
   cleanupEnvironmentRuntime(threadId: string, opts?: { destroyWorkspace?: boolean }): void {

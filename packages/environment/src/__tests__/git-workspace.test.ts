@@ -50,6 +50,11 @@ function createEnvironment(getStatusOutput: () => string): IEnvironment {
     exists: () => true,
     supportsHostFilesystemAccess: () => true,
     isIsolatedWorkspace: () => true,
+    getAgentConnectionTarget: () => ({
+      transport: "host-stdio",
+      cwd: "/repo",
+      env: {},
+    }),
     getCheckoutSnapshot: () => ({
       head: "head",
       detached: false,
