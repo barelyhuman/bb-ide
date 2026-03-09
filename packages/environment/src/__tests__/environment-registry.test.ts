@@ -56,7 +56,10 @@ describe("EnvironmentRegistry", () => {
       const registry = new EnvironmentRegistry()
         .register(createLocalEnvironmentDefinition())
         .register(
-          createWorktreeEnvironmentDefinition({ worktreeRootName: ".worktrees" }),
+          createWorktreeEnvironmentDefinition({
+            worktreeRootName: ".worktrees",
+            manageEnvironmentAgent: false,
+          }),
         );
       const environment = registry.create("worktree", {
         projectId: "proj-1",

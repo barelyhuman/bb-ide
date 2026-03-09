@@ -50,11 +50,12 @@ describe("docker environment-agent helper", () => {
     expect(dockerfile).toContain("docker-ce-cli");
     expect(dockerfile).toContain("curl -fsSL https://bun.sh/install | bash");
     expect(dockerfile).toContain("corepack prepare pnpm@9.15.0 --activate");
+    expect(dockerfile).toContain("npm install -g @openai/codex@latest");
   });
 
   it("resolves the built environment-agent artifact entry", () => {
     const artifactEntry = fileURLToPath(
-      new URL("../../../environment-agent/dist/bin/environment-agent.js", import.meta.url),
+      new URL("../../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
     );
     mkdirSync(dirname(artifactEntry), { recursive: true });
     if (!existsSync(artifactEntry)) {
@@ -62,7 +63,7 @@ describe("docker environment-agent helper", () => {
     }
     const entry = resolveDockerEnvironmentAgentArtifactEntry();
 
-    expect(entry.endsWith("/packages/environment-agent/dist/bin/environment-agent.js")).toBe(true);
+    expect(entry.endsWith("/packages/environment-agent/dist/environment-agent.bundle.mjs")).toBe(true);
     expect(existsSync(entry)).toBe(true);
   });
 
@@ -147,7 +148,7 @@ describe("docker environment-agent helper", () => {
     const commands: Array<{ command: string; args: string[] }> = [];
     const workspaceRoot = makeTempDir("bb-docker-agent-workspace-");
     const artifactRoot = makeTempDir("bb-docker-agent-artifact-");
-    const artifactEntry = join(artifactRoot, "dist", "bin", "environment-agent.js");
+    const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
     mkdirSync(dirname(artifactEntry), { recursive: true });
     writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
 
@@ -187,15 +188,15 @@ describe("docker environment-agent helper", () => {
           "beanbag-thread-thread-1",
           "mkdir",
           "-p",
-          "/opt/beanbag/environment-agent/dist",
+          "/opt/beanbag/environment-agent",
         ],
       },
       {
         command: "docker",
         args: [
           "cp",
-          `${join(artifactRoot, "dist")}/.`,
-          "beanbag-thread-thread-1:/opt/beanbag/environment-agent/dist",
+          artifactEntry,
+          "beanbag-thread-thread-1:/opt/beanbag/environment-agent/environment-agent.bundle.mjs",
         ],
       },
       {
@@ -215,7 +216,7 @@ describe("docker environment-agent helper", () => {
           "BEANBAG_DAEMON_URL=http://127.0.0.1:9000",
           "beanbag-thread-thread-1",
           "node",
-          "/opt/beanbag/environment-agent/dist/bin/environment-agent.js",
+          "/opt/beanbag/environment-agent/environment-agent.bundle.mjs",
           "--http-host",
           "0.0.0.0",
           "--http-port",

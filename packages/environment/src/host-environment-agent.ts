@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import { resolveDockerEnvironmentAgentArtifactEntry } from "./docker-environment-agent.js";
@@ -180,11 +181,27 @@ export function resolveManagedHostEnvironmentAgentLaunchCommand(): {
   command: string;
   args: string[];
 } {
-  const artifactEntry = resolveDockerEnvironmentAgentArtifactEntry();
-  return {
-    command: process.execPath,
-    args: [artifactEntry],
-  };
+  try {
+    const artifactEntry = resolveDockerEnvironmentAgentArtifactEntry();
+    return {
+      command: process.execPath,
+      args: [artifactEntry],
+    };
+  } catch {
+    const localCliEntry = fileURLToPath(
+      new URL("../../../apps/cli/dist/index.js", import.meta.url),
+    );
+    if (existsSync(localCliEntry)) {
+      return {
+        command: process.execPath,
+        args: [localCliEntry, "environment-agent"],
+      };
+    }
+    return {
+      command: "bb",
+      args: ["environment-agent"],
+    };
+  }
 }
 
 export async function ensureManagedHostEnvironmentAgent(args: {

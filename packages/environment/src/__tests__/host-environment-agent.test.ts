@@ -31,7 +31,7 @@ afterEach(() => {
 describe("resolveManagedHostEnvironmentAgentTarget", () => {
   it("launches the standalone environment-agent artifact directly", () => {
     const artifactEntry = fileURLToPath(
-      new URL("../../../environment-agent/dist/bin/environment-agent.js", import.meta.url),
+      new URL("../../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
     );
     mkdirSync(dirname(artifactEntry), { recursive: true });
     if (!existsSync(artifactEntry)) {

@@ -171,7 +171,7 @@ async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Prom
 
 export function resolveDockerEnvironmentAgentArtifactEntry(): string {
   const entry = fileURLToPath(
-    new URL("../../environment-agent/dist/bin/environment-agent.js", import.meta.url),
+    new URL("../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
   );
   if (!existsSync(entry)) {
     throw new Error(
@@ -309,7 +309,6 @@ export async function ensureManagedDockerEnvironmentAgent(
   const executor = deps?.run ?? runCommand;
   const waitForAgent = deps?.waitForAgent ?? waitForEnvironmentAgent;
   const artifactEntry = (deps?.resolveArtifactEntry ?? resolveDockerEnvironmentAgentArtifactEntry)();
-  const artifactDistRoot = dirname(dirname(artifactEntry));
   const authToken = (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
   const containerPort = args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
   const installRoot = args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
@@ -322,7 +321,7 @@ export async function ensureManagedDockerEnvironmentAgent(
       args.containerName,
       "mkdir",
       "-p",
-      `${installRoot}/dist`,
+      installRoot,
     ],
     cwd: args.workspaceRootPath,
     env: args.runtimeEnv,
@@ -334,8 +333,8 @@ export async function ensureManagedDockerEnvironmentAgent(
     command: args.dockerBin,
     commandArgs: [
       "cp",
-      `${artifactDistRoot}/.`,
-      `${args.containerName}:${installRoot}/dist`,
+      artifactEntry,
+      `${args.containerName}:${installRoot}/environment-agent.bundle.mjs`,
     ],
     cwd: args.workspaceRootPath,
     env: args.runtimeEnv,
@@ -361,7 +360,7 @@ export async function ensureManagedDockerEnvironmentAgent(
         : []),
       args.containerName,
       "node",
-      `${installRoot}/dist/bin/environment-agent.js`,
+      `${installRoot}/environment-agent.bundle.mjs`,
       "--http-host",
       "0.0.0.0",
       "--http-port",
