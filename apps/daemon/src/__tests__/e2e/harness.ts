@@ -208,13 +208,9 @@ export async function startDaemonE2eHarness(
     const shutdownForRestart = async (): Promise<void> => {
       const rawThreadManager = threadManager as unknown as {
         agentServer?: {
-          opts?: { onSessionExit?: (threadId: string, event: unknown) => void };
           stopAllSessions?: (reason?: string) => void;
         };
       };
-      if (rawThreadManager.agentServer?.opts) {
-        rawThreadManager.agentServer.opts.onSessionExit = undefined;
-      }
       rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
       threadManager.stopAll({ preserveEnvironments: true });
       await sleep(120);
