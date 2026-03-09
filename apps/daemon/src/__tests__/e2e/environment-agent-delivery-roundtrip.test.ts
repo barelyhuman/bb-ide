@@ -1,71 +1,19 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   EnvironmentAgentDeliveryRequest,
-  EnvironmentAgentDeliveryResponse,
 } from "@beanbag/environment-agent";
-import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
 import {
   startDaemonE2eHarness,
   type DaemonE2eHarness,
 } from "./harness.js";
-
-async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`HTTP ${response.status}: ${body || response.statusText}`);
-  }
-  return (await response.json()) as T;
-}
-
-async function createProject(baseUrl: string, rootPath: string): Promise<Project> {
-  return readJson<Project>(`${baseUrl}/api/v1/projects`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: "e2e-env-agent-delivery-project",
-      rootPath,
-    }),
-  });
-}
-
-async function createThread(baseUrl: string, projectId: string): Promise<Thread> {
-  return readJson<Thread>(`${baseUrl}/api/v1/threads`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      projectId,
-      input: [{ type: "text", text: "Prepare a thread for environment-agent delivery e2e." }],
-    }),
-  });
-}
-
-async function waitForThreadStatus(
-  baseUrl: string,
-  threadId: string,
-  expectedStatus: Thread["status"],
-  timeoutMs: number = 5_000,
-): Promise<Thread> {
-  const deadline = Date.now() + timeoutMs;
-  let lastThread: Thread | undefined;
-
-  while (Date.now() < deadline) {
-    const thread = await readJson<Thread>(`${baseUrl}/api/v1/threads/${threadId}`);
-    lastThread = thread;
-    if (thread.status === expectedStatus) {
-      return thread;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-
-  throw new Error(
-    `Thread ${threadId} did not reach ${expectedStatus} (last status=${lastThread?.status ?? "unknown"})`,
-  );
-}
-
-async function listEvents(baseUrl: string, threadId: string): Promise<ThreadEvent[]> {
-  return readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`);
-}
+import {
+  createProject,
+  createThread,
+  deliverEnvironmentAgentEvents,
+  listThreadEvents,
+  readError,
+  waitForThreadStatus,
+} from "./environment-agent-api.js";
 
 describe.sequential("e2e: environment-agent delivery", () => {
   let harness: DaemonE2eHarness | undefined;
@@ -90,7 +38,7 @@ describe.sequential("e2e: environment-agent delivery", () => {
       expect(authorization).toMatch(/^Bearer /);
 
       const nextSequence = harness.getEnvironmentAgentCursor(thread.id) + 1;
-      const initialEvents = await listEvents(harness.baseUrl, thread.id);
+      const initialEvents = await listThreadEvents(harness.baseUrl, thread.id);
       const initialTurnStartedCount = initialEvents.filter(
         (event) => event.type === "turn/started",
       ).length;
@@ -117,39 +65,29 @@ describe.sequential("e2e: environment-agent delivery", () => {
         ],
       };
 
-      const delivered = await readJson<EnvironmentAgentDeliveryResponse>(
-        `${harness.baseUrl}/api/v1/threads/${thread.id}/environment-agent/deliver`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            authorization: authorization!,
-          },
-          body: JSON.stringify(turnStartedDelivery),
-        },
+      const delivered = await deliverEnvironmentAgentEvents(
+        harness.baseUrl,
+        thread.id,
+        authorization!,
+        turnStartedDelivery,
       );
       expect(delivered.acknowledgedSequence).toBe(nextSequence);
 
       await waitForThreadStatus(harness.baseUrl, thread.id, "active");
-      const afterStartedEvents = await listEvents(harness.baseUrl, thread.id);
+      const afterStartedEvents = await listThreadEvents(harness.baseUrl, thread.id);
       expect(
         afterStartedEvents.filter((event) => event.type === "turn/started"),
       ).toHaveLength(initialTurnStartedCount + 1);
 
-      const duplicate = await readJson<EnvironmentAgentDeliveryResponse>(
-        `${harness.baseUrl}/api/v1/threads/${thread.id}/environment-agent/deliver`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            authorization: authorization!,
-          },
-          body: JSON.stringify(turnStartedDelivery),
-        },
+      const duplicate = await deliverEnvironmentAgentEvents(
+        harness.baseUrl,
+        thread.id,
+        authorization!,
+        turnStartedDelivery,
       );
       expect(duplicate.acknowledgedSequence).toBe(nextSequence);
 
-      const afterDuplicateEvents = await listEvents(harness.baseUrl, thread.id);
+      const afterDuplicateEvents = await listThreadEvents(harness.baseUrl, thread.id);
       expect(
         afterDuplicateEvents.filter((event) => event.type === "turn/started"),
       ).toHaveLength(initialTurnStartedCount + 1);
@@ -173,25 +111,113 @@ describe.sequential("e2e: environment-agent delivery", () => {
         ],
       };
 
-      const completed = await readJson<EnvironmentAgentDeliveryResponse>(
-        `${harness.baseUrl}/api/v1/threads/${thread.id}/environment-agent/deliver`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            authorization: authorization!,
-          },
-          body: JSON.stringify(turnCompletedDelivery),
-        },
+      const completed = await deliverEnvironmentAgentEvents(
+        harness.baseUrl,
+        thread.id,
+        authorization!,
+        turnCompletedDelivery,
       );
       expect(completed.acknowledgedSequence).toBe(nextSequence + 1);
 
       await waitForThreadStatus(harness.baseUrl, thread.id, "idle");
-      const finalEvents = await listEvents(harness.baseUrl, thread.id);
+      const finalEvents = await listThreadEvents(harness.baseUrl, thread.id);
       expect(
         finalEvents.filter((event) => event.type === "turn/completed"),
       ).toHaveLength(initialTurnCompletedCount + 1);
     },
     15_000,
   );
+
+  it("rejects unauthorized or gapped delivery without mutating state", async () => {
+    harness = await startDaemonE2eHarness();
+
+    const project = await createProject(
+      harness.baseUrl,
+      harness.projectRoot,
+      "e2e-env-agent-delivery-errors-project",
+    );
+    const thread = await createThread(
+      harness.baseUrl,
+      project.id,
+      "Prepare a thread for environment-agent delivery failure cases.",
+    );
+    await waitForThreadStatus(harness.baseUrl, thread.id, "idle");
+
+    const authorization = harness.getEnvironmentAgentAuthorization(thread.id);
+    expect(authorization).toMatch(/^Bearer /);
+
+    const initialCursor = harness.getEnvironmentAgentCursor(thread.id);
+    const unauthorizedBody: EnvironmentAgentDeliveryRequest = {
+      protocolVersion: 1,
+      threadId: thread.id,
+      events: [
+        {
+          protocolVersion: 1,
+          sequence: initialCursor + 1,
+          emittedAt: 2_000,
+          threadId: thread.id,
+          event: {
+            type: "provider.event",
+            threadId: thread.id,
+            method: "turn/started",
+            payload: { turnId: "turn-unauthorized" },
+          },
+        },
+      ],
+    };
+
+    const unauthorized = await readError(
+      `${harness.baseUrl}/api/v1/threads/${thread.id}/environment-agent/deliver`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          authorization: "Bearer wrong-token",
+        },
+        body: JSON.stringify(unauthorizedBody),
+      },
+    );
+    expect(unauthorized.status).toBe(400);
+    expect(unauthorized.body).toContain("Unauthorized environment-agent delivery");
+    expect(harness.getEnvironmentAgentCursor(thread.id)).toBe(initialCursor);
+
+    const gappedBody: EnvironmentAgentDeliveryRequest = {
+      protocolVersion: 1,
+      threadId: thread.id,
+      events: [
+        {
+          protocolVersion: 1,
+          sequence: initialCursor + 2,
+          emittedAt: 2_001,
+          threadId: thread.id,
+          event: {
+            type: "provider.event",
+            threadId: thread.id,
+            method: "turn/completed",
+            payload: { turnId: "turn-gap" },
+          },
+        },
+      ],
+    };
+    const gapped = await deliverEnvironmentAgentEvents(
+      harness.baseUrl,
+      thread.id,
+      authorization!,
+      gappedBody,
+    );
+
+    expect(gapped.acknowledgedSequence).toBe(initialCursor);
+    expect(harness.getEnvironmentAgentCursor(thread.id)).toBe(initialCursor);
+    await waitForThreadStatus(harness.baseUrl, thread.id, "idle");
+
+    const events = await listThreadEvents(harness.baseUrl, thread.id);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "turn/started" &&
+          typeof (event.data as { turnId?: unknown } | undefined)?.turnId === "string" &&
+          (event.data as { turnId?: string }).turnId === "turn-unauthorized",
+      ),
+    ).toBe(false);
+  });
 });
