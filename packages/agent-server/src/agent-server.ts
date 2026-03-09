@@ -100,6 +100,7 @@ export interface AgentServerOptions {
 interface ManagedSession {
   agentClient: EnvironmentAgentClient;
   runtime: ProviderRuntime;
+  unsubscribeEvents?: () => void;
   providerThreadId?: string;
   activeTurnId?: string;
 }
@@ -477,27 +478,7 @@ export class AgentServer {
     events: EnvironmentAgentEventEnvelope[];
   }): Promise<void> {
     for (const envelope of args.events) {
-      const event = envelope.event;
-      switch (event.type) {
-        case "provider.event":
-          if (event.method === "provider.stdout") continue;
-          this.handleNotification(args.threadId, {
-            method: event.method,
-            params: event.payload,
-          });
-          continue;
-        case "provider.stderr":
-          this.handleProviderStderrLine(args.threadId, event.line);
-          continue;
-        case "provider.rpc_error":
-          this.opts.logger?.error(
-            `[thread ${args.threadId}] Provider RPC error (request ${String(event.requestId)}):`,
-            event.message,
-          );
-          continue;
-        default:
-          continue;
-      }
+      this.handleEnvironmentAgentEvent(args.threadId, envelope.event);
     }
   }
 
@@ -716,21 +697,17 @@ export class AgentServer {
     this.disposeSession(threadId);
     return Promise.resolve(connection).then(async (resolvedConnection) => {
       const agentClient = resolvedConnection.client;
+      const unsubscribeEvents = agentClient.subscribeToEvents((event) => {
+        this.handleEnvironmentAgentEvent(threadId, event.event);
+      });
       const runtime = new ProviderRuntime({
         threadId,
         transport: agentClient.providerTransport,
-        onNotification: (msg) => {
-          this.handleNotification(threadId, msg);
-        },
-        onUnmatchedRpcError: (requestId, errorMessage) => {
-          this.opts.logger?.error(
-            `[thread ${threadId}] Provider RPC error (request ${requestId}):`,
-            errorMessage,
-          );
-        },
-        onStderrLine: (line) => {
-          this.handleProviderStderrLine(threadId, line);
-        },
+        // Provider notifications, stderr, and unmatched RPC errors are delivered
+        // through environment-agent live/replayed events instead of the raw session stream.
+        onNotification: () => {},
+        onUnmatchedRpcError: () => {},
+        onStderrLine: () => {},
         onClosed: () => {
           const current = this.sessions.get(threadId);
           if (current?.runtime !== runtime) return;
@@ -743,6 +720,7 @@ export class AgentServer {
       const session: ManagedSession = {
         agentClient,
         runtime,
+        unsubscribeEvents,
         providerThreadId: seed?.providerThreadId,
         activeTurnId: seed?.activeTurnId,
       };
@@ -775,10 +753,37 @@ export class AgentServer {
   private disposeSession(threadId: string): void {
     const existing = this.sessions.get(threadId);
     if (!existing) return;
+    existing.unsubscribeEvents?.();
     existing.agentClient.close();
     existing.runtime.close();
     this.sessions.delete(threadId);
     this.clearSessionState(threadId);
+  }
+
+  private handleEnvironmentAgentEvent(
+    threadId: string,
+    event: EnvironmentAgentEventEnvelope["event"],
+  ): void {
+    switch (event.type) {
+      case "provider.event":
+        if (event.method === "provider.stdout") return;
+        this.handleNotification(threadId, {
+          method: event.method,
+          params: event.payload,
+        });
+        return;
+      case "provider.stderr":
+        this.handleProviderStderrLine(threadId, event.line);
+        return;
+      case "provider.rpc_error":
+        this.opts.logger?.error(
+          `[thread ${threadId}] Provider RPC error (request ${String(event.requestId)}):`,
+          event.message,
+        );
+        return;
+      default:
+        return;
+    }
   }
 
   private requireSession(threadId: string): ManagedSession {

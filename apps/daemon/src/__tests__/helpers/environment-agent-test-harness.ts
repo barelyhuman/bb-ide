@@ -279,18 +279,23 @@ export function createFakeEnvironmentAgentClient(
         onClose?: (reason?: Error) => void;
       }
     | undefined;
+  const eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
   const replayEvents: EnvironmentAgentEventEnvelope[] = [];
   let nextSequence = 1;
   let replayThreadId = "thread-1";
 
   const appendReplayEvent = (event: EnvironmentAgentEventEnvelope["event"]) => {
-    replayEvents.push({
+    const envelope: EnvironmentAgentEventEnvelope = {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       sequence: nextSequence,
       emittedAt: 1_000 + nextSequence,
       threadId: event.threadId,
       event,
-    });
+    };
+    replayEvents.push(envelope);
+    for (const subscriber of eventSubscribers) {
+      subscriber(envelope);
+    }
     nextSequence += 1;
   };
 
@@ -300,8 +305,22 @@ export function createFakeEnvironmentAgentClient(
     for (const line of value.split(/\r\n|\n|\r/g)) {
       if (!line.trim()) continue;
       try {
-        const parsed = JSON.parse(line) as { id?: unknown; method?: unknown; params?: unknown };
-        if (parsed.id === undefined && typeof parsed.method === "string") {
+        const parsed = JSON.parse(line) as {
+          id?: unknown;
+          method?: unknown;
+          params?: unknown;
+          error?: unknown;
+        };
+        if (parsed.id !== undefined && parsed.error !== undefined) {
+          appendReplayEvent({
+            type: "provider.rpc_error",
+            threadId: replayThreadId,
+            requestId: typeof parsed.id === "string" || typeof parsed.id === "number"
+              ? parsed.id
+              : String(parsed.id),
+            message: JSON.stringify(parsed.error),
+          });
+        } else if (parsed.id === undefined && typeof parsed.method === "string") {
           appendReplayEvent({
             type: "provider.event",
             threadId: replayThreadId,
@@ -391,6 +410,12 @@ export function createFakeEnvironmentAgentClient(
       close(reason) {
         handlers?.onClose?.(reason);
       },
+    },
+    subscribeToEvents(listener) {
+      eventSubscribers.add(listener);
+      return () => {
+        eventSubscribers.delete(listener);
+      };
     },
     ensureProviderRunning: async (spec) => {
       ensureSpecs.push({
