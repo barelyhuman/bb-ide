@@ -2748,6 +2748,14 @@ export class Orchestrator implements ThreadOrchestrator {
               ? { headers: args.agentConnectionTarget.headers }
               : {}),
           }),
+          ...(args.agentConnectionTarget.providerLaunch
+            ? {
+                providerLaunch: {
+                  command: args.agentConnectionTarget.providerLaunch.command,
+                  args: [...args.agentConnectionTarget.providerLaunch.args],
+                },
+              }
+            : {}),
         };
       default:
         assertNever(args.agentConnectionTarget);

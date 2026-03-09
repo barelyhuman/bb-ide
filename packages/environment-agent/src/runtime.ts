@@ -8,6 +8,8 @@ import {
   type EnvironmentAgentConnectionTarget,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
+  type EnvironmentAgentProviderSpec,
+  type EnvironmentAgentProviderStatus,
   type EnvironmentAgentReplayRequest,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
@@ -18,8 +20,8 @@ export interface EnvironmentAgentRuntimeOptions {
   threadId?: string;
   projectId?: string;
   environmentId?: string;
-  providerCommand: string;
-  providerArgs: string[];
+  providerCommand?: string;
+  providerArgs?: string[];
   providerLaunchCommand?: string;
   providerLaunchArgs?: string[];
   onStdoutLine?: (line: string) => void;
@@ -28,6 +30,7 @@ export interface EnvironmentAgentRuntimeOptions {
 }
 
 type ProtocolInbound =
+  | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
   | { type: "ack"; payload: EnvironmentAgentAckRequest }
   | { type: "replay"; payload: EnvironmentAgentReplayRequest }
   | { type: "status" };
@@ -41,75 +44,19 @@ export class EnvironmentAgentRuntime {
   private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
   private readonly stderrLineSubscribers = new Set<(line: string) => void>();
   private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
+  private stdioAttached = false;
 
   constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {}
 
-  start(): ChildProcess {
-    const command = this.opts.providerLaunchCommand?.trim() || this.opts.providerCommand;
-    const args = this.opts.providerLaunchCommand?.trim()
-      ? [
-          ...(this.opts.providerLaunchArgs ?? []),
-          this.opts.providerCommand,
-          ...this.opts.providerArgs,
-        ]
-      : this.opts.providerArgs;
-
-    const child = spawn(command, args, {
-      cwd: process.cwd(),
-      env: process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    this.providerChild = child;
-
-    if (this.opts.attachProcessStdio !== false) {
-      process.stdin.setEncoding("utf-8");
-      process.stdin.on("data", (chunk: string) => {
-        for (const line of chunk.split(/\r\n|\n|\r/g)) {
-          if (!line.trim()) continue;
-          this.handleInboundLine(line);
-        }
-      });
-    }
-
-    child.stdout?.setEncoding("utf-8");
-    child.stdout?.on("data", (chunk: string) => {
-      for (const line of chunk.split(/\r\n|\n|\r/g)) {
-        if (!line.trim()) continue;
-        this.opts.onStdoutLine?.(line);
-        this.emitProviderStdoutLine(line);
-        if (this.opts.attachProcessStdio !== false) {
-          process.stdout.write(`${line}\n`);
-        }
-        this.appendEvent(this.toProviderEvent(line));
-      }
-    });
-
-    child.stderr?.setEncoding("utf-8");
-    child.stderr?.on("data", (chunk: string) => {
-      for (const line of chunk.split(/\r\n|\n|\r/g)) {
-        if (!line.trim()) continue;
-        this.opts.onStderrLine?.(line);
-        this.emitProviderStderrLine(line);
-        if (this.opts.attachProcessStdio !== false) {
-          process.stderr.write(`${line}\n`);
-        }
-      }
-    });
+  start(): ChildProcess | null {
+    this.attachProcessStdio();
 
     this.appendEvent({
       type: "environment.ready",
       threadId: this.resolveThreadId(),
     });
 
-    child.once("exit", (_code, _signal) => {
-      this.appendEvent({
-        type: "environment.degraded",
-        threadId: this.resolveThreadId(),
-        message: "Provider runtime exited",
-      });
-    });
-
-    return child;
+    return this.ensureProviderRunning();
   }
 
   appendEvent(event: EnvironmentAgentEvent): EnvironmentAgentEventEnvelope {
@@ -131,6 +78,31 @@ export class EnvironmentAgentRuntime {
   sendProviderLine(line: string): void {
     if (!line.trim()) return;
     this.providerChild?.stdin?.write(`${line}\n`);
+  }
+
+  ensureProviderRunning(spec?: EnvironmentAgentProviderSpec): ChildProcess | null {
+    if (this.providerChild && !this.providerChild.killed) {
+      return this.providerChild;
+    }
+
+    const resolvedSpec = this.resolveProviderSpec(spec);
+    if (!resolvedSpec) {
+      return null;
+    }
+
+    const child = this.spawnProvider(resolvedSpec);
+    this.providerChild = child;
+    return child;
+  }
+
+  getProviderStatus(): EnvironmentAgentProviderStatus {
+    const child = this.providerChild;
+    const running = Boolean(child && child.exitCode === null && !child.killed);
+    return {
+      running,
+      launched: running,
+      ...(typeof child?.pid === "number" ? { pid: child.pid } : {}),
+    };
   }
 
   subscribeToProviderStdout(listener: (line: string) => void): () => void {
@@ -271,6 +243,13 @@ export class EnvironmentAgentRuntime {
 
   private handleControlRequest(request: EnvironmentAgentControlRequest): void {
     switch (request.type) {
+      case "provider.ensure":
+        this.writeControlResponse(
+          request.requestId,
+          "provider.ensure.response",
+          this.ensureProviderStatus(request.payload),
+        );
+        break;
       case "ack":
         this.writeControlResponse(request.requestId, "ack.response", this.acknowledge(request.payload));
         break;
@@ -295,8 +274,13 @@ export class EnvironmentAgentRuntime {
 
   private writeControlResponse(
     requestId: string,
-    type: "ack.response" | "replay.response" | "status.response",
+    type:
+      | "provider.ensure.response"
+      | "ack.response"
+      | "replay.response"
+      | "status.response",
     payload:
+      | EnvironmentAgentProviderStatus
       | EnvironmentAgentAckResponse
       | EnvironmentAgentReplayResponse
       | EnvironmentAgentStatusSnapshot,
@@ -319,6 +303,99 @@ export class EnvironmentAgentRuntime {
         payload,
       })}\n`,
     );
+  }
+
+  private attachProcessStdio(): void {
+    if (this.stdioAttached || this.opts.attachProcessStdio === false) {
+      return;
+    }
+    this.stdioAttached = true;
+    process.stdin.setEncoding("utf-8");
+    process.stdin.on("data", (chunk: string) => {
+      for (const line of chunk.split(/\r\n|\n|\r/g)) {
+        if (!line.trim()) continue;
+        this.handleInboundLine(line);
+      }
+    });
+  }
+
+  ensureProviderStatus(spec?: EnvironmentAgentProviderSpec): EnvironmentAgentProviderStatus {
+    const launchedBefore = this.getProviderStatus().running;
+    const child = this.ensureProviderRunning(spec);
+    const status = this.getProviderStatus();
+    if (!launchedBefore && child) {
+      return {
+        ...status,
+        launched: true,
+      };
+    }
+    return status;
+  }
+
+  private resolveProviderSpec(
+    spec?: EnvironmentAgentProviderSpec,
+  ): EnvironmentAgentProviderSpec | null {
+    const command = spec?.command ?? this.opts.providerCommand;
+    if (!command?.trim()) {
+      return null;
+    }
+    return {
+      command: command.trim(),
+      args: [...(spec?.args ?? this.opts.providerArgs ?? [])],
+      launchCommand: spec?.launchCommand ?? this.opts.providerLaunchCommand,
+      launchArgs: [...(spec?.launchArgs ?? this.opts.providerLaunchArgs ?? [])],
+    };
+  }
+
+  private spawnProvider(spec: EnvironmentAgentProviderSpec): ChildProcess {
+    const command = spec.launchCommand?.trim() || spec.command;
+    const args = spec.launchCommand?.trim()
+      ? [...(spec.launchArgs ?? []), spec.command, ...spec.args]
+      : spec.args;
+
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    child.stdout?.setEncoding("utf-8");
+    child.stdout?.on("data", (chunk: string) => {
+      for (const line of chunk.split(/\r\n|\n|\r/g)) {
+        if (!line.trim()) continue;
+        this.opts.onStdoutLine?.(line);
+        this.emitProviderStdoutLine(line);
+        if (this.opts.attachProcessStdio !== false) {
+          process.stdout.write(`${line}\n`);
+        }
+        this.appendEvent(this.toProviderEvent(line));
+      }
+    });
+
+    child.stderr?.setEncoding("utf-8");
+    child.stderr?.on("data", (chunk: string) => {
+      for (const line of chunk.split(/\r\n|\n|\r/g)) {
+        if (!line.trim()) continue;
+        this.opts.onStderrLine?.(line);
+        this.emitProviderStderrLine(line);
+        if (this.opts.attachProcessStdio !== false) {
+          process.stderr.write(`${line}\n`);
+        }
+      }
+    });
+
+    child.once("exit", (_code, _signal) => {
+      if (this.providerChild === child) {
+        this.providerChild = null;
+      }
+      this.appendEvent({
+        type: "environment.degraded",
+        threadId: this.resolveThreadId(),
+        message: "Provider runtime exited",
+      });
+    });
+
+    return child;
   }
 
   private resolveThreadId(): string {

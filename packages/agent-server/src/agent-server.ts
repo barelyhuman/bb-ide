@@ -61,10 +61,18 @@ export type AgentServerSessionConnection =
   | {
       transport: "child_process";
       child: ChildProcess;
+      providerLaunch?: {
+        command: string;
+        args: string[];
+      };
     }
   | {
       transport: "http";
       client: EnvironmentAgentClient;
+      providerLaunch?: {
+        command: string;
+        args: string[];
+      };
     };
 
 export interface AgentServerNotification {
@@ -542,7 +550,7 @@ export class AgentServer {
     seed?: { providerThreadId?: string; activeTurnId?: string },
   ): Promise<ManagedSession> {
     this.disposeSession(threadId);
-    return Promise.resolve(connection).then((resolvedConnection) => {
+    return Promise.resolve(connection).then(async (resolvedConnection) => {
       const agentClient =
         resolvedConnection.transport === "child_process"
           ? createChildProcessEnvironmentAgentClient(resolvedConnection.child)
@@ -581,6 +589,17 @@ export class AgentServer {
         activeTurnId: seed?.activeTurnId,
       };
       this.sessions.set(threadId, session);
+
+      await agentClient.ensureProviderRunning({
+        command: this.opts.provider.processCommand,
+        args: [...this.opts.provider.processArgs],
+        ...(resolvedConnection.providerLaunch
+          ? {
+              launchCommand: resolvedConnection.providerLaunch.command,
+              launchArgs: [...resolvedConnection.providerLaunch.args],
+            }
+          : {}),
+      });
 
       this.send(runtime, threadId, {
         jsonrpc: "2.0",

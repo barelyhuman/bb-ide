@@ -22,5 +22,6 @@ export function resolveEnvironmentAgentConnectionTarget(args: {
     baseUrl: normalizeBaseUrl(baseUrl),
     headers: authToken ? { authorization: `Bearer ${authToken}` } : undefined,
     daemonConnection: args.defaultTarget.daemonConnection,
+    providerLaunch: args.defaultTarget.providerLaunch,
   };
 }

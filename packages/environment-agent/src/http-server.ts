@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentAckRequest,
+  type EnvironmentAgentProviderSpec,
   type EnvironmentAgentReplayRequest,
 } from "./protocol.js";
 import type { EnvironmentAgentRuntime } from "./runtime.js";
@@ -82,6 +83,12 @@ export async function createEnvironmentAgentHttpServer(args: {
 
       if (method === "POST" && url.pathname === "/control/status") {
         writeJson(response, 200, args.runtime.getStatusSnapshot());
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/control/provider/ensure") {
+        const body = (await readJsonBody(request)) as EnvironmentAgentProviderSpec;
+        writeJson(response, 200, args.runtime.ensureProviderStatus(body));
         return;
       }
 

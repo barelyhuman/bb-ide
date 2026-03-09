@@ -11,6 +11,8 @@ import {
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentControlRequest,
   type EnvironmentAgentEventEnvelope,
+  type EnvironmentAgentProviderSpec,
+  type EnvironmentAgentProviderStatus,
   type EnvironmentAgentReplayRequest,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
@@ -22,12 +24,16 @@ interface PendingControlRequest {
 }
 
 type EnvironmentAgentRequestShape =
+  | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
   | { type: "ack"; payload: EnvironmentAgentAckRequest }
   | { type: "replay"; payload: EnvironmentAgentReplayRequest }
   | { type: "status" };
 
 export interface EnvironmentAgentClient {
   readonly providerTransport: JsonLineTransport;
+  ensureProviderRunning(
+    spec: EnvironmentAgentProviderSpec,
+  ): Promise<EnvironmentAgentProviderStatus>;
   acknowledge(request: EnvironmentAgentAckRequest): Promise<EnvironmentAgentAckResponse>;
   replay(request: EnvironmentAgentReplayRequest): Promise<EnvironmentAgentReplayResponse>;
   status(): Promise<EnvironmentAgentStatusSnapshot>;
@@ -80,6 +86,15 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     return this.request<EnvironmentAgentAckResponse>({
       type: "ack",
       payload: request,
+    });
+  }
+
+  ensureProviderRunning(
+    spec: EnvironmentAgentProviderSpec,
+  ): Promise<EnvironmentAgentProviderStatus> {
+    return this.request<EnvironmentAgentProviderStatus>({
+      type: "provider.ensure",
+      payload: spec,
     });
   }
 
@@ -290,6 +305,9 @@ export async function createHttpEnvironmentAgentClient(args: {
 
   return {
     providerTransport: client.providerTransport,
+    ensureProviderRunning(spec) {
+      return postJson<EnvironmentAgentProviderStatus>("/control/provider/ensure", spec);
+    },
     acknowledge(request) {
       return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
     },

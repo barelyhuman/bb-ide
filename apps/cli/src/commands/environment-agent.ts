@@ -5,7 +5,7 @@ import {
 } from "@beanbag/environment-agent";
 
 interface EnvironmentAgentOptions {
-  providerCommand: string;
+  providerCommand?: string;
   providerArg?: string[];
   providerLaunchCommand?: string;
   providerLaunchArg?: string[];
@@ -42,7 +42,7 @@ export function registerEnvironmentAgentCommand(program: Command): void {
     .option("--http-host <host>", "HTTP bind host for environment-agent", "127.0.0.1")
     .action(async (opts: EnvironmentAgentOptions) => {
       const providerCommand = opts.providerCommand?.trim();
-      if (!providerCommand) {
+      if (!providerCommand && !opts.httpPort) {
         console.error("Missing required --provider-command");
         process.exit(1);
         return;
@@ -73,6 +73,23 @@ export function registerEnvironmentAgentCommand(program: Command): void {
           port: httpPort,
         });
         console.error(`environment-agent http listening on ${server.baseUrl}`);
+        const shutdown = async () => {
+          await server.close();
+          process.exit(0);
+        };
+        process.on("SIGINT", () => {
+          void shutdown();
+        });
+        process.on("SIGTERM", () => {
+          void shutdown();
+        });
+        return;
+      }
+
+      if (!child) {
+        console.error("Missing provider runtime");
+        process.exit(1);
+        return;
       }
 
       const forwardSignal = (signal: NodeJS.Signals) => {

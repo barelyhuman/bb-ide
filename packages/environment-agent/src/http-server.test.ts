@@ -54,6 +54,36 @@ describe("environment-agent HTTP transport", () => {
     client.close();
   });
 
+  it("can start a provider on demand over HTTP", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      attachProcessStdio: false,
+    });
+    runtime.start();
+    const server = await createEnvironmentAgentHttpServer({ runtime });
+    cleanup.push(() => server.close());
+
+    const client = await createHttpEnvironmentAgentClient({
+      baseUrl: server.baseUrl,
+    });
+
+    await expect(
+      client.ensureProviderRunning({
+        command: "node",
+        args: [
+          "-e",
+          "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
+        ],
+      }),
+    ).resolves.toMatchObject({
+      running: true,
+      launched: true,
+      pid: expect.any(Number),
+    });
+
+    client.close();
+  });
+
   it("streams provider lines over HTTP", async () => {
     const received: string[] = [];
     const upstream = createServer((request, response) => {

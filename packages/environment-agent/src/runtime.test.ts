@@ -83,4 +83,17 @@ describe("EnvironmentAgentRuntime", () => {
       payload: { turnId: "turn-1" },
     });
   });
+
+  it("does not require a provider at startup when launched in control-plane mode", () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      attachProcessStdio: false,
+    });
+
+    expect(runtime.start()).toBeNull();
+    expect(runtime.getProviderStatus()).toEqual({
+      running: false,
+      launched: false,
+    });
+  });
 });

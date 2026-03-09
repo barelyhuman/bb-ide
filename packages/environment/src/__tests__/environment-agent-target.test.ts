@@ -35,6 +35,10 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
           daemonConnection: {
             threadId: "thread-1",
           },
+          providerLaunch: {
+            command: "docker",
+            args: ["exec", "-i", "beanbag-thread-thread-1"],
+          },
         },
       }),
     ).toEqual({
@@ -45,6 +49,10 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
       },
       daemonConnection: {
         threadId: "thread-1",
+      },
+      providerLaunch: {
+        command: "docker",
+        args: ["exec", "-i", "beanbag-thread-thread-1"],
       },
     });
   });

@@ -48,7 +48,22 @@ function createFakeChildProcess(): FakeChildProcess {
         typeof record.requestId === "string" ? record.requestId : undefined;
 
       if (record.environmentAgentMessage === true && requestId) {
-        if (record.type === "status") {
+        if (record.type === "provider.ensure") {
+          process.nextTick(() => {
+            child.stdout.push(
+              JSON.stringify({
+                environmentAgentMessage: true,
+                requestId,
+                type: "provider.ensure.response",
+                payload: {
+                  running: true,
+                  launched: true,
+                  pid: 12345,
+                },
+              }) + "\n",
+            );
+          });
+        } else if (record.type === "status") {
           process.nextTick(() => {
             child.stdout.push(
               JSON.stringify({

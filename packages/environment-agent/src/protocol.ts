@@ -1,6 +1,24 @@
 export type EnvironmentAgentTransportKind = "command-stdio" | "http";
 export const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
+export interface EnvironmentAgentProviderLaunchWrapper {
+  command: string;
+  args: string[];
+}
+
+export interface EnvironmentAgentProviderSpec {
+  command: string;
+  args: string[];
+  launchCommand?: string;
+  launchArgs?: string[];
+}
+
+export interface EnvironmentAgentProviderStatus {
+  running: boolean;
+  launched: boolean;
+  pid?: number;
+}
+
 export type EnvironmentAgentConnectionTarget =
   | {
       transport: "command-stdio";
@@ -9,16 +27,14 @@ export type EnvironmentAgentConnectionTarget =
       cwd?: string;
       env?: Record<string, string | undefined>;
       daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
-      providerLaunch?: {
-        command: string;
-        args: string[];
-      };
+      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
     }
   | {
       transport: "http";
       baseUrl: string;
       headers?: Record<string, string>;
       daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
+      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
     };
 
 export interface EnvironmentAgentDaemonConnectionConfig {
@@ -198,6 +214,10 @@ interface EnvironmentAgentControlMessageBase {
 
 export type EnvironmentAgentControlRequest =
   | (EnvironmentAgentControlMessageBase & {
+      type: "provider.ensure";
+      payload: EnvironmentAgentProviderSpec;
+    })
+  | (EnvironmentAgentControlMessageBase & {
       type: "ack";
       payload: EnvironmentAgentAckRequest;
     })
@@ -210,6 +230,10 @@ export type EnvironmentAgentControlRequest =
     });
 
 export type EnvironmentAgentControlResponse =
+  | (EnvironmentAgentControlMessageBase & {
+      type: "provider.ensure.response";
+      payload: EnvironmentAgentProviderStatus;
+    })
   | (EnvironmentAgentControlMessageBase & {
       type: "ack.response";
       payload: EnvironmentAgentAckResponse;
@@ -242,7 +266,12 @@ export function isEnvironmentAgentControlRequest(
   if (record.environmentAgentMessage !== true) return false;
   if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
   const type = record.type;
-  return type === "ack" || type === "replay" || type === "status";
+  return (
+    type === "provider.ensure" ||
+    type === "ack" ||
+    type === "replay" ||
+    type === "status"
+  );
 }
 
 export function isEnvironmentAgentControlResponse(
@@ -254,6 +283,7 @@ export function isEnvironmentAgentControlResponse(
   if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
   const type = record.type;
   return (
+    type === "provider.ensure.response" ||
     type === "ack.response" ||
     type === "replay.response" ||
     type === "status.response"

@@ -75,6 +75,35 @@ describe("EnvironmentAgentClient", () => {
     expect(providerLineSpy).not.toHaveBeenCalled();
   });
 
+  it("sends provider ensure requests through the control plane", async () => {
+    const transport = createFakeTransport();
+    const client = createEnvironmentAgentClient(transport);
+
+    const ensurePromise = client.ensureProviderRunning({
+      command: "codex",
+      args: ["app-server"],
+    });
+    const request = JSON.parse(transport.emittedLines[0] ?? "") as EnvironmentAgentControlRequest;
+    transport.emitStdout(
+      JSON.stringify({
+        environmentAgentMessage: true,
+        requestId: request.requestId,
+        type: "provider.ensure.response",
+        payload: {
+          running: true,
+          launched: true,
+          pid: 1234,
+        },
+      }),
+    );
+
+    await expect(ensurePromise).resolves.toEqual({
+      running: true,
+      launched: true,
+      pid: 1234,
+    });
+  });
+
   it("forwards provider lines to the provider transport", () => {
     const transport = createFakeTransport();
     const client = createEnvironmentAgentClient(transport);
