@@ -83,6 +83,8 @@ export interface DaemonE2eHarness {
   tempDir: string;
   dbPath: string;
   projectRoot: string;
+  getEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
+  getEnvironmentAgentCursor: (threadId: string) => number;
   cleanup: () => Promise<void>;
 }
 
@@ -193,6 +195,18 @@ export async function startDaemonE2eHarness(
       tempDir,
       dbPath,
       projectRoot,
+      getEnvironmentAgentAuthorization: (threadId: string) =>
+        (
+          threadManager as unknown as {
+            _resolveEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
+          }
+        )._resolveEnvironmentAgentAuthorization(threadId),
+      getEnvironmentAgentCursor: (threadId: string) =>
+        (
+          threadRepo.getById(threadId) as
+            | ({ environmentAgentCursor?: number } & Record<string, unknown>)
+            | undefined
+        )?.environmentAgentCursor ?? 0,
       cleanup,
     };
   } catch (err) {
