@@ -6,6 +6,8 @@ import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
+  type EnvironmentAgentCommand,
+  type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentDaemonConnectionConfig,
   type EnvironmentAgentDeliveryReason,
@@ -41,6 +43,7 @@ const MAX_AUTOMATIC_DELIVERY_RETRIES = 8;
 export class EnvironmentAgentRuntime {
   private readonly events: EnvironmentAgentEventEnvelope[] = [];
   private sequence = 0;
+  private providerRequestId = 0;
   private lastAckedSequence = 0;
   private pendingCommandCount = 0;
   private providerChild: ChildProcess | null = null;
@@ -232,6 +235,27 @@ export class EnvironmentAgentRuntime {
       .finally(() => {
         this.deliveryInFlight = null;
       });
+  }
+
+  executeCommand(
+    envelope: EnvironmentAgentCommandEnvelope,
+  ): EnvironmentAgentCommandAck {
+    try {
+      this.ensureProviderForCommand(envelope.command);
+      this.sendProviderLine(this.toProviderCommandLine(envelope.command));
+      return this.createCommandAck({
+        commandId: envelope.meta.commandId,
+        idempotencyKey: envelope.meta.idempotencyKey,
+        state: "accepted",
+      });
+    } catch (error) {
+      return this.createCommandAck({
+        commandId: envelope.meta.commandId,
+        idempotencyKey: envelope.meta.idempotencyKey,
+        state: "rejected",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private emitProviderStdoutLine(line: string): void {
@@ -610,5 +634,70 @@ export class EnvironmentAgentRuntime {
       method: record.method,
       payload: record.params ?? {},
     };
+  }
+
+  private ensureProviderForCommand(command: EnvironmentAgentCommand): void {
+    switch (command.type) {
+      case "thread.start":
+      case "thread.resume":
+      case "thread.stop":
+      case "turn.start":
+      case "turn.steer":
+      case "thread.rename":
+        if (!this.ensureProviderRunning()) {
+          throw new Error("Provider runtime is unavailable");
+        }
+        return;
+      case "workspace.status":
+      case "workspace.diff":
+        return;
+    }
+  }
+
+  private toProviderCommandLine(command: EnvironmentAgentCommand): string {
+    const message = {
+      jsonrpc: "2.0" as const,
+      method: this.toProviderMethod(command),
+      id: ++this.providerRequestId,
+      params: this.toProviderParams(command),
+    };
+    return JSON.stringify(message);
+  }
+
+  private toProviderMethod(command: EnvironmentAgentCommand): string {
+    switch (command.type) {
+      case "thread.start":
+        return "thread/start";
+      case "thread.resume":
+        return "thread/resume";
+      case "thread.stop":
+        return "thread/stop";
+      case "turn.start":
+        return "turn/start";
+      case "turn.steer":
+        return "turn/steer";
+      case "thread.rename":
+        return "thread/name-set";
+      case "workspace.status":
+        return "workspace/status";
+      case "workspace.diff":
+        return "workspace/diff";
+    }
+  }
+
+  private toProviderParams(command: EnvironmentAgentCommand): unknown {
+    switch (command.type) {
+      case "thread.start":
+      case "thread.resume":
+      case "turn.start":
+      case "turn.steer":
+      case "thread.rename":
+        return command.params;
+      case "thread.stop":
+        return command.params ?? {};
+      case "workspace.status":
+      case "workspace.diff":
+        return { threadId: command.threadId };
+    }
   }
 }

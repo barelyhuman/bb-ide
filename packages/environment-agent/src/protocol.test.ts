@@ -20,6 +20,7 @@ describe("environment-agent protocol", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
+        params: { model: "gpt-5" },
       },
     };
 

@@ -62,27 +62,39 @@ export type EnvironmentAgentCommand =
       type: "thread.start";
       threadId: string;
       projectId: string;
+      params: unknown;
     }
   | {
       type: "thread.resume";
       threadId: string;
       projectId: string;
       providerThreadId: string;
+      params: unknown;
     }
   | {
       type: "thread.stop";
       threadId: string;
+      params?: unknown;
     }
   | {
       type: "turn.start";
       threadId: string;
       providerThreadId: string;
+      params: unknown;
     }
   | {
       type: "turn.steer";
       threadId: string;
       providerThreadId: string;
       turnId: string;
+      params: unknown;
+    }
+  | {
+      type: "thread.rename";
+      threadId: string;
+      providerThreadId: string;
+      title: string;
+      params: unknown;
     }
   | {
       type: "workspace.status";
@@ -259,6 +271,10 @@ interface EnvironmentAgentControlMessageBase {
 
 export type EnvironmentAgentControlRequest =
   | (EnvironmentAgentControlMessageBase & {
+      type: "command";
+      payload: EnvironmentAgentCommandEnvelope;
+    })
+  | (EnvironmentAgentControlMessageBase & {
       type: "provider.ensure";
       payload: EnvironmentAgentProviderSpec;
     })
@@ -278,6 +294,10 @@ export type EnvironmentAgentControlRequest =
     });
 
 export type EnvironmentAgentControlResponse =
+  | (EnvironmentAgentControlMessageBase & {
+      type: "command.response";
+      payload: EnvironmentAgentCommandAck;
+    })
   | (EnvironmentAgentControlMessageBase & {
       type: "provider.ensure.response";
       payload: EnvironmentAgentProviderStatus;
@@ -319,6 +339,7 @@ export function isEnvironmentAgentControlRequest(
   if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
   const type = record.type;
   return (
+    type === "command" ||
     type === "provider.ensure" ||
     type === "delivery.retry" ||
     type === "ack" ||
@@ -336,6 +357,7 @@ export function isEnvironmentAgentControlResponse(
   if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
   const type = record.type;
   return (
+    type === "command.response" ||
     type === "provider.ensure.response" ||
     type === "delivery.retry.response" ||
     type === "ack.response" ||

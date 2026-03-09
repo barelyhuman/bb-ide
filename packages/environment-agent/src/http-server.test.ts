@@ -94,6 +94,65 @@ describe("environment-agent HTTP transport", () => {
     client.close();
   });
 
+  it("accepts explicit thread commands over HTTP", async () => {
+    const received: string[] = [];
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
+      ],
+    });
+    runtime.start();
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      received.push(line);
+    });
+    cleanup.push(unsubscribe);
+    const server = await createEnvironmentAgentHttpServer({
+      runtime,
+      bearerToken: "test-token",
+    });
+    cleanup.push(() => server.close());
+
+    const client = await createHttpEnvironmentAgentClient({
+      baseUrl: server.baseUrl,
+      headers: {
+        authorization: "Bearer test-token",
+      },
+    });
+
+    await expect(
+      client.sendCommand({
+        meta: {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          commandId: "cmd-1",
+          idempotencyKey: "idem-1",
+          sentAt: 123,
+          threadId: "thread-1",
+          projectId: "proj-1",
+        },
+        command: {
+          type: "thread.start",
+          threadId: "thread-1",
+          projectId: "proj-1",
+          params: { model: "gpt-5" },
+        },
+      }),
+    ).resolves.toMatchObject({
+      commandId: "cmd-1",
+      state: "accepted",
+    });
+
+    await expect.poll(() => received.length).toBeGreaterThan(0);
+    expect(JSON.parse(received[0] ?? "{}")).toMatchObject({
+      method: "thread/start",
+      params: { model: "gpt-5" },
+    });
+
+    client.close();
+  });
+
   it("streams provider lines over HTTP", async () => {
     const received: string[] = [];
     const upstream = createServer((request, response) => {

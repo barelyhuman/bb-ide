@@ -159,6 +159,46 @@ describe("EnvironmentAgentRuntime", () => {
     );
   });
 
+  it("accepts explicit commands and forwards them to the provider transport", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
+      ],
+    });
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    const ack = runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-1",
+        idempotencyKey: "idem-1",
+        sentAt: Date.now(),
+        threadId: "thread-1",
+        projectId: "project-1",
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-1",
+        projectId: "project-1",
+        params: { cwd: "/tmp/project" },
+      },
+    });
+
+    expect(ack.state).toBe("accepted");
+    await expect.poll(() => lines.length).toBeGreaterThan(0);
+    expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
+      method: "thread/start",
+      params: { cwd: "/tmp/project" },
+    });
+  });
+
   it("pushes buffered events back to the daemon and advances the ack cursor", async () => {
     const deliveredSequences: number[][] = [];
     const daemon = createServer((request, response) => {

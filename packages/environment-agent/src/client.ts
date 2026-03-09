@@ -7,6 +7,8 @@ import {
   isEnvironmentAgentLiveEventMessage,
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
+  type EnvironmentAgentCommandAck,
+  type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentControlRequest,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderSpec,
@@ -22,6 +24,7 @@ interface PendingControlRequest {
 }
 
 type EnvironmentAgentRequestShape =
+  | { type: "command"; payload: EnvironmentAgentCommandEnvelope }
   | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
   | { type: "delivery.retry" }
   | { type: "ack"; payload: EnvironmentAgentAckRequest }
@@ -30,6 +33,9 @@ type EnvironmentAgentRequestShape =
 
 export interface EnvironmentAgentClient {
   readonly providerTransport: JsonLineTransport;
+  sendCommand(
+    envelope: EnvironmentAgentCommandEnvelope,
+  ): Promise<EnvironmentAgentCommandAck>;
   ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
   ): Promise<EnvironmentAgentProviderStatus>;
@@ -95,6 +101,15 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     return this.request<EnvironmentAgentProviderStatus>({
       type: "provider.ensure",
       payload: spec,
+    });
+  }
+
+  sendCommand(
+    envelope: EnvironmentAgentCommandEnvelope,
+  ): Promise<EnvironmentAgentCommandAck> {
+    return this.request<EnvironmentAgentCommandAck>({
+      type: "command",
+      payload: envelope,
     });
   }
 
@@ -303,17 +318,20 @@ export async function createHttpEnvironmentAgentClient(args: {
     return response.json() as Promise<TResponse>;
   };
 
-    return {
-      providerTransport: client.providerTransport,
-      ensureProviderRunning(spec) {
-        return postJson<EnvironmentAgentProviderStatus>("/control/provider/ensure", spec);
-      },
-      retryDaemonDelivery() {
-        return postJson<EnvironmentAgentStatusSnapshot>("/control/delivery/retry", {});
-      },
-      acknowledge(request) {
-        return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
-      },
+  return {
+    providerTransport: client.providerTransport,
+    sendCommand(envelope) {
+      return postJson<EnvironmentAgentCommandAck>("/control/command", envelope);
+    },
+    ensureProviderRunning(spec) {
+      return postJson<EnvironmentAgentProviderStatus>("/control/provider/ensure", spec);
+    },
+    retryDaemonDelivery() {
+      return postJson<EnvironmentAgentStatusSnapshot>("/control/delivery/retry", {});
+    },
+    acknowledge(request) {
+      return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
+    },
     replay(request) {
       return postJson<EnvironmentAgentReplayResponse>("/control/replay", request);
     },
