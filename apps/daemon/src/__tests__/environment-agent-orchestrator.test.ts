@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Thread } from "@beanbag/agent-core";
+import type { Thread, ThreadEvent } from "@beanbag/agent-core";
 import type { EnvironmentService } from "../environment-service.js";
 import type {
   ThreadRepository,

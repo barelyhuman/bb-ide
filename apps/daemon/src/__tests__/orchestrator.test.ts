@@ -6319,7 +6319,7 @@ describe("Orchestrator", () => {
     it("preserves managed environments during daemon shutdown mode", () => {
       const dispose = vi.fn();
       const stopWatchingWorkspaceStatus = vi.fn();
-      asOrchestratorHarness(manager).environmentService.environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
           rootPath: "/test",
           dispose,
