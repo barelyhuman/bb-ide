@@ -45,6 +45,11 @@ describe("environment-agent service config", () => {
         port: 4123,
         bearerToken: "secret-token",
       },
+      logging: {
+        filePath: expect.stringContaining(
+          "/.beanbag/environment-agent-logs/project-1/docker-thread-1.log",
+        ),
+      },
     });
   });
 

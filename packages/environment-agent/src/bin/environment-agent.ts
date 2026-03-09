@@ -56,7 +56,9 @@ async function main(): Promise<void> {
       env: process.env,
     });
     const { server } = await startEnvironmentAgentService(options);
-    console.error(`environment-agent http listening on ${server.baseUrl}`);
+    console.error(
+      `environment-agent http listening on ${server.baseUrl} (log: ${options.logging.filePath})`,
+    );
 
     const shutdown = async () => {
       await server.close();

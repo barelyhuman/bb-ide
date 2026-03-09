@@ -295,6 +295,9 @@ export class EnvironmentAgentRuntime {
       if (this.providerChild === child) {
         this.providerChild = null;
       }
+      this.opts.onStderrLine?.(
+        `provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`,
+      );
       this.appendEvent({
         type: "environment.degraded",
         threadId: this.resolveThreadId(),
@@ -414,6 +417,9 @@ export class EnvironmentAgentRuntime {
       }
     } catch (error) {
       this.connectedToDaemon = false;
+      this.opts.onStderrLine?.(
+        `daemon delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
       this.scheduleDaemonDeliveryRetry();
       throw error;
     }

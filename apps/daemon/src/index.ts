@@ -11,15 +11,17 @@ import {
   EventRepository,
 } from "@beanbag/db";
 import { createServer } from "./server.js";
+import { installConsoleFileLogger } from "./file-logger.js";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
 // ---------------------------------------------------------------------------
 
-function parseArgs(): { port: number; dbPath: string } {
+function parseArgs(): { port: number; dbPath: string; logFilePath: string } {
   const args = process.argv.slice(2);
   let port = 3333;
   let dbPath = resolve(homedir(), ".beanbag", "beanbag.db");
+  let logFilePath = resolve(homedir(), ".beanbag", "logs", "daemon.log");
 
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
@@ -32,6 +34,9 @@ function parseArgs(): { port: number; dbPath: string } {
     } else if ((args[i] === "--db" || args[i] === "-d") && args[i + 1]) {
       dbPath = resolve(args[i + 1]);
       i++;
+    } else if ((args[i] === "--log-file" || args[i] === "-l") && args[i + 1]) {
+      logFilePath = resolve(args[i + 1]);
+      i++;
     } else if (args[i] === "--help" || args[i] === "-h") {
       console.log(`
 Beanbag Daemon
@@ -41,13 +46,14 @@ Usage: beanbag-daemon [options]
 Options:
   --port, -p <number>   Port to listen on (default: 3333)
   --db, -d <path>       Path to SQLite database (default: ~/.beanbag/beanbag.db)
+  --log-file, -l <path> Path to daemon log file (default: ~/.beanbag/logs/daemon.log)
   --help, -h            Show this help message
 `);
       process.exit(0);
     }
   }
 
-  return { port, dbPath };
+  return { port, dbPath, logFilePath };
 }
 
 function closeHttpServer(server: ReturnType<typeof serve> | undefined): Promise<void> {
@@ -91,7 +97,8 @@ const SUPERVISED_RESTART_EXIT_CODE = 75;
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const { port, dbPath } = parseArgs();
+  const { port, dbPath, logFilePath } = parseArgs();
+  installConsoleFileLogger(logFilePath);
 
   // Ensure the data directory exists
   const dataDir = resolve(dbPath, "..");
@@ -198,6 +205,12 @@ async function main(): Promise<void> {
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("uncaughtException", (error) => {
+    console.error("Uncaught exception:", error);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled rejection:", reason);
+  });
 
   // Start listening
   httpServer = serve(
@@ -211,6 +224,7 @@ async function main(): Promise<void> {
       console.log(`  REST API: http://localhost:${info.port}/api/v1/`);
       console.log(`  WebSocket: ws://localhost:${info.port}/ws`);
       console.log(`  Database: ${dbPath}`);
+      console.log(`  Log file: ${logFilePath}`);
       console.log(`\nPress Ctrl+C to stop.\n`);
     },
   );
