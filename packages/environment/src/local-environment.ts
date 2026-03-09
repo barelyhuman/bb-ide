@@ -29,6 +29,11 @@ import {
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
 import { resolveEnvironmentAgentConnectionTarget } from "./environment-agent-target.js";
+import {
+  disposeManagedHostEnvironmentAgent,
+  ensureManagedHostEnvironmentAgent,
+  resolveManagedHostEnvironmentAgentTarget,
+} from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 
 interface LocalEnvironmentState {}
@@ -49,11 +54,15 @@ const LOCAL_ENVIRONMENT_INFO: EnvironmentInfo = {
 class LocalEnvironment implements IEnvironment {
   readonly kind = "local";
   readonly info = { ...LOCAL_ENVIRONMENT_INFO };
+  private readonly projectId: string;
+  private readonly threadId: string;
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
 
   constructor(context: CreateEnvironmentContext) {
+    this.projectId = context.projectId;
+    this.threadId = context.threadId;
     this.rootPath = context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
@@ -63,9 +72,24 @@ class LocalEnvironment implements IEnvironment {
     return {};
   }
 
-  async prepare(): Promise<void> {}
+  async prepare(): Promise<void> {
+    await ensureManagedHostEnvironmentAgent({
+      workspaceRootPath: this.rootPath,
+      threadId: this.threadId,
+      projectId: this.projectId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
+  }
 
-  dispose(): void {}
+  async dispose(): Promise<void> {
+    await disposeManagedHostEnvironmentAgent({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
+  }
 
   exists(): boolean {
     return existsSync(this.rootPath);
@@ -80,15 +104,22 @@ class LocalEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.env,
-      defaultTarget: {
-      transport: "command-stdio",
-      command: "bb",
-      args: ["environment-agent"],
-      cwd: this.rootPath,
-      env: { ...this.env },
-      },
+      defaultTarget:
+        managedTarget ?? {
+          transport: "command-stdio",
+          command: "bb",
+          args: ["environment-agent"],
+          cwd: this.rootPath,
+          env: { ...this.env },
+        },
     });
   }
 

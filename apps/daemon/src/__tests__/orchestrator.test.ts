@@ -473,7 +473,22 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
       try {
         const msg = JSON.parse(data.trim());
         if (msg.environmentAgentMessage === true && msg.requestId) {
-          if (msg.type === "replay") {
+          if (msg.type === "provider.ensure") {
+            process.nextTick(() => {
+              child.stdout.push(
+                JSON.stringify({
+                  environmentAgentMessage: true,
+                  requestId: msg.requestId,
+                  type: "provider.ensure.response",
+                  payload: {
+                    running: true,
+                    launched: true,
+                    pid: 12345,
+                  },
+                }) + "\n",
+              );
+            });
+          } else if (msg.type === "replay") {
             process.nextTick(() => {
               child.stdout.push(
                 JSON.stringify({
@@ -649,6 +664,16 @@ function createMockLlmCompletionService(
   };
 }
 
+function createTestRuntimeEnv(
+  overrides: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT: "true",
+    ...overrides,
+  };
+}
+
 describe("Orchestrator", () => {
   let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
   let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
@@ -671,6 +696,8 @@ describe("Orchestrator", () => {
       projectRepo,
       ws,
       llmCompletionService,
+      undefined,
+      createTestRuntimeEnv(),
     );
   });
 
@@ -699,7 +726,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -1002,7 +1029,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         environmentRegistry,
       );
 
@@ -1056,7 +1083,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1162,7 +1189,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1342,7 +1369,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1443,7 +1470,7 @@ describe("Orchestrator", () => {
       chmodSync(bbPath, 0o755);
 
       const pathValue = [firstBin, bbBin].join(delimiter);
-      const runtimeEnv = { ...process.env, PATH: pathValue };
+      const runtimeEnv = { ...createTestRuntimeEnv(), PATH: pathValue };
 
       try {
         const localManager = new Orchestrator(
@@ -1492,7 +1519,7 @@ describe("Orchestrator", () => {
       mkdirSync(secondBin, { recursive: true });
 
       const pathValue = [firstBin, secondBin].join(delimiter);
-      const runtimeEnv = { ...process.env, PATH: pathValue };
+      const runtimeEnv = { ...createTestRuntimeEnv(), PATH: pathValue };
 
       try {
         const localManager = new Orchestrator(
@@ -1740,7 +1767,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1839,7 +1866,7 @@ describe("Orchestrator", () => {
         ws,
         titleLlmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         undefined,
         undefined,
         undefined,
@@ -2196,6 +2223,26 @@ describe("Orchestrator", () => {
           errorChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
+            if (msg.environmentAgentMessage === true && msg.requestId) {
+              if (msg.type === "provider.ensure") {
+                process.nextTick(() => {
+                  errorChild.stdout!.push(
+                    JSON.stringify({
+                      environmentAgentMessage: true,
+                      requestId: msg.requestId,
+                      type: "provider.ensure.response",
+                      payload: {
+                        running: true,
+                        launched: true,
+                        pid: 12345,
+                      },
+                    }) + "\n",
+                  );
+                });
+              }
+              callback();
+              return;
+            }
             if (msg.method === "thread/start" && msg.id) {
               process.nextTick(() => {
                 errorChild.stdout!.push(
@@ -3414,6 +3461,26 @@ describe("Orchestrator", () => {
           resumeChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
+            if (msg.environmentAgentMessage === true && msg.requestId) {
+              if (msg.type === "provider.ensure") {
+                process.nextTick(() => {
+                  resumeChild.stdout!.push(
+                    JSON.stringify({
+                      environmentAgentMessage: true,
+                      requestId: msg.requestId,
+                      type: "provider.ensure.response",
+                      payload: {
+                        running: true,
+                        launched: true,
+                        pid: 12345,
+                      },
+                    }) + "\n",
+                  );
+                });
+              }
+              callback();
+              return;
+            }
             if (msg.method === "thread/resume" && msg.id) {
               process.nextTick(() => {
                 resumeChild.stdout!.push(
@@ -3531,7 +3598,7 @@ describe("Orchestrator", () => {
           ws,
           llmCompletionService,
           createCodexProviderAdapter(),
-          process.env,
+          createTestRuntimeEnv(),
           customEnvironmentRegistry,
         );
         const input = [{ type: "text" as const, text: "Resume and continue" }];
@@ -3575,7 +3642,22 @@ describe("Orchestrator", () => {
             try {
               const msg = JSON.parse(data.trim());
               if (msg.environmentAgentMessage === true && msg.requestId) {
-                if (msg.type === "replay") {
+                if (msg.type === "provider.ensure") {
+                  process.nextTick(() => {
+                    resumeChild.stdout!.push(
+                      JSON.stringify({
+                        environmentAgentMessage: true,
+                        requestId: msg.requestId,
+                        type: "provider.ensure.response",
+                        payload: {
+                          running: true,
+                          launched: true,
+                          pid: 12345,
+                        },
+                      }) + "\n",
+                    );
+                  });
+                } else if (msg.type === "replay") {
                   process.nextTick(() => {
                     resumeChild.stdout!.push(
                       JSON.stringify({
@@ -4594,7 +4676,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
       const thread = makeThread({

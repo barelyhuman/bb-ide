@@ -33,6 +33,11 @@ import {
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
 import { resolveEnvironmentAgentConnectionTarget } from "./environment-agent-target.js";
+import {
+  disposeManagedHostEnvironmentAgent,
+  ensureManagedHostEnvironmentAgent,
+  resolveManagedHostEnvironmentAgentTarget,
+} from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 
 export interface WorktreeEnvironmentState {
@@ -214,17 +219,23 @@ function resolveDefaultBranch(repoRoot: string): string | undefined {
 class WorktreeEnvironment implements IEnvironment {
   readonly kind = "worktree";
   readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
+  private readonly projectId: string;
+  private readonly threadId: string;
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
   private preparePromise: Promise<void> | null = null;
 
   constructor(
+    projectId: string,
+    threadId: string,
     private readonly projectRoot: string,
     private readonly state: WorktreeEnvironmentState,
     runtimeEnv: Record<string, string | undefined>,
     services?: CreateEnvironmentContext["services"],
   ) {
+    this.projectId = projectId;
+    this.threadId = threadId;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
     this.services = services;
@@ -236,6 +247,13 @@ class WorktreeEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     if (existsSync(this.state.workspaceRoot)) {
+      await ensureManagedHostEnvironmentAgent({
+        workspaceRootPath: this.state.workspaceRoot,
+        threadId: this.threadId,
+        projectId: this.projectId,
+        environmentId: this.kind,
+        runtimeEnv: this.env,
+      });
       return;
     }
     if (this.preparePromise) {
@@ -286,9 +304,23 @@ class WorktreeEnvironment implements IEnvironment {
         `Failed to create worktree: ${addResult.stderr || addResult.stdout || "unknown error"}`,
       );
     }
+
+    await ensureManagedHostEnvironmentAgent({
+      workspaceRootPath: this.state.workspaceRoot,
+      threadId: this.threadId,
+      projectId: this.projectId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
   }
 
   async dispose(): Promise<void> {
+    await disposeManagedHostEnvironmentAgent({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
     await runGitAtPathAsync(
       this.projectRoot,
       ["worktree", "remove", "--force", this.state.workspaceRoot],
@@ -310,15 +342,22 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.env,
-      defaultTarget: {
-      transport: "command-stdio",
-      command: "bb",
-      args: ["environment-agent"],
-      cwd: this.rootPath,
-      env: { ...this.env },
-      },
+      defaultTarget:
+        managedTarget ?? {
+          transport: "command-stdio",
+          command: "bb",
+          args: ["environment-agent"],
+          cwd: this.rootPath,
+          env: { ...this.env },
+        },
     });
   }
 
@@ -717,6 +756,8 @@ export function createWorktreeEnvironmentDefinition(
       mkdirSync(worktreeRoot, { recursive: true });
 
       return new WorktreeEnvironment(
+        context.projectId,
+        context.threadId,
         projectRoot,
         {
           workspaceRoot,
@@ -731,6 +772,8 @@ export function createWorktreeEnvironmentDefinition(
         throw new Error(`Worktree workspace is unavailable: ${state.workspaceRoot}`);
       }
       return new WorktreeEnvironment(
+        context.projectId,
+        context.threadId,
         context.projectRootPath,
         state,
         context.runtimeEnv,
