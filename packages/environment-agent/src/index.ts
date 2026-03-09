@@ -25,3 +25,9 @@ export type {
 export {
   createChildProcessJsonLineTransport,
 } from "./transport.js";
+
+export type { EnvironmentAgentRuntimeOptions } from "./runtime.js";
+export {
+  EnvironmentAgentRuntime,
+  connectionTargetFromRuntimeOptions,
+} from "./runtime.js";

@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import { Command } from "commander";
+import { EnvironmentAgentRuntime } from "@beanbag/environment-agent";
 
 interface EnvironmentAgentOptions {
   providerCommand: string;
@@ -41,22 +41,16 @@ export function registerEnvironmentAgentCommand(program: Command): void {
         return;
       }
 
-      const providerLaunchCommand = opts.providerLaunchCommand?.trim();
-      const child = spawn(
-        providerLaunchCommand || providerCommand,
-        providerLaunchCommand
-          ? [...(opts.providerLaunchArg ?? []), providerCommand, ...(opts.providerArg ?? [])]
-          : (opts.providerArg ?? []),
-        {
-        cwd: process.cwd(),
-        env: process.env,
-        stdio: ["pipe", "pipe", "pipe"],
-        },
-      );
-
-      process.stdin.pipe(child.stdin!);
-      child.stdout?.pipe(process.stdout);
-      child.stderr?.pipe(process.stderr);
+      const runtime = new EnvironmentAgentRuntime({
+        threadId: process.env.BB_THREAD_ID,
+        projectId: process.env.BB_PROJECT_ID,
+        environmentId: process.env.BB_ENVIRONMENT_ID,
+        providerCommand,
+        providerArgs: opts.providerArg ?? [],
+        providerLaunchCommand: opts.providerLaunchCommand?.trim(),
+        providerLaunchArgs: opts.providerLaunchArg ?? [],
+      });
+      const child = runtime.start();
 
       const forwardSignal = (signal: NodeJS.Signals) => {
         try {
@@ -69,7 +63,7 @@ export function registerEnvironmentAgentCommand(program: Command): void {
       process.on("SIGINT", () => forwardSignal("SIGINT"));
       process.on("SIGTERM", () => forwardSignal("SIGTERM"));
 
-      child.once("exit", (code, signal) => {
+      child.once("exit", (code: number | null, signal: NodeJS.Signals | null) => {
         if (signal) {
           process.kill(process.pid, signal);
           return;
@@ -77,7 +71,7 @@ export function registerEnvironmentAgentCommand(program: Command): void {
         process.exit(code ?? 1);
       });
 
-      child.once("error", (error) => {
+      child.once("error", (error: Error) => {
         console.error(error.message);
         process.exit(1);
       });
