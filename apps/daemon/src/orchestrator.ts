@@ -73,7 +73,10 @@ import {
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
 } from "@beanbag/environment";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type {
+  EnvironmentAgentClient,
+  EnvironmentAgentConnectionTarget,
+} from "@beanbag/environment-agent";
 import type {
   EnvironmentAgentDeliveryResponse,
   EnvironmentAgentEventEnvelope,
@@ -2129,7 +2132,7 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(threadId);
     }
     try {
-      return await this.agentServer.getEnvironmentAgentStatus(threadId);
+      return await this._withEnvironmentAgentClient(threadId, (client) => client.status());
     } catch (error) {
       this._rethrowAgentServerError(threadId, error);
     }
@@ -2150,7 +2153,14 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(args.threadId);
     }
     try {
-      return await this.agentServer.replayEnvironmentAgentEvents(args);
+      return await this._withEnvironmentAgentClient(args.threadId, (client) =>
+        client.replay({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          afterSequence: args.afterSequence,
+          limit: args.limit,
+          threadId: args.threadId,
+        }),
+      );
     } catch (error) {
       this._rethrowAgentServerError(args.threadId, error);
     }
@@ -2252,7 +2262,10 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(threadId);
     }
     try {
-      return await this.agentServer.retryEnvironmentAgentDelivery(threadId);
+      return await this._withEnvironmentAgentClient(
+        threadId,
+        (client) => client.retryDaemonDelivery(),
+      );
     } catch (error) {
       this._rethrowAgentServerError(threadId, error);
     }
@@ -2513,10 +2526,13 @@ export class Orchestrator implements ThreadOrchestrator {
       )?.environmentAgentCursor ?? 0;
     const afterSequence =
       this.environmentAgentReplayCursorByThreadId.get(threadId) ?? persistedCursor;
-    const replay = await this.agentServer.replayEnvironmentAgentEvents({
-      threadId,
-      afterSequence,
-    });
+    const replay = await this._withEnvironmentAgentClient(threadId, (client) =>
+      client.replay({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId,
+        afterSequence,
+      }),
+    );
     if (replay.events.length > 0) {
       await this.agentServer.ingestReplayedEnvironmentAgentEvents({
         threadId,
@@ -2585,29 +2601,49 @@ export class Orchestrator implements ThreadOrchestrator {
         return;
       }
 
-      const environment = this.environmentService.restoreThreadEnvironment(
-        thread,
-        project.rootPath,
+      await this._withEnvironmentAgentClient(
+        threadId,
+        (client) => client.retryDaemonDelivery(),
       );
-      const target = environment?.getAgentConnectionTarget();
-      if (!target) {
-        return;
-      }
-
-      const client = await createHttpEnvironmentAgentClient({
-        baseUrl: target.baseUrl,
-        ...(target.headers ? { headers: target.headers } : {}),
-      });
-      try {
-        await client.retryDaemonDelivery();
-      } finally {
-        client.close();
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
         `[thread ${threadId}] Failed to nudge environment-agent delivery: ${message}`,
       );
+    }
+  }
+
+  private async _withEnvironmentAgentClient<T>(
+    threadId: string,
+    action: (client: EnvironmentAgentClient) => Promise<T>,
+  ): Promise<T> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+
+    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
+    const target =
+      runtime?.agentConnectionTarget ??
+      this.environmentService
+        .restoreThreadEnvironment(thread, project.rootPath)
+        ?.getAgentConnectionTarget();
+    if (!target) {
+      throw inactiveSessionError(threadId);
+    }
+
+    const client = await createHttpEnvironmentAgentClient({
+      baseUrl: target.baseUrl,
+      ...(target.headers ? { headers: target.headers } : {}),
+    });
+    try {
+      return await action(client);
+    } finally {
+      client.close();
     }
   }
 

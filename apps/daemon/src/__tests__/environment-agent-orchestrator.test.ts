@@ -238,6 +238,129 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     );
   });
 
+  it("reads environment-agent status over short-lived HTTP without a live session", async () => {
+    const statusClient = {
+      status: vi.fn().mockResolvedValue({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        latestSequence: 3,
+        connectedToDaemon: true,
+        pendingEventCount: 1,
+        pendingCommandCount: 0,
+        deliveryState: "healthy",
+        retryAttemptCount: 0,
+      }),
+      close: vi.fn(),
+    };
+    const createClientSpy = vi
+      .spyOn(environmentAgent, "createHttpEnvironmentAgentClient")
+      .mockResolvedValue(statusClient as never);
+    const thread = makeThread();
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+
+    await expect(manager.getEnvironmentAgentStatus("thread-1")).resolves.toMatchObject({
+      latestSequence: 3,
+      pendingEventCount: 1,
+    });
+
+    expect(createClientSpy).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:4312",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(statusClient.status).toHaveBeenCalledTimes(1);
+    expect(statusClient.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays buffered events over short-lived HTTP without a live session", async () => {
+    const thread = makeThread({
+      environmentAgentCursor: 2,
+    } as Thread & { environmentAgentCursor: number }) as Thread & {
+      environmentAgentCursor: number;
+    };
+    const replayClient = {
+      replay: vi.fn().mockResolvedValue({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        fromSequenceExclusive: 2,
+        toSequenceInclusive: 4,
+        events: [
+          {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            sequence: 3,
+            emittedAt: 1_003,
+            threadId: "thread-1",
+            event: {
+              type: "provider.event",
+              threadId: "thread-1",
+              method: "turn/started",
+              payload: { turnId: "turn-1" },
+            },
+          },
+        ],
+        hasMore: false,
+      }),
+      close: vi.fn(),
+    };
+    const createClientSpy = vi
+      .spyOn(environmentAgent, "createHttpEnvironmentAgentClient")
+      .mockResolvedValue(replayClient as never);
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+      (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+    );
+    (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+      (_threadId: string, updates: Partial<Thread> & { environmentAgentCursor?: number }) => {
+        Object.assign(thread, updates);
+        return thread;
+      },
+    );
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+    const ingestSpy = vi
+      .spyOn(
+        (manager as unknown as { agentServer: { ingestReplayedEnvironmentAgentEvents: (args: unknown) => Promise<void> } }).agentServer,
+        "ingestReplayedEnvironmentAgentEvents",
+      )
+      .mockResolvedValue(undefined);
+
+    await (
+      manager as unknown as {
+        _replayBufferedEnvironmentAgentEvents: (threadId: string) => Promise<void>;
+      }
+    )._replayBufferedEnvironmentAgentEvents("thread-1");
+
+    expect(createClientSpy).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:4312",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(replayClient.replay).toHaveBeenCalledWith({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      threadId: "thread-1",
+      afterSequence: 2,
+    });
+    expect(ingestSpy).toHaveBeenCalledWith({
+      threadId: "thread-1",
+      events: [
+        expect.objectContaining({
+          sequence: 3,
+        }),
+      ],
+    });
+    expect(replayClient.close).toHaveBeenCalledTimes(1);
+    expect(thread.environmentAgentCursor).toBe(4);
+  });
+
   it("only ingests contiguous unseen environment-agent events and advances the cursor", async () => {
     const thread = makeThread({
       id: "thread-1",
@@ -521,13 +644,17 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         return thread;
       },
     );
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
 
-    const replaySpy = vi
-      .spyOn(
-        (manager as unknown as { agentServer: { replayEnvironmentAgentEvents: (args: unknown) => Promise<unknown> } }).agentServer,
-        "replayEnvironmentAgentEvents",
-      )
-      .mockResolvedValue({
+    const replayClient = {
+      replay: vi.fn().mockResolvedValue({
         fromSequenceExclusive: 4,
         toSequenceInclusive: 6,
         hasMore: false,
@@ -557,7 +684,12 @@ describe("Orchestrator environment-agent delivery and replay", () => {
             },
           },
         ],
-      });
+      }),
+      close: vi.fn(),
+    };
+    const createClientSpy = vi
+      .spyOn(environmentAgent, "createHttpEnvironmentAgentClient")
+      .mockResolvedValue(replayClient as never);
     const ingestSpy = vi
       .spyOn(
         (manager as unknown as { agentServer: { ingestReplayedEnvironmentAgentEvents: (args: unknown) => Promise<void> } }).agentServer,
@@ -571,7 +703,12 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       }
     )._replayBufferedEnvironmentAgentEvents("thread-1");
 
-    expect(replaySpy).toHaveBeenCalledWith({
+    expect(createClientSpy).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:4312",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(replayClient.replay).toHaveBeenCalledWith({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       threadId: "thread-1",
       afterSequence: 4,
     });
@@ -582,6 +719,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         expect.objectContaining({ sequence: 6 }),
       ]),
     });
+    expect(replayClient.close).toHaveBeenCalledTimes(1);
     expect(thread.environmentAgentCursor).toBe(6);
   });
 
@@ -602,18 +740,27 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         return thread;
       },
     );
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
 
-    const replaySpy = vi
-      .spyOn(
-        (manager as unknown as { agentServer: { replayEnvironmentAgentEvents: (args: unknown) => Promise<unknown> } }).agentServer,
-        "replayEnvironmentAgentEvents",
-      )
-      .mockResolvedValue({
+    const replayClient = {
+      replay: vi.fn().mockResolvedValue({
         fromSequenceExclusive: 5,
         toSequenceInclusive: 7,
         hasMore: false,
         events: [],
-      });
+      }),
+      close: vi.fn(),
+    };
+    const createClientSpy = vi
+      .spyOn(environmentAgent, "createHttpEnvironmentAgentClient")
+      .mockResolvedValue(replayClient as never);
 
     (
       manager as unknown as {
@@ -627,10 +774,16 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       }
     )._replayBufferedEnvironmentAgentEvents("thread-1");
 
-    expect(replaySpy).toHaveBeenCalledWith({
+    expect(createClientSpy).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:4312",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(replayClient.replay).toHaveBeenCalledWith({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       threadId: "thread-1",
       afterSequence: 5,
     });
+    expect(replayClient.close).toHaveBeenCalledTimes(1);
     expect(thread.environmentAgentCursor).toBe(7);
   });
 

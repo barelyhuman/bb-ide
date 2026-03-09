@@ -322,6 +322,14 @@ export function createFakeEnvironmentAgentClient(
         pid: child.pid,
       };
     },
+    sendCommand: async (envelope) => ({
+      protocolVersion: 1,
+      commandId: envelope.meta.commandId,
+      idempotencyKey: envelope.meta.idempotencyKey,
+      state: "accepted",
+      acknowledgedAt: Date.now(),
+      latestSequence: 0,
+    }),
     retryDaemonDelivery: async () => ({
       protocolVersion: 1,
       latestSequence: 0,
