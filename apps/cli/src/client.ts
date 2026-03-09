@@ -25,6 +25,78 @@ function isTypeErrorWithCauseCode(
   return (cause as { code?: unknown }).code === expectedCode;
 }
 
+function normalizeErrorText(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function extractCanonicalErrorMessage(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return typeof value.message === "string" && value.message.trim().length > 0
+    ? normalizeErrorText(value.message)
+    : null;
+}
+
+function extractLegacyErrorMessage(value: unknown): string | null {
+  if (typeof value === "string") {
+    const normalized = normalizeErrorText(value);
+    return normalized.length > 0 ? normalized : null;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const message = extractLegacyErrorMessage(entry);
+      if (message) {
+        return message;
+      }
+    }
+    return null;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  const legacyCandidates = [value.error, value.detail];
+  for (const candidate of legacyCandidates) {
+    const message = extractLegacyErrorMessage(candidate);
+    if (message) {
+      return message;
+    }
+  }
+  return null;
+}
+
+async function readHttpErrorMessage(res: Response): Promise<string> {
+  const rawBody = await res.text().catch(() => "");
+  const normalized = normalizeErrorText(rawBody);
+  if (normalized.length === 0) {
+    return res.statusText;
+  }
+
+  const contentType = res.headers.get("content-type");
+  const shouldParseJson =
+    (contentType?.includes("application/json") ?? false) ||
+    normalized.startsWith("{") ||
+    normalized.startsWith("[");
+  if (!shouldParseJson) {
+    return normalized;
+  }
+
+  try {
+    const parsed = JSON.parse(normalized) as unknown;
+    return (
+      extractCanonicalErrorMessage(parsed) ??
+      extractLegacyErrorMessage(parsed) ??
+      normalized
+    );
+  } catch {
+    return normalized;
+  }
+}
+
 export async function unwrap<T>(
   responsePromise: Promise<Response>,
 ): Promise<T> {
@@ -40,8 +112,8 @@ export async function unwrap<T>(
     throw err;
   }
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
+    const message = await readHttpErrorMessage(res);
+    throw new Error(`HTTP ${res.status}: ${message}`);
   }
   const text = await res.text();
   if (!text) return undefined as T;

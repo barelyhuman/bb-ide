@@ -35,13 +35,33 @@ describe("unwrap()", () => {
   });
 
   it("throws HTTP error with status and body for non-ok response", async () => {
+    const response = new Response(
+      JSON.stringify({
+        code: "thread_not_found",
+        message: "Thread thread-1 not found",
+        error: "Thread thread-1 not found",
+      }),
+      {
+        status: 404,
+        statusText: "Not Found",
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+
+    await expect(unwrap(Promise.resolve(response))).rejects.toThrow(
+      "HTTP 404: Thread thread-1 not found",
+    );
+  });
+
+  it("falls back to legacy error fields when canonical message is absent", async () => {
     const response = new Response('{"error":"Thread not found"}', {
       status: 404,
       statusText: "Not Found",
+      headers: { "Content-Type": "application/json" },
     });
 
     await expect(unwrap(Promise.resolve(response))).rejects.toThrow(
-      'HTTP 404: {"error":"Thread not found"}',
+      "HTTP 404: Thread not found",
     );
   });
 

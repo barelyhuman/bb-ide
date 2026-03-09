@@ -50,7 +50,7 @@ const THREAD_STATUSES: readonly ThreadStatus[] = [
   "active",
 ];
 
-const ERROR_KEYS = ["message", "error", "detail"] as const;
+const LEGACY_ERROR_KEYS = ["error", "detail"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -166,7 +166,13 @@ function extractErrorMessage(value: unknown): string | null {
   if (!isRecord(value)) {
     return null;
   }
-  for (const key of ERROR_KEYS) {
+  if (typeof value.message === "string") {
+    const message = extractErrorMessage(value.message);
+    if (message) {
+      return message;
+    }
+  }
+  for (const key of LEGACY_ERROR_KEYS) {
     const message = extractErrorMessage(value[key]);
     if (message) {
       return message;
