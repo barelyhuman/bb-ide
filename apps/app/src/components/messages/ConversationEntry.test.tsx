@@ -59,8 +59,28 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("Please review this screenshot");
+    expect(html).toContain("Copy message");
+    expect(html).toContain(">Copy<");
     expect(html).toContain("src=\"file:///tmp/screenshot.png\"");
     expect(html).toContain("Attached image 1");
+  });
+
+  it("does not render a copy button for attachment-only user messages", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "user",
+      text: "   ",
+      attachments: {
+        webImages: 0,
+        localImages: 1,
+        localFiles: 0,
+        localImagePaths: ["/tmp/screenshot.png"],
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).not.toContain("Copy message");
+    expect(html).not.toContain(">Copy<");
   });
 
   it("renders user local image thumbnails through daemon attachment endpoint when projectId is provided", () => {

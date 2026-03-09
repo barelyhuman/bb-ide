@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { UIUserMessage } from "@beanbag/agent-core";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Copy, X } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -14,11 +15,13 @@ export function UserMessageRow({
   projectId?: string;
 }) {
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
   const attachments: string[] = [];
   if (message.attachments?.localFiles) {
     const count = message.attachments.localFiles;
     attachments.push(`${count} local file${count === 1 ? "" : "s"}`);
   }
+  const messageText = message.text.trim();
 
   const imageSources = [
     ...(message.attachments?.imageUrls ?? []),
@@ -31,12 +34,35 @@ export function UserMessageRow({
       ? toUserAttachmentImageSrc(imageSources[expandedImageIndex], projectId)
       : null;
 
+  useEffect(() => {
+    if (!copied) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [copied]);
+
+  const handleCopy = async () => {
+    if (!messageText || copied) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(messageText);
+      setCopied(true);
+      toast.success("Copied");
+    } catch {
+      toast.error("Failed to copy message");
+    }
+  };
+
   return (
     <>
       <div className="group w-full py-2" style={{ overflowAnchor: "none" }}>
         <div className="ml-auto w-fit max-w-[80%]">
           <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
-            {message.text ? (
+            {messageText ? (
               <p className="whitespace-pre-wrap break-words">{message.text}</p>
             ) : (
               <p className="text-muted-foreground">Sent attachments</p>
@@ -76,6 +102,24 @@ export function UserMessageRow({
               </div>
             ) : null}
           </div>
+          {messageText ? (
+            <div className="mt-1 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  void handleCopy();
+                }}
+                aria-label="Copy message"
+                title="Copy message"
+              >
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                <span>{copied ? "Copied" : "Copy"}</span>
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
 
