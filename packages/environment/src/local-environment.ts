@@ -28,7 +28,10 @@ import {
   listGitWorkspaceCommitsSinceRef,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
-import { resolveEnvironmentAgentConnectionTarget } from "./environment-agent-target.js";
+import {
+  createCommandStdioEnvironmentAgentTarget,
+  resolveEnvironmentAgentConnectionTarget,
+} from "./environment-agent-target.js";
 import {
   disposeManagedHostEnvironmentAgent,
   ensureManagedHostEnvironmentAgent,
@@ -113,13 +116,10 @@ class LocalEnvironment implements IEnvironment {
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.env,
       defaultTarget:
-        managedTarget ?? {
-          transport: "command-stdio",
-          command: "bb",
-          args: ["environment-agent"],
+        managedTarget ?? createCommandStdioEnvironmentAgentTarget({
           cwd: this.rootPath,
-          env: { ...this.env },
-        },
+          env: this.env,
+        }),
     });
   }
 

@@ -30,7 +30,10 @@ import {
   resolveManagedHostEnvironmentAgentTarget,
 } from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
-import { resolveEnvironmentAgentConnectionTarget } from "./environment-agent-target.js";
+import {
+  createCommandStdioEnvironmentAgentTarget,
+  resolveEnvironmentAgentConnectionTarget,
+} from "./environment-agent-target.js";
 import {
   createWorktreeEnvironmentDefinition,
   type CreateWorktreeEnvironmentDefinitionOptions,
@@ -261,17 +264,14 @@ class DockerEnvironment implements IEnvironment {
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.runtimeEnv,
       defaultTarget:
-        managedTarget ?? {
-          transport: "command-stdio",
-          command: "bb",
-          args: ["environment-agent"],
+        managedTarget ?? createCommandStdioEnvironmentAgentTarget({
           cwd: this.getWorkspaceRootUnsafe(),
-          env: { ...this.runtimeEnv },
+          env: this.runtimeEnv,
           providerLaunch: {
             command: this.dockerBin,
             args: ["exec", "-i", this.state.containerName],
           },
-        },
+        }),
     });
   }
 
