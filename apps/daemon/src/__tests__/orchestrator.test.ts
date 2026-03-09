@@ -470,29 +470,83 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
   child.stdin = new Writable({
     write(chunk: Buffer, _encoding: string, callback: () => void) {
       const data = chunk.toString();
-      stdinData.push(data);
-
-      // Auto-respond to thread/start requests
-      if (autoRespond) {
-        try {
-          const msg = JSON.parse(data.trim());
-          if (msg.method === "thread/start" && msg.id) {
-            // Emit the response on stdout after a tick
+      try {
+        const msg = JSON.parse(data.trim());
+        if (msg.environmentAgentMessage === true && msg.requestId) {
+          if (msg.type === "replay") {
             process.nextTick(() => {
               child.stdout.push(
                 JSON.stringify({
-                  id: msg.id,
-                  result: {
-                    thread: { id: CODEX_THREAD_ID },
-                    model: "test-model",
+                  environmentAgentMessage: true,
+                  requestId: msg.requestId,
+                  type: "replay.response",
+                  payload: {
+                    protocolVersion: 1,
+                    fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
+                    toSequenceInclusive: msg.payload?.afterSequence ?? 0,
+                    events: [],
+                    hasMore: false,
+                  },
+                }) + "\n",
+              );
+            });
+          } else if (msg.type === "ack") {
+            process.nextTick(() => {
+              child.stdout.push(
+                JSON.stringify({
+                  environmentAgentMessage: true,
+                  requestId: msg.requestId,
+                  type: "ack.response",
+                  payload: {
+                    protocolVersion: 1,
+                    acknowledgedSequence: msg.payload?.sequence ?? 0,
+                    ...(msg.payload?.threadId
+                      ? { threadId: msg.payload.threadId }
+                      : {}),
+                  },
+                }) + "\n",
+              );
+            });
+          } else if (msg.type === "status") {
+            process.nextTick(() => {
+              child.stdout.push(
+                JSON.stringify({
+                  environmentAgentMessage: true,
+                  requestId: msg.requestId,
+                  type: "status.response",
+                  payload: {
+                    protocolVersion: 1,
+                    latestSequence: 0,
+                    connectedToDaemon: true,
+                    pendingEventCount: 0,
+                    pendingCommandCount: 0,
                   },
                 }) + "\n",
               );
             });
           }
-        } catch {
-          // not JSON, ignore
+          callback();
+          return;
         }
+
+        stdinData.push(data);
+
+        if (autoRespond && msg.method === "thread/start" && msg.id) {
+          // Emit the response on stdout after a tick
+          process.nextTick(() => {
+            child.stdout.push(
+              JSON.stringify({
+                id: msg.id,
+                result: {
+                  thread: { id: CODEX_THREAD_ID },
+                  model: "test-model",
+                },
+              }) + "\n",
+            );
+          });
+        }
+      } catch {
+        stdinData.push(data);
       }
 
       callback();
@@ -3518,9 +3572,32 @@ describe("Orchestrator", () => {
         resumeChild.stdin = new Writable({
           write(chunk: Buffer, _encoding: string, callback: () => void) {
             const data = chunk.toString();
-            resumeChild._stdinData.push(data);
             try {
               const msg = JSON.parse(data.trim());
+              if (msg.environmentAgentMessage === true && msg.requestId) {
+                if (msg.type === "replay") {
+                  process.nextTick(() => {
+                    resumeChild.stdout!.push(
+                      JSON.stringify({
+                        environmentAgentMessage: true,
+                        requestId: msg.requestId,
+                        type: "replay.response",
+                        payload: {
+                          protocolVersion: 1,
+                          fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
+                          toSequenceInclusive: msg.payload?.afterSequence ?? 0,
+                          events: [],
+                          hasMore: false,
+                        },
+                      }) + "\n",
+                    );
+                  });
+                }
+                callback();
+                return;
+              }
+
+              resumeChild._stdinData.push(data);
               if (msg.method === "thread/resume" && msg.id) {
                 process.nextTick(() => {
                   resumeChild.stdout!.push(
@@ -3534,7 +3611,9 @@ describe("Orchestrator", () => {
                   );
                 });
               }
-            } catch {}
+            } catch {
+              resumeChild._stdinData.push(data);
+            }
             callback();
           },
         });

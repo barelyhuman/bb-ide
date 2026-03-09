@@ -72,12 +72,7 @@ export class EnvironmentAgentRuntime {
         if (!line.trim()) continue;
         this.opts.onStdoutLine?.(line);
         process.stdout.write(`${line}\n`);
-        this.appendEvent({
-          type: "provider.event",
-          threadId: this.resolveThreadId(),
-          method: "provider.stdout",
-          payload: { line },
-        });
+        this.appendEvent(this.toProviderEvent(line));
       }
     });
 
@@ -265,6 +260,46 @@ export class EnvironmentAgentRuntime {
 
   private resolveThreadId(): string {
     return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
+  }
+
+  private toProviderEvent(line: string): EnvironmentAgentEvent {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      return {
+        type: "provider.event",
+        threadId: this.resolveThreadId(),
+        method: "provider.stdout",
+        payload: { line },
+      };
+    }
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {
+        type: "provider.event",
+        threadId: this.resolveThreadId(),
+        method: "provider.stdout",
+        payload: { line },
+      };
+    }
+
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.method !== "string") {
+      return {
+        type: "provider.event",
+        threadId: this.resolveThreadId(),
+        method: "provider.stdout",
+        payload: { line },
+      };
+    }
+
+    return {
+      type: "provider.event",
+      threadId: this.resolveThreadId(),
+      method: record.method,
+      payload: record.params ?? {},
+    };
   }
 }
 

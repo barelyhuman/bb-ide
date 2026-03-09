@@ -57,4 +57,30 @@ describe("EnvironmentAgentRuntime", () => {
     expect(status.lastAckedSequence).toBe(1);
     expect(status.pendingEventCount).toBe(1);
   });
+
+  it("normalizes provider notifications into replayable provider events", () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "codex",
+      providerArgs: ["app-server"],
+    });
+
+    runtime.appendEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "turn/started",
+      payload: { turnId: "turn-1" },
+    });
+
+    const replay = runtime.replay({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      afterSequence: 0,
+    });
+
+    expect(replay.events[0]?.event).toMatchObject({
+      type: "provider.event",
+      method: "turn/started",
+      payload: { turnId: "turn-1" },
+    });
+  });
 });

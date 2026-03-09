@@ -4,6 +4,7 @@ import {
   type EnvironmentAgentClient,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentAckResponse,
+  type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -281,6 +282,29 @@ export class AgentServer {
       sequence: args.sequence,
       threadId: args.threadId,
     });
+  }
+
+  async ingestReplayedEnvironmentAgentEvents(args: {
+    threadId: string;
+    events: EnvironmentAgentEventEnvelope[];
+  }): Promise<void> {
+    const session = this.requireSession(args.threadId);
+    let highestSequence = 0;
+
+    for (const envelope of args.events) {
+      highestSequence = Math.max(highestSequence, envelope.sequence);
+      const event = envelope.event;
+      if (event.type !== "provider.event") continue;
+      if (event.method === "provider.stdout") continue;
+      this.handleNotification(args.threadId, {
+        method: event.method,
+        params: event.payload,
+      });
+    }
+
+    if (highestSequence > 0) {
+      await this.acknowledgeEnvironmentSequence(args.threadId, session, highestSequence);
+    }
   }
 
   async startSession(args: {
@@ -682,11 +706,18 @@ export class AgentServer {
     if (!session) return;
     const latestObservedSequence = session.agentClient.getLatestObservedSequence();
     if (latestObservedSequence <= 0) return;
-    if ((session.lastAckedEnvironmentSequence ?? 0) >= latestObservedSequence) return;
+    await this.acknowledgeEnvironmentSequence(threadId, session, latestObservedSequence);
+  }
 
+  private async acknowledgeEnvironmentSequence(
+    threadId: string,
+    session: ManagedSession,
+    sequence: number,
+  ): Promise<void> {
+    if ((session.lastAckedEnvironmentSequence ?? 0) >= sequence) return;
     const response = await session.agentClient.acknowledge({
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-      sequence: latestObservedSequence,
+      sequence,
       threadId,
     });
     session.lastAckedEnvironmentSequence = response.acknowledgedSequence;

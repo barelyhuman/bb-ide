@@ -434,6 +434,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Cached prompt-derived fallback titles for untitled threads. */
   private titleFallbackByThreadId = new Map<string, string | null>();
+  /** Latest replay cursor consumed from each environment-agent event log. */
+  private environmentAgentReplayCursorByThreadId = new Map<string, number>();
   /** Cached provisioning completion state derived from provisioning lifecycle events. */
   private provisioningCompletionStateByThreadId = new Map<
     string,
@@ -2287,6 +2289,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
     this.projectOperationTransitionsInFlight.clear();
+    this.environmentAgentReplayCursorByThreadId.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
         clearTimeout(queued.timer);
@@ -2455,6 +2458,7 @@ export class Orchestrator implements ThreadOrchestrator {
       request: effectiveRequest,
       context: providerContext,
     });
+    await this._replayBufferedEnvironmentAgentEvents(threadId);
     const providerThreadId = started.providerThreadId;
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
     if (
@@ -2499,6 +2503,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _cleanupThreadRuntime(threadId: string): void {
     this.agentServer.stopSession(threadId);
     this.eventSeqCounters.delete(threadId);
+    this.environmentAgentReplayCursorByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
@@ -2507,6 +2512,26 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
     this.environmentService.cleanupEnvironmentRuntime(threadId);
+  }
+
+  private async _replayBufferedEnvironmentAgentEvents(
+    threadId: string,
+  ): Promise<void> {
+    const afterSequence = this.environmentAgentReplayCursorByThreadId.get(threadId) ?? 0;
+    const replay = await this.agentServer.replayEnvironmentAgentEvents({
+      threadId,
+      afterSequence,
+    });
+    if (replay.events.length > 0) {
+      await this.agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId,
+        events: replay.events,
+      });
+    }
+    this.environmentAgentReplayCursorByThreadId.set(
+      threadId,
+      Math.max(afterSequence, replay.toSequenceInclusive),
+    );
   }
 
   private _setEnvironmentRuntime(
@@ -2838,6 +2863,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }),
         options,
       });
+      await this._replayBufferedEnvironmentAgentEvents(threadId);
       return resumed.providerThreadId;
     } catch (err) {
       this._cleanupThreadRuntime(threadId);

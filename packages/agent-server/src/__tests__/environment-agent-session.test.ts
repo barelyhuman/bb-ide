@@ -233,4 +233,57 @@ describe("AgentServer environment-agent control plane", () => {
       child._stdinLines.some((line) => line.includes('"type":"ack"') && line.includes('"sequence":1')),
     ).toBe(true);
   });
+
+  it("ingests replayed provider notifications through the normal notification path", async () => {
+    const onNotification = vi.fn();
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      onNotification,
+    });
+    const child = createFakeChildProcess();
+
+    await agentServer.startSession({
+      threadId: "thread-1",
+      spawnProcess: () => child,
+      request: {
+        projectId: "project-1",
+        title: "Test thread",
+        input: [{ type: "text", text: "hello" }],
+      },
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    await agentServer.ingestReplayedEnvironmentAgentEvents({
+      threadId: "thread-1",
+      events: [
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 5,
+          emittedAt: 1000,
+          threadId: "thread-1",
+          event: {
+            type: "provider.event",
+            threadId: "thread-1",
+            method: "turn/started",
+            payload: { turnId: "turn-2" },
+          },
+        },
+      ],
+    });
+
+    expect(onNotification).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        method: "turn/started",
+        normalizedMethod: "turn/started",
+      }),
+    );
+    expect(
+      child._stdinLines.some((line) => line.includes('"type":"ack"') && line.includes('"sequence":5')),
+    ).toBe(true);
+  });
 });
