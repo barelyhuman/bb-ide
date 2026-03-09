@@ -559,7 +559,7 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Startup only reconstructs minimal daemon state:
    * - finalize archived environments that still claim persisted resources
-   * - nudge environment-agent delivery for non-archived threads with persisted environments
+   * - nudge environment-agent delivery for last-known-active threads with persisted environments
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
     const archivedThreadIds =
@@ -570,12 +570,12 @@ export class Orchestrator implements ThreadOrchestrator {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
 
-    const threadIdsWithPersistedEnvironments =
-      typeof this.threadRepo.listNonArchivedIdsWithEnvironmentRecord === "function"
-        ? this.threadRepo.listNonArchivedIdsWithEnvironmentRecord()
+    const activeThreadIdsWithPersistedEnvironments =
+      typeof this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord === "function"
+        ? this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord()
         : [];
     await Promise.all(
-      threadIdsWithPersistedEnvironments.map((threadId) =>
+      activeThreadIdsWithPersistedEnvironments.map((threadId) =>
         this._nudgeEnvironmentAgentDelivery(threadId),
       ),
     );

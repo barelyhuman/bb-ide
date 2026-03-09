@@ -176,6 +176,13 @@
       "when": 1773101400000,
       "tag": "0024_thread_environment_agent_cursor",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1773102000000,
+      "tag": "0025_project_primary_checkout_pointer",
+      "breakpoints": true
     }
   ]
 }

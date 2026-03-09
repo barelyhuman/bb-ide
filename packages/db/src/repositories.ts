@@ -271,6 +271,7 @@ export class ProjectRepository {
       name: row.name,
       rootPath: row.rootPath,
       projectInstructions: row.projectInstructions ?? undefined,
+      primaryCheckoutThreadId: row.primaryCheckoutThreadId ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -283,6 +284,7 @@ export class ProjectRepository {
       name: data.name,
       rootPath: data.rootPath,
       projectInstructions: data.projectInstructions ?? null,
+      primaryCheckoutThreadId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -303,16 +305,32 @@ export class ProjectRepository {
 
   update(
     id: string,
-    data: { name?: string; rootPath?: string; projectInstructions?: string },
+    data: {
+      name?: string;
+      rootPath?: string;
+      projectInstructions?: string;
+      primaryCheckoutThreadId?: string | null;
+    },
+    opts?: { touchUpdatedAt?: boolean },
   ): Project | undefined {
     const existing = this.db.select().from(projects).where(eq(projects.id, id)).get();
     if (!existing) return undefined;
 
-    const updates: Record<string, unknown> = { updatedAt: Date.now() };
+    const updates: Record<string, unknown> = {};
+    if (opts?.touchUpdatedAt !== false) {
+      updates.updatedAt = Date.now();
+    }
     if (data.name !== undefined) updates.name = data.name;
     if (data.rootPath !== undefined) updates.rootPath = data.rootPath;
     if (data.projectInstructions !== undefined) {
       updates.projectInstructions = data.projectInstructions;
+    }
+    if (data.primaryCheckoutThreadId !== undefined) {
+      updates.primaryCheckoutThreadId = data.primaryCheckoutThreadId;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return this.rowToProject(existing);
     }
 
     this.db.update(projects).set(updates).where(eq(projects.id, id)).run();
@@ -416,13 +434,14 @@ export class ThreadRepository {
       .map((row) => row.id);
   }
 
-  listNonArchivedIdsWithEnvironmentRecord(): string[] {
+  listNonArchivedActiveIdsWithEnvironmentRecord(): string[] {
     return this.db
       .select({ id: threads.id })
       .from(threads)
       .where(
         and(
           isNull(threads.archivedAt),
+          eq(threads.status, "active"),
           sql`${threads.environmentRecord} is not null`,
         ),
       )

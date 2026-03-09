@@ -180,8 +180,8 @@ function createService(args: {
   };
   const threadRepo = {
     getById: vi.fn((_threadId: string) => threadState),
-    update: vi.fn((_threadId: string, data: Record<string, unknown>) => {
-      Object.assign(threadState as Record<string, unknown>, data);
+    update: vi.fn((_threadId: string, data: Parameters<ThreadRepository["update"]>[1]) => {
+      Object.assign(threadState, data);
       return threadState;
     }),
   } as unknown as ThreadRepository;
@@ -194,6 +194,7 @@ function createService(args: {
       createdAt: 1000,
       updatedAt: 1000,
     })),
+    update: vi.fn(),
   } as unknown as ProjectRepository;
 
   const runOptionalSetup = vi.fn<
@@ -393,7 +394,6 @@ describe("EnvironmentService", () => {
       list: vi.fn(() => {
         throw new Error("broad thread listing should not be used");
       }),
-      listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => ["thread-1"]),
       getById: vi.fn(() => ({
         id: "thread-1",
         projectId: "proj-1",
@@ -411,6 +411,7 @@ describe("EnvironmentService", () => {
         id: "proj-1",
         name: "Project",
         rootPath: "/project/root",
+        primaryCheckoutThreadId: "thread-1",
         createdAt: 1000,
         updatedAt: 1000,
       }]),
@@ -418,9 +419,11 @@ describe("EnvironmentService", () => {
         id: "proj-1",
         name: "Project",
         rootPath: "/project/root",
+        primaryCheckoutThreadId: "thread-1",
         createdAt: 1000,
         updatedAt: 1000,
       })),
+      update: vi.fn(),
     } as unknown as ProjectRepository;
     vi.mocked(resolveProjectCheckoutSnapshot).mockReturnValue({
       branch: "bb/thread-thread-1",
@@ -455,10 +458,6 @@ describe("EnvironmentService", () => {
 
     service.rebuildPrimaryPromotionStateFromGit();
 
-    expect(
-      (threadRepo as unknown as { listProjectNonArchivedIdsWithEnvironmentRecord: ReturnType<typeof vi.fn> })
-        .listProjectNonArchivedIdsWithEnvironmentRecord,
-    ).toHaveBeenCalledWith("proj-1");
     expect(
       (threadRepo as unknown as { list: ReturnType<typeof vi.fn> }).list,
     ).not.toHaveBeenCalled();
@@ -523,7 +522,6 @@ describe("EnvironmentService", () => {
       list: vi.fn(() => {
         throw new Error("broad thread listing should not be used");
       }),
-      listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => ["thread-1"]),
       getById: vi.fn(() => ({
         id: "thread-1",
         projectId: "proj-1",
@@ -541,6 +539,7 @@ describe("EnvironmentService", () => {
         id: "proj-1",
         name: "Project",
         rootPath: "/project/root",
+        primaryCheckoutThreadId: "thread-1",
         createdAt: 1000,
         updatedAt: 1000,
       }]),
@@ -548,9 +547,11 @@ describe("EnvironmentService", () => {
         id: "proj-1",
         name: "Project",
         rootPath: "/project/root",
+        primaryCheckoutThreadId: "thread-1",
         createdAt: 1000,
         updatedAt: 1000,
       })),
+      update: vi.fn(),
     } as unknown as ProjectRepository;
     vi.mocked(resolveProjectCheckoutSnapshot).mockReturnValue({
       branch: "bb/thread-thread-1",
@@ -583,17 +584,11 @@ describe("EnvironmentService", () => {
       },
     );
 
-    expect(
-      (threadRepo as unknown as { listProjectNonArchivedIdsWithEnvironmentRecord: ReturnType<typeof vi.fn> })
-        .listProjectNonArchivedIdsWithEnvironmentRecord,
-    ).not.toHaveBeenCalled();
-
     service.ensurePrimaryPromotionStateIsCurrent("proj-1");
 
     expect(
-      (threadRepo as unknown as { listProjectNonArchivedIdsWithEnvironmentRecord: ReturnType<typeof vi.fn> })
-        .listProjectNonArchivedIdsWithEnvironmentRecord,
-    ).toHaveBeenCalledWith("proj-1");
+      (threadRepo as unknown as { list: ReturnType<typeof vi.fn> }).list,
+    ).not.toHaveBeenCalled();
     expect(service.getPrimaryCheckoutStatus("proj-1")).toEqual({
       projectId: "proj-1",
       activeThreadId: "thread-1",

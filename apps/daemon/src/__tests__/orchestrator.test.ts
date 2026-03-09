@@ -301,6 +301,10 @@ interface OrchestratorTestHarness {
     opts?: { rootPathHint?: string; reason?: string },
   ) => void;
   _cleanupThreadRuntime: (threadId: string) => void;
+  _cleanupEnvironmentRuntime: (
+    threadId: string,
+    opts?: { destroyWorkspace?: boolean },
+  ) => void;
   _ensurePrimaryPromotionStateIsCurrent: (
     projectId: string,
     opts?: { force?: boolean },
@@ -487,6 +491,12 @@ function createMocks() {
     create: vi.fn(),
     getById: vi.fn(),
     list: vi.fn(),
+    update: vi.fn(
+      (projectId: string, data: Parameters<ProjectRepository["update"]>[1]) => {
+        const existing = projectRepo.getById(projectId);
+        return existing ? { ...existing, ...data } : undefined;
+      },
+    ),
     delete: vi.fn(),
   } as unknown as ProjectRepository;
 
@@ -623,16 +633,21 @@ describe("Orchestrator", () => {
       const archivedIdsWithEnvironmentRecord = initialThreads
         .filter((thread) => thread.archivedAt !== undefined && thread.environmentRecord)
         .map((thread) => thread.id);
-      const nonArchivedIdsWithEnvironmentRecord = initialThreads
-        .filter((thread) => thread.archivedAt === undefined && thread.environmentRecord)
+      const nonArchivedActiveIdsWithEnvironmentRecord = initialThreads
+        .filter(
+          (thread) =>
+            thread.archivedAt === undefined &&
+            thread.status === "active" &&
+            thread.environmentRecord,
+        )
         .map((thread) => thread.id);
       const bootThreadRepo = {
         create: vi.fn(),
         getById: vi.fn((threadId: string) => threadState.get(threadId)),
         list: vi.fn(() => Array.from(threadState.values())),
         listArchivedIdsWithEnvironmentRecord: vi.fn(() => archivedIdsWithEnvironmentRecord),
-        listNonArchivedIdsWithEnvironmentRecord: vi.fn(
-          () => nonArchivedIdsWithEnvironmentRecord,
+        listNonArchivedActiveIdsWithEnvironmentRecord: vi.fn(
+          () => nonArchivedActiveIdsWithEnvironmentRecord,
         ),
         update: vi.fn((threadId: string, updates: Partial<Thread>) => {
           const existing = threadState.get(threadId);
@@ -660,6 +675,12 @@ describe("Orchestrator", () => {
         create: vi.fn(),
         getById: vi.fn(),
         list: vi.fn(),
+        update: vi.fn(
+          (projectId: string, data: Parameters<ProjectRepository["update"]>[1]) => {
+            const existing = bootProjectRepo.getById(projectId);
+            return existing ? { ...existing, ...data } : undefined;
+          },
+        ),
         delete: vi.fn(),
       } as unknown as ProjectRepository;
 
@@ -711,13 +732,13 @@ describe("Orchestrator", () => {
         }),
       ]);
       const cleanupEnvironmentRuntimeSpy = vi
-        .spyOn(asOrchestratorHarness(bootManager) as never, "_cleanupEnvironmentRuntime")
+        .spyOn(asOrchestratorHarness(bootManager), "_cleanupEnvironmentRuntime")
         .mockImplementation(() => undefined);
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
       expect(bootThreadRepo.listArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
-      expect(bootThreadRepo.listNonArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
+      expect(bootThreadRepo.listNonArchivedActiveIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
         "boot-archived-with-environment",
@@ -792,7 +813,7 @@ describe("Orchestrator", () => {
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
-      expect(bootThreadRepo.listNonArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
+      expect(bootThreadRepo.listNonArchivedActiveIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
       expect(createClientMock).toHaveBeenCalledWith({
         baseUrl: "http://127.0.0.1:4312",
       });

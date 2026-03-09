@@ -65,6 +65,27 @@ describe("repository strict normalization", () => {
     });
   });
 
+  it("persists and loads project primary checkout pointers without touching updatedAt", () => {
+    const project = projects.create({
+      name: "test-project",
+      rootPath: "/tmp/test-project",
+    });
+
+    sqlite.exec(`UPDATE projects SET updated_at=${project.updatedAt + 5000} WHERE id='${project.id}'`);
+
+    const updated = projects.update(
+      project.id,
+      { primaryCheckoutThreadId: "thread-1" },
+      { touchUpdatedAt: false },
+    );
+
+    expect(updated).toMatchObject({
+      id: project.id,
+      primaryCheckoutThreadId: "thread-1",
+      updatedAt: project.updatedAt + 5000,
+    });
+  });
+
   it("persists and loads thread environment ownership", () => {
     const projectId = createProjectId();
     const thread = threads.create({
@@ -76,6 +97,44 @@ describe("repository strict normalization", () => {
       id: thread.id,
       environmentId: "worktree",
     });
+  });
+
+  it("lists only non-archived active threads with persisted environments", () => {
+    const projectId = createProjectId();
+    const active = threads.create({
+      projectId,
+      environmentId: "worktree",
+      environmentRecord: {
+        kind: "worktree",
+        state: {},
+      },
+    });
+    threads.update(active.id, { status: "active" });
+
+    const idle = threads.create({
+      projectId,
+      environmentId: "worktree",
+      environmentRecord: {
+        kind: "worktree",
+        state: {},
+      },
+    });
+    threads.update(idle.id, { status: "idle" });
+
+    const archived = threads.create({
+      projectId,
+      environmentId: "worktree",
+      environmentRecord: {
+        kind: "worktree",
+        state: {},
+      },
+    });
+    threads.update(archived.id, {
+      status: "active",
+      archivedAt: Date.now(),
+    });
+
+    expect(threads.listNonArchivedActiveIdsWithEnvironmentRecord()).toEqual([active.id]);
   });
 
   it("filters thread listings by parent thread id", () => {

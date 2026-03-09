@@ -308,12 +308,27 @@ export class EnvironmentService {
   }
 
   setPrimaryPromotionState(projectId: string, state: PrimaryPromotionState): void {
+    this.projectRepo.update(
+      projectId,
+      { primaryCheckoutThreadId: state.threadId },
+      { touchUpdatedAt: false },
+    );
     this.primaryPromotionByProjectId.set(projectId, state);
     this.primaryPromotionValidatedAtByProjectId.set(projectId, Date.now());
     this.startPrimaryPromotionWatch(projectId);
   }
 
-  clearPrimaryPromotionState(projectId: string): PrimaryPromotionState | undefined {
+  clearPrimaryPromotionState(
+    projectId: string,
+    opts?: { persist?: boolean },
+  ): PrimaryPromotionState | undefined {
+    if (opts?.persist !== false) {
+      this.projectRepo.update(
+        projectId,
+        { primaryCheckoutThreadId: null },
+        { touchUpdatedAt: false },
+      );
+    }
     const existing = this.primaryPromotionByProjectId.get(projectId);
     this.primaryPromotionByProjectId.delete(projectId);
     this.primaryPromotionValidatedAtByProjectId.delete(projectId);
@@ -387,44 +402,51 @@ export class EnvironmentService {
       return;
     }
 
-    const candidateThreadIds =
-      typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
-        ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
-        : (this.threadRepo
-          .list({ projectId: project.id }) ?? [])
-          .filter((thread) => thread.environmentRecord)
-          .map((thread) => thread.id);
-
-    for (const threadId of candidateThreadIds) {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread || thread.archivedAt !== undefined) {
-        continue;
-      }
-      const environment = this.restoreThreadEnvironment(thread, project.rootPath);
-      if (!environment || !environment.exists() || !environment.isIsolatedWorkspace()) {
-        continue;
-      }
-      let workspaceCheckout: EnvironmentCheckoutSnapshot;
-      try {
-        workspaceCheckout = environment.getCheckoutSnapshot();
-      } catch {
-        continue;
-      }
-      if (!checkoutSnapshotsMatch(projectCheckout, workspaceCheckout)) {
-        continue;
-      }
-      this.setPrimaryPromotionState(project.id, {
-        projectId: project.id,
-        threadId: thread.id,
-        promotedAt: Date.now(),
-        promotedCheckout: workspaceCheckout,
-        reconstructed: true,
-      });
+    const primaryThreadId = project.primaryCheckoutThreadId;
+    if (!primaryThreadId) {
+      this.clearPrimaryPromotionState(projectId, { persist: false });
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
       return;
     }
 
-    this.clearPrimaryPromotionState(projectId);
-    this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+    const thread = this.threadRepo.getById(primaryThreadId);
+    if (!thread || thread.archivedAt !== undefined || thread.projectId !== project.id) {
+      this.clearPrimaryPromotionState(projectId);
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
+
+    const environment = this.restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment || !environment.exists() || !environment.isIsolatedWorkspace()) {
+      this.clearPrimaryPromotionState(projectId);
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
+    let workspaceCheckout: EnvironmentCheckoutSnapshot;
+    try {
+      workspaceCheckout = environment.getCheckoutSnapshot();
+    } catch {
+      this.clearPrimaryPromotionState(projectId);
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
+    if (!checkoutSnapshotsMatch(projectCheckout, workspaceCheckout)) {
+      const cleared = this.clearPrimaryPromotionState(projectId);
+      this.callbacks.onPrimaryCheckoutDemoted({
+        projectId,
+        threadId: cleared?.threadId ?? thread.id,
+        currentCheckout: projectCheckout,
+      });
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
+    this.setPrimaryPromotionState(project.id, {
+      projectId: project.id,
+      threadId: thread.id,
+      promotedAt: Date.now(),
+      promotedCheckout: workspaceCheckout,
+      reconstructed: true,
+    });
   }
 
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {
