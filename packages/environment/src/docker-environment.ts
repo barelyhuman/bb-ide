@@ -24,6 +24,11 @@ import type {
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
 } from "./contracts.js";
+import {
+  disposeManagedHostEnvironmentAgent,
+  ensureManagedHostEnvironmentAgent,
+  resolveManagedHostEnvironmentAgentTarget,
+} from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 import { resolveEnvironmentAgentConnectionTarget } from "./environment-agent-target.js";
 import {
@@ -159,6 +164,8 @@ class DockerEnvironment implements IEnvironment {
   readonly info = { ...DOCKER_ENVIRONMENT_INFO };
 
   constructor(
+    private readonly projectId: string,
+    private readonly threadId: string,
     private readonly inner: IEnvironment,
     private readonly state: DockerEnvironmentState,
     private readonly runtimeEnv: Record<string, string | undefined>,
@@ -176,42 +183,56 @@ class DockerEnvironment implements IEnvironment {
     await this.inner.prepare?.();
     if (this.containerExists()) {
       this.ensureContainerRunning();
-      return;
-    }
-    const result = spawnSync(
-      this.dockerBin,
-      [
-        "run",
-        "-d",
-        "--name",
-        this.state.containerName,
-        "-v",
-        `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
-        "-w",
-        this.state.mountPath,
-        this.state.image,
-        "sleep",
-        "infinity",
-      ],
-      {
-        encoding: "utf-8",
-        stdio: "pipe",
-      },
-    );
-    if (result.status !== 0) {
-      throw new Error(
-        result.stderr || result.stdout || "Failed to create Docker container",
+    } else {
+      const result = spawnSync(
+        this.dockerBin,
+        [
+          "run",
+          "-d",
+          "--name",
+          this.state.containerName,
+          "-v",
+          `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
+          "-w",
+          this.state.mountPath,
+          this.state.image,
+          "sleep",
+          "infinity",
+        ],
+        {
+          encoding: "utf-8",
+          stdio: "pipe",
+        },
       );
+      if (result.status !== 0) {
+        throw new Error(
+          result.stderr || result.stdout || "Failed to create Docker container",
+        );
+      }
     }
+
+    await ensureManagedHostEnvironmentAgent({
+      workspaceRootPath: this.getWorkspaceRootUnsafe(),
+      threadId: this.threadId,
+      projectId: this.projectId,
+      environmentId: this.kind,
+      runtimeEnv: this.runtimeEnv,
+    });
   }
 
-  dispose(): void | Promise<void> {
+  async dispose(): Promise<void> {
+    await disposeManagedHostEnvironmentAgent({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.runtimeEnv,
+    });
     spawnSync(
       this.dockerBin,
       ["rm", "-f", this.state.containerName],
       { encoding: "utf-8", stdio: "pipe" },
     );
-    return this.inner.dispose();
+    await Promise.resolve(this.inner.dispose());
   }
 
   exists(): boolean {
@@ -227,19 +248,30 @@ class DockerEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    return resolveEnvironmentAgentConnectionTarget({
+    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
       runtimeEnv: this.runtimeEnv,
-      defaultTarget: {
-      transport: "command-stdio",
-      command: "bb",
-      args: ["environment-agent"],
-      cwd: this.getWorkspaceRootUnsafe(),
-      env: { ...this.runtimeEnv },
       providerLaunch: {
         command: this.dockerBin,
         args: ["exec", "-i", this.state.containerName],
       },
-      },
+    });
+    return resolveEnvironmentAgentConnectionTarget({
+      runtimeEnv: this.runtimeEnv,
+      defaultTarget:
+        managedTarget ?? {
+          transport: "command-stdio",
+          command: "bb",
+          args: ["environment-agent"],
+          cwd: this.getWorkspaceRootUnsafe(),
+          env: { ...this.runtimeEnv },
+          providerLaunch: {
+            command: this.dockerBin,
+            args: ["exec", "-i", this.state.containerName],
+          },
+        },
     });
   }
 
@@ -433,13 +465,21 @@ export function createDockerEnvironmentDefinition(
     kind: "docker",
     info: { ...DOCKER_ENVIRONMENT_INFO },
     create(context: CreateEnvironmentContext): IEnvironment {
-      const inner = worktreeDefinition.create(context);
+      const inner = worktreeDefinition.create({
+        ...context,
+        runtimeEnv: {
+          ...context.runtimeEnv,
+          BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT: "true",
+        },
+      });
       const worktreeState = inner.serialize() as WorktreeEnvironmentState;
       const image = resolveDockerImage({
         configuredImage: opts?.image,
         runtimeEnv: context.runtimeEnv,
       });
       return new DockerEnvironment(
+        context.projectId,
+        context.threadId,
         inner,
         {
           worktree: worktreeState,
@@ -455,8 +495,16 @@ export function createDockerEnvironmentDefinition(
       );
     },
     restore(state: DockerEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
-      const inner = worktreeDefinition.restore(state.worktree, context);
+      const inner = worktreeDefinition.restore(state.worktree, {
+        ...context,
+        runtimeEnv: {
+          ...context.runtimeEnv,
+          BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT: "true",
+        },
+      });
       return new DockerEnvironment(
+        context.projectId,
+        context.threadId,
         inner,
         {
           worktree: { ...state.worktree },
