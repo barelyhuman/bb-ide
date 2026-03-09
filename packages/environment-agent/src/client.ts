@@ -33,6 +33,9 @@ type EnvironmentAgentRequestShape =
 
 export interface EnvironmentAgentClient {
   readonly providerTransport: JsonLineTransport;
+  subscribeToEvents(
+    listener: (event: EnvironmentAgentEventEnvelope) => void,
+  ): () => void;
   sendCommand(
     envelope: EnvironmentAgentCommandEnvelope,
   ): Promise<EnvironmentAgentCommandAck>;
@@ -57,6 +60,9 @@ export class EnvironmentAgentClientError extends Error {
 class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
   readonly providerTransport: JsonLineTransport;
   private providerHandlers: JsonLineTransportHandlers | undefined;
+  private readonly eventSubscribers = new Set<
+    (event: EnvironmentAgentEventEnvelope) => void
+  >();
   private readonly pending = new Map<string, PendingControlRequest>();
   private requestCounter = 0;
   private latestObservedSequence = 0;
@@ -132,6 +138,15 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     });
   }
 
+  subscribeToEvents(
+    listener: (event: EnvironmentAgentEventEnvelope) => void,
+  ): () => void {
+    this.eventSubscribers.add(listener);
+    return () => {
+      this.eventSubscribers.delete(listener);
+    };
+  }
+
   getLatestObservedSequence(): number {
     return this.latestObservedSequence;
   }
@@ -171,6 +186,9 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
 
   private recordObservedEvent(event: EnvironmentAgentEventEnvelope): void {
     this.latestObservedSequence = Math.max(this.latestObservedSequence, event.sequence);
+    for (const subscriber of this.eventSubscribers) {
+      subscriber(event);
+    }
   }
 
   private request<TResponse>(
@@ -320,6 +338,9 @@ export async function createHttpEnvironmentAgentClient(args: {
 
   return {
     providerTransport: client.providerTransport,
+    subscribeToEvents(listener) {
+      return client.subscribeToEvents(listener);
+    },
     sendCommand(envelope) {
       return postJson<EnvironmentAgentCommandAck>("/control/command", envelope);
     },

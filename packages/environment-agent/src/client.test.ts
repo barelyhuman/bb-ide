@@ -142,4 +142,40 @@ describe("EnvironmentAgentClient", () => {
 
     expect(client.getLatestObservedSequence()).toBe(4);
   });
+
+  it("publishes live environment-agent events to subscribers", () => {
+    const transport = createFakeTransport();
+    const client = createEnvironmentAgentClient(transport);
+    const subscriber = vi.fn();
+    client.subscribeToEvents(subscriber);
+
+    transport.emitStdout(
+      JSON.stringify({
+        environmentAgentMessage: true,
+        type: "event.emitted",
+        payload: {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 5,
+          emittedAt: 1001,
+          threadId: "thread-1",
+          event: {
+            type: "provider.event",
+            threadId: "thread-1",
+            method: "turn/started",
+            payload: { turnId: "turn-1" },
+          },
+        },
+      }),
+    );
+
+    expect(subscriber).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sequence: 5,
+        event: expect.objectContaining({
+          type: "provider.event",
+          method: "turn/started",
+        }),
+      }),
+    );
+  });
 });
