@@ -13,6 +13,15 @@ import {
 } from "@beanbag/environment";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { EnvironmentService } from "../environment-service.js";
+import { resolveProjectCheckoutSnapshot } from "../git-project.js";
+
+vi.mock("../git-project.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../git-project.js")>();
+  return {
+    ...actual,
+    resolveProjectCheckoutSnapshot: vi.fn(actual.resolveProjectCheckoutSnapshot),
+  };
+});
 
 const WORKTREE_INFO: SystemEnvironmentInfo = {
   id: "worktree",
@@ -328,5 +337,135 @@ describe("EnvironmentService", () => {
     );
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
+  });
+
+  it("rebuilds primary promotion state through per-project environment candidates", () => {
+    const environment = createTestEnvironment({ existsInitially: true });
+    const environmentRegistry = new EnvironmentRegistry().register({
+      kind: "worktree",
+      info: WORKTREE_INFO,
+      create(_context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      isState(_value: unknown): _value is unknown {
+        return true;
+      },
+    }).register({
+      kind: "local",
+      info: {
+        id: "local",
+        displayName: "Local Workspace",
+        description: "",
+        capabilities: {
+          host_filesystem: true,
+          isolated_workspace: false,
+          promote_primary_checkout: false,
+          demote_primary_checkout: false,
+          squash_merge: false,
+        },
+      },
+      create(_context: CreateEnvironmentContext): IEnvironment {
+        return {
+          ...createTestEnvironment({ existsInitially: true }),
+          kind: "local",
+          isIsolatedWorkspace() {
+            return false;
+          },
+        };
+      },
+      restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+        return {
+          ...createTestEnvironment({ existsInitially: true }),
+          kind: "local",
+          isIsolatedWorkspace() {
+            return false;
+          },
+        };
+      },
+      isState(_value: unknown): _value is unknown {
+        return true;
+      },
+    });
+    const threadRepo = {
+      list: vi.fn(() => {
+        throw new Error("broad thread listing should not be used");
+      }),
+      listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => ["thread-1"]),
+      getById: vi.fn(() => ({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentRecord: {
+          kind: "worktree",
+          state: {},
+        },
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+    } as unknown as ThreadRepository;
+    const projectRepo = {
+      list: vi.fn(() => [{
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/project/root",
+        createdAt: 1000,
+        updatedAt: 1000,
+      }]),
+      getById: vi.fn(() => ({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/project/root",
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+    } as unknown as ProjectRepository;
+    vi.mocked(resolveProjectCheckoutSnapshot).mockReturnValue({
+      branch: "bb/thread-thread-1",
+      head: "abc123",
+      detached: false,
+    });
+
+    const service = new EnvironmentService(
+      threadRepo,
+      projectRepo,
+      environmentRegistry,
+      {
+        createContext: (threadId, projectRootPath) => ({
+          projectId: "proj-1",
+          threadId,
+          projectRootPath,
+          runtimeEnv: {},
+        }),
+        onProvisioningEvent: vi.fn(),
+        onThreadChanged: vi.fn(),
+        onCleanupFailure: vi.fn(),
+        onPrimaryCheckoutDemoted: vi.fn(),
+        runOptionalSetup: vi.fn().mockResolvedValue(undefined),
+        spawnProviderProcess: vi.fn(
+          (): AgentServerSessionConnection => ({
+            transport: "http",
+            client: {} as never,
+          }),
+        ),
+      },
+    );
+
+    service.rebuildPrimaryPromotionStateFromGit();
+
+    expect(
+      (threadRepo as unknown as { listProjectNonArchivedIdsWithEnvironmentRecord: ReturnType<typeof vi.fn> })
+        .listProjectNonArchivedIdsWithEnvironmentRecord,
+    ).toHaveBeenCalledWith("proj-1");
+    expect(
+      (threadRepo as unknown as { list: ReturnType<typeof vi.fn> }).list,
+    ).not.toHaveBeenCalled();
+    expect(service.getPrimaryCheckoutStatus("proj-1")).toEqual({
+      projectId: "proj-1",
+      activeThreadId: "thread-1",
+      promotedAt: expect.any(Number),
+    });
   });
 });

@@ -301,8 +301,6 @@ export class EnvironmentService {
     this.primaryPromotionValidatedAtByProjectId.clear();
     const projects = this.projectRepo.list();
     if (!Array.isArray(projects) || projects.length === 0) return;
-    const allThreads = this.threadRepo.list({ includeArchived: true });
-    if (!Array.isArray(allThreads) || allThreads.length === 0) return;
 
     for (const project of projects) {
       let projectCheckout: EnvironmentCheckoutSnapshot;
@@ -312,8 +310,20 @@ export class EnvironmentService {
         continue;
       }
 
-      for (const thread of allThreads) {
-        if (thread.projectId !== project.id || thread.archivedAt !== undefined) {
+      const candidateThreadIds =
+        typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
+          ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
+          : this.threadRepo
+            .list({ projectId: project.id })
+            .filter((thread) => thread.environmentRecord)
+            .map((thread) => thread.id);
+      if (candidateThreadIds.length === 0) {
+        continue;
+      }
+
+      for (const threadId of candidateThreadIds) {
+        const thread = this.threadRepo.getById(threadId);
+        if (!thread || thread.archivedAt !== undefined) {
           continue;
         }
         const environment = this.restoreThreadEnvironment(thread, project.rootPath);
