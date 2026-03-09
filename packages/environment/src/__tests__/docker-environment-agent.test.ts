@@ -48,6 +48,7 @@ describe("docker environment-agent helper", () => {
     expect(dockerfile).toContain("FROM node:22-bookworm-slim");
     expect(dockerfile).toContain("git");
     expect(dockerfile).toContain("docker-ce-cli");
+    expect(dockerfile).toContain("unzip");
     expect(dockerfile).toContain("curl -fsSL https://bun.sh/install | bash");
     expect(dockerfile).toContain("corepack prepare pnpm@9.15.0 --activate");
     expect(dockerfile).toContain("npm install -g @openai/codex@latest");

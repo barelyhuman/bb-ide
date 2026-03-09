@@ -18,6 +18,7 @@ RUN apt-get update \
     procps \
     ripgrep \
     software-properties-common \
+    unzip \
   && rm -rf /var/lib/apt/lists/*
 
 # Docker CLI and compose/buildx support
