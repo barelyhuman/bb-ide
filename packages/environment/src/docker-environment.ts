@@ -241,10 +241,6 @@ class DockerEnvironment implements IEnvironment {
       threadId: this.threadId,
       environmentId: this.kind,
       runtimeEnv: this.runtimeEnv,
-      providerLaunch: {
-        command: this.dockerBin,
-        args: ["exec", "-i", this.state.containerName],
-      },
     });
     if (!managedTarget && !this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for docker environment");
@@ -255,10 +251,6 @@ class DockerEnvironment implements IEnvironment {
         managedTarget ?? {
           transport: "http",
           baseUrl: "http://127.0.0.1:0",
-          providerLaunch: {
-            command: this.dockerBin,
-            args: ["exec", "-i", this.state.containerName],
-          },
         },
     });
   }

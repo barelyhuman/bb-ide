@@ -113,7 +113,7 @@ describe("EnvironmentRegistry", () => {
       )).toThrow(/Worktree workspace is unavailable/);
   });
 
-  it("creates opt-in docker environments with a wrapped provider launch target", () => {
+  it("creates docker environments with a direct environment-agent target", () => {
     const projectRoot = makeTempDir("bb-docker-env-project-");
 
     try {
@@ -149,10 +149,6 @@ describe("EnvironmentRegistry", () => {
         baseUrl: "http://127.0.0.1:4312",
         headers: {
           authorization: "Bearer secret-token",
-        },
-        providerLaunch: {
-          command: "docker",
-          args: ["exec", "-i", "beanbag-thread-thread-1"],
         },
       });
     } finally {

@@ -233,20 +233,12 @@ describe("docker environment-agent helper", () => {
         threadId: "thread-1",
         environmentId: "docker",
         runtimeEnv: {},
-        providerLaunch: {
-          command: "docker",
-          args: ["exec", "-i", "beanbag-thread-thread-1"],
-        },
       }),
     ).toEqual({
       transport: "http",
       baseUrl: "http://127.0.0.1:4311",
       headers: {
         authorization: "Bearer auth-token",
-      },
-      providerLaunch: {
-        command: "docker",
-        args: ["exec", "-i", "beanbag-thread-thread-1"],
       },
     });
 
