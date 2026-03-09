@@ -5,7 +5,6 @@ import {
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentControlRequest,
-  type EnvironmentAgentConnectionTarget,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderSpec,
@@ -441,19 +440,4 @@ export class EnvironmentAgentRuntime {
       payload: record.params ?? {},
     };
   }
-}
-
-export function connectionTargetFromRuntimeOptions(
-  opts: EnvironmentAgentRuntimeOptions,
-): EnvironmentAgentConnectionTarget {
-  return {
-    transport: "command-stdio",
-    command: "bb",
-    args: ["environment-agent"],
-    env: {
-      ...(opts.threadId ? { BB_THREAD_ID: opts.threadId } : {}),
-      ...(opts.projectId ? { BB_PROJECT_ID: opts.projectId } : {}),
-      ...(opts.environmentId ? { BB_ENVIRONMENT_ID: opts.environmentId } : {}),
-    },
-  };
 }

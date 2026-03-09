@@ -40,7 +40,6 @@ export {
 export type { EnvironmentAgentRuntimeOptions } from "./runtime.js";
 export {
   EnvironmentAgentRuntime,
-  connectionTargetFromRuntimeOptions,
 } from "./runtime.js";
 
 export type { EnvironmentAgentClient } from "./client.js";
