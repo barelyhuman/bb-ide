@@ -4,6 +4,7 @@ import type {
   UIMessage,
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutPhase,
+  UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
   UIThreadOperationIntentAction,
   UIThreadOperationIntentPhase,
@@ -116,6 +117,30 @@ function mergeProvisioningSetup(
   };
 }
 
+function mergeProvisioningMetadata(
+  existing: UIProvisioningMetadata | undefined,
+  incoming: UIProvisioningMetadata | undefined,
+): UIProvisioningMetadata | undefined {
+  if (!incoming) {
+    return existing ? { ...existing } : undefined;
+  }
+  if (!existing) {
+    return {
+      ...incoming,
+      ...(incoming.setup ? { setup: { ...incoming.setup } } : {}),
+    };
+  }
+
+  const setup = mergeProvisioningSetup(existing.setup, incoming.setup);
+  return {
+    environmentId: incoming.environmentId ?? existing.environmentId,
+    environmentDisplayName: incoming.environmentDisplayName ?? existing.environmentDisplayName,
+    workspaceRoot: incoming.workspaceRoot ?? existing.workspaceRoot,
+    fallbackReason: incoming.fallbackReason ?? existing.fallbackReason,
+    ...(setup ? { setup } : {}),
+  };
+}
+
 function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   const merged: UIMessage[] = [];
   let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
@@ -147,14 +172,19 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       .filter((value): value is string => Boolean(value));
     const uniqueDetailLines = [...new Set(details)];
     const environment =
-      active
+      [...active]
+        .reverse()
         .filter((message) => message.opType !== "provisioning-env-setup")
-        .map((message) => parseProvisioningEnvironment(message.detail))
+        .map(
+          (message) =>
+            message.provisioning?.environmentDisplayName ?? parseProvisioningEnvironment(message.detail),
+        )
         .find((value): value is string => Boolean(value)) ?? "environment";
-    const setup = active.reduce<UIProvisioningSetupMetadata | undefined>(
-      (acc, message) => mergeProvisioningSetup(acc, message.provisioning?.setup),
+    const provisioning = active.reduce<UIProvisioningMetadata | undefined>(
+      (acc, message) => mergeProvisioningMetadata(acc, message.provisioning),
       undefined,
     );
+    const setup = provisioning?.setup;
     const title = (() => {
       if (!hasLifecycleUpdate && lastSetupUpdate) {
         switch (lastSetupUpdate.title) {
@@ -181,7 +211,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       opType: "provisioning",
       title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
-      ...(setup ? { provisioning: { setup } } : {}),
+      ...(provisioning ? { provisioning } : {}),
     });
 
     active = [];

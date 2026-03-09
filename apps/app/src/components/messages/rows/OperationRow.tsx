@@ -23,190 +23,19 @@ import { TerminalOutputBlock } from "./TerminalOutputBlock";
 type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
 type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];
 
-interface ProvisioningSetupAttempt {
-  scriptPath?: string;
-  workspaceRoot?: string;
-  timeout?: string;
-  durationMs?: number;
-  outputLines: string[];
-}
-
-interface ParsedProvisioningDetails {
-  environment?: string;
-  workspaceRoot?: string;
-  setupAttempt?: ProvisioningSetupAttempt;
-  additionalLines: string[];
-}
-
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
   return value.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
-}
-
-function parseProvisioningDurationMs(part: string): number | undefined {
-  const match = part.match(/^Duration\s+(\d+)ms$/i);
-  if (!match?.[1]) return undefined;
-  const durationMs = Number.parseInt(match[1], 10);
-  return Number.isNaN(durationMs) ? undefined : durationMs;
-}
-
-function parseProvisioningTimeout(part: string): string | undefined {
-  const match = part.match(/^Timeout\s+(.+)$/i);
-  return match?.[1]?.trim() || undefined;
 }
 
 function isWorkspaceRootToken(part: string): boolean {
   return part.startsWith("/") || part.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(part);
 }
 
-function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | null {
-  const parts = line.split("•").map((part) => part.trim()).filter((part) => part.length > 0);
-  if (parts.length === 0 || !parts.some((part) => part.includes(".bb-env-setup"))) {
-    return null;
-  }
-
-  let scriptPath: string | undefined;
-  let workspaceRoot: string | undefined;
-  let timeout: string | undefined;
-  let durationMs: number | undefined;
-  const outputLines: string[] = [];
-
-  for (const part of parts) {
-    if (!scriptPath && part.includes(".bb-env-setup")) {
-      scriptPath = part;
-      continue;
-    }
-    if (!workspaceRoot && isWorkspaceRootToken(part)) {
-      workspaceRoot = part;
-      continue;
-    }
-    if (!timeout) {
-      const parsedTimeout = parseProvisioningTimeout(part);
-      if (parsedTimeout) {
-        timeout = parsedTimeout;
-        continue;
-      }
-    }
-    if (durationMs === undefined) {
-      const parsedDurationMs = parseProvisioningDurationMs(part);
-      if (parsedDurationMs !== undefined) {
-        durationMs = parsedDurationMs;
-        continue;
-      }
-    }
-    outputLines.push(part);
-  }
-
-  return { scriptPath, workspaceRoot, timeout, durationMs, outputLines };
-}
-
-function isLikelyProvisioningEnvironmentToken(value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 && !normalized.startsWith("/") && !normalized.includes(":");
-}
-
-function parseProvisioningSummaryLine(
-  line: string,
-): { environment?: string; workspaceRoot?: string; remainingLine?: string } | null {
-  const parts = line.split("•").map((part) => part.trim()).filter((part) => part.length > 0);
-  if (parts.length === 0) return null;
-  let environment: string | undefined;
-  let workspaceRoot: string | undefined;
-  const remainingParts: string[] = [];
-  for (const [index, part] of parts.entries()) {
-    if (!workspaceRoot && isWorkspaceRootToken(part)) {
-      workspaceRoot = part;
-      continue;
-    }
-    if (!environment && index === 0 && isLikelyProvisioningEnvironmentToken(part)) {
-      environment = part;
-      continue;
-    }
-    remainingParts.push(part);
-  }
-  if (!environment && !workspaceRoot) return null;
-  return {
-    environment,
-    workspaceRoot,
-    remainingLine: remainingParts.length > 0 ? remainingParts.join(" • ") : undefined,
-  };
-}
-
-function pickBestProvisioningSetupAttempt(
-  attempts: ProvisioningSetupAttempt[],
-): ProvisioningSetupAttempt | undefined {
-  for (let index = attempts.length - 1; index >= 0; index -= 1) {
-    const attempt = attempts[index];
-    if (!attempt) continue;
-    if (attempt.durationMs !== undefined || attempt.outputLines.length > 0) {
-      return attempt;
-    }
-  }
-  return attempts.length > 0 ? attempts[attempts.length - 1] : undefined;
-}
-
-function parseProvisioningDetails(detail: string | undefined): ParsedProvisioningDetails | null {
-  const lines = splitNonEmptyLines(detail);
-  if (lines.length === 0) return null;
-  let environment: string | undefined;
-  let workspaceRoot: string | undefined;
-  const attempts: ProvisioningSetupAttempt[] = [];
-  let currentAttempt: ProvisioningSetupAttempt | undefined;
-  const additionalLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith("Environment:")) {
-      const nextEnvironment = line.slice("Environment:".length).trim();
-      if (nextEnvironment.length > 0) environment = nextEnvironment;
-      continue;
-    }
-    const parsedAttempt = parseProvisioningSetupLine(line);
-    if (parsedAttempt) {
-      attempts.push(parsedAttempt);
-      currentAttempt = parsedAttempt;
-      continue;
-    }
-    if (!currentAttempt) {
-      const parsedSummary = parseProvisioningSummaryLine(line);
-      if (parsedSummary) {
-        if (!environment && parsedSummary.environment) environment = parsedSummary.environment;
-        if (!workspaceRoot && parsedSummary.workspaceRoot) workspaceRoot = parsedSummary.workspaceRoot;
-        if (parsedSummary.remainingLine) additionalLines.push(parsedSummary.remainingLine);
-        continue;
-      }
-    }
-    if (currentAttempt) {
-      const parsedSummary = parseProvisioningSummaryLine(line);
-      if (parsedSummary) {
-        if (!environment && parsedSummary.environment) environment = parsedSummary.environment;
-        if (!workspaceRoot && parsedSummary.workspaceRoot) workspaceRoot = parsedSummary.workspaceRoot;
-        if (parsedSummary.remainingLine) additionalLines.push(parsedSummary.remainingLine);
-        continue;
-      }
-      if (line.includes("•") && !line.includes(".bb-env-setup")) {
-        additionalLines.push(line);
-        continue;
-      }
-      currentAttempt.outputLines.push(line);
-      continue;
-    }
-    additionalLines.push(line);
-  }
-
-  const setupAttempt = pickBestProvisioningSetupAttempt(attempts);
-  if (!environment && !setupAttempt && additionalLines.length === 0) return null;
-  return { environment, workspaceRoot, setupAttempt, additionalLines };
-}
-
 function normalizeProvisioningEnvironmentLabel(environment: string | undefined): string | undefined {
   const value = environment?.trim();
   if (!value) return undefined;
   return formatEnvironmentDisplayName({ id: value, displayName: value });
-}
-
-function provisioningSetupTimedOut(setupAttempt: ProvisioningSetupAttempt | undefined): boolean {
-  if (!setupAttempt?.timeout) return false;
-  return setupAttempt.outputLines.some((line) => /\btimed out\b/i.test(line));
 }
 
 function formatTimeoutLabel(timeoutMs: number | undefined): string | undefined {
@@ -251,26 +80,86 @@ function formatDurationLabel(durationMs: number): string {
 
 function getProvisioningSetupStatus(
   setup: UIProvisioningSetupMetadata | undefined,
-  setupAttempt: ProvisioningSetupAttempt | undefined,
-  isProvisioningCompleted: boolean,
 ): "Failed" | "Completed" | "Running" | undefined {
-  if (setup) {
-    switch (setup.status) {
-      case "failed":
-        return "Failed";
-      case "completed":
-        return "Completed";
-      case "started":
-      case "running":
-        return "Running";
-      default:
-        return assertNever(setup.status);
+  if (!setup) {
+    return undefined;
+  }
+  switch (setup.status) {
+    case "failed":
+      return "Failed";
+    case "completed":
+      return "Completed";
+    case "started":
+    case "running":
+      return "Running";
+    default:
+      return assertNever(setup.status);
+  }
+}
+
+function buildProvisioningStructuredDetailLines(message: UIOperationMessage): Set<string> {
+  const structuredLines = new Set<string>();
+  const environmentLabel = normalizeProvisioningEnvironmentLabel(
+    message.provisioning?.environmentDisplayName,
+  );
+  const workspaceRoot = message.provisioning?.workspaceRoot;
+  const setup = message.provisioning?.setup;
+  const timeoutLabel = formatTimeoutLabel(setup?.timeoutMs);
+  const timeoutDetailPart = timeoutLabel ? `Timeout ${timeoutLabel}` : undefined;
+
+  if (environmentLabel) {
+    structuredLines.add(`Environment: ${environmentLabel}`);
+  }
+  if (environmentLabel && workspaceRoot) {
+    structuredLines.add(`${environmentLabel} • ${workspaceRoot}`);
+    if (message.provisioning?.fallbackReason) {
+      structuredLines.add(
+        `${environmentLabel} • ${workspaceRoot} • ${message.provisioning.fallbackReason}`,
+      );
     }
   }
-  if (!setupAttempt) return undefined;
-  if (setupAttempt.outputLines.length > 0) return "Failed";
-  if (setupAttempt.durationMs !== undefined || isProvisioningCompleted) return "Completed";
-  return "Running";
+  if (setup?.scriptPath) {
+    const baseParts = [setup.scriptPath, workspaceRoot, timeoutDetailPart].filter(
+      (value): value is string => Boolean(value),
+    );
+    if (baseParts.length > 0) {
+      structuredLines.add(baseParts.join(" • "));
+    }
+    if (setup.durationMs !== undefined) {
+      structuredLines.add(
+        [setup.scriptPath, workspaceRoot, `Duration ${setup.durationMs}ms`]
+          .filter((value): value is string => Boolean(value))
+          .join(" • "),
+      );
+      structuredLines.add([...baseParts, `Duration ${setup.durationMs}ms`].join(" • "));
+    }
+  }
+  if (setup?.output) {
+    for (const line of splitNonEmptyLines(setup.output)) {
+      structuredLines.add(line);
+    }
+  }
+
+  return structuredLines;
+}
+
+function getProvisioningAdditionalDetailsText(message: UIOperationMessage): string | undefined {
+  const structuredLines = buildProvisioningStructuredDetailLines(message);
+  const structuredPrefixes = [...structuredLines]
+    .sort((left, right) => right.length - left.length)
+    .map((line) => `${line} • `);
+  const additionalLines = splitNonEmptyLines(message.detail)
+    .map((line) => {
+      if (structuredLines.has(line)) return undefined;
+      for (const prefix of structuredPrefixes) {
+        if (line.startsWith(prefix)) {
+          return line.slice(prefix.length).trim() || undefined;
+        }
+      }
+      return line;
+    })
+    .filter((line): line is string => Boolean(line));
+  return additionalLines.length > 0 ? additionalLines.join("\n") : undefined;
 }
 
 function isShimmeringThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
@@ -389,11 +278,15 @@ export function OperationRow({
   }
 
   if (message.opType === "provisioning") {
-    const parsedDetails = parseProvisioningDetails(message.detail);
     const fallbackDetailLines = splitNonEmptyLines(message.detail);
+    const provisioning = message.provisioning;
     const setupMetadata = message.provisioning?.setup;
-    const hasParsedDetails = Boolean(parsedDetails);
-    const hasStructuredProvisioningDetails = hasParsedDetails || Boolean(setupMetadata);
+    const hasStructuredProvisioningDetails = Boolean(
+      provisioning?.environmentDisplayName ||
+        provisioning?.workspaceRoot ||
+        provisioning?.fallbackReason ||
+        setupMetadata,
+    );
     const hasProvisioningOutput = Boolean(message.provisioning?.setup?.output?.trim());
     const hasDetails = hasStructuredProvisioningDetails || fallbackDetailLines.length > 0 || hasProvisioningOutput;
     const titleKind = (() => {
@@ -416,29 +309,27 @@ export function OperationRow({
         : titleKind === "provisioning"
           ? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim()
           : "";
-    const setupAttempt = parsedDetails?.setupAttempt;
-    const setupStatus = getProvisioningSetupStatus(setupMetadata, setupAttempt, isCompleted);
-    const outputText = (
-      setupMetadata?.output ??
-      setupAttempt?.outputLines.join("\n")
-    ) || undefined;
-    const timeoutLabel = formatTimeoutLabel(setupMetadata?.timeoutMs) ?? setupAttempt?.timeout;
-    const setupTimedOut = outputText ? /\btimed out\b/i.test(outputText) : provisioningSetupTimedOut(setupAttempt);
-    const additionalDetailsText = parsedDetails?.additionalLines.join("\n").trim();
-    const workspacePath = setupAttempt?.workspaceRoot ?? parsedDetails?.workspaceRoot;
+    const setupStatus = getProvisioningSetupStatus(setupMetadata);
+    const outputText = setupMetadata?.output?.trim() || undefined;
+    const timeoutLabel = formatTimeoutLabel(setupMetadata?.timeoutMs);
+    const setupTimedOut = Boolean(timeoutLabel && outputText && /\btimed out\b/i.test(outputText));
+    const additionalDetailsText = getProvisioningAdditionalDetailsText(message);
+    const workspacePath = provisioning?.workspaceRoot;
     const setupScriptPath = resolveProvisioningSetupScriptPath(
-      setupMetadata?.scriptPath ?? setupAttempt?.scriptPath,
+      setupMetadata?.scriptPath,
       workspacePath,
     );
-    const setupScriptLabel = setupMetadata?.scriptPath ?? setupScriptPath ?? setupAttempt?.scriptPath;
-    const setupCommand = formatProvisioningSetupCommand(setupMetadata?.scriptPath ?? setupAttempt?.scriptPath);
-    const setupDurationMs = setupMetadata?.durationMs ?? setupAttempt?.durationMs;
+    const setupScriptLabel = setupMetadata?.scriptPath ?? setupScriptPath;
+    const setupCommand = formatProvisioningSetupCommand(setupMetadata?.scriptPath);
+    const setupDurationMs = setupMetadata?.durationMs;
     const setupTimeLabel = setupDurationMs !== undefined
       ? `${formatDurationLabel(setupDurationMs)}${setupTimedOut && timeoutLabel ? ` / timeout ${timeoutLabel}` : ""}`
       : setupTimedOut && timeoutLabel
         ? `timeout ${timeoutLabel}`
         : undefined;
-    const environmentValue = normalizeProvisioningEnvironmentLabel(parsedDetails?.environment || environmentLabel || undefined);
+    const environmentValue = normalizeProvisioningEnvironmentLabel(
+      provisioning?.environmentDisplayName || environmentLabel || undefined,
+    );
     const setupStatusVariant: StatusPillVariant =
       setupStatus === "Failed"
         ? "destructive"
@@ -471,6 +362,7 @@ export function OperationRow({
                 {setupTimeLabel ? <EventMetaItem label="Setup time"><span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span></EventMetaItem> : null}
                 {workspacePath ? <EventMetaItem label="Workspace"><OpenPathButton path={workspacePath} target="directory" title={workspacePath}>{workspacePath}</OpenPathButton></EventMetaItem> : null}
                 {outputText ? <EventMetaItem label="Output" align="start"><TerminalOutputBlock command={setupCommand} outputText={outputText} isExpanded={isExpanded} /></EventMetaItem> : null}
+                {provisioning?.fallbackReason ? <EventMetaItem label="Fallback reason" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{provisioning.fallbackReason}</EventCodeBlock></EventMetaItem> : null}
                 {additionalDetailsText ? <EventMetaItem label="Additional details" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{additionalDetailsText}</EventCodeBlock></EventMetaItem> : null}
               </EventMetaList>
             ) : (

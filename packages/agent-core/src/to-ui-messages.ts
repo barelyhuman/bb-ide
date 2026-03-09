@@ -1342,8 +1342,9 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/started")) {
     const payload = toEventRecord(event.data);
+    const environmentId = getStringField(payload, "environmentId");
     const environmentDisplayName = formatEnvironmentDisplayName({
-      id: getStringField(payload, "environmentId"),
+      id: environmentId,
       displayName: getStringField(payload, "environmentDisplayName"),
     });
     return {
@@ -1359,6 +1360,13 @@ function parseOperationMessage(
       detail: environmentDisplayName
         ? `Environment: ${environmentDisplayName}`
         : undefined,
+      provisioning:
+        environmentId || environmentDisplayName
+          ? {
+              ...(environmentId ? { environmentId } : {}),
+              ...(environmentDisplayName ? { environmentDisplayName } : {}),
+            }
+          : undefined,
     };
   }
 
@@ -1383,11 +1391,13 @@ function parseOperationMessage(
     })();
 
     const scriptPath = getStringField(payload, "scriptPath");
+    const workspaceRoot = getStringField(payload, "workspaceRoot");
     const timeoutMs = getNumberField(payload, "timeoutMs");
     const durationMs = getNumberField(payload, "durationMs");
     const output = getStringField(payload, "detail");
     const detailParts = [
       scriptPath,
+      workspaceRoot,
       timeoutMs !== undefined ? `Timeout ${Math.round(timeoutMs / 1000)}s` : undefined,
       durationMs !== undefined ? `Duration ${durationMs}ms` : undefined,
     ].filter((value): value is string => Boolean(value));
@@ -1406,6 +1416,7 @@ function parseOperationMessage(
       ...(status
         ? {
             provisioning: {
+              ...(workspaceRoot ? { workspaceRoot } : {}),
               setup: {
                 status,
                 ...(scriptPath ? { scriptPath } : {}),
@@ -1610,13 +1621,17 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/completed")) {
     const payload = toEventRecord(event.data);
+    const environmentId = getStringField(payload, "environmentId");
     const environmentDisplayName = formatEnvironmentDisplayName({
-      id: getStringField(payload, "environmentId"),
+      id: environmentId,
       displayName: getStringField(payload, "environmentDisplayName"),
     });
+    const workspaceRoot = getStringField(payload, "workspaceRoot");
+    const fallbackReason = getStringField(payload, "fallbackReason");
     const detailParts = [
       environmentDisplayName,
-      getStringField(payload, "fallbackReason"),
+      workspaceRoot,
+      fallbackReason,
     ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
@@ -1629,6 +1644,15 @@ function parseOperationMessage(
       opType: "provisioning-completed",
       title: "Provisioning ready",
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      provisioning:
+        environmentId || environmentDisplayName || workspaceRoot || fallbackReason
+          ? {
+              ...(environmentId ? { environmentId } : {}),
+              ...(environmentDisplayName ? { environmentDisplayName } : {}),
+              ...(workspaceRoot ? { workspaceRoot } : {}),
+              ...(fallbackReason ? { fallbackReason } : {}),
+            }
+          : undefined,
     };
   }
 

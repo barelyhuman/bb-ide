@@ -2677,6 +2677,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this._appendEvent(threadId, "system/provisioning/env_setup", {
       status: event.status,
       scriptPath: event.scriptPath,
+      ...(event.workspaceRoot ? { workspaceRoot: event.workspaceRoot } : {}),
       ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
       ...(event.detail ? { detail: event.detail } : {}),
@@ -2729,11 +2730,13 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const startedAt = Date.now();
+    const workspaceRoot = environment.getWorkspaceRootUnsafe();
     const thread = this.threadRepo.getById(threadId);
     this._appendEnvironmentProvisioningEvent(threadId, {
       type: "env-setup",
       status: "started",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
+      workspaceRoot,
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       reason,
     });
@@ -2759,6 +2762,7 @@ export class Orchestrator implements ThreadOrchestrator {
             type: "env-setup",
             status: "running",
             scriptPath: ENV_SETUP_SCRIPT_NAME,
+            workspaceRoot,
             timeoutMs: ENV_SETUP_TIMEOUT_MS,
             detail: line,
             reason,
@@ -2771,6 +2775,7 @@ export class Orchestrator implements ThreadOrchestrator {
             type: "env-setup",
             status: "running",
             scriptPath: ENV_SETUP_SCRIPT_NAME,
+            workspaceRoot,
             timeoutMs: ENV_SETUP_TIMEOUT_MS,
             detail: line,
             reason,
@@ -2784,6 +2789,7 @@ export class Orchestrator implements ThreadOrchestrator {
         type: "env-setup",
         status: "failed",
         scriptPath: ENV_SETUP_SCRIPT_NAME,
+        workspaceRoot,
         timeoutMs: ENV_SETUP_TIMEOUT_MS,
         durationMs: Date.now() - startedAt,
         ...(sawSetupOutput ? {} : { detail }),
@@ -2795,6 +2801,7 @@ export class Orchestrator implements ThreadOrchestrator {
       type: "env-setup",
       status: "completed",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
+      workspaceRoot,
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       durationMs: Date.now() - startedAt,
       reason,
@@ -2802,6 +2809,8 @@ export class Orchestrator implements ThreadOrchestrator {
     if (this.threadRepo.getById(threadId)?.status !== "provisioning") {
       this._appendEvent(threadId, "system/provisioning/completed", {
         environmentId: environment.kind,
+        environmentDisplayName: this.environmentRegistry.get(environment.kind).info.displayName,
+        workspaceRoot,
       });
     }
   }

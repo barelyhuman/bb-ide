@@ -239,6 +239,7 @@ export interface SystemProvisioningStartedEventData {
 export interface SystemProvisioningEnvSetupEventData {
   status: "started" | "running" | "completed" | "failed";
   scriptPath: string;
+  workspaceRoot?: string;
   timeoutMs?: number;
   durationMs?: number;
   detail?: string;
@@ -254,6 +255,8 @@ export interface SystemProvisioningFallbackEventData {
 
 export interface SystemProvisioningCompletedEventData {
   environmentId: string;
+  environmentDisplayName?: string;
+  workspaceRoot?: string;
   fallbackReason?: string;
   reason?: ThreadProvisioningReason;
 }

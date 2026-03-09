@@ -141,6 +141,7 @@ export type EnvironmentProvisioningEvent =
       type: "env-setup";
       status: "started" | "running" | "completed" | "failed";
       scriptPath: string;
+      workspaceRoot?: string;
       timeoutMs?: number;
       durationMs?: number;
       detail?: string;

@@ -807,6 +807,10 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned Direct",
       detail: "Environment: Direct\nDirect • /Users/michael/Projects/bb",
+      provisioning: {
+        environmentDisplayName: "Direct",
+        workspaceRoot: "/Users/michael/Projects/bb",
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
@@ -822,6 +826,10 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned Worktree",
       detail: "Environment: Worktree\nWorktree • /tmp/worktree",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
@@ -840,10 +848,15 @@ describe("ConversationEntry", () => {
       detail:
         "Environment: Worktree\n" +
         "Worktree • /tmp/worktree • fallback because worktree bootstrap was unavailable",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+        fallbackReason: "fallback because worktree bootstrap was unavailable",
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Additional details");
+    expect(html).toContain("Fallback reason");
     expect(html).toContain("fallback because worktree bootstrap was unavailable");
     expect(html).not.toContain("worktree • /tmp/worktree •");
   });
@@ -858,6 +871,15 @@ describe("ConversationEntry", () => {
         "Environment: Worktree\n" +
         ".bb-env-setup.sh • /tmp/worktree • Duration 10200ms\n" +
         "Worktree • /tmp/worktree",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+        setup: {
+          status: "completed",
+          scriptPath: ".bb-env-setup.sh",
+          durationMs: 10200,
+        },
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
@@ -880,6 +902,17 @@ describe("ConversationEntry", () => {
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms • turbo 2.8.3\n" +
         "@beanbag/daemon:build: ERROR: command failed",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+        setup: {
+          status: "failed",
+          scriptPath: ".bb-env-setup.sh",
+          timeoutMs: 600000,
+          durationMs: 5988,
+          output: "@beanbag/daemon:build: ERROR: command failed",
+        },
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
@@ -908,6 +941,8 @@ describe("ConversationEntry", () => {
         "Environment: Worktree\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s",
       provisioning: {
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
         setup: {
           status: "running",
           scriptPath: ".bb-env-setup.sh",
@@ -934,6 +969,17 @@ describe("ConversationEntry", () => {
         "Environment: Worktree\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 600000ms • .bb-env-setup.sh timed out after 10 minutes",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+        setup: {
+          status: "failed",
+          scriptPath: ".bb-env-setup.sh",
+          timeoutMs: 600000,
+          durationMs: 600000,
+          output: ".bb-env-setup.sh timed out after 10 minutes",
+        },
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
@@ -964,6 +1010,15 @@ describe("ConversationEntry", () => {
       detail:
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms",
+      provisioning: {
+        workspaceRoot: "/tmp/worktree",
+        setup: {
+          status: "completed",
+          scriptPath: ".bb-env-setup.sh",
+          timeoutMs: 600000,
+          durationMs: 5988,
+        },
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);

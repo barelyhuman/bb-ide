@@ -1261,6 +1261,7 @@ describe("toUIMessages replay coverage", () => {
         data: {
           status: "started",
           scriptPath: ".bb-env-setup.sh",
+          workspaceRoot: "/tmp/worktree",
           timeoutMs: 600000,
         },
         createdAt: 1,
@@ -1273,6 +1274,7 @@ describe("toUIMessages replay coverage", () => {
         data: {
           status: "running",
           scriptPath: ".bb-env-setup.sh",
+          workspaceRoot: "/tmp/worktree",
           timeoutMs: 600000,
           detail: "pnpm install",
         },
@@ -1286,6 +1288,7 @@ describe("toUIMessages replay coverage", () => {
         data: {
           status: "completed",
           scriptPath: ".bb-env-setup.sh",
+          workspaceRoot: "/tmp/worktree",
           durationMs: 125,
         },
         createdAt: 3,
@@ -1302,9 +1305,11 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.opType).toBe("provisioning-env-setup");
     expect(ops[0]?.title).toBe("Environment setup started");
     expect(ops[0]?.detail).toContain(".bb-env-setup.sh");
+    expect(ops[0]?.detail).toContain("/tmp/worktree");
+    expect(ops[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(ops[1]?.opType).toBe("provisioning-env-setup");
     expect(ops[1]?.title).toBe("Environment setup running");
-    expect(ops[1]?.detail).toBe(".bb-env-setup.sh • Timeout 600s");
+    expect(ops[1]?.detail).toBe(".bb-env-setup.sh • /tmp/worktree • Timeout 600s");
     expect(ops[1]?.provisioning?.setup?.output).toBe("pnpm install");
     expect(ops[2]?.opType).toBe("provisioning-env-setup");
     expect(ops[2]?.title).toBe("Environment setup completed");

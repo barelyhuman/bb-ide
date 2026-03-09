@@ -169,6 +169,10 @@ export interface UIProvisioningSetupMetadata {
 }
 
 export interface UIProvisioningMetadata {
+  environmentId?: string;
+  environmentDisplayName?: string;
+  workspaceRoot?: string;
+  fallbackReason?: string;
   setup?: UIProvisioningSetupMetadata;
 }
 
