@@ -646,9 +646,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const project = this.projectRepo.getById(thread.projectId);
     const providerThreadId = this._resolvePersistedProviderThreadId(thread.id);
     const latestLifecycle = this._latestTurnLifecycleStatus(thread.id);
-    const shouldRemainActive = latestLifecycle === "active";
+    const shouldAttemptResume = latestLifecycle !== "idle";
 
-    if (!project || !providerThreadId || !shouldRemainActive) {
+    if (!project || !providerThreadId || !shouldAttemptResume) {
       this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
       return;
     }
