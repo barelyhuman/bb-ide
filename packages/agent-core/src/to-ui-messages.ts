@@ -2,6 +2,8 @@ import type { ThreadEvent } from "./types.js";
 import { assertNever } from "./assert-never.js";
 import { formatEnvironmentDisplayName } from "./environment-display-name.js";
 import {
+  decodeLooseTextContent,
+  decodeThreadEventData,
   normalizeThreadEventType,
   resolveProviderEventMethod,
   unwrapProviderEventPayload,
@@ -153,43 +155,8 @@ function getStringArrayField(
   });
 }
 
-function collectTextFragments(value: unknown, out: string[]): void {
-  if (typeof value === "string") {
-    if (value.length > 0) out.push(value);
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const entry of value) collectTextFragments(entry, out);
-    return;
-  }
-
-  const record = toRecord(value);
-  if (!record) return;
-
-  const candidates = [
-    record.delta,
-    record.text,
-    record.content,
-    record.value,
-    record.message,
-    record.summary,
-    record.summary_text,
-    record.stdout,
-    record.stderr,
-    record.aggregated_output,
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate === undefined) continue;
-    collectTextFragments(candidate, out);
-  }
-}
-
 function extractText(value: unknown): string {
-  const parts: string[] = [];
-  collectTextFragments(value, parts);
-  return parts.join("");
+  return decodeLooseTextContent(value).text;
 }
 
 function getEventType(event: ThreadEvent): string {
@@ -198,72 +165,23 @@ function getEventType(event: ThreadEvent): string {
 }
 
 function getTurnId(data: unknown): string | undefined {
-  const params = toEventRecord(data);
-  if (!params) return undefined;
-
-  if (typeof params.turnId === "string" && params.turnId.length > 0) {
-    return params.turnId;
-  }
-  if (typeof params.turn_id === "string" && params.turn_id.length > 0) {
-    return params.turn_id;
-  }
-
-  const turn = toRecord(params.turn);
-  if (turn && typeof turn.id === "string" && turn.id.length > 0) {
-    return turn.id;
-  }
-
-  const msg = toRecord(params.msg);
-  if (msg && typeof msg.turn_id === "string" && msg.turn_id.length > 0) {
-    return msg.turn_id;
-  }
-
-  if (typeof params.id === "string" && params.id.length > 0) {
-    return params.id;
-  }
-
-  return undefined;
+  return decodeThreadEventData(data).turnId;
 }
 
 function getItemRecord(data: unknown): Record<string, unknown> | null {
-  const params = toEventRecord(data);
-  if (!params) return null;
-
-  const directItem = toRecord(params.item);
-  if (directItem) return directItem;
-
-  const msg = toRecord(params.msg);
-  if (!msg) return null;
-  return toRecord(msg.item);
+  return decodeThreadEventData(data).item?.raw ?? null;
 }
 
 function getItemTypeToken(data: unknown): string {
-  const item = getItemRecord(data);
-  const type = getStringField(item, "type");
-  return type ? normalizeToken(type) : "";
+  return decodeThreadEventData(data).item?.normalizedType ?? "";
 }
 
 function getItemId(data: unknown): string | undefined {
-  const item = getItemRecord(data);
-  const itemId = getStringField(item, "id");
-  if (itemId) return itemId;
-
-  const params = toEventRecord(data);
-  const paramsItemId = getStringField(params, "itemId");
-  if (paramsItemId) return paramsItemId;
-
-  const msg = toRecord(params?.msg);
-  const msgItemId = getStringField(msg, "item_id");
-  if (msgItemId) return msgItemId;
-
-  return undefined;
+  return decodeThreadEventData(data).itemId;
 }
 
 function getEventPayloadRecord(data: unknown): Record<string, unknown> | null {
-  const params = toEventRecord(data);
-  if (!params) return null;
-  const msg = toRecord(params.msg);
-  return msg ?? params;
+  return decodeThreadEventData(data).eventPayload;
 }
 
 function parsePromptInput(input: unknown): {
@@ -544,10 +462,9 @@ function parseUserFromItemEvent(
   if (!eventTypeMatchesAny(eventType, ["item/started", "item/completed"])) {
     return null;
   }
-  if (getItemTypeToken(event.data) !== "usermessage") return null;
+  const decoded = decodeThreadEventData(event.data);
+  if (decoded.item?.normalizedType !== "usermessage") return null;
 
-  const item = getItemRecord(event.data);
-  const content = Array.isArray(item?.content) ? item.content : [];
   const textParts: string[] = [];
   let webImages = 0;
   let localImages = 0;
@@ -556,52 +473,27 @@ function parseUserFromItemEvent(
   const localImagePaths: string[] = [];
   const localFilePaths: string[] = [];
 
-  for (const entry of content) {
-    const part = toRecord(entry);
-    if (!part) continue;
-
-    const typeToken =
-      typeof part.type === "string" ? normalizeToken(part.type) : "";
-
-    if (typeToken === "text") {
-      if (typeof part.text === "string" && part.text.length > 0) {
+  for (const part of decoded.item.content) {
+    switch (part.type) {
+      case "text":
         textParts.push(part.text);
-      }
-      continue;
-    }
-
-    if (typeToken === "image") {
-      webImages += 1;
-      const imageUrl =
-        getStringField(part, "image_url") ??
-        getStringField(part, "url") ??
-        getStringField(toRecord(part.data), "image_url") ??
-        getStringField(toRecord(part.data), "url");
-      if (imageUrl) {
-        imageUrls.push(imageUrl);
-      }
-      continue;
-    }
-
-    if (typeToken === "localimage") {
-      localImages += 1;
-      const imagePath =
-        getStringField(part, "path") ??
-        getStringField(toRecord(part.data), "path");
-      if (imagePath) {
-        localImagePaths.push(imagePath);
-      }
-      continue;
-    }
-
-    if (typeToken === "localfile") {
-      localFiles += 1;
-      const filePath =
-        getStringField(part, "path") ??
-        getStringField(toRecord(part.data), "path");
-      if (filePath) {
-        localFilePaths.push(filePath);
-      }
+        break;
+      case "image":
+        webImages += 1;
+        if (part.imageUrl) imageUrls.push(part.imageUrl);
+        break;
+      case "local_image":
+        localImages += 1;
+        if (part.path) localImagePaths.push(part.path);
+        break;
+      case "local_file":
+        localFiles += 1;
+        if (part.path) localFilePaths.push(part.path);
+        break;
+      case "unknown":
+        break;
+      default:
+        assertNever(part);
     }
   }
 
@@ -610,8 +502,8 @@ function parseUserFromItemEvent(
     return null;
   }
 
-  const turnId = getTurnId(event.data);
-  const itemId = getItemId(event.data) ?? `${event.seq}`;
+  const turnId = decoded.turnId;
+  const itemId = decoded.itemId ?? `${event.seq}`;
 
   return {
     kind: "user",
@@ -700,8 +592,7 @@ function parseAssistantFinalText(
     eventTypeMatches(eventType, "item/completed") &&
     getItemTypeToken(event.data) === "agentmessage"
   ) {
-    const item = getItemRecord(event.data);
-    const text = extractText(item?.text ?? item?.content);
+    const text = decodeThreadEventData(event.data).item?.text.text ?? "";
     return text.length > 0 ? text : null;
   }
 
@@ -732,8 +623,8 @@ function parseReasoningFinalText(
     eventTypeMatches(eventType, "item/completed") &&
     getItemTypeToken(event.data) === "reasoning"
   ) {
-    const item = getItemRecord(event.data);
-    const text = extractText(item?.summary ?? item?.summaryText ?? item?.text ?? item?.content);
+    const item = decodeThreadEventData(event.data).item;
+    const text = item?.summaryText.text || item?.text.text || "";
     return text.length > 0 ? text : null;
   }
 

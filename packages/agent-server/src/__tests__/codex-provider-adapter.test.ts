@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AvailableModel, ThreadEvent } from "@beanbag/agent-core";
+import {
+  createProviderEventEnvelope,
+  type AvailableModel,
+  type ThreadEvent,
+} from "@beanbag/agent-core";
 
 vi.mock("../codex-models.js", () => ({
   listCodexModels: vi.fn(),
@@ -130,6 +134,28 @@ describe("codex provider adapter", () => {
             text: "Final answer",
           },
         },
+      }),
+    );
+
+    expect(output).toBe("Final answer");
+  });
+
+  it("extracts assistant output from enveloped item/completed events", () => {
+    const adapter = createCodexProviderAdapter();
+
+    const output = adapter.outputFromEvent(
+      makeEvent({
+        type: "item/completed",
+        data: createProviderEventEnvelope({
+          providerId: "codex",
+          method: "item/completed",
+          payload: {
+            item: {
+              type: "agentMessage",
+              text: [{ text: "Final " }, { value: "answer" }],
+            },
+          },
+        }),
       }),
     );
 

@@ -47,7 +47,7 @@ export class ProviderRuntimeRpcError extends ProviderRuntimeError {
 }
 
 export interface ProviderRuntimeNotification {
-  method: unknown;
+  method: string;
   params: unknown;
 }
 
@@ -68,6 +68,61 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function asJsonRpcId(value: unknown): JsonRpcId | undefined {
   if (typeof value === "string" || typeof value === "number") return value;
   return undefined;
+}
+
+type DecodedProviderRuntimeMessage =
+  | {
+      kind: "response";
+      id: JsonRpcId;
+      result: unknown;
+      error?: undefined;
+    }
+  | {
+      kind: "response";
+      id: JsonRpcId;
+      result?: undefined;
+      error: unknown;
+    }
+  | {
+      kind: "notification";
+      method: string;
+      params: unknown;
+    };
+
+function decodeProviderRuntimeMessage(
+  value: unknown,
+): DecodedProviderRuntimeMessage | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const id = asJsonRpcId(record.id);
+  const method = typeof record.method === "string" ? record.method : undefined;
+
+  if (id !== undefined && ("result" in record || "error" in record)) {
+    if ("error" in record && record.error !== undefined) {
+      return {
+        kind: "response",
+        id,
+        error: record.error,
+      };
+    }
+
+    return {
+      kind: "response",
+      id,
+      result: record.result,
+    };
+  }
+
+  if (method) {
+    return {
+      kind: "notification",
+      method,
+      params: record.params,
+    };
+  }
+
+  return null;
 }
 
 function getErrorMessage(value: unknown): string {
@@ -173,53 +228,50 @@ export class ProviderRuntime {
   }
 
   private _handleLine(line: string): void {
-      const trimmed = line.trim();
-      if (!trimmed) return;
+    const trimmed = line.trim();
+    if (!trimmed) return;
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      return;
+    }
+
+    const msg = decodeProviderRuntimeMessage(parsed);
+    if (!msg) return;
+
+    if (msg.kind === "response") {
+      const pending = this.pending.get(msg.id);
+      if (!pending) {
+        if (msg.error !== undefined) {
+          this.opts.onUnmatchedRpcError?.(msg.id, getErrorMessage(msg.error));
+        }
         return;
       }
 
-      const msg = asRecord(parsed);
-      if (!msg) return;
+      clearTimeout(pending.timeout);
+      this.pending.delete(msg.id);
 
-      const id = asJsonRpcId(msg.id);
-      if (id !== undefined && ("result" in msg || "error" in msg)) {
-        const pending = this.pending.get(id);
-        if (!pending) {
-          if (msg.error) {
-            this.opts.onUnmatchedRpcError?.(id, getErrorMessage(msg.error));
-          }
-          return;
-        }
-
-        clearTimeout(pending.timeout);
-        this.pending.delete(id);
-
-        if (msg.error) {
-          pending.reject(
-            new ProviderRuntimeRpcError(
-              id,
-              `[thread ${this.opts.threadId}] Provider RPC error for request ${id}: ` +
-                getErrorMessage(msg.error),
-            ),
-          );
-          return;
-        }
-
-        pending.resolve(msg.result);
+      if (msg.error !== undefined) {
+        pending.reject(
+          new ProviderRuntimeRpcError(
+            msg.id,
+            `[thread ${this.opts.threadId}] Provider RPC error for request ${msg.id}: ` +
+              getErrorMessage(msg.error),
+          ),
+        );
         return;
       }
 
-      if ("method" in msg) {
-        this.opts.onNotification({
-          method: msg.method,
-          params: msg.params,
-        });
-      }
+      pending.resolve(msg.result);
+      return;
+    }
+
+    this.opts.onNotification({
+      method: msg.method,
+      params: msg.params,
+    });
   }
 
   private _setupTransport(): void {

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createProviderEventEnvelope,
+  decodeLooseTextContent,
   decodeProviderEventEnvelope,
+  decodeThreadEventData,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
   normalizeThreadEventType,
@@ -61,6 +63,45 @@ describe("thread event normalization", () => {
         conversation_id: "thread-legacy",
       }),
     ).toBe("thread-legacy");
+  });
+
+  it("decodes a normalized event view from mixed legacy/provider shapes", () => {
+    const decoded = decodeThreadEventData({
+      payload: {
+        msg: {
+          turn_id: "turn-1",
+          item_id: "item-1",
+          item: {
+            id: "item-1",
+            type: "userMessage",
+            content: [
+              { type: "text", text: "hello " },
+              { type: "image", data: { url: "https://example.com/a.png" } },
+              { type: "localFile", path: "/tmp/note.txt" },
+            ],
+          },
+        },
+        thread: { id: "thread-1" },
+      },
+    });
+
+    expect(decoded.turnId).toBe("turn-1");
+    expect(decoded.providerThreadId).toBe("thread-1");
+    expect(decoded.itemId).toBe("item-1");
+    expect(decoded.item?.normalizedType).toBe("usermessage");
+    expect(decoded.item?.content).toEqual([
+      { type: "text", text: "hello " },
+      { type: "image", imageUrl: "https://example.com/a.png" },
+      { type: "local_file", path: "/tmp/note.txt" },
+    ]);
+  });
+
+  it("centralizes tolerant text extraction for open_external provider payloads", () => {
+    expect(
+      decodeLooseTextContent({
+        summary_text: [{ value: "alpha" }, { stdout: "beta" }],
+      }).text,
+    ).toBe("alphabeta");
   });
 
   it("normalizes event types for lookup keys", () => {

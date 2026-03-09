@@ -178,7 +178,9 @@ export { assertNever } from "./assert-never.js";
 export { toRecord, getStringField } from "./unknown-helpers.js";
 export {
   createProviderEventEnvelope,
+  decodeLooseTextContent,
   decodeProviderEventEnvelope,
+  decodeThreadEventData,
   isProviderEventEnvelope,
   unwrapProviderEventPayload,
   resolveProviderEventMethod,

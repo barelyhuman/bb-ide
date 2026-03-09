@@ -8,7 +8,7 @@ import type {
   Thread,
   ThreadEvent,
 } from "@beanbag/agent-core";
-import { assertNever, unwrapProviderEventPayload } from "@beanbag/agent-core";
+import { assertNever, decodeThreadEventData } from "@beanbag/agent-core";
 import { resolveCodexProviderLaunchConfiguration } from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
 import type {
@@ -170,12 +170,9 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
   const normalizedType = normalizeProviderEventType(event.type);
   if (normalizedType !== "item/completed") return undefined;
 
-  const payload = asRecord(unwrapProviderEventPayload(event.data));
-  const item = asRecord(payload?.item);
-  if (!item) return undefined;
-  if (item.type !== "agentMessage") return undefined;
-  if (typeof item.text !== "string") return undefined;
-  return item.text;
+  const decoded = decodeThreadEventData(event.data);
+  if (decoded.item?.normalizedType !== "agentmessage") return undefined;
+  return decoded.item.text.text || undefined;
 }
 
 export interface CreateCodexProviderAdapterOptions {

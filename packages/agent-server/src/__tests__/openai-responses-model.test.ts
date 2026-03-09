@@ -40,6 +40,33 @@ function mockResponsesSuccessFetch(): ReturnType<typeof vi.fn> {
   return fetchMock;
 }
 
+function mockResponsesNestedOutputFetch(): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        id: "resp_nested",
+        output: [
+          {
+            type: "message",
+            content: [
+              { type: "output_text", text: "fix " },
+              { type: "output_text", output_text: "bug" },
+            ],
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+      },
+    ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 function mockSseResponsesSuccessFetch(): ReturnType<typeof vi.fn> {
   const sseBody = [
     "event: response.created",
@@ -174,5 +201,17 @@ describe("generateOpenAIResponsesText auth handling", () => {
     await expect(
       generateOpenAIResponsesText({ prompt: "Suggest a commit message." }),
     ).rejects.toThrow("OpenAI auth is missing");
+  });
+
+  it("extracts text from structured JSON response output", async () => {
+    process.env.OPENAI_API_KEY = "sk-test-123";
+    mockResponsesNestedOutputFetch();
+
+    await expect(
+      generateOpenAIResponsesText({ prompt: "Suggest a commit message." }),
+    ).resolves.toMatchObject({
+      text: "fixbug",
+      responseId: "resp_nested",
+    });
   });
 });

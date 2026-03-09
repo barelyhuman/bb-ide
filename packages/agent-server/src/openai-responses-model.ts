@@ -34,6 +34,25 @@ interface ParsedSseResponsePayload {
   responseId?: string;
 }
 
+interface DecodedOpenAIResponse {
+  id?: string;
+  text: string;
+}
+
+type DecodedSseEvent =
+  | {
+      type: "response.output_text.delta";
+      delta: string;
+    }
+  | {
+      type: "response.output_text.done";
+      text: string;
+    }
+  | {
+      type: "response.created" | "response.in_progress" | "response.completed";
+      response: DecodedOpenAIResponse;
+    };
+
 export interface GenerateOpenAIResponsesTextArgs {
   prompt: string;
   model?: string;
@@ -57,6 +76,10 @@ function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function normalizeBaseUrl(authMode: ResponsesAuthMode): string {
@@ -131,8 +154,80 @@ function parseUpstreamErrorMessage(rawBody: string): string | null {
   return truncateErrorText(normalized);
 }
 
-function parseResponseIdFromRecord(value: Record<string, unknown>): string | undefined {
-  return typeof value.id === "string" ? value.id : undefined;
+function decodeOpenAIResponse(value: unknown): DecodedOpenAIResponse | null {
+  const payload = asRecord(value);
+  if (!payload) return null;
+
+  const direct = payload.output_text;
+  if (typeof direct === "string") {
+    return {
+      id: asNonEmptyString(payload.id) ?? undefined,
+      text: direct,
+    };
+  }
+
+  if (Array.isArray(direct)) {
+    const fragments = direct
+      .map((entry) => (typeof entry === "string" ? entry : ""))
+      .filter((entry) => entry.length > 0);
+    if (fragments.length > 0) {
+      return {
+        id: asNonEmptyString(payload.id) ?? undefined,
+        text: fragments.join(""),
+      };
+    }
+  }
+
+  const fragments: string[] = [];
+  for (const item of asArray(payload.output)) {
+    const outputItem = asRecord(item);
+    if (!outputItem) continue;
+
+    for (const part of asArray(outputItem.content)) {
+      const contentPart = asRecord(part);
+      if (!contentPart) continue;
+
+      const text =
+        asNonEmptyString(contentPart.text) ??
+        asNonEmptyString(contentPart.output_text);
+      if (text) {
+        fragments.push(text);
+      }
+    }
+  }
+
+  return {
+    id: asNonEmptyString(payload.id) ?? undefined,
+    text: fragments.join(""),
+  };
+}
+
+function decodeSseEvent(value: unknown): DecodedSseEvent | null {
+  const eventRecord = asRecord(value);
+  if (!eventRecord) return null;
+
+  const type = asNonEmptyString(eventRecord.type);
+  if (!type) return null;
+
+  switch (type) {
+    case "response.output_text.delta": {
+      const delta = asNonEmptyString(eventRecord.delta);
+      return delta ? { type, delta } : null;
+    }
+    case "response.output_text.done": {
+      const text = asNonEmptyString(eventRecord.text);
+      return text ? { type, text } : null;
+    }
+    case "response.created":
+    case "response.in_progress":
+    case "response.completed": {
+      const response = decodeOpenAIResponse(eventRecord.response);
+      return response ? { type, response } : null;
+    }
+    default:
+      // OpenAI SSE event types are open_external; unknown events are ignored.
+      return null;
+  }
 }
 
 function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | null {
@@ -168,40 +263,30 @@ function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | nu
       continue;
     }
 
-    const eventRecord = asRecord(parsed);
-    if (!eventRecord) continue;
+    const event = decodeSseEvent(parsed);
+    if (!event) continue;
 
-    const type = asNonEmptyString(eventRecord.type);
-    if (!type) continue;
-
-    if (type === "response.output_text.delta") {
-      const delta = asNonEmptyString(eventRecord.delta);
-      if (delta) textDeltas.push(delta);
-      continue;
-    }
-
-    if (type === "response.output_text.done") {
-      const doneText = asNonEmptyString(eventRecord.text);
-      if (doneText) textDone.push(doneText);
-      continue;
-    }
-
-    if (type === "response.completed") {
-      const responseRecord = asRecord(eventRecord.response);
-      if (!responseRecord) continue;
-
-      responseId = parseResponseIdFromRecord(responseRecord) ?? responseId;
-      const completedText = collectOutputText(responseRecord).trim();
-      if (completedText) {
-        textFromCompleted = completedText;
+    switch (event.type) {
+      case "response.output_text.delta":
+        textDeltas.push(event.delta);
+        break;
+      case "response.output_text.done":
+        textDone.push(event.text);
+        break;
+      case "response.completed":
+        responseId = event.response.id ?? responseId;
+        if (event.response.text.trim()) {
+          textFromCompleted = event.response.text.trim();
+        }
+        break;
+      case "response.created":
+      case "response.in_progress":
+        responseId = event.response.id ?? responseId;
+        break;
+      default: {
+        const exhausted: never = event;
+        throw new Error(`Unhandled SSE event: ${String(exhausted)}`);
       }
-      continue;
-    }
-
-    if (type === "response.created" || type === "response.in_progress") {
-      const responseRecord = asRecord(eventRecord.response);
-      if (!responseRecord) continue;
-      responseId = parseResponseIdFromRecord(responseRecord) ?? responseId;
     }
   }
 
@@ -214,45 +299,6 @@ function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | nu
     text,
     responseId,
   };
-}
-
-function collectOutputText(payload: Record<string, unknown>): string {
-  const direct = payload.output_text;
-  if (typeof direct === "string") return direct;
-  if (Array.isArray(direct)) {
-    const fragments = direct
-      .map((entry) => (typeof entry === "string" ? entry : ""))
-      .filter((entry) => entry.length > 0);
-    if (fragments.length > 0) return fragments.join("");
-  }
-
-  const output = payload.output;
-  if (!Array.isArray(output)) return "";
-
-  const fragments: string[] = [];
-  for (const item of output) {
-    const outputItem = asRecord(item);
-    if (!outputItem) continue;
-    const content = outputItem.content;
-    if (!Array.isArray(content)) continue;
-
-    for (const part of content) {
-      const contentPart = asRecord(part);
-      if (!contentPart) continue;
-      if (typeof contentPart.text === "string" && contentPart.text.length > 0) {
-        fragments.push(contentPart.text);
-        continue;
-      }
-      if (
-        typeof contentPart.output_text === "string" &&
-        contentPart.output_text.length > 0
-      ) {
-        fragments.push(contentPart.output_text);
-      }
-    }
-  }
-
-  return fragments.join("");
 }
 
 function resolveKnownAuthMode(value: unknown): KnownAuthMode | null {
@@ -411,9 +457,9 @@ export async function generateOpenAIResponsesText(
     if (!payloadRecord) {
       throw new Error("OpenAI responses returned an invalid payload.");
     }
-    const responseId = parseResponseIdFromRecord(payloadRecord);
-
-    const text = collectOutputText(payloadRecord).trim();
+    const decodedResponse = decodeOpenAIResponse(payloadRecord);
+    const responseId = decodedResponse?.id;
+    const text = decodedResponse?.text.trim() ?? "";
     if (!text) {
       throw new Error("OpenAI responses returned no text content.");
     }

@@ -13,6 +13,246 @@ export interface CreateProviderEventEnvelopeArgs<TPayload = unknown> {
   observedAt?: number;
 }
 
+export interface DecodedTextContent {
+  fragments: string[];
+  text: string;
+}
+
+export type DecodedProviderContentPart =
+  | {
+      type: "text";
+      text: string;
+    }
+  | {
+      type: "image";
+      imageUrl?: string;
+    }
+  | {
+      type: "local_image";
+      path?: string;
+    }
+  | {
+      type: "local_file";
+      path?: string;
+    }
+  | {
+      type: "unknown";
+    };
+
+export interface DecodedThreadEventItem {
+  id?: string;
+  type?: string;
+  normalizedType: string;
+  content: DecodedProviderContentPart[];
+  text: DecodedTextContent;
+  summaryText: DecodedTextContent;
+  raw: Record<string, unknown>;
+}
+
+export interface DecodedThreadEventData {
+  envelope: ProviderEventEnvelope["__bb_provider_event"] | null;
+  payload: Record<string, unknown> | null;
+  eventPayload: Record<string, unknown> | null;
+  turnId?: string;
+  providerThreadId?: string;
+  itemId?: string;
+  item: DecodedThreadEventItem | null;
+}
+
+function normalizeToken(value: string): string {
+  return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+}
+
+function collectLooseTextFragments(value: unknown, out: string[]): void {
+  if (typeof value === "string") {
+    if (value.length > 0) out.push(value);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) collectLooseTextFragments(entry, out);
+    return;
+  }
+
+  const record = toRecord(value);
+  if (!record) return;
+
+  const candidates = [
+    record.delta,
+    record.text,
+    record.content,
+    record.value,
+    record.message,
+    record.summary,
+    record.summary_text,
+    record.summaryText,
+    record.stdout,
+    record.stderr,
+    record.aggregated_output,
+    record.aggregatedOutput,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === undefined) continue;
+    collectLooseTextFragments(candidate, out);
+  }
+}
+
+function decodeContentPart(value: unknown): DecodedProviderContentPart | null {
+  const record = toRecord(value);
+  if (!record) return null;
+
+  const type = getStringField(record, "type");
+  const normalizedType = type ? normalizeToken(type) : "";
+  const data = toRecord(record.data);
+
+  switch (normalizedType) {
+    case "text": {
+      const text = decodeLooseTextContent(record.text).text;
+      if (!text) return null;
+      return { type: "text", text };
+    }
+    case "image":
+      return {
+        type: "image",
+        imageUrl:
+          getStringField(record, "image_url") ??
+          getStringField(record, "url") ??
+          getStringField(data, "image_url") ??
+          getStringField(data, "url"),
+      };
+    case "localimage":
+      return {
+        type: "local_image",
+        path: getStringField(record, "path") ?? getStringField(data, "path"),
+      };
+    case "localfile":
+      return {
+        type: "local_file",
+        path: getStringField(record, "path") ?? getStringField(data, "path"),
+      };
+    default:
+      // Provider content part types are open_external; unknown variants are preserved
+      // as opaque parts instead of being rejected.
+      return { type: "unknown" };
+  }
+}
+
+function decodeItemContent(value: unknown): DecodedProviderContentPart[] {
+  if (!Array.isArray(value)) return [];
+  const parts: DecodedProviderContentPart[] = [];
+  for (const entry of value) {
+    const part = decodeContentPart(entry);
+    if (part) parts.push(part);
+  }
+  return parts;
+}
+
+export function decodeLooseTextContent(value: unknown): DecodedTextContent {
+  const fragments: string[] = [];
+  collectLooseTextFragments(value, fragments);
+  return {
+    fragments,
+    text: fragments.join(""),
+  };
+}
+
+function getNestedRecordCandidates(
+  root: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const msg = toRecord(root.msg);
+  const payload = toRecord(root.payload);
+  const payloadMsg = toRecord(payload?.msg);
+  return [root, msg, payload, payloadMsg].filter(
+    (candidate): candidate is Record<string, unknown> => candidate !== null,
+  );
+}
+
+function decodeItem(root: Record<string, unknown>): DecodedThreadEventItem | null {
+  const candidates = getNestedRecordCandidates(root);
+  const rawItem =
+    candidates.map((candidate) => toRecord(candidate.item)).find(Boolean) ?? null;
+  if (!rawItem) return null;
+
+  const type = getStringField(rawItem, "type");
+  return {
+    id: getStringField(rawItem, "id"),
+    type,
+    normalizedType: type ? normalizeToken(type) : "",
+    content: decodeItemContent(rawItem.content),
+    text: decodeLooseTextContent(rawItem.text ?? rawItem.content),
+    summaryText: decodeLooseTextContent(
+      rawItem.summary ?? rawItem.summaryText ?? rawItem.summary_text,
+    ),
+    raw: rawItem,
+  };
+}
+
+export function decodeThreadEventData(
+  data: PersistedThreadEventData | unknown,
+): DecodedThreadEventData {
+  const envelope = decodeProviderEventEnvelope(data);
+  const payload = toRecord(envelope ? envelope.payload : data);
+  if (!payload) {
+    return {
+      envelope: envelope?.__bb_provider_event ?? null,
+      payload: null,
+      eventPayload: null,
+      item: null,
+    };
+  }
+
+  const candidates = getNestedRecordCandidates(payload);
+  const turnId =
+    candidates
+      .map((candidate) => {
+        return (
+          getStringField(candidate, "turnId") ??
+          getStringField(candidate, "turn_id") ??
+          getStringField(toRecord(candidate.turn), "id")
+        );
+      })
+      .find((value): value is string => Boolean(value)) ??
+    getStringField(payload, "id") ??
+    undefined;
+
+  const providerThreadId =
+    candidates
+      .map((candidate) => {
+        return (
+          getStringField(candidate, "threadId") ??
+          getStringField(candidate, "thread_id") ??
+          getStringField(candidate, "conversationId") ??
+          getStringField(candidate, "conversation_id") ??
+          getStringField(toRecord(candidate.thread), "id")
+        );
+      })
+      .find((value): value is string => Boolean(value)) ?? undefined;
+
+  const item = decodeItem(payload);
+  const itemId =
+    item?.id ??
+    candidates
+      .map((candidate) => {
+        return (
+          getStringField(candidate, "itemId") ??
+          getStringField(candidate, "item_id")
+        );
+      })
+      .find((value): value is string => Boolean(value)) ??
+    undefined;
+
+  return {
+    envelope: envelope?.__bb_provider_event ?? null,
+    payload,
+    eventPayload: toRecord(payload.msg) ?? payload,
+    turnId,
+    providerThreadId,
+    itemId,
+    item,
+  };
+}
+
 function decodeProviderEventEnvelopeMeta(
   value: unknown,
 ): ProviderEventEnvelope["__bb_provider_event"] | null {
@@ -90,65 +330,11 @@ export function normalizeThreadEventType(type: string): string {
 export function extractTurnIdFromPersistedEventData(
   data: PersistedThreadEventData | unknown,
 ): string | undefined {
-  const root = toRecord(unwrapProviderEventPayload(data));
-  if (!root) return undefined;
-
-  const direct =
-    getStringField(root, "turnId") ??
-    getStringField(root, "turn_id");
-  if (direct) return direct;
-
-  const turn = toRecord(root.turn);
-  const turnId = getStringField(turn, "id");
-  if (turnId) return turnId;
-
-  const msg = toRecord(root.msg);
-  const msgTurnId =
-    getStringField(msg, "turn_id") ??
-    getStringField(msg, "turnId");
-  if (msgTurnId) return msgTurnId;
-
-  const payload = toRecord(root.payload);
-  if (!payload) return undefined;
-
-  return (
-    getStringField(payload, "turnId") ??
-    getStringField(payload, "turn_id") ??
-    getStringField(toRecord(payload.turn), "id") ??
-    getStringField(toRecord(payload.msg), "turn_id") ??
-    getStringField(toRecord(payload.msg), "turnId")
-  );
+  return decodeThreadEventData(data).turnId;
 }
 
 export function extractProviderThreadIdFromPersistedEventData(
   data: PersistedThreadEventData | unknown,
 ): string | undefined {
-  const root = toRecord(unwrapProviderEventPayload(data));
-  if (!root) return undefined;
-
-  const candidates = [
-    root,
-    toRecord(root.msg),
-    toRecord(root.thread),
-    toRecord(root.payload),
-    toRecord(toRecord(root.payload)?.msg),
-    toRecord(toRecord(root.payload)?.thread),
-  ];
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-
-    const threadId =
-      getStringField(candidate, "threadId") ??
-      getStringField(candidate, "thread_id") ??
-      getStringField(candidate, "conversationId") ??
-      getStringField(candidate, "conversation_id");
-    if (threadId) return threadId;
-
-    const thread = toRecord(candidate.thread);
-    const nestedThreadId = getStringField(thread, "id");
-    if (nestedThreadId) return nestedThreadId;
-  }
-
-  return undefined;
+  return decodeThreadEventData(data).providerThreadId;
 }
