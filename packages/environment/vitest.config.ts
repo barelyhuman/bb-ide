@@ -8,6 +8,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
-    exclude: ["dist/**", "src/__tests__/worktree-environment.test.ts"],
+    exclude: [
+      "dist/**",
+      "src/__tests__/worktree-environment.test.ts",
+      "src/__tests__/docker-environment.integration.test.ts",
+    ],
   },
 });

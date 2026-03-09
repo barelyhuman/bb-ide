@@ -7,7 +7,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/__tests__/worktree-environment.test.ts"],
+    include: [
+      "src/__tests__/worktree-environment.test.ts",
+      "src/__tests__/docker-environment.integration.test.ts",
+    ],
     exclude: ["dist/**"],
   },
 });
