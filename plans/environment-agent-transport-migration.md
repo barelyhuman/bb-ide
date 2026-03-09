@@ -107,3 +107,32 @@ Out of scope for this phase:
 - If we push too much provider-specific behavior into `packages/environment-agent`, we may recreate the same coupling in a new place. Keep provider adapter logic reusable and environment-agnostic.
 - Durable buffering can start in-memory or on local disk for v1, but the replay contract must be designed as if environments may be interrupted and resumed later.
 - Docker is the first remote-ish environment, but not the last. The environment-agent connection target must not assume localhost, Docker-specific networking, or a single deployment model.
+
+# TODOs
+
+- Define the environment-agent command/event protocol beyond the current placeholder envelopes.
+- Add daemon-to-environment-agent connection config (`BB_DAEMON_URL`, auth/shared secret, replay cursor/session metadata).
+- Decide whether environment-agent is daemon-connected, daemon-polled, or dual-mode.
+- Add durable event buffering in `packages/environment-agent` instead of the current relay-only behavior.
+- Add replay-from-sequence and daemon ack semantics.
+- Add idempotent command submission and duplicate suppression.
+- Refactor `packages/agent-server` further so environment-agent, not daemon, owns provider session lifecycle end to end.
+- Move provider runtime startup/resume logic fully behind environment-agent commands instead of relay passthrough.
+- Add a real environment-agent client in the daemon instead of using direct stdio as the logical protocol boundary.
+- Add environment-agent health/status reporting to daemon/system surfaces.
+- Add explicit environment-agent shutdown and cleanup behavior.
+- Decide what commands are still allowed while daemon is offline.
+- Add `docker` environment preparation tests for container creation, restart, reuse, and cleanup.
+- Add `docker` command execution tests for cwd/env/path handling inside the container.
+- Add `docker` setup-script execution tests.
+- Add `docker` provider-launch integration tests using the environment-agent wrapper path.
+- Decide on the default Docker image contract and how it is configured/documented.
+- Decide whether Docker workspaces remain host-mounted worktrees or move to in-container clone/bootstrap later.
+- Add route/system tests for opt-in Docker environment registration.
+- Add UI fallback/display handling for the Docker environment label/capabilities where needed.
+- Add daemon restart recovery tests that prove provider sessions and environment-agent state resynchronize correctly.
+- Add tests for environment-agent surviving daemon disconnects and replaying missed events.
+- Add persistence strategy for environment-agent local state (memory vs disk) and test crash recovery.
+- Define environment-agent auth/trust model for future remote environments.
+- Decide how non-stdio transports (`http`) are negotiated and implemented.
+- Add the first real non-stdio environment-agent transport implementation after the protocol is stable.
