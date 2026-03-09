@@ -2,7 +2,12 @@ import {
   type EnvironmentAgentClient,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentAckResponse,
+  type EnvironmentAgentCommand,
+  type EnvironmentAgentCommandAck,
+  type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentEventEnvelope,
+  type EnvironmentAgentProviderLaunchWrapper,
+  type EnvironmentAgentProviderSpec,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -248,6 +253,183 @@ export class AgentServer {
 
   listActiveSessionIds(): string[] {
     return Array.from(this.sessions.keys());
+  }
+
+  async startThreadCommand(args: {
+    client: EnvironmentAgentClient;
+    threadId: string;
+    projectId: string;
+    request: SpawnThreadRequest;
+    context: ProviderThreadContext;
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+  }): Promise<{ providerThreadId: string }> {
+    await this.ensureProviderRunningForCommand(
+      args.client,
+      args.context,
+      args.providerLaunch,
+    );
+    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+      type: "thread.start",
+      threadId: args.threadId,
+      projectId: args.projectId,
+      params: this.opts.provider.createThreadStartParams(args.request, args.context),
+      initialize: this.buildInitializeRequest(),
+    });
+    const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
+    if (!providerThreadId) {
+      throw new AgentServerSessionError(
+        "provider_rpc_error",
+        `[thread ${args.threadId}] RPC response missing thread ID. Response: ${JSON.stringify(ack.result)}`,
+      );
+    }
+    return { providerThreadId };
+  }
+
+  async resumeThreadCommand(args: {
+    client: EnvironmentAgentClient;
+    threadId: string;
+    projectId: string;
+    providerThreadId: string;
+    context: ProviderThreadContext;
+    options?: ProviderExecutionOptions;
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+  }): Promise<{ providerThreadId: string }> {
+    await this.ensureProviderRunningForCommand(
+      args.client,
+      args.context,
+      args.providerLaunch,
+    );
+    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+      type: "thread.resume",
+      threadId: args.threadId,
+      projectId: args.projectId,
+      providerThreadId: args.providerThreadId,
+      params: this.opts.provider.createThreadResumeParams(
+        args.providerThreadId,
+        args.context,
+        args.options,
+      ),
+      initialize: this.buildInitializeRequest(),
+    });
+    const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
+    if (!providerThreadId) {
+      throw new AgentServerSessionError(
+        "provider_rpc_error",
+        `[thread ${args.threadId}] RPC response missing thread ID. Response: ${JSON.stringify(ack.result)}`,
+      );
+    }
+    return { providerThreadId };
+  }
+
+  async sendTurnCommand(args: {
+    client: EnvironmentAgentClient;
+    threadId: string;
+    providerThreadId: string;
+    activeTurnId?: string;
+    input: PromptInput[];
+    options?: ProviderExecutionOptions;
+    mode?: "auto" | "steer" | "start";
+    context: ProviderThreadContext;
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+  }): Promise<{ mode: "steer" | "start"; providerThreadId: string }> {
+    const hasExecutionOverrides = Boolean(
+      args.options?.model ||
+      args.options?.serviceTier ||
+      args.options?.reasoningLevel ||
+      args.options?.sandboxMode,
+    );
+    const requestedMode = args.mode ?? "auto";
+    const activeTurnId = args.activeTurnId;
+    const steerSupported = Boolean(
+      this.opts.provider.turnSteerMethod && this.opts.provider.createTurnSteerParams,
+    );
+    const shouldUseSteer =
+      requestedMode !== "start" &&
+      steerSupported &&
+      Boolean(activeTurnId) &&
+      (requestedMode === "steer" || !hasExecutionOverrides);
+
+    if (requestedMode === "steer") {
+      if (!steerSupported) {
+        throw new AgentServerSessionError(
+          "unsupported_operation",
+          `${this.opts.provider.displayName} does not support turn/steer`,
+        );
+      }
+      if (!activeTurnId) {
+        throw new AgentServerSessionError("no_active_turn", "No active turn");
+      }
+      if (hasExecutionOverrides) {
+        throw new AgentServerSessionError(
+          "unsupported_operation",
+          "Tell mode 'steer' does not support model, speed, or reasoning overrides",
+        );
+      }
+    }
+
+    await this.ensureProviderRunningForCommand(
+      args.client,
+      args.context,
+      args.providerLaunch,
+    );
+
+    if (shouldUseSteer && activeTurnId) {
+      await this.sendEnvironmentAgentCommand(args.client, {
+        type: "turn.steer",
+        threadId: args.threadId,
+        providerThreadId: args.providerThreadId,
+        turnId: activeTurnId,
+        params: this.opts.provider.createTurnSteerParams!(
+          args.providerThreadId,
+          activeTurnId,
+          args.input,
+        ),
+        initialize: this.buildInitializeRequest(),
+      });
+      return { mode: "steer", providerThreadId: args.providerThreadId };
+    }
+
+    await this.sendEnvironmentAgentCommand(args.client, {
+      type: "turn.start",
+      threadId: args.threadId,
+      providerThreadId: args.providerThreadId,
+      params: this.opts.provider.createTurnStartParams(
+        args.providerThreadId,
+        args.input,
+        args.options,
+      ),
+      initialize: this.buildInitializeRequest(),
+    });
+    return { mode: "start", providerThreadId: args.providerThreadId };
+  }
+
+  async renameThreadCommand(args: {
+    client: EnvironmentAgentClient;
+    threadId: string;
+    providerThreadId: string;
+    title: string;
+    context: ProviderThreadContext;
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+  }): Promise<void> {
+    if (!this.opts.provider.threadNameSetMethod) return;
+    if (!this.opts.provider.createThreadNameSetParams) return;
+
+    await this.ensureProviderRunningForCommand(
+      args.client,
+      args.context,
+      args.providerLaunch,
+    );
+    await this.sendEnvironmentAgentCommand(args.client, {
+      type: "thread.rename",
+      threadId: args.threadId,
+      providerThreadId: args.providerThreadId,
+      title: args.title,
+      params: this.opts.provider.createThreadNameSetParams(
+        args.providerThreadId,
+        args.title,
+      ),
+      initialize: this.buildInitializeRequest(),
+    });
   }
 
   async getEnvironmentAgentStatus(
@@ -758,6 +940,87 @@ export class AgentServer {
 
     this.opts.onProviderStderrLine?.(threadId, line);
     this.opts.logger?.error(`[thread ${threadId}] stderr: ${line}`);
+  }
+
+  private buildInitializeRequest() {
+    return {
+      method: this.opts.provider.initializeMethod,
+      params:
+        this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
+          clientInfo: this.opts.provider.clientInfo,
+        },
+    };
+  }
+
+  private async ensureProviderRunningForCommand(
+    client: EnvironmentAgentClient,
+    context: ProviderThreadContext,
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
+  ): Promise<void> {
+    const spec = await this.buildProviderSpec(context, providerLaunch);
+    await client.ensureProviderRunning(spec);
+  }
+
+  private async buildProviderSpec(
+    context: ProviderThreadContext,
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
+  ): Promise<EnvironmentAgentProviderSpec> {
+    const launchConfig = await this.opts.provider.resolveLaunchConfiguration?.(context);
+    return {
+      command: this.opts.provider.processCommand,
+      args: [...this.opts.provider.processArgs],
+      ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
+      ...(launchConfig?.files
+        ? {
+            files: launchConfig.files.map((file) => ({ ...file })),
+          }
+        : {}),
+      ...(providerLaunch
+        ? {
+            launchCommand: providerLaunch.command,
+            launchArgs: [...providerLaunch.args],
+          }
+        : {}),
+    };
+  }
+
+  private async sendEnvironmentAgentCommand(
+    client: EnvironmentAgentClient,
+    command: EnvironmentAgentCommand,
+  ): Promise<EnvironmentAgentCommandAck> {
+    const envelope: EnvironmentAgentCommandEnvelope = {
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: `cmd-${++this.rpcIdCounter}`,
+        idempotencyKey: `cmd-${this.rpcIdCounter}`,
+        sentAt: Date.now(),
+      },
+      command,
+    };
+    const ack = await client.sendCommand(envelope);
+    if (ack.state === "accepted" || ack.state === "duplicate") {
+      return ack;
+    }
+    throw this.toCommandError(ack);
+  }
+
+  private toCommandError(ack: EnvironmentAgentCommandAck): AgentServerSessionError {
+    const message = ack.message ?? "Environment-agent command failed";
+    switch (ack.errorCode) {
+      case "missing_provider_thread":
+        return new AgentServerSessionError("missing_provider_thread", message);
+      case "provider_timeout":
+        return new AgentServerSessionError("provider_timeout", message);
+      case "provider_unavailable":
+        return new AgentServerSessionError("provider_unavailable", message);
+      case "unsupported_operation":
+        return new AgentServerSessionError("unsupported_operation", message);
+      case "provider_rpc_error":
+      case undefined:
+        return new AgentServerSessionError("provider_rpc_error", message);
+      default:
+        return new AgentServerSessionError("provider_rpc_error", message);
+    }
   }
 
   private consumeSuppressedAuthStderrLine(threadId: string, line: string): boolean {

@@ -4,6 +4,7 @@ import {
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentClient,
+  type EnvironmentAgentCommand,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentControlRequest,
   type EnvironmentAgentControlResponse,
@@ -232,14 +233,20 @@ export class EnvironmentAgentSimulator {
   }
 
   private handleProviderRequest(request: ProviderRequest): void {
+    this.issueProviderRequest(request);
+  }
+
+  private issueProviderRequest(
+    request: ProviderRequest,
+  ): ProviderResponse | undefined {
     this.providerRequests.push(request);
     const handler = this.providerHandlers.get(request.method);
     if (!handler || request.id === undefined) {
-      return;
+      return undefined;
     }
     const response = handler(request);
     if (!response) {
-      return;
+      return undefined;
     }
     this.transport.emitLine(
       JSON.stringify(
@@ -256,20 +263,44 @@ export class EnvironmentAgentSimulator {
             },
       ),
     );
+    return response;
   }
 
   private handleControlRequest(request: EnvironmentAgentControlRequest): void {
     switch (request.type) {
-      case "command":
+      case "command": {
+        const initialize = "initialize" in request.payload.command
+          ? request.payload.command.initialize
+          : undefined;
+        if (initialize) {
+          this.issueProviderRequest({
+            id: `${request.payload.meta.commandId}:init`,
+            method: initialize.method,
+            params: initialize.params,
+          });
+        }
+        const providerResponse = this.issueProviderRequest({
+          id: request.payload.meta.commandId,
+          method: this.toProviderMethod(request.payload.command.type),
+          params: "params" in request.payload.command
+            ? request.payload.command.params
+            : { threadId: request.payload.command.threadId },
+        });
         this.respond(request, {
           protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
           commandId: request.payload.meta.commandId,
           idempotencyKey: request.payload.meta.idempotencyKey,
-          state: "accepted",
+          state: providerResponse && "error" in providerResponse ? "rejected" : "accepted",
           acknowledgedAt: Date.now(),
           latestSequence: this.status.latestSequence,
+          ...(providerResponse && "error" in providerResponse
+            ? { message: providerResponse.error.message, errorCode: "provider_rpc_error" }
+            : providerResponse && "result" in providerResponse
+              ? { result: providerResponse.result }
+              : {}),
         } satisfies EnvironmentAgentCommandAck);
         return;
+      }
       case "provider.ensure":
         this.ensureRequests.push(request.payload);
         this.respond(request, {
@@ -369,6 +400,29 @@ export class EnvironmentAgentSimulator {
       return JSON.parse(line);
     } catch {
       return null;
+    }
+  }
+
+  private toProviderMethod(type: EnvironmentAgentCommand["type"]): string {
+    switch (type) {
+      case "thread.start":
+        return "thread/start";
+      case "thread.resume":
+        return "thread/resume";
+      case "thread.stop":
+        return "thread/stop";
+      case "turn.start":
+        return "turn/start";
+      case "turn.steer":
+        return "turn/steer";
+      case "thread.rename":
+        return "thread/name/set";
+      case "workspace.status":
+        return "workspace/status";
+      case "workspace.diff":
+        return "workspace/diff";
+      default:
+        return type satisfies never;
     }
   }
 }

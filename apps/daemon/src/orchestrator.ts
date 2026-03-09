@@ -2629,6 +2629,18 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     action: (client: EnvironmentAgentClient) => Promise<T>,
   ): Promise<T> {
+    return this._withEnvironmentAgentAccess(threadId, ({ client }) => action(client));
+  }
+
+  private async _withEnvironmentAgentAccess<T>(
+    threadId: string,
+    action: (args: {
+      client: EnvironmentAgentClient;
+      thread: Thread;
+      projectRootPath: string;
+      providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
+    }) => Promise<T>,
+  ): Promise<T> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -2653,7 +2665,12 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(target.headers ? { headers: target.headers } : {}),
     });
     try {
-      return await action(client);
+      return await action({
+        client,
+        thread,
+        projectRootPath: project.rootPath,
+        providerLaunch: target.providerLaunch,
+      });
     } finally {
       client.close();
     }

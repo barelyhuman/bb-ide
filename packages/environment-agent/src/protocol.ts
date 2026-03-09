@@ -135,6 +135,7 @@ export interface EnvironmentAgentCommandAck {
   state: EnvironmentAgentCommandDeliveryState;
   acknowledgedAt: number;
   latestSequence: number;
+  errorCode?: string;
   message?: string;
   result?: unknown;
 }

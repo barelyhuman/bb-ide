@@ -148,6 +148,75 @@ describe("AgentServer environment-agent control plane", () => {
     );
   });
 
+  it("starts threads through stateless environment-agent commands", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    const started = await agentServer.startThreadCommand({
+      client: simulator.createClient(),
+      threadId: "thread-1",
+      projectId: "project-1",
+      request: {
+        projectId: "project-1",
+        input: [{ type: "text", text: "hello" }],
+      },
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    expect(started).toEqual({ providerThreadId: "provider-thread-1" });
+    expect(simulator.ensureRequests).toContainEqual(
+      expect.objectContaining({
+        command: "codex",
+        args: ["app-server"],
+      }),
+    );
+    expect(simulator.providerRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "initialize" }),
+        expect.objectContaining({ method: "thread/start" }),
+      ]),
+    );
+  });
+
+  it("sends turn commands through stateless environment-agent commands", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+    simulator.onProviderRequest("turn/steer", () => ({ result: { ok: true } }));
+
+    const sent = await agentServer.sendTurnCommand({
+      client: simulator.createClient(),
+      threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
+      activeTurnId: "turn-1",
+      input: [{ type: "text", text: "keep going" }],
+      mode: "steer",
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    expect(sent).toEqual({
+      mode: "steer",
+      providerThreadId: "provider-thread-1",
+    });
+    expect(simulator.providerRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "initialize" }),
+        expect.objectContaining({ method: "turn/steer" }),
+      ]),
+    );
+  });
+
   it("ingests replayed provider notifications through the normal notification path", async () => {
     const onNotification = vi.fn();
     const agentServer = new AgentServer({

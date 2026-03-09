@@ -181,6 +181,7 @@ export class EnvironmentAgentRuntime {
     commandId: string;
     idempotencyKey: string;
     state: EnvironmentAgentCommandAck["state"];
+    errorCode?: string;
     message?: string;
     result?: unknown;
   }): EnvironmentAgentCommandAck {
@@ -191,6 +192,7 @@ export class EnvironmentAgentRuntime {
       state: args.state,
       acknowledgedAt: Date.now(),
       latestSequence: this.sequence,
+      ...(args.errorCode ? { errorCode: args.errorCode } : {}),
       ...(args.message ? { message: args.message } : {}),
       ...(args.result !== undefined ? { result: args.result } : {}),
     };
@@ -260,11 +262,13 @@ export class EnvironmentAgentRuntime {
         result,
       });
     } catch (error) {
+      const normalizedError = this.normalizeCommandError(error);
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
         idempotencyKey: envelope.meta.idempotencyKey,
         state: "rejected",
-        message: error instanceof Error ? error.message : String(error),
+        errorCode: normalizedError.code,
+        message: normalizedError.message,
       });
     }
   }
@@ -834,5 +838,23 @@ export class EnvironmentAgentRuntime {
       return record.message;
     }
     return JSON.stringify(error);
+  }
+
+  private normalizeCommandError(error: unknown): { code: string; message: string } {
+    const message = error instanceof Error ? error.message : String(error);
+    const normalized = message.toLowerCase();
+    if (normalized.includes("timed out waiting for provider response")) {
+      return { code: "provider_timeout", message };
+    }
+    if (
+      normalized.includes("provider runtime is unavailable") ||
+      normalized.includes("provider runtime exited")
+    ) {
+      return { code: "provider_unavailable", message };
+    }
+    if (normalized.includes("no rollout found for thread id")) {
+      return { code: "missing_provider_thread", message };
+    }
+    return { code: "provider_rpc_error", message };
   }
 }
