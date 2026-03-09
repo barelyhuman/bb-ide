@@ -142,11 +142,14 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
   ingestEnvironmentAgentEvents?: (args: {
     threadId: string;
     authorizationHeader?: string;
+    afterSequence?: number;
     events: EnvironmentAgentEventEnvelope[];
   }) => Promise<{
     protocolVersion: number;
     threadId: string;
     acknowledgedSequence: number;
+    state: string;
+    reason: string;
   }>;
   replayEnvironmentAgentEvents?: (args: {
     threadId: string;
@@ -354,6 +357,7 @@ export function createThreadRoutes(
             await environmentAgentAccessor.ingestEnvironmentAgentEvents({
               threadId,
               authorizationHeader: c.req.header("authorization"),
+              afterSequence: body.afterSequence,
               events: body.events,
             });
           return c.json(response);

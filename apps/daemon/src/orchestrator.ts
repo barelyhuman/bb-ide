@@ -581,6 +581,9 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!Array.isArray(allThreads) || allThreads.length === 0) return;
 
     for (const thread of allThreads) {
+      if (thread.archivedAt !== undefined) {
+        this._cleanupEnvironmentRuntime(thread.id, { destroyWorkspace: true });
+      }
       const action = this._resolveBootReconcileAction(thread);
       switch (action.kind) {
         case "schedule-provisioning":
@@ -2268,6 +2271,7 @@ export class Orchestrator implements ThreadOrchestrator {
   async ingestEnvironmentAgentEvents(args: {
     threadId: string;
     authorizationHeader?: string;
+    afterSequence?: number;
     events: EnvironmentAgentEventEnvelope[];
   }): Promise<EnvironmentAgentDeliveryResponse> {
     const thread = this.threadRepo.getById(args.threadId);
@@ -2276,6 +2280,19 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     this._assertEnvironmentAgentAuthorization(args.threadId, args.authorizationHeader);
+
+    if (thread.archivedAt !== undefined) {
+      const archivedCursor =
+        (thread as Thread & { environmentAgentCursor?: number }).environmentAgentCursor ?? 0;
+      return {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: args.threadId,
+        acknowledgedSequence: archivedCursor,
+        state: "stopped",
+        reason: "thread_archived",
+        message: "Archived threads are not eligible for environment-agent delivery",
+      };
+    }
 
     const persistedCursor =
       (this.threadRepo.getById(args.threadId) as
@@ -2298,10 +2315,25 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     if (newEvents.length === 0) {
+      const requestedAfterSequence =
+        args.afterSequence ??
+        (args.events.length > 0 ? args.events[0]!.sequence - 1 : currentCursor);
+      const state =
+        currentCursor > requestedAfterSequence ? "accepted" : "stalled";
+      const reason =
+        currentCursor > requestedAfterSequence ? "duplicate" : "sequence_gap";
       return {
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
         threadId: args.threadId,
         acknowledgedSequence: currentCursor,
+        state,
+        reason,
+        ...(state === "stalled"
+          ? {
+              message:
+                "Environment-agent delivery is ahead of the daemon cursor and requires reconciliation",
+            }
+          : {}),
       };
     }
 
@@ -2316,6 +2348,8 @@ export class Orchestrator implements ThreadOrchestrator {
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
         threadId: args.threadId,
         acknowledgedSequence,
+        state: "accepted",
+        reason: "accepted",
       };
     } catch (error) {
       this._rethrowAgentServerError(args.threadId, error);
@@ -2677,8 +2711,8 @@ export class Orchestrator implements ThreadOrchestrator {
     this.environmentService.cleanupEnvironmentRuntime(threadId, opts);
   }
 
-  private _cleanupPersistedWorkspace(threadId: string): void {
-    this.environmentService.cleanupPersistedWorkspace(threadId);
+  private _cleanupPersistedEnvironment(threadId: string): void {
+    this.environmentService.cleanupPersistedEnvironment(threadId);
   }
 
   private _appendEnvironmentProvisioningEvent(

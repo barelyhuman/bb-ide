@@ -234,7 +234,7 @@ export class EnvironmentService {
     };
 
     if (!runtime) {
-      void this.cleanupPersistedWorkspace(threadId)
+      void this.cleanupPersistedEnvironment(threadId)
         .catch((error: unknown) => {
           reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
         })
@@ -253,13 +253,13 @@ export class EnvironmentService {
     }
   }
 
-  async cleanupPersistedWorkspace(threadId: string): Promise<void> {
+  async cleanupPersistedEnvironment(threadId: string): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) return;
     const environment = this.restoreThreadEnvironment(thread, project.rootPath);
-    if (!environment || !environment.isIsolatedWorkspace()) {
+    if (!environment) {
       return;
     }
     await Promise.resolve(environment.dispose());

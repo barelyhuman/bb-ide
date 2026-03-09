@@ -218,6 +218,8 @@ describe("EnvironmentAgentRuntime", () => {
         connectedToDaemon: true,
         pendingEventCount: 0,
         lastAckedSequence: 1,
+        deliveryState: "healthy",
+        retryAttemptCount: 0,
       });
     expect(deliveredSequences).toEqual([[1]]);
   });
@@ -261,5 +263,127 @@ describe("EnvironmentAgentRuntime", () => {
     await expect.poll(() => deliveredPaths).toEqual([
       "/api/v1/threads/thread-1/environment-agent/deliver",
     ]);
+  });
+
+  it("stalls delivery when the daemon reports a sequence gap without progress", async () => {
+    let requestCount = 0;
+    const daemon = createServer((request, response) => {
+      if (request.url !== "/threads/thread-1/environment-agent/deliver") {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+
+      requestCount += 1;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          threadId: "thread-1",
+          acknowledgedSequence: 0,
+          state: "stalled",
+          reason: "sequence_gap",
+          message: "cursor gap",
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => daemon.listen(0, "127.0.0.1", resolve));
+    cleanup.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          daemon.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    const address = daemon.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to resolve daemon server address");
+    }
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: `http://${address.address}:${address.port}`,
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+
+    runtime.start();
+
+    await expect
+      .poll(() => runtime.getStatusSnapshot())
+      .toMatchObject({
+        connectedToDaemon: true,
+        pendingEventCount: 1,
+        deliveryState: "stalled",
+        deliveryIssue: "sequence_gap",
+        lastDeliveryError: "cursor gap",
+      });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(requestCount).toBe(1);
+  });
+
+  it("stops delivery when the daemon marks the thread as ineligible", async () => {
+    let requestCount = 0;
+    const daemon = createServer((request, response) => {
+      if (request.url !== "/threads/thread-1/environment-agent/deliver") {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+
+      requestCount += 1;
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          threadId: "thread-1",
+          acknowledgedSequence: 0,
+          state: "stopped",
+          reason: "thread_archived",
+          message: "archived",
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => daemon.listen(0, "127.0.0.1", resolve));
+    cleanup.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          daemon.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    const address = daemon.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to resolve daemon server address");
+    }
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: `http://${address.address}:${address.port}`,
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+
+    runtime.start();
+
+    await expect
+      .poll(() => runtime.getStatusSnapshot())
+      .toMatchObject({
+        connectedToDaemon: true,
+        pendingEventCount: 1,
+        deliveryState: "stopped",
+        deliveryIssue: "thread_archived",
+        lastDeliveryError: "archived",
+      });
+
+    runtime.appendEvent({
+      type: "workspace.status.changed",
+      threadId: "thread-1",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(requestCount).toBe(1);
   });
 });

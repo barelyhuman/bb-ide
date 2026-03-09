@@ -307,6 +307,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       threadId: "thread-1",
       acknowledgedSequence: 2,
+      state: "accepted",
+      reason: "accepted",
     });
 
     expect(ingestSpy).toHaveBeenCalledWith({
@@ -430,6 +432,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       threadId: "thread-1",
       acknowledgedSequence: 2,
+      state: "accepted",
+      reason: "duplicate",
     });
 
     expect(ingestSpy).not.toHaveBeenCalled();
@@ -465,6 +469,37 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       }),
     ).rejects.toMatchObject({
       message: "Unauthorized environment-agent delivery",
+    });
+  });
+
+  it("stops delivery for archived threads", async () => {
+    const thread = makeThread({
+      id: "thread-1",
+      projectId: "proj-1",
+      status: "idle",
+      archivedAt: 1_234,
+      environmentAgentCursor: 4,
+    } as Thread & { environmentAgentCursor: number }) as Thread & {
+      environmentAgentCursor: number;
+    };
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+      (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+    );
+    installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+
+    await expect(
+      manager.ingestEnvironmentAgentEvents({
+        threadId: "thread-1",
+        authorizationHeader: "Bearer test-token",
+        afterSequence: 4,
+        events: [],
+      }),
+    ).resolves.toMatchObject({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      threadId: "thread-1",
+      acknowledgedSequence: 4,
+      state: "stopped",
+      reason: "thread_archived",
     });
   });
 

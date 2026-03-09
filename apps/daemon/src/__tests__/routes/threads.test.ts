@@ -297,6 +297,8 @@ describe("Thread routes", () => {
         connectedToDaemon: true,
         pendingEventCount: 1,
         pendingCommandCount: 0,
+        deliveryState: "healthy",
+        retryAttemptCount: 0,
       });
 
       const res = await app.request("/threads/thread-1/environment-agent/status");
@@ -370,6 +372,8 @@ describe("Thread routes", () => {
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
         threadId: "thread-1",
         acknowledgedSequence: 4,
+        state: "accepted",
+        reason: "accepted",
       });
 
       const res = await app.request("/threads/thread-1/environment-agent/deliver", {
@@ -403,6 +407,7 @@ describe("Thread routes", () => {
       expect(threadManager.ingestEnvironmentAgentEvents).toHaveBeenCalledWith({
         threadId: "thread-1",
         authorizationHeader: "Bearer secret-token",
+        afterSequence: undefined,
         events: [
           expect.objectContaining({
             sequence: 4,

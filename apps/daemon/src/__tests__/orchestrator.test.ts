@@ -815,6 +815,8 @@ describe("Orchestrator", () => {
           connectedToDaemon: true,
           pendingEventCount: 0,
           pendingCommandCount: 0,
+          deliveryState: "healthy",
+          retryAttemptCount: 0,
         });
 
       await bootManager.reconcileActiveThreadsOnBoot();
@@ -953,6 +955,9 @@ describe("Orchestrator", () => {
       const cleanupRuntimeSpy = vi
         .spyOn(asOrchestratorHarness(bootManager), "_cleanupThreadRuntime")
         .mockImplementation(() => {});
+      const cleanupEnvironmentRuntimeSpy = vi
+        .spyOn(asOrchestratorHarness(bootManager) as any, "_cleanupEnvironmentRuntime")
+        .mockImplementation(() => undefined);
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
@@ -981,6 +986,14 @@ describe("Orchestrator", () => {
         "boot-archived-active",
         { status: "idle" },
         { touchUpdatedAt: false },
+      );
+      expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
+        "boot-archived-active",
+        { destroyWorkspace: true },
+      );
+      expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
+        "boot-archived-idle",
+        { destroyWorkspace: true },
       );
 
       const updatedIds = (bootThreadRepo.update as ReturnType<typeof vi.fn>).mock.calls

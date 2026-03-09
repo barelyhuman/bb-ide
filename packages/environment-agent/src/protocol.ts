@@ -205,11 +205,35 @@ export interface EnvironmentAgentDeliveryRequest {
   events: EnvironmentAgentEventEnvelope[];
 }
 
+export type EnvironmentAgentDeliveryState =
+  | "accepted"
+  | "retry"
+  | "stalled"
+  | "stopped";
+
+export type EnvironmentAgentDeliveryReason =
+  | "accepted"
+  | "duplicate"
+  | "sequence_gap"
+  | "transport_error"
+  | "thread_archived"
+  | "thread_inactive";
+
 export interface EnvironmentAgentDeliveryResponse {
   protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
   acknowledgedSequence: number;
   threadId: string;
+  state: EnvironmentAgentDeliveryState;
+  reason: EnvironmentAgentDeliveryReason;
+  retryAfterMs?: number;
+  message?: string;
 }
+
+export type EnvironmentAgentDeliveryRuntimeState =
+  | "healthy"
+  | "retrying"
+  | "stalled"
+  | "stopped";
 
 export interface EnvironmentAgentStatusSnapshot {
   protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
@@ -221,6 +245,11 @@ export interface EnvironmentAgentStatusSnapshot {
   connectedToDaemon: boolean;
   pendingEventCount: number;
   pendingCommandCount: number;
+  deliveryState: EnvironmentAgentDeliveryRuntimeState;
+  deliveryIssue?: EnvironmentAgentDeliveryReason;
+  retryAttemptCount: number;
+  nextRetryAt?: number;
+  lastDeliveryError?: string;
 }
 
 interface EnvironmentAgentControlMessageBase {
@@ -291,6 +320,7 @@ export function isEnvironmentAgentControlRequest(
   const type = record.type;
   return (
     type === "provider.ensure" ||
+    type === "delivery.retry" ||
     type === "ack" ||
     type === "replay" ||
     type === "status"
@@ -307,6 +337,7 @@ export function isEnvironmentAgentControlResponse(
   const type = record.type;
   return (
     type === "provider.ensure.response" ||
+    type === "delivery.retry.response" ||
     type === "ack.response" ||
     type === "replay.response" ||
     type === "status.response"

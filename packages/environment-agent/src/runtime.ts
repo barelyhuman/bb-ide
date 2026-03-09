@@ -8,7 +8,9 @@ import {
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentDaemonConnectionConfig,
+  type EnvironmentAgentDeliveryReason,
   type EnvironmentAgentDeliveryResponse,
+  type EnvironmentAgentDeliveryRuntimeState,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderFile,
@@ -32,6 +34,10 @@ export interface EnvironmentAgentRuntimeOptions {
   onStderrLine?: (line: string) => void;
 }
 
+const INITIAL_DELIVERY_BACKOFF_MS = 250;
+const MAX_DELIVERY_BACKOFF_MS = 30_000;
+const MAX_AUTOMATIC_DELIVERY_RETRIES = 8;
+
 export class EnvironmentAgentRuntime {
   private readonly events: EnvironmentAgentEventEnvelope[] = [];
   private sequence = 0;
@@ -45,7 +51,12 @@ export class EnvironmentAgentRuntime {
   private connectedToDaemon = false;
   private deliveryInFlight: Promise<void> | null = null;
   private deliveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
-  private deliveryBackoffMs = 250;
+  private deliveryBackoffMs = INITIAL_DELIVERY_BACKOFF_MS;
+  private deliveryState: EnvironmentAgentDeliveryRuntimeState = "healthy";
+  private deliveryIssue: EnvironmentAgentDeliveryReason | undefined;
+  private deliveryRetryAttemptCount = 0;
+  private nextRetryAt: number | undefined;
+  private lastDeliveryError: string | undefined;
 
   constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {
     this.daemonConnection = opts.daemonConnection
@@ -185,18 +196,30 @@ export class EnvironmentAgentRuntime {
       connectedToDaemon: this.connectedToDaemon,
       pendingEventCount: Math.max(0, this.sequence - this.lastAckedSequence),
       pendingCommandCount: this.pendingCommandCount,
+      deliveryState: this.deliveryState,
+      ...(this.deliveryIssue ? { deliveryIssue: this.deliveryIssue } : {}),
+      retryAttemptCount: this.deliveryRetryAttemptCount,
+      ...(this.nextRetryAt ? { nextRetryAt: this.nextRetryAt } : {}),
+      ...(this.lastDeliveryError ? { lastDeliveryError: this.lastDeliveryError } : {}),
     };
   }
 
-  triggerDaemonDelivery(): void {
+  triggerDaemonDelivery(opts?: { nudge?: boolean }): void {
     if (!this.hasDaemonDeliveryConfig()) {
       this.connectedToDaemon = false;
+      return;
+    }
+    if (this.deliveryState === "stopped") {
+      return;
+    }
+    if (this.deliveryState === "stalled" && !opts?.nudge) {
       return;
     }
 
     if (this.deliveryRetryTimer) {
       clearTimeout(this.deliveryRetryTimer);
       this.deliveryRetryTimer = undefined;
+      this.nextRetryAt = undefined;
     }
     if (this.deliveryInFlight) {
       return;
@@ -376,8 +399,7 @@ export class EnvironmentAgentRuntime {
     const threadId = this.resolveThreadId();
     const pendingEvents = this.events.filter((event) => event.sequence > this.lastAckedSequence);
     if (pendingEvents.length === 0) {
-      this.connectedToDaemon = true;
-      this.deliveryBackoffMs = 250;
+      this.markDeliveryHealthy();
       return;
     }
 
@@ -408,36 +430,137 @@ export class EnvironmentAgentRuntime {
       }
 
       const body = (await response.json()) as EnvironmentAgentDeliveryResponse;
-      this.lastAckedSequence = Math.max(
-        this.lastAckedSequence,
-        body.acknowledgedSequence,
-      );
+      const previousAckedSequence = this.lastAckedSequence;
+      this.lastAckedSequence = Math.max(this.lastAckedSequence, body.acknowledgedSequence);
       this.connectedToDaemon = true;
-      this.deliveryBackoffMs = 250;
+      this.lastDeliveryError = undefined;
+      this.nextRetryAt = undefined;
 
-      if (this.sequence > this.lastAckedSequence) {
-        this.triggerDaemonDelivery();
+      switch (body.state) {
+        case "accepted":
+          this.deliveryIssue = body.reason;
+          if (this.lastAckedSequence > previousAckedSequence) {
+            this.markDeliveryHealthy();
+          } else if (this.sequence > this.lastAckedSequence) {
+            this.markDeliveryStalled(
+              body.reason === "accepted" ? "sequence_gap" : body.reason,
+              body.message ?? "Daemon accepted delivery without acknowledgement progress",
+            );
+            return;
+          } else {
+            this.markDeliveryHealthy();
+          }
+          if (this.sequence > this.lastAckedSequence) {
+            this.triggerDaemonDelivery();
+          }
+          return;
+        case "retry":
+          this.markDeliveryRetrying(
+            body.reason,
+            body.message ?? "Daemon requested delivery retry",
+            body.retryAfterMs,
+          );
+          return;
+        case "stalled":
+          this.markDeliveryStalled(
+            body.reason,
+            body.message ?? "Daemon reported stalled delivery",
+          );
+          return;
+        case "stopped":
+          this.markDeliveryStopped(
+            body.reason,
+            body.message ?? "Daemon reported delivery is no longer eligible",
+          );
+          return;
       }
     } catch (error) {
       this.connectedToDaemon = false;
-      this.opts.onStderrLine?.(
-        `daemon delivery failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      this.scheduleDaemonDeliveryRetry();
+      const message = error instanceof Error ? error.message : String(error);
+      this.opts.onStderrLine?.(`daemon delivery failed: ${message}`);
+      this.markDeliveryRetrying("transport_error", message);
       throw error;
     }
   }
 
-  private scheduleDaemonDeliveryRetry(): void {
+  private markDeliveryHealthy(): void {
+    this.connectedToDaemon = true;
+    this.deliveryState = "healthy";
+    this.deliveryIssue = undefined;
+    this.deliveryRetryAttemptCount = 0;
+    this.deliveryBackoffMs = INITIAL_DELIVERY_BACKOFF_MS;
+    this.nextRetryAt = undefined;
+    this.lastDeliveryError = undefined;
+  }
+
+  private markDeliveryRetrying(
+    reason: EnvironmentAgentDeliveryReason,
+    message: string,
+    requestedDelayMs?: number,
+  ): void {
+    this.deliveryState = "retrying";
+    this.deliveryIssue = reason;
+    this.lastDeliveryError = message;
+    if (this.deliveryRetryAttemptCount >= MAX_AUTOMATIC_DELIVERY_RETRIES) {
+      this.markDeliveryStalled(
+        "transport_error",
+        `Automatic delivery retry budget exhausted after ${this.deliveryRetryAttemptCount} attempts`,
+      );
+      return;
+    }
+    const delayMs = Math.max(100, Math.round(requestedDelayMs ?? this.nextBackoffDelayMs()));
+    this.deliveryRetryAttemptCount += 1;
+    this.scheduleDaemonDeliveryRetry(delayMs);
+  }
+
+  private markDeliveryStalled(
+    reason: EnvironmentAgentDeliveryReason,
+    message: string,
+  ): void {
+    this.deliveryState = "stalled";
+    this.deliveryIssue = reason;
+    this.lastDeliveryError = message;
+    if (this.deliveryRetryTimer) {
+      clearTimeout(this.deliveryRetryTimer);
+      this.deliveryRetryTimer = undefined;
+    }
+    this.nextRetryAt = undefined;
+  }
+
+  private markDeliveryStopped(
+    reason: EnvironmentAgentDeliveryReason,
+    message: string,
+  ): void {
+    this.deliveryState = "stopped";
+    this.deliveryIssue = reason;
+    this.lastDeliveryError = message;
+    if (this.deliveryRetryTimer) {
+      clearTimeout(this.deliveryRetryTimer);
+      this.deliveryRetryTimer = undefined;
+    }
+    this.nextRetryAt = undefined;
+  }
+
+  private scheduleDaemonDeliveryRetry(delayMs: number): void {
     if (this.deliveryRetryTimer) {
       return;
     }
-    const delayMs = this.deliveryBackoffMs;
-    this.deliveryBackoffMs = Math.min(this.deliveryBackoffMs * 2, 5_000);
+    this.nextRetryAt = Date.now() + delayMs;
     this.deliveryRetryTimer = setTimeout(() => {
       this.deliveryRetryTimer = undefined;
+      this.nextRetryAt = undefined;
       this.triggerDaemonDelivery();
     }, delayMs);
+  }
+
+  private nextBackoffDelayMs(): number {
+    const baseDelayMs = this.deliveryBackoffMs;
+    this.deliveryBackoffMs = Math.min(this.deliveryBackoffMs * 2, MAX_DELIVERY_BACKOFF_MS);
+    const jitterFactor = 0.8 + Math.random() * 0.4;
+    return Math.min(
+      MAX_DELIVERY_BACKOFF_MS,
+      Math.max(INITIAL_DELIVERY_BACKOFF_MS, Math.round(baseDelayMs * jitterFactor)),
+    );
   }
 
   private resolveThreadId(): string {

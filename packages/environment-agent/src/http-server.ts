@@ -109,7 +109,7 @@ export async function createEnvironmentAgentHttpServer(args: {
       }
 
       if (method === "POST" && url.pathname === "/control/delivery/retry") {
-        args.runtime.triggerDaemonDelivery();
+        args.runtime.triggerDaemonDelivery({ nudge: true });
         writeJson(response, 200, args.runtime.getStatusSnapshot());
         return;
       }

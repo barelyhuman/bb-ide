@@ -116,6 +116,8 @@ export class EnvironmentAgentSimulator {
       connectedToDaemon: true,
       pendingEventCount: 0,
       pendingCommandCount: 0,
+      deliveryState: "healthy",
+      retryAttemptCount: 0,
       ...(options.status ?? {}),
     };
 

@@ -44,7 +44,7 @@ function makeWorkspaceStatus(): ThreadWorkStatus {
   };
 }
 
-function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment {
+function createTestEnvironment(args: { existsInitially: boolean; disposeSpy?: () => void }): IEnvironment {
   let exists = args.existsInitially;
 
   return {
@@ -56,7 +56,9 @@ function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment
     async prepare() {
       exists = true;
     },
-    dispose() {},
+    dispose() {
+      args.disposeSpy?.();
+    },
     exists() {
       return exists;
     },
@@ -132,7 +134,7 @@ function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment
   };
 }
 
-function createService(args: { existsInitially: boolean }) {
+function createService(args: { existsInitially: boolean; disposeSpy?: () => void }) {
   const environment = createTestEnvironment(args);
   const environmentRegistry = new EnvironmentRegistry().register({
     kind: "worktree",
@@ -154,13 +156,23 @@ function createService(args: { existsInitially: boolean }) {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
+        environmentRecord: {
+          kind: "worktree",
+          state: {},
+        },
         createdAt: 1000,
         updatedAt: 1000,
       }) satisfies Thread),
   } as unknown as ThreadRepository;
 
   const projectRepo = {
-    getById: vi.fn(),
+    getById: vi.fn(() => ({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/project/root",
+      createdAt: 1000,
+      updatedAt: 1000,
+    })),
   } as unknown as ProjectRepository;
 
   const runOptionalSetup = vi.fn<
@@ -232,5 +244,17 @@ describe("EnvironmentService", () => {
     );
 
     expect(runOptionalSetup).not.toHaveBeenCalled();
+  });
+
+  it("disposes restored environments during persisted cleanup even when no runtime is active", async () => {
+    const disposeSpy = vi.fn();
+    const { service } = createService({
+      existsInitially: true,
+      disposeSpy,
+    });
+
+    await service.cleanupPersistedEnvironment("thread-1");
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
   });
 });

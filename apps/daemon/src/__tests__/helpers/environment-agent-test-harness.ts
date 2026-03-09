@@ -109,6 +109,8 @@ export function respondToEnvironmentAgentControlMessage(
               connectedToDaemon: true,
               pendingEventCount: 0,
               pendingCommandCount: 0,
+              deliveryState: "healthy",
+              retryAttemptCount: 0,
             },
           }) + "\n",
         );
@@ -326,6 +328,8 @@ export function createFakeEnvironmentAgentClient(
       connectedToDaemon: true,
       pendingEventCount: 0,
       pendingCommandCount: 0,
+      deliveryState: "healthy",
+      retryAttemptCount: 0,
     }),
     acknowledge: async (request) => ({
       protocolVersion: 1,
@@ -345,6 +349,8 @@ export function createFakeEnvironmentAgentClient(
       connectedToDaemon: true,
       pendingEventCount: 0,
       pendingCommandCount: 0,
+      deliveryState: "healthy",
+      retryAttemptCount: 0,
     }),
     getLatestObservedSequence: () => 0,
     close: vi.fn(),
