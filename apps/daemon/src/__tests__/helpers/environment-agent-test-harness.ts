@@ -1,6 +1,10 @@
 import { EventEmitter, Readable, Writable } from "node:stream";
 import type { ChildProcess } from "node:child_process";
-import type { EnvironmentAgentClient } from "@beanbag/environment-agent";
+import {
+  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  type EnvironmentAgentClient,
+  type EnvironmentAgentEventEnvelope,
+} from "@beanbag/environment-agent";
 import { toRecord } from "@beanbag/agent-core";
 import { vi } from "vitest";
 
@@ -275,12 +279,39 @@ export function createFakeEnvironmentAgentClient(
         onClose?: (reason?: Error) => void;
       }
     | undefined;
+  const replayEvents: EnvironmentAgentEventEnvelope[] = [];
+  let nextSequence = 1;
+  let replayThreadId = "thread-1";
+
+  const appendReplayEvent = (event: EnvironmentAgentEventEnvelope["event"]) => {
+    replayEvents.push({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: nextSequence,
+      emittedAt: 1_000 + nextSequence,
+      threadId: event.threadId,
+      event,
+    });
+    nextSequence += 1;
+  };
 
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string | Buffer) => {
     const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
     for (const line of value.split(/\r\n|\n|\r/g)) {
       if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line) as { id?: unknown; method?: unknown; params?: unknown };
+        if (parsed.id === undefined && typeof parsed.method === "string") {
+          appendReplayEvent({
+            type: "provider.event",
+            threadId: replayThreadId,
+            method: parsed.method,
+            payload: parsed.params ?? {},
+          });
+        }
+      } catch {
+        // Ignore non-JSON lines in the fake replay log.
+      }
       handlers?.onLine(line);
     }
   });
@@ -289,6 +320,11 @@ export function createFakeEnvironmentAgentClient(
     const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
     for (const line of value.split(/\r\n|\n|\r/g)) {
       if (!line.trim()) continue;
+      appendReplayEvent({
+        type: "provider.stderr",
+        threadId: replayThreadId,
+        line,
+      });
       handlers?.onStderrLine?.(line);
     }
   });
@@ -371,6 +407,7 @@ export function createFakeEnvironmentAgentClient(
     },
     sendCommand: async (envelope) => {
       const command = envelope.command;
+      replayThreadId = command.threadId;
       const initialize =
         "initialize" in command ? command.initialize : undefined;
       if (initialize) {
@@ -434,8 +471,10 @@ export function createFakeEnvironmentAgentClient(
     replay: async (request) => ({
       protocolVersion: 1,
       fromSequenceExclusive: request.afterSequence,
-      toSequenceInclusive: request.afterSequence,
-      events: [],
+      toSequenceInclusive:
+        replayEvents.filter((event) => event.sequence > request.afterSequence).at(-1)?.sequence ??
+        request.afterSequence,
+      events: replayEvents.filter((event) => event.sequence > request.afterSequence),
       hasMore: false,
     }),
     status: async () => ({
