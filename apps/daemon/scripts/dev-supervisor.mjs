@@ -20,6 +20,24 @@ function requestStop(signal) {
   }
 }
 
+function runCommand(command, args) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: process.cwd(),
+      stdio: "inherit",
+      env: process.env,
+    });
+
+    child.once("error", () => {
+      resolve({ code: 1, signal: null });
+    });
+
+    child.once("exit", (code, signal) => {
+      resolve({ code, signal });
+    });
+  });
+}
+
 process.on("SIGINT", () => {
   requestStop("SIGINT");
 });
@@ -27,6 +45,18 @@ process.on("SIGINT", () => {
 process.on("SIGTERM", () => {
   requestStop("SIGTERM");
 });
+
+async function ensureDependencyBuilds() {
+  const result = await runCommand("pnpm", [
+    "--filter",
+    "@beanbag/agent-server",
+    "build",
+  ]);
+  if (normalizeExitCode(result.code, result.signal) !== 0) {
+    return result;
+  }
+  return null;
+}
 
 function runDaemonOnce() {
   return new Promise((resolve) => {
@@ -58,6 +88,11 @@ function runDaemonOnce() {
 }
 
 while (true) {
+  const buildFailure = await ensureDependencyBuilds();
+  if (buildFailure) {
+    process.exit(normalizeExitCode(buildFailure.code, buildFailure.signal));
+  }
+
   const { code, signal } = await runDaemonOnce();
 
   if (stopRequested) {

@@ -2338,17 +2338,6 @@ export class Orchestrator implements ThreadOrchestrator {
    * Stop all active processes. Called during graceful shutdown.
    */
   stopAll(): void {
-    const threadIds = new Set<string>(this.agentServer.listActiveSessionIds());
-    const activeThreads = this.threadRepo.list({ includeArchived: true }) ?? [];
-    for (const thread of activeThreads) {
-      threadIds.add(thread.id);
-    }
-    for (const threadId of threadIds) {
-      // Shutdown/restart should not create unread noise by touching thread.updatedAt.
-      this.threadRepo.update(threadId, { status: "idle" }, {
-        touchUpdatedAt: false,
-      });
-    }
     this.agentServer.stopAllSessions("Beanbag daemon shutdown");
     this.environmentService.stopAll();
     this.autoTitleAttemptedThreadIds.clear();

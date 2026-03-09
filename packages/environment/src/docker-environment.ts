@@ -65,7 +65,7 @@ const DEFAULT_MOUNT_PATH = "/workspace";
 
 const DOCKER_ENVIRONMENT_INFO: EnvironmentInfo = {
   id: "docker",
-  displayName: "Docker Workspace",
+  displayName: "Docker Sandbox",
   description:
     "Run thread commands in a per-thread Docker container backed by an isolated git worktree.",
   capabilities: {

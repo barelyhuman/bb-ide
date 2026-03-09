@@ -6272,7 +6272,7 @@ describe("Orchestrator", () => {
       expect(manager.getActiveCount()).toBe(0);
     });
 
-    it("kills all active processes and marks them idle", () => {
+    it("kills all active processes without rewriting persisted thread status", () => {
       const proc1 = { stdin: null, stdout: null };
       const proc2 = { stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", proc1);
@@ -6282,16 +6282,7 @@ describe("Orchestrator", () => {
 
       manager.stopAll();
 
-      expect(threadRepo.update).toHaveBeenCalledWith(
-        "thread-1",
-        { status: "idle" },
-        { touchUpdatedAt: false },
-      );
-      expect(threadRepo.update).toHaveBeenCalledWith(
-        "thread-2",
-        { status: "idle" },
-        { touchUpdatedAt: false },
-      );
+      expect(threadRepo.update).not.toHaveBeenCalled();
       expect(manager.getActiveCount()).toBe(0);
     });
   });

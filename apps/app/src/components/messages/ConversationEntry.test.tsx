@@ -60,7 +60,9 @@ describe("ConversationEntry", () => {
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("Please review this screenshot");
     expect(html).toContain("Copy message");
-    expect(html).toContain(">Copy<");
+    expect(html).toContain("group-hover:opacity-100");
+    expect(html).toContain("size-6");
+    expect(html).toContain("size-2.5");
     expect(html).toContain("src=\"file:///tmp/screenshot.png\"");
     expect(html).toContain("Attached image 1");
   });
@@ -80,7 +82,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).not.toContain("Copy message");
-    expect(html).not.toContain(">Copy<");
+    expect(html).not.toContain("group-hover:opacity-100");
   });
 
   it("renders user local image thumbnails through daemon attachment endpoint when projectId is provided", () => {

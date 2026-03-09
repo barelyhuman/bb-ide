@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderGit2, Laptop } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { buildThreadOperationInstruction } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
@@ -18,6 +17,7 @@ import {
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { getEnvironmentIconInfo } from "@/lib/environment-icon";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
@@ -69,17 +69,15 @@ export function ProjectMainView() {
     supportsServiceTier,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
-    () =>
-      environmentOptions.map((option) => {
-        const environment = environments?.find((item) => item.id === option.value);
-        if (environment?.capabilities.isolated_workspace) {
-          return { ...option, icon: FolderGit2 };
-        }
-        if (environment?.capabilities.host_filesystem) {
-          return { ...option, icon: Laptop };
-        }
-        return option;
-      }),
+    () => {
+      const environmentById = new Map(
+        (environments ?? []).map((environment) => [environment.id, environment]),
+      );
+      return environmentOptions.map((option) => ({
+        ...option,
+        icon: getEnvironmentIconInfo(environmentById.get(option.value))?.icon,
+      }));
+    },
     [environmentOptions, environments],
   );
   const projectOptions = useMemo(() => {

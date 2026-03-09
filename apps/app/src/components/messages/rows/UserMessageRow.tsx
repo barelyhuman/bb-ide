@@ -103,20 +103,19 @@ export function UserMessageRow({
             ) : null}
           </div>
           {messageText ? (
-            <div className="mt-1 flex justify-end">
+            <div className="mt-1 flex justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
+                size="icon"
+                className="size-6 text-muted-foreground hover:text-foreground focus-visible:opacity-100"
                 onClick={() => {
                   void handleCopy();
                 }}
                 aria-label="Copy message"
                 title="Copy message"
               >
-                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                <span>{copied ? "Copied" : "Copy"}</span>
+                {copied ? <Check className="size-2.5" /> : <Copy className="size-2.5" />}
               </Button>
             </div>
           ) : null}

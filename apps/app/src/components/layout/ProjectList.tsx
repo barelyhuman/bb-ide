@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ChevronRight,
   Folder,
-  FolderGit2,
   FolderOpen,
   LoaderCircle,
   MoreHorizontal,
@@ -26,6 +25,7 @@ import {
   useUpdateThread,
 } from "@/hooks/useApi"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
+import { getEnvironmentIconInfo } from "@/lib/environment-icon"
 import { cn } from "@/lib/utils"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
@@ -453,6 +453,8 @@ export function ProjectList({
                           const environmentInfo = thread.environmentId
                             ? environmentById.get(thread.environmentId)
                             : undefined
+                          const environmentIconInfo = getEnvironmentIconInfo(environmentInfo)
+                          const ThreadEnvironmentIcon = environmentIconInfo?.icon
 
                           return (
                             <div
@@ -488,16 +490,16 @@ export function ProjectList({
                                   <StatusPill variant="emphasis">active</StatusPill>
                                 ) : null}
                                 <span className="relative h-7 w-7 shrink-0">
-                                  {environmentInfo?.capabilities.isolated_workspace ? (
+                                  {ThreadEnvironmentIcon ? (
                                     <span
                                       className={cn(
                                         "absolute inset-0 flex items-center justify-center transition-opacity",
                                         isThreadActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0"
                                       )}
                                     >
-                                      <FolderGit2
+                                      <ThreadEnvironmentIcon
                                         className="size-4 text-sidebar-foreground/70"
-                                        aria-label="Worktree thread"
+                                        aria-label={environmentIconInfo.ariaLabel}
                                       />
                                     </span>
                                   ) : null}
