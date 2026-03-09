@@ -300,8 +300,9 @@ export class EnvironmentService {
     this.primaryPromotionByProjectId.clear();
     this.primaryPromotionValidatedAtByProjectId.clear();
     const projects = this.projectRepo.list();
+    if (!Array.isArray(projects) || projects.length === 0) return;
     const allThreads = this.threadRepo.list({ includeArchived: true });
-    if (!Array.isArray(projects) || !Array.isArray(allThreads)) return;
+    if (!Array.isArray(allThreads) || allThreads.length === 0) return;
 
     for (const project of projects) {
       let projectCheckout: EnvironmentCheckoutSnapshot;

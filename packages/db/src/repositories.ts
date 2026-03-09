@@ -402,6 +402,35 @@ export class ThreadRepository {
     );
   }
 
+  listArchivedIdsWithEnvironmentRecord(): string[] {
+    return this.db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(
+        and(
+          sql`${threads.archivedAt} is not null`,
+          sql`${threads.environmentRecord} is not null`,
+        ),
+      )
+      .all()
+      .map((row) => row.id);
+  }
+
+  listNonArchivedIdsByStatuses(statuses: readonly ThreadStatus[]): string[] {
+    if (statuses.length === 0) return [];
+    return this.db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(
+        and(
+          isNull(threads.archivedAt),
+          inArray(threads.status, [...statuses]),
+        ),
+      )
+      .all()
+      .map((row) => row.id);
+  }
+
   update(
     id: string,
     data: {

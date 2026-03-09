@@ -619,10 +619,24 @@ describe("Orchestrator", () => {
       const threadState = new Map(
         initialThreads.map((thread) => [thread.id, { ...thread }]),
       );
+      const archivedIdsWithEnvironmentRecord = initialThreads
+        .filter((thread) => thread.archivedAt !== undefined && thread.environmentRecord)
+        .map((thread) => thread.id);
+      const nonArchivedIdsByStatus = (statuses: readonly Thread["status"][]) =>
+        initialThreads
+          .filter(
+            (thread) =>
+              thread.archivedAt === undefined &&
+              statuses.includes(thread.status),
+          )
+          .map((thread) => thread.id);
       const bootThreadRepo = {
         create: vi.fn(),
         getById: vi.fn((threadId: string) => threadState.get(threadId)),
         list: vi.fn(() => Array.from(threadState.values())),
+        listArchivedIdsWithEnvironmentRecord: vi.fn(() => archivedIdsWithEnvironmentRecord),
+        listNonArchivedIdsByStatuses: vi.fn((statuses: readonly Thread["status"][]) =>
+          nonArchivedIdsByStatus(statuses)),
         update: vi.fn((threadId: string, updates: Partial<Thread>) => {
           const existing = threadState.get(threadId);
           if (!existing) return undefined;
@@ -676,331 +690,111 @@ describe("Orchestrator", () => {
       };
     }
 
-    it("keeps persisted active threads active when boot cannot attach yet but recovery is still possible", async () => {
+    it("normalizes stale daemon-runtime statuses to idle on boot", async () => {
       const {
         bootManager,
-        bootEventRepo,
-        bootProjectRepo,
-        bootThreadRepo,
-        bootWs,
-        threadState,
-      } = createBootManager([
-        makeThread({ id: "boot-active", status: "active" }),
-      ]);
-      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Test",
-        rootPath: "/test",
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
-        .fn()
-        .mockReturnValue({
-          normType: "turn/started",
-          turnId: "turn-1",
-        });
-
-      await bootManager.reconcileActiveThreadsOnBoot();
-
-      expect(threadState.get("boot-active")?.status).toBe("active");
-      expect(bootThreadRepo.update).not.toHaveBeenCalledWith(
-        "boot-active",
-        {
-          status: "idle",
-        },
-        {
-          touchUpdatedAt: false,
-        },
-      );
-      expect(bootWs.broadcast).not.toHaveBeenCalledWith("thread", "boot-active", [
-        "status-changed",
-        "work-status-changed",
-      ]);
-    });
-
-    it("resumes active threads on boot when provider state is still available", async () => {
-      const {
-        bootManager,
-        bootEventRepo,
-        bootProjectRepo,
         bootThreadRepo,
         threadState,
-      } = createBootManager([
-        makeThread({ id: "boot-active", status: "active" }),
-      ]);
-
-      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Test",
-        rootPath: "/test",
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      (bootEventRepo.getLatestProviderThreadId as unknown as ReturnType<typeof vi.fn>) = vi
-        .fn()
-        .mockReturnValue("persisted-thread-1");
-      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
-        .fn()
-        .mockReturnValue({
-          normType: "turn/started",
-          turnId: "turn-1",
-        });
-
-      const resumeChild = createFakeChildProcess({ autoRespond: false });
-      resumeChild.stdin = new Writable({
-        write(chunk: Buffer, _encoding: string, callback: () => void) {
-          const data = chunk.toString();
-          resumeChild._stdinData.push(data);
-          try {
-            const msg = JSON.parse(data.trim());
-            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
-              callback();
-              return;
-            }
-            if (
-              respondToProviderRpcMessage(resumeChild, msg, {
-                threadId: "persisted-thread-1",
-              })
-            ) {
-              callback();
-              return;
-            }
-          } catch {}
-          callback();
-        },
-      });
-
-      vi.spyOn(
-        bootManager as unknown as {
-          _spawnProcess: (
-            threadId: string,
-            projectRootPath: string,
-            environmentKind: string,
-            reason: string,
-          ) => Promise<{
-            environment: IEnvironment;
-            agentConnectionTarget: {
-              transport: "http";
-              baseUrl: string;
-            };
-            connectSession: () => {
-              transport: "http";
-              client: EnvironmentAgentClient;
-            };
-          }>;
-        },
-        "_spawnProcess",
-      ).mockResolvedValue({
-        environment: makeRuntimeEnvironment({ rootPath: "/test" }),
-        agentConnectionTarget: {
-          transport: "http",
-          baseUrl: "http://127.0.0.1:4312",
-        },
-        connectSession: () => ({
-          transport: "http",
-          client: createFakeEnvironmentAgentClient(resumeChild),
-        }),
-      });
-      const retrySpy = vi
-        .spyOn(
-          (bootManager as unknown as {
-            agentServer: { retryEnvironmentAgentDelivery: (threadId: string) => Promise<unknown> };
-          }).agentServer,
-          "retryEnvironmentAgentDelivery",
-        )
-        .mockResolvedValue({
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-          latestSequence: 0,
-          connectedToDaemon: true,
-          pendingEventCount: 0,
-          pendingCommandCount: 0,
-          deliveryState: "healthy",
-          retryAttemptCount: 0,
-        });
-
-      await bootManager.reconcileActiveThreadsOnBoot();
-
-      expect(threadState.get("boot-active")?.status).toBe("active");
-      expect(bootThreadRepo.update).not.toHaveBeenCalledWith(
-        "boot-active",
-        { status: "idle" },
-        { touchUpdatedAt: false },
-      );
-      expect(resumeChild._stdinData.some((line) => {
-        try {
-          return JSON.parse(line.trim()).method === "thread/resume";
-        } catch {
-          return false;
-        }
-      })).toBe(true);
-      expect(retrySpy).toHaveBeenCalledWith("boot-active");
-    });
-
-    it("attempts boot resume even when no lifecycle event was persisted yet", async () => {
-      const {
-        bootManager,
-        bootEventRepo,
-        bootProjectRepo,
-      } = createBootManager([
-        makeThread({ id: "boot-active", status: "active" }),
-      ]);
-
-      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Test",
-        rootPath: "/test",
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      (bootEventRepo.getLatestProviderThreadId as unknown as ReturnType<typeof vi.fn>) = vi
-        .fn()
-        .mockReturnValue("persisted-thread-1");
-      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
-        .fn()
-        .mockReturnValue(undefined);
-
-      const resumeChild = createFakeChildProcess({ autoRespond: false });
-      resumeChild.stdin = new Writable({
-        write(chunk: Buffer, _encoding: string, callback: () => void) {
-          const data = chunk.toString();
-          resumeChild._stdinData.push(data);
-          try {
-            const msg = JSON.parse(data.trim());
-            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
-              callback();
-              return;
-            }
-            if (
-              respondToProviderRpcMessage(resumeChild, msg, {
-                threadId: "persisted-thread-1",
-              })
-            ) {
-              callback();
-              return;
-            }
-          } catch {}
-          callback();
-        },
-      });
-
-      vi.spyOn(
-        bootManager as unknown as {
-          _spawnProcess: (
-            threadId: string,
-            projectRootPath: string,
-            environmentKind: string,
-            reason: string,
-          ) => Promise<{
-            environment: IEnvironment;
-            agentConnectionTarget: {
-              transport: "http";
-              baseUrl: string;
-            };
-            connectSession: () => {
-              transport: "http";
-              client: EnvironmentAgentClient;
-            };
-          }>;
-        },
-        "_spawnProcess",
-      ).mockResolvedValue({
-        environment: makeRuntimeEnvironment({ rootPath: "/test" }),
-        agentConnectionTarget: {
-          transport: "http",
-          baseUrl: "http://127.0.0.1:4312",
-        },
-        connectSession: () => ({
-          transport: "http",
-          client: createFakeEnvironmentAgentClient(resumeChild),
-        }),
-      });
-
-      await bootManager.reconcileActiveThreadsOnBoot();
-
-      expect(resumeChild._stdinData.some((line) => {
-        try {
-          return JSON.parse(line.trim()).method === "thread/resume";
-        } catch {
-          return false;
-        }
-      })).toBe(true);
-    });
-
-    it("applies the restart policy matrix across persisted thread statuses", async () => {
-      const {
-        bootManager,
-        bootThreadRepo,
       } = createBootManager([
         makeThread({ id: "boot-created", status: "created" }),
         makeThread({ id: "boot-provisioning", status: "provisioning" }),
         makeThread({ id: "boot-active", status: "active" }),
         makeThread({ id: "boot-idle", status: "idle" }),
         makeThread({ id: "boot-provisioning-failed", status: "provisioning_failed" }),
+      ]);
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(bootThreadRepo.listNonArchivedIdsByStatuses).toHaveBeenCalledWith([
+        "created",
+        "provisioning",
+        "active",
+      ]);
+      expect(threadState.get("boot-created")?.status).toBe("idle");
+      expect(threadState.get("boot-provisioning")?.status).toBe("idle");
+      expect(threadState.get("boot-active")?.status).toBe("idle");
+      expect(threadState.get("boot-idle")?.status).toBe("idle");
+      expect(threadState.get("boot-provisioning-failed")?.status).toBe("provisioning_failed");
+    });
+
+    it("finalizes archived environments through targeted archived queries", async () => {
+      const {
+        bootManager,
+        bootThreadRepo,
+      } = createBootManager([
         makeThread({
-          id: "boot-archived-active",
-          status: "active",
+          id: "boot-archived-with-environment",
+          status: "idle",
           archivedAt: 123,
+          environmentRecord: {
+            kind: "worktree",
+            state: {
+              workspaceRoot: "/tmp/worktree",
+              branchName: "bb/thread-1",
+            },
+          },
         }),
         makeThread({
-          id: "boot-archived-idle",
+          id: "boot-archived-no-environment",
           status: "idle",
           archivedAt: 123,
         }),
       ]);
-
-      const scheduleProvisioningSpy = vi
-        .spyOn(asOrchestratorHarness(bootManager), "_scheduleProvisioning")
-        .mockImplementation(() => {});
-      const cleanupRuntimeSpy = vi
-        .spyOn(asOrchestratorHarness(bootManager), "_cleanupThreadRuntime")
-        .mockImplementation(() => {});
       const cleanupEnvironmentRuntimeSpy = vi
-        .spyOn(asOrchestratorHarness(bootManager) as any, "_cleanupEnvironmentRuntime")
+        .spyOn(asOrchestratorHarness(bootManager) as never, "_cleanupEnvironmentRuntime")
         .mockImplementation(() => undefined);
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
-      expect(scheduleProvisioningSpy).toHaveBeenCalledWith(
-        "boot-created",
-        {
-          projectId: "proj-1",
-          environmentId: undefined,
-        },
-        {
-          reason: "boot-created-thread",
-        },
-      );
-      expect(cleanupRuntimeSpy).toHaveBeenCalledWith("boot-provisioning");
-      expect(bootThreadRepo.update).toHaveBeenCalledWith(
-        "boot-provisioning",
-        { status: "provisioning_failed" },
-        { touchUpdatedAt: false },
-      );
-      expect(bootThreadRepo.update).toHaveBeenCalledWith(
-        "boot-active",
-        { status: "idle" },
-        { touchUpdatedAt: false },
-      );
-      expect(bootThreadRepo.update).toHaveBeenCalledWith(
-        "boot-archived-active",
-        { status: "idle" },
-        { touchUpdatedAt: false },
-      );
+      expect(bootThreadRepo.listArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
+      expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
-        "boot-archived-active",
+        "boot-archived-with-environment",
         { destroyWorkspace: true },
       );
-      expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
-        "boot-archived-idle",
-        { destroyWorkspace: true },
+    });
+
+    it("does not use the broad thread listing path during boot", async () => {
+      const {
+        bootManager,
+        bootThreadRepo,
+      } = createBootManager([
+        makeThread({ id: "boot-active", status: "active" }),
+      ]);
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(bootThreadRepo.list).not.toHaveBeenCalled();
+    });
+
+    it("does not attempt provider-session resume based on persisted active status", async () => {
+      const {
+        bootManager,
+      } = createBootManager([
+        makeThread({ id: "boot-active", status: "active" }),
+      ]);
+      const spawnSpy = vi.spyOn(
+        bootManager as unknown as {
+          _spawnProcess: (
+            threadId: string,
+            projectRootPath: string,
+            environmentKind: string,
+            reason: string,
+          ) => Promise<unknown>;
+        },
+        "_spawnProcess",
+      );
+      const retrySpy = vi.spyOn(
+        (bootManager as unknown as {
+          agentServer: { retryEnvironmentAgentDelivery: (threadId: string) => Promise<unknown> };
+        }).agentServer,
+        "retryEnvironmentAgentDelivery",
       );
 
-      const updatedIds = (bootThreadRepo.update as ReturnType<typeof vi.fn>).mock.calls
-        .map((call) => call[0] as string);
-      expect(updatedIds).not.toContain("boot-idle");
-      expect(updatedIds).not.toContain("boot-provisioning-failed");
-      expect(updatedIds).not.toContain("boot-archived-idle");
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(spawnSpy).not.toHaveBeenCalled();
+      expect(retrySpy).not.toHaveBeenCalled();
     });
   });
 
