@@ -571,15 +571,7 @@ export class AgentServer {
           : {}),
       });
 
-      this.send(runtime, threadId, {
-        jsonrpc: "2.0",
-        method: this.opts.provider.initializeMethod,
-        id: ++this.rpcIdCounter,
-        params:
-          this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
-            clientInfo: this.opts.provider.clientInfo,
-          },
-      });
+      await this.requestInitialize(runtime, threadId);
 
       return session;
     });
@@ -609,6 +601,35 @@ export class AgentServer {
     try {
       runtime.send(msg);
     } catch (error) {
+      if (error instanceof ProviderRuntimeUnavailableError) {
+        throw new AgentServerSessionError("provider_unavailable", error.message);
+      }
+      throw error;
+    }
+  }
+
+  private async requestInitialize(
+    runtime: ProviderRuntime,
+    threadId: string,
+  ): Promise<void> {
+    const requestId = ++this.rpcIdCounter;
+    try {
+      await runtime.request({
+        jsonrpc: "2.0",
+        method: this.opts.provider.initializeMethod,
+        id: requestId,
+        params:
+          this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
+            clientInfo: this.opts.provider.clientInfo,
+          },
+      });
+    } catch (error) {
+      if (error instanceof ProviderRuntimeTimeoutError) {
+        throw new AgentServerSessionError("provider_timeout", error.message);
+      }
+      if (error instanceof ProviderRuntimeRpcError) {
+        throw new AgentServerSessionError("provider_rpc_error", error.message);
+      }
       if (error instanceof ProviderRuntimeUnavailableError) {
         throw new AgentServerSessionError("provider_unavailable", error.message);
       }
