@@ -1,8 +1,6 @@
-import type { ChildProcess } from "node:child_process";
-import {
-  createChildProcessJsonLineTransport,
-  type JsonLineTransport,
-  type JsonLineTransportHandlers,
+import type {
+  JsonLineTransport,
+  JsonLineTransportHandlers,
 } from "./transport.js";
 import {
   isEnvironmentAgentControlResponse,
@@ -25,6 +23,7 @@ interface PendingControlRequest {
 
 type EnvironmentAgentRequestShape =
   | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
+  | { type: "delivery.retry" }
   | { type: "ack"; payload: EnvironmentAgentAckRequest }
   | { type: "replay"; payload: EnvironmentAgentReplayRequest }
   | { type: "status" };
@@ -34,6 +33,7 @@ export interface EnvironmentAgentClient {
   ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
   ): Promise<EnvironmentAgentProviderStatus>;
+  retryDaemonDelivery(): Promise<EnvironmentAgentStatusSnapshot>;
   acknowledge(request: EnvironmentAgentAckRequest): Promise<EnvironmentAgentAckResponse>;
   replay(request: EnvironmentAgentReplayRequest): Promise<EnvironmentAgentReplayResponse>;
   status(): Promise<EnvironmentAgentStatusSnapshot>;
@@ -95,6 +95,12 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     return this.request<EnvironmentAgentProviderStatus>({
       type: "provider.ensure",
       payload: spec,
+    });
+  }
+
+  retryDaemonDelivery(): Promise<EnvironmentAgentStatusSnapshot> {
+    return this.request<EnvironmentAgentStatusSnapshot>({
+      type: "delivery.retry",
     });
   }
 
@@ -205,12 +211,6 @@ export function createEnvironmentAgentClient(
   return new EnvironmentAgentClientImpl(transport);
 }
 
-export function createChildProcessEnvironmentAgentClient(
-  child: ChildProcess,
-): EnvironmentAgentClient {
-  return createEnvironmentAgentClient(createChildProcessJsonLineTransport(child));
-}
-
 export async function createHttpEnvironmentAgentClient(args: {
   baseUrl: string;
   headers?: Record<string, string>;
@@ -303,14 +303,17 @@ export async function createHttpEnvironmentAgentClient(args: {
     return response.json() as Promise<TResponse>;
   };
 
-  return {
-    providerTransport: client.providerTransport,
-    ensureProviderRunning(spec) {
-      return postJson<EnvironmentAgentProviderStatus>("/control/provider/ensure", spec);
-    },
-    acknowledge(request) {
-      return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
-    },
+    return {
+      providerTransport: client.providerTransport,
+      ensureProviderRunning(spec) {
+        return postJson<EnvironmentAgentProviderStatus>("/control/provider/ensure", spec);
+      },
+      retryDaemonDelivery() {
+        return postJson<EnvironmentAgentStatusSnapshot>("/control/delivery/retry", {});
+      },
+      acknowledge(request) {
+        return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
+      },
     replay(request) {
       return postJson<EnvironmentAgentReplayResponse>("/control/replay", request);
     },

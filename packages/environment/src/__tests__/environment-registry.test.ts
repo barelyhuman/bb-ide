@@ -133,16 +133,19 @@ describe("EnvironmentRegistry", () => {
         projectId: "proj-1",
         threadId: "thread-1",
         projectRootPath: projectRoot,
-        runtimeEnv: {},
+        runtimeEnv: {
+          BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
+          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+        },
       });
 
       expect(environment.kind).toBe("docker");
       expect(environment.getAgentConnectionTarget()).toEqual({
-        transport: "command-stdio",
-        command: "bb",
-        args: ["environment-agent"],
-        cwd: `${projectRoot}/.worktrees/thread-1`,
-        env: {},
+        transport: "http",
+        baseUrl: "http://127.0.0.1:4312",
+        headers: {
+          authorization: "Bearer secret-token",
+        },
         providerLaunch: {
           command: "docker",
           args: ["exec", "-i", "beanbag-thread-thread-1"],

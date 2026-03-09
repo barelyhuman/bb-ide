@@ -33,7 +33,6 @@ import {
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
 import {
-  createCommandStdioEnvironmentAgentTarget,
   resolveEnvironmentAgentConnectionTarget,
 } from "./environment-agent-target.js";
 import {
@@ -50,6 +49,7 @@ export interface WorktreeEnvironmentState {
 
 export interface CreateWorktreeEnvironmentDefinitionOptions {
   worktreeRootName?: string;
+  manageEnvironmentAgent?: boolean;
 }
 
 const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
@@ -227,6 +227,7 @@ class WorktreeEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private readonly manageEnvironmentAgent: boolean;
   private preparePromise: Promise<void> | null = null;
 
   constructor(
@@ -236,12 +237,14 @@ class WorktreeEnvironment implements IEnvironment {
     private readonly state: WorktreeEnvironmentState,
     runtimeEnv: Record<string, string | undefined>,
     services?: CreateEnvironmentContext["services"],
+    manageEnvironmentAgent = true,
   ) {
     this.projectId = projectId;
     this.threadId = threadId;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
     this.services = services;
+    this.manageEnvironmentAgent = manageEnvironmentAgent;
   }
 
   serialize(): WorktreeEnvironmentState {
@@ -250,13 +253,15 @@ class WorktreeEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     if (existsSync(this.state.workspaceRoot)) {
-      await ensureManagedHostEnvironmentAgent({
-        workspaceRootPath: this.state.workspaceRoot,
-        threadId: this.threadId,
-        projectId: this.projectId,
-        environmentId: this.kind,
-        runtimeEnv: this.env,
-      });
+      if (this.manageEnvironmentAgent) {
+        await ensureManagedHostEnvironmentAgent({
+          workspaceRootPath: this.state.workspaceRoot,
+          threadId: this.threadId,
+          projectId: this.projectId,
+          environmentId: this.kind,
+          runtimeEnv: this.env,
+        });
+      }
       return;
     }
     if (this.preparePromise) {
@@ -308,22 +313,26 @@ class WorktreeEnvironment implements IEnvironment {
       );
     }
 
-    await ensureManagedHostEnvironmentAgent({
-      workspaceRootPath: this.state.workspaceRoot,
-      threadId: this.threadId,
-      projectId: this.projectId,
-      environmentId: this.kind,
-      runtimeEnv: this.env,
-    });
+    if (this.manageEnvironmentAgent) {
+      await ensureManagedHostEnvironmentAgent({
+        workspaceRootPath: this.state.workspaceRoot,
+        threadId: this.threadId,
+        projectId: this.projectId,
+        environmentId: this.kind,
+        runtimeEnv: this.env,
+      });
+    }
   }
 
   async dispose(): Promise<void> {
-    await disposeManagedHostEnvironmentAgent({
-      projectId: this.projectId,
-      threadId: this.threadId,
-      environmentId: this.kind,
-      runtimeEnv: this.env,
-    });
+    if (this.manageEnvironmentAgent) {
+      await disposeManagedHostEnvironmentAgent({
+        projectId: this.projectId,
+        threadId: this.threadId,
+        environmentId: this.kind,
+        runtimeEnv: this.env,
+      });
+    }
     await runGitAtPathAsync(
       this.projectRoot,
       ["worktree", "remove", "--force", this.state.workspaceRoot],
@@ -345,19 +354,25 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    if (!this.manageEnvironmentAgent && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Worktree environment-agent management is disabled");
+    }
     const managedTarget = resolveManagedHostEnvironmentAgentTarget({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
       runtimeEnv: this.env,
     });
+    if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Missing managed environment-agent target for worktree environment");
+    }
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.env,
       defaultTarget:
-        managedTarget ?? createCommandStdioEnvironmentAgentTarget({
-          cwd: this.rootPath,
-          env: this.env,
-        }),
+        managedTarget ?? {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:0",
+        },
     });
   }
 
@@ -736,6 +751,7 @@ export function createWorktreeEnvironmentDefinition(
     opts?.worktreeRootName ??
     process.env.BEANBAG_WORKTREE_ROOT ??
     DEFAULT_WORKTREE_ROOT;
+  const manageEnvironmentAgent = opts?.manageEnvironmentAgent ?? true;
 
   return {
     kind: "worktree",
@@ -765,6 +781,7 @@ export function createWorktreeEnvironmentDefinition(
         },
         context.runtimeEnv,
         context.services,
+        manageEnvironmentAgent,
       );
     },
     restore(state: WorktreeEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
@@ -778,6 +795,7 @@ export function createWorktreeEnvironmentDefinition(
         state,
         context.runtimeEnv,
         context.services,
+        manageEnvironmentAgent,
       );
     },
     isState(value: unknown): value is WorktreeEnvironmentState {

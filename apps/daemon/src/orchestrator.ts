@@ -1,4 +1,3 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import {
   accessSync,
   constants,
@@ -76,9 +75,11 @@ import {
 } from "@beanbag/environment";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
+  EnvironmentAgentDeliveryResponse,
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type {
   ThreadRepository,
   EventRepository,
@@ -680,6 +681,7 @@ export class Orchestrator implements ThreadOrchestrator {
           activeTurnId,
         });
       }
+      await this._nudgeEnvironmentAgentDelivery(thread.id);
     } catch {
       this._cleanupThreadRuntime(thread.id);
       this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
@@ -2261,6 +2263,77 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
+  async ingestEnvironmentAgentEvents(args: {
+    threadId: string;
+    authorizationHeader?: string;
+    events: EnvironmentAgentEventEnvelope[];
+  }): Promise<EnvironmentAgentDeliveryResponse> {
+    const thread = this.threadRepo.getById(args.threadId);
+    if (!thread) {
+      throw threadNotFoundError(args.threadId);
+    }
+
+    this._assertEnvironmentAgentAuthorization(args.threadId, args.authorizationHeader);
+
+    const persistedCursor =
+      (this.threadRepo.getById(args.threadId) as
+        | (Thread & { environmentAgentCursor?: number })
+        | undefined)?.environmentAgentCursor ?? 0;
+    const currentCursor =
+      this.environmentAgentReplayCursorByThreadId.get(args.threadId) ?? persistedCursor;
+
+    const newEvents: EnvironmentAgentEventEnvelope[] = [];
+    let expectedSequence = currentCursor + 1;
+    for (const event of args.events) {
+      if (event.sequence < expectedSequence) {
+        continue;
+      }
+      if (event.sequence !== expectedSequence) {
+        break;
+      }
+      newEvents.push(event);
+      expectedSequence += 1;
+    }
+
+    if (newEvents.length === 0) {
+      return {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: args.threadId,
+        acknowledgedSequence: currentCursor,
+      };
+    }
+
+    try {
+      await this.agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId: args.threadId,
+        events: newEvents,
+      });
+      const acknowledgedSequence = newEvents[newEvents.length - 1]!.sequence;
+      this._setEnvironmentAgentReplayCursor(args.threadId, acknowledgedSequence);
+      return {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: args.threadId,
+        acknowledgedSequence,
+      };
+    } catch (error) {
+      this._rethrowAgentServerError(args.threadId, error);
+    }
+  }
+
+  async retryEnvironmentAgentDelivery(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    try {
+      return await this.agentServer.retryEnvironmentAgentDelivery(threadId);
+    } catch (error) {
+      this._rethrowAgentServerError(threadId, error);
+    }
+  }
+
   /**
    * Stop all active processes. Called during graceful shutdown.
    */
@@ -2553,6 +2626,50 @@ export class Orchestrator implements ThreadOrchestrator {
     );
   }
 
+  private _assertEnvironmentAgentAuthorization(
+    threadId: string,
+    authorizationHeader?: string,
+  ): void {
+    const expectedAuthorization = this._resolveEnvironmentAgentAuthorization(threadId);
+    if (!expectedAuthorization || authorizationHeader !== expectedAuthorization) {
+      throw invalidRequestError("Unauthorized environment-agent delivery");
+    }
+  }
+
+  private _resolveEnvironmentAgentAuthorization(threadId: string): string | undefined {
+    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
+    if (runtime?.agentConnectionTarget.headers?.authorization) {
+      return runtime.agentConnectionTarget.headers.authorization;
+    }
+
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      return undefined;
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      return undefined;
+    }
+
+    try {
+      const restored = this.environmentService.restoreThreadEnvironment(thread, project.rootPath);
+      return restored?.getAgentConnectionTarget().headers?.authorization;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async _nudgeEnvironmentAgentDelivery(threadId: string): Promise<void> {
+    try {
+      await this.agentServer.retryEnvironmentAgentDelivery(threadId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[thread ${threadId}] Failed to nudge environment-agent delivery: ${message}`,
+      );
+    }
+  }
+
   private _setEnvironmentRuntime(
     threadId: string,
     environment: IEnvironment,
@@ -2726,83 +2843,23 @@ export class Orchestrator implements ThreadOrchestrator {
     projectId?: string;
     agentConnectionTarget: EnvironmentAgentConnectionTarget;
   }): Promise<AgentServerSessionConnection> {
-    switch (args.agentConnectionTarget.transport) {
-      case "command-stdio": {
-        const commandTarget = args.agentConnectionTarget;
-        return {
-          transport: "child_process",
-          child: this._spawnEnvironmentAgentProcess({
-            threadId: args.threadId,
-            ...(args.projectId ? { projectId: args.projectId } : {}),
-            spawnSpec: this.agentServer.getSpawnSpec(),
-            agentConnectionTarget: commandTarget,
-          }),
-        };
-      }
-      case "http":
-        return {
-          transport: "http",
-          client: await createHttpEnvironmentAgentClient({
-            baseUrl: args.agentConnectionTarget.baseUrl,
-            ...(args.agentConnectionTarget.headers
-              ? { headers: args.agentConnectionTarget.headers }
-              : {}),
-          }),
-          ...(args.agentConnectionTarget.providerLaunch
-            ? {
-                providerLaunch: {
-                  command: args.agentConnectionTarget.providerLaunch.command,
-                  args: [...args.agentConnectionTarget.providerLaunch.args],
-                },
-              }
-            : {}),
-        };
-      default:
-        assertNever(args.agentConnectionTarget);
-    }
-  }
-
-  private _spawnEnvironmentAgentProcess(args: {
-    threadId: string;
-    projectId?: string;
-    spawnSpec: { command: string; args: string[] };
-    agentConnectionTarget: Extract<
-      EnvironmentAgentConnectionTarget,
-      { transport: "command-stdio" }
-    >;
-  }): ChildProcess {
-    return spawn(
-      args.agentConnectionTarget.command,
-      [
-        ...args.agentConnectionTarget.args,
-        "--provider-command",
-        args.spawnSpec.command,
-        ...(args.agentConnectionTarget.providerLaunch
-          ? [
-              "--provider-launch-command",
-              args.agentConnectionTarget.providerLaunch.command,
-              ...args.agentConnectionTarget.providerLaunch.args.flatMap((value) => [
-                "--provider-launch-arg",
-                value,
-              ]),
-            ]
-          : []),
-        ...args.spawnSpec.args.flatMap((value) => ["--provider-arg", value]),
-      ],
-      {
-        ...(args.agentConnectionTarget.cwd
-          ? { cwd: args.agentConnectionTarget.cwd }
+    return {
+      transport: "http",
+      client: await createHttpEnvironmentAgentClient({
+        baseUrl: args.agentConnectionTarget.baseUrl,
+        ...(args.agentConnectionTarget.headers
+          ? { headers: args.agentConnectionTarget.headers }
           : {}),
-        env: {
-          ...this.runtimeEnv,
-          ...(args.agentConnectionTarget.env ?? {}),
-          ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-          ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
-          BB_THREAD_ID: args.threadId,
-        },
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
+      }),
+      ...(args.agentConnectionTarget.providerLaunch
+        ? {
+            providerLaunch: {
+              command: args.agentConnectionTarget.providerLaunch.command,
+              args: [...args.agentConnectionTarget.providerLaunch.args],
+            },
+          }
+        : {}),
+    };
   }
 
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {

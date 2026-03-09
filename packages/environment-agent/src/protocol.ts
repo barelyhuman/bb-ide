@@ -1,4 +1,4 @@
-export type EnvironmentAgentTransportKind = "command-stdio" | "http";
+export type EnvironmentAgentTransportKind = "http";
 export const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
 export interface EnvironmentAgentProviderLaunchWrapper {
@@ -20,22 +20,13 @@ export interface EnvironmentAgentProviderStatus {
 }
 
 export type EnvironmentAgentConnectionTarget =
-  | {
-      transport: "command-stdio";
-      command: string;
-      args: string[];
-      cwd?: string;
-      env?: Record<string, string | undefined>;
-      daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
-      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
-    }
-  | {
-      transport: "http";
-      baseUrl: string;
-      headers?: Record<string, string>;
-      daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
-      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
-    };
+  {
+    transport: "http";
+    baseUrl: string;
+    headers?: Record<string, string>;
+    daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
+    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+  };
 
 export interface EnvironmentAgentDaemonConnectionConfig {
   daemonUrl?: string;
@@ -195,6 +186,21 @@ export interface EnvironmentAgentAckResponse {
   threadId?: string;
 }
 
+export interface EnvironmentAgentDeliveryRequest {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  threadId: string;
+  projectId?: string;
+  environmentId?: string;
+  afterSequence?: number;
+  events: EnvironmentAgentEventEnvelope[];
+}
+
+export interface EnvironmentAgentDeliveryResponse {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  acknowledgedSequence: number;
+  threadId: string;
+}
+
 export interface EnvironmentAgentStatusSnapshot {
   protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
   threadId?: string;
@@ -218,6 +224,9 @@ export type EnvironmentAgentControlRequest =
       payload: EnvironmentAgentProviderSpec;
     })
   | (EnvironmentAgentControlMessageBase & {
+      type: "delivery.retry";
+    })
+  | (EnvironmentAgentControlMessageBase & {
       type: "ack";
       payload: EnvironmentAgentAckRequest;
     })
@@ -233,6 +242,10 @@ export type EnvironmentAgentControlResponse =
   | (EnvironmentAgentControlMessageBase & {
       type: "provider.ensure.response";
       payload: EnvironmentAgentProviderStatus;
+    })
+  | (EnvironmentAgentControlMessageBase & {
+      type: "delivery.retry.response";
+      payload: EnvironmentAgentStatusSnapshot;
     })
   | (EnvironmentAgentControlMessageBase & {
       type: "ack.response";

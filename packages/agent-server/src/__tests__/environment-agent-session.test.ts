@@ -1,195 +1,162 @@
-import { EventEmitter } from "node:events";
-import type { ChildProcess } from "node:child_process";
-import { Readable, Writable } from "node:stream";
+import type {
+  EnvironmentAgentAckRequest,
+  EnvironmentAgentAckResponse,
+  EnvironmentAgentClient,
+  EnvironmentAgentProviderSpec,
+  EnvironmentAgentProviderStatus,
+  EnvironmentAgentReplayRequest,
+  EnvironmentAgentReplayResponse,
+  EnvironmentAgentStatusSnapshot,
+  JsonLineTransport,
+  JsonLineTransportHandlers,
+} from "@beanbag/environment-agent";
 import { describe, expect, it, vi } from "vitest";
 import { AgentServer } from "../agent-server.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 
 const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
-type FakeChildProcess = Omit<ChildProcess, "stdout" | "stderr" | "stdin"> & {
-  stdin: Writable;
-  stdout: Readable;
-  stderr: Readable;
-  _emitExit: (code: number | null, signal: string | null) => void;
-  _stdinLines: string[];
-};
+class FakeJsonLineTransport implements JsonLineTransport {
+  private handlers: JsonLineTransportHandlers | undefined;
+  readonly sentLines: string[] = [];
 
-function createFakeChildProcess(): FakeChildProcess {
-  const child = new EventEmitter() as unknown as FakeChildProcess;
-  const stdinLines: string[] = [];
+  setHandlers(handlers: JsonLineTransportHandlers): void {
+    this.handlers = handlers;
+  }
 
-  child.stdout = new Readable({ read() {} });
-  child.stderr = new Readable({ read() {} });
-  child.stdin = new Writable({
-    write(chunk: Buffer, _encoding, callback) {
-      const line = chunk.toString().trim();
-      stdinLines.push(line);
-      if (!line) {
-        callback();
-        return;
-      }
+  send(line: string): void {
+    this.sentLines.push(line);
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        callback();
-        return;
-      }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      return;
+    }
 
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        callback();
-        return;
-      }
-
-      const record = parsed as Record<string, unknown>;
-      const requestId =
-        typeof record.requestId === "string" ? record.requestId : undefined;
-
-      if (record.environmentAgentMessage === true && requestId) {
-        if (record.type === "provider.ensure") {
-          process.nextTick(() => {
-            child.stdout.push(
-              JSON.stringify({
-                environmentAgentMessage: true,
-                requestId,
-                type: "provider.ensure.response",
-                payload: {
-                  running: true,
-                  launched: true,
-                  pid: 12345,
-                },
-              }) + "\n",
-            );
-          });
-        } else if (record.type === "status") {
-          process.nextTick(() => {
-            child.stdout.push(
-              JSON.stringify({
-                environmentAgentMessage: true,
-                requestId,
-                type: "status.response",
-                payload: {
-                  protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-                  threadId: "thread-1",
-                  latestSequence: 3,
-                  connectedToDaemon: true,
-                  pendingEventCount: 2,
-                  pendingCommandCount: 0,
-                },
-              }) + "\n",
-            );
-          });
-        } else if (record.type === "replay") {
-          process.nextTick(() => {
-            child.stdout.push(
-              JSON.stringify({
-                environmentAgentMessage: true,
-                requestId,
-                type: "replay.response",
-                payload: {
-                  protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-                  fromSequenceExclusive: 1,
-                  toSequenceInclusive: 3,
-                  hasMore: false,
-                  events: [
-                    {
-                      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-                      sequence: 2,
-                      emittedAt: 1000,
-                      threadId: "thread-1",
-                      event: {
-                        type: "environment.ready",
-                        threadId: "thread-1",
-                      },
-                    },
-                  ],
-                },
-              }) + "\n",
-            );
-          });
-        } else if (record.type === "ack") {
-          process.nextTick(() => {
-            child.stdout.push(
-              JSON.stringify({
-                environmentAgentMessage: true,
-                requestId,
-                type: "ack.response",
-                payload: {
-                  protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-                  threadId: "thread-1",
-                  acknowledgedSequence: 3,
-                },
-              }) + "\n",
-            );
-          });
-        }
-        callback();
-        return;
-      }
-
-      if (record.jsonrpc === "2.0" && typeof record.id !== "undefined") {
-        if (record.method === "thread/start") {
-          process.nextTick(() => {
-            child.stdout.push(
-              JSON.stringify({
-                environmentAgentMessage: true,
-                type: "event.emitted",
-                payload: {
-                  protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-                  sequence: 1,
-                  emittedAt: 999,
-                  threadId: "thread-1",
-                  event: {
-                    type: "environment.ready",
-                    threadId: "thread-1",
-                  },
-                },
-              }) + "\n",
-            );
-          });
-        }
-        process.nextTick(() => {
-          child.stdout.push(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: record.id,
-              result:
-                record.method === "thread/start"
-                  ? { threadId: "provider-thread-1" }
-                  : {},
-            }) + "\n",
-          );
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      (parsed as { jsonrpc?: unknown }).jsonrpc === "2.0"
+    ) {
+      const message = parsed as { id?: unknown; method?: unknown };
+      if (message.method === "thread/start") {
+        this.emitLiveEvent({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 1,
+          emittedAt: 999,
+          threadId: "thread-1",
+          event: {
+            type: "environment.ready",
+            threadId: "thread-1",
+          },
         });
       }
 
-      callback();
-    },
-  });
+      this.handlers?.onLine(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: message.id,
+          result:
+            message.method === "thread/start"
+              ? { threadId: "provider-thread-1" }
+              : {},
+        }),
+      );
+    }
+  }
 
-  Object.defineProperty(child, "pid", {
-    value: 12345,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(child, "exitCode", {
-    value: null,
-    writable: true,
-    configurable: true,
-  });
-  child.kill = vi.fn();
-  child._stdinLines = stdinLines;
-  child._emitExit = (code: number | null, signal: string | null) => {
-    Object.defineProperty(child, "exitCode", {
-      value: code,
-      writable: true,
-      configurable: true,
-    });
-    child.emit("exit", code, signal);
+  close(reason?: Error): void {
+    this.handlers?.onClose?.(reason);
+  }
+
+  emitLiveEvent(payload: {
+    protocolVersion: number;
+    sequence: number;
+    emittedAt: number;
+    threadId: string;
+    event: {
+      type: string;
+      threadId: string;
+      method?: string;
+      payload?: unknown;
+    };
+  }): void {
+    this.handlers?.onLine(
+      JSON.stringify({
+        environmentAgentMessage: true,
+        type: "event.emitted",
+        payload,
+      }),
+    );
+  }
+}
+
+function createFakeEnvironmentAgentClient() {
+  const providerTransport = new FakeJsonLineTransport();
+  const acknowledgements: number[] = [];
+
+  const client: EnvironmentAgentClient = {
+    providerTransport,
+    ensureProviderRunning: async (
+      _spec: EnvironmentAgentProviderSpec,
+    ): Promise<EnvironmentAgentProviderStatus> => ({
+      running: true,
+      launched: true,
+      pid: 12345,
+    }),
+    retryDaemonDelivery: async (): Promise<EnvironmentAgentStatusSnapshot> => ({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      threadId: "thread-1",
+      latestSequence: 3,
+      connectedToDaemon: true,
+      pendingEventCount: 2,
+      pendingCommandCount: 0,
+    }),
+    acknowledge: async (
+      request: EnvironmentAgentAckRequest,
+    ): Promise<EnvironmentAgentAckResponse> => {
+      acknowledgements.push(request.sequence);
+      return {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: request.threadId,
+        acknowledgedSequence: request.sequence,
+      };
+    },
+    replay: async (
+      request: EnvironmentAgentReplayRequest,
+    ): Promise<EnvironmentAgentReplayResponse> => ({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      fromSequenceExclusive: request.afterSequence,
+      toSequenceInclusive: 3,
+      hasMore: false,
+      events: [
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 2,
+          emittedAt: 1000,
+          threadId: "thread-1",
+          event: {
+            type: "environment.ready",
+            threadId: "thread-1",
+          },
+        },
+      ],
+    }),
+    status: async (): Promise<EnvironmentAgentStatusSnapshot> => ({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      threadId: "thread-1",
+      latestSequence: 3,
+      connectedToDaemon: true,
+      pendingEventCount: 2,
+      pendingCommandCount: 0,
+    }),
+    getLatestObservedSequence: () => 1,
+    close: vi.fn(),
   };
 
-  return child;
+  return { client, providerTransport, acknowledgements };
 }
 
 describe("AgentServer environment-agent control plane", () => {
@@ -197,13 +164,13 @@ describe("AgentServer environment-agent control plane", () => {
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),
     });
-    const child = createFakeChildProcess();
+    const { client, acknowledgements } = createFakeEnvironmentAgentClient();
 
     await agentServer.startSession({
       threadId: "thread-1",
       connectSession: () => ({
-        transport: "child_process",
-        child,
+        transport: "http",
+        client,
       }),
       request: {
         projectId: "project-1",
@@ -247,9 +214,7 @@ describe("AgentServer environment-agent control plane", () => {
       threadId: "thread-1",
     });
 
-    expect(
-      child._stdinLines.some((line) => line.includes('"type":"ack"') && line.includes('"sequence":1')),
-    ).toBe(true);
+    expect(acknowledgements).toContain(1);
   });
 
   it("ingests replayed provider notifications through the normal notification path", async () => {
@@ -258,13 +223,13 @@ describe("AgentServer environment-agent control plane", () => {
       provider: createCodexProviderAdapter(),
       onNotification,
     });
-    const child = createFakeChildProcess();
+    const { client, acknowledgements } = createFakeEnvironmentAgentClient();
 
     await agentServer.startSession({
       threadId: "thread-1",
       connectSession: () => ({
-        transport: "child_process",
-        child,
+        transport: "http",
+        client,
       }),
       request: {
         projectId: "project-1",
@@ -303,8 +268,6 @@ describe("AgentServer environment-agent control plane", () => {
         normalizedMethod: "turn/started",
       }),
     );
-    expect(
-      child._stdinLines.some((line) => line.includes('"type":"ack"') && line.includes('"sequence":5')),
-    ).toBe(true);
+    expect(acknowledgements).toContain(5);
   });
 });

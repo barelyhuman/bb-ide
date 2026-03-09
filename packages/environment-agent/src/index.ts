@@ -17,6 +17,8 @@ export type {
   EnvironmentAgentReplayResponse,
   EnvironmentAgentAckRequest,
   EnvironmentAgentAckResponse,
+  EnvironmentAgentDeliveryRequest,
+  EnvironmentAgentDeliveryResponse,
   EnvironmentAgentStatusSnapshot,
   EnvironmentAgentControlRequest,
   EnvironmentAgentControlResponse,
@@ -33,9 +35,6 @@ export type {
   JsonLineTransport,
   JsonLineTransportHandlers,
 } from "./transport.js";
-export {
-  createChildProcessJsonLineTransport,
-} from "./transport.js";
 
 export type { EnvironmentAgentRuntimeOptions } from "./runtime.js";
 export {
@@ -46,7 +45,6 @@ export type { EnvironmentAgentClient } from "./client.js";
 export {
   EnvironmentAgentClientError,
   createEnvironmentAgentClient,
-  createChildProcessEnvironmentAgentClient,
   createHttpEnvironmentAgentClient,
 } from "./client.js";
 

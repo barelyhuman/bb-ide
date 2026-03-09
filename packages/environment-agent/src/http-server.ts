@@ -44,15 +44,31 @@ function writeJson(response: ServerResponse<IncomingMessage>, statusCode: number
   response.end(JSON.stringify(body));
 }
 
+function isAuthorized(
+  request: IncomingMessage,
+  expectedBearerToken?: string,
+): boolean {
+  if (!expectedBearerToken) return true;
+  const authorizationHeader = request.headers.authorization?.trim();
+  if (!authorizationHeader) return false;
+  return authorizationHeader === `Bearer ${expectedBearerToken}`;
+}
+
 export async function createEnvironmentAgentHttpServer(args: {
   runtime: EnvironmentAgentRuntime;
   host?: string;
   port?: number;
+  bearerToken?: string;
 }): Promise<EnvironmentAgentHttpServer> {
   const clients = new Set<StreamClient>();
 
   const server = createServer(async (request, response) => {
     try {
+      if (!isAuthorized(request, args.bearerToken)) {
+        writeJson(response, 401, { error: "Unauthorized" });
+        return;
+      }
+
       const method = request.method ?? "GET";
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
 
@@ -89,6 +105,12 @@ export async function createEnvironmentAgentHttpServer(args: {
       if (method === "POST" && url.pathname === "/control/provider/ensure") {
         const body = (await readJsonBody(request)) as EnvironmentAgentProviderSpec;
         writeJson(response, 200, args.runtime.ensureProviderStatus(body));
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/control/delivery/retry") {
+        args.runtime.triggerDaemonDelivery();
+        writeJson(response, 200, args.runtime.getStatusSnapshot());
         return;
       }
 

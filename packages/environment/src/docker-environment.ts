@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import path from "node:path";
 import type { ChildProcess } from "node:child_process";
+import path from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
   CreateEnvironmentContext,
@@ -31,7 +31,6 @@ import {
 } from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 import {
-  createCommandStdioEnvironmentAgentTarget,
   resolveEnvironmentAgentConnectionTarget,
 } from "./environment-agent-target.js";
 import {
@@ -261,17 +260,20 @@ class DockerEnvironment implements IEnvironment {
         args: ["exec", "-i", this.state.containerName],
       },
     });
+    if (!managedTarget && !this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Missing managed environment-agent target for docker environment");
+    }
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.runtimeEnv,
       defaultTarget:
-        managedTarget ?? createCommandStdioEnvironmentAgentTarget({
-          cwd: this.getWorkspaceRootUnsafe(),
-          env: this.runtimeEnv,
+        managedTarget ?? {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:0",
           providerLaunch: {
             command: this.dockerBin,
             args: ["exec", "-i", this.state.containerName],
           },
-        }),
+        },
     });
   }
 
@@ -456,7 +458,10 @@ class DockerEnvironment implements IEnvironment {
 export function createDockerEnvironmentDefinition(
   opts?: CreateDockerEnvironmentDefinitionOptions,
 ): EnvironmentDefinition<DockerEnvironmentState> {
-  const worktreeDefinition = createWorktreeEnvironmentDefinition(opts?.worktree);
+  const worktreeDefinition = createWorktreeEnvironmentDefinition({
+    ...opts?.worktree,
+    manageEnvironmentAgent: false,
+  });
   const dockerBin = opts?.dockerBin ?? "docker";
   const mountPath = opts?.mountPath ?? DEFAULT_MOUNT_PATH;
   const containerPrefix = opts?.containerPrefix ?? DEFAULT_CONTAINER_PREFIX;
@@ -465,13 +470,7 @@ export function createDockerEnvironmentDefinition(
     kind: "docker",
     info: { ...DOCKER_ENVIRONMENT_INFO },
     create(context: CreateEnvironmentContext): IEnvironment {
-      const inner = worktreeDefinition.create({
-        ...context,
-        runtimeEnv: {
-          ...context.runtimeEnv,
-          BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT: "true",
-        },
-      });
+      const inner = worktreeDefinition.create(context);
       const worktreeState = inner.serialize() as WorktreeEnvironmentState;
       const image = resolveDockerImage({
         configuredImage: opts?.image,
@@ -495,13 +494,7 @@ export function createDockerEnvironmentDefinition(
       );
     },
     restore(state: DockerEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
-      const inner = worktreeDefinition.restore(state.worktree, {
-        ...context,
-        runtimeEnv: {
-          ...context.runtimeEnv,
-          BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT: "true",
-        },
-      });
+      const inner = worktreeDefinition.restore(state.worktree, context);
       return new DockerEnvironment(
         context.projectId,
         context.threadId,

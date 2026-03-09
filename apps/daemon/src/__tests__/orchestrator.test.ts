@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
 import { EventEmitter, Readable, Writable } from "node:stream";
+import type { ChildProcess } from "node:child_process";
 import {
   accessSync,
   chmodSync,
@@ -14,7 +15,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { ChildProcess } from "node:child_process";
 import {
   buildSquashMergeConflictFollowUpInstruction,
   toRecord,
@@ -28,6 +28,7 @@ import {
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "@beanbag/environment";
+import type { EnvironmentAgentClient } from "@beanbag/environment-agent";
 import type {
   ThreadRepository,
   EventRepository,
@@ -172,11 +173,8 @@ function makeRuntimeEnvironment(args: {
     },
     getAgentConnectionTarget() {
       return {
-        transport: "command-stdio" as const,
-        command: "bb",
-        args: ["environment-agent"],
-        cwd: args.rootPath,
-        env: {},
+        transport: "http" as const,
+        baseUrl: "http://127.0.0.1:4312",
       };
     },
     getCheckoutSnapshot() {
@@ -214,7 +212,7 @@ function makeRuntimeEnvironment(args: {
         command,
         commandArgs,
         options,
-      );
+      ) as unknown as ChildProcess;
     },
     shouldRunSetupScript() {
       return false;
@@ -253,6 +251,21 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 import { spawn as spawnMock } from "node:child_process";
+
+vi.mock("@beanbag/environment-agent", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@beanbag/environment-agent")>();
+  return {
+    ...actual,
+    createHttpEnvironmentAgentClient: vi.fn(async () => {
+      const child =
+        ((spawnMock as unknown as { (): FakeChildProcess | undefined })() as
+          | FakeChildProcess
+          | undefined) ??
+        createFakeChildProcess();
+      return createFakeEnvironmentAgentClient(child);
+    }),
+  };
+});
 
 const CODEX_THREAD_ID = "codex-thread-abc-123";
 const DEFAULT_BASE_INSTRUCTIONS =
@@ -405,7 +418,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
     agentServer: {
       sessions: Map<string, {
-        child: unknown;
+        agentClient?: { __fakeChild?: unknown };
         runtime: {
           send?: (msg: object) => void;
           close?: (error?: Error) => void;
@@ -432,11 +445,11 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
         stdin: {
           write: vi.fn(),
         },
-        kill: vi.fn(),
-        exitCode: null,
       };
       session = {
-        child,
+        agentClient: {
+          __fakeChild: child,
+        },
         runtime: {
           send(msg: object) {
             child.stdin?.write?.(`${JSON.stringify(msg)}\n`);
@@ -450,7 +463,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   };
 
   const processes = new Map<string, unknown>() as Map<string, unknown>;
-  processes.get = (threadId: string) => sessions.get(threadId)?.child;
+  processes.get = (threadId: string) => sessions.get(threadId)?.agentClient?.__fakeChild;
   processes.set = (threadId: string, child: unknown) => {
     const runtime = {
       send(msg: object) {
@@ -460,7 +473,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
       close: vi.fn(),
     };
     sessions.set(threadId, {
-      child,
+      agentClient: {
+        __fakeChild: child,
+      },
       runtime,
       providerThreadId: sessions.get(threadId)?.providerThreadId,
       activeTurnId: sessions.get(threadId)?.activeTurnId,
@@ -611,6 +626,110 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
   return child;
 }
 
+function createFakeEnvironmentAgentClient(
+  child: FakeChildProcess,
+): EnvironmentAgentClient & {
+  __fakeChild: FakeChildProcess;
+  __ensureSpecs: Array<{ command: string; args: string[]; launchCommand?: string; launchArgs?: string[] }>;
+} {
+  let handlers:
+    | {
+        onLine: (line: string) => void;
+        onStderrLine?: (line: string) => void;
+        onClose?: (reason?: Error) => void;
+      }
+    | undefined;
+
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string | Buffer) => {
+    const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    for (const line of value.split(/\r\n|\n|\r/g)) {
+      if (!line.trim()) continue;
+      handlers?.onLine(line);
+    }
+  });
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string | Buffer) => {
+    const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    for (const line of value.split(/\r\n|\n|\r/g)) {
+      if (!line.trim()) continue;
+      handlers?.onStderrLine?.(line);
+    }
+  });
+  child.on("exit", (code: number | null, signal: string | null) => {
+    handlers?.onClose?.(
+      new Error(`Process exited (${signal ?? code ?? "unknown"})`),
+    );
+  });
+  child.on("error", (error: Error) => {
+    handlers?.onClose?.(error instanceof Error ? error : new Error(String(error)));
+  });
+
+  const ensureSpecs: Array<{
+    command: string;
+    args: string[];
+    launchCommand?: string;
+    launchArgs?: string[];
+  }> = [];
+
+  return {
+    __fakeChild: child,
+    __ensureSpecs: ensureSpecs,
+    providerTransport: {
+      setHandlers(nextHandlers) {
+        handlers = nextHandlers;
+      },
+      send(line) {
+        child.stdin.write(`${line}\n`);
+      },
+      close(reason) {
+        handlers?.onClose?.(reason);
+      },
+    },
+    ensureProviderRunning: async (spec) => {
+      ensureSpecs.push({
+        command: spec.command,
+        args: [...spec.args],
+        ...(spec.launchCommand ? { launchCommand: spec.launchCommand } : {}),
+        ...(spec.launchArgs ? { launchArgs: [...spec.launchArgs] } : {}),
+      });
+      return {
+        running: true,
+        launched: true,
+        pid: child.pid,
+      };
+    },
+    retryDaemonDelivery: async () => ({
+      protocolVersion: 1,
+      latestSequence: 0,
+      connectedToDaemon: true,
+      pendingEventCount: 0,
+      pendingCommandCount: 0,
+    }),
+    acknowledge: async (request) => ({
+      protocolVersion: 1,
+      acknowledgedSequence: request.sequence,
+      ...(request.threadId ? { threadId: request.threadId } : {}),
+    }),
+    replay: async (request) => ({
+      protocolVersion: 1,
+      fromSequenceExclusive: request.afterSequence,
+      toSequenceInclusive: request.afterSequence,
+      events: [],
+      hasMore: false,
+    }),
+    status: async () => ({
+      protocolVersion: 1,
+      latestSequence: 0,
+      connectedToDaemon: true,
+      pendingEventCount: 0,
+      pendingCommandCount: 0,
+    }),
+    getLatestObservedSequence: () => 0,
+    close: vi.fn(),
+  };
+}
+
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
     id: "thread-1",
@@ -693,7 +812,8 @@ function createTestRuntimeEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT: "true",
+    BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
+    BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "test-token",
     ...overrides,
   };
 }
@@ -947,28 +1067,25 @@ describe("Orchestrator", () => {
           ) => Promise<{
             environment: IEnvironment;
             agentConnectionTarget: {
-              transport: "command-stdio";
-              command: string;
-              args: string[];
-              cwd: string;
-              env: Record<string, string | undefined>;
+              transport: "http";
+              baseUrl: string;
             };
-            connectSession: () => { transport: "child_process"; child: ChildProcess };
+            connectSession: () => {
+              transport: "http";
+              client: EnvironmentAgentClient;
+            };
           }>;
         },
         "_spawnProcess",
       ).mockResolvedValue({
         environment: makeRuntimeEnvironment({ rootPath: "/test" }),
         agentConnectionTarget: {
-          transport: "command-stdio",
-          command: "bb",
-          args: ["environment-agent"],
-          cwd: "/test",
-          env: {},
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
         },
         connectSession: () => ({
-          transport: "child_process",
-          child: resumeChild,
+          transport: "http",
+          client: createFakeEnvironmentAgentClient(resumeChild),
         }),
       });
 
@@ -1051,28 +1168,25 @@ describe("Orchestrator", () => {
           ) => Promise<{
             environment: IEnvironment;
             agentConnectionTarget: {
-              transport: "command-stdio";
-              command: string;
-              args: string[];
-              cwd: string;
-              env: Record<string, string | undefined>;
+              transport: "http";
+              baseUrl: string;
             };
-            connectSession: () => { transport: "child_process"; child: ChildProcess };
+            connectSession: () => {
+              transport: "http";
+              client: EnvironmentAgentClient;
+            };
           }>;
         },
         "_spawnProcess",
       ).mockResolvedValue({
         environment: makeRuntimeEnvironment({ rootPath: "/test" }),
         agentConnectionTarget: {
-          transport: "command-stdio",
-          command: "bb",
-          args: ["environment-agent"],
-          cwd: "/test",
-          env: {},
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
         },
         connectSession: () => ({
-          transport: "child_process",
-          child: resumeChild,
+          transport: "http",
+          client: createFakeEnvironmentAgentClient(resumeChild),
         }),
       });
 
@@ -1162,7 +1276,7 @@ describe("Orchestrator", () => {
       (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
     });
 
-    it("spawns environment-agent with the provider runtime args and cwd", async () => {
+    it("ensures the provider runtime through the environment agent", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/my/project", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -1177,29 +1291,18 @@ describe("Orchestrator", () => {
         expect(spawnMock).toHaveBeenCalled();
       });
 
-      expect(spawnMock).toHaveBeenCalledWith(
-        "bb",
-        [
-          "environment-agent",
-          "--provider-command",
-          "codex",
-          "--provider-arg",
-          "app-server",
-        ],
-        expect.objectContaining({
-          stdio: ["pipe", "pipe", "pipe"],
-          cwd: "/my/project",
-          env: expect.objectContaining({
-            BB_PROJECT_ID: "proj-1",
-            BB_THREAD_ID: "t-new",
-          }),
-        }),
-      );
+      const session = (manager as unknown as {
+        agentServer: {
+          sessions: Map<string, { agentClient: { __ensureSpecs: Array<unknown> } }>;
+        };
+      }).agentServer.sessions.get("t-new");
 
-      const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
-        | { env?: Record<string, string | undefined> }
-        | undefined;
-      expect(spawnOptions?.env?.BB_TASK_ID).toBeUndefined();
+      expect(session?.agentClient.__ensureSpecs).toEqual([
+        {
+          command: "codex",
+          args: ["app-server"],
+        },
+      ]);
     });
 
     it("creates a thread record in the DB", async () => {
@@ -1220,18 +1323,15 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("passes provider launch wrapper args through the environment agent target", async () => {
+    it("passes provider launch wrapper args through provider ensure", async () => {
       const wrappedEnvironment = makeRuntimeEnvironment({
         kind: "worktree",
         rootPath: "/wrapped/project",
         overrides: {
           getAgentConnectionTarget() {
             return {
-              transport: "command-stdio",
-              command: "bb",
-              args: ["environment-agent"],
-              cwd: "/wrapped/project",
-              env: {},
+              transport: "http",
+              baseUrl: "http://127.0.0.1:4312",
               providerLaunch: {
                 command: "docker",
                 args: ["exec", "-i", "bb-thread-container"],
@@ -1278,27 +1378,20 @@ describe("Orchestrator", () => {
         expect(spawnMock).toHaveBeenCalled();
       });
 
-      expect(spawnMock).toHaveBeenCalledWith(
-        "bb",
-        [
-          "environment-agent",
-          "--provider-command",
-          "codex",
-          "--provider-launch-command",
-          "docker",
-          "--provider-launch-arg",
-          "exec",
-          "--provider-launch-arg",
-          "-i",
-          "--provider-launch-arg",
-          "bb-thread-container",
-          "--provider-arg",
-          "app-server",
-        ],
-        expect.objectContaining({
-          cwd: "/wrapped/project",
-        }),
-      );
+      const session = (managerWithWrapper as unknown as {
+        agentServer: {
+          sessions: Map<string, { agentClient: { __ensureSpecs: Array<unknown> } }>;
+        };
+      }).agentServer.sessions.get("t-new");
+
+      expect(session?.agentClient.__ensureSpecs).toEqual([
+        {
+          command: "codex",
+          args: ["app-server"],
+          launchCommand: "docker",
+          launchArgs: ["exec", "-i", "bb-thread-container"],
+        },
+      ]);
     });
 
     it("returns before provisioning work starts", async () => {
@@ -1729,12 +1822,6 @@ describe("Orchestrator", () => {
         });
 
         const expectedPath = [bbBin, firstBin].join(delimiter);
-        const spawnCall = (spawnMock as ReturnType<typeof vi.fn>).mock.calls.at(-1);
-        const spawnOptions = spawnCall?.[2] as
-          | { env?: Record<string, string | undefined> }
-          | undefined;
-        expect(spawnOptions?.env?.PATH).toBe(expectedPath);
-
         const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
         expect(startMsg.params.config["shell_environment_policy.set.PATH"]).toBe(expectedPath);
       } finally {
@@ -1777,11 +1864,9 @@ describe("Orchestrator", () => {
           expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
         });
 
-        const spawnCall = (spawnMock as ReturnType<typeof vi.fn>).mock.calls.at(-1);
-        const spawnOptions = spawnCall?.[2] as
-          | { env?: Record<string, string | undefined> }
-          | undefined;
-        const injectedPath = spawnOptions?.env?.PATH;
+        const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+        const injectedPath =
+          startMsg.params.config["shell_environment_policy.set.PATH"];
         expect(typeof injectedPath).toBe("string");
         expect(injectedPath).toBeTruthy();
 
@@ -1796,10 +1881,7 @@ describe("Orchestrator", () => {
         expect(hasNodeRunner || hasTsxRunner).toBe(true);
         expect(shimScript).toContain('"$@"');
 
-        const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
-        expect(startMsg.params.config["shell_environment_policy.set.PATH"]).toBe(
-          injectedPath,
-        );
+        expect(injectedPath).toBe(startMsg.params.config["shell_environment_policy.set.PATH"]);
       } finally {
         rmSync(tmpRoot, { recursive: true, force: true });
       }
@@ -4404,12 +4486,11 @@ describe("Orchestrator", () => {
     });
 
     it("kills the process with SIGTERM when an active process exists", () => {
-      const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
+      const fakeProcess = { stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
 
       manager.stop("thread-1");
 
-      expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
       });
@@ -4455,7 +4536,7 @@ describe("Orchestrator", () => {
     });
 
     it("kills running process and clears runtime state when archiving", () => {
-      const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
+      const fakeProcess = { stdin: null, stdout: null };
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "active" }),
       );
@@ -4465,7 +4546,6 @@ describe("Orchestrator", () => {
 
       manager.archive("thread-1");
 
-      expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
       expect(asOrchestratorHarness(manager).processes.has("thread-1")).toBe(false);
       expect(asOrchestratorHarness(manager).providerThreadIds.has("thread-1")).toBe(false);
       expect(asOrchestratorHarness(manager).activeTurnIds.has("thread-1")).toBe(false);
@@ -6352,8 +6432,8 @@ describe("Orchestrator", () => {
     });
 
     it("kills all active processes and marks them idle", () => {
-      const proc1 = { kill: vi.fn(), stdin: null, stdout: null };
-      const proc2 = { kill: vi.fn(), stdin: null, stdout: null };
+      const proc1 = { stdin: null, stdout: null };
+      const proc2 = { stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", proc1);
       asOrchestratorHarness(manager).processes.set("thread-2", proc2);
 
@@ -6361,8 +6441,6 @@ describe("Orchestrator", () => {
 
       manager.stopAll();
 
-      expect(proc1.kill).toHaveBeenCalledWith("SIGTERM");
-      expect(proc2.kill).toHaveBeenCalledWith("SIGTERM");
       expect(threadRepo.update).toHaveBeenCalledWith(
         "thread-1",
         { status: "idle" },

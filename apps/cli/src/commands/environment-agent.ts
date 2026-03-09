@@ -13,10 +13,13 @@ interface EnvironmentAgentOptions {
   httpHost?: string;
 }
 
+const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
+const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
+
 export function registerEnvironmentAgentCommand(program: Command): void {
   program
     .command("environment-agent")
-    .description("Run the environment-agent relay process")
+    .description("Run the environment-agent HTTP service")
     .allowUnknownOption(false)
     .option(
       "--provider-command <command>",
@@ -41,79 +44,61 @@ export function registerEnvironmentAgentCommand(program: Command): void {
     .option("--http-port <port>", "Run as an HTTP environment-agent on the given port")
     .option("--http-host <host>", "HTTP bind host for environment-agent", "127.0.0.1")
     .action(async (opts: EnvironmentAgentOptions) => {
-      const providerCommand = opts.providerCommand?.trim();
-      if (!providerCommand && !opts.httpPort) {
-        console.error("Missing required --provider-command");
+      if (!opts.httpPort) {
+        console.error("Missing required --http-port");
         process.exit(1);
         return;
       }
+
+      const authToken = process.env[BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN]?.trim();
+      if (!authToken) {
+        console.error(`Missing required ${BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN}`);
+        process.exit(1);
+        return;
+      }
+
+      const providerCommand = opts.providerCommand?.trim();
 
       const runtime = new EnvironmentAgentRuntime({
         threadId: process.env.BB_THREAD_ID,
         projectId: process.env.BB_PROJECT_ID,
         environmentId: process.env.BB_ENVIRONMENT_ID,
+        daemonConnection: {
+          daemonUrl: process.env[BEANBAG_DAEMON_URL],
+          authToken,
+          threadId: process.env.BB_THREAD_ID,
+          projectId: process.env.BB_PROJECT_ID,
+          environmentId: process.env.BB_ENVIRONMENT_ID,
+        },
         providerCommand,
         providerArgs: opts.providerArg ?? [],
         providerLaunchCommand: opts.providerLaunchCommand?.trim(),
         providerLaunchArgs: opts.providerLaunchArg ?? [],
-        attachProcessStdio: !opts.httpPort,
       });
-      const child = runtime.start();
+      runtime.start();
 
-      if (opts.httpPort) {
-        const httpPort = Number.parseInt(opts.httpPort, 10);
-        if (!Number.isFinite(httpPort) || httpPort < 0) {
-          console.error("Invalid --http-port");
-          process.exit(1);
-          return;
-        }
-        const server = await createEnvironmentAgentHttpServer({
-          runtime,
-          host: opts.httpHost?.trim() || "127.0.0.1",
-          port: httpPort,
-        });
-        console.error(`environment-agent http listening on ${server.baseUrl}`);
-        const shutdown = async () => {
-          await server.close();
-          process.exit(0);
-        };
-        process.on("SIGINT", () => {
-          void shutdown();
-        });
-        process.on("SIGTERM", () => {
-          void shutdown();
-        });
-        return;
-      }
-
-      if (!child) {
-        console.error("Missing provider runtime");
+      const httpPort = Number.parseInt(opts.httpPort, 10);
+      if (!Number.isFinite(httpPort) || httpPort < 0) {
+        console.error("Invalid --http-port");
         process.exit(1);
         return;
       }
-
-      const forwardSignal = (signal: NodeJS.Signals) => {
-        try {
-          child.kill(signal);
-        } catch {
-          // Ignore shutdown races.
-        }
+      const server = await createEnvironmentAgentHttpServer({
+        runtime,
+        host: opts.httpHost?.trim() || "127.0.0.1",
+        port: httpPort,
+        bearerToken: authToken,
+      });
+      console.error(`environment-agent http listening on ${server.baseUrl}`);
+      const shutdown = async () => {
+        await server.close();
+        process.exit(0);
       };
-
-      process.on("SIGINT", () => forwardSignal("SIGINT"));
-      process.on("SIGTERM", () => forwardSignal("SIGTERM"));
-
-      child.once("exit", (code: number | null, signal: NodeJS.Signals | null) => {
-        if (signal) {
-          process.kill(process.pid, signal);
-          return;
-        }
-        process.exit(code ?? 1);
+      process.on("SIGINT", () => {
+        void shutdown();
       });
-
-      child.once("error", (error: Error) => {
-        console.error(error.message);
-        process.exit(1);
+      process.on("SIGTERM", () => {
+        void shutdown();
       });
     });
 }

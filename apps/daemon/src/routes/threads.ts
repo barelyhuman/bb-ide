@@ -16,6 +16,7 @@ import {
 import { z } from "zod";
 import { isAbsolute } from "node:path";
 import type {
+  EnvironmentAgentDeliveryRequest,
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -62,6 +63,15 @@ const environmentAgentReplayQuerySchema = z.object({
       if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
       return parsed;
     }),
+});
+
+const environmentAgentDeliveryBodySchema = z.object({
+  protocolVersion: z.number().int().optional(),
+  threadId: z.string().min(1),
+  projectId: z.string().optional(),
+  environmentId: z.string().optional(),
+  afterSequence: z.number().int().min(0).optional(),
+  events: z.array(z.custom<EnvironmentAgentEventEnvelope>()),
 });
 
 const workStatusQuerySchema = z.object({
@@ -126,6 +136,18 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
   getEnvironmentAgentStatus?: (
     threadId: string,
   ) => Promise<EnvironmentAgentStatusSnapshot>;
+  retryEnvironmentAgentDelivery?: (
+    threadId: string,
+  ) => Promise<EnvironmentAgentStatusSnapshot>;
+  ingestEnvironmentAgentEvents?: (args: {
+    threadId: string;
+    authorizationHeader?: string;
+    events: EnvironmentAgentEventEnvelope[];
+  }) => Promise<{
+    protocolVersion: number;
+    threadId: string;
+    acknowledgedSequence: number;
+  }>;
   replayEnvironmentAgentEvents?: (args: {
     threadId: string;
     afterSequence: number;
@@ -311,6 +333,35 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .post(
+      "/:id/environment-agent/deliver",
+      zValidator("json", environmentAgentDeliveryBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentAccessor.ingestEnvironmentAgentEvents) {
+            throw invalidRequestError("Environment-agent delivery is unavailable");
+          }
+          const body = c.req.valid("json") as EnvironmentAgentDeliveryRequest;
+          if (body.threadId !== threadId) {
+            throw invalidRequestError("Environment-agent delivery thread mismatch");
+          }
+          const response =
+            await environmentAgentAccessor.ingestEnvironmentAgentEvents({
+              threadId,
+              authorizationHeader: c.req.header("authorization"),
+              events: body.events,
+            });
+          return c.json(response);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
     .get(
       "/:id/environment-agent/events",
       zValidator("query", environmentAgentReplayQuerySchema),

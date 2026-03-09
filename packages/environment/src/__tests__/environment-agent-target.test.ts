@@ -4,11 +4,8 @@ import { resolveEnvironmentAgentConnectionTarget } from "../environment-agent-ta
 describe("resolveEnvironmentAgentConnectionTarget", () => {
   it("returns the default target when no environment agent base URL is configured", () => {
     const defaultTarget = {
-      transport: "command-stdio" as const,
-      command: "bb",
-      args: ["environment-agent"],
-      cwd: "/repo",
-      env: {},
+      transport: "http" as const,
+      baseUrl: "http://127.0.0.1:4010",
     };
 
     expect(
@@ -27,11 +24,8 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
           BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
         },
         defaultTarget: {
-          transport: "command-stdio",
-          command: "bb",
-          args: ["environment-agent"],
-          cwd: "/repo",
-          env: {},
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4010",
           daemonConnection: {
             threadId: "thread-1",
           },

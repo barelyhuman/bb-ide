@@ -29,7 +29,6 @@ import {
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
 import {
-  createCommandStdioEnvironmentAgentTarget,
   resolveEnvironmentAgentConnectionTarget,
 } from "./environment-agent-target.js";
 import {
@@ -113,13 +112,16 @@ class LocalEnvironment implements IEnvironment {
       environmentId: this.kind,
       runtimeEnv: this.env,
     });
+    if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Missing managed environment-agent target for local environment");
+    }
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.env,
       defaultTarget:
-        managedTarget ?? createCommandStdioEnvironmentAgentTarget({
-          cwd: this.rootPath,
-          env: this.env,
-        }),
+        managedTarget ?? {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:0",
+        },
     });
   }
 

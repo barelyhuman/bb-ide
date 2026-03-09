@@ -42,6 +42,7 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
         pid: 4321,
         port: 4123,
         baseUrl: "http://127.0.0.1:4123",
+        authToken: "auth-token",
         threadId: "thread-1",
         projectId: "project-1",
         environmentId: "worktree",
@@ -60,6 +61,9 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
     ).toEqual({
       transport: "http",
       baseUrl: "http://127.0.0.1:4123",
+      headers: {
+        authorization: "Bearer auth-token",
+      },
     });
   });
 });

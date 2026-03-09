@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
@@ -11,14 +12,13 @@ const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 500;
 const STATE_VERSION = 1 as const;
-const BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT =
-  "BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT";
 
 interface ManagedHostEnvironmentAgentRecord {
   version: typeof STATE_VERSION;
   pid: number;
   port: number;
   baseUrl: string;
+  authToken: string;
   threadId: string;
   projectId: string;
   environmentId: string;
@@ -65,6 +65,7 @@ function readRecord(args: {
       typeof parsed.pid !== "number" ||
       typeof parsed.port !== "number" ||
       typeof parsed.baseUrl !== "string" ||
+      typeof parsed.authToken !== "string" ||
       typeof parsed.threadId !== "string" ||
       typeof parsed.projectId !== "string" ||
       typeof parsed.environmentId !== "string" ||
@@ -108,13 +109,11 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
-function isManagedHostEnvironmentAgentDisabled(
-  runtimeEnv: Record<string, string | undefined>,
-): boolean {
-  return runtimeEnv[BEANBAG_DISABLE_MANAGED_ENVIRONMENT_AGENT]?.trim().toLowerCase() === "true";
-}
-
-function pingEnvironmentAgent(baseUrl: string, timeoutMs: number): Promise<boolean> {
+function pingEnvironmentAgent(
+  baseUrl: string,
+  authToken: string,
+  timeoutMs: number,
+): Promise<boolean> {
   return new Promise((resolvePromise) => {
     const url = new URL("/control/status", baseUrl);
     const req = httpRequest(
@@ -126,6 +125,7 @@ function pingEnvironmentAgent(baseUrl: string, timeoutMs: number): Promise<boole
         timeout: timeoutMs,
         headers: {
           "content-type": "application/json",
+          authorization: `Bearer ${authToken}`,
         },
       },
       (response) => {
@@ -165,10 +165,10 @@ async function allocatePort(): Promise<number> {
   });
 }
 
-async function waitForEnvironmentAgent(baseUrl: string): Promise<void> {
+async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Promise<void> {
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (await pingEnvironmentAgent(baseUrl, HEALTH_TIMEOUT_MS)) {
+    if (await pingEnvironmentAgent(baseUrl, authToken, HEALTH_TIMEOUT_MS)) {
       return;
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
@@ -202,10 +202,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
 }): Promise<void> {
-  if (
-    isManagedHostEnvironmentAgentDisabled(args.runtimeEnv) ||
-    args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()
-  ) {
+  if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return;
   }
 
@@ -219,7 +216,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     if (
       isProcessAlive(existing.pid) &&
       existing.workspaceRoot === args.workspaceRootPath &&
-      await pingEnvironmentAgent(existing.baseUrl, HEALTH_TIMEOUT_MS)
+      await pingEnvironmentAgent(existing.baseUrl, existing.authToken, HEALTH_TIMEOUT_MS)
     ) {
       return;
     }
@@ -234,6 +231,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   }
 
   const port = await allocatePort();
+  const authToken = randomBytes(24).toString("hex");
   const { command, args: commandArgs } = resolveEnvironmentAgentLaunchCommand();
   const child = spawn(
     command,
@@ -253,6 +251,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
         BB_THREAD_ID: args.threadId,
         BB_PROJECT_ID: args.projectId,
         BB_ENVIRONMENT_ID: args.environmentId,
+        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: authToken,
       },
       detached: true,
       stdio: "ignore",
@@ -261,12 +260,13 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   child.unref?.();
 
   const baseUrl = `http://${HOST}:${port}`;
-  await waitForEnvironmentAgent(baseUrl);
+  await waitForEnvironmentAgent(baseUrl, authToken);
   writeRecord(stateIdentity, {
     version: STATE_VERSION,
     pid: child.pid!,
     port,
     baseUrl,
+    authToken,
     threadId: args.threadId,
     projectId: args.projectId,
     environmentId: args.environmentId,
@@ -281,9 +281,6 @@ export function resolveManagedHostEnvironmentAgentTarget(args: {
   runtimeEnv: Record<string, string | undefined>;
   providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
 }): EnvironmentAgentConnectionTarget | undefined {
-  if (isManagedHostEnvironmentAgentDisabled(args.runtimeEnv)) {
-    return undefined;
-  }
   const record = readRecord(args);
   if (!record) {
     return undefined;
@@ -295,6 +292,9 @@ export function resolveManagedHostEnvironmentAgentTarget(args: {
   return {
     transport: "http",
     baseUrl: record.baseUrl,
+    headers: {
+      authorization: `Bearer ${record.authToken}`,
+    },
     ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
   };
 }
@@ -305,10 +305,7 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
 }): Promise<void> {
-  if (
-    isManagedHostEnvironmentAgentDisabled(args.runtimeEnv) ||
-    args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()
-  ) {
+  if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return;
   }
   const stateIdentity = {

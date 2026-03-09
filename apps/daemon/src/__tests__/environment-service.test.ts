@@ -68,11 +68,8 @@ function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment
     },
     getAgentConnectionTarget() {
       return {
-        transport: "command-stdio" as const,
-        command: "bb",
-        args: ["environment-agent"],
-        cwd: "/tmp/thread-1",
-        env: {},
+        transport: "http" as const,
+        baseUrl: "http://127.0.0.1:4312",
       };
     },
     getCheckoutSnapshot() {
@@ -192,8 +189,8 @@ function createService(args: { existsInitially: boolean }) {
       runOptionalSetup,
       spawnProviderProcess: vi.fn(
         (): AgentServerSessionConnection => ({
-          transport: "child_process",
-          child: {} as never,
+          transport: "http",
+          client: {} as never,
         }),
       ),
     },

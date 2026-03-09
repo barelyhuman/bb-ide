@@ -75,6 +75,7 @@ function mockOrchestrator(): Orchestrator {
     getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
     getEnvironmentAgentStatus: vi.fn(),
+    ingestEnvironmentAgentEvents: vi.fn(),
     replayEnvironmentAgentEvents: vi.fn(),
     list: vi.fn(),
     getTimeline: vi.fn(),
@@ -358,6 +359,55 @@ describe("Thread routes", () => {
         threadId: "thread-1",
         afterSequence: 2,
         limit: 10,
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/deliver", () => {
+    it("ingests authenticated environment-agent events", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (threadManager.ingestEnvironmentAgentEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: "thread-1",
+        acknowledgedSequence: 4,
+      });
+
+      const res = await app.request("/threads/thread-1/environment-agent/deliver", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer secret-token",
+        },
+        body: JSON.stringify({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          threadId: "thread-1",
+          events: [
+            {
+              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+              sequence: 4,
+              emittedAt: 1000,
+              threadId: "thread-1",
+              event: {
+                type: "environment.ready",
+                threadId: "thread-1",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        acknowledgedSequence: 4,
+      });
+      expect(threadManager.ingestEnvironmentAgentEvents).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        authorizationHeader: "Bearer secret-token",
+        events: [
+          expect.objectContaining({
+            sequence: 4,
+          }),
+        ],
       });
     });
   });

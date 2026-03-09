@@ -4,7 +4,8 @@ import {
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentCommandAck,
-  type EnvironmentAgentControlRequest,
+  type EnvironmentAgentDaemonConnectionConfig,
+  type EnvironmentAgentDeliveryResponse,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderSpec,
@@ -12,27 +13,20 @@ import {
   type EnvironmentAgentReplayRequest,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
-  isEnvironmentAgentControlRequest,
 } from "./protocol.js";
 
 export interface EnvironmentAgentRuntimeOptions {
   threadId?: string;
   projectId?: string;
   environmentId?: string;
+  daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
   providerCommand?: string;
   providerArgs?: string[];
   providerLaunchCommand?: string;
   providerLaunchArgs?: string[];
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
-  attachProcessStdio?: boolean;
 }
-
-type ProtocolInbound =
-  | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
-  | { type: "ack"; payload: EnvironmentAgentAckRequest }
-  | { type: "replay"; payload: EnvironmentAgentReplayRequest }
-  | { type: "status" };
 
 export class EnvironmentAgentRuntime {
   private readonly events: EnvironmentAgentEventEnvelope[] = [];
@@ -43,17 +37,25 @@ export class EnvironmentAgentRuntime {
   private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
   private readonly stderrLineSubscribers = new Set<(line: string) => void>();
   private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
-  private stdioAttached = false;
+  private daemonConnection: EnvironmentAgentDaemonConnectionConfig | undefined;
+  private connectedToDaemon = false;
+  private deliveryInFlight: Promise<void> | null = null;
+  private deliveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  private deliveryBackoffMs = 250;
 
-  constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {}
+  constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {
+    this.daemonConnection = opts.daemonConnection
+      ? { ...opts.daemonConnection }
+      : undefined;
+  }
 
   start(): ChildProcess | null {
-    this.attachProcessStdio();
-
     this.appendEvent({
       type: "environment.ready",
       threadId: this.resolveThreadId(),
     });
+
+    this.triggerDaemonDelivery();
 
     return this.ensureProviderRunning();
   }
@@ -68,9 +70,7 @@ export class EnvironmentAgentRuntime {
     };
     this.events.push(envelope);
     this.emitEvent(envelope);
-    if (this.opts.attachProcessStdio !== false) {
-      this.writeLiveEvent(envelope);
-    }
+    this.triggerDaemonDelivery();
     return envelope;
   }
 
@@ -178,48 +178,33 @@ export class EnvironmentAgentRuntime {
       ...(this.lastAckedSequence > 0
         ? { lastAckedSequence: this.lastAckedSequence }
         : {}),
-      connectedToDaemon: true,
+      connectedToDaemon: this.connectedToDaemon,
       pendingEventCount: Math.max(0, this.sequence - this.lastAckedSequence),
       pendingCommandCount: this.pendingCommandCount,
     };
   }
 
-  handleInboundLine(line: string): void {
-    if (this.handleProtocolLine(line)) return;
-    this.sendProviderLine(line);
-  }
+  triggerDaemonDelivery(): void {
+    if (!this.hasDaemonDeliveryConfig()) {
+      this.connectedToDaemon = false;
+      return;
+    }
 
-  private handleProtocolLine(line: string): boolean {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      return false;
+    if (this.deliveryRetryTimer) {
+      clearTimeout(this.deliveryRetryTimer);
+      this.deliveryRetryTimer = undefined;
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return false;
+    if (this.deliveryInFlight) {
+      return;
     }
-    if (isEnvironmentAgentControlRequest(parsed)) {
-      this.handleControlRequest(parsed);
-      return true;
-    }
-    const record = parsed as Record<string, unknown>;
-    const type = record.type;
-    if (type === "ack") {
-      const payload = record.payload as EnvironmentAgentAckRequest;
-      process.stdout.write(`${JSON.stringify(this.acknowledge(payload))}\n`);
-      return true;
-    }
-    if (type === "replay") {
-      const payload = record.payload as EnvironmentAgentReplayRequest;
-      process.stdout.write(`${JSON.stringify(this.replay(payload))}\n`);
-      return true;
-    }
-    if (type === "status") {
-      process.stdout.write(`${JSON.stringify(this.getStatusSnapshot())}\n`);
-      return true;
-    }
-    return false;
+
+    this.deliveryInFlight = this.flushDaemonDelivery()
+      .catch(() => {
+        // Retry is scheduled by flushDaemonDelivery on failure.
+      })
+      .finally(() => {
+        this.deliveryInFlight = null;
+      });
   }
 
   private emitProviderStdoutLine(line: string): void {
@@ -238,84 +223,6 @@ export class EnvironmentAgentRuntime {
     for (const subscriber of this.eventSubscribers) {
       subscriber(event);
     }
-  }
-
-  private handleControlRequest(request: EnvironmentAgentControlRequest): void {
-    switch (request.type) {
-      case "provider.ensure":
-        this.writeControlResponse(
-          request.requestId,
-          "provider.ensure.response",
-          this.ensureProviderStatus(request.payload),
-        );
-        break;
-      case "ack":
-        this.writeControlResponse(request.requestId, "ack.response", this.acknowledge(request.payload));
-        break;
-      case "replay":
-        this.writeControlResponse(
-          request.requestId,
-          "replay.response",
-          this.replay(request.payload),
-        );
-        break;
-      case "status":
-        this.writeControlResponse(
-          request.requestId,
-          "status.response",
-          this.getStatusSnapshot(),
-        );
-        break;
-      default:
-        request satisfies never;
-    }
-  }
-
-  private writeControlResponse(
-    requestId: string,
-    type:
-      | "provider.ensure.response"
-      | "ack.response"
-      | "replay.response"
-      | "status.response",
-    payload:
-      | EnvironmentAgentProviderStatus
-      | EnvironmentAgentAckResponse
-      | EnvironmentAgentReplayResponse
-      | EnvironmentAgentStatusSnapshot,
-  ): void {
-    process.stdout.write(
-      `${JSON.stringify({
-        environmentAgentMessage: true,
-        requestId,
-        type,
-        payload,
-      })}\n`,
-    );
-  }
-
-  private writeLiveEvent(payload: EnvironmentAgentEventEnvelope): void {
-    process.stdout.write(
-      `${JSON.stringify({
-        environmentAgentMessage: true,
-        type: "event.emitted",
-        payload,
-      })}\n`,
-    );
-  }
-
-  private attachProcessStdio(): void {
-    if (this.stdioAttached || this.opts.attachProcessStdio === false) {
-      return;
-    }
-    this.stdioAttached = true;
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk: string) => {
-      for (const line of chunk.split(/\r\n|\n|\r/g)) {
-        if (!line.trim()) continue;
-        this.handleInboundLine(line);
-      }
-    });
   }
 
   ensureProviderStatus(spec?: EnvironmentAgentProviderSpec): EnvironmentAgentProviderStatus {
@@ -364,9 +271,6 @@ export class EnvironmentAgentRuntime {
         if (!line.trim()) continue;
         this.opts.onStdoutLine?.(line);
         this.emitProviderStdoutLine(line);
-        if (this.opts.attachProcessStdio !== false) {
-          process.stdout.write(`${line}\n`);
-        }
         this.appendEvent(this.toProviderEvent(line));
       }
     });
@@ -377,9 +281,6 @@ export class EnvironmentAgentRuntime {
         if (!line.trim()) continue;
         this.opts.onStderrLine?.(line);
         this.emitProviderStderrLine(line);
-        if (this.opts.attachProcessStdio !== false) {
-          process.stderr.write(`${line}\n`);
-        }
       }
     });
 
@@ -395,6 +296,83 @@ export class EnvironmentAgentRuntime {
     });
 
     return child;
+  }
+
+  private hasDaemonDeliveryConfig(): boolean {
+    return Boolean(
+      this.daemonConnection?.daemonUrl?.trim() &&
+        this.daemonConnection?.authToken?.trim() &&
+        this.resolveThreadId().trim(),
+    );
+  }
+
+  private async flushDaemonDelivery(): Promise<void> {
+    if (!this.hasDaemonDeliveryConfig()) {
+      this.connectedToDaemon = false;
+      return;
+    }
+
+    const daemonUrl = this.daemonConnection!.daemonUrl!.trim();
+    const authToken = this.daemonConnection!.authToken!.trim();
+    const threadId = this.resolveThreadId();
+    const pendingEvents = this.events.filter((event) => event.sequence > this.lastAckedSequence);
+    if (pendingEvents.length === 0) {
+      this.connectedToDaemon = true;
+      this.deliveryBackoffMs = 250;
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        new URL(`/threads/${threadId}/environment-agent/deliver`, daemonUrl),
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${authToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            threadId,
+            ...(this.opts.projectId ? { projectId: this.opts.projectId } : {}),
+            ...(this.opts.environmentId ? { environmentId: this.opts.environmentId } : {}),
+            afterSequence: this.lastAckedSequence,
+            events: pendingEvents,
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`Daemon delivery failed: ${response.status}`);
+      }
+
+      const body = (await response.json()) as EnvironmentAgentDeliveryResponse;
+      this.lastAckedSequence = Math.max(
+        this.lastAckedSequence,
+        body.acknowledgedSequence,
+      );
+      this.connectedToDaemon = true;
+      this.deliveryBackoffMs = 250;
+
+      if (this.sequence > this.lastAckedSequence) {
+        this.triggerDaemonDelivery();
+      }
+    } catch (error) {
+      this.connectedToDaemon = false;
+      this.scheduleDaemonDeliveryRetry();
+      throw error;
+    }
+  }
+
+  private scheduleDaemonDeliveryRetry(): void {
+    if (this.deliveryRetryTimer) {
+      return;
+    }
+    const delayMs = this.deliveryBackoffMs;
+    this.deliveryBackoffMs = Math.min(this.deliveryBackoffMs * 2, 5_000);
+    this.deliveryRetryTimer = setTimeout(() => {
+      this.deliveryRetryTimer = undefined;
+      this.triggerDaemonDelivery();
+    }, delayMs);
   }
 
   private resolveThreadId(): string {
