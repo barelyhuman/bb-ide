@@ -793,6 +793,15 @@ export class EnvironmentAgentRuntime {
     }
     const pending = this.pendingProviderRequests.get(id);
     if (!pending) {
+      if (record.error !== undefined) {
+        this.appendEvent({
+          type: "provider.rpc_error",
+          threadId: this.resolveThreadId(),
+          requestId: id,
+          message: this.toProviderErrorMessage(record.error),
+        });
+        return true;
+      }
       return false;
     }
     clearTimeout(pending.timeout);

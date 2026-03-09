@@ -121,6 +121,31 @@ describe("EnvironmentAgentRuntime", () => {
     ).toBe(true);
   });
 
+  it("captures unmatched provider rpc errors as replayable events", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        "console.log(JSON.stringify({ id: 999, error: { message: 'provider exploded' } })); setTimeout(() => process.exit(0), 20);",
+      ],
+    });
+
+    runtime.start();
+
+    await expect.poll(() =>
+      runtime.replay({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        afterSequence: 0,
+      }).events.some(
+        (event) =>
+          event.event.type === "provider.rpc_error" &&
+          event.event.requestId === 999 &&
+          event.event.message === "provider exploded",
+      ),
+    ).toBe(true);
+  });
+
   it("does not require a provider at startup when launched in control-plane mode", () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",

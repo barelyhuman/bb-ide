@@ -180,6 +180,12 @@ export type EnvironmentAgentEvent =
       line: string;
     }
   | {
+      type: "provider.rpc_error";
+      threadId: string;
+      requestId: string | number;
+      message: string;
+    }
+  | {
       type: "workspace.status.changed";
       threadId: string;
     };

@@ -307,6 +307,12 @@ export class AgentServer {
         case "provider.stderr":
           this.handleProviderStderrLine(args.threadId, event.line);
           continue;
+        case "provider.rpc_error":
+          this.opts.logger?.error(
+            `[thread ${args.threadId}] Provider RPC error (request ${String(event.requestId)}):`,
+            event.message,
+          );
+          continue;
         default:
           continue;
       }

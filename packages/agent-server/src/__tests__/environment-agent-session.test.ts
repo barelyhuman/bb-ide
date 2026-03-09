@@ -274,6 +274,43 @@ describe("AgentServer environment-agent control plane", () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  it("ingests replayed provider rpc errors through the normal logger path", async () => {
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      logger,
+    });
+
+    await expect(
+      agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId: "thread-1",
+        events: [
+          {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            sequence: 7,
+            emittedAt: 1_000,
+            threadId: "thread-1",
+            event: {
+              type: "provider.rpc_error",
+              threadId: "thread-1",
+              requestId: 999,
+              message: "provider exploded",
+            },
+          },
+        ],
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(logger.error).toHaveBeenCalledWith(
+      "[thread thread-1] Provider RPC error (request 999):",
+      "provider exploded",
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("preserves replay window semantics through the session", async () => {
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),
