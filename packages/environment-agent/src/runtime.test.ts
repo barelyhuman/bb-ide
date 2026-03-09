@@ -97,6 +97,30 @@ describe("EnvironmentAgentRuntime", () => {
     });
   });
 
+  it("captures provider stderr as replayable events", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        "console.error('refresh token has already been used'); setTimeout(() => process.exit(0), 20);",
+      ],
+    });
+
+    runtime.start();
+
+    await expect.poll(() =>
+      runtime.replay({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        afterSequence: 0,
+      }).events.some(
+        (event) =>
+          event.event.type === "provider.stderr" &&
+          event.event.line === "refresh token has already been used",
+      ),
+    ).toBe(true);
+  });
+
   it("does not require a provider at startup when launched in control-plane mode", () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",

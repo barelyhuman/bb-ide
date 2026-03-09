@@ -296,12 +296,20 @@ export class AgentServer {
   }): Promise<void> {
     for (const envelope of args.events) {
       const event = envelope.event;
-      if (event.type !== "provider.event") continue;
-      if (event.method === "provider.stdout") continue;
-      this.handleNotification(args.threadId, {
-        method: event.method,
-        params: event.payload,
-      });
+      switch (event.type) {
+        case "provider.event":
+          if (event.method === "provider.stdout") continue;
+          this.handleNotification(args.threadId, {
+            method: event.method,
+            params: event.payload,
+          });
+          continue;
+        case "provider.stderr":
+          this.handleProviderStderrLine(args.threadId, event.line);
+          continue;
+        default:
+          continue;
+      }
     }
   }
 

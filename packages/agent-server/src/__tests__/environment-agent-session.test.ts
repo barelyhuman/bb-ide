@@ -238,6 +238,42 @@ describe("AgentServer environment-agent control plane", () => {
     );
   });
 
+  it("ingests replayed provider stderr through the normal warning path", async () => {
+    const logger = {
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      logger,
+    });
+
+    await expect(
+      agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId: "thread-1",
+        events: [
+          {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            sequence: 6,
+            emittedAt: 1_000,
+            threadId: "thread-1",
+            event: {
+              type: "provider.stderr",
+              threadId: "thread-1",
+              line: "refresh token has already been used",
+            },
+          },
+        ],
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("provider auth refresh conflict"),
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it("preserves replay window semantics through the session", async () => {
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),

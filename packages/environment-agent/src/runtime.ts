@@ -349,6 +349,11 @@ export class EnvironmentAgentRuntime {
         if (!line.trim()) continue;
         this.opts.onStderrLine?.(line);
         this.emitProviderStderrLine(line);
+        this.appendEvent({
+          type: "provider.stderr",
+          threadId: this.resolveThreadId(),
+          line,
+        });
       }
     });
 
@@ -737,7 +742,8 @@ export class EnvironmentAgentRuntime {
     timeoutMs?: number;
   }): Promise<unknown> {
     const child = this.providerChild;
-    if (!child?.stdin || child.killed || child.exitCode !== null) {
+    const stdin = child?.stdin;
+    if (!stdin || child.killed || child.exitCode !== null) {
       return Promise.reject(new Error("Provider runtime is unavailable"));
     }
 
@@ -761,7 +767,7 @@ export class EnvironmentAgentRuntime {
       }, timeoutMs);
       this.pendingProviderRequests.set(id, { resolve, reject, timeout });
       try {
-        child.stdin.write(`${message}\n`);
+        stdin.write(`${message}\n`);
       } catch (error) {
         clearTimeout(timeout);
         this.pendingProviderRequests.delete(id);

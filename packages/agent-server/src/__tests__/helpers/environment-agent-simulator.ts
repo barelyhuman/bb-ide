@@ -4,6 +4,7 @@ import {
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentClient,
+  type EnvironmentAgentCommandAck,
   type EnvironmentAgentControlRequest,
   type EnvironmentAgentControlResponse,
   type EnvironmentAgentEvent,
@@ -50,6 +51,8 @@ function isProviderRequest(value: unknown): value is ProviderRequest {
 
 function toResponseType(type: EnvironmentAgentControlRequest["type"]): EnvironmentAgentControlResponse["type"] {
   switch (type) {
+    case "command":
+      return "command.response";
     case "provider.ensure":
       return "provider.ensure.response";
     case "delivery.retry":
@@ -257,6 +260,16 @@ export class EnvironmentAgentSimulator {
 
   private handleControlRequest(request: EnvironmentAgentControlRequest): void {
     switch (request.type) {
+      case "command":
+        this.respond(request, {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          commandId: request.payload.meta.commandId,
+          idempotencyKey: request.payload.meta.idempotencyKey,
+          state: "accepted",
+          acknowledgedAt: Date.now(),
+          latestSequence: this.status.latestSequence,
+        } satisfies EnvironmentAgentCommandAck);
+        return;
       case "provider.ensure":
         this.ensureRequests.push(request.payload);
         this.respond(request, {

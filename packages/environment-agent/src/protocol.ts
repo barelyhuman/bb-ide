@@ -175,6 +175,11 @@ export type EnvironmentAgentEvent =
       payload: unknown;
     }
   | {
+      type: "provider.stderr";
+      threadId: string;
+      line: string;
+    }
+  | {
       type: "workspace.status.changed";
       threadId: string;
     };
