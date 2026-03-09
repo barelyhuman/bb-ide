@@ -6,26 +6,9 @@ import {
   useReducer,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  Check,
-  ChevronsDown,
-  ChevronsUp,
-  ChevronDown,
-  ChevronRight,
-  Columns2,
-  CornerDownRight,
-  GripVertical,
-  Loader2,
-  Pencil,
-  Rows2,
-  Trash2,
-} from "lucide-react";
-import { parsePatchFiles } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   useThread,
   useThreadWorkStatus,
@@ -53,17 +36,7 @@ import {
   getCollapsibleHeaderToneClass,
 } from "@/components/messages/CollapsibleHeader";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
-import { PromptBox } from "@/components/promptbox/PromptBox";
-import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
-import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -72,20 +45,16 @@ import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
-import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   ConversationEmptyState,
   ConversationTimeline,
   ExpandablePanel,
-  PromptComposerShell,
 } from "@beanbag/ui-core";
 import {
   formatEnvironmentDisplayName,
-  toRecord,
   type PromptInput,
   type ServiceTier,
-  type ThreadQueuedMessage,
   type UIMessage,
 } from "@beanbag/agent-core";
 import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
@@ -100,16 +69,12 @@ import {
 } from "@/lib/latestInitialExpanded";
 import {
   promptDraftToInput,
-  type PromptDraftState,
 } from "@/lib/prompt-draft";
-import { HttpError, openThreadPathInEditor } from "@/lib/api";
-import { getPathCommandForTarget } from "@/lib/open-path-preferences";
+import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
-import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
 import {
   threadWorktreeCleanLabel,
   threadWorkStatusLabel,
@@ -124,13 +89,27 @@ import {
   withThreadGitDiffPanelOpen,
 } from "@/lib/thread-git-diff-panel";
 import { supportsPrimaryCheckoutMetadata } from "@/lib/thread-primary-checkout";
-import { cn } from "@/lib/utils";
+import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
+import {
+  type GitDiffSelectionOption,
+  ThreadGitDiffPanel,
+} from "./ThreadGitDiffPanel";
+import {
+  doesGitDiffFileMatchPath,
+  getGitDiffParseKey,
+  getParsedGitDiffFileKey,
+  parseGitDiffFiles,
+  parseGitDiffPatchChunks,
+  splitGitDiffIntoPatchChunks,
+  summarizeGitDiff,
+  type ParsedGitDiffFile,
+} from "./threadDetailGitDiff";
+import {
+  extractThreadQueuedMessages,
+  queuedInputToDraft,
+} from "./threadQueuedMessages";
 
 const SCROLL_THRESHOLD = 40;
-const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
-const GIT_DIFF_PANEL_MIN_SIZE_PERCENT = 24;
-const GIT_DIFF_PANEL_MAX_SIZE_PERCENT = 70;
-const GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
 const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;
@@ -142,79 +121,12 @@ const GIT_DIFF_FILE_INITIAL_RENDER_COUNT = 4;
 const GIT_DIFF_FILE_RENDER_BATCH_SIZE = 6;
 const GIT_DIFF_FILE_INITIAL_DELAY_MS = 30;
 const GIT_DIFF_FILE_RENDER_BATCH_DELAY_MS = 70;
-const GIT_DIFF_PANEL_SKELETON_FILE_COUNT = 3;
 const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
 const GIT_DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   diffStyle: "unified",
   disableFileHeader: false,
 } as const;
-const GIT_DIFF_VIEW_STYLE = {
-  "--diffs-font-size": "12px",
-  "--diffs-line-height": "18px",
-} as CSSProperties;
-
-function parseGitDiffFiles(diff: string): ReturnType<typeof parsePatchFiles>[number]["files"] {
-  if (diff.trim().length === 0) return [];
-  try {
-    return parsePatchFiles(diff).flatMap((patch) => patch.files);
-  } catch {
-    return [];
-  }
-}
-
-type ParsedGitDiffFile = ReturnType<typeof parsePatchFiles>[number]["files"][number];
-
-function splitGitDiffIntoPatchChunks(diff: string): string[] {
-  const trimmedDiff = diff.trim();
-  if (trimmedDiff.length === 0) return [];
-
-  const lines = diff.split("\n");
-  const chunks: string[] = [];
-  let currentChunk: string[] = [];
-  let hasGitPatchHeader = false;
-
-  for (const line of lines) {
-    const startsPatch = line.startsWith("diff --git ");
-    if (startsPatch) {
-      hasGitPatchHeader = true;
-    }
-    if (startsPatch && currentChunk.length > 0) {
-      chunks.push(currentChunk.join("\n"));
-      currentChunk = [line];
-      continue;
-    }
-    currentChunk.push(line);
-  }
-
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join("\n"));
-  }
-
-  if (!hasGitPatchHeader) {
-    return [diff];
-  }
-
-  return chunks.filter((chunk) => chunk.trim().length > 0);
-}
-
-function parseGitDiffPatchChunks(patchChunks: readonly string[]): ParsedGitDiffFile[] {
-  const files: ParsedGitDiffFile[] = [];
-  for (const chunk of patchChunks) {
-    files.push(...parseGitDiffFiles(chunk));
-  }
-  return files;
-}
-
-function getGitDiffParseKey(diff: string): string {
-  return `${diff.length}:${diff.slice(0, 120)}:${diff.slice(-120)}`;
-}
-
-interface GitDiffStats {
-  files: number;
-  additions: number;
-  deletions: number;
-}
 
 interface TimelineScrollAnchor {
   rowId: string;
@@ -259,429 +171,6 @@ function findTimelineRowElement(
     container.querySelectorAll<HTMLElement>(TIMELINE_ROW_SELECTOR),
   );
   return rows.find((row) => row.dataset.threadRowId === rowId) ?? null;
-}
-
-function summarizeGitDiff(files: ParsedGitDiffFile[], diff: string): GitDiffStats {
-  if (files.length > 0) {
-    let additions = 0;
-    let deletions = 0;
-    for (const file of files) {
-      for (const hunk of file.hunks) {
-        additions += hunk.additionCount;
-        deletions += hunk.deletionCount;
-      }
-    }
-    return { files: files.length, additions, deletions };
-  }
-
-  let additions = 0;
-  let deletions = 0;
-  let fileCount = 0;
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      fileCount += 1;
-      continue;
-    }
-    if (line.startsWith("+++ ")) continue;
-    if (line.startsWith("--- ")) continue;
-    if (line.startsWith("+")) {
-      additions += 1;
-      continue;
-    }
-    if (line.startsWith("-")) {
-      deletions += 1;
-    }
-  }
-  return {
-    files: fileCount > 0 ? fileCount : additions > 0 || deletions > 0 ? 1 : 0,
-    additions,
-    deletions,
-  };
-}
-
-function summarizeGitDiffFile(file: ParsedGitDiffFile): Pick<GitDiffStats, "additions" | "deletions"> {
-  let additions = 0;
-  let deletions = 0;
-  for (const hunk of file.hunks) {
-    additions += hunk.additionCount;
-    deletions += hunk.deletionCount;
-  }
-  return { additions, deletions };
-}
-
-function formatGitDiffFileLabel(file: ParsedGitDiffFile): string {
-  if (file.prevName && file.prevName !== file.name) {
-    return `${file.prevName} → ${file.name}`;
-  }
-  return file.name;
-}
-
-function getParsedGitDiffFileKey(file: ParsedGitDiffFile, index: number): string {
-  return `${file.name}:${file.prevName ?? ""}:${index}`;
-}
-
-function getGitDiffPathAliases(path: string | undefined): string[] {
-  if (!path || path === "/dev/null") return [];
-  const normalizedPath = path.startsWith("./")
-    ? path.slice(2)
-    : path;
-  if (normalizedPath.length === 0) return [];
-  const aliases = [normalizedPath];
-  if (normalizedPath.startsWith("a/") || normalizedPath.startsWith("b/")) {
-    aliases.push(normalizedPath.slice(2));
-  }
-  return Array.from(new Set(aliases.filter((alias) => alias.length > 0)));
-}
-
-function doesGitDiffFileMatchPath(
-  file: ParsedGitDiffFile,
-  targetPath: string,
-): boolean {
-  const targetAliases = new Set(getGitDiffPathAliases(targetPath));
-  if (targetAliases.size === 0) return false;
-
-  for (const candidatePath of [file.name, file.prevName]) {
-    for (const alias of getGitDiffPathAliases(candidatePath)) {
-      if (targetAliases.has(alias)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-function getOpenableGitDiffPath(file: ParsedGitDiffFile): string | null {
-  for (const candidatePath of [file.name, file.prevName]) {
-    const aliases = getGitDiffPathAliases(candidatePath);
-    if (aliases.length > 0) {
-      return aliases[aliases.length - 1] ?? null;
-    }
-  }
-  return null;
-}
-
-interface GitDiffSelectionOption {
-  value: string;
-  label: string;
-}
-
-function GitDiffPanelSkeleton({
-  count = GIT_DIFF_PANEL_SKELETON_FILE_COUNT,
-}: {
-  count?: number;
-}) {
-  return (
-    <div className="space-y-2 pt-2">
-      {Array.from({ length: count }).map((_, index) => (
-        <div
-          key={`git-diff-skeleton-${index}`}
-          className="rounded-md border border-border/70 bg-muted/35"
-        >
-          <div className="border-b border-border/60 bg-background px-2.5 py-1">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <Skeleton className="size-4 shrink-0 rounded-sm" />
-                <Skeleton className="h-3 w-48 max-w-full rounded-sm" />
-              </div>
-              <Skeleton className="h-3 w-14 shrink-0 rounded-sm" />
-            </div>
-          </div>
-          <div className="space-y-1.5 px-2.5 py-2">
-            <Skeleton className="h-3 w-full rounded-sm" />
-            <Skeleton className="h-3 w-[94%] rounded-sm" />
-            <Skeleton className="h-3 w-[90%] rounded-sm" />
-            <Skeleton className="h-3 w-[86%] rounded-sm" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function GitDiffSelector({
-  value,
-  options,
-  onChange,
-  disabled,
-}: {
-  value: string;
-  options: readonly GitDiffSelectionOption[];
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  const selectedOption = options.find((option) => option.value === value);
-  const selectedLabel = selectedOption?.label ?? value;
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={disabled}>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className={cn(
-            "h-8 w-full min-w-0 justify-between gap-2 px-2 text-xs font-normal",
-            disabled && "opacity-60",
-          )}
-        >
-          <span className="truncate">{selectedLabel}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[var(--radix-dropdown-menu-trigger-width)]"
-      >
-        {options.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onSelect={() => onChange(option.value)}
-            className="flex items-center justify-between gap-2"
-          >
-            <span className="truncate" title={option.label}>
-              {option.label}
-            </span>
-            <Check className={cn("size-3.5", option.value === value ? "opacity-100" : "opacity-0")} />
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function getFileNameFromPath(path: string): string {
-  const trimmedPath = path.trim();
-  if (trimmedPath.length === 0) return "Attachment";
-  const segments = trimmedPath.split("/");
-  const lastSegment = segments[segments.length - 1];
-  return lastSegment && lastSegment.length > 0 ? lastSegment : trimmedPath;
-}
-
-function countQueuedMessageAttachments(input: PromptInput[]): number {
-  let count = 0;
-  for (const chunk of input) {
-    if (chunk.type === "localImage" || chunk.type === "localFile") {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function formatQueuedFollowUpPreview(input: PromptInput[]): string {
-  const text = input
-    .filter((chunk): chunk is Extract<PromptInput, { type: "text" }> => chunk.type === "text")
-    .map((chunk) => chunk.text.trim())
-    .filter((chunk) => chunk.length > 0)
-    .join("\n\n");
-  const trimmedText = text.trim();
-  if (trimmedText.length > 0) {
-    if (trimmedText.length <= QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS) {
-      return trimmedText;
-    }
-    return `${trimmedText.slice(0, QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS - 1)}…`;
-  }
-
-  const attachmentCount = countQueuedMessageAttachments(input);
-  if (attachmentCount === 1) {
-    const firstAttachment = input.find(
-      (chunk) => chunk.type === "localImage" || chunk.type === "localFile",
-    );
-    if (firstAttachment) {
-      if (firstAttachment.type === "localFile" && firstAttachment.name) {
-        return `Attachment only (${firstAttachment.name})`;
-      }
-      return `Attachment only (${getFileNameFromPath(firstAttachment.path)})`;
-    }
-    return "Attachment only (1 file)";
-  }
-  if (attachmentCount > 1) {
-    return `Attachment only (${attachmentCount} files)`;
-  }
-
-  return "(empty message)";
-}
-
-function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
-  const textSegments: string[] = [];
-  const attachments: PromptDraftState["attachments"] = [];
-
-  for (const chunk of input) {
-    if (chunk.type === "text") {
-      if (chunk.text.trim().length > 0) {
-        textSegments.push(chunk.text);
-      }
-      continue;
-    }
-
-    if (chunk.type === "localImage") {
-      attachments.push({
-        type: "localImage",
-        path: chunk.path,
-        name: getFileNameFromPath(chunk.path),
-        sizeBytes: 0,
-      });
-      continue;
-    }
-
-    if (chunk.type === "localFile") {
-      attachments.push({
-        type: "localFile",
-        path: chunk.path,
-        name: chunk.name ?? getFileNameFromPath(chunk.path),
-        sizeBytes: chunk.sizeBytes ?? 0,
-        ...(chunk.mimeType ? { mimeType: chunk.mimeType } : {}),
-      });
-      continue;
-    }
-
-    // Open provider/runtime input variant: URL images are intentionally ignored
-    // by the prompt draft editor because we cannot map them to local attachments.
-  }
-
-  return {
-    text: textSegments.join("\n\n"),
-    attachments,
-  };
-}
-
-function isPromptInputChunk(value: unknown): value is PromptInput {
-  const record = toRecord(value);
-  if (!record) return false;
-
-  const type = record.type;
-  if (typeof type !== "string") return false;
-  if (type === "text") {
-    return typeof record.text === "string";
-  }
-  if (type === "image") {
-    return typeof record.url === "string";
-  }
-  if (type === "localImage" || type === "localFile") {
-    return typeof record.path === "string";
-  }
-  return false;
-}
-
-function isThreadQueuedMessage(value: unknown): value is ThreadQueuedMessage {
-  const record = toRecord(value);
-  if (!record || typeof record.id !== "string") return false;
-  if (!Array.isArray(record.input)) return false;
-  return record.input.every(isPromptInputChunk);
-}
-
-function extractThreadQueuedMessages(thread: unknown): ThreadQueuedMessage[] {
-  const record = toRecord(thread);
-  const queuedMessages = record?.queuedMessages;
-  if (!Array.isArray(queuedMessages)) return [];
-  return queuedMessages.filter(isThreadQueuedMessage);
-}
-
-function QueuedFollowUpList({
-  queuedMessages,
-  sendDisabled,
-  actionDisabled,
-  processingMessageId,
-  onSendImmediately,
-  onEdit,
-  onDelete,
-}: {
-  queuedMessages: readonly ThreadQueuedMessage[];
-  sendDisabled: boolean;
-  actionDisabled: boolean;
-  processingMessageId: string | null;
-  onSendImmediately: (id: string) => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  if (queuedMessages.length === 0) return null;
-
-  return (
-    <section
-      aria-label="Queued follow-up messages"
-      className="mb-2 overflow-hidden rounded-md border border-border/60 bg-muted/25"
-    >
-      <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
-        <p className="text-xs text-muted-foreground">Queued ({queuedMessages.length})</p>
-      </div>
-      <ul>
-        {queuedMessages.map((queuedMessage, index) => {
-          const preview = formatQueuedFollowUpPreview(queuedMessage.input);
-          const attachmentCount = countQueuedMessageAttachments(queuedMessage.input);
-          const isProcessing = processingMessageId === queuedMessage.id;
-          return (
-            <li
-              key={queuedMessage.id}
-              className="px-2.5 py-0.5"
-            >
-              <div className="flex items-center gap-1.5">
-                <div className="p-0.5 text-muted-foreground">
-                  <CornerDownRight className="size-3.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
-                    <p className="min-w-0 truncate text-foreground" title={preview}>
-                      {preview}
-                    </p>
-                    {attachmentCount > 0 ? (
-                      <>
-                        <span className="shrink-0 text-muted-foreground">·</span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {attachmentCount === 1 ? "1 attachment" : `${attachmentCount} attachments`}
-                        </span>
-                      </>
-                    ) : null}
-                    {isProcessing ? (
-                      <>
-                        <span className="shrink-0 text-muted-foreground">·</span>
-                        <span className="shrink-0 text-muted-foreground">Sending...</span>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="ml-1 flex shrink-0 items-center gap-1">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="link"
-                    className="h-auto px-0 pr-1 text-xs text-muted-foreground underline"
-                    disabled={sendDisabled || isProcessing}
-                    onClick={() => onSendImmediately(queuedMessage.id)}
-                  >
-                    {isProcessing ? "Sending..." : "Send now"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground"
-                    disabled={actionDisabled || isProcessing}
-                    onClick={() => onEdit(queuedMessage.id)}
-                    aria-label={`Edit queued message ${index + 1}`}
-                    title="Edit queued message"
-                  >
-                    <Pencil className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-7 text-muted-foreground hover:text-destructive"
-                    disabled={actionDisabled || isProcessing}
-                    onClick={() => onDelete(queuedMessage.id)}
-                    aria-label={`Delete queued message ${index + 1}`}
-                    title="Delete queued message"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
 }
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
@@ -903,7 +392,7 @@ export function ThreadDetailView() {
   );
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
-  const contextWindowUsage = timeline?.contextWindowUsage ?? null;
+  const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
@@ -2122,153 +1611,66 @@ export function ThreadDetailView() {
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
-        <div ref={promptComposerRef}>
-          <PromptComposerShell statusLabel={provisioningStatusLabel}>
-            <ScrollToBottomButton
-              visible={showScrollToBottom}
-              onClick={scrollToBottom}
-            />
-            {showPromptGitStatsBanner ? (
-              <div
-                className={cn(
-                  "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
-                  !isGitDiffPanelOpen && "cursor-pointer transition-colors hover:bg-muted/55",
-                )}
-                onClick={handlePromptGitStatsBannerClick}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  {canExpandPromptChangeList ? (
-                    <button
-                      type="button"
-                      className="flex min-w-0 items-center gap-2 truncate text-left"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setIsChangeListExpanded((prev) => !prev);
-                      }}
-                    >
-                      <span className="truncate">{promptBannerSummary}</span>
-                      <ChevronDown
-                        className={`size-3.5 shrink-0 transition-transform duration-200 ${
-                          isChangeListExpanded ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-                  ) : (
-                    <span className="truncate">{promptBannerSummary}</span>
-                  )}
-                  {showBranchComparisonUi ? (
-                    <span className="shrink-0 text-xs text-muted-foreground/90">
-                      {promptBannerMergeBaseBranch
-                        ? `Merge base: ${promptBannerMergeBaseBranch}`
-                        : "Merge base comparison"}
-                    </span>
-                  ) : (
-                    <span className="shrink-0 text-xs text-muted-foreground/90">
-                      Includes all threads in this working directory
-                    </span>
-                  )}
-                </div>
-                {canExpandPromptChangeList && resolvedThreadWorkStatus ? (
-                  <div
-                    className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out ${
-                      isChangeListExpanded
-                        ? "mt-2 grid-rows-[1fr] border-t border-border/50 pt-1 opacity-100"
-                        : "grid-rows-[0fr] border-t border-transparent pt-0 opacity-0"
-                    }`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                    }}
-                  >
-                    <div className="overflow-hidden">
-                      <WorkspaceChangesList
-                        files={resolvedThreadWorkStatus.files}
-                        threadId={thread.id}
-                        onFileClick={handlePromptBannerFileClick}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-            <QueuedFollowUpList
-              queuedMessages={queuedMessages}
-              sendDisabled={!canSendFollowUp || isFollowUpSubmitting || isQueueMutationPending}
-              actionDisabled={isFollowUpSubmitting || isQueueMutationPending}
-              processingMessageId={processingQueuedMessageId}
-              onSendImmediately={handleSendQueuedImmediately}
-              onEdit={handleEditQueuedMessage}
-              onDelete={handleDeleteQueuedMessage}
-            />
-            <PromptBox
-              value={message}
-              onChange={promptDraft.setText}
-              onSubmit={handleSend}
-              zenModeLayout="thread"
-              zenModeStorageKey={null}
-              zenModeResetKey={threadId}
-              resetZenModeOnSubmit
-              onStop={
-                thread.status === "active"
-                  ? () => stopThread.mutate(thread.id)
-                  : undefined
-              }
-              isSubmitting={isFollowUpSubmitting}
-              submitDisabled={!canSendFollowUp || isFollowUpSubmitting}
-              submitTitle={
-                thread.status === "active"
-                  ? "Queue follow-up (Enter)"
-                  : "Submit (Enter)"
-              }
-              isRunning={thread.status === "active"}
-              placeholder={promptPlaceholder}
-              submitMode="enter"
-              autoFocus
-              mentionSuggestions={fileMentions.suggestions}
-              mentionLoading={fileMentions.isLoading}
-              mentionError={fileMentions.isError}
-              onMentionQueryChange={fileMentions.setQuery}
-              attachments={promptDraft.attachments}
-              attachmentProjectId={projectId}
-              onAttachFiles={handleAttachFiles}
-              onRemoveAttachment={promptDraft.removeAttachment}
-              isAttaching={uploadPromptAttachment.isPending}
-              attachmentError={attachmentError}
-              footerStart={
-                <>
-                  {supportsModelList ? (
-                    <PromptModelPicker
-                      value={activeModel?.model ?? selectedModel}
-                      options={modelOptions}
-                      onChange={setSelectedModel}
-                      fastModeEnabled={serviceTier === "fast"}
-                      onFastModeChange={(enabled) => setServiceTier(enabled ? "fast" : undefined)}
-                      showFastModeToggle={supportsServiceTier}
-                    />
-                  ) : null}
-                  {supportsReasoningLevels ? (
-                    <PromptOptionPicker
-                      label="Reasoning"
-                      value={reasoningLevel}
-                      options={reasoningOptions}
-                      onChange={setReasoningLevel}
-                    />
-                  ) : null}
-                  <PromptOptionPicker
-                    label="Sandbox"
-                    value={sandboxMode}
-                    options={sandboxOptions}
-                    onChange={setSandboxMode}
-                  />
-                </>
-              }
-            />
-            {contextWindowUsage ? (
-              <div className="mt-1 flex justify-end pr-0.5">
-                <ThreadContextWindowIndicator usage={contextWindowUsage} />
-              </div>
-            ) : null}
-          </PromptComposerShell>
-        </div>
+        <ThreadFollowUpComposer
+          composerRef={promptComposerRef}
+          provisioningStatusLabel={provisioningStatusLabel}
+          showScrollToBottom={showScrollToBottom}
+          onScrollToBottom={scrollToBottom}
+          showPromptGitStatsBanner={showPromptGitStatsBanner}
+          isGitDiffPanelOpen={isGitDiffPanelOpen}
+          canExpandPromptChangeList={canExpandPromptChangeList}
+          isChangeListExpanded={isChangeListExpanded}
+          onToggleChangeListExpanded={() => {
+            setIsChangeListExpanded((prev) => !prev);
+          }}
+          promptBannerSummary={promptBannerSummary}
+          showBranchComparisonUi={showBranchComparisonUi}
+          promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
+          resolvedThreadWorkStatus={resolvedThreadWorkStatus}
+          threadId={thread.id}
+          onPromptGitStatsBannerClick={handlePromptGitStatsBannerClick}
+          onPromptBannerFileClick={handlePromptBannerFileClick}
+          queuedMessages={queuedMessages}
+          canSendFollowUp={canSendFollowUp}
+          isFollowUpSubmitting={isFollowUpSubmitting}
+          isQueueMutationPending={isQueueMutationPending}
+          processingQueuedMessageId={processingQueuedMessageId}
+          onSendQueuedImmediately={handleSendQueuedImmediately}
+          onEditQueuedMessage={handleEditQueuedMessage}
+          onDeleteQueuedMessage={handleDeleteQueuedMessage}
+          message={message}
+          onChangeMessage={promptDraft.setText}
+          onSubmit={handleSend}
+          threadStatus={thread.status}
+          onStop={() => stopThread.mutate(thread.id)}
+          promptPlaceholder={promptPlaceholder}
+          mentionSuggestions={fileMentions.suggestions}
+          mentionLoading={fileMentions.isLoading}
+          mentionError={fileMentions.isError}
+          onMentionQueryChange={fileMentions.setQuery}
+          attachments={promptDraft.attachments}
+          projectId={projectId}
+          onAttachFiles={handleAttachFiles}
+          onRemoveAttachment={promptDraft.removeAttachment}
+          isAttaching={uploadPromptAttachment.isPending}
+          attachmentError={attachmentError}
+          supportsModelList={supportsModelList}
+          activeModel={activeModel}
+          selectedModel={selectedModel}
+          modelOptions={modelOptions}
+          onSelectedModelChange={setSelectedModel}
+          serviceTier={serviceTier}
+          onServiceTierChange={setServiceTier}
+          supportsServiceTier={supportsServiceTier}
+          supportsReasoningLevels={supportsReasoningLevels}
+          reasoningLevel={reasoningLevel}
+          reasoningOptions={reasoningOptions}
+          onReasoningLevelChange={setReasoningLevel}
+          sandboxMode={sandboxMode}
+          sandboxOptions={sandboxOptions}
+          onSandboxModeChange={setSandboxMode}
+          contextWindowUsage={contextWindowUsage}
+        />
       }
     >
       {conversationMain}
@@ -2319,240 +1721,42 @@ export function ThreadDetailView() {
       <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
         <Panel
           defaultSize={TIMELINE_PANEL_DEFAULT_SIZE_PERCENT}
-          minSize={100 - GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
+          minSize={30}
           className="min-w-0 overflow-hidden"
         >
           {conversationShell}
         </Panel>
         {isGitDiffPanelOpen ? (
-          <PanelResizeHandle
+          <ThreadGitDiffPanel
+            threadId={thread.id}
+            panelRef={gitDiffPanelRef}
+            isResizing={isGitDiffPanelResizing}
             onDragging={handleGitDiffPanelDragging}
-            className={cn(
-              "group relative w-3 shrink-0 cursor-col-resize bg-transparent transition-colors",
-              isGitDiffPanelResizing && "bg-accent/25",
-            )}
-            aria-label="Resize thread and git diff panels"
-          >
-            <span
-              className={cn(
-                "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors",
-                isGitDiffPanelResizing ? "bg-accent-foreground/55" : "group-hover:bg-accent-foreground/40",
-              )}
-            />
-            <span
-              className={cn(
-                "pointer-events-none absolute left-1/2 top-1/2 flex h-8 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border/70 bg-background/95 opacity-0 shadow-sm transition-opacity",
-                isGitDiffPanelResizing ? "opacity-100" : "group-hover:opacity-100",
-              )}
-            >
-              <GripVertical className="size-3 text-muted-foreground" />
-            </span>
-          </PanelResizeHandle>
-        ) : null}
-        {isGitDiffPanelOpen ? (
-          <Panel
-            defaultSize={GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT}
-            minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
-            maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
-            className="min-w-0 bg-background"
-          >
-            <aside ref={gitDiffPanelRef} className="flex min-h-0 h-full min-w-0 flex-1 flex-col">
-            <div className="px-3 py-2">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <div className="min-w-0 max-w-[48%] flex-1">
-                  <GitDiffSelector
-                    value={gitDiffSelectValue}
-                    options={gitDiffSelectOptions}
-                    onChange={(value) => {
-                      setSelectedGitDiffCommitSha(value === "combined" ? null : value);
-                    }}
-                    disabled={isGitDiffLoading || threadGitDiff === undefined}
-                  />
-                </div>
-                <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
-                  {isParsingGitDiffFiles ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      <Loader2 className="size-3 animate-spin" />
-                      Parsing…
-                    </span>
-                  ) : null}
-                  <span
-                    className="max-w-[110px] truncate whitespace-nowrap text-xs text-muted-foreground"
-                    title={gitDiffStatsLabel}
-                  >
-                    {gitDiffStatsLabel}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-muted-foreground"
-                    onClick={toggleAllGitDiffFilesCollapsed}
-                    disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
-                    aria-label={areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"}
-                    title={areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"}
-                  >
-                    {areAllGitDiffFilesCollapsed ? (
-                      <ChevronsDown className="size-3.5" />
-                    ) : (
-                      <ChevronsUp className="size-3.5" />
-                    )}
-                  </Button>
-                  <div className="inline-flex items-center rounded-md border border-border/70 p-0.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-6 w-6 p-0",
-                        gitDiffDisplayMode === "unified" ? "bg-accent text-foreground" : "text-muted-foreground",
-                      )}
-                      onClick={() => handleGitDiffDisplayModeChange("unified")}
-                      aria-label="Stacked diff view"
-                      title="Stacked diff view"
-                    >
-                      <Rows2 className="size-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "h-6 w-6 p-0",
-                        gitDiffDisplayMode === "split" ? "bg-accent text-foreground" : "text-muted-foreground",
-                      )}
-                      onClick={() => handleGitDiffDisplayModeChange("split")}
-                      aria-label="Split diff view"
-                      title="Split diff view"
-                    >
-                      <Columns2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-2 pt-0">
-              {isPreparingGitDiff ? (
-                <GitDiffPanelSkeleton />
-              ) : gitDiffError ? (
-                <p className="py-2 text-xs text-destructive">
-                  {gitDiffError instanceof Error
-                    ? gitDiffError.message
-                    : "Failed to load git diff"}
-                </p>
-              ) : threadGitDiff && hasCurrentGitDiff ? (
-                <>
-                  {parsedGitDiffFileEntries.length > 0 ? (
-                    <div className="space-y-2 pt-2">
-                      {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
-                        const isCollapsed = collapsedGitDiffFileKeys.has(key);
-                        const hasQueuedFileRender = queuedGitDiffFileRenderKeysRef.current.has(key);
-                        const isRendering = !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
-                        const fileDiffStats = summarizeGitDiffFile(fileDiff);
-                        const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
-                        const openablePath = getOpenableGitDiffPath(fileDiff);
-                        const canOpenFile = Boolean(openablePath);
-                        return (
-                          <div
-                            key={key}
-                            ref={(element) => setGitDiffFileRef(key, element)}
-                            className="rounded-md border border-border/70 bg-muted/35"
-                          >
-                            <div className="sticky top-0 z-20 border-b border-border/60 bg-background px-2.5 py-1 text-xs font-medium text-foreground">
-                              <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                                <span className="flex min-w-0 items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
-                                    onClick={() => toggleGitDiffFileCollapsed(key)}
-                                    aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${fileDiffLabel}`}
-                                    aria-expanded={!isCollapsed}
-                                  >
-                                    <ChevronRight
-                                      className={cn(
-                                        "size-3.5 shrink-0 transition-transform duration-150",
-                                        !isCollapsed && "rotate-90",
-                                      )}
-                                    />
-                                  </button>
-                                  {canOpenFile && openablePath ? (
-                                    <button
-                                      type="button"
-                                      className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
-                                      title={fileDiffLabel}
-                                      onClick={() => {
-                                        void openThreadPathInEditor(thread.id, {
-                                          relativePath: openablePath,
-                                          target: "file",
-                                          command: getPathCommandForTarget("file"),
-                                        });
-                                      }}
-                                    >
-                                      {fileDiffLabel}
-                                    </button>
-                                  ) : (
-                                    <span className="block min-w-0 truncate" title={fileDiffLabel}>
-                                      {fileDiffLabel}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                                  +{fileDiffStats.additions} -{fileDiffStats.deletions}
-                                </span>
-                              </div>
-                            </div>
-                            {!isCollapsed ? (
-                              isRendering ? (
-                                <div className="space-y-1.5 px-2.5 py-2">
-                                  <Skeleton className="h-3 w-full rounded-sm" />
-                                  <Skeleton className="h-3 w-[96%] rounded-sm" />
-                                  <Skeleton className="h-3 w-[93%] rounded-sm" />
-                                  <Skeleton className="h-3 w-[90%] rounded-sm" />
-                                  <Skeleton className="h-3 w-[87%] rounded-sm" />
-                                  <Skeleton className="h-3 w-[84%] rounded-sm" />
-                                </div>
-                              ) : (
-                                <div className="overflow-x-auto">
-                                  <div className="w-full max-w-full" style={GIT_DIFF_VIEW_STYLE}>
-                                    <FileDiff
-                                      fileDiff={fileDiff}
-                                      options={{ ...gitDiffViewOptions, disableFileHeader: true }}
-                                    />
-                                  </div>
-                                </div>
-                              )
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                      {isParsingGitDiffFiles ? (
-                        <div className="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
-                          <div className="space-y-1.5">
-                            <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
-                            <Skeleton className="h-3 w-5/6 rounded-sm" />
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <pre className="overflow-auto whitespace-pre rounded-md border border-border/70 bg-muted/35 p-2 font-mono text-xs text-foreground">
-                      {threadGitDiff.diff}
-                    </pre>
-                  )}
-                  {threadGitDiff.truncated ? (
-                    <p className="pt-2 text-xs text-muted-foreground">
-                      Diff output was truncated for display.
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="py-2 text-xs text-muted-foreground">
-                  No diff to display.
-                </p>
-              )}
-            </div>
-            </aside>
-          </Panel>
+            gitDiffSelectValue={gitDiffSelectValue}
+            gitDiffSelectOptions={gitDiffSelectOptions}
+            onGitDiffSelectionChange={(value) => {
+              setSelectedGitDiffCommitSha(value === "combined" ? null : value);
+            }}
+            isGitDiffLoading={isGitDiffLoading}
+            gitDiffError={gitDiffError}
+            threadGitDiff={threadGitDiff}
+            currentGitDiff={currentGitDiff}
+            isPreparingGitDiff={isPreparingGitDiff}
+            isParsingGitDiffFiles={isParsingGitDiffFiles}
+            gitDiffStatsLabel={gitDiffStatsLabel}
+            hasParsedGitDiffFiles={hasParsedGitDiffFiles}
+            areAllGitDiffFilesCollapsed={areAllGitDiffFilesCollapsed}
+            onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
+            gitDiffDisplayMode={gitDiffDisplayMode}
+            onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
+            parsedGitDiffFileEntries={parsedGitDiffFileEntries}
+            collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
+            queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeysRef.current}
+            loadingGitDiffFileKeys={loadingGitDiffFileKeys}
+            setGitDiffFileRef={setGitDiffFileRef}
+            onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
+            gitDiffViewOptions={gitDiffViewOptions}
+          />
         ) : null}
       </PanelGroup>
     </div>
