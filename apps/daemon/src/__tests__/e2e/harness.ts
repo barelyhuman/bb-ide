@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -38,8 +38,6 @@ const TSX_CLI_PATH = resolve(
   "dist",
   "cli.mjs",
 );
-const PNPM_BIN = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-let cliArtifactsEnsured = false;
 
 function prependPathEntry(
   pathValue: string | undefined,
@@ -91,8 +89,6 @@ export interface DaemonE2eHarness {
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
-  ensureCliArtifactsAvailable();
-
   const tempDir = mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
@@ -215,32 +211,12 @@ interface CliLaunchTarget {
   args: string[];
 }
 
-function ensureCliArtifactsAvailable(): void {
-  if (cliArtifactsEnsured && existsSync(CLI_DIST_PATH)) {
-    return;
-  }
-
-  const packagesToBuild = [
-    "@beanbag/environment-agent",
-    "@beanbag/agent-server",
-    "@beanbag/environment",
-    "@beanbag/db",
-    "@beanbag/cli",
-  ] as const;
-
-  for (const pkg of packagesToBuild) {
-    execFileSync(PNPM_BIN, ["--filter", pkg, "build"], {
-      cwd: WORKSPACE_ROOT,
-      stdio: "pipe",
-    });
-  }
-
-  cliArtifactsEnsured = true;
-}
-
 function resolveCliLaunchTarget(): CliLaunchTarget {
-  if (!existsSync(CLI_DIST_PATH)) {
-    ensureCliArtifactsAvailable();
+  if (existsSync(TSX_CLI_PATH) && existsSync(CLI_SOURCE_PATH)) {
+    return {
+      command: process.execPath,
+      args: [TSX_CLI_PATH, CLI_SOURCE_PATH],
+    };
   }
 
   if (existsSync(CLI_DIST_PATH)) {
@@ -250,15 +226,8 @@ function resolveCliLaunchTarget(): CliLaunchTarget {
     };
   }
 
-  if (existsSync(TSX_CLI_PATH) && existsSync(CLI_SOURCE_PATH)) {
-    return {
-      command: process.execPath,
-      args: [TSX_CLI_PATH, CLI_SOURCE_PATH],
-    };
-  }
-
   throw new Error(
-    "Unable to launch CLI: missing apps/cli/dist/index.js and tsx fallback.",
+    "Unable to launch CLI: missing tsx source runner and apps/cli/dist/index.js fallback.",
   );
 }
 
