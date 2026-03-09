@@ -789,6 +789,20 @@ describe("Orchestrator", () => {
           client: createFakeEnvironmentAgentClient(resumeChild),
         }),
       });
+      const retrySpy = vi
+        .spyOn(
+          (bootManager as unknown as {
+            agentServer: { retryEnvironmentAgentDelivery: (threadId: string) => Promise<unknown> };
+          }).agentServer,
+          "retryEnvironmentAgentDelivery",
+        )
+        .mockResolvedValue({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          latestSequence: 0,
+          connectedToDaemon: true,
+          pendingEventCount: 0,
+          pendingCommandCount: 0,
+        });
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
@@ -805,6 +819,7 @@ describe("Orchestrator", () => {
           return false;
         }
       })).toBe(true);
+      expect(retrySpy).toHaveBeenCalledWith("boot-active");
     });
 
     it("attempts boot resume even when no lifecycle event was persisted yet", async () => {
@@ -1313,6 +1328,30 @@ describe("Orchestrator", () => {
         afterSequence: 5,
       });
       expect(thread.environmentAgentCursor).toBe(7);
+    });
+
+    it("swallows retry-delivery failures while nudging the environment agent", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const retrySpy = vi
+        .spyOn(
+          (manager as unknown as {
+            agentServer: { retryEnvironmentAgentDelivery: (threadId: string) => Promise<unknown> };
+          }).agentServer,
+          "retryEnvironmentAgentDelivery",
+        )
+        .mockRejectedValue(new Error("transport down"));
+
+      await (
+        manager as unknown as {
+          _nudgeEnvironmentAgentDelivery: (threadId: string) => Promise<void>;
+        }
+      )._nudgeEnvironmentAgentDelivery("thread-1");
+
+      expect(retrySpy).toHaveBeenCalledWith("thread-1");
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[thread thread-1] Failed to nudge environment-agent delivery: transport down",
+      );
+      warnSpy.mockRestore();
     });
   });
 
