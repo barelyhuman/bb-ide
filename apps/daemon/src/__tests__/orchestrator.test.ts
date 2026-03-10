@@ -31,6 +31,7 @@ import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   createHttpEnvironmentAgentClient,
   type EnvironmentAgentClient,
+  type EnvironmentAgentCommandAck,
   type EnvironmentAgentEventEnvelope,
 } from "@beanbag/environment-agent";
 import type {
@@ -3484,8 +3485,8 @@ describe("Orchestrator", () => {
           const baseSendCommand = client.sendCommand.bind(client);
           client.sendCommand = vi.fn(async (envelope) => {
             if (envelope.command.type === "thread.resume") {
-              return {
-                protocolVersion: 1,
+              const ack: EnvironmentAgentCommandAck = {
+                protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
                 commandId: envelope.meta.commandId,
                 idempotencyKey: envelope.meta.idempotencyKey,
                 state: "rejected",
@@ -3494,6 +3495,7 @@ describe("Orchestrator", () => {
                 message: "Timed out waiting for provider response to thread/resume (2)",
                 errorCode: "provider_timeout",
               };
+              return ack;
             }
             return baseSendCommand(envelope);
           });
