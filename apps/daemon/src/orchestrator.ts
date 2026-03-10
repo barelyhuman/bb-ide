@@ -3386,12 +3386,17 @@ export class Orchestrator implements ThreadOrchestrator {
       return resumed.providerThreadId;
     } catch (err) {
       this._cleanupThreadRuntime(threadId);
-      if (!this.agentServer.isMissingProviderThreadError(err)) {
+      const resumeTimedOut =
+        (isDomainError(err) && err.code === "provider_timeout") ||
+        (err instanceof AgentServerSessionError && err.code === "provider_timeout");
+      if (!this.agentServer.isMissingProviderThreadError(err) && !resumeTimedOut) {
         this._rethrowAgentServerError(threadId, err);
         throw err;
       }
 
       // Resume can fail when provider-side rollout state has been evicted.
+      // Timeout here is also treated as a stale/irrecoverable resume attempt,
+      // because this catch block only wraps thread/resume for an existing rollout.
       // Fall back to fresh provisioning so the pending tell can continue.
       await this._provisionThread(
         threadId,

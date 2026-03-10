@@ -3433,6 +3433,73 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("falls back to reprovision when thread/resume times out", async () => {
+      const input = [{ type: "text" as const, text: "Retry after resume timeout" }];
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo).getLatestProviderThreadId = vi
+        .fn()
+        .mockReturnValue("stale-rollout-timeout");
+
+      const resumeChild = createFakeChildProcess({ autoRespond: false });
+      const reprovisionChild = createFakeChildProcess();
+      const createClientMock = vi.mocked(createHttpEnvironmentAgentClient);
+      let clientCallCount = 0;
+      createClientMock.mockImplementation(async () => {
+        clientCallCount += 1;
+        if (clientCallCount === 1 || clientCallCount === 2) {
+          const client = createFakeEnvironmentAgentClient(resumeChild);
+          const baseSendCommand = client.sendCommand.bind(client);
+          client.sendCommand = vi.fn(async (envelope) => {
+            if (envelope.command.type === "thread.resume") {
+              return {
+                protocolVersion: 1,
+                commandId: envelope.meta.commandId,
+                idempotencyKey: envelope.meta.idempotencyKey,
+                state: "rejected",
+                acknowledgedAt: Date.now(),
+                latestSequence: 0,
+                message: "Timed out waiting for provider response to thread/resume (2)",
+                errorCode: "provider_timeout",
+              };
+            }
+            return baseSendCommand(envelope);
+          });
+          return client;
+        }
+        return createFakeEnvironmentAgentClient(reprovisionChild);
+      });
+
+      await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
+
+      const reprovisionMethods = reprovisionChild._stdinData.map((line) => {
+        try {
+          return JSON.parse(line.trim()).method as string;
+        } catch {
+          return "";
+        }
+      });
+      expect(reprovisionMethods).toContain("thread/start");
+      expect(reprovisionMethods).toContain("turn/start");
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "system/provisioning/started",
+          data: expect.objectContaining({
+            reason: "resume-missing-provider-thread",
+          }),
+        }),
+      );
+    });
+
     it("steers into the active turn after replaying buffered resume events", async () => {
       const input = [{ type: "text" as const, text: "Continue the in-flight turn" }];
       const thread = makeThread({
