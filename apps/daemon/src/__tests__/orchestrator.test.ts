@@ -6568,6 +6568,8 @@ describe("Orchestrator", () => {
                   merged: true,
                   message: "Squash-merged into main",
                   committed: true,
+                  commitSha: "def4567890",
+                  commitSubject: "feat: squash merged thread work",
                   prepCommit: {
                     message: "Committed changes",
                     commitSha: "abc123",
@@ -6600,6 +6602,8 @@ describe("Orchestrator", () => {
             data: expect.objectContaining({
               status: "merged",
               message: "Squash-merged into main",
+              commitSha: "def4567890",
+              commitSubject: "feat: squash merged thread work",
             }),
           }),
         );

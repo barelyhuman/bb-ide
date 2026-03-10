@@ -544,6 +544,14 @@ export function OperationRow({
   if (message.opType === "worktree-squash-merge") {
     const mergeTargetBranch = extractMergeTargetBranch(message);
     const isConflict = message.worktreeSquashMerge?.status === "conflict" || message.status === "error";
+    const squashCommitLine = !isConflict
+      ? formatCommitDetailLine({
+          commitSha: message.worktreeSquashMerge?.commitSha?.trim(),
+          commitMessage:
+            message.worktreeSquashMerge?.commitSubject?.trim() ??
+            message.worktreeSquashMerge?.message?.trim(),
+        })
+      : undefined;
     const summaryContent = isConflict
       ? buildGenericSummary(
           <EventTitle prefix="Squash merge" emphasis="failed" tone={tone} />,
@@ -552,7 +560,7 @@ export function OperationRow({
         ? <EventTitle prefix="Squash merged into" emphasis={mergeTargetBranch} tone={tone} emphasisAs="em" />
         : buildGenericSummary(message.title);
     const detailLines = [
-      message.worktreeSquashMerge?.message,
+      squashCommitLine,
       ...(message.worktreeSquashMerge?.conflictFiles?.length
         ? [`Conflicts: ${message.worktreeSquashMerge.conflictFiles.join(", ")}`]
         : []),
@@ -562,7 +570,10 @@ export function OperationRow({
       message.worktreeSquashMerge?.prepCommitSha
         ? `Hash: ${message.worktreeSquashMerge.prepCommitSha}`
         : undefined,
-      ...splitNonEmptyLines(message.detail).filter((line) => line !== message.worktreeSquashMerge?.message),
+      ...splitNonEmptyLines(message.detail).filter((line) =>
+        line !== message.worktreeSquashMerge?.message &&
+        line !== squashCommitLine
+      ),
     ].filter((value): value is string => Boolean(value));
 
     if (detailLines.length === 0) {

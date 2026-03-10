@@ -127,7 +127,15 @@ describe("WorktreeEnvironment", () => {
       resolveMessage,
     });
 
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main", committed: false });
+    expect(result).toEqual(
+      expect.objectContaining({
+        merged: true,
+        message: "Squash-merged into main",
+        committed: false,
+        commitSha: expect.any(String),
+        commitSubject: "feat: integrate thread updates",
+      }),
+    );
     expect(resolveMessage).toHaveBeenCalledTimes(1);
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
       "feat: integrate thread updates",
@@ -144,7 +152,15 @@ describe("WorktreeEnvironment", () => {
       resolveMessage,
     });
 
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main", committed: false });
+    expect(result).toEqual(
+      expect.objectContaining({
+        merged: true,
+        message: "Squash-merged into main",
+        committed: false,
+        commitSha: expect.any(String),
+        commitSubject: expect.stringContaining("chore: squash merge from bb/thread-thread-"),
+      }),
+    );
     expect(resolveMessage).toHaveBeenCalledTimes(1);
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toContain(
       "chore: squash merge from bb/thread-thread-",
@@ -162,7 +178,15 @@ describe("WorktreeEnvironment", () => {
       resolveMessage,
     });
 
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main", committed: false });
+    expect(result).toEqual(
+      expect.objectContaining({
+        merged: true,
+        message: "Squash-merged into main",
+        committed: false,
+        commitSha: expect.any(String),
+        commitSubject: "feat: custom squash message",
+      }),
+    );
     expect(resolveMessage).not.toHaveBeenCalled();
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
       "feat: custom squash message",
@@ -187,6 +211,8 @@ describe("WorktreeEnvironment", () => {
 
     expect(result.merged).toBe(true);
     expect(result.committed).toBe(true);
+    expect(result.commitSha).toEqual(expect.any(String));
+    expect(result.commitSubject).toContain("squash merge");
     expect(result.prepCommit).toEqual(
       expect.objectContaining({
         message: "Committed changes",

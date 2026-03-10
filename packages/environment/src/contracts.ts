@@ -251,6 +251,8 @@ export interface EnvironmentSquashMergeResult {
   merged: boolean;
   message: string;
   committed?: boolean;
+  commitSha?: string;
+  commitSubject?: string;
   prepCommit?: {
     message: string;
     commitSha?: string;

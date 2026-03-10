@@ -1623,6 +1623,8 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const status = getStringField(payload, "status");
     const squashMessage = getStringField(payload, "message");
+    const commitSha = getStringField(payload, "commitSha");
+    const commitSubject = getStringField(payload, "commitSubject");
     const mergeBaseBranch = getStringField(payload, "mergeBaseBranch");
     const committed = payload?.committed;
     const conflictFiles = payload?.conflictFiles;
@@ -1637,6 +1639,8 @@ function parseOperationMessage(
             status,
             ...(squashMessage ? { message: squashMessage } : {}),
             ...(typeof committed === "boolean" ? { committed } : {}),
+            ...(commitSha ? { commitSha } : {}),
+            ...(commitSubject ? { commitSubject } : {}),
             ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
             ...(normalizedConflictFiles.length > 0
               ? { conflictFiles: normalizedConflictFiles }

@@ -574,6 +574,7 @@ class WorktreeEnvironment implements IEnvironment {
       | {
           message: string;
           commitSha?: string;
+          commitSubject?: string;
           includeUnstaged?: boolean;
         }
       | undefined;
@@ -758,10 +759,14 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
 
+      const commitSubject = finalMessage.split("\n")[0]?.trim();
+
       return {
         merged: true,
         message: `Squash-merged into ${mergeBaseBranch}`,
         committed,
+        commitSha: mergedHead.stdout.trim(),
+        ...(commitSubject ? { commitSubject } : {}),
         ...(prepCommit ? { prepCommit } : {}),
       };
     } finally {

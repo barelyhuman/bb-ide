@@ -192,6 +192,8 @@ export interface UIWorktreeSquashMergeMetadata {
   status: "merged" | "noop" | "conflict";
   message?: string;
   committed?: boolean;
+  commitSha?: string;
+  commitSubject?: string;
   mergeBaseBranch?: string;
   conflictFiles?: string[];
   prepCommitMessage?: string;

@@ -1214,6 +1214,8 @@ export class Orchestrator implements ThreadOrchestrator {
           : "noop",
       message: mergeResult.message,
       ...(mergeResult.committed !== undefined ? { committed: mergeResult.committed } : {}),
+      ...(mergeResult.commitSha ? { commitSha: mergeResult.commitSha } : {}),
+      ...(mergeResult.commitSubject ? { commitSubject: mergeResult.commitSubject } : {}),
       ...(options.mergeBaseBranch?.trim()
         ? { mergeBaseBranch: options.mergeBaseBranch.trim() }
         : {}),

@@ -1121,6 +1121,28 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
+  it("renders squash merge expansions like commit details when commit metadata is available", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "worktree-squash-merge",
+      title: "Squash merged",
+      detail: "Squash merged into main",
+      worktreeSquashMerge: {
+        status: "merged",
+        message: "Squash-merged into main",
+        commitSha: "abcdef1234567890",
+        commitSubject: "feat: improve prompt handling",
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
+    expect(html).toContain("[abcdef1] feat: improve prompt handling");
+    expect(html).not.toContain("Squash-merged into main</div>");
+  });
+
   it("renders merged thread-operation intents as expandable rows with prompt details", () => {
     const promptText =
       "Please squash-merge the changes in this thread workspace.\n" +
