@@ -1911,7 +1911,6 @@ export class Orchestrator implements ThreadOrchestrator {
 
       const requiresDemoteFirst =
         this.primaryPromotionByProjectId.get(thread.projectId)?.threadId === thread.id;
-      const builtInAction = this._getThreadBuiltInAction(thread, request.operation);
 
       const operationId = this._nextOperationId();
       let demotedPrimaryCheckout = false;
@@ -1935,7 +1934,6 @@ export class Orchestrator implements ThreadOrchestrator {
 
         const latestThread = this.threadRepo.getById(thread.id);
         const shouldQueue =
-          builtInAction.queuesWhenActive ||
           latestThread?.status !== "idle" ||
           this.projectOperationTransitionsInFlight.has(thread.projectId);
         if (shouldQueue) {

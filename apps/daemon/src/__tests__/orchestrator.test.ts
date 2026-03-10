@@ -6030,6 +6030,72 @@ describe("Orchestrator", () => {
         );
       });
 
+      it("accepts squash operations for async-only environments", async () => {
+        const projectRoot = "/tmp/proj-1";
+        const thread = makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+          queuedMessages: [],
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Project",
+          rootPath: projectRoot,
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          environment: makeRuntimeEnvironment({
+            kind: "worktree",
+            rootPath: "/tmp/worktrees/proj-1/thread-1",
+            overrides: {
+              getWorkspaceStatus() {
+                throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
+              },
+              async getWorkspaceStatusAsync() {
+                return makeWorkspaceStatus({
+                  state: "committed_unmerged",
+                  hasCommittedUnmergedChanges: true,
+                  aheadCount: 1,
+                  currentBranch: "bb/thread-1",
+                  defaultBranch: "main",
+                });
+              },
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
+            },
+          }),
+        });
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        vi
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
+          .mockImplementation(() => {});
+
+        const result = await manager.requestThreadOperation("thread-1", {
+          operation: "squash_merge",
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          operation: "squash_merge",
+          status: "accepted",
+          executionStatus: "running",
+          queued: false,
+        });
+      });
+
       it("demotes primary checkout before accepting operations", async () => {
         const thread = makeThread({
           id: "thread-1",
