@@ -225,6 +225,10 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
   ) => Promise<EnvironmentAgentStatusSnapshot>;
 };
 
+type RouteLookupCapableOrchestrator = ThreadOrchestrator & {
+  getRawById?: (threadId: string) => Thread | undefined;
+};
+
 function validatePromptInputAttachments(input: PromptInput[]): void {
   let attachmentCount = 0;
   for (const chunk of input) {
@@ -253,6 +257,18 @@ async function getThreadForRouteLookup(
   threadId: string,
 ): Promise<Thread | undefined> {
   return threadManager.getByIdAsync(threadId);
+}
+
+function getThreadForLightweightRouteLookup(
+  threadManager: ThreadOrchestrator,
+  threadId: string,
+): Thread | undefined {
+  const lookupCapableThreadManager =
+    threadManager as RouteLookupCapableOrchestrator;
+  if (lookupCapableThreadManager.getRawById) {
+    return lookupCapableThreadManager.getRawById(threadId);
+  }
+  return undefined;
 }
 
 export function createThreadRoutes(
@@ -660,7 +676,9 @@ export function createThreadRoutes(
           const threadId = c.req.param("id");
           const { input, model, serviceTier, reasoningLevel, sandboxMode } = c.req.valid("json");
           validatePromptInputAttachments(input);
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
+          const thread =
+            getThreadForLightweightRouteLookup(threadManager, threadId) ??
+            await getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(threadId));
           }
