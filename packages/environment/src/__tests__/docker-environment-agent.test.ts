@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  __testOnly__resolveDockerDaemonUrl,
   DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
   ensureDockerEnvironmentImageAvailable,
   ensureManagedDockerEnvironmentAgent,
@@ -75,6 +76,36 @@ describe("docker environment-agent helper", () => {
         runtimeEnv: {},
       }),
     ).toBe(DEFAULT_DOCKER_ENVIRONMENT_IMAGE);
+  });
+
+  it("rewrites loopback daemon URLs for docker containers", () => {
+    expect(
+      __testOnly__resolveDockerDaemonUrl({
+        BEANBAG_DAEMON_URL: "http://127.0.0.1:3333/api/v1",
+      }),
+    ).toBe("http://host.docker.internal:3333/api/v1");
+    expect(
+      __testOnly__resolveDockerDaemonUrl({
+        BEANBAG_DAEMON_URL: "http://localhost:3333/api/v1",
+      }),
+    ).toBe("http://host.docker.internal:3333/api/v1");
+  });
+
+  it("keeps non-loopback daemon URLs unchanged", () => {
+    expect(
+      __testOnly__resolveDockerDaemonUrl({
+        BEANBAG_DAEMON_URL: "http://10.0.0.5:3333/api/v1",
+      }),
+    ).toBe("http://10.0.0.5:3333/api/v1");
+  });
+
+  it("uses an explicit docker daemon host override when provided", () => {
+    expect(
+      __testOnly__resolveDockerDaemonUrl({
+        BEANBAG_DAEMON_URL: "http://127.0.0.1:3333/api/v1",
+        BEANBAG_DOCKER_DAEMON_HOST: "docker-host.internal",
+      }),
+    ).toBe("http://docker-host.internal:3333/api/v1");
   });
 
   it("builds the default local image when it is missing", () => {
@@ -215,7 +246,7 @@ describe("docker environment-agent helper", () => {
           "-e",
           "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=auth-token",
           "-e",
-          "BEANBAG_DAEMON_URL=http://127.0.0.1:9000",
+          "BEANBAG_DAEMON_URL=http://host.docker.internal:9000",
           "beanbag-thread-thread-1",
           "node",
           "/opt/beanbag/environment-agent/environment-agent.bundle.mjs",

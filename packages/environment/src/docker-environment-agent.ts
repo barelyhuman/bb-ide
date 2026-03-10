@@ -11,6 +11,8 @@ const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 500;
 const STATE_VERSION = 1 as const;
+const DOCKER_DAEMON_HOST_OVERRIDE_ENV = "BEANBAG_DOCKER_DAEMON_HOST";
+const DEFAULT_DOCKER_DAEMON_HOST = "host.docker.internal";
 export const DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT = 4310;
 export const DEFAULT_DOCKER_ENVIRONMENT_IMAGE = "beanbag/environment:local";
 const DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT = "/opt/beanbag/environment-agent";
@@ -216,6 +218,31 @@ function executeOrThrow(args: {
   }
 }
 
+function resolveDockerDaemonUrl(
+  runtimeEnv: Record<string, string | undefined>,
+): string | undefined {
+  const daemonUrl = runtimeEnv.BEANBAG_DAEMON_URL?.trim();
+  if (!daemonUrl) {
+    return undefined;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(daemonUrl);
+  } catch {
+    return daemonUrl;
+  }
+
+  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
+    return daemonUrl;
+  }
+
+  const dockerHost =
+    runtimeEnv[DOCKER_DAEMON_HOST_OVERRIDE_ENV]?.trim() || DEFAULT_DOCKER_DAEMON_HOST;
+  parsed.hostname = dockerHost;
+  return parsed.toString().replace(/\/$/, "");
+}
+
 export function ensureDockerEnvironmentImageAvailable(
   args: {
     dockerBin: string;
@@ -312,6 +339,7 @@ export async function ensureManagedDockerEnvironmentAgent(
   const authToken = (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
   const containerPort = args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
   const installRoot = args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
+  const dockerDaemonUrl = resolveDockerDaemonUrl(args.runtimeEnv);
 
   executeOrThrow({
     executor,
@@ -355,8 +383,8 @@ export async function ensureManagedDockerEnvironmentAgent(
       `BB_ENVIRONMENT_ID=${args.environmentId}`,
       "-e",
       `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
-      ...(args.runtimeEnv.BEANBAG_DAEMON_URL
-        ? ["-e", `BEANBAG_DAEMON_URL=${args.runtimeEnv.BEANBAG_DAEMON_URL}`]
+      ...(dockerDaemonUrl
+        ? ["-e", `BEANBAG_DAEMON_URL=${dockerDaemonUrl}`]
         : []),
       args.containerName,
       "node",
@@ -412,6 +440,12 @@ export function resolveManagedDockerEnvironmentAgentTarget(args: {
     },
     ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
   };
+}
+
+export function __testOnly__resolveDockerDaemonUrl(
+  runtimeEnv: Record<string, string | undefined>,
+): string | undefined {
+  return resolveDockerDaemonUrl(runtimeEnv);
 }
 
 export function disposeManagedDockerEnvironmentAgent(args: {
