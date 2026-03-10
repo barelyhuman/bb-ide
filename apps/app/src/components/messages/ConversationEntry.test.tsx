@@ -806,7 +806,6 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned Direct",
-      detail: "Environment: Direct\nDirect • /Users/michael/Projects/bb",
       provisioning: {
         environmentDisplayName: "Direct",
         workspaceRoot: "/Users/michael/Projects/bb",
@@ -819,13 +818,12 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
-  it("renders workspace from provisioning-completed details without setup status", () => {
+  it("renders workspace from structured provisioning details without setup status", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned Worktree",
-      detail: "Environment: Worktree\nWorktree • /tmp/worktree",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -839,13 +837,12 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Additional details");
   });
 
-  it("does not show additional details when completed provisioning only repeats the environment", () => {
+  it("does not show additional details when provisioning only has structured fields", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned Direct",
-      detail: "Environment: Direct\nDirect",
       provisioning: {
         environmentDisplayName: "Direct",
       },
@@ -857,15 +854,13 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Additional details");
   });
 
-  it("shows only unstructured provisioning fields under additional details", () => {
+  it("shows unstructured provisioning details under additional details", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned Worktree",
-      detail:
-        "Environment: Worktree\n" +
-        "Worktree • /tmp/worktree • fallback because worktree bootstrap was unavailable",
+      detail: "bootstrap note: used cached dependencies",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -876,19 +871,16 @@ describe("ConversationEntry", () => {
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Fallback reason");
     expect(html).toContain("fallback because worktree bootstrap was unavailable");
-    expect(html).not.toContain("worktree • /tmp/worktree •");
+    expect(html).toContain("Additional details");
+    expect(html).toContain("bootstrap note: used cached dependencies");
   });
 
-  it("does not show additional details when post-setup summary repeats environment and workspace", () => {
+  it("does not show additional details when setup info is fully structured", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned Worktree",
-      detail:
-        "Environment: Worktree\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Duration 10200ms\n" +
-        "Worktree • /tmp/worktree",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -906,7 +898,6 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Setup time");
     expect(html).toContain("10.2s");
     expect(html).not.toContain("Additional details");
-    expect(html).not.toContain("worktree • /tmp/worktree");
   });
 
   it("renders provisioning metadata and setup output in a structured layout", () => {
@@ -915,11 +906,6 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning Worktree...",
-      detail:
-        "Environment: Worktree\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms • turbo 2.8.3\n" +
-        "@beanbag/daemon:build: ERROR: command failed",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -946,7 +932,6 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("5988ms");
     expect(html).toContain("Output");
     expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
-    expect(html).not.toContain(".bb-env-setup.sh • /tmp/worktree • Timeout 600s");
   });
 
   it("renders streamed provisioning output with the terminal-style command block", () => {
@@ -955,9 +940,6 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning Worktree...",
-      detail:
-        "Environment: Worktree\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -983,10 +965,6 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning Worktree...",
-      detail:
-        "Environment: Worktree\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 600000ms • .bb-env-setup.sh timed out after 10 minutes",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -1025,9 +1003,6 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "provisioning",
       title: "Environment setup completed",
-      detail:
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
-        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms",
       provisioning: {
         workspaceRoot: "/tmp/worktree",
         setup: {

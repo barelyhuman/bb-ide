@@ -1,5 +1,4 @@
 import { assertNever } from "./assert-never.js";
-import { formatEnvironmentDisplayName } from "./environment-display-name.js";
 import type {
   UIMessage,
   UIPrimaryCheckoutAction,
@@ -73,19 +72,6 @@ function isProvisioningOperation(
   );
 }
 
-function parseProvisioningEnvironment(detail: string | undefined): string | undefined {
-  if (!detail) return undefined;
-  const fromEnvironmentPrefix = detail.match(/^Environment:\s*(.+)$/);
-  if (fromEnvironmentPrefix?.[1]) {
-    const value = fromEnvironmentPrefix[1].trim();
-    return formatEnvironmentDisplayName({ id: value, displayName: value });
-  }
-  const [firstToken] = detail.split(" • ");
-  const value = firstToken?.trim();
-  if (!value || value.length === 0) return undefined;
-  return formatEnvironmentDisplayName({ id: value, displayName: value });
-}
-
 function appendProvisioningOutput(
   existing: string | undefined,
   incoming: string | undefined,
@@ -144,91 +130,14 @@ function mergeProvisioningMetadata(
   };
 }
 
-function getProvisioningStructuredDetailLines(
-  metadata: UIProvisioningMetadata | undefined,
-): Set<string> {
-  const lines = new Set<string>();
-  const environment = metadata?.environmentDisplayName?.trim();
-  const workspaceRoot = metadata?.workspaceRoot?.trim();
-  const fallbackReason = metadata?.fallbackReason?.trim();
-
-  if (environment) {
-    lines.add(`Environment: ${environment}`);
-    lines.add(environment);
-  }
-  if (workspaceRoot) {
-    lines.add(workspaceRoot);
-  }
-  if (fallbackReason) {
-    lines.add(fallbackReason);
-  }
-
-  const detailParts = [environment, workspaceRoot, fallbackReason].filter(
-    (value): value is string => Boolean(value),
-  );
-  if (detailParts.length > 1) {
-    lines.add(detailParts.join(" • "));
-  }
-
-  return lines;
-}
-
-function normalizeProvisioningLineEnvironment(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return formatEnvironmentDisplayName({ id: trimmed, displayName: trimmed });
-}
-
-function isRedundantProvisioningDetailLine(
-  line: string,
-  metadata: UIProvisioningMetadata | undefined,
+function shouldNormalizeProvisioningLifecycleOperation(
+  message: Extract<UIMessage, { kind: "operation" }>,
 ): boolean {
-  const trimmedLine = line.trim();
-  if (!trimmedLine) return true;
-
-  const environment = metadata?.environmentDisplayName?.trim();
-  const workspaceRoot = metadata?.workspaceRoot?.trim();
-  const fallbackReason = metadata?.fallbackReason?.trim();
-
-  if (trimmedLine.startsWith("Environment: ")) {
-    return false;
-  }
-
-  const structuredLines = getProvisioningStructuredDetailLines(metadata);
-  if (structuredLines.has(trimmedLine)) {
-    return true;
-  }
-
-  const parts = trimmedLine.split(" • ").map((part) => part.trim()).filter(Boolean);
-  if (parts.length === 0) return true;
-  if (parts.length === 1) {
-    const [part] = parts;
-    return Boolean(
-      (environment && normalizeProvisioningLineEnvironment(part) === environment) ||
-        (workspaceRoot && part === workspaceRoot) ||
-        (fallbackReason && part === fallbackReason),
-    );
-  }
-
-  const [environmentPart, workspacePart, fallbackPart, ...rest] = parts;
-  if (rest.length > 0 || !environmentPart) return false;
-  if (!environment || normalizeProvisioningLineEnvironment(environmentPart) !== environment) {
-    return false;
-  }
-  if (workspaceRoot && workspacePart !== workspaceRoot) {
-    return false;
-  }
-  if (!workspaceRoot && workspacePart) {
-    return false;
-  }
-  if (fallbackReason && fallbackPart !== fallbackReason) {
-    return false;
-  }
-  if (!fallbackReason && fallbackPart) {
-    return false;
-  }
-
-  return true;
+  return (
+    message.opType === "provisioning-started" ||
+    message.opType === "provisioning-env-setup" ||
+    message.opType === "provisioning-completed"
+  );
 }
 
 function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
@@ -237,8 +146,9 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
 
   const flush = () => {
     if (active.length === 0) return;
-    if (active.length === 1) {
-      merged.push(active[0]);
+    const single = active[0];
+    if (active.length === 1 && single && !shouldNormalizeProvisioningLifecycleOperation(single)) {
+      merged.push(single);
       active = [];
       return;
     }
@@ -261,20 +171,11 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       .map((message) => message.detail?.trim())
       .filter((value): value is string => Boolean(value));
     const uniqueDetailLines = [...new Set(details)];
-    const environment =
-      [...active]
-        .reverse()
-        .filter((message) => message.opType !== "provisioning-env-setup")
-        .map(
-          (message) =>
-            message.provisioning?.environmentDisplayName ?? parseProvisioningEnvironment(message.detail),
-        )
-        .find((value): value is string => Boolean(value)) ?? "environment";
     const provisioning = active.reduce<UIProvisioningMetadata | undefined>(
       (acc, message) => mergeProvisioningMetadata(acc, message.provisioning),
       undefined,
     );
-    const setup = provisioning?.setup;
+    const environment = provisioning?.environmentDisplayName?.trim() ?? "environment";
     const title = (() => {
       if (!hasLifecycleUpdate && lastSetupUpdate) {
         switch (lastSetupUpdate.title) {
@@ -289,9 +190,6 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
 
       return hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`;
     })();
-    const dedupedDetailLines = uniqueDetailLines.filter(
-      (line) => !isRedundantProvisioningDetailLine(line, provisioning),
-    );
 
     merged.push({
       kind: "operation",
@@ -303,7 +201,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       turnId: first.turnId ?? last.turnId,
       opType: "provisioning",
       title,
-      detail: dedupedDetailLines.length > 0 ? dedupedDetailLines.join("\n") : undefined,
+      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
       ...(provisioning ? { provisioning } : {}),
     });
 

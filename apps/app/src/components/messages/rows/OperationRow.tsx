@@ -101,74 +101,6 @@ function getProvisioningSetupStatus(
   }
 }
 
-function buildProvisioningStructuredDetailLines(message: UIOperationMessage): Set<string> {
-  const structuredLines = new Set<string>();
-  const environmentLabel = normalizeProvisioningEnvironmentLabel(
-    message.provisioning?.environmentDisplayName,
-  );
-  const workspaceRoot = message.provisioning?.workspaceRoot;
-  const setup = message.provisioning?.setup;
-  const timeoutLabel = formatTimeoutLabel(setup?.timeoutMs);
-  const timeoutDetailPart = timeoutLabel ? `Timeout ${timeoutLabel}` : undefined;
-  const provisioningDetailParts = [
-    environmentLabel,
-    workspaceRoot,
-    message.provisioning?.fallbackReason,
-  ].filter((value): value is string => Boolean(value));
-
-  if (environmentLabel) {
-    structuredLines.add(`Environment: ${environmentLabel}`);
-  }
-  for (const part of provisioningDetailParts) {
-    structuredLines.add(part);
-  }
-  if (provisioningDetailParts.length > 1) {
-    structuredLines.add(provisioningDetailParts.join(" • "));
-  }
-  if (setup?.scriptPath) {
-    const baseParts = [setup.scriptPath, workspaceRoot, timeoutDetailPart].filter(
-      (value): value is string => Boolean(value),
-    );
-    if (baseParts.length > 0) {
-      structuredLines.add(baseParts.join(" • "));
-    }
-    if (setup.durationMs !== undefined) {
-      structuredLines.add(
-        [setup.scriptPath, workspaceRoot, `Duration ${setup.durationMs}ms`]
-          .filter((value): value is string => Boolean(value))
-          .join(" • "),
-      );
-      structuredLines.add([...baseParts, `Duration ${setup.durationMs}ms`].join(" • "));
-    }
-  }
-  if (setup?.output) {
-    for (const line of splitNonEmptyLines(setup.output)) {
-      structuredLines.add(line);
-    }
-  }
-
-  return structuredLines;
-}
-
-function getProvisioningAdditionalDetailsText(message: UIOperationMessage): string | undefined {
-  const structuredLines = buildProvisioningStructuredDetailLines(message);
-  const structuredPrefixes = [...structuredLines]
-    .sort((left, right) => right.length - left.length)
-    .map((line) => `${line} • `);
-  const additionalLines = splitNonEmptyLines(message.detail)
-    .map((line) => {
-      if (structuredLines.has(line)) return undefined;
-      for (const prefix of structuredPrefixes) {
-        if (line.startsWith(prefix)) {
-          return line.slice(prefix.length).trim() || undefined;
-        }
-      }
-      return line;
-    })
-    .filter((line): line is string => Boolean(line));
-  return additionalLines.length > 0 ? additionalLines.join("\n") : undefined;
-}
-
 function isShimmeringThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
   switch (phase) {
     case "requested":
@@ -285,7 +217,8 @@ export function OperationRow({
   }
 
   if (message.opType === "provisioning") {
-    const fallbackDetailLines = splitNonEmptyLines(message.detail);
+    const additionalDetailsText = message.detail?.trim() || undefined;
+    const additionalDetailLines = splitNonEmptyLines(additionalDetailsText);
     const provisioning = message.provisioning;
     const setupMetadata = message.provisioning?.setup;
     const hasStructuredProvisioningDetails = Boolean(
@@ -294,8 +227,8 @@ export function OperationRow({
         provisioning?.fallbackReason ||
         setupMetadata,
     );
-    const hasProvisioningOutput = Boolean(message.provisioning?.setup?.output?.trim());
-    const hasDetails = hasStructuredProvisioningDetails || fallbackDetailLines.length > 0 || hasProvisioningOutput;
+    const hasDetails =
+      hasStructuredProvisioningDetails || Boolean(additionalDetailsText);
     const titleKind = (() => {
       if (message.title.startsWith("Provisioned ")) return "provisioned" as const;
       if (message.title.startsWith("Provisioning ")) return "provisioning" as const;
@@ -320,7 +253,6 @@ export function OperationRow({
     const outputText = setupMetadata?.output?.trim() || undefined;
     const timeoutLabel = formatTimeoutLabel(setupMetadata?.timeoutMs);
     const setupTimedOut = Boolean(timeoutLabel && outputText && /\btimed out\b/i.test(outputText));
-    const additionalDetailsText = getProvisioningAdditionalDetailsText(message);
     const workspacePath = provisioning?.workspaceRoot;
     const setupScriptPath = resolveProvisioningSetupScriptPath(
       setupMetadata?.scriptPath,
@@ -373,7 +305,7 @@ export function OperationRow({
                 {additionalDetailsText ? <EventMetaItem label="Additional details" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{additionalDetailsText}</EventCodeBlock></EventMetaItem> : null}
               </EventMetaList>
             ) : (
-              <div className="mt-0.5 space-y-0.5">{fallbackDetailLines.map((line, index) => <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">{line}</div>)}</div>
+              <div className="mt-0.5 space-y-0.5">{additionalDetailLines.map((line, index) => <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">{line}</div>)}</div>
             )}
           </ExpandablePanel>
         </div>

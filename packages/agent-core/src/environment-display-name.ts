@@ -12,6 +12,8 @@ export function formatEnvironmentDisplayName(
       return "Direct";
     case "worktree":
       return "Worktree";
+    case "docker":
+      return "Docker Sandbox";
     default:
       break;
   }

@@ -1458,16 +1458,18 @@ describe("toUIMessages replay coverage", () => {
     expect(ops).toHaveLength(3);
     expect(ops[0]?.opType).toBe("provisioning-env-setup");
     expect(ops[0]?.title).toBe("Environment setup started");
-    expect(ops[0]?.detail).toContain(".bb-env-setup.sh");
-    expect(ops[0]?.detail).toContain("/tmp/worktree");
+    expect(ops[0]?.detail).toBeUndefined();
     expect(ops[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
+    expect(ops[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.sh");
+    expect(ops[0]?.provisioning?.setup?.timeoutMs).toBe(600000);
     expect(ops[1]?.opType).toBe("provisioning-env-setup");
     expect(ops[1]?.title).toBe("Environment setup running");
-    expect(ops[1]?.detail).toBe(".bb-env-setup.sh • /tmp/worktree • Timeout 600s");
+    expect(ops[1]?.detail).toBeUndefined();
     expect(ops[1]?.provisioning?.setup?.output).toBe("pnpm install");
     expect(ops[2]?.opType).toBe("provisioning-env-setup");
     expect(ops[2]?.title).toBe("Environment setup completed");
-    expect(ops[2]?.detail).toContain("Duration 125ms");
+    expect(ops[2]?.detail).toBeUndefined();
+    expect(ops[2]?.provisioning?.setup?.durationMs).toBe(125);
   });
 
   it("projects primary-checkout lifecycle events with stable metadata", () => {
@@ -2211,6 +2213,7 @@ describe("toUIMessages replay coverage", () => {
         type: "system/provisioning/completed",
         data: {
           environmentId: "worktree",
+          environmentDisplayName: "Git Worktree Workspace",
         },
         createdAt: 3,
       },
@@ -2270,6 +2273,75 @@ describe("toUIMessages replay coverage", () => {
     if (messageRows[1]?.message.kind === "operation") {
       expect(messageRows[1].message.opType).toBe("provisioning");
     }
+  });
+
+  it("projects docker provisioning rows from structured events without string details", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Check the docker environment" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/started",
+        data: {
+          environmentId: "docker",
+          environmentDisplayName: "Docker Sandbox",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/provisioning/completed",
+        data: {
+          environmentId: "docker",
+          environmentDisplayName: "Docker Sandbox",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+    const rows = buildThreadDetailRows(projected, {
+      includeToolGroupMessages: false,
+    });
+    const messageRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message",
+    );
+
+    expect(messageRows).toHaveLength(2);
+    expect(messageRows[1]?.message.kind).toBe("operation");
+    if (messageRows[1]?.message.kind !== "operation") {
+      return;
+    }
+
+    expect(messageRows[1].message.opType).toBe("provisioning");
+    expect(messageRows[1].message.title).toBe("Provisioned Docker Sandbox");
+    expect(messageRows[1].message.provisioning?.environmentDisplayName).toBe(
+      "Docker Sandbox",
+    );
+    expect(messageRows[1].message.detail).toBeUndefined();
   });
 
   it("keeps non-duplicated initial client thread input alongside later user items", () => {

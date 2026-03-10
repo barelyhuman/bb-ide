@@ -232,7 +232,7 @@ export type ThreadEnvironmentStartReason =
 
 export interface SystemProvisioningStartedEventData {
   environmentId: string;
-  environmentDisplayName?: string;
+  environmentDisplayName: string;
   reason?: ThreadProvisioningReason;
 }
 
@@ -255,7 +255,7 @@ export interface SystemProvisioningFallbackEventData {
 
 export interface SystemProvisioningCompletedEventData {
   environmentId: string;
-  environmentDisplayName?: string;
+  environmentDisplayName: string;
   workspaceRoot?: string;
   fallbackReason?: string;
   reason?: ThreadProvisioningReason;

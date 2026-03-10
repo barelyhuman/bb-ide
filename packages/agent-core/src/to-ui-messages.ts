@@ -1235,7 +1235,6 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const environmentId = getStringField(payload, "environmentId");
     const environmentDisplayName = formatEnvironmentDisplayName({
-      id: environmentId,
       displayName: getStringField(payload, "environmentDisplayName"),
     });
     return {
@@ -1248,9 +1247,6 @@ function parseOperationMessage(
       turnId: getTurnId(event.data),
       opType: "provisioning-started",
       title: "Provisioning started",
-      detail: environmentDisplayName
-        ? `Environment: ${environmentDisplayName}`
-        : undefined,
       provisioning:
         environmentId || environmentDisplayName
           ? {
@@ -1286,12 +1282,6 @@ function parseOperationMessage(
     const timeoutMs = getNumberField(payload, "timeoutMs");
     const durationMs = getNumberField(payload, "durationMs");
     const output = getStringField(payload, "detail");
-    const detailParts = [
-      scriptPath,
-      workspaceRoot,
-      timeoutMs !== undefined ? `Timeout ${Math.round(timeoutMs / 1000)}s` : undefined,
-      durationMs !== undefined ? `Duration ${durationMs}ms` : undefined,
-    ].filter((value): value is string => Boolean(value));
 
     return {
       kind: "operation",
@@ -1303,7 +1293,6 @@ function parseOperationMessage(
       turnId: getTurnId(event.data),
       opType: "provisioning-env-setup",
       title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       ...(status
         ? {
             provisioning: {
@@ -1478,24 +1467,12 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/fallback")) {
     const payload = toEventRecord(event.data);
-    const requestedEnvironmentId = getStringField(payload, "requestedEnvironmentId");
     const fallbackEnvironmentId = getStringField(payload, "fallbackEnvironmentId");
     const reason = getStringField(payload, "reason");
-    const requestedEnvironmentLabel = formatEnvironmentDisplayName({
-      id: requestedEnvironmentId,
-      displayName: requestedEnvironmentId,
-    });
     const fallbackEnvironmentLabel = formatEnvironmentDisplayName({
       id: fallbackEnvironmentId,
       displayName: fallbackEnvironmentId,
     });
-    const detailParts = [
-      requestedEnvironmentLabel && fallbackEnvironmentLabel
-        ? `Requested ${requestedEnvironmentLabel}, using ${fallbackEnvironmentLabel}`
-        : undefined,
-      reason ? `Reason: ${reason}` : undefined,
-      getStringField(payload, "detail"),
-    ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `provisioning-fallback:${event.seq}`),
@@ -1506,7 +1483,17 @@ function parseOperationMessage(
       turnId: getTurnId(event.data),
       opType: "provisioning-fallback",
       title: "Provisioning fallback",
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      detail: getStringField(payload, "detail") || undefined,
+      provisioning:
+        fallbackEnvironmentId || fallbackEnvironmentLabel || reason
+          ? {
+              ...(fallbackEnvironmentId ? { environmentId: fallbackEnvironmentId } : {}),
+              ...(fallbackEnvironmentLabel
+                ? { environmentDisplayName: fallbackEnvironmentLabel }
+                : {}),
+              ...(reason ? { fallbackReason: reason } : {}),
+            }
+          : undefined,
     };
   }
 
@@ -1514,16 +1501,10 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const environmentId = getStringField(payload, "environmentId");
     const environmentDisplayName = formatEnvironmentDisplayName({
-      id: environmentId,
       displayName: getStringField(payload, "environmentDisplayName"),
     });
     const workspaceRoot = getStringField(payload, "workspaceRoot");
     const fallbackReason = getStringField(payload, "fallbackReason");
-    const detailParts = [
-      environmentDisplayName,
-      workspaceRoot,
-      fallbackReason,
-    ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `provisioning-completed:${event.seq}`),
@@ -1534,7 +1515,6 @@ function parseOperationMessage(
       turnId: getTurnId(event.data),
       opType: "provisioning-completed",
       title: "Provisioning ready",
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       provisioning:
         environmentId || environmentDisplayName || workspaceRoot || fallbackReason
           ? {

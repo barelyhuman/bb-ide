@@ -334,28 +334,43 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         1,
         "provisioning-started",
         "Provisioning started",
-        "Environment: Git Worktree Workspace",
-        { environmentDisplayName: "Git Worktree Workspace" },
+        undefined,
+        { environmentDisplayName: "Worktree" },
       ),
       provisioningOperation(
         2,
         "provisioning-env-setup",
         "Environment setup started",
-        ".bb-env-setup.ts • /tmp/worktree • Timeout 600s",
-        { workspaceRoot: "/tmp/worktree" },
+        undefined,
+        {
+          workspaceRoot: "/tmp/worktree",
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+          },
+        },
       ),
       provisioningOperation(
         3,
         "provisioning-env-setup",
         "Environment setup completed",
-        ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
-        { workspaceRoot: "/tmp/worktree" },
+        undefined,
+        {
+          workspaceRoot: "/tmp/worktree",
+          setup: {
+            status: "completed",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+            durationMs: 3074,
+          },
+        },
       ),
       provisioningOperation(
         4,
         "provisioning-completed",
         "Provisioning ready",
-        "worktree • /tmp/worktree",
+        undefined,
         { environmentDisplayName: "Worktree", workspaceRoot: "/tmp/worktree" },
       ),
     ]);
@@ -365,32 +380,28 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.title).toBe("Provisioned Worktree");
     expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Worktree");
     expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
+    expect(rows[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
+    expect(rows[0]?.provisioning?.setup?.timeoutMs).toBe(600000);
+    expect(rows[0]?.provisioning?.setup?.durationMs).toBe(3074);
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(4);
-    expect(rows[0]?.detail).toContain("Environment: Git Worktree Workspace");
-    expect(rows[0]?.detail).toContain("Worktree");
-    expect(rows[0]?.detail).toContain("/tmp/worktree");
-    expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
-    expect(rows[0]?.detail).toContain(
-      ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
-    );
-    expect(rows[0]?.detail).not.toContain("worktree • /tmp/worktree");
+    expect(rows[0]?.detail).toBeUndefined();
   });
 
-  it("removes redundant environment-only completed detail when collapsing provisioning rows", () => {
+  it("keeps completed provisioning rows fully structured", () => {
     const rows = getOperationRows([
       provisioningOperation(
         1,
         "provisioning-started",
         "Provisioning started",
-        "Environment: Direct",
+        undefined,
         { environmentDisplayName: "Direct" },
       ),
       provisioningOperation(
         2,
         "provisioning-completed",
         "Provisioning ready",
-        "Direct",
+        undefined,
         { environmentDisplayName: "Direct" },
       ),
     ]);
@@ -398,7 +409,8 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned Direct");
-    expect(rows[0]?.detail).toBe("Environment: Direct");
+    expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Direct");
+    expect(rows[0]?.detail).toBeUndefined();
   });
 
   it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {
@@ -407,8 +419,8 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         1,
         "provisioning-started",
         "Provisioning started",
-        "Environment: Git Worktree Workspace",
-        { environmentDisplayName: "Git Worktree Workspace" },
+        undefined,
+        { environmentDisplayName: "Worktree" },
       ),
     ]);
     const mergedRows = getOperationRows([
@@ -416,14 +428,14 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         1,
         "provisioning-started",
         "Provisioning started",
-        "Environment: Git Worktree Workspace",
-        { environmentDisplayName: "Git Worktree Workspace" },
+        undefined,
+        { environmentDisplayName: "Worktree" },
       ),
       provisioningOperation(
         2,
         "provisioning-env-setup",
         "Environment setup started",
-        ".bb-env-setup.sh • Timeout 600s",
+        undefined,
         {
           workspaceRoot: "/tmp/worktree",
           setup: {
@@ -437,7 +449,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         3,
         "provisioning-env-setup",
         "Environment setup running",
-        ".bb-env-setup.sh • Timeout 600s",
+        undefined,
         {
           workspaceRoot: "/tmp/worktree",
           setup: {
@@ -451,6 +463,8 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     ]);
 
     expect(startedRows[0]?.id).toBe("provisioning-1");
+    expect(startedRows[0]?.opType).toBe("provisioning");
+    expect(startedRows[0]?.title).toBe("Provisioning Worktree...");
     expect(mergedRows[0]?.id).toBe("provisioning-1");
   });
 
@@ -460,14 +474,14 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         1,
         "provisioning-started",
         "Provisioning started",
-        "Environment: Git Worktree Workspace",
-        { environmentDisplayName: "Git Worktree Workspace" },
+        undefined,
+        { environmentDisplayName: "Worktree" },
       ),
       provisioningOperation(
         2,
         "provisioning-env-setup",
         "Environment setup started",
-        ".bb-env-setup.sh • Timeout 600s",
+        undefined,
         {
           workspaceRoot: "/tmp/worktree",
           setup: {
@@ -481,7 +495,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         3,
         "provisioning-env-setup",
         "Environment setup running",
-        ".bb-env-setup.sh • Timeout 600s",
+        undefined,
         {
           workspaceRoot: "/tmp/worktree",
           setup: {
@@ -496,7 +510,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         4,
         "provisioning-env-setup",
         "Environment setup running",
-        ".bb-env-setup.sh • Timeout 600s",
+        undefined,
         {
           workspaceRoot: "/tmp/worktree",
           setup: {
@@ -511,13 +525,12 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioning Git Worktree Workspace...");
+    expect(rows[0]?.title).toBe("Provisioning Worktree...");
+    expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Worktree");
     expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(rows[0]?.provisioning?.setup?.status).toBe("running");
     expect(rows[0]?.provisioning?.setup?.output).toBe("+ pnpm install\nDone in 3.2s");
-    expect(rows[0]?.detail).toBe(
-      "Environment: Git Worktree Workspace\n.bb-env-setup.sh • Timeout 600s",
-    );
+    expect(rows[0]?.detail).toBeUndefined();
   });
 
   it("collapses env-setup-only updates without looking stuck in provisioning", () => {
@@ -526,13 +539,30 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         1,
         "provisioning-env-setup",
         "Environment setup started",
-        ".bb-env-setup.ts • /tmp/worktree • Timeout 600s",
+        undefined,
+        {
+          workspaceRoot: "/tmp/worktree",
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+          },
+        },
       ),
       provisioningOperation(
         2,
         "provisioning-env-setup",
         "Environment setup completed",
-        ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
+        undefined,
+        {
+          workspaceRoot: "/tmp/worktree",
+          setup: {
+            status: "completed",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+            durationMs: 3074,
+          },
+        },
       ),
     ]);
 
@@ -541,10 +571,10 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.title).toBe("Environment setup completed");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
-    expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
-    expect(rows[0]?.detail).toContain(
-      ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
-    );
+    expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
+    expect(rows[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
+    expect(rows[0]?.provisioning?.setup?.durationMs).toBe(3074);
+    expect(rows[0]?.detail).toBeUndefined();
   });
 });
 

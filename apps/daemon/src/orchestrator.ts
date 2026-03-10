@@ -2480,8 +2480,13 @@ export class Orchestrator implements ThreadOrchestrator {
         state: environmentRuntime.environment.serialize(),
       },
     });
+    const provisionedEnvironmentInfo = this.environmentRegistry.get(
+      environmentRuntime.environment.kind,
+    ).info;
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
+      environmentDisplayName: provisionedEnvironmentInfo.displayName,
+      workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
       reason: provisioningReason,
     });
     const hydratedThread = this.threadRepo.getById(threadId);

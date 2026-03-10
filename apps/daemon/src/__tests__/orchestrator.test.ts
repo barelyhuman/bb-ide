@@ -3681,6 +3681,8 @@ describe("Orchestrator", () => {
             type: "system/provisioning/completed",
             data: expect.objectContaining({
               environmentId: "worktree",
+              environmentDisplayName: "Git Worktree Workspace",
+              workspaceRoot,
             }),
           }),
         );
@@ -4288,7 +4290,10 @@ describe("Orchestrator", () => {
           type === "system/provisioning/completed"
             ? makeEvent({
                 type: "system/provisioning/completed",
-                data: {},
+                data: {
+                  environmentId: "worktree",
+                  environmentDisplayName: "Git Worktree Workspace",
+                },
               })
             : undefined,
       );
@@ -4731,7 +4736,10 @@ describe("Orchestrator", () => {
           type === "system/provisioning/completed"
             ? makeEvent({
                 type: "system/provisioning/completed",
-                data: {},
+                data: {
+                  environmentId: "worktree",
+                  environmentDisplayName: "Git Worktree Workspace",
+                },
               })
             : undefined,
       );
@@ -5768,7 +5776,10 @@ describe("Orchestrator", () => {
           if (type !== "system/provisioning/completed") return undefined;
           return makeEvent({
             type: "system/provisioning/completed",
-            data: {},
+            data: {
+              environmentId: "worktree",
+              environmentDisplayName: "Git Worktree Workspace",
+            },
           });
         },
       );

@@ -5,6 +5,7 @@ describe("formatEnvironmentDisplayName", () => {
   it("maps built-in environment ids to concise labels", () => {
     expect(formatEnvironmentDisplayName({ id: "local" })).toBe("Direct");
     expect(formatEnvironmentDisplayName({ id: "worktree" })).toBe("Worktree");
+    expect(formatEnvironmentDisplayName({ id: "docker" })).toBe("Docker Sandbox");
   });
 
   it("normalizes legacy built-in display names", () => {

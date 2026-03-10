@@ -458,29 +458,48 @@ describe("buildThreadDetailRows", () => {
         kind: "operation",
         opType: "provisioning-started",
         title: "Provisioning started",
-        detail: "Environment: Local Workspace",
+        provisioning: {
+          environmentDisplayName: "Direct",
+        },
       },
       {
         ...baseMessage("provisioning-env-setup-1", 2),
         kind: "operation",
         opType: "provisioning-env-setup",
         title: "Environment setup started",
-        detail: ".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s",
+        provisioning: {
+          workspaceRoot: "/Users/michael/Projects/bb",
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+          },
+        },
       },
       {
         ...baseMessage("provisioning-env-setup-2", 3),
         kind: "operation",
         opType: "provisioning-env-setup",
         title: "Environment setup completed",
-        detail:
-          ".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s • Duration 3074ms",
+        provisioning: {
+          workspaceRoot: "/Users/michael/Projects/bb",
+          setup: {
+            status: "completed",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+            durationMs: 3074,
+          },
+        },
       },
       {
         ...baseMessage("provisioning-completed-1", 4),
         kind: "operation",
         opType: "provisioning-completed",
         title: "Provisioning ready",
-        detail: "local • /Users/michael/Projects/bb",
+        provisioning: {
+          environmentDisplayName: "Direct",
+          workspaceRoot: "/Users/michael/Projects/bb",
+        },
       },
     ];
 
@@ -492,12 +511,11 @@ describe("buildThreadDetailRows", () => {
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("provisioning");
     expect(rows[0].message.title).toBe("Provisioned Direct");
-    expect(rows[0].message.detail).toContain("Environment: Local Workspace");
-    expect(rows[0].message.detail).toContain(".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s");
-    expect(rows[0].message.detail).toContain(
-      ".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s • Duration 3074ms",
-    );
-    expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
+    expect(rows[0].message.provisioning?.environmentDisplayName).toBe("Direct");
+    expect(rows[0].message.provisioning?.workspaceRoot).toBe("/Users/michael/Projects/bb");
+    expect(rows[0].message.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
+    expect(rows[0].message.provisioning?.setup?.durationMs).toBe(3074);
+    expect(rows[0].message.detail).toBeUndefined();
   });
 
   it("keeps streamed provisioning output on the merged provisioning row", () => {
@@ -507,15 +525,17 @@ describe("buildThreadDetailRows", () => {
         kind: "operation",
         opType: "provisioning-started",
         title: "Provisioning started",
-        detail: "Environment: Local Workspace",
+        provisioning: {
+          environmentDisplayName: "Direct",
+        },
       },
       {
         ...baseMessage("provisioning-env-setup-1", 2),
         kind: "operation",
         opType: "provisioning-env-setup",
         title: "Environment setup started",
-        detail: ".bb-env-setup.sh • Timeout 600s",
         provisioning: {
+          workspaceRoot: "/Users/michael/Projects/bb",
           setup: {
             status: "started",
             scriptPath: ".bb-env-setup.sh",
@@ -528,8 +548,8 @@ describe("buildThreadDetailRows", () => {
         kind: "operation",
         opType: "provisioning-env-setup",
         title: "Environment setup running",
-        detail: ".bb-env-setup.sh • Timeout 600s",
         provisioning: {
+          workspaceRoot: "/Users/michael/Projects/bb",
           setup: {
             status: "running",
             scriptPath: ".bb-env-setup.sh",
