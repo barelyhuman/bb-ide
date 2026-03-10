@@ -6,6 +6,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
+  PromptInput,
   Project,
   Thread,
   CreateProjectRequest,
@@ -37,8 +38,10 @@ import type {
   ThreadGitDiffSelection,
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
+  ThreadDetailRow,
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
+import { wsManager } from "../lib/ws";
 
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
 const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
@@ -151,6 +154,93 @@ function updateCachedThread(
     if (!thread) return thread;
     return updater(thread);
   });
+}
+
+function buildOptimisticUserMessageText(input: PromptInput[]): string {
+  return input
+    .filter((entry): entry is Extract<PromptInput, { type: "text" }> => entry.type === "text")
+    .map((entry) => entry.text.trim())
+    .filter((entry) => entry.length > 0)
+    .join("\n\n");
+}
+
+function buildOptimisticUserAttachments(input: PromptInput[]) {
+  let webImages = 0;
+  let localImages = 0;
+  let localFiles = 0;
+  const imageUrls: string[] = [];
+  const localImagePaths: string[] = [];
+  const localFilePaths: string[] = [];
+
+  for (const entry of input) {
+    switch (entry.type) {
+      case "text":
+        break;
+      case "image":
+        webImages += 1;
+        imageUrls.push(entry.url);
+        break;
+      case "localImage":
+        localImages += 1;
+        localImagePaths.push(entry.path);
+        break;
+      case "localFile":
+        localFiles += 1;
+        localFilePaths.push(entry.path);
+        break;
+    }
+  }
+
+  if (webImages === 0 && localImages === 0 && localFiles === 0) {
+    return undefined;
+  }
+
+  return {
+    webImages,
+    localImages,
+    localFiles,
+    ...(imageUrls.length > 0 ? { imageUrls } : {}),
+    ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
+    ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
+  };
+}
+
+export function buildOptimisticUserThreadRow(
+  threadId: string,
+  input: PromptInput[],
+  createdAt: number,
+): ThreadDetailRow {
+  const id = `optimistic-user-${createdAt}`;
+  return {
+    kind: "message",
+    id,
+    message: {
+      id,
+      kind: "user",
+      threadId,
+      text: buildOptimisticUserMessageText(input),
+      attachments: buildOptimisticUserAttachments(input),
+      sourceSeqStart: Number.MAX_SAFE_INTEGER,
+      sourceSeqEnd: Number.MAX_SAFE_INTEGER,
+      createdAt,
+    },
+  };
+}
+
+export function appendOptimisticUserRowToTimeline(
+  timeline: ThreadTimelineResponse | undefined,
+  threadId: string,
+  input: PromptInput[],
+  createdAt: number,
+): ThreadTimelineResponse | undefined {
+  if (!timeline) {
+    return timeline;
+  }
+
+  return {
+    ...timeline,
+    rows: [...timeline.rows, buildOptimisticUserThreadRow(threadId, input, createdAt)],
+  };
 }
 
 function appendQueuedThreadMessage(
@@ -577,14 +667,56 @@ export function useTellThread() {
         mode,
         demotePrimaryIfNeeded,
       }),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["thread", variables.id] });
+      await queryClient.cancelQueries({ queryKey: ["threadTimeline", variables.id] });
+
+      const previousThread = queryClient.getQueryData<Thread>(["thread", variables.id]);
+      const previousTimelines = queryClient.getQueriesData<ThreadTimelineResponse>({
+        queryKey: ["threadTimeline", variables.id],
+      });
+      const optimisticCreatedAt = Date.now();
+
+      updateCachedThread(queryClient, variables.id, (thread) => ({
+        ...thread,
+        status: "active",
+        updatedAt: Math.max(thread.updatedAt, optimisticCreatedAt),
+      }));
+      for (const [queryKey, timeline] of previousTimelines) {
+        queryClient.setQueryData<ThreadTimelineResponse | undefined>(
+          queryKey,
+          appendOptimisticUserRowToTimeline(
+            timeline ?? undefined,
+            variables.id,
+            variables.input,
+            optimisticCreatedAt,
+          ),
+        );
+      }
+
+      return {
+        previousThread,
+        previousTimelines,
+      };
+    },
+    onError: (_error, variables, context) => {
+      if (context?.previousThread) {
+        queryClient.setQueryData<Thread>(["thread", variables.id], context.previousThread);
+      }
+      for (const [queryKey, data] of context?.previousTimelines ?? []) {
+        queryClient.setQueryData(queryKey, data);
+      }
+    },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({
         queryKey: ["threadDefaultExecutionOptions", variables.id],
       });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
+      if (wsManager.getConnectionState() !== "connected") {
+        queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+        queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
+        queryClient.invalidateQueries({ queryKey: ["threads"] });
+        queryClient.invalidateQueries({ queryKey: ["status"] });
+      }
     },
   });
 }

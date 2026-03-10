@@ -1279,6 +1279,16 @@ export function ThreadDetailView() {
       return;
     }
 
+    const submittedDraft = {
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    };
+
+    // Match project-start behavior: clear immediately, then restore only if the
+    // request fails and the user has not started a new draft in the meantime.
+    promptDraft.clear();
+    setAttachmentError(null);
+
     try {
       await sendFollowUpInput({
         input: promptInput,
@@ -1287,9 +1297,8 @@ export function ThreadDetailView() {
         ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
       });
-      promptDraft.clear();
-      setAttachmentError(null);
     } catch (err) {
+      promptDraft.restoreIfEmpty(submittedDraft);
       window.alert(err instanceof Error ? err.message : "Failed to send follow-up");
     }
   };
@@ -1555,7 +1564,14 @@ export function ThreadDetailView() {
           threadDetailRows.map((entry, entryIndex) => {
             const isLastRow = entryIndex === threadDetailRows.length - 1;
             return (
-              <div key={`${threadId}:${entry.id}`} data-thread-row-id={entry.id}>
+              <div
+                key={`${threadId}:${entry.id}`}
+                data-thread-row-id={entry.id}
+                style={{
+                  contentVisibility: "auto",
+                  containIntrinsicSize: "160px",
+                }}
+              >
                 {entry.kind === "tool-group" ? (
                   <ToolGroupEntry
                     projectId={projectId}
