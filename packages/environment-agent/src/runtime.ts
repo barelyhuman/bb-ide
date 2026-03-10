@@ -60,6 +60,8 @@ export class EnvironmentAgentRuntime {
   private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
   private readonly stderrLineSubscribers = new Set<(line: string) => void>();
   private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
+  private providerStdoutBuffer = "";
+  private providerStderrBuffer = "";
   private daemonConnection: EnvironmentAgentDaemonConnectionConfig | undefined;
   private connectedToDaemon = false;
   private deliveryInFlight: Promise<void> | null = null;
@@ -418,29 +420,35 @@ export class EnvironmentAgentRuntime {
 
     child.stdout?.setEncoding("utf-8");
     child.stdout?.on("data", (chunk: string) => {
-      for (const line of chunk.split(/\r\n|\n|\r/g)) {
-        if (!line.trim()) continue;
-        this.opts.onStdoutLine?.(line);
-        this.emitProviderStdoutLine(line);
-        if (this.tryResolveProviderRequest(line)) {
-          continue;
-        }
-        this.appendEvent(this.toProviderEvent(line));
-      }
+      this.providerStdoutBuffer = this.processBufferedLines({
+        buffer: this.providerStdoutBuffer,
+        chunk,
+        onLine: (line) => {
+          this.opts.onStdoutLine?.(line);
+          this.emitProviderStdoutLine(line);
+          if (this.tryResolveProviderRequest(line)) {
+            return;
+          }
+          this.appendEvent(this.toProviderEvent(line));
+        },
+      });
     });
 
     child.stderr?.setEncoding("utf-8");
     child.stderr?.on("data", (chunk: string) => {
-      for (const line of chunk.split(/\r\n|\n|\r/g)) {
-        if (!line.trim()) continue;
-        this.opts.onStderrLine?.(line);
-        this.emitProviderStderrLine(line);
-        this.appendEvent({
-          type: "provider.stderr",
-          threadId: this.resolveThreadId(),
-          line,
-        });
-      }
+      this.providerStderrBuffer = this.processBufferedLines({
+        buffer: this.providerStderrBuffer,
+        chunk,
+        onLine: (line) => {
+          this.opts.onStderrLine?.(line);
+          this.emitProviderStderrLine(line);
+          this.appendEvent({
+            type: "provider.stderr",
+            threadId: this.resolveThreadId(),
+            line,
+          });
+        },
+      });
     });
 
     child.once("exit", (_code, _signal) => {
@@ -1022,6 +1030,21 @@ export class EnvironmentAgentRuntime {
       pending.reject(error);
       this.pendingProviderRequests.delete(id);
     }
+  }
+
+  private processBufferedLines(args: {
+    buffer: string;
+    chunk: string;
+    onLine: (line: string) => void;
+  }): string {
+    const combined = args.buffer + args.chunk;
+    const parts = combined.split(/\r\n|\n|\r/g);
+    const remainder = parts.pop() ?? "";
+    for (const line of parts) {
+      if (!line.trim()) continue;
+      args.onLine(line);
+    }
+    return remainder;
   }
 
   private toProviderErrorMessage(error: unknown): string {

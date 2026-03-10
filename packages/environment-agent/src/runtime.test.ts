@@ -329,6 +329,67 @@ describe("EnvironmentAgentRuntime", () => {
     expect(ack.message).toContain("no rollout found for thread id");
   });
 
+  it("reassembles provider responses split across stdout chunks", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        [
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) {",
+          "if (!line.trim()) continue;",
+          "const msg = JSON.parse(line);",
+          "if (msg.method === 'initialize') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+          "} else if (msg.method === 'thread/resume') {",
+          "const response = JSON.stringify({",
+          "  id: msg.id,",
+          "  result: { thread: { id: 'provider-thread-1', preview: 'x'.repeat(70000) } }",
+          "});",
+          "const midpoint = Math.floor(response.length / 2);",
+          "process.stdout.write(response.slice(0, midpoint));",
+          "setTimeout(() => process.stdout.write(response.slice(midpoint) + '\\n'), 5);",
+          "}",
+          "}",
+          "});",
+        ].join(""),
+      ],
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-3",
+        idempotencyKey: "idem-3",
+        sentAt: Date.now(),
+        threadId: "thread-1",
+        projectId: "project-1",
+      },
+      command: {
+        type: "thread.resume",
+        threadId: "thread-1",
+        projectId: "project-1",
+        providerThreadId: "provider-thread-1",
+        params: { threadId: "provider-thread-1" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+        },
+      },
+    });
+
+    expect(ack.state).toBe("accepted");
+    expect(ack.result).toEqual({
+      thread: { id: "provider-thread-1", preview: "x".repeat(70000) },
+    });
+  });
+
   it("pushes buffered events back to the daemon and advances the ack cursor", async () => {
     const deliveredSequences: number[][] = [];
     const daemon = createServer((request, response) => {
