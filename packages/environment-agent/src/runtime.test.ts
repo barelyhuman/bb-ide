@@ -579,7 +579,15 @@ describe("EnvironmentAgentRuntime", () => {
     });
 
     runtime.start();
-    await expect.poll(() => deliveredSequences).toEqual([[1]]);
+    await expect
+      .poll(() => runtime.getStatusSnapshot())
+      .toMatchObject({
+        connectedToDaemon: true,
+        pendingEventCount: 0,
+        lastAckedSequence: 1,
+        deliveryState: "healthy",
+      });
+    expect(deliveredSequences).toEqual([[1]]);
 
     runtime.appendEvent({
       type: "provider.event",
