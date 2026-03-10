@@ -41,7 +41,10 @@ function isCollapsibleTurnMessage(message: UIMessage): message is CollapsibleTur
   ) {
     return false;
   }
-  return message.kind !== "user";
+  if (message.kind === "user" || message.kind === "assistant-text") {
+    return false;
+  }
+  return true;
 }
 
 function isToolExploringMessage(
@@ -141,6 +144,94 @@ function mergeProvisioningMetadata(
   };
 }
 
+function getProvisioningStructuredDetailLines(
+  metadata: UIProvisioningMetadata | undefined,
+): Set<string> {
+  const lines = new Set<string>();
+  const environment = metadata?.environmentDisplayName?.trim();
+  const workspaceRoot = metadata?.workspaceRoot?.trim();
+  const fallbackReason = metadata?.fallbackReason?.trim();
+
+  if (environment) {
+    lines.add(`Environment: ${environment}`);
+    lines.add(environment);
+  }
+  if (workspaceRoot) {
+    lines.add(workspaceRoot);
+  }
+  if (fallbackReason) {
+    lines.add(fallbackReason);
+  }
+
+  const detailParts = [environment, workspaceRoot, fallbackReason].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (detailParts.length > 1) {
+    lines.add(detailParts.join(" • "));
+  }
+
+  return lines;
+}
+
+function normalizeProvisioningLineEnvironment(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return formatEnvironmentDisplayName({ id: trimmed, displayName: trimmed });
+}
+
+function isRedundantProvisioningDetailLine(
+  line: string,
+  metadata: UIProvisioningMetadata | undefined,
+): boolean {
+  const trimmedLine = line.trim();
+  if (!trimmedLine) return true;
+
+  const environment = metadata?.environmentDisplayName?.trim();
+  const workspaceRoot = metadata?.workspaceRoot?.trim();
+  const fallbackReason = metadata?.fallbackReason?.trim();
+
+  if (trimmedLine.startsWith("Environment: ")) {
+    const value = trimmedLine.slice("Environment: ".length).trim();
+    return false;
+  }
+
+  const structuredLines = getProvisioningStructuredDetailLines(metadata);
+  if (structuredLines.has(trimmedLine)) {
+    return true;
+  }
+
+  const parts = trimmedLine.split(" • ").map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return true;
+  if (parts.length === 1) {
+    const [part] = parts;
+    return Boolean(
+      (environment && normalizeProvisioningLineEnvironment(part) === environment) ||
+        (workspaceRoot && part === workspaceRoot) ||
+        (fallbackReason && part === fallbackReason),
+    );
+  }
+
+  const [environmentPart, workspacePart, fallbackPart, ...rest] = parts;
+  if (rest.length > 0 || !environmentPart) return false;
+  if (!environment || normalizeProvisioningLineEnvironment(environmentPart) !== environment) {
+    return false;
+  }
+  if (workspaceRoot && workspacePart !== workspaceRoot) {
+    return false;
+  }
+  if (!workspaceRoot && workspacePart) {
+    return false;
+  }
+  if (fallbackReason && fallbackPart !== fallbackReason) {
+    return false;
+  }
+  if (!fallbackReason && fallbackPart) {
+    return false;
+  }
+
+  return true;
+}
+
 function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   const merged: UIMessage[] = [];
   let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
@@ -199,6 +290,9 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
 
       return hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`;
     })();
+    const dedupedDetailLines = uniqueDetailLines.filter(
+      (line) => !isRedundantProvisioningDetailLine(line, provisioning),
+    );
 
     merged.push({
       kind: "operation",
@@ -210,7 +304,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       turnId: first.turnId ?? last.turnId,
       opType: "provisioning",
       title,
-      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      detail: dedupedDetailLines.length > 0 ? dedupedDetailLines.join("\n") : undefined,
       ...(provisioning ? { provisioning } : {}),
     });
 

@@ -1692,7 +1692,9 @@ interface ProjectionState {
   messages: UIMessage[];
   seenUserKeys: Set<string>;
   openAssistantByTurn: Map<string, UIAssistantTextMessage>;
+  finalizedAssistantTurnKeys: Set<string>;
   openReasoningByTurn: Map<string, UIAssistantReasoningMessage>;
+  finalizedReasoningTurnKeys: Set<string>;
   fileEditsByCallId: Map<string, UIFileEditMessage>;
   toolActivity: ToolActivityState;
 }
@@ -1702,7 +1704,9 @@ function createProjectionState(): ProjectionState {
     messages: [],
     seenUserKeys: new Set(),
     openAssistantByTurn: new Map(),
+    finalizedAssistantTurnKeys: new Set(),
     openReasoningByTurn: new Map(),
+    finalizedReasoningTurnKeys: new Set(),
     fileEditsByCallId: new Map(),
     toolActivity: {
       runningCallsById: new Map(),
@@ -2536,6 +2540,9 @@ export function toUIMessages(
     if (assistantDelta) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      if (state.finalizedAssistantTurnKeys.has(turnKey)) {
+        continue;
+      }
 
       let existing = state.openAssistantByTurn.get(turnKey);
       if (!existing) {
@@ -2565,6 +2572,9 @@ export function toUIMessages(
     if (assistantFinal) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      if (state.finalizedAssistantTurnKeys.has(turnKey)) {
+        continue;
+      }
       const existing = state.openAssistantByTurn.get(turnKey);
 
       if (existing) {
@@ -2573,6 +2583,7 @@ export function toUIMessages(
         existing.text = assistantFinal;
         existing.status = "completed";
         state.openAssistantByTurn.delete(turnKey);
+        state.finalizedAssistantTurnKeys.add(turnKey);
       } else {
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push({
@@ -2586,6 +2597,7 @@ export function toUIMessages(
           text: assistantFinal,
           status: "completed",
         });
+        state.finalizedAssistantTurnKeys.add(turnKey);
       }
       continue;
     }
@@ -2594,6 +2606,9 @@ export function toUIMessages(
     if (reasoningDelta) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      if (state.finalizedReasoningTurnKeys.has(turnKey)) {
+        continue;
+      }
 
       let existing = state.openReasoningByTurn.get(turnKey);
       if (!existing) {
@@ -2631,6 +2646,7 @@ export function toUIMessages(
         existing.text = reasoningFinal;
         existing.status = "completed";
         state.openReasoningByTurn.delete(turnKey);
+        state.finalizedReasoningTurnKeys.add(turnKey);
       } else {
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push({
@@ -2644,6 +2660,7 @@ export function toUIMessages(
           text: reasoningFinal,
           status: "completed",
         });
+        state.finalizedReasoningTurnKeys.add(turnKey);
       }
       continue;
     }

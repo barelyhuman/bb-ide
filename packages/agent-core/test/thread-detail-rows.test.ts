@@ -178,6 +178,46 @@ function getOperationRows(messages: UIMessage[]): Array<Extract<UIMessage, { kin
 }
 
 describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
+  it("does not collapse earlier assistant messages into a tool group", () => {
+    const rows = buildThreadDetailRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "say hi",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        text: "Hi!",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        text: "What can I help with?",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
+    expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
+  });
+
   it("collapses a promote started/completed pair into a single operation row", () => {
     const rows = getOperationRows([
       primaryCheckoutOperation(
@@ -328,11 +368,37 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(4);
     expect(rows[0]?.detail).toContain("Environment: Git Worktree Workspace");
+    expect(rows[0]?.detail).toContain("Worktree");
+    expect(rows[0]?.detail).toContain("/tmp/worktree");
     expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
     expect(rows[0]?.detail).toContain(
       ".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms",
     );
-    expect(rows[0]?.detail).toContain("worktree • /tmp/worktree");
+    expect(rows[0]?.detail).not.toContain("worktree • /tmp/worktree");
+  });
+
+  it("removes redundant environment-only completed detail when collapsing provisioning rows", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        "Environment: Direct",
+        { environmentDisplayName: "Direct" },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-completed",
+        "Provisioning ready",
+        "Direct",
+        { environmentDisplayName: "Direct" },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.title).toBe("Provisioned Direct");
+    expect(rows[0]?.detail).toBe("Environment: Direct");
   });
 
   it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {

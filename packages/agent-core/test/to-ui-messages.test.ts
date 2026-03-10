@@ -70,6 +70,72 @@ describe("toUIMessages replay coverage", () => {
     }
   });
 
+  it("deduplicates repeated completed assistant final messages for the same item id", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          __bb_provider_event: {
+            schema: "beanbag/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1,
+          },
+          payload: {
+            threadId: "provider-thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "Hello",
+              phase: "final_answer",
+            },
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          __bb_provider_event: {
+            schema: "beanbag/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 2,
+          },
+          payload: {
+            threadId: "provider-thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "Hello",
+              phase: "final_answer",
+            },
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const assistantMessages = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.text).toBe("Hello");
+  });
+
   it("projects the direct raw-events fixture with stable, deduplicated output", () => {
     const events = loadFixture("thread-JQh4-pAyGlgHLACZ8AXY2-events.json");
     expect(events.length).toBeGreaterThan(500);
@@ -371,6 +437,94 @@ describe("toUIMessages replay coverage", () => {
     expect(assistant?.status).toBe("streaming");
     expect(reasoning).toBeDefined();
     expect(reasoning?.status).toBe("streaming");
+  });
+
+  it("ignores trailing assistant deltas that arrive after completion", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "Final answer",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/agentMessage/delta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: " trailing",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const assistants = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+
+    expect(assistants).toHaveLength(1);
+    expect(assistants[0]?.text).toBe("Final answer");
+    expect(assistants[0]?.status).toBe("completed");
+  });
+
+  it("ignores trailing reasoning deltas that arrive after completion", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "rs-1",
+            text: "Final reasoning",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-1",
+          delta: " trailing",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const reasoning = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "assistant-reasoning" }> =>
+        message.kind === "assistant-reasoning",
+    );
+
+    expect(reasoning).toHaveLength(1);
+    expect(reasoning[0]?.text).toBe("Final reasoning");
+    expect(reasoning[0]?.status).toBe("completed");
   });
 
   it("coalesces command output deltas and completion state", () => {
