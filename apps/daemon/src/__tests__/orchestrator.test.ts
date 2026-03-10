@@ -6440,7 +6440,86 @@ describe("Orchestrator", () => {
         );
       });
 
-      it("queues a follow-up thread message when squash merge hits conflicts", async () => {
+      it("returns deferred follow-up actions when squash merge hits conflicts", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Test",
+          rootPath: "/tmp/proj-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        (threadRepo.enqueueQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "queued-1",
+          input: [],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          createdAt: 1000,
+        });
+        (threadRepo.deleteQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue(false);
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          threadId: "thread-1",
+          projectId: "proj-1",
+          rootPath: "/tmp/proj-1",
+          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
+          branchName: "bb/thread-1",
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-1",
+            overrides: {
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
+              async squashMergeIntoDefaultBranch() {
+                return {
+                  merged: false,
+                  message: "Squash merge has conflicts against main.",
+                  conflictFiles: ["src/conflicted.ts", "README.md"],
+                };
+              },
+            },
+          }),
+        });
+        const result = await (asOrchestratorHarness(manager) as any)._runWorktreeSquashMergeOperation("thread-1", {
+          mergeBaseBranch: "main",
+          squashMessage: "feat: ship thread changes",
+        });
+
+        expect(result).toEqual({
+          message: "Squash merge has conflicts against main.",
+          postActions: [
+            {
+              type: "enqueue_queued_follow_up",
+              request: {
+                operation: "squash_merge",
+                options: {
+                  mergeBaseBranch: "main",
+                  squashMessage: "feat: ship thread changes",
+                },
+              },
+              conflictFiles: ["src/conflicted.ts", "README.md"],
+            },
+          ],
+        });
+        expect(threadRepo.enqueueQueuedMessage).not.toHaveBeenCalled();
+        expect(ws.broadcast).not.toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
+      });
+
+      it("queues follow-up side effects after squash merge operation terminal status is recorded", async () => {
         const thread = makeThread({
           id: "thread-1",
           projectId: "proj-1",
@@ -6498,9 +6577,17 @@ describe("Orchestrator", () => {
           .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
           .mockImplementation(() => {});
 
-        await (asOrchestratorHarness(manager) as any)._runWorktreeSquashMergeOperation("thread-1", {
-          mergeBaseBranch: "main",
-          squashMessage: "feat: ship thread changes",
+        await (asOrchestratorHarness(manager) as any)._runQueuedThreadOperation(thread, {
+          operationId: "op-1",
+          requestedAt: 1000,
+          demotedPrimaryCheckout: false,
+          request: {
+            operation: "squash_merge",
+            options: {
+              mergeBaseBranch: "main",
+              squashMessage: "feat: ship thread changes",
+            },
+          },
         });
 
         expect(threadRepo.enqueueQueuedMessage).toHaveBeenCalledWith(
@@ -6525,6 +6612,29 @@ describe("Orchestrator", () => {
         );
         expect(scheduleFollowUpSpy).toHaveBeenCalledWith("thread-1");
         expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "squash_merge",
+              status: "completed",
+              operationId: "op-1",
+            }),
+          }),
+        );
+        expect(
+          (eventRepo.create as ReturnType<typeof vi.fn>).mock.invocationCallOrder[
+            (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls.findIndex(
+              ([event]) =>
+                event.type === "system/thread_operation" &&
+                event.data?.status === "completed" &&
+                event.data?.operationId === "op-1",
+            )
+          ] ?? Number.POSITIVE_INFINITY,
+        ).toBeLessThan(
+          (threadRepo.enqueueQueuedMessage as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0] ??
+            Number.POSITIVE_INFINITY,
+        );
       });
 
       it("emits a commit event when squash merge creates a prep commit", async () => {

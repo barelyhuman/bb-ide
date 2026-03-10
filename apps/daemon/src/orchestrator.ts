@@ -145,6 +145,19 @@ interface QueuedThreadOperation {
   demotedPrimaryCheckout: boolean;
 }
 
+interface EnqueueQueuedFollowUpPostAction {
+  type: "enqueue_queued_follow_up";
+  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>;
+  conflictFiles: string[];
+}
+
+type ThreadOperationPostAction = EnqueueQueuedFollowUpPostAction;
+
+interface ThreadOperationRunResult {
+  message: string;
+  postActions?: ThreadOperationPostAction[];
+}
+
 // Open provider/runtime event type set: unknown values are intentionally not filtered.
 const TIMELINE_NOISE_EVENT_TYPES: readonly string[] = [
   "thread/started",
@@ -1050,6 +1063,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     try {
       let completionMessage = "";
+      let postActions: ThreadOperationPostAction[] = [];
       switch (queuedOperation.request.operation) {
         case "commit": {
           const result = await this._runWorktreeCommitOperation(
@@ -1057,6 +1071,7 @@ export class Orchestrator implements ThreadOrchestrator {
             queuedOperation.request.options,
           );
           completionMessage = result.message;
+          postActions = result.postActions ?? [];
           break;
         }
         case "squash_merge": {
@@ -1065,6 +1080,7 @@ export class Orchestrator implements ThreadOrchestrator {
             queuedOperation.request.options,
           );
           completionMessage = result.message;
+          postActions = result.postActions ?? [];
           break;
         }
         default:
@@ -1081,6 +1097,8 @@ export class Orchestrator implements ThreadOrchestrator {
           demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
         },
       );
+
+      await this._applyThreadOperationPostActions(thread.id, postActions);
     } catch (err) {
       this._appendThreadOperationEvent(
         thread.id,
@@ -1104,10 +1122,30 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
+  private async _applyThreadOperationPostActions(
+    threadId: string,
+    postActions: readonly ThreadOperationPostAction[],
+  ): Promise<void> {
+    for (const postAction of postActions) {
+      const postActionType = postAction.type;
+      switch (postActionType) {
+        case "enqueue_queued_follow_up":
+          this._enqueueSquashMergeConflictFollowUp(
+            threadId,
+            postAction.request,
+            postAction.conflictFiles,
+          );
+          break;
+        default:
+          assertNever(postActionType);
+      }
+    }
+  }
+
   private async _runWorktreeCommitOperation(
     threadId: string,
     request?: Extract<ThreadOperationRequest, { operation: "commit" }>["options"],
-  ): Promise<{ message: string }> {
+  ): Promise<ThreadOperationRunResult> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -1159,7 +1197,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _runWorktreeSquashMergeOperation(
     threadId: string,
     request?: Extract<ThreadOperationRequest, { operation: "squash_merge" }>["options"],
-  ): Promise<{ message: string }> {
+  ): Promise<ThreadOperationRunResult> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -1222,12 +1260,19 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
     }, { broadcastChanges: ["events-appended", "work-status-changed"] });
 
-    if (!mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0) {
-      this._enqueueSquashMergeConflictFollowUp(thread.id, {
-        operation: "squash_merge",
-        ...(request ? { options: request } : {}),
-      }, mergeResult.conflictFiles);
-    }
+    const postActions: ThreadOperationPostAction[] =
+      !mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
+        ? [
+            {
+              type: "enqueue_queued_follow_up",
+              request: {
+                operation: "squash_merge",
+                ...(request ? { options: request } : {}),
+              },
+              conflictFiles: mergeResult.conflictFiles,
+            },
+          ]
+        : [];
 
     if (
       mergeResult.merged &&
@@ -1242,7 +1287,10 @@ export class Orchestrator implements ThreadOrchestrator {
       this.archive(thread.id);
     }
 
-    return { message: mergeResult.message };
+    return {
+      message: mergeResult.message,
+      ...(postActions.length > 0 ? { postActions } : {}),
+    };
   }
 
   private _enqueueSquashMergeConflictFollowUp(
