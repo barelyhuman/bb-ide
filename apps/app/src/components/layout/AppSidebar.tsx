@@ -99,11 +99,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     if (isRestartDisabled) return
     restartDaemon.mutate({ force: true }, {
       onSuccess: () => {
-        toast.success(
-          blockingThreadCount > 0
-            ? "Daemon restart requested. Active threads will reconnect if possible."
-            : "Daemon restart requested",
-        )
+        toast.success("Daemon restart requested")
       },
       onError: (error) => {
         toast.error(
