@@ -8,6 +8,7 @@ import {
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
 import {
+  resolveEnvironmentId,
   requireProjectId,
   requireThreadId,
   resolveProjectId,
@@ -88,6 +89,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--prompt <prompt>", "Initial prompt for the thread")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option(
+      "--environment <id>",
+      "Environment ID (defaults to BEANBAG_ENVIRONMENT when set)",
+    )
+    .option(
       "--parent-thread <id>",
       "Parent thread ID for worker thread links (defaults to BB_THREAD_ID)",
     )
@@ -98,6 +103,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (opts: {
       prompt?: string;
       project?: string;
+      environment?: string;
       parentThread?: string;
       contextParentThread?: boolean;
     }) => {
@@ -110,6 +116,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
 
         const projectId = requireProjectId(opts.project);
+        const environmentId = resolveEnvironmentId(opts.environment);
         const parentThreadId =
           opts.parentThread ??
           (opts.contextParentThread === false
@@ -122,6 +129,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
+              ...(environmentId ? { environmentId } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
             },
           }),

@@ -54,6 +54,7 @@ describe("CLI command output contracts", () => {
 
     delete process.env.BB_PROJECT_ID;
     delete process.env.BB_THREAD_ID;
+    delete process.env.BEANBAG_ENVIRONMENT;
   });
 
   afterEach(() => {
@@ -136,6 +137,76 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         input: undefined,
         parentThreadId: "thread-parent",
+      },
+    });
+  });
+
+  it("bb thread spawn forwards --environment", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    const thread: Thread = {
+      id: "thread-env-1",
+      projectId: "proj-1",
+      status: "created",
+      environmentId: "worktree",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "spawn", "--environment", "worktree"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        projectId: "proj-1",
+        input: undefined,
+        environmentId: "worktree",
+      },
+    });
+  });
+
+  it("bb thread spawn falls back to BEANBAG_ENVIRONMENT", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    process.env.BEANBAG_ENVIRONMENT = "local";
+    const thread: Thread = {
+      id: "thread-env-2",
+      projectId: "proj-1",
+      status: "created",
+      environmentId: "local",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "spawn"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        projectId: "proj-1",
+        input: undefined,
+        environmentId: "local",
       },
     });
   });

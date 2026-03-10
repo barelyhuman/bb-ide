@@ -16,6 +16,15 @@ import {
   type EnvironmentAgentStatusSnapshot,
 } from "./protocol.js";
 
+type EnvironmentAgentProviderEnsureCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.ensure" }
+>;
+type EnvironmentAgentRpcCommand = Exclude<
+  EnvironmentAgentCommand,
+  EnvironmentAgentProviderEnsureCommand
+>;
+
 export interface EnvironmentAgentRuntimeOptions {
   threadId?: string;
   projectId?: string;
@@ -179,8 +188,12 @@ export class EnvironmentAgentRuntime {
     envelope: EnvironmentAgentCommandEnvelope,
   ): Promise<EnvironmentAgentCommandAck> {
     try {
-      await this.ensureProviderForCommand(envelope.command);
-      const result = await this.requestProviderCommand(envelope.command);
+      const result =
+        envelope.command.type === "provider.ensure"
+          ? this.ensureProviderStatus(
+              this.toProviderEnsureSpec(envelope.command),
+            )
+          : await this.executeRpcCommand(envelope.command);
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
         idempotencyKey: envelope.meta.idempotencyKey,
@@ -197,6 +210,13 @@ export class EnvironmentAgentRuntime {
         message: normalizedError.message,
       });
     }
+  }
+
+  private async executeRpcCommand(
+    command: EnvironmentAgentRpcCommand,
+  ): Promise<unknown> {
+    await this.ensureProviderForCommand(command);
+    return this.requestProviderCommand(command);
   }
 
   private emitProviderStdoutLine(line: string): void {
@@ -461,7 +481,24 @@ export class EnvironmentAgentRuntime {
     };
   }
 
-  private async ensureProviderForCommand(command: EnvironmentAgentCommand): Promise<void> {
+  private toProviderEnsureSpec(
+    command: EnvironmentAgentProviderEnsureCommand,
+  ): EnvironmentAgentProviderSpec {
+    return {
+      command: command.command,
+      args: [...command.args],
+      ...(command.launchCommand ? { launchCommand: command.launchCommand } : {}),
+      ...(command.launchArgs ? { launchArgs: [...command.launchArgs] } : {}),
+      ...(command.env ? { env: { ...command.env } } : {}),
+      ...(command.files
+        ? { files: command.files.map((file) => ({ ...file })) }
+        : {}),
+    };
+  }
+
+  private async ensureProviderForCommand(
+    command: EnvironmentAgentRpcCommand,
+  ): Promise<void> {
     switch (command.type) {
       case "thread.start":
       case "thread.resume":
@@ -492,14 +529,16 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  private requestProviderCommand(command: EnvironmentAgentCommand): Promise<unknown> {
+  private requestProviderCommand(
+    command: EnvironmentAgentRpcCommand,
+  ): Promise<unknown> {
     return this.requestProvider({
       method: this.toProviderMethod(command),
       params: this.toProviderParams(command),
     });
   }
 
-  private toProviderMethod(command: EnvironmentAgentCommand): string {
+  private toProviderMethod(command: EnvironmentAgentRpcCommand): string {
     switch (command.type) {
       case "thread.start":
         return "thread/start";
@@ -520,7 +559,7 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  private toProviderParams(command: EnvironmentAgentCommand): unknown {
+  private toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
     switch (command.type) {
       case "thread.start":
       case "thread.resume":

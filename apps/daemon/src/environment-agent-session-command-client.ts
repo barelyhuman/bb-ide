@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type {
   EnvironmentAgentClient,
   EnvironmentAgentCommandAck,
@@ -8,13 +9,22 @@ import type {
 } from "@beanbag/environment-agent";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type { JsonLineTransport } from "@beanbag/environment-agent";
+import type { EnvironmentAgentCommandRecord } from "@beanbag/db";
 import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 50;
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function isEnvironmentAgentProviderStatus(
+  value: unknown,
+): value is EnvironmentAgentProviderStatus {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { running?: unknown }).running === "boolean" &&
+    typeof (value as { launched?: unknown }).launched === "boolean"
+  );
 }
 
 export interface EnvironmentAgentSessionCommandClientOptions {
@@ -46,13 +56,10 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
     envelope: EnvironmentAgentCommandEnvelope,
   ): Promise<EnvironmentAgentCommandAck> {
     this.ensureOpen();
-    const command = await this.options.commandDispatcher.enqueueForActiveSession({
-      threadId: this.options.threadId,
+    const command = await this.enqueueCommand({
       commandId: envelope.meta.commandId,
       commandType: envelope.command.type,
       payload: envelope.command,
-      timeoutMs: this.commandTimeoutMs,
-      pollIntervalMs: this.pollIntervalMs,
       sentAt: envelope.meta.sentAt,
     });
 
@@ -91,18 +98,34 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
   }
 
   async ensureProviderRunning(
-    _spec: EnvironmentAgentProviderSpec,
+    spec: EnvironmentAgentProviderSpec,
   ): Promise<EnvironmentAgentProviderStatus> {
     this.ensureOpen();
-    await this.options.commandDispatcher.awaitActiveSession({
-      threadId: this.options.threadId,
-      timeoutMs: this.commandTimeoutMs,
-      pollIntervalMs: this.pollIntervalMs,
+    const command = await this.enqueueCommand({
+      commandId: `provider-ensure-${randomUUID()}`,
+      commandType: "provider.ensure",
+      payload: spec,
     });
-    return {
-      running: true,
-      launched: true,
-    };
+
+    switch (command.state) {
+      case "completed":
+        if (!isEnvironmentAgentProviderStatus(command.result)) {
+          throw new Error("Environment-agent provider.ensure returned invalid status");
+        }
+        return command.result;
+      case "failed":
+      case "cancelled":
+        throw new Error(
+          command.errorMessage ??
+            (command.state === "cancelled"
+              ? "Environment-agent provider.ensure was cancelled"
+              : "Environment-agent provider.ensure failed"),
+        );
+      default:
+        throw new Error(
+          `Environment-agent provider.ensure ${command.id} did not reach terminal state`,
+        );
+    }
   }
 
   status(): Promise<EnvironmentAgentStatusSnapshot> {
@@ -117,5 +140,22 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
     if (this.closed) {
       throw new Error("Environment-agent session command client is closed");
     }
+  }
+
+  private enqueueCommand(args: {
+    commandId: string;
+    commandType: string;
+    payload: unknown;
+    sentAt?: number;
+  }): Promise<EnvironmentAgentCommandRecord> {
+    return this.options.commandDispatcher.enqueueForActiveSession({
+      threadId: this.options.threadId,
+      commandId: args.commandId,
+      commandType: args.commandType,
+      payload: args.payload,
+      timeoutMs: this.commandTimeoutMs,
+      pollIntervalMs: this.pollIntervalMs,
+      sentAt: args.sentAt,
+    });
   }
 }

@@ -2678,6 +2678,31 @@ function interruptOperationMessage(message: UIOperationMessage): void {
   }
 }
 
+function finalizeOperationMessage(
+  message: UIOperationMessage,
+  options: ToUIMessagesOptions | undefined,
+): void {
+  if (message.status !== "pending") return;
+
+  if (options?.threadStatus === "provisioning_failed") {
+    switch (message.opType) {
+      case "provisioning-started":
+      case "provisioning-fallback":
+        message.status = "error";
+        message.title = "Provisioning failed";
+        return;
+      case "provisioning-env-setup":
+        message.status = "error";
+        message.title = "Environment setup failed";
+        return;
+      default:
+        break;
+    }
+  }
+
+  interruptOperationMessage(message);
+}
+
 function finalizePendingMessages(
   state: ProjectionState,
   options: ToUIMessagesOptions | undefined,
@@ -2762,7 +2787,7 @@ function finalizePendingMessages(
 
   for (const message of state.messages) {
     if (message.kind !== "operation") continue;
-    interruptOperationMessage(message);
+    finalizeOperationMessage(message, options);
   }
 
   flushActiveToolCell(state);

@@ -519,9 +519,25 @@ describe("environment-agent session orchestrator roundtrip", () => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
 
+    const providerEnsure = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsure.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
     const completed = completeCommand({
       threadId,
       sessionId,
+      afterCursor: providerEnsure.commandCursor,
       result: {},
     });
 
@@ -539,7 +555,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 
-  it("drives spawn through session queued thread.start and turn.start commands", async () => {
+  it("drives spawn through session queued provider.ensure, thread.start, provider.ensure, and turn.start commands", async () => {
     installSpawnRuntime();
     const project = createProject();
 
@@ -554,9 +570,25 @@ describe("environment-agent session orchestrator roundtrip", () => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
 
+    const providerEnsure = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsure.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
     const threadStart = completeCommand({
       threadId,
       sessionId,
+      afterCursor: providerEnsure.commandCursor,
       result: { threadId: "provider-thread-1" },
     });
     expect(threadStart.command).toMatchObject({
@@ -573,9 +605,25 @@ describe("environment-agent session orchestrator roundtrip", () => {
       threadId,
       sessionId,
       afterCursor: threadStart.commandCursor,
-      result: { ok: true },
+      result: { running: true, launched: true, pid: 123 },
     });
     expect(turnStart.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
+    const turnStartRpc = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: turnStart.commandCursor,
+      result: { ok: true },
+    });
+    expect(turnStartRpc.command).toMatchObject({
       type: "turn.start",
       threadId,
       providerThreadId: "provider-thread-1",
@@ -618,7 +666,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     );
   });
 
-  it("drives tell through session queued thread.resume and turn.start commands", async () => {
+  it("drives tell through session queued provider.ensure, thread.resume, provider.ensure, and turn.start commands", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);
     const sessionId = openSession(threadId);
@@ -643,9 +691,25 @@ describe("environment-agent session orchestrator roundtrip", () => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
 
+    const providerEnsureForResume = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsureForResume.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
     const resume = completeCommand({
       threadId,
       sessionId,
+      afterCursor: providerEnsureForResume.commandCursor,
       result: { threadId: "provider-thread-1" },
     });
     expect(resume.command).toMatchObject({
@@ -658,10 +722,26 @@ describe("environment-agent session orchestrator roundtrip", () => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
 
-    const turnStart = completeCommand({
+    const providerEnsureForTurn = completeCommand({
       threadId,
       sessionId,
       afterCursor: resume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsureForTurn.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
+    const turnStart = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForTurn.commandCursor,
       result: { ok: true },
     });
     expect(turnStart.command).toMatchObject({
@@ -707,9 +787,25 @@ describe("environment-agent session orchestrator roundtrip", () => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
 
+    const providerEnsure = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsure.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
     const failed = completeCommand({
       threadId,
       sessionId,
+      afterCursor: providerEnsure.commandCursor,
       state: "failed",
       errorCode: "provider_rpc_error",
       errorMessage: "Invalid params",
@@ -722,6 +818,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     await vi.waitFor(() => {
       expect(threads.getById(threadId)?.status).toBe("provisioning_failed");
     });
-    expect(events.listByThread(threadId).map((event) => event.type)).toContain("system/error");
+    const eventTypes = events.listByThread(threadId).map((event) => event.type);
+    expect(eventTypes).toContain("system/error");
+    expect(eventTypes).not.toContain("system/provisioning/completed");
   });
 });

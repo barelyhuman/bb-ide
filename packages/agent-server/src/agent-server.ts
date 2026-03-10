@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type EnvironmentAgentClient,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -88,6 +89,7 @@ function toTurnLifecycleState(
 export class AgentServer {
   private readonly authRefreshWarningThreadIds = new Set<string>();
   private readonly suppressedAuthStderrDepth = new Map<string, number>();
+  private readonly rpcIdPrefix = randomUUID();
   private rpcIdCounter = 0;
   private readonly providerCatalog: SystemProviderInfo[];
   private cachedModels:
@@ -538,11 +540,12 @@ export class AgentServer {
     client: EnvironmentAgentClient,
     command: EnvironmentAgentCommand,
   ): Promise<EnvironmentAgentCommandAck> {
+    const commandToken = `cmd-${this.rpcIdPrefix}-${++this.rpcIdCounter}`;
     const envelope: EnvironmentAgentCommandEnvelope = {
       meta: {
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        commandId: `cmd-${++this.rpcIdCounter}`,
-        idempotencyKey: `cmd-${this.rpcIdCounter}`,
+        commandId: commandToken,
+        idempotencyKey: commandToken,
         sentAt: Date.now(),
       },
       command,

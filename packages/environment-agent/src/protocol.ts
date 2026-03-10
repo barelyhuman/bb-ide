@@ -63,6 +63,9 @@ export interface EnvironmentAgentInitializeRequest {
 }
 
 export type EnvironmentAgentCommand =
+  | ({
+      type: "provider.ensure";
+    } & EnvironmentAgentProviderSpec)
   | {
       type: "thread.start";
       threadId: string;

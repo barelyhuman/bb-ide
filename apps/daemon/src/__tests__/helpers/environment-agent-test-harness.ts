@@ -2,9 +2,10 @@ import { EventEmitter, Readable, Writable } from "node:stream";
 import type { ChildProcess } from "node:child_process";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  type EnvironmentAgentCommand,
   type EnvironmentAgentClient,
 } from "@beanbag/environment-agent";
-import { toRecord } from "@beanbag/agent-core";
+import { assertNever, toRecord } from "@beanbag/agent-core";
 import { vi } from "vitest";
 
 export const CODEX_THREAD_ID = "codex-thread-abc-123";
@@ -30,6 +31,56 @@ export type FakeChildProcess = Omit<
   _pushStderr: (line: string) => void;
   _emitExit: (code: number | null, signal: string | null) => void;
 };
+
+type EnvironmentAgentProviderEnsureCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.ensure" }
+>;
+type EnvironmentAgentRpcCommand = Exclude<
+  EnvironmentAgentCommand,
+  EnvironmentAgentProviderEnsureCommand
+>;
+
+function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+  switch (command.type) {
+    case "thread.start":
+      return "thread/start";
+    case "thread.resume":
+      return "thread/resume";
+    case "thread.stop":
+      return "thread/stop";
+    case "turn.start":
+      return "turn/start";
+    case "turn.steer":
+      return "turn/steer";
+    case "thread.rename":
+      return "thread/name/set";
+    case "workspace.status":
+      return "workspace/status";
+    case "workspace.diff":
+      return "workspace/diff";
+  }
+
+  return assertNever(command);
+}
+
+function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+  switch (command.type) {
+    case "thread.start":
+    case "thread.resume":
+    case "turn.start":
+    case "turn.steer":
+    case "thread.rename":
+      return command.params;
+    case "thread.stop":
+      return command.params ?? {};
+    case "workspace.status":
+    case "workspace.diff":
+      return { threadId: command.threadId };
+  }
+
+  return assertNever(command);
+}
 
 export function respondToEnvironmentAgentControlMessage(
   child: Pick<FakeChildProcess, "stdout">,
@@ -360,6 +411,9 @@ export function createFakeEnvironmentAgentClient(
     },
     sendCommand: async (envelope) => {
       const command = envelope.command;
+      if (command.type === "provider.ensure") {
+        throw new Error("provider.ensure should be sent via ensureProviderRunning");
+      }
       replayThreadId = command.threadId;
       const initialize =
         "initialize" in command ? command.initialize : undefined;
@@ -367,38 +421,11 @@ export function createFakeEnvironmentAgentClient(
         await sendRpcRequest(initialize.method, initialize.params);
         initialized = true;
       }
-      let method: string;
-      switch (command.type) {
-        case "thread.start":
-          method = "thread/start";
-          break;
-        case "thread.resume":
-          method = "thread/resume";
-          break;
-        case "thread.stop":
-          method = "thread/stop";
-          break;
-        case "turn.start":
-          method = "turn/start";
-          break;
-        case "turn.steer":
-          method = "turn/steer";
-          break;
-        case "thread.rename":
-          method = "thread/name/set";
-          break;
-        case "workspace.status":
-          method = "workspace/status";
-          break;
-        case "workspace.diff":
-          method = "workspace/diff";
-          break;
-      }
       let result: unknown;
       try {
         result = await sendRpcRequest(
-          method,
-          "params" in command ? command.params ?? { threadId: command.threadId } : { threadId: command.threadId },
+          toProviderMethod(command),
+          toProviderParams(command),
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

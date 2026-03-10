@@ -2132,6 +2132,75 @@ describe("toUIMessages replay coverage", () => {
     }
   });
 
+  it("renders provider-start provisioning failures as failed instead of interrupted", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Retry the direct environment" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/started",
+        data: {
+          environmentId: "direct",
+          environmentDisplayName: "Direct",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/error",
+        data: {
+          code: "thread_provisioning_failed",
+          message: "Thread provisioning failed for project proj-1",
+          detail: "Provider runtime is unavailable",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "provisioning_failed",
+    });
+    const rows = buildThreadDetailRows(projected, {
+      includeToolGroupMessages: false,
+    });
+    const messageRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message",
+    );
+
+    expect(messageRows).toHaveLength(3);
+    expect(messageRows[1]?.message.kind).toBe("operation");
+    if (messageRows[1]?.message.kind === "operation") {
+      expect(messageRows[1].message.opType).toBe("provisioning");
+      expect(messageRows[1].message.title).toBe("Provisioning Direct failed");
+    }
+
+    expect(messageRows[2]?.message.kind).toBe("error");
+    if (messageRows[2]?.message.kind === "error") {
+      expect(messageRows[2].message.message).toContain("Provider runtime is unavailable");
+    }
+  });
+
   it("renders initial client thread input while idle when no user item events exist", () => {
     const events: ThreadEvent[] = [
       {

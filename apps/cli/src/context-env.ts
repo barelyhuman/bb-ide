@@ -22,6 +22,10 @@ export function resolveThreadId(flagValue?: string): string | undefined {
   return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_THREAD_ID);
 }
 
+export function resolveEnvironmentId(flagValue?: string): string | undefined {
+  return normalizeValue(flagValue) ?? normalizeValue(process.env.BEANBAG_ENVIRONMENT);
+}
+
 export function requireProjectId(flagValue?: string): string {
   const projectId = resolveProjectId(flagValue);
   if (projectId) return projectId;

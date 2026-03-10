@@ -157,6 +157,41 @@ describe("EnvironmentAgentRuntime", () => {
     });
   });
 
+  it("accepts provider.ensure commands and returns provider status", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-provider-1",
+        idempotencyKey: "idem-provider-1",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.ensure",
+        command: "node",
+        args: [
+          "-e",
+          [
+            "process.stdin.resume();",
+            "setTimeout(() => process.exit(0), 250);",
+          ].join(""),
+        ],
+      },
+    });
+
+    expect(ack).toMatchObject({
+      commandId: "cmd-provider-1",
+      state: "accepted",
+      result: {
+        running: true,
+        launched: true,
+      },
+    });
+  });
+
   it("captures provider stderr as events", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",

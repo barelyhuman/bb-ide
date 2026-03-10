@@ -1,3 +1,4 @@
+import { assertNever } from "@beanbag/agent-core";
 import {
   createEnvironmentAgentClient,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -262,9 +263,7 @@ export class EnvironmentAgentSimulator {
         const providerResponse = this.issueProviderRequest({
           id: request.payload.meta.commandId,
           method: this.toProviderMethod(request.payload.command.type),
-          params: "params" in request.payload.command
-            ? request.payload.command.params
-            : { threadId: request.payload.command.threadId },
+          params: this.toProviderParams(request.payload.command),
         });
         this.respond(request, {
           protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -337,6 +336,8 @@ export class EnvironmentAgentSimulator {
 
   private toProviderMethod(type: EnvironmentAgentCommand["type"]): string {
     switch (type) {
+      case "provider.ensure":
+        return "provider/ensure";
       case "thread.start":
         return "thread/start";
       case "thread.resume":
@@ -356,6 +357,26 @@ export class EnvironmentAgentSimulator {
       default:
         return type satisfies never;
     }
+  }
+
+  private toProviderParams(command: EnvironmentAgentCommand): unknown {
+    switch (command.type) {
+      case "provider.ensure":
+        return command;
+      case "thread.start":
+      case "thread.resume":
+      case "turn.start":
+      case "turn.steer":
+      case "thread.rename":
+        return command.params;
+      case "thread.stop":
+        return command.params ?? {};
+      case "workspace.status":
+      case "workspace.diff":
+        return { threadId: command.threadId };
+    }
+
+    return assertNever(command);
   }
 }
 

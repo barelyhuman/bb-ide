@@ -2584,13 +2584,6 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentRuntime.environment.kind,
     ).info;
     const branchName = getEnvironmentCurrentBranch(environmentRuntime.environment);
-    this._appendEvent(threadId, "system/provisioning/completed", {
-      environmentId: environmentRuntime.environment.kind,
-      environmentDisplayName: provisionedEnvironmentInfo.displayName,
-      workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
-      ...(branchName ? { branchName } : {}),
-      reason: provisioningReason,
-    });
     const hydratedThread = this.threadRepo.getById(threadId);
     if (hydratedThread) {
       this._broadcastThreadChanged(threadId, ["work-status-changed"]);
@@ -2647,6 +2640,13 @@ export class Orchestrator implements ThreadOrchestrator {
     });
     const providerThreadId = started.providerThreadId;
     this.providerThreadIdByThreadId.set(threadId, providerThreadId);
+    this._appendEvent(threadId, "system/provisioning/completed", {
+      environmentId: environmentRuntime.environment.kind,
+      environmentDisplayName: provisionedEnvironmentInfo.displayName,
+      workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
+      ...(branchName ? { branchName } : {}),
+      reason: provisioningReason,
+    });
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
     if (
       hydratedThreadAfterStart?.title &&
