@@ -839,6 +839,24 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Additional details");
   });
 
+  it("does not show additional details when completed provisioning only repeats the environment", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned Direct",
+      detail: "Environment: Direct\nDirect",
+      provisioning: {
+        environmentDisplayName: "Direct",
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Environment");
+    expect(html).toContain(">Direct<");
+    expect(html).not.toContain("Additional details");
+  });
+
   it("shows only unstructured provisioning fields under additional details", () => {
     const message: UIMessage = {
       ...baseMessage(),

@@ -787,6 +787,113 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(thread.environmentAgentCursor).toBe(7);
   });
 
+  it("only ingests contiguous live environment-agent events and advances the cursor", async () => {
+    const thread = makeThread({
+      id: "thread-1",
+      projectId: "proj-1",
+      environmentAgentCursor: 2,
+    } as Thread & { environmentAgentCursor: number }) as Thread & {
+      environmentAgentCursor: number;
+    };
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+      (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+    );
+    (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+      (_threadId: string, updates: Partial<Thread> & { environmentAgentCursor?: number }) => {
+        Object.assign(thread, updates);
+        return thread;
+      },
+    );
+
+    let onEvent: ((event: EnvironmentAgentEventEnvelope) => void) | undefined;
+    const liveClient = {
+      subscribeToEvents: vi.fn((listener: (event: EnvironmentAgentEventEnvelope) => void) => {
+        onEvent = listener;
+        return () => {};
+      }),
+      close: vi.fn(),
+    };
+    vi.spyOn(environmentAgent, "createHttpEnvironmentAgentClient").mockResolvedValue(
+      liveClient as never,
+    );
+
+    const ingestSpy = vi
+      .spyOn(
+        (manager as unknown as { agentServer: { ingestReplayedEnvironmentAgentEvents: (args: unknown) => Promise<void> } }).agentServer,
+        "ingestReplayedEnvironmentAgentEvents",
+      )
+      .mockResolvedValue(undefined);
+
+    await (
+      manager as unknown as {
+        _ensureLiveEnvironmentAgentSubscription: (
+          threadId: string,
+          targetOverride: {
+            baseUrl: string;
+            headers?: Record<string, string>;
+          },
+        ) => Promise<void>;
+      }
+    )._ensureLiveEnvironmentAgentSubscription("thread-1", {
+      baseUrl: "http://127.0.0.1:4312",
+      headers: { authorization: "Bearer test-token" },
+    });
+
+    expect(onEvent).toBeDefined();
+    if (!onEvent) return;
+
+    onEvent({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: 4,
+      emittedAt: 1_004,
+      threadId: "thread-1",
+      event: {
+        type: "provider.event",
+        threadId: "thread-1",
+        method: "turn/completed",
+        payload: { turnId: "turn-1" },
+      },
+    });
+    await vi.waitFor(() => {
+      expect(ingestSpy).toHaveBeenCalledTimes(0);
+    });
+    expect(thread.environmentAgentCursor).toBe(2);
+
+    onEvent({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: 3,
+      emittedAt: 1_003,
+      threadId: "thread-1",
+      event: {
+        type: "provider.event",
+        threadId: "thread-1",
+        method: "turn/started",
+        payload: { turnId: "turn-1" },
+      },
+    });
+    await vi.waitFor(() => {
+      expect(ingestSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(thread.environmentAgentCursor).toBe(3);
+
+    onEvent({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: 4,
+      emittedAt: 1_004,
+      threadId: "thread-1",
+      event: {
+        type: "provider.event",
+        threadId: "thread-1",
+        method: "turn/completed",
+        payload: { turnId: "turn-1" },
+      },
+    });
+    await vi.waitFor(() => {
+      expect(ingestSpy).toHaveBeenCalledTimes(2);
+    });
+    expect(thread.environmentAgentCursor).toBe(4);
+  });
+
   it("swallows retry-delivery failures while nudging the environment agent", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const retryClient = {

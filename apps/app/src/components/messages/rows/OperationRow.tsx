@@ -110,17 +110,20 @@ function buildProvisioningStructuredDetailLines(message: UIOperationMessage): Se
   const setup = message.provisioning?.setup;
   const timeoutLabel = formatTimeoutLabel(setup?.timeoutMs);
   const timeoutDetailPart = timeoutLabel ? `Timeout ${timeoutLabel}` : undefined;
+  const provisioningDetailParts = [
+    environmentLabel,
+    workspaceRoot,
+    message.provisioning?.fallbackReason,
+  ].filter((value): value is string => Boolean(value));
 
   if (environmentLabel) {
     structuredLines.add(`Environment: ${environmentLabel}`);
   }
-  if (environmentLabel && workspaceRoot) {
-    structuredLines.add(`${environmentLabel} • ${workspaceRoot}`);
-    if (message.provisioning?.fallbackReason) {
-      structuredLines.add(
-        `${environmentLabel} • ${workspaceRoot} • ${message.provisioning.fallbackReason}`,
-      );
-    }
+  for (const part of provisioningDetailParts) {
+    structuredLines.add(part);
+  }
+  if (provisioningDetailParts.length > 1) {
+    structuredLines.add(provisioningDetailParts.join(" • "));
   }
   if (setup?.scriptPath) {
     const baseParts = [setup.scriptPath, workspaceRoot, timeoutDetailPart].filter(

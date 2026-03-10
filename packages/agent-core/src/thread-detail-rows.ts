@@ -191,7 +191,6 @@ function isRedundantProvisioningDetailLine(
   const fallbackReason = metadata?.fallbackReason?.trim();
 
   if (trimmedLine.startsWith("Environment: ")) {
-    const value = trimmedLine.slice("Environment: ".length).trim();
     return false;
   }
 

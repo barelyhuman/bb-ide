@@ -420,6 +420,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private providerThreadIdByThreadId = new Map<string, string>();
   /** Long-lived environment-agent stream subscriptions keyed by thread. */
   private liveEnvironmentAgentClientsByThreadId = new Map<string, EnvironmentAgentClient>();
+  /** Serializes live environment-agent event ingestion per thread. */
+  private liveEnvironmentAgentIngestByThreadId = new Map<string, Promise<void>>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
   /** Last event sequence where historical noise pruning ran for an active thread. */
@@ -1255,6 +1257,7 @@ export class Orchestrator implements ThreadOrchestrator {
       liveClient.close();
       this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
     }
+    this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -1283,6 +1286,7 @@ export class Orchestrator implements ThreadOrchestrator {
       liveClient.close();
       this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
     }
+    this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -2329,6 +2333,7 @@ export class Orchestrator implements ThreadOrchestrator {
       client.close();
     }
     this.liveEnvironmentAgentClientsByThreadId.clear();
+    this.liveEnvironmentAgentIngestByThreadId.clear();
     this.environmentService.stopAll({
       preserveEnvironments: opts?.preserveEnvironments,
     });
@@ -2818,12 +2823,54 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(target.headers ? { headers: target.headers } : {}),
     });
     client.subscribeToEvents((event) => {
-      void this.agentServer.ingestReplayedEnvironmentAgentEvents({
-        threadId,
-        events: [event],
-      });
+      this._enqueueLiveEnvironmentAgentEvent(threadId, event);
     });
     this.liveEnvironmentAgentClientsByThreadId.set(threadId, client);
+  }
+
+  private _enqueueLiveEnvironmentAgentEvent(
+    threadId: string,
+    event: EnvironmentAgentEventEnvelope,
+  ): void {
+    const prior = this.liveEnvironmentAgentIngestByThreadId.get(threadId) ?? Promise.resolve();
+    const next = prior
+      .catch(() => {
+        // Keep the per-thread queue alive after transient ingestion failures.
+      })
+      .then(async () => {
+        await this._ingestLiveEnvironmentAgentEvent(threadId, event);
+      });
+    this.liveEnvironmentAgentIngestByThreadId.set(threadId, next);
+    void next.finally(() => {
+      if (this.liveEnvironmentAgentIngestByThreadId.get(threadId) === next) {
+        this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
+      }
+    });
+  }
+
+  private async _ingestLiveEnvironmentAgentEvent(
+    threadId: string,
+    event: EnvironmentAgentEventEnvelope,
+  ): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    const persistedCursor =
+      (thread as (Thread & { environmentAgentCursor?: number }) | undefined)
+        ?.environmentAgentCursor ?? 0;
+    const currentCursor =
+      this.environmentAgentReplayCursorByThreadId.get(threadId) ?? persistedCursor;
+
+    if (event.sequence <= currentCursor) {
+      return;
+    }
+    if (event.sequence !== currentCursor + 1) {
+      return;
+    }
+
+    await this.agentServer.ingestReplayedEnvironmentAgentEvents({
+      threadId,
+      events: [event],
+    });
+    this._setEnvironmentAgentReplayCursor(threadId, event.sequence);
   }
 
   private _setEnvironmentRuntime(

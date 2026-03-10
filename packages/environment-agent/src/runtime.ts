@@ -39,6 +39,8 @@ export interface EnvironmentAgentRuntimeOptions {
 const INITIAL_DELIVERY_BACKOFF_MS = 250;
 const MAX_DELIVERY_BACKOFF_MS = 30_000;
 const MAX_AUTOMATIC_DELIVERY_RETRIES = 8;
+const DELIVERY_DEBOUNCE_MS = 100;
+const DELIVERY_MAX_WAIT_MS = 1_000;
 
 export class EnvironmentAgentRuntime {
   private readonly events: EnvironmentAgentEventEnvelope[] = [];
@@ -61,6 +63,8 @@ export class EnvironmentAgentRuntime {
   private daemonConnection: EnvironmentAgentDaemonConnectionConfig | undefined;
   private connectedToDaemon = false;
   private deliveryInFlight: Promise<void> | null = null;
+  private deliveryFlushTimer: ReturnType<typeof setTimeout> | undefined;
+  private deliveryDebounceStartedAt: number | undefined;
   private deliveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
   private deliveryBackoffMs = INITIAL_DELIVERY_BACKOFF_MS;
   private deliveryState: EnvironmentAgentDeliveryRuntimeState = "healthy";
@@ -236,17 +240,20 @@ export class EnvironmentAgentRuntime {
       this.deliveryRetryTimer = undefined;
       this.nextRetryAt = undefined;
     }
+    if (this.deliveryFlushTimer && opts?.nudge) {
+      clearTimeout(this.deliveryFlushTimer);
+      this.deliveryFlushTimer = undefined;
+      this.deliveryDebounceStartedAt = undefined;
+    }
     if (this.deliveryInFlight) {
       return;
     }
+    if (!opts?.nudge) {
+      this.scheduleDebouncedDaemonDelivery();
+      return;
+    }
 
-    this.deliveryInFlight = this.flushDaemonDelivery()
-      .catch(() => {
-        // Retry is scheduled by flushDaemonDelivery on failure.
-      })
-      .finally(() => {
-        this.deliveryInFlight = null;
-      });
+    this.kickOffDaemonDelivery();
   }
 
   async executeCommand(
@@ -577,6 +584,11 @@ export class EnvironmentAgentRuntime {
       clearTimeout(this.deliveryRetryTimer);
       this.deliveryRetryTimer = undefined;
     }
+    if (this.deliveryFlushTimer) {
+      clearTimeout(this.deliveryFlushTimer);
+      this.deliveryFlushTimer = undefined;
+    }
+    this.deliveryDebounceStartedAt = undefined;
     this.nextRetryAt = undefined;
   }
 
@@ -591,7 +603,50 @@ export class EnvironmentAgentRuntime {
       clearTimeout(this.deliveryRetryTimer);
       this.deliveryRetryTimer = undefined;
     }
+    if (this.deliveryFlushTimer) {
+      clearTimeout(this.deliveryFlushTimer);
+      this.deliveryFlushTimer = undefined;
+    }
+    this.deliveryDebounceStartedAt = undefined;
     this.nextRetryAt = undefined;
+  }
+
+  private kickOffDaemonDelivery(): void {
+    if (this.deliveryFlushTimer) {
+      clearTimeout(this.deliveryFlushTimer);
+      this.deliveryFlushTimer = undefined;
+    }
+    this.deliveryDebounceStartedAt = undefined;
+    if (this.deliveryInFlight) {
+      return;
+    }
+    this.deliveryInFlight = this.flushDaemonDelivery()
+      .catch(() => {
+        // Retry is scheduled by flushDaemonDelivery on failure.
+      })
+      .finally(() => {
+        this.deliveryInFlight = null;
+        if (this.sequence > this.lastAckedSequence) {
+          this.triggerDaemonDelivery();
+        }
+      });
+  }
+
+  private scheduleDebouncedDaemonDelivery(): void {
+    const now = Date.now();
+    const debounceStartedAt = this.deliveryDebounceStartedAt ?? now;
+    this.deliveryDebounceStartedAt = debounceStartedAt;
+    const maxWaitAt = debounceStartedAt + DELIVERY_MAX_WAIT_MS;
+    const flushAt = Math.min(now + DELIVERY_DEBOUNCE_MS, maxWaitAt);
+    const delayMs = Math.max(0, flushAt - now);
+
+    if (this.deliveryFlushTimer) {
+      clearTimeout(this.deliveryFlushTimer);
+    }
+    this.deliveryFlushTimer = setTimeout(() => {
+      this.deliveryFlushTimer = undefined;
+      this.kickOffDaemonDelivery();
+    }, delayMs);
   }
 
   private scheduleDaemonDeliveryRetry(delayMs: number): void {
