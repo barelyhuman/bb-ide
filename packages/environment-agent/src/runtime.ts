@@ -64,6 +64,7 @@ export class EnvironmentAgentRuntime {
   private connectedToDaemon = false;
   private deliveryInFlight: Promise<void> | null = null;
   private deliveryFlushTimer: ReturnType<typeof setTimeout> | undefined;
+  private deliveryNudgeQueuedWhileInFlight = false;
   private deliveryDebounceStartedAt: number | undefined;
   private deliveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
   private deliveryBackoffMs = INITIAL_DELIVERY_BACKOFF_MS;
@@ -317,6 +318,9 @@ export class EnvironmentAgentRuntime {
       this.deliveryDebounceStartedAt = undefined;
     }
     if (this.deliveryInFlight) {
+      if (opts?.nudge) {
+        this.deliveryNudgeQueuedWhileInFlight = true;
+      }
       return;
     }
     if (!opts?.nudge) {
@@ -762,8 +766,11 @@ export class EnvironmentAgentRuntime {
       })
       .finally(() => {
         this.deliveryInFlight = null;
+        const shouldNudgeFollowUp =
+          this.deliveryNudgeQueuedWhileInFlight && this.deliveryState === "healthy";
+        this.deliveryNudgeQueuedWhileInFlight = false;
         if (this.sequence > this.lastAckedSequence) {
-          this.triggerDaemonDelivery();
+          this.triggerDaemonDelivery(shouldNudgeFollowUp ? { nudge: true } : undefined);
         }
       });
   }
@@ -1057,7 +1064,11 @@ function shouldNudgeDaemonDeliveryForEvent(
     return false;
   }
 
-  if (event.method === "turn/completed" || event.method === "turn/end") {
+  if (
+    event.method === "turn/completed" ||
+    event.method === "turn/end" ||
+    event.method === "item/completed"
+  ) {
     return true;
   }
 

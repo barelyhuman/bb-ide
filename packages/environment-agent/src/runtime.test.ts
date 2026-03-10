@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
 } from "./protocol.js";
@@ -15,6 +15,7 @@ afterEach(async () => {
     const fn = cleanup.pop();
     await fn?.();
   }
+  vi.restoreAllMocks();
 });
 
 describe("EnvironmentAgentRuntime", () => {
@@ -541,6 +542,88 @@ describe("EnvironmentAgentRuntime", () => {
         lastAckedSequence: 3,
         deliveryState: "healthy",
       });
+  });
+
+  it("treats item/completed as an immediate delivery nudge", () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: "http://127.0.0.1:1234",
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+    const runtimeInternals = runtime as unknown as {
+      scheduleDebouncedDaemonDelivery(): void;
+      kickOffDaemonDelivery(): void;
+    };
+
+    const scheduleDebouncedDelivery = vi
+      .spyOn(runtimeInternals, "scheduleDebouncedDaemonDelivery")
+      .mockImplementation(() => undefined);
+    const kickOffDelivery = vi
+      .spyOn(runtimeInternals, "kickOffDaemonDelivery")
+      .mockImplementation(() => undefined);
+
+    runtime.appendEvent({
+      type: "workspace.status.changed",
+      threadId: "thread-1",
+    });
+
+    expect(scheduleDebouncedDelivery).toHaveBeenCalledTimes(1);
+    expect(kickOffDelivery).not.toHaveBeenCalled();
+
+    scheduleDebouncedDelivery.mockClear();
+
+    runtime.appendEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "item/completed",
+      payload: { item: { id: "item-1", type: "agentMessage", text: "done" } },
+    });
+
+    expect(scheduleDebouncedDelivery).not.toHaveBeenCalled();
+    expect(kickOffDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays completion nudges immediately after an in-flight delivery settles", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: "http://127.0.0.1:1234",
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+    const runtimeInternals = runtime as unknown as {
+      sequence: number;
+      lastAckedSequence: number;
+      flushDaemonDelivery(): Promise<void>;
+      kickOffDaemonDelivery(): void;
+    };
+    let resolveFlush: (() => void) | undefined;
+    const flushPromise = new Promise<void>((resolve) => {
+      resolveFlush = resolve;
+    });
+    vi.spyOn(runtimeInternals, "flushDaemonDelivery").mockReturnValue(flushPromise);
+    const triggerDaemonDelivery = vi.spyOn(runtime, "triggerDaemonDelivery");
+
+    runtimeInternals.sequence = 2;
+    runtimeInternals.lastAckedSequence = 1;
+    runtimeInternals.kickOffDaemonDelivery();
+
+    triggerDaemonDelivery.mockClear();
+
+    runtime.triggerDaemonDelivery({ nudge: true });
+
+    expect(triggerDaemonDelivery).toHaveBeenCalledWith({ nudge: true });
+
+    triggerDaemonDelivery.mockClear();
+    resolveFlush?.();
+    await flushPromise;
+    await Promise.resolve();
+
+    expect(triggerDaemonDelivery).toHaveBeenCalledWith({ nudge: true });
   });
 
   it("drains pending daemon delivery synchronously during shutdown", async () => {
