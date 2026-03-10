@@ -341,6 +341,54 @@ describe("toUIMessages replay coverage", () => {
     expect(tool?.status).toBe("pending");
   });
 
+  it("keeps provisioning operations pending while thread provisioning is still in progress", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/provisioning/started",
+        data: {
+          environmentId: "worktree",
+          environmentDisplayName: "Worktree",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/env_setup",
+        data: {
+          status: "running",
+          workspaceRoot: "/tmp/worktree",
+          scriptPath: ".bb-env-setup.sh",
+          detail: "+ pnpm install",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "provisioning" });
+    const rows = buildThreadDetailRows(projected, {
+      includeToolGroupMessages: false,
+    });
+    const messageRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message",
+    );
+
+    expect(messageRows).toHaveLength(1);
+    expect(messageRows[0]?.message.kind).toBe("operation");
+    if (messageRows[0]?.message.kind !== "operation") {
+      return;
+    }
+
+    expect(messageRows[0].message.opType).toBe("provisioning");
+    expect(messageRows[0].message.status).toBe("pending");
+    expect(messageRows[0].message.title).toBe("Provisioning Worktree...");
+  });
+
   it("finalizes streaming assistant and reasoning messages when thread is idle", () => {
     const events: ThreadEvent[] = [
       {

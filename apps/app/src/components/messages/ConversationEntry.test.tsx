@@ -1089,19 +1089,31 @@ describe("ConversationEntry", () => {
     expect(html).toContain(".bb-env-setup.sh timed out after 10 minutes");
   });
 
-  it("renders in-progress provisioning summaries with shimmer feedback", () => {
+  it("renders in-progress provisioning summaries without terminal duration copy", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning Worktree...",
+      startedAt: 1,
+      createdAt: 15_000,
       status: "pending",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        setup: {
+          status: "running",
+          scriptPath: ".bb-env-setup.sh",
+        },
+      },
     };
 
-    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
     expect(html).toContain("Provisioning");
     expect(html).toContain("Worktree");
     expect(html).toContain("animate-shine");
+    expect(html).not.toContain("provisioning took");
   });
 
   it("renders setup-only provisioning summaries as completed when env setup finished", () => {

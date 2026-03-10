@@ -507,6 +507,23 @@ function shouldRenderThreadStartInput(
   }
 }
 
+function shouldPreservePendingMessages(
+  threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
+): boolean {
+  if (!threadStatus) return false;
+  switch (threadStatus) {
+    case "provisioning":
+    case "active":
+      return true;
+    case "created":
+    case "provisioning_failed":
+    case "idle":
+      return false;
+    default:
+      return assertNever(threadStatus);
+  }
+}
+
 function messageId(threadId: string, kind: string, key: string): string {
   return `${threadId}:${kind}:${key}`;
 }
@@ -2707,8 +2724,7 @@ function finalizePendingMessages(
   state: ProjectionState,
   options: ToUIMessagesOptions | undefined,
 ): void {
-  const isActiveThread = options?.threadStatus === "active";
-  if (isActiveThread) {
+  if (shouldPreservePendingMessages(options?.threadStatus)) {
     flushActiveToolCell(state);
     return;
   }
