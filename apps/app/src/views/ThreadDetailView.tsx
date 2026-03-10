@@ -293,6 +293,9 @@ export function ThreadDetailView() {
     threadId ?? "",
     { refetchOnMount: "always" },
   );
+  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
+    threadId ?? "",
+  );
   const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
