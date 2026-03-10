@@ -14,6 +14,10 @@ export function emptyPromptDraftState(): PromptDraftState {
   };
 }
 
+export function isPromptDraftEmpty(draft: PromptDraftState): boolean {
+  return draft.text.length === 0 && draft.attachments.length === 0;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -52,7 +56,7 @@ export function parsePromptDraftStorage(rawValue: string | null): PromptDraftSta
 export function serializePromptDraftStorage(draft: PromptDraftState): string | null {
   const text = draft.text;
   const attachments = draft.attachments;
-  if (text.length === 0 && attachments.length === 0) {
+  if (isPromptDraftEmpty(draft)) {
     return null;
   }
   return JSON.stringify({

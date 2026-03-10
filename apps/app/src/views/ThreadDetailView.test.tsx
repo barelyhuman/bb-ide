@@ -178,6 +178,7 @@ vi.mock("@/hooks/usePromptDraftStorage", () => ({
     attachments: [],
     addAttachment: vi.fn(),
     clear: vi.fn(),
+    restoreIfEmpty: vi.fn(),
     setText: vi.fn(),
     setAttachments: vi.fn(),
     removeAttachment: vi.fn(),

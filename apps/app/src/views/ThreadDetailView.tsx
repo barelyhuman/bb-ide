@@ -1308,21 +1308,30 @@ export function ThreadDetailView() {
     resolvedThreadWorkStatus?.defaultBranch;
 
   const handleSend = async () => {
-    if (promptInput.length === 0) return;
+    const submittedDraft = {
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    };
+    const submittedInput = promptDraftToInput(submittedDraft);
+    if (submittedInput.length === 0) return;
+
+    // Clear optimistically so the composer does not lag behind a successful follow-up
+    // submission or resurrect the just-sent message after a route remount.
+    promptDraft.clear();
+    setAttachmentError(null);
 
     if (thread.status === "active") {
       try {
         await enqueueThreadMessage.mutateAsync({
           id: thread.id,
-          input: promptInput,
+          input: submittedInput,
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           ...(supportsReasoningLevels ? { reasoningLevel } : {}),
           sandboxMode,
         });
-        promptDraft.clear();
-        setAttachmentError(null);
       } catch (err) {
+        promptDraft.restoreIfEmpty(submittedDraft);
         window.alert(err instanceof Error ? err.message : "Failed to queue follow-up");
       }
       return;
@@ -1330,15 +1339,14 @@ export function ThreadDetailView() {
 
     try {
       await sendFollowUpInput({
-        input: promptInput,
+        input: submittedInput,
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
       });
-      promptDraft.clear();
-      setAttachmentError(null);
     } catch (err) {
+      promptDraft.restoreIfEmpty(submittedDraft);
       window.alert(err instanceof Error ? err.message : "Failed to send follow-up");
     }
   };

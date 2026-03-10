@@ -190,11 +190,21 @@ export function ProjectMainView() {
   }
 
   const submitPrompt = async () => {
-    if (promptInput.length === 0 || spawnThread.isPending) return;
+    const submittedDraft = {
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    };
+    const submittedInput = promptDraftToInput(submittedDraft);
+    if (submittedInput.length === 0 || spawnThread.isPending) return;
+
+    // Match thread follow-up behavior: clear immediately, then restore only if the
+    // request fails and the user has not started a new draft in the meantime.
+    promptDraft.clear();
+    setAttachmentError(null);
 
     try {
       await spawnThread.mutateAsync({
-        input: promptInput,
+        input: submittedInput,
         projectId,
         model: activeModel?.model,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
@@ -202,9 +212,8 @@ export function ProjectMainView() {
         sandboxMode,
         ...(environmentId ? { environmentId } : {}),
       });
-      promptDraft.clear();
-      setAttachmentError(null);
     } catch {
+      promptDraft.restoreIfEmpty(submittedDraft);
       // Error state is surfaced in mutation status and can be shown by callers if needed.
     }
   };

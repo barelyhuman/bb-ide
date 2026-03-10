@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyPromptDraftState,
+  isPromptDraftEmpty,
   parsePromptDraftStorage,
   promptDraftToInput,
   serializePromptDraftStorage,
@@ -45,6 +46,22 @@ describe("prompt draft helpers", () => {
 
   it("serializes empty drafts as null storage", () => {
     expect(serializePromptDraftStorage(emptyPromptDraftState())).toBeNull();
+  });
+
+  it("detects whether a draft has any submittable state", () => {
+    expect(isPromptDraftEmpty(emptyPromptDraftState())).toBe(true);
+    expect(isPromptDraftEmpty({
+      text: "",
+      attachments: [
+        {
+          type: "localFile",
+          path: "/tmp/spec.md",
+          name: "spec.md",
+          sizeBytes: 42,
+          mimeType: "text/markdown",
+        },
+      ],
+    })).toBe(false);
   });
 
   it("maps draft text and attachments to prompt input list", () => {
