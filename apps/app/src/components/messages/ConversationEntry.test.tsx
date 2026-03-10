@@ -1053,7 +1053,8 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Promoting primary checkout");
+    expect(html).toContain(">Promoting<");
+    expect(html).toContain("primary checkout");
     expect(html).toContain("animate-shine");
     expect(html).not.toContain("text-muted-foreground/70");
   });
@@ -1140,7 +1141,8 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Committing changes");
+    expect(html).toContain(">Committing<");
+    expect(html).toContain("changes");
     expect(html).toContain("animate-shine");
   });
 
@@ -1156,7 +1158,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("MCP tool progress");
-    expect(html).toContain("animate-shine");
+    expect(html).not.toContain("animate-shine");
   });
 
   it("renders plan-updated operations as expandable rows", () => {

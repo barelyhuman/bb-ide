@@ -16,7 +16,6 @@ import {
   formatCompactDuration,
   getEventHeaderToneClass,
   getStaticEventToneClass,
-  renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
@@ -207,39 +206,54 @@ function buildProvisioningSummary(
 ): ReactNode {
   const environmentLabel = normalizeProvisioningEnvironmentLabel(message.provisioning);
   const isPending = isPendingOperation(message);
-
-  const summaryContent = (() => {
-    switch (message.title) {
-      case "Environment setup completed":
-        return <EventTitle prefix="Environment setup" emphasis="completed" tone={tone} />;
-      case "Environment setup failed":
-        return <EventTitle prefix="Environment setup" emphasis="failed" tone={tone} />;
-      case "Environment setup interrupted":
-        return <EventTitle prefix="Environment setup" emphasis="interrupted" tone={tone} />;
-      case "Provisioning interrupted":
-        return <EventTitle prefix="Provisioning" emphasis="interrupted" tone={tone} />;
-      default:
-        if (message.title.startsWith("Provisioned ")) {
-          return (
-            <EventTitle
-              prefix="Provisioned"
-              emphasis={environmentLabel ?? message.title.slice("Provisioned ".length).trim()}
-              tone={tone}
-            />
-          );
-        }
-        if (message.title.startsWith("Provisioning ")) {
-          const label = environmentLabel ?? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim();
-          return <EventTitle prefix="Provisioning" emphasis={label || "environment"} tone={tone} />;
-        }
-        if (message.title.startsWith("Provisioning ") && tone === "destructive") {
-          return <EventTitle prefix="Provisioning" emphasis="failed" tone={tone} />;
-        }
-        return <span>{message.title}</span>;
-    }
-  })();
-
-  return renderShimmeringSummary(summaryContent, isPending);
+  switch (message.title) {
+    case "Environment setup completed":
+      return <EventTitle prefix="Environment setup" emphasis="completed" tone={tone} />;
+    case "Environment setup failed":
+      return <EventTitle prefix="Environment setup" emphasis="failed" tone={tone} />;
+    case "Environment setup interrupted":
+      return <EventTitle prefix="Environment setup" emphasis="interrupted" tone={tone} />;
+    case "Environment setup started":
+    case "Environment setup running":
+    case "Environment setup...":
+      return <EventTitle prefix="Environment setup" tone={tone} shimmerPrefix={isPending} />;
+    case "Provisioning interrupted":
+      return <EventTitle prefix="Provisioning" emphasis="interrupted" tone={tone} />;
+    default:
+      if (message.title.startsWith("Provisioned ")) {
+        return (
+          <EventTitle
+            prefix="Provisioned"
+            emphasis={environmentLabel ?? message.title.slice("Provisioned ".length).trim()}
+            tone={tone}
+          />
+        );
+      }
+      if (tone === "destructive" && /^Provisioning\s+.+\s+failed$/i.test(message.title)) {
+        return (
+          <EventTitle
+            prefix="Provisioning"
+            detail={environmentLabel}
+            emphasis="failed"
+            tone={tone}
+          />
+        );
+      }
+      if (message.title.startsWith("Provisioning ")) {
+        return (
+          <EventTitle
+            prefix="Provisioning"
+            emphasis={
+              environmentLabel ??
+              (message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim() || "environment")
+            }
+            tone={tone}
+            shimmerPrefix={isPending}
+          />
+        );
+      }
+      return <span>{message.title}</span>;
+  }
 }
 
 function buildProvisioningTranscript(message: UIOperationMessage): {
@@ -276,11 +290,111 @@ function buildProvisioningTranscript(message: UIOperationMessage): {
   };
 }
 
-function buildGenericSummary(
-  title: ReactNode,
+function buildThreadOperationIntentSummary(
   message: UIOperationMessage,
+  tone: "default" | "destructive",
 ): ReactNode {
-  return renderShimmeringSummary(title, isPendingOperation(message));
+  const metadata = message.threadOperation;
+  if (!metadata) return <span>{message.title}</span>;
+
+  const baseLabel = metadata.action === "commit" ? "Commit" : "Squash merge";
+  switch (metadata.phase) {
+    case "requested":
+      return <EventTitle prefix={baseLabel} detail="requested" tone={tone} />;
+    case "queued":
+      return <EventTitle prefix={baseLabel} detail="queued" tone={tone} />;
+    case "running":
+      return (
+        <EventTitle
+          prefix={metadata.action === "commit" ? "Committing" : "Squash merging"}
+          detail="changes"
+          tone={tone}
+          shimmerPrefix
+        />
+      );
+    case "completed":
+      return <EventTitle prefix={baseLabel} detail="completed" tone={tone} />;
+    case "failed":
+      return <EventTitle prefix={baseLabel} emphasis="failed" tone={tone} />;
+    case "update":
+      return <EventTitle prefix={baseLabel} detail="update" tone={tone} />;
+    default:
+      return assertNever(metadata.phase);
+  }
+}
+
+function buildPrimaryCheckoutSummary(
+  message: UIOperationMessage,
+  tone: "default" | "destructive",
+): ReactNode {
+  const metadata = message.primaryCheckout;
+  if (!metadata) return <span>{message.title}</span>;
+
+  switch (metadata.action) {
+    case "promote":
+      switch (metadata.phase) {
+        case "started":
+          return (
+            <EventTitle
+              prefix="Promoting"
+              detail="primary checkout"
+              tone={tone}
+              shimmerPrefix
+            />
+          );
+        case "completed":
+          return <EventTitle prefix="Promoted" detail="to primary checkout" tone={tone} />;
+        case "failed":
+          return <EventTitle prefix="Primary checkout promotion" emphasis="failed" tone={tone} />;
+        case "noop":
+          return <EventTitle prefix="Primary checkout" detail="already promoted" tone={tone} />;
+        case "update":
+          return <EventTitle prefix="Primary checkout promotion" detail="update" tone={tone} />;
+        default:
+          return assertNever(metadata.phase);
+      }
+    case "demote":
+      switch (metadata.phase) {
+        case "started":
+          return (
+            <EventTitle
+              prefix="Demoting"
+              detail="primary checkout"
+              tone={tone}
+              shimmerPrefix
+            />
+          );
+        case "completed":
+          return <EventTitle prefix="Demoted" detail="from primary checkout" tone={tone} />;
+        case "failed":
+          return <EventTitle prefix="Primary checkout demotion" emphasis="failed" tone={tone} />;
+        case "noop":
+          return <EventTitle prefix="Primary checkout" detail="already demoted" tone={tone} />;
+        case "update":
+          return <EventTitle prefix="Primary checkout demotion" detail="update" tone={tone} />;
+        default:
+          return assertNever(metadata.phase);
+      }
+    default:
+      return assertNever(metadata.action);
+  }
+}
+
+function buildCompactionSummary(
+  message: UIOperationMessage,
+  tone: "default" | "destructive",
+): ReactNode {
+  if (message.status === "pending") {
+    return <EventTitle prefix="Compacting" detail="context" tone={tone} shimmerPrefix />;
+  }
+  if (message.status === "interrupted") {
+    return <EventTitle prefix="Context compaction" emphasis="interrupted" tone={tone} />;
+  }
+  return <span>{message.title}</span>;
+}
+
+function buildGenericSummary(title: ReactNode): ReactNode {
+  return title;
 }
 
 export function OperationRow({
@@ -295,7 +409,7 @@ export function OperationRow({
 
   if (message.opType === "plan-updated") {
     const detailLines = splitNonEmptyLines(message.detail);
-    const summaryContent = buildGenericSummary(message.title, message);
+    const summaryContent = buildGenericSummary(message.title);
     if (detailLines.length === 0) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
@@ -349,7 +463,7 @@ export function OperationRow({
 
   if (message.opType === "thread-operation-intent") {
     const { operationDetailText, promptText } = extractPromptSections(message.detail);
-    const summaryContent = buildGenericSummary(message.title, message);
+    const summaryContent = buildThreadOperationIntentSummary(message, tone);
     if (!operationDetailText && !promptText) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
@@ -384,8 +498,8 @@ export function OperationRow({
       message.worktreeCommit?.message?.trim() ??
       detailLinesFromMessage.find((line) => line !== commitSha);
     const summaryContent = message.title === "Committed changes"
-      ? <EventTitle prefix="Committed" emphasis="changes" tone={tone} />
-      : buildGenericSummary(message.title, message);
+      ? <EventTitle prefix="Committed" detail="changes" tone={tone} />
+      : buildGenericSummary(message.title);
     const detailLines = [commitMessage, commitSha].filter((value): value is string => Boolean(value));
 
     if (detailLines.length === 0) {
@@ -410,11 +524,10 @@ export function OperationRow({
     const summaryContent = isConflict
       ? buildGenericSummary(
           <EventTitle prefix="Squash merge" emphasis="failed" tone={tone} />,
-          message,
         )
       : mergeTargetBranch
         ? <EventTitle prefix="Squash merged into" emphasis={mergeTargetBranch} tone={tone} emphasisAs="em" />
-        : buildGenericSummary(message.title, message);
+        : buildGenericSummary(message.title);
     const detailLines = [
       message.worktreeSquashMerge?.message,
       ...(message.worktreeSquashMerge?.conflictFiles?.length
@@ -452,7 +565,7 @@ export function OperationRow({
       (message.title === "Promoted to primary checkout" ||
         message.title === "Demoted from primary checkout" ||
         message.title === "Promoted then demoted as primary checkout");
-    const summaryContent = buildGenericSummary(message.title, message);
+    const summaryContent = buildPrimaryCheckoutSummary(message, tone);
 
     if (detailLines.length === 0) {
       return (
@@ -478,7 +591,9 @@ export function OperationRow({
   }
 
   const detailLines = splitNonEmptyLines(message.detail);
-  const summaryContent = buildGenericSummary(message.title, message);
+  const summaryContent = message.opType === "compaction"
+    ? buildCompactionSummary(message, tone)
+    : buildGenericSummary(message.title);
 
   if (detailLines.length === 0) {
     return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;

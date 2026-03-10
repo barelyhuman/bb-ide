@@ -9,7 +9,6 @@ import { usePreferredTheme } from "@/hooks/useTheme";
 import {
   EventTitle,
   getEventHeaderToneClass,
-  renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
 
@@ -220,7 +219,7 @@ export function FileEditRow({
       : isExpanded && uniqueFileCount === 1
         ? collapsedFileLabelBase
         : collapsedFileLabel;
-  const summaryContent = renderShimmeringSummary(
+  const summaryContent = (
     <EventTitle
       prefix={actionLabel}
       emphasis={summaryLabel}
@@ -231,8 +230,8 @@ export function FileEditRow({
         </>
       }
       tone={tone}
-    />,
-    isApplying,
+      shimmerPrefix={isApplying}
+    />
   );
   const isAggregatedChanges = message.changes.length > 1;
   const changeKeys = useMemo(

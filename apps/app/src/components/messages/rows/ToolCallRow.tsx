@@ -4,7 +4,6 @@ import {
   EventTitle,
   formatSummaryDuration,
   getEventHeaderToneClass,
-  renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
@@ -30,14 +29,14 @@ export function ToolCallRow({
   const duration = formatSummaryDuration(message.durationMs);
   const isRunning = message.status === "pending";
   const tone = message.status === "error" ? "destructive" : "default";
-  const summaryContent = renderShimmeringSummary(
+  const summaryContent = (
     <EventTitle
       prefix={actionLabel}
-      emphasis={command}
+      detail={command}
       suffix={duration}
       tone={tone}
-    />,
-    isRunning,
+      shimmerPrefix={isRunning}
+    />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded, tone);
 

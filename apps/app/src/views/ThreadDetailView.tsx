@@ -104,7 +104,6 @@ import {
   EventTitle,
   formatSummaryDuration,
   getEventHeaderToneClass,
-  renderShimmeringSummary,
 } from "@/components/messages/rows/shared";
 
 const SCROLL_THRESHOLD = 40;
@@ -190,21 +189,20 @@ function ToolGroupEntry({
   const count = entry.summaryCount;
   const visibleDuration = formatSummaryDuration(entry.durationMs);
   const isWorking = entry.status === "pending";
-  const summaryContent = renderShimmeringSummary(
-    visibleDuration ? (
-      <EventTitle
-        prefix={isWorking ? "Working for" : "Worked for"}
-        emphasis={visibleDuration}
-        suffix={count > 0 ? `${count} item${count === 1 ? "" : "s"}` : undefined}
-        suffixClassName="truncate"
-      />
-    ) : (
-      <EventTitle
-        prefix={isWorking ? "Working on" : "Worked on"}
-        emphasis={`${count} item${count === 1 ? "" : "s"}`}
-      />
-    ),
-    isWorking,
+  const summaryContent = visibleDuration ? (
+    <EventTitle
+      prefix={isWorking ? "Working for" : "Worked for"}
+      emphasis={visibleDuration}
+      suffix={count > 0 ? `${count} item${count === 1 ? "" : "s"}` : undefined}
+      suffixClassName="truncate"
+      shimmerPrefix={isWorking}
+    />
+  ) : (
+    <EventTitle
+      prefix={isWorking ? "Working on" : "Worked on"}
+      emphasis={`${count} item${count === 1 ? "" : "s"}`}
+      shimmerPrefix={isWorking}
+    />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded);
 

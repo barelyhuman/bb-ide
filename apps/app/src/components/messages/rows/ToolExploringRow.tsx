@@ -10,7 +10,6 @@ import {
   EventTitle,
   getEventHeaderToneClass,
   getStaticEventToneClass,
-  renderShimmeringSummary,
   useLatestInitialExpanded,
   useStickyBottomAutoScroll,
 } from "./shared";
@@ -163,12 +162,12 @@ export function ToolExploringRow({
   const hasDetails = detailLines.length > 0;
   const isExploring = message.status === "pending";
   const summaryLabel = formatExploringCountsLabel(counts);
-  const summaryContent = renderShimmeringSummary(
+  const summaryContent = (
     <EventTitle
       prefix={isExploring ? "Exploring" : "Explored"}
       emphasis={summaryLabel || "workspace"}
-    />,
-    isExploring,
+      shimmerPrefix={isExploring}
+    />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded);
 

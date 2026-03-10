@@ -51,35 +51,47 @@ export function getStaticEventToneClass(tone: EventTitleTone = "default"): strin
 
 export function EventTitle({
   prefix,
+  detail,
   emphasis,
   suffix,
   tone = "default",
+  shimmerPrefix = false,
   className,
   prefixClassName,
+  detailClassName,
   emphasisClassName,
   suffixClassName,
   emphasisAs: EmphasisTag = "span",
 }: {
   prefix: ReactNode;
+  detail?: ReactNode;
   emphasis?: ReactNode;
   suffix?: ReactNode;
   tone?: EventTitleTone;
+  shimmerPrefix?: boolean;
   className?: string;
   prefixClassName?: string;
+  detailClassName?: string;
   emphasisClassName?: string;
   suffixClassName?: string;
   emphasisAs?: "span" | "em";
 }) {
   const prefixToneClass =
     tone === "destructive" ? "text-destructive/85" : "text-muted-foreground/90";
+  const detailToneClass =
+    tone === "destructive" ? "text-destructive/90" : "text-foreground/85";
   const emphasisToneClass =
     tone === "destructive" ? "text-destructive" : "text-foreground/95";
   const suffixToneClass =
     tone === "destructive" ? "text-destructive/80" : "text-muted-foreground/75";
+  const prefixContent = shimmerPrefix ? <OngoingEventLabel>{prefix}</OngoingEventLabel> : prefix;
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
-      <span className={cn("shrink-0", prefixToneClass, prefixClassName)}>{prefix}</span>
+      <span className={cn("shrink-0", prefixToneClass, prefixClassName)}>{prefixContent}</span>
+      {detail !== undefined ? (
+        <span className={cn("min-w-0 truncate", detailToneClass, detailClassName)}>{detail}</span>
+      ) : null}
       {emphasis !== undefined ? (
         <EmphasisTag
           className={cn("truncate font-semibold not-italic", emphasisToneClass, emphasisClassName)}

@@ -1,9 +1,6 @@
 import type { UIWebSearchMessage } from "@beanbag/agent-core";
 import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "@beanbag/ui-core";
-import {
-  EventTitle,
-  renderShimmeringSummary,
-} from "./shared";
+import { EventTitle } from "./shared";
 
 export function WebSearchRow({
   message,
@@ -11,12 +8,11 @@ export function WebSearchRow({
   message: UIWebSearchMessage;
 }) {
   const isSearching = message.status === "pending";
-  const summary = isSearching ? (
-    <EventTitle prefix="Searching" emphasis="the web" />
-  ) : (
+  const summary = (
     <EventTitle
-      prefix="Searched"
-      emphasis={message.query ?? "the web"}
+      prefix={isSearching ? "Searching" : "Searched"}
+      detail={message.query ?? "the web"}
+      shimmerPrefix={isSearching}
     />
   );
 
@@ -25,7 +21,7 @@ export function WebSearchRow({
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
           <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
-            {renderShimmeringSummary(summary, isSearching)}
+            {summary}
           </div>
         </div>
       </div>
