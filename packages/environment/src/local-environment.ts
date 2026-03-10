@@ -14,6 +14,7 @@ import type {
   EnvironmentWorkspaceCommitsOptions,
   EnvironmentWorkspaceDiffOptions,
   EnvironmentWorkspaceDiffResult,
+  EnvironmentWorkStatus,
   EnvironmentWorkspaceStatusOptions,
   EnvironmentSquashMergeOptions,
   EnvironmentSquashMergeResult,
@@ -61,6 +62,7 @@ class LocalEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private readonly workspaceStatusCache = new Map<string, EnvironmentWorkStatus>();
 
   constructor(context: CreateEnvironmentContext) {
     this.projectId = context.projectId;
@@ -159,14 +161,25 @@ class LocalEnvironment implements IEnvironment {
   }
 
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
-    return getGitWorkspaceStatus(this, args);
+    const cacheKey = this._workspaceStatusCacheKey(args);
+    const cached = this.workspaceStatusCache.get(cacheKey);
+    if (cached) {
+      return { ...cached };
+    }
+    const status = getGitWorkspaceStatus(this, args);
+    this.workspaceStatusCache.set(cacheKey, { ...status });
+    return status;
   }
 
   watchWorkspaceStatus(onChange: () => void): () => void {
-    return watchGitWorkspaceStatus(this, onChange);
+    return watchGitWorkspaceStatus(this, () => {
+      this.workspaceStatusCache.clear();
+      onChange();
+    });
   }
 
   commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult> {
+    this.workspaceStatusCache.clear();
     return commitGitWorkspace(
       this,
       args,
@@ -269,6 +282,10 @@ class LocalEnvironment implements IEnvironment {
       ...(options?.onStdoutLine ? { onStdoutLine: options.onStdoutLine } : {}),
       ...(options?.onStderrLine ? { onStderrLine: options.onStderrLine } : {}),
     });
+  }
+
+  private _workspaceStatusCacheKey(args?: EnvironmentWorkspaceStatusOptions): string {
+    return `${args?.defaultBranch ?? ""}::${args?.mergeBaseBranch ?? ""}`;
   }
 }
 

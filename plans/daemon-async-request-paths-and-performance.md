@@ -39,6 +39,7 @@ Current status:
   - removed the thread-detail parent-thread network fetch in favor of cached thread-list data
   - stopped the thread-detail view from eagerly fetching merge-base work status when the base thread payload already has the same branch
   - added a lightweight in-memory default-branch cache and thread work-status cache to reduce repeated sync git/status work
+  - added local/worktree environment workspace-status caching with watcher/mutation invalidation
 - In progress:
   - reducing remaining request-path sync git/process work
   - deciding the right long-term thread-detail read model (`GET /threads/:id` vs composite read endpoint)
