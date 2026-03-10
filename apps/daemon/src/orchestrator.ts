@@ -1135,6 +1135,7 @@ export class Orchestrator implements ThreadOrchestrator {
       status: result.commitCreated ? "committed" : "noop",
       message: result.message,
       ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+      ...(result.commitSubject ? { commitSubject: result.commitSubject } : {}),
       ...(result.includeUnstaged !== undefined
         ? { includeUnstaged: result.includeUnstaged }
         : {}),
@@ -1196,6 +1197,9 @@ export class Orchestrator implements ThreadOrchestrator {
         message: mergeResult.prepCommit.message,
         ...(mergeResult.prepCommit.commitSha
           ? { commitSha: mergeResult.prepCommit.commitSha }
+          : {}),
+        ...(mergeResult.prepCommit.commitSubject
+          ? { commitSubject: mergeResult.prepCommit.commitSubject }
           : {}),
         ...(mergeResult.prepCommit.includeUnstaged !== undefined
           ? { includeUnstaged: mergeResult.prepCommit.includeUnstaged }

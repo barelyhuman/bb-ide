@@ -1068,8 +1068,9 @@ describe("ConversationEntry", () => {
       detail: "feat: improve prompt handling • abcdef1234567890",
       worktreeCommit: {
         status: "committed",
-        message: "feat: improve prompt handling",
+        message: "Committed changes",
         commitSha: "abcdef1234567890",
+        commitSubject: "feat: improve prompt handling",
       },
     };
 
@@ -1082,7 +1083,8 @@ describe("ConversationEntry", () => {
     const expandedHtml = renderToStaticMarkup(
       <ConversationEntry message={message} initialExpanded />,
     );
-    expect(expandedHtml).toContain("abcdef1234567890");
+    expect(expandedHtml).toContain("[abcdef1] feat: improve prompt handling");
+    expect(expandedHtml).not.toContain("abcdef1234567890");
   });
 
   it("renders squash merge summaries as 'Squash merged into <em>branch</em>'", () => {

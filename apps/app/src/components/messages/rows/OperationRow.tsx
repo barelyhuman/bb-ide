@@ -88,6 +88,26 @@ function extractMergeTargetBranch(message: UIOperationMessage): string | undefin
   return undefined;
 }
 
+function formatCommitDetailLine({
+  commitSha,
+  commitMessage,
+}: {
+  commitSha?: string;
+  commitMessage?: string;
+}): string | undefined {
+  const normalizedSha = commitSha?.trim();
+  const normalizedMessage = commitMessage?.trim();
+  const shortSha = normalizedSha?.slice(0, 7);
+
+  if (shortSha && normalizedMessage) {
+    return `[${shortSha}] ${normalizedMessage}`;
+  }
+  if (shortSha) {
+    return `[${shortSha}]`;
+  }
+  return normalizedMessage;
+}
+
 function isShimmeringThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
   switch (phase) {
     case "requested":
@@ -495,12 +515,15 @@ export function OperationRow({
       message.worktreeCommit?.commitSha?.trim() ??
       detailLinesFromMessage.find((line) => /^[0-9a-f]{7,40}$/i.test(line));
     const commitMessage =
+      message.worktreeCommit?.commitSubject?.trim() ??
       message.worktreeCommit?.message?.trim() ??
       detailLinesFromMessage.find((line) => line !== commitSha);
     const summaryContent = message.title === "Committed changes"
       ? <EventTitle prefix="Committed" detail="changes" tone={tone} />
       : buildGenericSummary(message.title);
-    const detailLines = [commitMessage, commitSha].filter((value): value is string => Boolean(value));
+    const detailLines = [
+      formatCommitDetailLine({ commitSha, commitMessage }),
+    ].filter((value): value is string => Boolean(value));
 
     if (detailLines.length === 0) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;

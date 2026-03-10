@@ -190,6 +190,7 @@ describe("WorktreeEnvironment", () => {
     expect(result.prepCommit).toEqual(
       expect.objectContaining({
         message: "Committed changes",
+        commitSubject: "chore: prep thread changes",
         includeUnstaged: true,
         commitSha: expect.any(String),
       }),

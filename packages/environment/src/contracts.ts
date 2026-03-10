@@ -145,6 +145,7 @@ export interface EnvironmentWorkspaceCommitResult {
   message: string;
   workStatus: EnvironmentWorkStatus;
   commitSha?: string;
+  commitSubject?: string;
   includeUnstaged?: boolean;
 }
 
@@ -253,6 +254,7 @@ export interface EnvironmentSquashMergeResult {
   prepCommit?: {
     message: string;
     commitSha?: string;
+    commitSubject?: string;
     includeUnstaged?: boolean;
   };
   conflictFiles?: string[];

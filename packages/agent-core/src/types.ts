@@ -281,6 +281,7 @@ export interface SystemWorktreeCommitEventData {
   status: "committed" | "noop";
   message: string;
   commitSha?: string;
+  commitSubject?: string;
   includeUnstaged?: boolean;
 }
 

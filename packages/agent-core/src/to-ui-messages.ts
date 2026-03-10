@@ -1586,6 +1586,7 @@ function parseOperationMessage(
     const title = status === "committed" ? "Committed changes" : "No commit created";
     const commitMessage = getStringField(payload, "message");
     const commitSha = getStringField(payload, "commitSha");
+    const commitSubject = getStringField(payload, "commitSubject");
     const includeUnstaged = payload?.includeUnstaged;
     const worktreeCommit: UIWorktreeCommitMetadata | undefined =
       status === "committed" || status === "noop"
@@ -1593,11 +1594,12 @@ function parseOperationMessage(
             status,
             ...(commitMessage ? { message: commitMessage } : {}),
             ...(commitSha ? { commitSha } : {}),
+            ...(commitSubject ? { commitSubject } : {}),
             ...(typeof includeUnstaged === "boolean" ? { includeUnstaged } : {}),
           }
         : undefined;
     const detailParts = [
-      commitMessage,
+      commitSubject ?? commitMessage,
       commitSha,
     ].filter((value): value is string => Boolean(value));
     return {

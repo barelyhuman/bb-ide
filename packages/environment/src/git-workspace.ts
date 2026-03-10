@@ -1409,6 +1409,7 @@ export function commitGitWorkspace(
       ...(args.defaultBranch ? { defaultBranch: args.defaultBranch } : {}),
     });
     const shaResult = await runGitAsync(environment, ["rev-parse", "HEAD"]);
+    const subjectResult = await runGitAsync(environment, ["show", "-s", "--format=%s", "HEAD"]);
 
     const result = {
       ok: true,
@@ -1416,6 +1417,9 @@ export function commitGitWorkspace(
       message: "Committed changes",
       workStatus: after,
       ...(shaResult.ok && shaResult.stdout ? { commitSha: shaResult.stdout } : {}),
+      ...(subjectResult.ok && subjectResult.stdout
+        ? { commitSubject: subjectResult.stdout }
+        : {}),
       ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
     } satisfies EnvironmentWorkspaceCommitResult;
     onResult?.(result);

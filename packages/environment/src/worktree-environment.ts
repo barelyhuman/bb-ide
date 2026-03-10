@@ -591,6 +591,7 @@ class WorktreeEnvironment implements IEnvironment {
         prepCommit = {
           message: commitResult.message,
           ...(commitResult.commitSha ? { commitSha: commitResult.commitSha } : {}),
+          ...(commitResult.commitSubject ? { commitSubject: commitResult.commitSubject } : {}),
           ...(commitResult.includeUnstaged !== undefined
             ? { includeUnstaged: commitResult.includeUnstaged }
             : {}),

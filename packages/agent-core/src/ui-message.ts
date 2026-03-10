@@ -184,6 +184,7 @@ export interface UIWorktreeCommitMetadata {
   status: "committed" | "noop";
   message?: string;
   commitSha?: string;
+  commitSubject?: string;
   includeUnstaged?: boolean;
 }
 
