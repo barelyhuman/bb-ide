@@ -861,13 +861,12 @@ export function useShutdownDaemon() {
 }
 
 export function useRestartDaemon() {
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (req?: SystemRestartRequest): Promise<SystemRestartAcceptedResponse> =>
       api.restartDaemon(req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-      queryClient.invalidateQueries({ queryKey: ["systemRestartPolicy"] });
-    },
+    // Avoid immediately refetching system endpoints here: a successful restart
+    // request intentionally drops the daemon for a moment, which can produce
+    // noisy transient 5xx proxy errors in the browser console. The websocket
+    // reconnect path already invalidates queries once the daemon is back.
   });
 }
