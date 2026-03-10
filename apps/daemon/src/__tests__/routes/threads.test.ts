@@ -1,17 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { Thread, ThreadEvent, ThreadWorkStatus } from "@beanbag/agent-core";
+import type {
+  Thread,
+  ThreadEvent,
+  ThreadOrchestrator,
+  ThreadWorkStatus,
+} from "@beanbag/agent-core";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import { createThreadRoutes } from "../../routes/threads.js";
-import type { Orchestrator } from "../../orchestrator.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
+import type { EnvironmentAgentSessionService } from "../../environment-agent-session-service.js";
 
-type LegacyThreadRouteMock = Orchestrator & {
+type LegacyThreadRouteMock = ThreadOrchestrator & {
   getRawById: ReturnType<typeof vi.fn>;
   getById: ReturnType<typeof vi.fn>;
   getByIdAsync: ReturnType<typeof vi.fn>;
   getWorkStatus: ReturnType<typeof vi.fn>;
   getWorkStatusAsync: ReturnType<typeof vi.fn>;
+  getEnvironmentAgentStatus: ReturnType<typeof vi.fn>;
   listAsync: ReturnType<typeof vi.fn>;
   getGitDiff: ReturnType<typeof vi.fn>;
   getGitDiffAsync: ReturnType<typeof vi.fn>;
@@ -90,8 +96,6 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
     getEnvironmentAgentStatus: vi.fn(),
-    ingestEnvironmentAgentEvents: vi.fn(),
-    replayEnvironmentAgentEvents: vi.fn(),
     list: vi.fn(),
     listAsync: vi.fn(),
     getTimeline: vi.fn(),
@@ -134,6 +138,18 @@ function mockOrchestrator(): LegacyThreadRouteMock {
       )(threadId, selection, mergeBaseBranch),
   );
   return orchestrator;
+}
+
+function mockEnvironmentAgentSessionService(): EnvironmentAgentSessionService {
+  return {
+    openSession: vi.fn(),
+    recordHeartbeat: vi.fn(),
+    applyEventBatch: vi.fn(),
+    listCommands: vi.fn(),
+    recordCommandAck: vi.fn(),
+    recordCommandResult: vi.fn(),
+    closeSession: vi.fn(),
+  } as unknown as EnvironmentAgentSessionService;
 }
 
 describe("Thread routes", () => {
@@ -372,93 +388,414 @@ describe("Thread routes", () => {
     });
   });
 
-  describe("GET /threads/:id/environment-agent/events", () => {
-    it("replays environment-agent events from the requested sequence", async () => {
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
-      (threadManager.replayEnvironmentAgentEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
-        fromSequenceExclusive: 2,
-        toSequenceInclusive: 4,
-        hasMore: false,
-        events: [
-          {
-            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-            sequence: 3,
-            emittedAt: 1000,
-            threadId: "thread-1",
-            event: {
-              type: "environment.ready",
-              threadId: "thread-1",
-            },
+  describe("POST /threads/:id/environment-agent/session/open", () => {
+    it("opens a session and returns a welcome payload", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      (sessionService.openSession as ReturnType<typeof vi.fn>).mockReturnValue({
+        session: {
+          id: "sess-1",
+        },
+        welcome: {
+          protocol: "beanbag.env-agent.v1",
+          type: "session_welcome",
+          messageId: "msg-1",
+          sessionId: "sess-1",
+          sentAt: 1_000,
+          payload: {
+            leaseTtlMs: 30_000,
+            heartbeatIntervalMs: 10_000,
+            selectedTransport: "websocket",
+            protocolVersion: 1,
+            channels: [
+              {
+                channelId: "thread-1",
+                applyFrom: {
+                  generation: 1,
+                  sequenceExclusive: 0,
+                },
+                deliverCommandsAfter: 0,
+              },
+            ],
           },
-        ],
+        },
       });
-
-      const res = await app.request(
-        "/threads/thread-1/environment-agent/events?afterSequence=2&limit=10",
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
       );
 
-      expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toMatchObject({
-        fromSequenceExclusive: 2,
-        toSequenceInclusive: 4,
-        hasMore: false,
-      });
-      expect(threadManager.replayEnvironmentAgentEvents).toHaveBeenCalledWith({
-        threadId: "thread-1",
-        afterSequence: 2,
-        limit: 10,
-      });
-    });
-  });
-
-  describe("POST /threads/:id/environment-agent/deliver", () => {
-    it("ingests authenticated environment-agent events", async () => {
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
-      (threadManager.ingestEnvironmentAgentEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        threadId: "thread-1",
-        acknowledgedSequence: 4,
-        state: "accepted",
-        reason: "accepted",
-      });
-
-      const res = await app.request("/threads/thread-1/environment-agent/deliver", {
+      const res = await app.request("/threads/thread-1/environment-agent/session/open", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer secret-token",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-          threadId: "thread-1",
-          events: [
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [1],
+          supportedTransports: ["websocket"],
+          channels: [
             {
-              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-              sequence: 4,
-              emittedAt: 1000,
-              threadId: "thread-1",
-              event: {
-                type: "environment.ready",
-                threadId: "thread-1",
-              },
+              channelId: "thread-1",
+              generation: 1,
             },
           ],
         }),
       });
 
-      expect(res.status).toBe(200);
-      await expect(res.json()).resolves.toMatchObject({
-        acknowledgedSequence: 4,
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
+        type: "session_welcome",
+        sessionId: "sess-1",
       });
-      expect(threadManager.ingestEnvironmentAgentEvents).toHaveBeenCalledWith({
+      expect(sessionService.openSession).toHaveBeenCalledWith({
         threadId: "thread-1",
-        authorizationHeader: "Bearer secret-token",
-        afterSequence: undefined,
-        events: [
-          expect.objectContaining({
-            sequence: 4,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [1],
+          supportedTransports: ["websocket"],
+          channels: [
+            {
+              channelId: "thread-1",
+              generation: 1,
+            },
+          ],
+        },
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/session/heartbeat", () => {
+    it("accepts session heartbeats", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      (sessionService.recordHeartbeat as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "sess-1",
+        threadId: "thread-1",
+        status: "active",
+      });
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/heartbeat",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "sess-1",
+            agentObservedAt: 1_000,
+            outboxDepth: 2,
+            channels: [
+              {
+                channelId: "thread-1",
+                lastSent: {
+                  generation: 1,
+                  sequence: 2,
+                },
+                lastAcked: {
+                  generation: 1,
+                  sequence: 1,
+                },
+              },
+            ],
           }),
-        ],
+        },
+      );
+
+      expect(res.status).toBe(204);
+      expect(sessionService.recordHeartbeat).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        payload: {
+          sessionId: "sess-1",
+          agentObservedAt: 1_000,
+          outboxDepth: 2,
+          channels: [
+            {
+              channelId: "thread-1",
+              lastSent: {
+                generation: 1,
+                sequence: 2,
+              },
+              lastAcked: {
+                generation: 1,
+                sequence: 1,
+              },
+            },
+          ],
+        },
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/session/events", () => {
+    it("applies session event batches and returns an event ack", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (sessionService.applyEventBatch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "event_ack",
+        messageId: "msg-evt-1",
+        sessionId: "sess-1",
+        sentAt: 1_000,
+        payload: {
+          channels: [
+            {
+              channelId: "thread-1",
+              ackedThrough: { generation: 2, sequence: 4 },
+            },
+          ],
+        },
+      });
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/events",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "sess-1",
+            batches: [
+              {
+                channelId: "thread-1",
+                generation: 2,
+                events: [
+                  {
+                    sequence: 4,
+                    eventId: "evt-4",
+                    emittedAt: 999,
+                    event: {
+                      type: "provider.stderr",
+                      threadId: "thread-1",
+                      line: "stderr line",
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+        },
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        type: "event_ack",
+        sessionId: "sess-1",
+      });
+      expect(sessionService.applyEventBatch).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        payload: {
+          batches: [
+            {
+              channelId: "thread-1",
+              generation: 2,
+              events: [
+                {
+                  sequence: 4,
+                  eventId: "evt-4",
+                  emittedAt: 999,
+                  event: {
+                    type: "provider.stderr",
+                    threadId: "thread-1",
+                    line: "stderr line",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/session/commands/ack", () => {
+    it("records command acknowledgements", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/commands/ack",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "sess-1",
+            commands: [
+              {
+                commandId: "cmd-1",
+                channelId: "thread-1",
+                state: "received",
+              },
+            ],
+            deliveredThrough: 3,
+          }),
+        },
+      );
+
+      expect(res.status).toBe(204);
+      expect(sessionService.recordCommandAck).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        payload: {
+          commands: [
+            {
+              commandId: "cmd-1",
+              channelId: "thread-1",
+              state: "received",
+            },
+          ],
+          deliveredThrough: 3,
+        },
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/session/commands/result", () => {
+    it("records command lifecycle results", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/commands/result",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "sess-1",
+            commandId: "cmd-1",
+            channelId: "thread-1",
+            state: "failed",
+            errorCode: "provider_error",
+            errorMessage: "runtime down",
+          }),
+        },
+      );
+
+      expect(res.status).toBe(204);
+      expect(sessionService.recordCommandResult).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        payload: {
+          commandId: "cmd-1",
+          channelId: "thread-1",
+          state: "failed",
+          errorCode: "provider_error",
+          errorMessage: "runtime down",
+        },
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/session/close", () => {
+    it("closes an active session", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/close",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "sess-1",
+            reason: "agent_shutdown",
+          }),
+        },
+      );
+
+      expect(res.status).toBe(204);
+      expect(sessionService.closeSession).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        reason: "agent_shutdown",
+      });
+    });
+  });
+
+  describe("GET /threads/:id/environment-agent/session/commands", () => {
+    it("returns command batches for the active session", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      (sessionService.listCommands as ReturnType<typeof vi.fn>).mockReturnValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "command_batch",
+        messageId: "msg-1",
+        sessionId: "sess-1",
+        sentAt: 1_000,
+        payload: {
+          commands: [
+            {
+              channelId: "thread-1",
+              commandCursor: 2,
+              commandId: "cmd-1",
+              createdAt: 900,
+              command: {
+                type: "workspace.status",
+                threadId: "thread-1",
+              },
+            },
+          ],
+        },
+      });
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=1&limit=10",
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        type: "command_batch",
+        sessionId: "sess-1",
+      });
+      expect(sessionService.listCommands).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        afterCursor: 1,
+        limit: 10,
       });
     });
   });
@@ -1225,7 +1562,7 @@ describe("Thread routes", () => {
       const getWorkStatusAsync = vi.fn().mockResolvedValue({
         state: "dirty_uncommitted",
       });
-      (threadManager as Orchestrator & {
+      (threadManager as ThreadOrchestrator & {
         getWorkStatusAsync?: typeof getWorkStatusAsync;
       }).getWorkStatusAsync = getWorkStatusAsync;
       (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockImplementation(() => {

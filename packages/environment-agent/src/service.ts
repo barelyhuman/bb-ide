@@ -10,6 +10,11 @@ import {
   createEnvironmentAgentFileLogger,
   resolveEnvironmentAgentLogFilePath,
 } from "./file-logger.js";
+import { InMemoryEnvironmentAgentSessionStore } from "./in-memory-session-store.js";
+import { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
+import { createEnvironmentAgentSessionHttpClientFromConnection } from "./session-http-client.js";
+import { EnvironmentAgentSessionSync } from "./session-sync.js";
+import { EnvironmentAgentSessionSupervisor } from "./session-supervisor.js";
 
 export interface EnvironmentAgentServiceCliOptions {
   providerCommand?: string;
@@ -29,6 +34,10 @@ export interface EnvironmentAgentServiceOptions {
   };
   logging: {
     filePath: string;
+  };
+  session: {
+    pollIntervalMs: number;
+    commandBatchLimit: number;
   };
 }
 
@@ -78,6 +87,10 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     logging: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
+    session: {
+      pollIntervalMs: 250,
+      commandBatchLimit: 50,
+    },
   };
 }
 
@@ -86,6 +99,7 @@ export async function startEnvironmentAgentService(
 ): Promise<{
   runtime: EnvironmentAgentRuntime;
   server: EnvironmentAgentHttpServer;
+  sessionSupervisor?: EnvironmentAgentSessionSupervisor;
 }> {
   const logger = createEnvironmentAgentFileLogger(options.logging.filePath);
   logger.log("info", "environment-agent starting", {
@@ -115,6 +129,33 @@ export async function startEnvironmentAgentService(
   });
   runtime.start();
 
+  let sessionSupervisor: EnvironmentAgentSessionSupervisor | undefined;
+  if (options.runtime.daemonConnection?.daemonUrl && options.runtime.threadId) {
+    const sessionStore = new InMemoryEnvironmentAgentSessionStore();
+    const sessionRuntime = new EnvironmentAgentSessionRuntime({ store: sessionStore });
+    const sessionClient = createEnvironmentAgentSessionHttpClientFromConnection(
+      options.runtime.daemonConnection,
+    );
+    const sessionSync = new EnvironmentAgentSessionSync({
+      runtime: sessionRuntime,
+      client: sessionClient,
+    });
+    sessionSupervisor = new EnvironmentAgentSessionSupervisor({
+      threadId: options.runtime.threadId,
+      runtime,
+      sessionRuntime,
+      sessionSync,
+      pollIntervalMs: options.session.pollIntervalMs,
+      commandBatchLimit: options.session.commandBatchLimit,
+      onError: (error) => {
+        logger.log("warn", "environment-agent session sync error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    });
+    await sessionSupervisor.start();
+  }
+
   const server = await createEnvironmentAgentHttpServer({
     runtime,
     host: options.server.host,
@@ -126,5 +167,5 @@ export async function startEnvironmentAgentService(
     logFilePath: options.logging.filePath,
   });
 
-  return { runtime, server };
+  return { runtime, server, ...(sessionSupervisor ? { sessionSupervisor } : {}) };
 }

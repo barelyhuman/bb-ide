@@ -4,17 +4,11 @@ import type {
 } from "./transport.js";
 import {
   isEnvironmentAgentControlResponse,
-  isEnvironmentAgentLiveEventMessage,
-  type EnvironmentAgentAckRequest,
-  type EnvironmentAgentAckResponse,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentControlRequest,
-  type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderSpec,
   type EnvironmentAgentProviderStatus,
-  type EnvironmentAgentReplayRequest,
-  type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
 } from "./protocol.js";
 
@@ -26,27 +20,17 @@ interface PendingControlRequest {
 type EnvironmentAgentRequestShape =
   | { type: "command"; payload: EnvironmentAgentCommandEnvelope }
   | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
-  | { type: "delivery.retry" }
-  | { type: "ack"; payload: EnvironmentAgentAckRequest }
-  | { type: "replay"; payload: EnvironmentAgentReplayRequest }
   | { type: "status" };
 
 export interface EnvironmentAgentClient {
   readonly providerTransport: JsonLineTransport;
-  subscribeToEvents(
-    listener: (event: EnvironmentAgentEventEnvelope) => void,
-  ): () => void;
   sendCommand(
     envelope: EnvironmentAgentCommandEnvelope,
   ): Promise<EnvironmentAgentCommandAck>;
   ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
   ): Promise<EnvironmentAgentProviderStatus>;
-  retryDaemonDelivery(): Promise<EnvironmentAgentStatusSnapshot>;
-  acknowledge(request: EnvironmentAgentAckRequest): Promise<EnvironmentAgentAckResponse>;
-  replay(request: EnvironmentAgentReplayRequest): Promise<EnvironmentAgentReplayResponse>;
   status(): Promise<EnvironmentAgentStatusSnapshot>;
-  getLatestObservedSequence(): number;
   close(reason?: Error): void;
 }
 
@@ -60,12 +44,8 @@ export class EnvironmentAgentClientError extends Error {
 class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
   readonly providerTransport: JsonLineTransport;
   private providerHandlers: JsonLineTransportHandlers | undefined;
-  private readonly eventSubscribers = new Set<
-    (event: EnvironmentAgentEventEnvelope) => void
-  >();
   private readonly pending = new Map<string, PendingControlRequest>();
   private requestCounter = 0;
-  private latestObservedSequence = 0;
   private closed = false;
 
   constructor(private readonly transport: JsonLineTransport) {
@@ -94,13 +74,6 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     });
   }
 
-  acknowledge(request: EnvironmentAgentAckRequest): Promise<EnvironmentAgentAckResponse> {
-    return this.request<EnvironmentAgentAckResponse>({
-      type: "ack",
-      payload: request,
-    });
-  }
-
   ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
   ): Promise<EnvironmentAgentProviderStatus> {
@@ -119,36 +92,10 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     });
   }
 
-  retryDaemonDelivery(): Promise<EnvironmentAgentStatusSnapshot> {
-    return this.request<EnvironmentAgentStatusSnapshot>({
-      type: "delivery.retry",
-    });
-  }
-
-  replay(request: EnvironmentAgentReplayRequest): Promise<EnvironmentAgentReplayResponse> {
-    return this.request<EnvironmentAgentReplayResponse>({
-      type: "replay",
-      payload: request,
-    });
-  }
-
   status(): Promise<EnvironmentAgentStatusSnapshot> {
     return this.request<EnvironmentAgentStatusSnapshot>({
       type: "status",
     });
-  }
-
-  subscribeToEvents(
-    listener: (event: EnvironmentAgentEventEnvelope) => void,
-  ): () => void {
-    this.eventSubscribers.add(listener);
-    return () => {
-      this.eventSubscribers.delete(listener);
-    };
-  }
-
-  getLatestObservedSequence(): number {
-    return this.latestObservedSequence;
   }
 
   close(reason?: Error): void {
@@ -168,11 +115,6 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
 
   private handleLine(line: string): void {
     const parsed = parseJson(line);
-    if (parsed && isEnvironmentAgentLiveEventMessage(parsed)) {
-      this.recordObservedEvent(parsed.payload);
-      return;
-    }
-
     if (!parsed || !isEnvironmentAgentControlResponse(parsed)) {
       this.providerHandlers?.onLine(line);
       return;
@@ -182,13 +124,6 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     if (!pending) return;
     this.pending.delete(parsed.requestId);
     pending.resolve(parsed.payload);
-  }
-
-  private recordObservedEvent(event: EnvironmentAgentEventEnvelope): void {
-    this.latestObservedSequence = Math.max(this.latestObservedSequence, event.sequence);
-    for (const subscriber of this.eventSubscribers) {
-      subscriber(event);
-    }
   }
 
   private request<TResponse>(
@@ -242,128 +177,4 @@ export function createEnvironmentAgentClient(
   transport: JsonLineTransport,
 ): EnvironmentAgentClient {
   return new EnvironmentAgentClientImpl(transport);
-}
-
-export async function createHttpEnvironmentAgentClient(args: {
-  baseUrl: string;
-  headers?: Record<string, string>;
-}): Promise<EnvironmentAgentClient> {
-  const headers = {
-    "content-type": "application/json",
-    ...(args.headers ?? {}),
-  };
-  let handlers: JsonLineTransportHandlers | undefined;
-  let closed = false;
-  const abortController = new AbortController();
-
-  const streamPromise = fetch(`${args.baseUrl}/stream`, {
-    method: "GET",
-    headers: args.headers,
-    signal: abortController.signal,
-  }).then(async (response) => {
-    if (!response.ok || !response.body) {
-      throw new EnvironmentAgentClientError(
-        `Environment agent stream failed: ${response.status}`,
-      );
-    }
-
-    const reader = response.body
-      .pipeThrough(new TextDecoderStream())
-      .getReader();
-    let buffer = "";
-    while (!closed) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += value;
-      const lines = buffer.split(/\r\n|\n|\r/g);
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        handlers?.onLine(line);
-      }
-    }
-  }).catch((error) => {
-    if (!closed) {
-      handlers?.onClose?.(
-        error instanceof Error ? error : new EnvironmentAgentClientError(String(error)),
-      );
-    }
-  });
-
-  const transport: JsonLineTransport = {
-    setHandlers(nextHandlers) {
-      handlers = nextHandlers;
-    },
-    send(line) {
-      void fetch(`${args.baseUrl}/provider-line`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ line }),
-      }).then((response) => {
-        if (!response.ok) {
-          throw new EnvironmentAgentClientError(
-            `Environment agent provider send failed: ${response.status}`,
-          );
-        }
-      }).catch((error) => {
-        handlers?.onClose?.(
-          error instanceof Error ? error : new EnvironmentAgentClientError(String(error)),
-        );
-      });
-    },
-    close(reason) {
-      if (closed) return;
-      closed = true;
-      abortController.abort();
-      handlers?.onClose?.(reason);
-    },
-  };
-
-  void streamPromise;
-  const client = createEnvironmentAgentClient(transport);
-
-  const postJson = async <TResponse>(path: string, body: unknown): Promise<TResponse> => {
-    const response = await fetch(`${args.baseUrl}${path}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      throw new EnvironmentAgentClientError(
-        `Environment agent request failed: ${response.status}`,
-      );
-    }
-    return response.json() as Promise<TResponse>;
-  };
-
-  return {
-    providerTransport: client.providerTransport,
-    subscribeToEvents(listener) {
-      return client.subscribeToEvents(listener);
-    },
-    sendCommand(envelope) {
-      return postJson<EnvironmentAgentCommandAck>("/control/command", envelope);
-    },
-    ensureProviderRunning(spec) {
-      return postJson<EnvironmentAgentProviderStatus>("/control/provider/ensure", spec);
-    },
-    retryDaemonDelivery() {
-      return postJson<EnvironmentAgentStatusSnapshot>("/control/delivery/retry", {});
-    },
-    acknowledge(request) {
-      return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
-    },
-    replay(request) {
-      return postJson<EnvironmentAgentReplayResponse>("/control/replay", request);
-    },
-    status() {
-      return postJson<EnvironmentAgentStatusSnapshot>("/control/status", {});
-    },
-    getLatestObservedSequence() {
-      return client.getLatestObservedSequence();
-    },
-    close(reason) {
-      client.close(reason);
-    },
-  };
 }

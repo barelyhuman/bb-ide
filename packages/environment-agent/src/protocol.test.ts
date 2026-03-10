@@ -3,7 +3,6 @@ import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentEventEnvelope,
-  type EnvironmentAgentReplayResponse,
 } from "./index.js";
 
 describe("environment-agent protocol", () => {
@@ -28,7 +27,7 @@ describe("environment-agent protocol", () => {
     expect(envelope.command.type).toBe("thread.start");
   });
 
-  it("uses a versioned replay response shape", () => {
+  it("uses a versioned event envelope shape", () => {
     const event: EnvironmentAgentEventEnvelope = {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       sequence: 8,
@@ -39,15 +38,8 @@ describe("environment-agent protocol", () => {
         threadId: "thread-1",
       },
     };
-    const replay: EnvironmentAgentReplayResponse = {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-      fromSequenceExclusive: 5,
-      toSequenceInclusive: 8,
-      events: [event],
-      hasMore: false,
-    };
 
-    expect(replay.events[0]?.sequence).toBe(8);
-    expect(replay.protocolVersion).toBe(1);
+    expect(event.sequence).toBe(8);
+    expect(event.protocolVersion).toBe(1);
   });
 });

@@ -6,6 +6,9 @@ import { serve } from "@hono/node-server";
 import {
   createConnection,
   migrate,
+  EnvironmentAgentCommandRepository,
+  EnvironmentAgentCursorRepository,
+  EnvironmentAgentSessionRepository,
   ProjectRepository,
   ThreadRepository,
   EventRepository,
@@ -120,6 +123,9 @@ async function main(): Promise<void> {
   const projectRepo = new ProjectRepository(db);
   const threadRepo = new ThreadRepository(db);
   const eventRepo = new EventRepository(db);
+  const environmentAgentSessionRepo = new EnvironmentAgentSessionRepository(db);
+  const environmentAgentCursorRepo = new EnvironmentAgentCursorRepository(db);
+  const environmentAgentCommandRepo = new EnvironmentAgentCommandRepository(db);
 
   try {
     const storageReclaim = eventRepo.reclaimStorageIfNeeded({
@@ -148,6 +154,7 @@ async function main(): Promise<void> {
   let restartRecommendationMonitorRef:
     | ReturnType<typeof createServer>["restartRecommendationMonitor"]
     | undefined;
+  let serverCloseRef: ReturnType<typeof createServer>["close"] | undefined;
 
   const shutdown = async (
     signal: string,
@@ -164,7 +171,7 @@ async function main(): Promise<void> {
     );
 
     threadManagerRef?.stopAll({ preserveEnvironments: true });
-    restartRecommendationMonitorRef?.close();
+    serverCloseRef?.();
     wsManagerRef?.close();
     await closeHttpServer(httpServer);
 
@@ -188,11 +195,14 @@ async function main(): Promise<void> {
   };
 
   // Create server
-  const { app, injectWebSocket, wsManager, threadManager, restartRecommendationMonitor } =
+  const { app, injectWebSocket, wsManager, threadManager, restartRecommendationMonitor, close } =
     createServer({
       projectRepo,
       threadRepo,
       eventRepo,
+      environmentAgentSessionRepo,
+      environmentAgentCursorRepo,
+      environmentAgentCommandRepo,
       daemonBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       requestShutdown: (reason) => {
         void shutdown(reason);
@@ -204,6 +214,7 @@ async function main(): Promise<void> {
   threadManagerRef = threadManager;
   wsManagerRef = wsManager;
   restartRecommendationMonitorRef = restartRecommendationMonitor;
+  serverCloseRef = close;
 
   console.log("Reconciling active threads with provider...");
   await threadManager.reconcileActiveThreadsOnBoot();

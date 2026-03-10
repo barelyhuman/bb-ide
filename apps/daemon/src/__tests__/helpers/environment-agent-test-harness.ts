@@ -3,7 +3,6 @@ import type { ChildProcess } from "node:child_process";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentClient,
-  type EnvironmentAgentEventEnvelope,
 } from "@beanbag/environment-agent";
 import { toRecord } from "@beanbag/agent-core";
 import { vi } from "vitest";
@@ -61,40 +60,6 @@ export function respondToEnvironmentAgentControlMessage(
               running: true,
               launched: true,
               pid: 12345,
-            },
-          }) + "\n",
-        );
-      });
-      return true;
-    case "replay":
-      process.nextTick(() => {
-        child.stdout.push(
-          JSON.stringify({
-            environmentAgentMessage: true,
-            requestId: msg.requestId,
-            type: "replay.response",
-            payload: {
-              protocolVersion: 1,
-              fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
-              toSequenceInclusive: msg.payload?.afterSequence ?? 0,
-              events: [],
-              hasMore: false,
-            },
-          }) + "\n",
-        );
-      });
-      return true;
-    case "ack":
-      process.nextTick(() => {
-        child.stdout.push(
-          JSON.stringify({
-            environmentAgentMessage: true,
-            requestId: msg.requestId,
-            type: "ack.response",
-            payload: {
-              protocolVersion: 1,
-              acknowledgedSequence: msg.payload?.sequence ?? 0,
-              ...(msg.payload?.threadId ? { threadId: msg.payload.threadId } : {}),
             },
           }) + "\n",
         );
@@ -279,59 +244,14 @@ export function createFakeEnvironmentAgentClient(
         onClose?: (reason?: Error) => void;
       }
     | undefined;
-  const eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
-  const replayEvents: EnvironmentAgentEventEnvelope[] = [];
-  let nextSequence = 1;
   let replayThreadId = "thread-1";
   let initialized = false;
-
-  const appendReplayEvent = (event: EnvironmentAgentEventEnvelope["event"]) => {
-    const envelope: EnvironmentAgentEventEnvelope = {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-      sequence: nextSequence,
-      emittedAt: 1_000 + nextSequence,
-      threadId: event.threadId,
-      event,
-    };
-    replayEvents.push(envelope);
-    for (const subscriber of eventSubscribers) {
-      subscriber(envelope);
-    }
-    nextSequence += 1;
-  };
 
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (chunk: string | Buffer) => {
     const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
     for (const line of value.split(/\r\n|\n|\r/g)) {
       if (!line.trim()) continue;
-      try {
-        const parsed = JSON.parse(line) as {
-          id?: unknown;
-          method?: unknown;
-          params?: unknown;
-          error?: unknown;
-        };
-        if (parsed.id !== undefined && parsed.error !== undefined) {
-          appendReplayEvent({
-            type: "provider.rpc_error",
-            threadId: replayThreadId,
-            requestId: typeof parsed.id === "string" || typeof parsed.id === "number"
-              ? parsed.id
-              : String(parsed.id),
-            message: JSON.stringify(parsed.error),
-          });
-        } else if (parsed.id === undefined && typeof parsed.method === "string") {
-          appendReplayEvent({
-            type: "provider.event",
-            threadId: replayThreadId,
-            method: parsed.method,
-            payload: parsed.params ?? {},
-          });
-        }
-      } catch {
-        // Ignore non-JSON lines in the fake replay log.
-      }
       handlers?.onLine(line);
     }
   });
@@ -340,11 +260,6 @@ export function createFakeEnvironmentAgentClient(
     const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
     for (const line of value.split(/\r\n|\n|\r/g)) {
       if (!line.trim()) continue;
-      appendReplayEvent({
-        type: "provider.stderr",
-        threadId: replayThreadId,
-        line,
-      });
       handlers?.onStderrLine?.(line);
     }
   });
@@ -430,12 +345,6 @@ export function createFakeEnvironmentAgentClient(
         handlers?.onClose?.(reason);
       },
     },
-    subscribeToEvents(listener) {
-      eventSubscribers.add(listener);
-      return () => {
-        eventSubscribers.delete(listener);
-      };
-    },
     ensureProviderRunning: async (spec) => {
       ensureSpecs.push({
         command: spec.command,
@@ -520,29 +429,6 @@ export function createFakeEnvironmentAgentClient(
         result,
       };
     },
-    retryDaemonDelivery: async () => ({
-      protocolVersion: 1,
-      latestSequence: 0,
-      connectedToDaemon: true,
-      pendingEventCount: 0,
-      pendingCommandCount: 0,
-      deliveryState: "healthy",
-      retryAttemptCount: 0,
-    }),
-    acknowledge: async (request) => ({
-      protocolVersion: 1,
-      acknowledgedSequence: request.sequence,
-      ...(request.threadId ? { threadId: request.threadId } : {}),
-    }),
-    replay: async (request) => ({
-      protocolVersion: 1,
-      fromSequenceExclusive: request.afterSequence,
-      toSequenceInclusive:
-        replayEvents.filter((event) => event.sequence > request.afterSequence).at(-1)?.sequence ??
-        request.afterSequence,
-      events: replayEvents.filter((event) => event.sequence > request.afterSequence),
-      hasMore: false,
-    }),
     status: async () => ({
       protocolVersion: 1,
       latestSequence: 0,
@@ -552,7 +438,6 @@ export function createFakeEnvironmentAgentClient(
       deliveryState: "healthy",
       retryAttemptCount: 0,
     }),
-    getLatestObservedSequence: () => 0,
     close: vi.fn(),
   };
 }

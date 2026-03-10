@@ -327,67 +327,28 @@ describe("AgentServer environment-agent control plane", () => {
   });
 
   it("preserves replay window semantics through delivered event envelopes", async () => {
-    const collected: EnvironmentAgentEventEnvelope[] = [];
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-      onNotification: vi.fn(),
-    });
     const simulator = createEnvironmentAgentSimulator();
-
-    simulator.setReplayEvents([
-      {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        sequence: 1,
-        emittedAt: 1_000,
-        threadId: "thread-1",
-        event: {
-          type: "environment.ready",
-          threadId: "thread-1",
-        },
-      } satisfies EnvironmentAgentEventEnvelope,
-      {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        sequence: 2,
-        emittedAt: 1_001,
-        threadId: "thread-1",
-        event: {
-          type: "provider.event",
-          threadId: "thread-1",
-          method: "turn/started",
-          payload: { turnId: "turn-1" },
-        },
-      } satisfies EnvironmentAgentEventEnvelope,
-      {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        sequence: 3,
-        emittedAt: 1_002,
-        threadId: "thread-1",
-        event: {
-          type: "provider.event",
-          threadId: "thread-1",
-          method: "turn/completed",
-          payload: { turnId: "turn-1" },
-        },
-      } satisfies EnvironmentAgentEventEnvelope,
-    ]);
-
-    const replay = await simulator.createClient().replay({
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-      afterSequence: 0,
-      limit: 2,
+    const first = simulator.emitEvent({
+      type: "environment.ready",
       threadId: "thread-1",
     });
-    collected.push(...replay.events);
-    await agentServer.ingestReplayedEnvironmentAgentEvents({
+    const second = simulator.emitEvent({
+      type: "provider.event",
       threadId: "thread-1",
-      events: replay.events,
+      method: "turn/started",
+      payload: { turnId: "turn-1" },
+    });
+    const third = simulator.emitEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "turn/completed",
+      payload: { turnId: "turn-1" },
     });
 
-    expect(collected).toHaveLength(2);
-    expect(replay).toMatchObject({
-      fromSequenceExclusive: 0,
-      toSequenceInclusive: 2,
-      hasMore: true,
+    expect([first, second, third].map((event) => event.sequence)).toEqual([1, 2, 3]);
+    expect(third.event).toMatchObject({
+      type: "provider.event",
+      method: "turn/completed",
     });
   });
 });

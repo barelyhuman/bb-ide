@@ -1,14 +1,12 @@
 import {
   type EnvironmentAgentClient,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentAckResponse,
   type EnvironmentAgentCommand,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderLaunchWrapper,
   type EnvironmentAgentProviderSpec,
-  type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
 import {

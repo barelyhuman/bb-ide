@@ -1,8 +1,5 @@
 import { createServer } from "node:net";
 import type {
-  EnvironmentAgentDeliveryRequest,
-  EnvironmentAgentDeliveryResponse,
-  EnvironmentAgentReplayResponse,
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
 import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
@@ -84,43 +81,6 @@ export async function listThreadEvents(
   return readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`);
 }
 
-export async function deliverEnvironmentAgentEvents(
-  baseUrl: string,
-  threadId: string,
-  authorization: string,
-  body: EnvironmentAgentDeliveryRequest,
-): Promise<EnvironmentAgentDeliveryResponse> {
-  return readJson<EnvironmentAgentDeliveryResponse>(
-    `${baseUrl}/api/v1/threads/${threadId}/environment-agent/deliver`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        authorization,
-      },
-      body: JSON.stringify(body),
-    },
-  );
-}
-
-export async function replayEnvironmentAgentEvents(
-  baseUrl: string,
-  threadId: string,
-  opts?: { afterSequence?: number; limit?: number },
-): Promise<EnvironmentAgentReplayResponse> {
-  const params = new URLSearchParams();
-  if (typeof opts?.afterSequence === "number") {
-    params.set("afterSequence", String(opts.afterSequence));
-  }
-  if (typeof opts?.limit === "number") {
-    params.set("limit", String(opts.limit));
-  }
-  const query = params.toString();
-  return readJson<EnvironmentAgentReplayResponse>(
-    `${baseUrl}/api/v1/threads/${threadId}/environment-agent/events${query ? `?${query}` : ""}`,
-  );
-}
-
 export async function getEnvironmentAgentStatus(
   baseUrl: string,
   threadId: string,
@@ -128,33 +88,6 @@ export async function getEnvironmentAgentStatus(
   return readJson<EnvironmentAgentStatusSnapshot>(
     `${baseUrl}/api/v1/threads/${threadId}/environment-agent/status`,
   );
-}
-
-export function makeProviderEventDeliveryRequest(args: {
-  threadId: string;
-  sequence: number;
-  method: string;
-  payload: unknown;
-  emittedAt?: number;
-}): EnvironmentAgentDeliveryRequest {
-  return {
-    protocolVersion: 1,
-    threadId: args.threadId,
-    events: [
-      {
-        protocolVersion: 1,
-        sequence: args.sequence,
-        emittedAt: args.emittedAt ?? 1_000 + args.sequence,
-        threadId: args.threadId,
-        event: {
-          type: "provider.event",
-          threadId: args.threadId,
-          method: args.method,
-          payload: args.payload,
-        },
-      },
-    ],
-  };
 }
 
 export function sleep(ms: number): Promise<void> {

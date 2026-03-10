@@ -8,5 +8,24 @@ export {
   ThreadRepository,
   EventRepository,
 } from "./repositories.js";
+export type {
+  EnvironmentAgentSessionTransportKind,
+  EnvironmentAgentSessionStatus,
+  EnvironmentAgentSessionCloseReason,
+  EnvironmentAgentCursorPosition,
+  EnvironmentAgentSessionRecord,
+  EnvironmentAgentCursorRecord,
+  EnvironmentAgentCursorAdvanceResult,
+  EnvironmentAgentCommandState,
+  EnvironmentAgentCommandRecord,
+  CreateEnvironmentAgentSessionInput,
+  ReplaceActiveEnvironmentAgentSessionInput,
+  EnqueueEnvironmentAgentCommandInput,
+} from "./environment-agent-repositories.js";
+export {
+  EnvironmentAgentSessionRepository,
+  EnvironmentAgentCursorRepository,
+  EnvironmentAgentCommandRepository,
+} from "./environment-agent-repositories.js";
 
 export { migrate } from "./migrate.js";

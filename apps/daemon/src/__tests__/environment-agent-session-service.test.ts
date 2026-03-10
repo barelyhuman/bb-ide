@@ -1,0 +1,576 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { DbConnection } from "@beanbag/db";
+import {
+  createConnection,
+  migrate,
+  EnvironmentAgentCommandRepository,
+  EnvironmentAgentCursorRepository,
+  EnvironmentAgentSessionRepository,
+  ProjectRepository,
+  ThreadRepository,
+} from "@beanbag/db";
+import { vi } from "vitest";
+import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
+import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
+import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
+import { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+
+interface SqliteClient {
+  close(): void;
+}
+
+function sqliteClient(db: DbConnection): SqliteClient {
+  return (db as unknown as { $client: SqliteClient }).$client;
+}
+
+describe("EnvironmentAgentSessionService", () => {
+  let db: DbConnection;
+  let sqlite: SqliteClient;
+  let projects: ProjectRepository;
+  let threads: ThreadRepository;
+  let sessions: EnvironmentAgentSessionRepository;
+  let cursors: EnvironmentAgentCursorRepository;
+  let commands: EnvironmentAgentCommandRepository;
+  let service: EnvironmentAgentSessionService;
+
+  beforeEach(() => {
+    db = createConnection(":memory:");
+    migrate(db);
+    sqlite = sqliteClient(db);
+    projects = new ProjectRepository(db);
+    threads = new ThreadRepository(db);
+    sessions = new EnvironmentAgentSessionRepository(db);
+    cursors = new EnvironmentAgentCursorRepository(db);
+    commands = new EnvironmentAgentCommandRepository(db);
+    service = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        leaseTtlMs: 45_000,
+        heartbeatIntervalMs: 15_000,
+        commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands),
+        eventApplier: new EnvironmentAgentEventApplier(cursors, {
+          ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+        }),
+      },
+    );
+  });
+
+  afterEach(() => {
+    sqlite.close();
+  });
+
+  function createThreadId(): string {
+    const project = projects.create({
+      name: "daemon-session-service-project",
+      rootPath: "/tmp/daemon-session-service-project",
+    });
+    return threads.create({ projectId: project.id }).id;
+  }
+
+  it("negotiates a session and returns a welcome payload from the daemon cursor", () => {
+    const threadId = createThreadId();
+    cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
+
+    const opened = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["http-long-poll", "websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 7,
+            lastDaemonAcked: {
+              generation: 7,
+              sequence: 5,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(opened.session).toMatchObject({
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      transportKind: "websocket",
+      leaseExpiresAt: 47_000,
+    });
+    expect(opened.welcome).toMatchObject({
+      protocol: "beanbag.env-agent.v1",
+      type: "session_welcome",
+      sessionId: opened.session.id,
+      sentAt: 2_000,
+      payload: {
+        leaseTtlMs: 45_000,
+        heartbeatIntervalMs: 15_000,
+        selectedTransport: "websocket",
+        protocolVersion: 1,
+        channels: [
+          {
+            channelId: threadId,
+            applyFrom: {
+              generation: 3,
+              sequenceExclusive: 9,
+            },
+            deliverCommandsAfter: 0,
+          },
+        ],
+      },
+    });
+  });
+
+  it("falls back to the agent bootstrap generation when the daemon has no cursor yet", () => {
+    const threadId = createThreadId();
+
+    const opened = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["http-long-poll"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 5,
+          },
+        ],
+      },
+    });
+
+    expect(opened.welcome.payload.selectedTransport).toBe("http-long-poll");
+    expect(opened.welcome.payload.channels).toEqual([
+      {
+        channelId: threadId,
+        applyFrom: {
+          generation: 5,
+          sequenceExclusive: 0,
+        },
+        deliverCommandsAfter: 0,
+      },
+    ]);
+  });
+
+  it("replaces active sessions and rejects unsupported opens", () => {
+    const threadId = createThreadId();
+    const first = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    const second = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-2",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+    expect(second.replaced).toMatchObject({
+      id: first.session.id,
+      status: "replaced",
+      closeReason: "newer_session",
+    });
+
+    expect(() =>
+      service.openSession({
+        threadId,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-3",
+          supportedProtocolVersions: [99],
+          supportedTransports: ["websocket"],
+          channels: [
+            {
+              channelId: threadId,
+              generation: 1,
+            },
+          ],
+        },
+      }),
+    ).toThrow("No compatible environment-agent session protocol version");
+
+    expect(() =>
+      service.openSession({
+        threadId,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-4",
+          supportedProtocolVersions: [1],
+          supportedTransports: ["websocket"],
+          channels: [
+            {
+              channelId: "other-thread",
+              generation: 1,
+            },
+          ],
+        },
+      }),
+    ).toThrow(
+      `Missing environment-agent channel bootstrap for thread ${threadId}`,
+    );
+  });
+
+  it("applies event batches and requests replay when the daemon detects a gap", async () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 2,
+          },
+        ],
+      },
+    });
+
+    const ack = await service.applyEventBatch({
+      threadId,
+      sessionId: opened.session.id,
+      now: 2_000,
+      payload: {
+        batches: [
+          {
+            channelId: threadId,
+            generation: 2,
+            events: [
+              {
+                sequence: 0,
+                eventId: "evt-0",
+                emittedAt: 1_500,
+                event: {
+                  type: "provider.stderr",
+                  threadId,
+                  line: "stderr 0",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(ack).toMatchObject({
+      type: "event_ack",
+      sessionId: opened.session.id,
+      payload: {
+        channels: [
+          {
+            channelId: threadId,
+            ackedThrough: {
+              generation: 2,
+              sequence: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    const replayRequest = await service.applyEventBatch({
+      threadId,
+      sessionId: opened.session.id,
+      now: 3_000,
+      payload: {
+        batches: [
+          {
+            channelId: threadId,
+            generation: 2,
+            events: [
+              {
+                sequence: 2,
+                eventId: "evt-2",
+                emittedAt: 2_500,
+                event: {
+                  type: "provider.stderr",
+                  threadId,
+                  line: "stderr 2",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(replayRequest).toMatchObject({
+      type: "replay_request",
+      sessionId: opened.session.id,
+      payload: {
+        channelId: threadId,
+        generation: 2,
+        afterSequence: 0,
+      },
+    });
+  });
+
+  it("expires overdue leases", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(service.expireLeases(60_000)).toEqual([
+      expect.objectContaining({
+        id: opened.session.id,
+        status: "expired",
+        closeReason: "lease_expired",
+      }),
+    ]);
+  });
+
+  it("closes active sessions explicitly", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(
+      service.closeSession({
+        threadId,
+        sessionId: opened.session.id,
+        reason: "agent_shutdown",
+        now: 2_000,
+      }),
+    ).toMatchObject({
+      id: opened.session.id,
+      status: "closed",
+      closeReason: "agent_shutdown",
+      closedAt: 2_000,
+    });
+  });
+
+  it("records command acknowledgements and command results for the active session", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+    commands.enqueue({
+      id: "cmd-1",
+      threadId,
+      sessionId: opened.session.id,
+      commandType: "workspace.status",
+      payload: { type: "workspace.status", threadId },
+      now: 1_500,
+    });
+
+    service.recordCommandAck({
+      threadId,
+      sessionId: opened.session.id,
+      now: 2_000,
+      payload: {
+        commands: [
+          {
+            commandId: "cmd-1",
+            channelId: threadId,
+            state: "received",
+          },
+        ],
+        deliveredThrough: 1,
+      },
+    });
+    expect(commands.getById("cmd-1")).toMatchObject({ state: "received" });
+
+    service.recordCommandResult({
+      threadId,
+      sessionId: opened.session.id,
+      now: 3_000,
+      payload: {
+        commandId: "cmd-1",
+        channelId: threadId,
+        state: "completed",
+        result: { ok: true },
+      },
+    });
+    expect(commands.getById("cmd-1")).toMatchObject({
+      state: "completed",
+      result: { ok: true },
+    });
+  });
+
+  it("extends active session leases on heartbeat and rejects mismatched sessions", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(
+      service.recordHeartbeat({
+        threadId,
+        sessionId: opened.session.id,
+        now: 2_000,
+        payload: {
+          agentObservedAt: 2_000,
+          outboxDepth: 0,
+          channels: [{ channelId: threadId }],
+        },
+      }),
+    ).toMatchObject({
+      id: opened.session.id,
+      threadId,
+      lastHeartbeatAt: 2_000,
+      leaseExpiresAt: 47_000,
+      status: "active",
+    });
+
+    const otherThreadId = createThreadId();
+    expect(() =>
+      service.recordHeartbeat({
+        threadId: otherThreadId,
+        sessionId: opened.session.id,
+        now: 3_000,
+        payload: {
+          agentObservedAt: 3_000,
+          outboxDepth: 0,
+          channels: [{ channelId: otherThreadId }],
+        },
+      }),
+    ).toThrow(
+      `Environment-agent session ${opened.session.id} does not belong to thread ${otherThreadId}`,
+    );
+  });
+
+  it("lists deliverable commands as a command_batch protocol message", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    commands.enqueue({
+      id: "cmd-1",
+      threadId,
+      sessionId: opened.session.id,
+      commandType: "thread.start",
+      payload: {
+        threadId,
+        projectId: "project-1",
+        params: { prompt: "hello" },
+      },
+      now: 2_000,
+    });
+
+    expect(
+      service.listCommands({
+        threadId,
+        sessionId: opened.session.id,
+        now: 3_000,
+      }),
+    ).toMatchObject({
+      protocol: "beanbag.env-agent.v1",
+      type: "command_batch",
+      sessionId: opened.session.id,
+      sentAt: 3_000,
+      payload: {
+        commands: [
+          {
+            channelId: threadId,
+            commandCursor: 1,
+            commandId: "cmd-1",
+            command: {
+              type: "thread.start",
+              threadId,
+              projectId: "project-1",
+              params: { prompt: "hello" },
+            },
+          },
+        ],
+      },
+    });
+  });
+});

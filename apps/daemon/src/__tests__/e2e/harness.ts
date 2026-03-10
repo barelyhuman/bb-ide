@@ -10,6 +10,9 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import {
+  EnvironmentAgentCommandRepository,
+  EnvironmentAgentCursorRepository,
+  EnvironmentAgentSessionRepository,
   EventRepository,
   ProjectRepository,
   ThreadRepository,
@@ -147,11 +150,17 @@ export async function startDaemonE2eHarness(
     const projectRepo = new ProjectRepository(db);
     const threadRepo = new ThreadRepository(db);
     const eventRepo = new EventRepository(db);
+    const environmentAgentSessionRepo = new EnvironmentAgentSessionRepository(db);
+    const environmentAgentCursorRepo = new EnvironmentAgentCursorRepository(db);
+    const environmentAgentCommandRepo = new EnvironmentAgentCommandRepository(db);
 
     const { app, injectWebSocket, wsManager, threadManager } = createServer({
       projectRepo,
       threadRepo,
       eventRepo,
+      environmentAgentSessionRepo,
+      environmentAgentCursorRepo,
+      environmentAgentCommandRepo,
       ...(opts?.port
         ? { daemonBaseUrl: `http://127.0.0.1:${opts.port}/api/v1` }
         : {}),

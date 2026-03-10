@@ -78,7 +78,6 @@ import type {
   EnvironmentAgentConnectionTarget,
 } from "@beanbag/environment-agent";
 import type {
-  EnvironmentAgentDeliveryResponse,
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -96,7 +95,6 @@ import {
   type LlmCompletionService,
   createCodexProviderAdapter,
 } from "@beanbag/agent-server";
-import { createHttpEnvironmentAgentClient } from "@beanbag/environment-agent";
 import { WSManager } from "./ws.js";
 import {
   isDomainError,
@@ -113,6 +111,9 @@ import {
   unsupportedOperationError,
 } from "./domain-errors.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
+import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
+import type { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
+import { EnvironmentAgentSessionCommandClient } from "./environment-agent-session-command-client.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 import {
   detectProjectDefaultBranch,
@@ -444,10 +445,6 @@ export class Orchestrator implements ThreadOrchestrator {
     string,
     ReturnType<typeof setTimeout>
   >();
-  /** Long-lived environment-agent stream subscriptions keyed by thread. */
-  private liveEnvironmentAgentClientsByThreadId = new Map<string, EnvironmentAgentClient>();
-  /** Serializes live environment-agent event ingestion per thread. */
-  private liveEnvironmentAgentIngestByThreadId = new Map<string, Promise<void>>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
   /** Last event sequence where historical noise pruning ran for an active thread. */
@@ -466,8 +463,6 @@ export class Orchestrator implements ThreadOrchestrator {
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Cached prompt-derived fallback titles for untitled threads. */
   private titleFallbackByThreadId = new Map<string, string | null>();
-  /** Latest replay cursor consumed from each environment-agent event log. */
-  private environmentAgentReplayCursorByThreadId = new Map<string, number>();
   /** Cached provisioning completion state derived from provisioning lifecycle events. */
   private provisioningCompletionStateByThreadId = new Map<
     string,
@@ -508,6 +503,8 @@ export class Orchestrator implements ThreadOrchestrator {
     providerCatalog?: SystemProviderInfo[],
     environmentCatalog?: SystemEnvironmentInfo[],
     private scheduler: SchedulerService = new InMemorySchedulerService(),
+    private environmentAgentCommandDispatcher?: EnvironmentAgentCommandDispatcher,
+    private environmentAgentSessionService?: EnvironmentAgentSessionService,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentCatalog =
@@ -613,11 +610,7 @@ export class Orchestrator implements ThreadOrchestrator {
       typeof this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord === "function"
         ? this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord()
         : [];
-    await Promise.all(
-      activeThreadIdsWithPersistedEnvironments.map((threadId) =>
-        this._nudgeEnvironmentAgentDelivery(threadId),
-      ),
-    );
+    void activeThreadIdsWithPersistedEnvironments;
   }
 
   private _rebuildPrimaryPromotionStateFromGit(): void {
@@ -1173,7 +1166,9 @@ export class Orchestrator implements ThreadOrchestrator {
       status: result.commitCreated ? "committed" : "noop",
       message: result.message,
       ...(result.commitSha ? { commitSha: result.commitSha } : {}),
-      ...(result.commitSubject ? { commitSubject: result.commitSubject } : {}),
+      ...("commitSubject" in result && result.commitSubject
+        ? { commitSubject: result.commitSubject }
+        : {}),
       ...(result.includeUnstaged !== undefined
         ? { includeUnstaged: result.includeUnstaged }
         : {}),
@@ -1236,7 +1231,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ...(mergeResult.prepCommit.commitSha
           ? { commitSha: mergeResult.prepCommit.commitSha }
           : {}),
-        ...(mergeResult.prepCommit.commitSubject
+        ...("commitSubject" in mergeResult.prepCommit && mergeResult.prepCommit.commitSubject
           ? { commitSubject: mergeResult.prepCommit.commitSubject }
           : {}),
         ...(mergeResult.prepCommit.includeUnstaged !== undefined
@@ -1252,8 +1247,12 @@ export class Orchestrator implements ThreadOrchestrator {
           : "noop",
       message: mergeResult.message,
       ...(mergeResult.committed !== undefined ? { committed: mergeResult.committed } : {}),
-      ...(mergeResult.commitSha ? { commitSha: mergeResult.commitSha } : {}),
-      ...(mergeResult.commitSubject ? { commitSubject: mergeResult.commitSubject } : {}),
+      ...("commitSha" in mergeResult && mergeResult.commitSha
+        ? { commitSha: mergeResult.commitSha }
+        : {}),
+      ...("commitSubject" in mergeResult && mergeResult.commitSubject
+        ? { commitSubject: mergeResult.commitSubject }
+        : {}),
       ...(options.mergeBaseBranch?.trim()
         ? { mergeBaseBranch: options.mergeBaseBranch.trim() }
         : {}),
@@ -1326,12 +1325,6 @@ export class Orchestrator implements ThreadOrchestrator {
       thread?.status === "active" || thread?.status === "provisioning";
 
     this._cancelIdleEnvironmentSuspend(threadId);
-    const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
-    if (liveClient) {
-      liveClient.close();
-      this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
-    }
-    this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -1341,9 +1334,9 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this._cleanupEnvironmentRuntime(threadId);
     if (shouldAppendInterruptedEvent) {
-      this._appendEvent(threadId, "system/thread/interrupted", {
+      this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
-      });
+      } as never);
     }
     this.threadRepo.update(threadId, { status: "idle" });
     this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
@@ -1360,13 +1353,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this._cancelIdleEnvironmentSuspend(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
-
-    const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
-    if (liveClient) {
-      liveClient.close();
-      this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
-    }
-    this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -1443,7 +1429,6 @@ export class Orchestrator implements ThreadOrchestrator {
               }),
               providerLaunch,
             });
-            await this._replayBufferedEnvironmentAgentEvents(threadId);
           },
         ).catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -1705,6 +1690,74 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
+  getGitDiff(
+    threadId: string,
+    selection: ThreadGitDiffSelection = { type: "combined" },
+    mergeBaseBranch?: string,
+  ): ThreadGitDiffResponse {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment) {
+      throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
+    }
+    if (environment.isIsolatedWorkspace()) {
+      const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+      const status = environment.getWorkspaceStatus({
+        ...(defaultBranch ? { defaultBranch } : {}),
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+      });
+      const commits = environment.listWorkspaceCommitsSinceRef({
+        baseRef: status.baseRef,
+      });
+      const hasSelectedCommit =
+        selection.type === "commit" &&
+        commits.some((commit: EnvironmentCommitSummary) => commit.sha === selection.sha);
+      const normalizedSelection: ThreadGitDiffSelection = hasSelectedCommit
+        ? selection
+        : { type: "combined" };
+      const diffResult =
+        normalizedSelection.type === "combined" &&
+        !status.hasUncommittedChanges &&
+        !status.hasCommittedUnmergedChanges
+          ? { diff: "", truncated: false }
+          : normalizedSelection.type === "commit"
+            ? environment.getWorkspaceDiff({
+                type: "commit",
+                commitSha: normalizedSelection.sha,
+              })
+            : environment.getWorkspaceDiff({
+                type: "combined",
+                baseRef: status.baseRef,
+              });
+      return {
+        mode: "worktree_commits",
+        commits,
+        selection: normalizedSelection,
+        diff: diffResult.diff,
+        truncated: diffResult.truncated,
+        ...(status.currentBranch ? { currentBranch: status.currentBranch } : {}),
+        ...(status.mergeBaseBranch ? { mergeBaseBranch: status.mergeBaseBranch } : {}),
+        ...(status.baseRef ? { mergeBaseRef: status.baseRef } : {}),
+      };
+    }
+
+    const diffResult = environment.getWorkspaceDiff({ type: "working_tree" });
+    return {
+      mode: "local_uncommitted",
+      commits: [],
+      selection: { type: "combined" },
+      diff: diffResult.diff,
+      truncated: diffResult.truncated,
+    };
+  }
+
   resolveThreadOpenPath(threadId: string, relativePath: string): string {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
@@ -1764,6 +1817,10 @@ export class Orchestrator implements ThreadOrchestrator {
    */
   getRawById(threadId: string): Thread | undefined {
     return this.threadRepo.getById(threadId);
+  }
+
+  getById(threadId: string): Thread | undefined {
+    return this.getRawById(threadId);
   }
 
   /**
@@ -1830,6 +1887,29 @@ export class Orchestrator implements ThreadOrchestrator {
     rootPath: string,
   ): Promise<ThreadWorkStatus> {
     return this.environmentService.getProjectWorkspaceStatusAsync(projectId, rootPath);
+  }
+
+  getWorkStatus(
+    threadId: string,
+    mergeBaseBranch?: string,
+  ): ThreadWorkStatus | undefined {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return undefined;
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) return undefined;
+
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment) return undefined;
+    if (this._shouldForceDeletedWorkStatus(thread)) {
+      return this._buildDeletedWorkStatus();
+    }
+
+    const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+    const workspaceStatus = environment.getWorkspaceStatus({
+      ...(defaultBranch ? { defaultBranch } : {}),
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+    });
+    return { ...workspaceStatus };
   }
 
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {
@@ -2326,155 +2406,35 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
+    if (!this.environmentAgentSessionService) {
+      throw inactiveSessionError(threadId);
+    }
     try {
-      return await this._withEnvironmentAgentClient(threadId, (client) => client.status());
-    } catch (error) {
-      this._rethrowAgentServerError(threadId, error);
+      return this.environmentAgentSessionService.getThreadStatus(threadId);
+    } catch {
+      throw inactiveSessionError(threadId);
     }
   }
 
-  async replayEnvironmentAgentEvents(args: {
+  async ingestReplayedEnvironmentAgentEvents(args: {
     threadId: string;
-    afterSequence: number;
-    limit?: number;
-  }): Promise<{
     events: EnvironmentAgentEventEnvelope[];
-    fromSequenceExclusive: number;
-    toSequenceInclusive: number;
-    hasMore: boolean;
-  }> {
-    const thread = this.threadRepo.getById(args.threadId);
-    if (!thread) {
-      throw threadNotFoundError(args.threadId);
-    }
-    try {
-      return await this._withEnvironmentAgentClient(args.threadId, (client) =>
-        client.replay({
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-          afterSequence: args.afterSequence,
-          limit: args.limit,
-          threadId: args.threadId,
-        }),
-      );
-    } catch (error) {
-      this._rethrowAgentServerError(args.threadId, error);
-    }
-  }
-
-  async ingestEnvironmentAgentEvents(args: {
-    threadId: string;
-    authorizationHeader?: string;
-    afterSequence?: number;
-    events: EnvironmentAgentEventEnvelope[];
-  }): Promise<EnvironmentAgentDeliveryResponse> {
+  }): Promise<void> {
     const thread = this.threadRepo.getById(args.threadId);
     if (!thread) {
       throw threadNotFoundError(args.threadId);
     }
 
-    this._assertEnvironmentAgentAuthorization(args.threadId, args.authorizationHeader);
-
-    if (thread.archivedAt !== undefined) {
-      const archivedCursor =
-        (thread as Thread & { environmentAgentCursor?: number }).environmentAgentCursor ?? 0;
-      return {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        threadId: args.threadId,
-        acknowledgedSequence: archivedCursor,
-        state: "stopped",
-        reason: "thread_archived",
-        message: "Archived threads are not eligible for environment-agent delivery",
-      };
-    }
-
-    const persistedCursor =
-      (this.threadRepo.getById(args.threadId) as
-        | (Thread & { environmentAgentCursor?: number })
-        | undefined)?.environmentAgentCursor ?? 0;
-    const currentCursor =
-      this.environmentAgentReplayCursorByThreadId.get(args.threadId) ?? persistedCursor;
-
-    const newEvents: EnvironmentAgentEventEnvelope[] = [];
-    let expectedSequence = currentCursor + 1;
-    for (const event of args.events) {
-      if (event.sequence < expectedSequence) {
-        continue;
-      }
-      if (event.sequence !== expectedSequence) {
-        break;
-      }
-      newEvents.push(event);
-      expectedSequence += 1;
-    }
-
-    if (newEvents.length === 0) {
-      const requestedAfterSequence =
-        args.afterSequence ??
-        (args.events.length > 0 ? args.events[0]!.sequence - 1 : currentCursor);
-      const state =
-        currentCursor > requestedAfterSequence ? "accepted" : "stalled";
-      const reason =
-        currentCursor > requestedAfterSequence ? "duplicate" : "sequence_gap";
-      return {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        threadId: args.threadId,
-        acknowledgedSequence: currentCursor,
-        state,
-        reason,
-        ...(state === "stalled"
-          ? {
-              message:
-                "Environment-agent delivery is ahead of the daemon cursor and requires reconciliation",
-            }
-          : {}),
-      };
-    }
-
-    try {
-      await this.agentServer.ingestReplayedEnvironmentAgentEvents({
-        threadId: args.threadId,
-        events: newEvents,
-      });
-      const acknowledgedSequence = newEvents[newEvents.length - 1]!.sequence;
-      this._setEnvironmentAgentReplayCursor(args.threadId, acknowledgedSequence);
-      return {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        threadId: args.threadId,
-        acknowledgedSequence,
-        state: "accepted",
-        reason: "accepted",
-      };
-    } catch (error) {
-      this._rethrowAgentServerError(args.threadId, error);
-    }
-  }
-
-  async retryEnvironmentAgentDelivery(
-    threadId: string,
-  ): Promise<EnvironmentAgentStatusSnapshot> {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    try {
-      return await this._withEnvironmentAgentClient(
-        threadId,
-        (client) => client.retryDaemonDelivery(),
-      );
-    } catch (error) {
-      this._rethrowAgentServerError(threadId, error);
-    }
+    await this.agentServer.ingestReplayedEnvironmentAgentEvents({
+      threadId: args.threadId,
+      events: args.events,
+    });
   }
 
   /**
    * Stop all active processes. Called during graceful shutdown.
    */
   stopAll(opts?: { preserveEnvironments?: boolean }): void {
-    for (const client of this.liveEnvironmentAgentClientsByThreadId.values()) {
-      client.close();
-    }
-    this.liveEnvironmentAgentClientsByThreadId.clear();
-    this.liveEnvironmentAgentIngestByThreadId.clear();
     this.environmentService.stopAll({
       preserveEnvironments: opts?.preserveEnvironments,
     });
@@ -2491,7 +2451,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
     this.projectOperationTransitionsInFlight.clear();
-    this.environmentAgentReplayCursorByThreadId.clear();
     for (const timer of this.idleEnvironmentSuspendTimersByThreadId.values()) {
       clearTimeout(timer);
     }
@@ -2614,10 +2573,6 @@ export class Orchestrator implements ThreadOrchestrator {
       requestedEnvironmentId,
       provisioningReason,
     );
-    await this._ensureLiveEnvironmentAgentSubscription(
-      threadId,
-      environmentRuntime.agentConnectionTarget,
-    );
     this.threadRepo.update(threadId, {
       environmentId: environmentRuntime.environment.kind,
       environmentRecord: {
@@ -2690,7 +2645,6 @@ export class Orchestrator implements ThreadOrchestrator {
           providerLaunch,
         }),
     });
-    await this._replayBufferedEnvironmentAgentEvents(threadId);
     const providerThreadId = started.providerThreadId;
     this.providerThreadIdByThreadId.set(threadId, providerThreadId);
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
@@ -2755,13 +2709,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _cleanupThreadRuntime(threadId: string): void {
     this._cancelIdleEnvironmentSuspend(threadId);
-    const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
-    if (liveClient) {
-      liveClient.close();
-      this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
-    }
     this.eventSeqCounters.delete(threadId);
-    this.environmentAgentReplayCursorByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
@@ -2772,104 +2720,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
     this.environmentService.suspendEnvironmentRuntime(threadId);
-  }
-
-  private async _replayBufferedEnvironmentAgentEvents(
-    threadId: string,
-  ): Promise<void> {
-    const persistedCursor =
-      (
-        this.threadRepo.getById(threadId) as
-          | (Thread & { environmentAgentCursor?: number })
-          | undefined
-      )?.environmentAgentCursor ?? 0;
-    const afterSequence =
-      this.environmentAgentReplayCursorByThreadId.get(threadId) ?? persistedCursor;
-    const replay = await this._withEnvironmentAgentClient(threadId, (client) =>
-      client.replay({
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        threadId,
-        afterSequence,
-      }),
-    );
-    if (replay.events.length > 0) {
-      await this.agentServer.ingestReplayedEnvironmentAgentEvents({
-        threadId,
-        events: replay.events,
-      });
-    }
-    this._setEnvironmentAgentReplayCursor(
-      threadId,
-      Math.max(afterSequence, replay.toSequenceInclusive),
-    );
-  }
-
-  private _setEnvironmentAgentReplayCursor(
-    threadId: string,
-    sequence: number,
-  ): void {
-    this.environmentAgentReplayCursorByThreadId.set(threadId, sequence);
-    this.threadRepo.update(
-      threadId,
-      { environmentAgentCursor: sequence } as { environmentAgentCursor: number },
-      { touchUpdatedAt: false },
-    );
-  }
-
-  private _assertEnvironmentAgentAuthorization(
-    threadId: string,
-    authorizationHeader?: string,
-  ): void {
-    const expectedAuthorization = this._resolveEnvironmentAgentAuthorization(threadId);
-    if (!expectedAuthorization || authorizationHeader !== expectedAuthorization) {
-      throw invalidRequestError("Unauthorized environment-agent delivery");
-    }
-  }
-
-  private _resolveEnvironmentAgentAuthorization(threadId: string): string | undefined {
-    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
-    if (runtime?.agentConnectionTarget.headers?.authorization) {
-      return runtime.agentConnectionTarget.headers.authorization;
-    }
-
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      return undefined;
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      return undefined;
-    }
-
-    try {
-      const restored = this.environmentService.restoreThreadEnvironment(thread, project.rootPath);
-      return restored?.getAgentConnectionTarget().headers?.authorization;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private async _nudgeEnvironmentAgentDelivery(threadId: string): Promise<void> {
-    try {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread || thread.archivedAt !== undefined) {
-        return;
-      }
-      const project = this.projectRepo.getById(thread.projectId);
-      if (!project) {
-        return;
-      }
-
-      await this._withEnvironmentAgentClient(
-        threadId,
-        (client) => client.retryDaemonDelivery(),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[thread ${threadId}] Failed to nudge environment-agent delivery: ${message}`,
-      );
-    }
   }
 
   private async _withEnvironmentAgentClient<T>(
@@ -2890,9 +2740,12 @@ export class Orchestrator implements ThreadOrchestrator {
       providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
     }) => Promise<T>;
   }): Promise<T> {
-    const client = await createHttpEnvironmentAgentClient({
-      baseUrl: args.target.baseUrl,
-      ...(args.target.headers ? { headers: args.target.headers } : {}),
+    if (!this.environmentAgentCommandDispatcher) {
+      throw inactiveSessionError(args.thread.id);
+    }
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId: args.thread.id,
+      commandDispatcher: this.environmentAgentCommandDispatcher,
     });
     try {
       return await args.action({
@@ -2998,9 +2851,6 @@ export class Orchestrator implements ThreadOrchestrator {
     }) => Promise<T>,
   ): Promise<T> {
     const resolved = await this._ensureEnvironmentAgentAccess(threadId);
-    if (resolved.resetReplayCursor) {
-      this._setEnvironmentAgentReplayCursor(threadId, 0);
-    }
     return this._withEnvironmentAgentTarget({
       thread: resolved.thread,
       projectRootPath: resolved.projectRootPath,
@@ -3013,78 +2863,6 @@ export class Orchestrator implements ThreadOrchestrator {
           providerLaunch,
         }),
     });
-  }
-
-  private async _ensureLiveEnvironmentAgentSubscription(
-    threadId: string,
-    targetOverride?: EnvironmentAgentConnectionTarget,
-  ): Promise<void> {
-    if (this.liveEnvironmentAgentClientsByThreadId.has(threadId)) {
-      return;
-    }
-    const ensured = targetOverride ? undefined : await this._ensureEnvironmentAgentAccess(threadId);
-    if (ensured?.resetReplayCursor) {
-      this._setEnvironmentAgentReplayCursor(threadId, 0);
-    }
-    const target = targetOverride ?? ensured!.target;
-    const client = await createHttpEnvironmentAgentClient({
-      baseUrl: target.baseUrl,
-      ...(target.headers ? { headers: target.headers } : {}),
-    });
-    client.subscribeToEvents((event) => {
-      this._enqueueLiveEnvironmentAgentEvent(threadId, event);
-    });
-    this.liveEnvironmentAgentClientsByThreadId.set(threadId, client);
-  }
-
-  private _enqueueLiveEnvironmentAgentEvent(
-    threadId: string,
-    event: EnvironmentAgentEventEnvelope,
-  ): void {
-    const prior = this.liveEnvironmentAgentIngestByThreadId.get(threadId) ?? Promise.resolve();
-    const next = prior
-      .catch(() => {
-        // Keep the per-thread queue alive after transient ingestion failures.
-      })
-      .then(async () => {
-        await this._ingestLiveEnvironmentAgentEvent(threadId, event);
-      });
-    this.liveEnvironmentAgentIngestByThreadId.set(threadId, next);
-    void next.finally(() => {
-      if (this.liveEnvironmentAgentIngestByThreadId.get(threadId) === next) {
-        this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
-      }
-    });
-  }
-
-  private async _ingestLiveEnvironmentAgentEvent(
-    threadId: string,
-    event: EnvironmentAgentEventEnvelope,
-  ): Promise<void> {
-    const thread = this.threadRepo.getById(threadId);
-    const persistedCursor =
-      (thread as (Thread & { environmentAgentCursor?: number }) | undefined)
-        ?.environmentAgentCursor ?? 0;
-    const currentCursor =
-      this.environmentAgentReplayCursorByThreadId.get(threadId) ?? persistedCursor;
-
-    if (event.sequence <= currentCursor) {
-      return;
-    }
-    if (event.sequence !== currentCursor + 1) {
-      console.warn(
-        `[thread ${threadId}] live environment-agent sequence gap: expected ${
-          currentCursor + 1
-        }, received ${event.sequence}`,
-      );
-      return;
-    }
-
-    await this.agentServer.ingestReplayedEnvironmentAgentEvents({
-      threadId,
-      events: [event],
-    });
-    this._setEnvironmentAgentReplayCursor(threadId, event.sequence);
   }
 
   private _setEnvironmentRuntime(
@@ -3117,7 +2895,9 @@ export class Orchestrator implements ThreadOrchestrator {
       status: event.status,
       scriptPath: event.scriptPath,
       ...(event.workspaceRoot ? { workspaceRoot: event.workspaceRoot } : {}),
-      ...(event.branchName ? { branchName: event.branchName } : {}),
+      ...("branchName" in event && event.branchName
+        ? { branchName: event.branchName }
+        : {}),
       ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
       ...(event.detail ? { detail: event.detail } : {}),
@@ -3281,12 +3061,13 @@ export class Orchestrator implements ThreadOrchestrator {
     projectId?: string;
     agentConnectionTarget: EnvironmentAgentConnectionTarget;
   }): Promise<EnvironmentAgentControlConnection> {
+    if (!this.environmentAgentCommandDispatcher) {
+      throw inactiveSessionError(args.threadId);
+    }
     return {
-      client: await createHttpEnvironmentAgentClient({
-        baseUrl: args.agentConnectionTarget.baseUrl,
-        ...(args.agentConnectionTarget.headers
-          ? { headers: args.agentConnectionTarget.headers }
-          : {}),
+      client: new EnvironmentAgentSessionCommandClient({
+        threadId: args.threadId,
+        commandDispatcher: this.environmentAgentCommandDispatcher,
       }),
       ...(args.agentConnectionTarget.providerLaunch
         ? {
@@ -3410,13 +3191,7 @@ export class Orchestrator implements ThreadOrchestrator {
           project.rootPath,
           "resume-existing-provider-session",
         );
-      if (resetReplayCursor) {
-        this._setEnvironmentAgentReplayCursor(threadId, 0);
-      }
-      await this._ensureLiveEnvironmentAgentSubscription(
-        threadId,
-        environmentRuntime.agentConnectionTarget,
-      );
+      void resetReplayCursor;
       const resumed = await this._withEnvironmentAgentTarget({
         thread,
         projectRootPath: project.rootPath,
@@ -3435,7 +3210,6 @@ export class Orchestrator implements ThreadOrchestrator {
             providerLaunch,
           }),
       });
-      await this._replayBufferedEnvironmentAgentEvents(threadId);
       this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);
       return resumed.providerThreadId;
     } catch (err) {
@@ -4765,13 +4539,6 @@ export class Orchestrator implements ThreadOrchestrator {
     if (thread.archivedAt !== undefined) return;
     if (thread.status !== "idle") return;
     if (!thread.environmentRecord) return;
-
-    const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
-    if (liveClient) {
-      liveClient.close();
-      this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
-    }
-    this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.environmentService.suspendEnvironmentRuntime(threadId);
   }
@@ -4872,7 +4639,6 @@ export class Orchestrator implements ThreadOrchestrator {
           }),
           providerLaunch,
         });
-        await this._replayBufferedEnvironmentAgentEvents(threadId);
       },
     ).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);

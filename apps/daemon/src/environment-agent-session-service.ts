@@ -1,0 +1,431 @@
+import { randomUUID } from "node:crypto";
+import type {
+  EnvironmentAgentCursorPosition,
+  EnvironmentAgentCursorRepository,
+  EnvironmentAgentSessionRecord,
+  EnvironmentAgentSessionTransportKind,
+} from "@beanbag/db";
+import {
+  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+  type EnvironmentAgentCommand,
+  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  type EnvironmentAgentSessionCommandAckPayload,
+  type EnvironmentAgentSessionCommandBatchMessage,
+  type EnvironmentAgentSessionCommandResultPayload,
+  type EnvironmentAgentSessionEventAckMessage,
+  type EnvironmentAgentSessionEventBatchPayload,
+  type EnvironmentAgentSessionHeartbeatPayload,
+  type EnvironmentAgentSessionOpenPayload,
+  type EnvironmentAgentSessionReplayRequestMessage,
+  type EnvironmentAgentSessionTransportKind as ClientEnvironmentAgentSessionTransportKind,
+  type EnvironmentAgentSessionWelcomeMessage,
+  type EnvironmentAgentStatusSnapshot,
+} from "@beanbag/environment-agent";
+import type { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
+import type { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
+import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
+
+export interface EnvironmentAgentSessionServiceOptions {
+  leaseTtlMs?: number;
+  heartbeatIntervalMs?: number;
+  preferredTransports?: readonly EnvironmentAgentSessionTransportKind[];
+  commandDispatcher?: EnvironmentAgentCommandDispatcher;
+  eventApplier?: EnvironmentAgentEventApplier;
+}
+
+const DEFAULT_LEASE_TTL_MS = 30_000;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
+const DEFAULT_PREFERRED_TRANSPORTS = [
+  "websocket",
+  "http-long-poll",
+] as const satisfies readonly EnvironmentAgentSessionTransportKind[];
+
+function chooseSessionTransport(args: {
+  supportedTransports: ClientEnvironmentAgentSessionTransportKind[];
+  preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
+}): EnvironmentAgentSessionTransportKind {
+  for (const preferred of args.preferredTransports) {
+    if (args.supportedTransports.includes(preferred)) {
+      return preferred;
+    }
+  }
+  throw new Error("No compatible environment-agent session transport");
+}
+
+function toEnvironmentAgentCommand(args: {
+  commandType: string;
+  payload: unknown;
+}): EnvironmentAgentCommand {
+  if (!args.payload || typeof args.payload !== "object" || Array.isArray(args.payload)) {
+    throw new Error(
+      `Invalid persisted environment-agent command payload for ${args.commandType}`,
+    );
+  }
+  const record = args.payload as Record<string, unknown>;
+  if ("type" in record && record.type !== args.commandType) {
+    throw new Error(
+      `Environment-agent command payload type mismatch for ${args.commandType}`,
+    );
+  }
+  return {
+    type: args.commandType,
+    ...record,
+  } as EnvironmentAgentCommand;
+}
+
+function cursorForReply(args: {
+  threadId: string;
+  batchGeneration: number;
+  acknowledgedCursor?: EnvironmentAgentCursorPosition;
+  daemonCursor?: EnvironmentAgentCursorPosition;
+}): EnvironmentAgentCursorPosition {
+  if (args.acknowledgedCursor) {
+    return args.acknowledgedCursor;
+  }
+  if (args.daemonCursor) {
+    return args.daemonCursor;
+  }
+  return {
+    generation: args.batchGeneration,
+    sequence: 0,
+  };
+}
+
+export class EnvironmentAgentSessionService {
+  private readonly leaseTtlMs: number;
+  private readonly heartbeatIntervalMs: number;
+  private readonly preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
+  private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
+  private readonly eventApplier?: EnvironmentAgentEventApplier;
+
+  constructor(
+    private readonly sessions: EnvironmentAgentSessionManager,
+    private readonly cursors: EnvironmentAgentCursorRepository,
+    options: EnvironmentAgentSessionServiceOptions = {},
+  ) {
+    this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
+    this.heartbeatIntervalMs =
+      options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+    this.preferredTransports =
+      options.preferredTransports ?? DEFAULT_PREFERRED_TRANSPORTS;
+    this.commandDispatcher = options.commandDispatcher;
+    this.eventApplier = options.eventApplier;
+  }
+
+  openSession(args: {
+    threadId: string;
+    payload: EnvironmentAgentSessionOpenPayload;
+    now?: number;
+  }): {
+    session: EnvironmentAgentSessionRecord;
+    replaced?: EnvironmentAgentSessionRecord;
+    welcome: EnvironmentAgentSessionWelcomeMessage;
+  } {
+    const now = args.now ?? Date.now();
+    if (
+      !args.payload.supportedProtocolVersions.includes(
+        ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+      )
+    ) {
+      throw new Error("No compatible environment-agent session protocol version");
+    }
+
+    const channel = args.payload.channels.find(
+      (candidate) => candidate.channelId === args.threadId,
+    );
+    if (!channel) {
+      throw new Error(
+        `Missing environment-agent channel bootstrap for thread ${args.threadId}`,
+      );
+    }
+    if (args.payload.channels.length !== 1) {
+      throw new Error("Multi-channel environment-agent sessions are not supported yet");
+    }
+
+    const transportKind = chooseSessionTransport({
+      supportedTransports: args.payload.supportedTransports,
+      preferredTransports: this.preferredTransports,
+    });
+    const opened = this.sessions.openSession({
+      threadId: args.threadId,
+      agentId: args.payload.agentId,
+      agentInstanceId: args.payload.agentInstanceId,
+      protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+      transportKind,
+      leaseTtlMs: this.leaseTtlMs,
+      now,
+    });
+
+    const cursor = this.cursors.getByThreadId(args.threadId);
+    return {
+      ...(opened.replaced ? { replaced: opened.replaced } : {}),
+      session: opened.active,
+      welcome: {
+        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        type: "session_welcome",
+        messageId: randomUUID(),
+        sessionId: opened.active.id,
+        sentAt: now,
+        payload: {
+          leaseTtlMs: this.leaseTtlMs,
+          heartbeatIntervalMs: this.heartbeatIntervalMs,
+          selectedTransport: transportKind,
+          protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+          channels: [
+            {
+              channelId: args.threadId,
+              applyFrom: {
+                generation: cursor?.generation ?? channel.generation,
+                sequenceExclusive: cursor?.sequence ?? 0,
+              },
+              deliverCommandsAfter: 0,
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  recordHeartbeat(args: {
+    threadId: string;
+    sessionId: string;
+    payload: EnvironmentAgentSessionHeartbeatPayload;
+    now?: number;
+  }): EnvironmentAgentSessionRecord {
+    const heartbeat = this.sessions.recordHeartbeat({
+      sessionId: args.sessionId,
+      leaseTtlMs: this.leaseTtlMs,
+      now: args.now,
+    });
+    if (!heartbeat) {
+      throw new Error(`Unknown environment-agent session: ${args.sessionId}`);
+    }
+    if (heartbeat.threadId !== args.threadId) {
+      throw new Error(
+        `Environment-agent session ${args.sessionId} does not belong to thread ${args.threadId}`,
+      );
+    }
+    if (heartbeat.status !== "active") {
+      throw new Error(
+        `Environment-agent session ${args.sessionId} is not active`,
+      );
+    }
+
+    return heartbeat;
+  }
+
+  closeSession(args: {
+    threadId: string;
+    sessionId: string;
+    reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error";
+    now?: number;
+  }): EnvironmentAgentSessionRecord {
+    this.requireActiveSession(args.threadId, args.sessionId);
+    const closed = this.sessions.closeSession({
+      sessionId: args.sessionId,
+      reason: args.reason,
+      now: args.now,
+    });
+    if (!closed) {
+      throw new Error(`Unknown environment-agent session: ${args.sessionId}`);
+    }
+    return closed;
+  }
+
+  expireLeases(now?: number): EnvironmentAgentSessionRecord[] {
+    return this.sessions.expireLeases(now);
+  }
+
+  getThreadStatus(threadId: string): EnvironmentAgentStatusSnapshot {
+    const session = this.sessions.getActiveSessionByThreadId(threadId);
+    if (!session) {
+      throw new Error(`No active environment-agent session for thread ${threadId}`);
+    }
+
+    const cursor = this.cursors.getByThreadId(threadId);
+    return {
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      threadId,
+      latestSequence: cursor?.sequence ?? 0,
+      ...(cursor ? { lastAckedSequence: cursor.sequence } : {}),
+      connectedToDaemon: true,
+      pendingEventCount: 0,
+      pendingCommandCount: this.commandDispatcher?.getPendingCommandCount(threadId) ?? 0,
+      deliveryState: "healthy",
+      retryAttemptCount: 0,
+    };
+  }
+
+  applyEventBatch(args: {
+    threadId: string;
+    sessionId: string;
+    payload: EnvironmentAgentSessionEventBatchPayload;
+    now?: number;
+  }): Promise<EnvironmentAgentSessionEventAckMessage | EnvironmentAgentSessionReplayRequestMessage> {
+    if (!this.eventApplier) {
+      throw new Error("Environment-agent session event apply is unavailable");
+    }
+
+    const session = this.requireActiveSession(args.threadId, args.sessionId);
+    const now = args.now ?? Date.now();
+    const daemonCursor = this.cursors.getByThreadId(args.threadId);
+    if (args.payload.batches.length !== 1) {
+      throw new Error("Multi-channel environment-agent event batches are not supported yet");
+    }
+
+    const batch = args.payload.batches[0]!;
+    return this.eventApplier.applyChannelBatch({
+      threadId: args.threadId,
+      batch,
+      now,
+    }).then((result) => {
+      if (result.blockedReason === "gap") {
+        const replayFrom = cursorForReply({
+          threadId: args.threadId,
+          batchGeneration: batch.generation,
+          acknowledgedCursor: result.acknowledgedCursor,
+          daemonCursor: daemonCursor
+            ? { generation: daemonCursor.generation, sequence: daemonCursor.sequence }
+            : undefined,
+        });
+        return {
+          protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+          type: "replay_request",
+          messageId: randomUUID(),
+          sessionId: session.id,
+          sentAt: now,
+          payload: {
+            channelId: args.threadId,
+            generation: replayFrom.generation,
+            afterSequence: replayFrom.sequence,
+          },
+        };
+      }
+
+      if (result.blockedReason === "invalid_channel") {
+        throw new Error(`Environment-agent batch channel mismatch for thread ${args.threadId}`);
+      }
+
+      return {
+        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        type: "event_ack",
+        messageId: randomUUID(),
+        sessionId: session.id,
+        sentAt: now,
+        payload: {
+          channels: [
+            {
+              channelId: args.threadId,
+              ackedThrough: cursorForReply({
+                threadId: args.threadId,
+                batchGeneration: batch.generation,
+                acknowledgedCursor: result.acknowledgedCursor,
+                daemonCursor: daemonCursor
+                  ? { generation: daemonCursor.generation, sequence: daemonCursor.sequence }
+                  : undefined,
+              }),
+            },
+          ],
+        },
+      };
+    });
+  }
+
+  listCommands(args: {
+    threadId: string;
+    sessionId: string;
+    afterCursor?: number;
+    limit?: number;
+    now?: number;
+  }): EnvironmentAgentSessionCommandBatchMessage {
+    if (!this.commandDispatcher) {
+      throw new Error("Environment-agent session command dispatch is unavailable");
+    }
+
+    const session = this.requireActiveSession(args.threadId, args.sessionId);
+    const now = args.now ?? Date.now();
+    const records = this.commandDispatcher.listDeliverableCommandRecords({
+      sessionId: session.id,
+      afterCursor: args.afterCursor,
+      limit: args.limit,
+    });
+
+    return {
+      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      type: "command_batch",
+      messageId: randomUUID(),
+      sessionId: args.sessionId,
+      sentAt: now,
+      payload: {
+        commands: records
+          .filter((record) => record.threadId === args.threadId)
+          .map((record) => ({
+            channelId: record.threadId,
+            commandCursor: record.commandCursor,
+            commandId: record.id,
+            createdAt: record.createdAt,
+            command: toEnvironmentAgentCommand({
+              commandType: record.commandType,
+              payload: record.payload,
+            }),
+          })),
+      },
+    };
+  }
+
+  recordCommandAck(args: {
+    threadId: string;
+    sessionId: string;
+    payload: EnvironmentAgentSessionCommandAckPayload;
+    now?: number;
+  }): void {
+    if (!this.commandDispatcher) {
+      throw new Error("Environment-agent session command dispatch is unavailable");
+    }
+
+    const session = this.requireActiveSession(args.threadId, args.sessionId);
+    this.commandDispatcher.recordDeliveryAck({
+      sessionId: session.id,
+      payload: args.payload,
+      now: args.now,
+    });
+  }
+
+  recordCommandResult(args: {
+    threadId: string;
+    sessionId: string;
+    payload: EnvironmentAgentSessionCommandResultPayload;
+    now?: number;
+  }): void {
+    if (!this.commandDispatcher) {
+      throw new Error("Environment-agent session command dispatch is unavailable");
+    }
+
+    const session = this.requireActiveSession(args.threadId, args.sessionId);
+    this.commandDispatcher.recordCommandResult({
+      sessionId: session.id,
+      payload: args.payload,
+      now: args.now,
+    });
+  }
+
+  private requireActiveSession(
+    threadId: string,
+    sessionId: string,
+  ): EnvironmentAgentSessionRecord {
+    const session = this.sessions.getSession(sessionId);
+    if (!session) {
+      throw new Error(`Unknown environment-agent session: ${sessionId}`);
+    }
+    if (session.threadId !== threadId) {
+      throw new Error(
+        `Environment-agent session ${sessionId} does not belong to thread ${threadId}`,
+      );
+    }
+    if (session.status !== "active") {
+      throw new Error(`Environment-agent session ${sessionId} is not active`);
+    }
+    return session;
+  }
+}

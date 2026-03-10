@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
+  assertNever,
   type OpenPathRequest,
   type ThreadOrchestrator,
   enqueueThreadMessageSchema,
@@ -16,13 +17,18 @@ import {
 import { z } from "zod";
 import { isAbsolute } from "node:path";
 import type {
-  EnvironmentAgentDeliveryRequest,
   EnvironmentAgentEventEnvelope,
+  EnvironmentAgentSessionCommandAckPayload,
+  EnvironmentAgentSessionCommandResultPayload,
+  EnvironmentAgentSessionEventBatchPayload,
+  EnvironmentAgentSessionHeartbeatPayload,
+  EnvironmentAgentSessionOpenPayload,
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import { openPathInEditor } from "./system.js";
+import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
@@ -44,14 +50,49 @@ const eventsQuerySchema = z.object({
     }),
 });
 
-const environmentAgentReplayQuerySchema = z.object({
-  afterSequence: z
+const environmentAgentSessionCursorSchema = z.object({
+  generation: z.number().int().min(0),
+  sequence: z.number().int().min(0),
+});
+
+const environmentAgentSessionChannelBootstrapSchema = z.object({
+  channelId: z.string().min(1),
+  generation: z.number().int().min(0),
+  lastDaemonAcked: environmentAgentSessionCursorSchema.optional(),
+});
+
+const environmentAgentSessionOpenBodySchema = z.object({
+  agentId: z.string().min(1),
+  agentInstanceId: z.string().min(1),
+  supportedProtocolVersions: z.array(z.number().int()).min(1),
+  supportedTransports: z
+    .array(z.enum(["websocket", "http-long-poll"]))
+    .min(1),
+  channels: z.array(environmentAgentSessionChannelBootstrapSchema).min(1),
+});
+
+const environmentAgentSessionHeartbeatChannelSchema = z.object({
+  channelId: z.string().min(1),
+  lastSent: environmentAgentSessionCursorSchema.optional(),
+  lastAcked: environmentAgentSessionCursorSchema.optional(),
+});
+
+const environmentAgentSessionHeartbeatBodySchema = z.object({
+  sessionId: z.string().min(1),
+  agentObservedAt: z.number().int().nonnegative(),
+  outboxDepth: z.number().int().nonnegative(),
+  channels: z.array(environmentAgentSessionHeartbeatChannelSchema),
+});
+
+const environmentAgentSessionCommandsQuerySchema = z.object({
+  sessionId: z.string().min(1),
+  afterCursor: z
     .string()
     .optional()
     .transform((value) => {
-      if (!value) return 0;
+      if (!value) return undefined;
       const parsed = Number.parseInt(value, 10);
-      if (!Number.isFinite(parsed) || parsed < 0) return 0;
+      if (!Number.isFinite(parsed) || parsed < 0) return undefined;
       return parsed;
     }),
   limit: z
@@ -65,13 +106,64 @@ const environmentAgentReplayQuerySchema = z.object({
     }),
 });
 
-const environmentAgentDeliveryBodySchema = z.object({
-  protocolVersion: z.number().int().optional(),
-  threadId: z.string().min(1),
-  projectId: z.string().optional(),
-  environmentId: z.string().optional(),
-  afterSequence: z.number().int().min(0).optional(),
-  events: z.array(z.custom<EnvironmentAgentEventEnvelope>()),
+const environmentAgentSessionEventItemSchema = z.object({
+  sequence: z.number().int().nonnegative(),
+  eventId: z.string().min(1),
+  emittedAt: z.number().int().nonnegative(),
+  event: z.custom<EnvironmentAgentEventEnvelope["event"]>(),
+});
+
+const environmentAgentSessionEventBatchChannelSchema = z.object({
+  channelId: z.string().min(1),
+  generation: z.number().int().nonnegative(),
+  events: z.array(environmentAgentSessionEventItemSchema),
+});
+
+const environmentAgentSessionEventBatchBodySchema = z.object({
+  sessionId: z.string().min(1),
+  batches: z.array(environmentAgentSessionEventBatchChannelSchema).min(1),
+});
+
+const environmentAgentSessionCommandAckBodySchema = z.object({
+  sessionId: z.string().min(1),
+  commands: z.array(z.object({
+    commandId: z.string().min(1),
+    channelId: z.string().min(1),
+    state: z.enum(["received", "duplicate"]),
+  })),
+  deliveredThrough: z.number().int().nonnegative().optional(),
+});
+
+const environmentAgentSessionCommandResultBodySchema = z.object({
+  sessionId: z.string().min(1),
+  commandId: z.string().min(1),
+  channelId: z.string().min(1),
+  state: z.enum(["started", "completed", "failed"]),
+  result: z.unknown().optional(),
+  errorCode: z.string().min(1).optional(),
+  errorMessage: z.string().min(1).optional(),
+}).superRefine((value, ctx) => {
+  switch (value.state) {
+    case "started":
+      return;
+    case "completed":
+      return;
+    case "failed":
+      if (!value.errorMessage && !value.errorCode) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Failed command results must include an errorCode or errorMessage",
+        });
+      }
+      return;
+    default:
+      assertNever(value.state);
+  }
+});
+
+const environmentAgentSessionCloseBodySchema = z.object({
+  sessionId: z.string().min(1),
+  reason: z.enum(["agent_shutdown", "daemon_shutdown", "migration", "internal_error"]),
 });
 
 const workStatusQuerySchema = z.object({
@@ -129,6 +221,7 @@ const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
 type RouteThreadLookupCapableOrchestrator = ThreadOrchestrator & {
   getRawById?: (threadId: string) => Thread | undefined;
+  getByIdAsync?: (threadId: string) => Promise<Thread | undefined>;
   isPrimaryCheckoutActive?: (threadId: string) => boolean;
 };
 
@@ -136,31 +229,14 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
   getEnvironmentAgentStatus?: (
     threadId: string,
   ) => Promise<EnvironmentAgentStatusSnapshot>;
-  retryEnvironmentAgentDelivery?: (
+};
+
+type RouteGitDiffCapableOrchestrator = ThreadOrchestrator & {
+  getGitDiffAsync?: (
     threadId: string,
-  ) => Promise<EnvironmentAgentStatusSnapshot>;
-  ingestEnvironmentAgentEvents?: (args: {
-    threadId: string;
-    authorizationHeader?: string;
-    afterSequence?: number;
-    events: EnvironmentAgentEventEnvelope[];
-  }) => Promise<{
-    protocolVersion: number;
-    threadId: string;
-    acknowledgedSequence: number;
-    state: string;
-    reason: string;
-  }>;
-  replayEnvironmentAgentEvents?: (args: {
-    threadId: string;
-    afterSequence: number;
-    limit?: number;
-  }) => Promise<{
-    events: EnvironmentAgentEventEnvelope[];
-    fromSequenceExclusive: number;
-    toSequenceInclusive: number;
-    hasMore: boolean;
-  }>;
+    selection?: ThreadGitDiffSelection,
+    mergeBaseBranch?: string,
+  ) => Promise<ReturnType<ThreadOrchestrator["getGitDiff"]>>;
 };
 
 function validatePromptInputAttachments(input: PromptInput[]): void {
@@ -194,7 +270,7 @@ function getThreadForRouteLookup(
   if (routeLookupManager.getRawById) {
     return routeLookupManager.getRawById(threadId);
   }
-  return undefined;
+  return threadManager.getById(threadId);
 }
 
 function isThreadPrimaryCheckoutActiveForRoute(
@@ -212,10 +288,11 @@ export function createThreadRoutes(
   threadManager: ThreadOrchestrator,
   opts?: {
     openPath?: OpenPathFn;
+    environmentAgentSessionService?: EnvironmentAgentSessionService;
   },
 ) {
   const openPath = opts?.openPath ?? openPathInEditor;
-  const routeThreadManager = threadManager as RouteThreadLookupCapableOrchestrator;
+  const environmentAgentSessionService = opts?.environmentAgentSessionService;
   const environmentAgentAccessor =
     threadManager as RouteEnvironmentAgentCapableOrchestrator;
   return new Hono()
@@ -289,9 +366,15 @@ export function createThreadRoutes(
           ...(includeArchived !== undefined ? { includeArchived } : {}),
           ...(includeWorkStatus !== undefined ? { includeWorkStatus } : {}),
         };
-        const threads = includeWorkStatus
-          ? await threadManager.listAsync(threadFilters)
-          : threadManager.list(threadFilters);
+        const asyncListAccessor = threadManager as ThreadOrchestrator & {
+          listAsync?: (
+            filters?: Parameters<ThreadOrchestrator["list"]>[0],
+          ) => Promise<ReturnType<ThreadOrchestrator["list"]>>;
+        };
+        const threads =
+          includeWorkStatus && asyncListAccessor.listAsync
+            ? await asyncListAccessor.listAsync(threadFilters)
+            : threadManager.list(threadFilters);
         return c.json(threads);
       } catch (err) {
         return sendRouteError(c, err);
@@ -299,7 +382,10 @@ export function createThreadRoutes(
     })
     .get("/:id", async (c) => {
       try {
-        const thread = await threadManager.getByIdAsync(c.req.param("id"));
+        const routeLookupManager = threadManager as RouteThreadLookupCapableOrchestrator;
+        const thread = routeLookupManager.getByIdAsync
+          ? await routeLookupManager.getByIdAsync(c.req.param("id"))
+          : threadManager.getById(c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
@@ -341,8 +427,8 @@ export function createThreadRoutes(
       }
     })
     .post(
-      "/:id/environment-agent/deliver",
-      zValidator("json", environmentAgentDeliveryBodySchema),
+      "/:id/environment-agent/session/open",
+      zValidator("json", environmentAgentSessionOpenBodySchema),
       async (c) => {
         try {
           const threadId = c.req.param("id");
@@ -350,29 +436,49 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(threadId));
           }
-          if (!environmentAgentAccessor.ingestEnvironmentAgentEvents) {
-            throw invalidRequestError("Environment-agent delivery is unavailable");
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session open is unavailable");
           }
-          const body = c.req.valid("json") as EnvironmentAgentDeliveryRequest;
-          if (body.threadId !== threadId) {
-            throw invalidRequestError("Environment-agent delivery thread mismatch");
+          const body = c.req.valid("json") as EnvironmentAgentSessionOpenPayload;
+          const opened = environmentAgentSessionService.openSession({
+            threadId,
+            payload: body,
+          });
+          return c.json(opened.welcome, 201);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/environment-agent/session/heartbeat",
+      zValidator("json", environmentAgentSessionHeartbeatBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
           }
-          const response =
-            await environmentAgentAccessor.ingestEnvironmentAgentEvents({
-              threadId,
-              authorizationHeader: c.req.header("authorization"),
-              afterSequence: body.afterSequence,
-              events: body.events,
-            });
-          return c.json(response);
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session heartbeat is unavailable");
+          }
+          const body =
+            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionHeartbeatPayload;
+          environmentAgentSessionService.recordHeartbeat({
+            threadId,
+            sessionId: body.sessionId,
+            payload: body,
+          });
+          return c.body(null, 204);
         } catch (err) {
           return sendRouteError(c, err);
         }
       },
     )
     .get(
-      "/:id/environment-agent/events",
-      zValidator("query", environmentAgentReplayQuerySchema),
+      "/:id/environment-agent/session/commands",
+      zValidator("query", environmentAgentSessionCommandsQuerySchema),
       async (c) => {
         try {
           const threadId = c.req.param("id");
@@ -380,16 +486,139 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(threadId));
           }
-          if (!environmentAgentAccessor.replayEnvironmentAgentEvents) {
-            throw invalidRequestError("Environment-agent replay is unavailable");
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session command pull is unavailable");
           }
           const query = c.req.valid("query");
-          const replay = await environmentAgentAccessor.replayEnvironmentAgentEvents({
+          const response = environmentAgentSessionService.listCommands({
             threadId,
-            afterSequence: query.afterSequence,
-            ...(query.limit ? { limit: query.limit } : {}),
+            sessionId: query.sessionId,
+            ...(query.afterCursor !== undefined
+              ? { afterCursor: query.afterCursor }
+              : {}),
+            ...(query.limit !== undefined ? { limit: query.limit } : {}),
           });
-          return c.json(replay);
+          return c.json(response);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/environment-agent/session/events",
+      zValidator("json", environmentAgentSessionEventBatchBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session event push is unavailable");
+          }
+          const body =
+            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionEventBatchPayload;
+          const response = await environmentAgentSessionService.applyEventBatch({
+            threadId,
+            sessionId: body.sessionId,
+            payload: {
+              batches: body.batches,
+            },
+          });
+          return c.json(response);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/environment-agent/session/commands/ack",
+      zValidator("json", environmentAgentSessionCommandAckBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session command ack is unavailable");
+          }
+          const body =
+            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionCommandAckPayload;
+          environmentAgentSessionService.recordCommandAck({
+            threadId,
+            sessionId: body.sessionId,
+            payload: {
+              commands: body.commands,
+              ...(body.deliveredThrough !== undefined
+                ? { deliveredThrough: body.deliveredThrough }
+                : {}),
+            },
+          });
+          return c.body(null, 204);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/environment-agent/session/commands/result",
+      zValidator("json", environmentAgentSessionCommandResultBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session command result is unavailable");
+          }
+          const body =
+            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionCommandResultPayload;
+          environmentAgentSessionService.recordCommandResult({
+            threadId,
+            sessionId: body.sessionId,
+            payload: {
+              commandId: body.commandId,
+              channelId: body.channelId,
+              state: body.state,
+              ...(body.result !== undefined ? { result: body.result } : {}),
+              ...(body.errorCode !== undefined ? { errorCode: body.errorCode } : {}),
+              ...(body.errorMessage !== undefined ? { errorMessage: body.errorMessage } : {}),
+            },
+          });
+          return c.body(null, 204);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/environment-agent/session/close",
+      zValidator("json", environmentAgentSessionCloseBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentSessionService) {
+            throw invalidRequestError("Environment-agent session close is unavailable");
+          }
+          const body = c.req.valid("json") as {
+            sessionId: string;
+            reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error";
+          };
+          environmentAgentSessionService.closeSession({
+            threadId,
+            sessionId: body.sessionId,
+            reason: body.reason,
+          });
+          return c.body(null, 204);
         } catch (err) {
           return sendRouteError(c, err);
         }
@@ -552,7 +781,15 @@ export function createThreadRoutes(
         }
         const force = parsedBody.data.force === true;
         if (!force && threadManager.requiresForceArchive(thread.id)) {
-          const workStatus = await threadManager.getWorkStatusAsync(thread.id);
+          const asyncWorkStatusAccessor = threadManager as ThreadOrchestrator & {
+            getWorkStatusAsync?: (
+              threadId: string,
+              mergeBaseBranch?: string,
+            ) => Promise<ReturnType<ThreadOrchestrator["getWorkStatus"]>>;
+          };
+          const workStatus = asyncWorkStatusAccessor.getWorkStatusAsync
+            ? await asyncWorkStatusAccessor.getWorkStatusAsync(thread.id)
+            : threadManager.getWorkStatus(thread.id);
           if (
             workStatus &&
             (
@@ -623,10 +860,18 @@ export function createThreadRoutes(
           return sendRouteError(c, threadNotFoundError(threadId));
         }
         const query = c.req.valid("query");
-        const workStatus = await threadManager.getWorkStatusAsync(
-          threadId,
-          query.mergeBaseBranch,
-        );
+        const asyncWorkStatusAccessor = threadManager as ThreadOrchestrator & {
+          getWorkStatusAsync?: (
+            threadId: string,
+            mergeBaseBranch?: string,
+          ) => Promise<ReturnType<ThreadOrchestrator["getWorkStatus"]>>;
+        };
+        const workStatus = asyncWorkStatusAccessor.getWorkStatusAsync
+          ? await asyncWorkStatusAccessor.getWorkStatusAsync(
+              threadId,
+              query.mergeBaseBranch,
+            )
+          : threadManager.getWorkStatus(threadId, query.mergeBaseBranch);
         return c.json(
           workStatus ?? null,
         );
@@ -714,11 +959,18 @@ export function createThreadRoutes(
           } else {
             selection = { type: "combined" };
           }
-          const result = await threadManager.getGitDiffAsync(
-            c.req.param("id"),
-            selection,
-            query.mergeBaseBranch,
-          );
+          const gitDiffAccessor = threadManager as RouteGitDiffCapableOrchestrator;
+          const result = gitDiffAccessor.getGitDiffAsync
+            ? await gitDiffAccessor.getGitDiffAsync(
+                c.req.param("id"),
+                selection,
+                query.mergeBaseBranch,
+              )
+            : threadManager.getGitDiff(
+                c.req.param("id"),
+                selection,
+                query.mergeBaseBranch,
+              );
           return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);

@@ -7,6 +7,9 @@ import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createNodeWebSocket } from "@hono/node-ws";
 import type {
+  EnvironmentAgentCommandRepository,
+  EnvironmentAgentCursorRepository,
+  EnvironmentAgentSessionRepository,
   ProjectRepository,
   ThreadRepository,
   EventRepository,
@@ -27,6 +30,10 @@ import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
 import { isPerfDebugEnabled, logPerf } from "./perf.js";
+import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
+import { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
+import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
+import { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,6 +42,9 @@ export interface ServerDeps {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
+  environmentAgentSessionRepo: EnvironmentAgentSessionRepository;
+  environmentAgentCursorRepo: EnvironmentAgentCursorRepository;
+  environmentAgentCommandRepo: EnvironmentAgentCommandRepository;
   provider?: ProviderAdapter;
   daemonBaseUrl?: string;
   requestShutdown?: (reason: string) => void;
@@ -73,13 +83,36 @@ export function createServer(deps: ServerDeps) {
   const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();
+  const environmentAgentSessionManager = new EnvironmentAgentSessionManager(
+    deps.environmentAgentSessionRepo,
+  );
+  const environmentAgentCommandDispatcher = new EnvironmentAgentCommandDispatcher(
+    deps.environmentAgentSessionRepo,
+    deps.environmentAgentCommandRepo,
+  );
   const daemonRuntimeEnv = {
     ...process.env,
     ...(deps.daemonBaseUrl
       ? { BEANBAG_DAEMON_URL: deps.daemonBaseUrl }
       : {}),
   };
-  const threadManager = new Orchestrator(
+  let threadManager: Orchestrator;
+  const environmentAgentEventApplier = new EnvironmentAgentEventApplier(
+    deps.environmentAgentCursorRepo,
+    {
+      ingestReplayedEnvironmentAgentEvents: ({ threadId, events }) =>
+        threadManager.ingestReplayedEnvironmentAgentEvents({ threadId, events }),
+    },
+  );
+  const environmentAgentSessionService = new EnvironmentAgentSessionService(
+    environmentAgentSessionManager,
+    deps.environmentAgentCursorRepo,
+    {
+      commandDispatcher: environmentAgentCommandDispatcher,
+      eventApplier: environmentAgentEventApplier,
+    },
+  );
+  threadManager = new Orchestrator(
     deps.threadRepo,
     deps.eventRepo,
     deps.projectRepo,
@@ -91,7 +124,13 @@ export function createServer(deps: ServerDeps) {
     providerCatalog,
     environmentCatalog,
     scheduler,
+    environmentAgentCommandDispatcher,
+    environmentAgentSessionService,
   );
+  const environmentAgentLeaseSweepInterval = setInterval(() => {
+    environmentAgentSessionService.expireLeases();
+  }, 5_000);
+  environmentAgentLeaseSweepInterval.unref();
 
   // WebSocket handler
   app.get(
@@ -115,6 +154,7 @@ export function createServer(deps: ServerDeps) {
     threadRepo: deps.threadRepo,
     eventRepo: deps.eventRepo,
     threadManager,
+    environmentAgentSessionService,
     wsManager,
     startTime,
     requestShutdown: deps.requestShutdown,
@@ -154,6 +194,10 @@ export function createServer(deps: ServerDeps) {
     wsManager,
     threadManager,
     restartRecommendationMonitor,
+    close: () => {
+      clearInterval(environmentAgentLeaseSweepInterval);
+      restartRecommendationMonitor.close();
+    },
   };
 }
 

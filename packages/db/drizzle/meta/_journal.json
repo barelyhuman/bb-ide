@@ -183,6 +183,13 @@
       "when": 1773102000000,
       "tag": "0025_project_primary_checkout_pointer",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1773139800000,
+      "tag": "0026_environment_agent_session_protocol",
+      "breakpoints": true
     }
   ]
 }

@@ -1,9 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createServer } from "node:http";
-import { createHttpEnvironmentAgentClient } from "./client.js";
 import { createEnvironmentAgentHttpServer } from "./http-server.js";
 import { EnvironmentAgentRuntime } from "./runtime.js";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "./protocol.js";
 
 describe("environment-agent HTTP transport", () => {
   const cleanup: Array<() => Promise<void> | void> = [];
@@ -15,7 +12,7 @@ describe("environment-agent HTTP transport", () => {
     }
   });
 
-  it("serves status and replay over HTTP", async () => {
+  it("serves status over HTTP", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
       providerCommand: "codex",
@@ -30,207 +27,19 @@ describe("environment-agent HTTP transport", () => {
       bearerToken: "test-token",
     });
     cleanup.push(() => server.close());
-
-    const client = await createHttpEnvironmentAgentClient({
-      baseUrl: server.baseUrl,
+    const response = await fetch(`${server.baseUrl}/control/status`, {
+      method: "POST",
       headers: {
         authorization: "Bearer test-token",
+        "content-type": "application/json",
       },
+      body: "{}",
     });
 
-    await expect(client.status()).resolves.toMatchObject({
+    await expect(response.json()).resolves.toMatchObject({
       latestSequence: 1,
       pendingEventCount: 1,
     });
-    await expect(
-      client.replay({
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        afterSequence: 0,
-      }),
-    ).resolves.toMatchObject({
-      toSequenceInclusive: 1,
-      events: [
-        expect.objectContaining({
-          sequence: 1,
-        }),
-      ],
-    });
-
-    client.close();
-  });
-
-  it("can start a provider on demand over HTTP", async () => {
-    const runtime = new EnvironmentAgentRuntime({
-      threadId: "thread-1",
-    });
-    runtime.start();
-    const server = await createEnvironmentAgentHttpServer({
-      runtime,
-      bearerToken: "test-token",
-    });
-    cleanup.push(() => server.close());
-
-    const client = await createHttpEnvironmentAgentClient({
-      baseUrl: server.baseUrl,
-      headers: {
-        authorization: "Bearer test-token",
-      },
-    });
-
-    await expect(
-      client.ensureProviderRunning({
-        command: "node",
-        args: [
-          "-e",
-          "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
-        ],
-      }),
-    ).resolves.toMatchObject({
-      running: true,
-      launched: true,
-      pid: expect.any(Number),
-    });
-
-    client.close();
-  });
-
-  it("accepts explicit thread commands over HTTP", async () => {
-    const received: string[] = [];
-    const runtime = new EnvironmentAgentRuntime({
-      threadId: "thread-1",
-      providerCommand: "node",
-      providerArgs: [
-        "-e",
-        [
-          "process.stdin.setEncoding('utf8');",
-          "let buffer='';",
-          "process.stdin.on('data',chunk=>{",
-          "buffer+=chunk;",
-          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
-          "buffer=parts.pop() ?? '';",
-          "for (const line of parts) {",
-          "if (!line.trim()) continue;",
-          "const msg = JSON.parse(line);",
-          "if (msg.method === 'initialize') {",
-          "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
-          "} else if (msg.method === 'thread/start') {",
-          "console.log(JSON.stringify({ id: msg.id, result: { thread: { id: 'provider-thread-1' } } }));",
-          "}",
-          "}",
-          "});",
-        ].join(""),
-      ],
-    });
-    runtime.start();
-    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
-      received.push(line);
-    });
-    cleanup.push(unsubscribe);
-    const server = await createEnvironmentAgentHttpServer({
-      runtime,
-      bearerToken: "test-token",
-    });
-    cleanup.push(() => server.close());
-
-    const client = await createHttpEnvironmentAgentClient({
-      baseUrl: server.baseUrl,
-      headers: {
-        authorization: "Bearer test-token",
-      },
-    });
-
-    await expect(
-      client.sendCommand({
-        meta: {
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-          commandId: "cmd-1",
-          idempotencyKey: "idem-1",
-          sentAt: 123,
-          threadId: "thread-1",
-          projectId: "proj-1",
-        },
-        command: {
-          type: "thread.start",
-          threadId: "thread-1",
-          projectId: "proj-1",
-          params: { model: "gpt-5" },
-          initialize: {
-            method: "initialize",
-            params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
-          },
-        },
-      }),
-    ).resolves.toMatchObject({
-      commandId: "cmd-1",
-      state: "accepted",
-      result: { thread: { id: "provider-thread-1" } },
-    });
-
-    await expect.poll(() => received.length).toBeGreaterThanOrEqual(2);
-    expect(JSON.parse(received[0] ?? "{}")).toMatchObject({
-      id: 1,
-      result: { capabilities: {} },
-    });
-    expect(JSON.parse(received[1] ?? "{}")).toMatchObject({
-      id: 2,
-      result: { thread: { id: "provider-thread-1" } },
-    });
-
-    client.close();
-  });
-
-  it("streams provider lines over HTTP", async () => {
-    const received: string[] = [];
-    const upstream = createServer((request, response) => {
-      if (request.url === "/provider" && request.method === "POST") {
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ ok: true }));
-        return;
-      }
-      response.writeHead(404);
-      response.end();
-    });
-    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
-    cleanup.push(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          upstream.close((error) => (error ? reject(error) : resolve()));
-        }),
-    );
-
-    const runtime = new EnvironmentAgentRuntime({
-      threadId: "thread-1",
-      providerCommand: "node",
-      providerArgs: [
-        "-e",
-        "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
-      ],
-    });
-    runtime.start();
-    const server = await createEnvironmentAgentHttpServer({
-      runtime,
-      bearerToken: "test-token",
-    });
-    cleanup.push(() => server.close());
-
-    const client = await createHttpEnvironmentAgentClient({
-      baseUrl: server.baseUrl,
-      headers: {
-        authorization: "Bearer test-token",
-      },
-    });
-    client.providerTransport.setHandlers({
-      onLine(line) {
-        received.push(line);
-      },
-    });
-
-    client.providerTransport.send('{"jsonrpc":"2.0","method":"turn/started","params":{}}');
-
-    await expect.poll(() => received).toContain(
-      '{"jsonrpc":"2.0","method":"turn/started","params":{}}',
-    );
-    client.close();
   });
 
   it("rejects unauthenticated requests", async () => {

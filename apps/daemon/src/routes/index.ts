@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ThreadOrchestrator } from "@beanbag/agent-core";
+import type { ThreadOrchestrator, ThreadWorkStatus } from "@beanbag/agent-core";
 import type {
   EventRepository,
   ProjectRepository,
@@ -9,12 +9,14 @@ import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
 import type { WSManager } from "../ws.js";
+import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   threadManager: ThreadOrchestrator;
+  environmentAgentSessionService?: EnvironmentAgentSessionService;
   wsManager: WSManager;
   startTime: number;
   requestShutdown?: (reason: string) => void;
@@ -23,6 +25,12 @@ export interface ApiRouteDeps {
 }
 
 export function createApiRoutes(deps: ApiRouteDeps) {
+  const workspaceStatusAccessor = deps.threadManager as ThreadOrchestrator & {
+    getProjectWorkspaceStatusAsync?: (
+      projectId: string,
+      rootPath: string,
+    ) => Promise<ThreadWorkStatus>;
+  };
   return new Hono()
     .route(
       "/projects",
@@ -30,10 +38,19 @@ export function createApiRoutes(deps: ApiRouteDeps) {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
         getProjectWorkspaceStatusAsync: (projectId, rootPath) =>
-          deps.threadManager.getProjectWorkspaceStatusAsync(projectId, rootPath),
+          workspaceStatusAccessor.getProjectWorkspaceStatusAsync
+            ? workspaceStatusAccessor.getProjectWorkspaceStatusAsync(projectId, rootPath)
+            : Promise.reject(
+                new Error("Project workspace status lookup is unavailable"),
+              ),
       }),
     )
-    .route("/threads", createThreadRoutes(deps.threadManager))
+    .route(
+      "/threads",
+      createThreadRoutes(deps.threadManager, {
+        environmentAgentSessionService: deps.environmentAgentSessionService,
+      }),
+    )
     .route(
       "/system",
       createSystemRoutes(deps.threadManager, deps.startTime, {

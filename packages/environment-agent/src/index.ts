@@ -15,27 +15,125 @@ export type {
   EnvironmentAgentCommandDeliveryState,
   EnvironmentAgentEvent,
   EnvironmentAgentEventEnvelope,
-  EnvironmentAgentReplayCursor,
-  EnvironmentAgentReplayRequest,
-  EnvironmentAgentReplayResponse,
-  EnvironmentAgentAckRequest,
-  EnvironmentAgentAckResponse,
-  EnvironmentAgentDeliveryRequest,
-  EnvironmentAgentDeliveryState,
   EnvironmentAgentDeliveryReason,
-  EnvironmentAgentDeliveryResponse,
   EnvironmentAgentDeliveryRuntimeState,
   EnvironmentAgentStatusSnapshot,
   EnvironmentAgentControlRequest,
   EnvironmentAgentControlResponse,
-  EnvironmentAgentLiveEventMessage,
 } from "./protocol.js";
 export { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "./protocol.js";
 export {
   isEnvironmentAgentControlRequest,
   isEnvironmentAgentControlResponse,
-  isEnvironmentAgentLiveEventMessage,
 } from "./protocol.js";
+
+export type {
+  EnvironmentAgentSessionTransportKind,
+  EnvironmentAgentSessionCloseReason,
+  EnvironmentAgentSessionCursor,
+  EnvironmentAgentSessionCursorExclusive,
+  EnvironmentAgentSessionChannelBootstrap,
+  EnvironmentAgentSessionOpenPayload,
+  EnvironmentAgentSessionResumePayload,
+  EnvironmentAgentSessionWelcomeChannel,
+  EnvironmentAgentSessionWelcomePayload,
+  EnvironmentAgentSessionHeartbeatChannel,
+  EnvironmentAgentSessionHeartbeatPayload,
+  EnvironmentAgentSessionEventBatchItem,
+  EnvironmentAgentSessionEventBatchChannel,
+  EnvironmentAgentSessionEventBatchPayload,
+  EnvironmentAgentSessionEventAckChannel,
+  EnvironmentAgentSessionEventAckPayload,
+  EnvironmentAgentSessionReplayRequestPayload,
+  EnvironmentAgentSessionCommandBatchItem,
+  EnvironmentAgentSessionCommandBatchPayload,
+  EnvironmentAgentSessionCommandAckState,
+  EnvironmentAgentSessionCommandAckItem,
+  EnvironmentAgentSessionCommandAckPayload,
+  EnvironmentAgentSessionCommandResultState,
+  EnvironmentAgentSessionCommandResultPayload,
+  EnvironmentAgentSessionClosePayload,
+  EnvironmentAgentSessionReplacedPayload,
+  EnvironmentAgentSessionOpenMessage,
+  EnvironmentAgentSessionResumeMessage,
+  EnvironmentAgentSessionWelcomeMessage,
+  EnvironmentAgentSessionHeartbeatMessage,
+  EnvironmentAgentSessionEventBatchMessage,
+  EnvironmentAgentSessionEventAckMessage,
+  EnvironmentAgentSessionReplayRequestMessage,
+  EnvironmentAgentSessionCommandBatchMessage,
+  EnvironmentAgentSessionCommandAckMessage,
+  EnvironmentAgentSessionCommandResultMessage,
+  EnvironmentAgentSessionCloseMessage,
+  EnvironmentAgentSessionReplacedMessage,
+  EnvironmentAgentSessionClientMessage,
+  EnvironmentAgentSessionServerMessage,
+  EnvironmentAgentSessionSessionControlMessage,
+  EnvironmentAgentSessionMessage,
+} from "./session-protocol.js";
+export {
+  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+  compareEnvironmentAgentSessionCursors,
+  isEnvironmentAgentSessionCursor,
+  isEnvironmentAgentSessionMessage,
+  isEnvironmentAgentSessionClientMessage,
+  isEnvironmentAgentSessionServerMessage,
+} from "./session-protocol.js";
+
+export type {
+  EnvironmentAgentSessionStoreCommandReceiptState,
+  EnvironmentAgentSessionStoreSessionStatus,
+  EnvironmentAgentSessionStateRecord,
+  EnvironmentAgentOutboxEventRecord,
+  EnvironmentAgentCommandReceiptRecord,
+  EnvironmentAgentPersistedSessionRecord,
+  InitializeEnvironmentAgentThreadStateInput,
+  AppendEnvironmentAgentOutboxEventInput,
+  AckEnvironmentAgentOutboxThroughInput,
+  RecordEnvironmentAgentCommandReceivedInput,
+  CompleteEnvironmentAgentCommandReceiptInput,
+  FailEnvironmentAgentCommandReceiptInput,
+  BindEnvironmentAgentSessionInput,
+  SetEnvironmentAgentLastDeliveredCommandCursorInput,
+  EnvironmentAgentSessionStore,
+} from "./session-store.js";
+export {
+  InMemoryEnvironmentAgentSessionStore,
+} from "./in-memory-session-store.js";
+export type {
+  EnvironmentAgentSessionRuntimeOptions,
+  RecordEnvironmentAgentSessionEventInput,
+  ReceiveEnvironmentAgentSessionCommandResult,
+} from "./session-runtime.js";
+export {
+  EnvironmentAgentSessionRuntime,
+} from "./session-runtime.js";
+
+export type {
+  EnvironmentAgentSessionHttpClientOptions,
+} from "./session-http-client.js";
+export {
+  EnvironmentAgentSessionHttpClient,
+  EnvironmentAgentSessionHttpClientError,
+  createEnvironmentAgentSessionHttpClientFromConnection,
+} from "./session-http-client.js";
+
+export type {
+  EnvironmentAgentSessionSyncOptions,
+  EnvironmentAgentPulledCommand,
+  FlushEnvironmentAgentEventBatchResult,
+} from "./session-sync.js";
+export {
+  EnvironmentAgentSessionSync,
+} from "./session-sync.js";
+
+export type {
+  EnvironmentAgentSessionSupervisorOptions,
+} from "./session-supervisor.js";
+export {
+  EnvironmentAgentSessionSupervisor,
+} from "./session-supervisor.js";
 
 export type {
   JsonLineTransport,
@@ -51,7 +149,6 @@ export type { EnvironmentAgentClient } from "./client.js";
 export {
   EnvironmentAgentClientError,
   createEnvironmentAgentClient,
-  createHttpEnvironmentAgentClient,
 } from "./client.js";
 
 export type { EnvironmentAgentHttpServer } from "./http-server.js";

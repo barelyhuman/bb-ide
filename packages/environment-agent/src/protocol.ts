@@ -201,52 +201,6 @@ export interface EnvironmentAgentEventEnvelope<
   event: TEvent;
 }
 
-export interface EnvironmentAgentReplayCursor {
-  sequence: number;
-}
-
-export interface EnvironmentAgentReplayRequest {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
-  afterSequence: number;
-  limit?: number;
-  threadId?: string;
-}
-
-export interface EnvironmentAgentReplayResponse {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
-  fromSequenceExclusive: number;
-  toSequenceInclusive: number;
-  events: EnvironmentAgentEventEnvelope[];
-  hasMore: boolean;
-}
-
-export interface EnvironmentAgentAckRequest {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
-  sequence: number;
-  threadId?: string;
-}
-
-export interface EnvironmentAgentAckResponse {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
-  acknowledgedSequence: number;
-  threadId?: string;
-}
-
-export interface EnvironmentAgentDeliveryRequest {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
-  threadId: string;
-  projectId?: string;
-  environmentId?: string;
-  afterSequence?: number;
-  events: EnvironmentAgentEventEnvelope[];
-}
-
-export type EnvironmentAgentDeliveryState =
-  | "accepted"
-  | "retry"
-  | "stalled"
-  | "stopped";
-
 export type EnvironmentAgentDeliveryReason =
   | "accepted"
   | "duplicate"
@@ -254,16 +208,6 @@ export type EnvironmentAgentDeliveryReason =
   | "transport_error"
   | "thread_archived"
   | "thread_inactive";
-
-export interface EnvironmentAgentDeliveryResponse {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
-  acknowledgedSequence: number;
-  threadId: string;
-  state: EnvironmentAgentDeliveryState;
-  reason: EnvironmentAgentDeliveryReason;
-  retryAfterMs?: number;
-  message?: string;
-}
 
 export type EnvironmentAgentDeliveryRuntimeState =
   | "healthy"
@@ -303,17 +247,6 @@ export type EnvironmentAgentControlRequest =
       payload: EnvironmentAgentProviderSpec;
     })
   | (EnvironmentAgentControlMessageBase & {
-      type: "delivery.retry";
-    })
-  | (EnvironmentAgentControlMessageBase & {
-      type: "ack";
-      payload: EnvironmentAgentAckRequest;
-    })
-  | (EnvironmentAgentControlMessageBase & {
-      type: "replay";
-      payload: EnvironmentAgentReplayRequest;
-    })
-  | (EnvironmentAgentControlMessageBase & {
       type: "status";
     });
 
@@ -327,27 +260,9 @@ export type EnvironmentAgentControlResponse =
       payload: EnvironmentAgentProviderStatus;
     })
   | (EnvironmentAgentControlMessageBase & {
-      type: "delivery.retry.response";
-      payload: EnvironmentAgentStatusSnapshot;
-    })
-  | (EnvironmentAgentControlMessageBase & {
-      type: "ack.response";
-      payload: EnvironmentAgentAckResponse;
-    })
-  | (EnvironmentAgentControlMessageBase & {
-      type: "replay.response";
-      payload: EnvironmentAgentReplayResponse;
-    })
-  | (EnvironmentAgentControlMessageBase & {
       type: "status.response";
       payload: EnvironmentAgentStatusSnapshot;
     });
-
-export interface EnvironmentAgentLiveEventMessage {
-  environmentAgentMessage: true;
-  type: "event.emitted";
-  payload: EnvironmentAgentEventEnvelope;
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -365,9 +280,6 @@ export function isEnvironmentAgentControlRequest(
   return (
     type === "command" ||
     type === "provider.ensure" ||
-    type === "delivery.retry" ||
-    type === "ack" ||
-    type === "replay" ||
     type === "status"
   );
 }
@@ -383,18 +295,6 @@ export function isEnvironmentAgentControlResponse(
   return (
     type === "command.response" ||
     type === "provider.ensure.response" ||
-    type === "delivery.retry.response" ||
-    type === "ack.response" ||
-    type === "replay.response" ||
     type === "status.response"
   );
-}
-
-export function isEnvironmentAgentLiveEventMessage(
-  value: unknown,
-): value is EnvironmentAgentLiveEventMessage {
-  const record = asRecord(value);
-  if (!record) return false;
-  if (record.environmentAgentMessage !== true) return false;
-  return record.type === "event.emitted";
 }
