@@ -8,6 +8,14 @@ import {
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
 
+function getToolCallTone(message: UIToolCallMessage): "default" | "destructive" {
+  // Shell command rows are common, and failed commands should read like regular
+  // command history rather than error alerts. Keep destructive tone for any future
+  // non-shell tool rows that may still need stronger emphasis.
+  if (message.toolName === "exec_command") return "default";
+  return message.status === "error" ? "destructive" : "default";
+}
+
 export function ToolCallRow({
   message,
   initialExpanded = false,
@@ -28,7 +36,7 @@ export function ToolCallRow({
           : "Ran";
   const duration = formatSummaryDuration(message.durationMs);
   const isRunning = message.status === "pending";
-  const tone = message.status === "error" ? "destructive" : "default";
+  const tone = getToolCallTone(message);
   const summaryContent = (
     <EventTitle
       prefix={actionLabel}

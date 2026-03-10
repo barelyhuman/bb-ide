@@ -172,6 +172,24 @@ describe("ConversationEntry", () => {
     expect(html).toContain("rm -rf /tmp/nope");
   });
 
+  it("renders failed exec_command rows without destructive red styling", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-err",
+      command: "npm test",
+      status: "error",
+      output: "tests failed",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain(">Failed<");
+    expect(html).toContain("text-muted-foreground/90");
+    expect(html).toContain("text-foreground/85");
+    expect(html).not.toContain("text-destructive");
+  });
+
   it("keeps completed tool activity summaries stable when expanded", () => {
     const message: UIMessage = {
       ...baseMessage(),
