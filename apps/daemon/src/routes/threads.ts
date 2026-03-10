@@ -129,7 +129,6 @@ const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
 type RouteThreadLookupCapableOrchestrator = ThreadOrchestrator & {
   getRawById?: (threadId: string) => Thread | undefined;
-  getByIdAsync?: (threadId: string) => Promise<Thread | undefined>;
   isPrimaryCheckoutActive?: (threadId: string) => boolean;
 };
 
@@ -164,14 +163,6 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
   }>;
 };
 
-type RouteGitDiffCapableOrchestrator = ThreadOrchestrator & {
-  getGitDiffAsync?: (
-    threadId: string,
-    selection?: ThreadGitDiffSelection,
-    mergeBaseBranch?: string,
-  ) => Promise<ReturnType<ThreadOrchestrator["getGitDiff"]>>;
-};
-
 function validatePromptInputAttachments(input: PromptInput[]): void {
   let attachmentCount = 0;
   for (const chunk of input) {
@@ -203,7 +194,7 @@ function getThreadForRouteLookup(
   if (routeLookupManager.getRawById) {
     return routeLookupManager.getRawById(threadId);
   }
-  return threadManager.getById(threadId);
+  return undefined;
 }
 
 function isThreadPrimaryCheckoutActiveForRoute(
@@ -224,6 +215,7 @@ export function createThreadRoutes(
   },
 ) {
   const openPath = opts?.openPath ?? openPathInEditor;
+  const routeThreadManager = threadManager as RouteThreadLookupCapableOrchestrator;
   const environmentAgentAccessor =
     threadManager as RouteEnvironmentAgentCapableOrchestrator;
   return new Hono()
@@ -289,14 +281,17 @@ export function createThreadRoutes(
             : filters.includeWorkStatus === "false"
               ? false
               : undefined;
-        const threads = threadManager.list({
+        const threadFilters = {
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),
           ...(includeArchived !== undefined ? { includeArchived } : {}),
           ...(includeWorkStatus !== undefined ? { includeWorkStatus } : {}),
-        });
+        };
+        const threads = includeWorkStatus
+          ? await threadManager.listAsync(threadFilters)
+          : threadManager.list(threadFilters);
         return c.json(threads);
       } catch (err) {
         return sendRouteError(c, err);
@@ -304,10 +299,7 @@ export function createThreadRoutes(
     })
     .get("/:id", async (c) => {
       try {
-        const routeLookupManager = threadManager as RouteThreadLookupCapableOrchestrator;
-        const thread = routeLookupManager.getByIdAsync
-          ? await routeLookupManager.getByIdAsync(c.req.param("id"))
-          : threadManager.getById(c.req.param("id"));
+        const thread = await threadManager.getByIdAsync(c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
@@ -560,7 +552,7 @@ export function createThreadRoutes(
         }
         const force = parsedBody.data.force === true;
         if (!force && threadManager.requiresForceArchive(thread.id)) {
-          const workStatus = threadManager.getWorkStatus(thread.id);
+          const workStatus = await threadManager.getWorkStatusAsync(thread.id);
           if (
             workStatus &&
             (
@@ -631,18 +623,10 @@ export function createThreadRoutes(
           return sendRouteError(c, threadNotFoundError(threadId));
         }
         const query = c.req.valid("query");
-        const asyncWorkStatusAccessor = threadManager as ThreadOrchestrator & {
-          getWorkStatusAsync?: (
-            threadId: string,
-            mergeBaseBranch?: string,
-          ) => Promise<ReturnType<ThreadOrchestrator["getWorkStatus"]>>;
-        };
-        const workStatus = asyncWorkStatusAccessor.getWorkStatusAsync
-          ? await asyncWorkStatusAccessor.getWorkStatusAsync(
-              threadId,
-              query.mergeBaseBranch,
-            )
-          : threadManager.getWorkStatus(threadId, query.mergeBaseBranch);
+        const workStatus = await threadManager.getWorkStatusAsync(
+          threadId,
+          query.mergeBaseBranch,
+        );
         return c.json(
           workStatus ?? null,
         );
@@ -730,18 +714,11 @@ export function createThreadRoutes(
           } else {
             selection = { type: "combined" };
           }
-          const gitDiffAccessor = threadManager as RouteGitDiffCapableOrchestrator;
-          const result = gitDiffAccessor.getGitDiffAsync
-            ? await gitDiffAccessor.getGitDiffAsync(
-                c.req.param("id"),
-                selection,
-                query.mergeBaseBranch,
-              )
-            : threadManager.getGitDiff(
-                c.req.param("id"),
-                selection,
-                query.mergeBaseBranch,
-              );
+          const result = await threadManager.getGitDiffAsync(
+            c.req.param("id"),
+            selection,
+            query.mergeBaseBranch,
+          );
           return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);

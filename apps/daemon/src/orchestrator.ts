@@ -1560,75 +1560,6 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  getGitDiff(
-    threadId: string,
-    selection: ThreadGitDiffSelection = { type: "combined" },
-    mergeBaseBranch?: string,
-  ): ThreadGitDiffResponse {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      throw projectNotFoundError(thread.projectId);
-    }
-    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-    if (!environment) {
-      throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
-    }
-    if (environment.isIsolatedWorkspace()) {
-      const defaultBranch = detectProjectDefaultBranch(project.rootPath);
-      const status = environment.getWorkspaceStatus({
-        defaultBranch,
-        mergeBaseBranch,
-      });
-      const commits = environment.listWorkspaceCommitsSinceRef({
-        baseRef: status.baseRef,
-      });
-      const hasSelectedCommit =
-        selection.type === "commit" &&
-        commits.some((commit: EnvironmentCommitSummary) => commit.sha === selection.sha);
-      const normalizedSelection: ThreadGitDiffSelection = hasSelectedCommit
-        ? selection
-        : { type: "combined" };
-      const diffResult =
-        normalizedSelection.type === "combined" &&
-        !status.hasUncommittedChanges &&
-        !status.hasCommittedUnmergedChanges
-          ? { diff: "", truncated: false }
-          : normalizedSelection.type === "commit"
-          ? environment.getWorkspaceDiff({
-              type: "commit",
-              commitSha: normalizedSelection.sha,
-            })
-          : environment.getWorkspaceDiff({
-              type: "combined",
-              baseRef: status.baseRef,
-            });
-      return {
-        mode: "worktree_commits",
-        commits,
-        selection: normalizedSelection,
-        diff: diffResult.diff,
-        truncated: diffResult.truncated,
-        ...(status.currentBranch ? { currentBranch: status.currentBranch } : {}),
-        ...(status.mergeBaseBranch ? { mergeBaseBranch: status.mergeBaseBranch } : {}),
-        ...(status.baseRef ? { mergeBaseRef: status.baseRef } : {}),
-      };
-    }
-
-    const workspaceStatus = environment.getWorkspaceStatus();
-    const diffResult = environment.getWorkspaceDiff({ type: "working_tree" });
-    return {
-      mode: "local_uncommitted",
-      commits: [],
-      selection: { type: "combined" },
-      diff: diffResult.diff,
-      truncated: diffResult.truncated,
-    };
-  }
-
   async getGitDiffAsync(
     threadId: string,
     selection: ThreadGitDiffSelection = { type: "combined" },
@@ -1647,7 +1578,9 @@ export class Orchestrator implements ThreadOrchestrator {
       throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
     }
     if (environment.isIsolatedWorkspace()) {
-      const defaultBranch = await detectProjectDefaultBranchAsync(project.rootPath);
+      const defaultBranch =
+        detectProjectDefaultBranch(project.rootPath) ??
+        await detectProjectDefaultBranchAsync(project.rootPath);
       const status = environment.getWorkspaceStatusAsync
         ? await environment.getWorkspaceStatusAsync({
             defaultBranch,
@@ -1794,31 +1727,13 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Get the thread record by id.
    */
-  getById(threadId: string): Thread | undefined {
-    return measureSync("orchestrator.getById", () => {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread) return undefined;
-      return this._withDefaultExecutionOptions(this._hydrateThreadState(thread));
-    }, { threadId });
-  }
-
   async getByIdAsync(threadId: string): Promise<Thread | undefined> {
     return measureAsync("orchestrator.getByIdAsync", async () => {
       const thread = this.threadRepo.getById(threadId);
       if (!thread) return undefined;
+      this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
       return this._withDefaultExecutionOptions(await this._hydrateThreadStateAsync(thread));
     }, { threadId });
-  }
-
-  getWorkStatus(threadId: string, mergeBaseBranch?: string) {
-    return measureSync("orchestrator.getWorkStatus", () => {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread) return undefined;
-      return this._hydrateThreadState(thread, { mergeBaseBranch }).workStatus;
-    }, {
-      threadId,
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-    });
   }
 
   async getWorkStatusAsync(
@@ -1837,7 +1752,9 @@ export class Orchestrator implements ThreadOrchestrator {
         return this._buildDeletedWorkStatus();
       }
 
-      const defaultBranch = await detectProjectDefaultBranchAsync(project.rootPath);
+      const defaultBranch =
+        detectProjectDefaultBranch(project.rootPath) ??
+        await detectProjectDefaultBranchAsync(project.rootPath);
       const workspaceStatus = environment.getWorkspaceStatusAsync
         ? await environment.getWorkspaceStatusAsync({
             defaultBranch,
@@ -1852,10 +1769,6 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
     });
-  }
-
-  getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {
-    return this.environmentService.getProjectWorkspaceStatus(projectId, rootPath);
   }
 
   async getProjectWorkspaceStatusAsync(
@@ -1902,6 +1815,21 @@ export class Orchestrator implements ThreadOrchestrator {
       return threads.map((thread) => this._withPrimaryCheckoutState(thread));
     }
     return threads.map((thread) => this._hydrateThreadState(thread));
+  }
+
+  async listAsync(filters?: {
+    projectId?: string;
+    parentThreadId?: string;
+    includeArchived?: boolean;
+    includeWorkStatus?: boolean;
+  }): Promise<Thread[]> {
+    const threads = this.threadRepo.list(filters);
+    if (!filters?.includeWorkStatus) {
+      return threads.map((thread) => this._withPrimaryCheckoutState(thread));
+    }
+    return Promise.all(
+      threads.map((thread) => this._hydrateThreadStateAsync(thread)),
+    );
   }
 
   async requestThreadOperation(
@@ -3590,6 +3518,11 @@ export class Orchestrator implements ThreadOrchestrator {
     return err instanceof Error ? err.message : String(err);
   }
 
+  private _isSyncWorkspaceStatusUnsupportedError(err: unknown): boolean {
+    return err instanceof Error &&
+      err.message.includes("Synchronous workspace status is unsupported");
+  }
+
   private _restoreEnvironmentUnavailableMessage(threadId: string): string {
     return this.environmentService.getRestoreFailure(threadId) ??
       "Thread workspace is unavailable";
@@ -4109,12 +4042,28 @@ export class Orchestrator implements ThreadOrchestrator {
       return this._withPrimaryCheckoutState(hydrated);
     }
     const defaultBranch = detectProjectDefaultBranch(project.rootPath);
-    const workspaceStatus = environment
-      ? environment.getWorkspaceStatus({
-          defaultBranch,
-          mergeBaseBranch: opts?.mergeBaseBranch,
-        })
-      : this._buildDeletedWorkStatus();
+    let workspaceStatus: ThreadWorkStatus | undefined;
+    try {
+      workspaceStatus = environment.getWorkspaceStatus({
+        defaultBranch,
+        mergeBaseBranch: opts?.mergeBaseBranch,
+      });
+    } catch (err) {
+      if (!this._isSyncWorkspaceStatusUnsupportedError(err)) {
+        throw err;
+      }
+    }
+    if (!workspaceStatus) {
+      const hydrated: Thread = {
+        ...thread,
+        builtInActions: this._buildThreadBuiltInActions({
+          thread,
+          environment,
+        }),
+        ...(provisioningState ? { provisioningState } : {}),
+      };
+      return this._withPrimaryCheckoutState(hydrated);
+    }
     const hydrated: Thread = {
       ...thread,
       workStatus: { ...workspaceStatus },
@@ -4167,7 +4116,9 @@ export class Orchestrator implements ThreadOrchestrator {
       };
       return this._withPrimaryCheckoutState(hydrated);
     }
-    const defaultBranch = await detectProjectDefaultBranchAsync(project.rootPath);
+    const defaultBranch =
+      detectProjectDefaultBranch(project.rootPath) ??
+      await detectProjectDefaultBranchAsync(project.rootPath);
     const workspaceStatus = environment.getWorkspaceStatusAsync
       ? await environment.getWorkspaceStatusAsync({
           defaultBranch,

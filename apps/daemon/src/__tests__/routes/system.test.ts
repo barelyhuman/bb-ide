@@ -54,7 +54,14 @@ function mockOrchestrator(): ThreadOrchestrator {
 
   return {
     list: vi.fn(),
+    listAsync: vi.fn(),
+    getById: vi.fn(),
+    getByIdAsync: vi.fn(),
     getWorkStatus: vi.fn(),
+    getWorkStatusAsync: vi.fn(),
+    getGitDiff: vi.fn(),
+    getGitDiffAsync: vi.fn(),
+    getProjectWorkspaceStatusAsync: vi.fn(),
     getRunningCount: vi.fn(),
     listModels: vi.fn(),
     getProviderInfo: vi.fn(),

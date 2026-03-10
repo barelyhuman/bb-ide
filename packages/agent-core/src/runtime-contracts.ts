@@ -193,8 +193,11 @@ export interface ThreadOrchestrator {
   promoteThread(threadId: string): Promise<PromoteThreadResponse>;
   demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse>;
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus;
-  getById(threadId: string): Thread | undefined;
-  getWorkStatus(threadId: string, mergeBaseBranch?: string): ThreadWorkStatus | undefined;
+  getByIdAsync(threadId: string): Promise<Thread | undefined>;
+  getWorkStatusAsync(
+    threadId: string,
+    mergeBaseBranch?: string,
+  ): Promise<ThreadWorkStatus | undefined>;
   getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];
   getTimeline(
     threadId: string,
@@ -205,17 +208,22 @@ export interface ThreadOrchestrator {
     threadId: string,
     request: ThreadToolGroupMessagesRequest,
   ): ThreadToolGroupMessagesResponse;
-  getGitDiff(
+  getGitDiffAsync(
     threadId: string,
     selection?: ThreadGitDiffSelection,
     mergeBaseBranch?: string,
-  ): ThreadGitDiffResponse;
+  ): Promise<ThreadGitDiffResponse>;
   resolveThreadOpenPath(threadId: string, relativePath: string): string;
   getOutput(threadId: string): string | undefined;
   getDefaultExecutionOptions(
     threadId: string,
   ): ThreadExecutionOptions | undefined;
   list(filters?: ThreadListFilters): Thread[];
+  listAsync(filters?: ThreadListFilters): Promise<Thread[]>;
+  getProjectWorkspaceStatusAsync(
+    projectId: string,
+    rootPath: string,
+  ): Promise<ThreadWorkStatus>;
   isActive(threadId: string): boolean;
   getActiveCount(): number;
   getRunningCount(): number;

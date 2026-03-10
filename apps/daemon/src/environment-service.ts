@@ -152,10 +152,6 @@ export class EnvironmentService {
     return this.environmentRuntimes.get(threadId);
   }
 
-  getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {
-    throw new Error("Synchronous project workspace status is unsupported; use getProjectWorkspaceStatusAsync");
-  }
-
   async getProjectWorkspaceStatusAsync(projectId: string, rootPath: string): Promise<ThreadWorkStatus> {
     const environment = this.environmentRegistry.create(
       "local",

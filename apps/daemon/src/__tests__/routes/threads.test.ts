@@ -1,10 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { Thread, ThreadEvent } from "@beanbag/agent-core";
+import type { Thread, ThreadEvent, ThreadWorkStatus } from "@beanbag/agent-core";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import { createThreadRoutes } from "../../routes/threads.js";
 import type { Orchestrator } from "../../orchestrator.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
+
+type LegacyThreadRouteMock = Orchestrator & {
+  getRawById: ReturnType<typeof vi.fn>;
+  getById: ReturnType<typeof vi.fn>;
+  getByIdAsync: ReturnType<typeof vi.fn>;
+  getWorkStatus: ReturnType<typeof vi.fn>;
+  getWorkStatusAsync: ReturnType<typeof vi.fn>;
+  listAsync: ReturnType<typeof vi.fn>;
+  getGitDiff: ReturnType<typeof vi.fn>;
+  getGitDiffAsync: ReturnType<typeof vi.fn>;
+  getProjectWorkspaceStatusAsync: ReturnType<typeof vi.fn>;
+};
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
@@ -36,7 +48,7 @@ function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
   } as ThreadEvent;
 }
 
-function makeWorkStatus() {
+function makeWorkStatus(): ThreadWorkStatus {
   return {
     state: "clean",
     changedFiles: 0,
@@ -55,8 +67,8 @@ function makeWorkStatus() {
   };
 }
 
-function mockOrchestrator(): Orchestrator {
-  return {
+function mockOrchestrator(): LegacyThreadRouteMock {
+  const orchestrator = {
     spawn: vi.fn(),
     tell: vi.fn(),
     enqueueFollowUp: vi.fn(),
@@ -70,24 +82,58 @@ function mockOrchestrator(): Orchestrator {
     demotePrimaryCheckout: vi.fn(),
     requestThreadOperation: vi.fn(),
     markRead: vi.fn(),
+    getRawById: vi.fn(),
     getById: vi.fn(),
+    getByIdAsync: vi.fn(),
     getWorkStatus: vi.fn(),
+    getWorkStatusAsync: vi.fn(),
     getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
     getEnvironmentAgentStatus: vi.fn(),
     ingestEnvironmentAgentEvents: vi.fn(),
     replayEnvironmentAgentEvents: vi.fn(),
     list: vi.fn(),
+    listAsync: vi.fn(),
     getTimeline: vi.fn(),
     getToolGroupMessages: vi.fn(),
     getGitDiff: vi.fn(),
+    getGitDiffAsync: vi.fn(),
+    getProjectWorkspaceStatusAsync: vi.fn(),
     resolveThreadOpenPath: vi.fn(),
     getEvents: vi.fn(),
     getOutput: vi.fn(),
     isActive: vi.fn(),
     getActiveCount: vi.fn(),
     stopAll: vi.fn(),
-  } as unknown as Orchestrator;
+  } as unknown as LegacyThreadRouteMock;
+  orchestrator.getRawById.mockImplementation(
+    (threadId: string) => (orchestrator.getById as unknown as (threadId: string) => Thread | undefined)(threadId),
+  );
+  orchestrator.getByIdAsync.mockImplementation(
+    async (threadId: string) =>
+      (orchestrator.getById as unknown as (threadId: string) => Thread | undefined)(threadId),
+  );
+  orchestrator.getWorkStatusAsync.mockImplementation(
+    async (threadId: string, mergeBaseBranch?: string) =>
+      (
+        orchestrator.getWorkStatus as unknown as (
+          threadId: string,
+          mergeBaseBranch?: string,
+        ) => ThreadWorkStatus | undefined
+      )(threadId, mergeBaseBranch),
+  );
+  orchestrator.listAsync.mockImplementation(async (filters) => orchestrator.list(filters));
+  orchestrator.getGitDiffAsync.mockImplementation(
+    async (threadId: string, selection, mergeBaseBranch?: string) =>
+      (
+        orchestrator.getGitDiff as unknown as (
+          threadId: string,
+          selection?: unknown,
+          mergeBaseBranch?: string,
+        ) => unknown
+      )(threadId, selection, mergeBaseBranch),
+  );
+  return orchestrator;
 }
 
 describe("Thread routes", () => {
@@ -431,6 +477,21 @@ describe("Thread routes", () => {
       expect(body).toHaveLength(2);
     });
 
+    it("uses async listing when work status is requested", async () => {
+      const threads = [makeThread({ workStatus: makeWorkStatus() })];
+      (threadManager.listAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
+        threads,
+      );
+
+      const res = await app.request("/threads?includeWorkStatus=true");
+
+      expect(res.status).toBe(200);
+      expect(threadManager.listAsync).toHaveBeenCalledWith({
+        includeWorkStatus: true,
+      });
+      expect(threadManager.list).not.toHaveBeenCalled();
+    });
+
     it("lists threads with project filter", async () => {
       (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
@@ -449,7 +510,7 @@ describe("Thread routes", () => {
   describe("GET /threads/:id", () => {
     it("returns a thread by id", async () => {
       const thread = makeThread();
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+      (threadManager.getByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
         thread,
       );
 
@@ -462,7 +523,7 @@ describe("Thread routes", () => {
     });
 
     it("returns 404 for nonexistent thread", async () => {
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+      (threadManager.getByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
         undefined,
       );
 
@@ -1154,6 +1215,35 @@ describe("Thread routes", () => {
         code: "worktree_not_clean",
         workStatusState: "dirty_uncommitted",
       });
+      expect(threadManager.archive).not.toHaveBeenCalled();
+    });
+
+    it("uses async work status when available", async () => {
+      const thread = makeThread({ environmentId: "worktree" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.requiresForceArchive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      const getWorkStatusAsync = vi.fn().mockResolvedValue({
+        state: "dirty_uncommitted",
+      });
+      (threadManager as Orchestrator & {
+        getWorkStatusAsync?: typeof getWorkStatusAsync;
+      }).getWorkStatusAsync = getWorkStatusAsync;
+      (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error("sync should not be used");
+      });
+
+      const res = await app.request("/threads/thread-1/archive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error:
+          "Thread workspace has uncommitted or unmerged work. Archiving may lose work; retry with force=true.",
+        code: "worktree_not_clean",
+        workStatusState: "dirty_uncommitted",
+      });
+      expect(getWorkStatusAsync).toHaveBeenCalledWith("thread-1");
       expect(threadManager.archive).not.toHaveBeenCalled();
     });
 
