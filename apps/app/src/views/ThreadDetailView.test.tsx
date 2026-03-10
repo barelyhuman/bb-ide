@@ -337,9 +337,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Parent thread");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
-    expect(html).toContain("Ask for follow-up changes|1|");
-    expect(html).toContain("Environment");
-    expect(html).toContain("Local Env");
+    expect(html).toContain("Ask for follow-up changes|1|Local Env");
     expect(html).toContain("1 file");
     expect(html).toContain("+1 -1");
   });

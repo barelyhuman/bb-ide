@@ -65,6 +65,7 @@ import {
 } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
+import { getEnvironmentIconInfo } from "@/lib/environment-icon";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import {
@@ -1225,10 +1226,19 @@ export function ThreadDetailView() {
   const showWorkspaceStatus =
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
     !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
+  const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
+  const threadEnvironmentLabel =
+    thread.environmentId
+      ? (
+          formatEnvironmentDisplayName({
+            id: thread.environmentId,
+            displayName: environmentInfo?.displayName,
+          }) ?? thread.environmentId
+        )
+      : undefined;
   const showThreadMetadata = Boolean(
     parentThreadId ||
       thread.archivedAt !== undefined ||
-      thread.environmentId ||
       showPrimaryCheckoutMetadata ||
       showWorkspaceStatus,
   );
@@ -1408,19 +1418,6 @@ export function ThreadDetailView() {
                 >
                   {parentThreadDisplayName}
                 </Link>
-              </DetailRow>
-            ) : null}
-            {thread.environmentId ? (
-              <DetailRow
-                label="Environment"
-                valueClassName="min-w-0 truncate"
-              >
-                <span>
-                  {formatEnvironmentDisplayName({
-                    id: thread.environmentId,
-                    displayName: environmentInfo?.displayName,
-                  }) ?? thread.environmentId}
-                </span>
               </DetailRow>
             ) : null}
             {showPrimaryCheckoutMetadata ? (
@@ -1679,6 +1676,8 @@ export function ThreadDetailView() {
           sandboxMode={sandboxMode}
           sandboxOptions={sandboxOptions}
           onSandboxModeChange={setSandboxMode}
+          environmentLabel={threadEnvironmentLabel}
+          environmentIcon={environmentIconInfo?.icon}
           contextWindowUsage={contextWindowUsage}
         />
       }
