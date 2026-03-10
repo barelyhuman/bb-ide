@@ -1109,6 +1109,42 @@ function parseFileEditFromItemEvent(
   };
 }
 
+interface CompactionLifecycleEvent {
+  key: string;
+  kind: "begin" | "end";
+  detail?: string;
+}
+
+function getCompactionKey(event: ThreadEvent): string {
+  return getTurnId(event.data) ?? getItemId(event.data) ?? `seq-${event.seq}`;
+}
+
+function parseCompactionLifecycleEvent(
+  event: ThreadEvent,
+  eventType: string,
+): CompactionLifecycleEvent | null {
+  if (
+    eventTypeMatchesAny(eventType, ["item/started", "item/completed"]) &&
+    getItemTypeToken(event.data) === "contextcompaction"
+  ) {
+    return {
+      key: getCompactionKey(event),
+      kind: eventTypeMatches(eventType, "item/started") ? "begin" : "end",
+      detail: extractText(event.data) || undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "thread/compacted")) {
+    return {
+      key: getCompactionKey(event),
+      kind: "end",
+      detail: extractText(event.data) || undefined,
+    };
+  }
+
+  return null;
+}
+
 function parseOperationMessage(
   event: ThreadEvent,
   eventType: string,
@@ -1552,10 +1588,10 @@ function parseOperationMessage(
     };
   }
 
-  if (eventType.includes("compact")) {
+  if (eventTypeMatches(eventType, "thread/compacted")) {
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `compaction:${event.seq}`),
+      id: messageId(event.threadId, "op", `compaction:${getCompactionKey(event)}`),
       threadId: event.threadId,
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
@@ -1675,6 +1711,8 @@ interface ProjectionState {
   finalizedAssistantTurnKeys: Set<string>;
   openReasoningByTurn: Map<string, UIAssistantReasoningMessage>;
   finalizedReasoningTurnKeys: Set<string>;
+  openCompactionsByKey: Map<string, UIOperationMessage>;
+  finalizedCompactionKeys: Set<string>;
   fileEditsByCallId: Map<string, UIFileEditMessage>;
   toolActivity: ToolActivityState;
 }
@@ -1687,6 +1725,8 @@ function createProjectionState(): ProjectionState {
     finalizedAssistantTurnKeys: new Set(),
     openReasoningByTurn: new Map(),
     finalizedReasoningTurnKeys: new Set(),
+    openCompactionsByKey: new Map(),
+    finalizedCompactionKeys: new Set(),
     fileEditsByCallId: new Map(),
     toolActivity: {
       runningCallsById: new Map(),
@@ -2322,6 +2362,77 @@ function upsertFileEdit(
   }
 }
 
+function onCompactionBegin(
+  state: ProjectionState,
+  event: ThreadEvent,
+  payload: CompactionLifecycleEvent,
+): void {
+  if (state.finalizedCompactionKeys.has(payload.key)) {
+    return;
+  }
+
+  const existing = state.openCompactionsByKey.get(payload.key);
+  if (existing) {
+    existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
+    existing.createdAt = Math.max(existing.createdAt, event.createdAt);
+    existing.title = "Context compacting...";
+    existing.detail = payload.detail ?? existing.detail;
+    return;
+  }
+
+  const turnId = getTurnId(event.data);
+  const message: UIOperationMessage = {
+    kind: "operation",
+    id: messageId(event.threadId, "op", `compaction:${payload.key}`),
+    threadId: event.threadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    ...(turnId ? { turnId } : {}),
+    opType: "compaction",
+    title: "Context compacting...",
+    detail: payload.detail,
+  };
+  state.openCompactionsByKey.set(payload.key, message);
+  state.messages.push(message);
+}
+
+function onCompactionEnd(
+  state: ProjectionState,
+  event: ThreadEvent,
+  payload: CompactionLifecycleEvent,
+): void {
+  const existing = state.openCompactionsByKey.get(payload.key);
+  if (existing) {
+    existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
+    existing.createdAt = Math.max(existing.createdAt, event.createdAt);
+    existing.title = "Context compacted";
+    existing.detail = payload.detail ?? existing.detail;
+    state.openCompactionsByKey.delete(payload.key);
+    state.finalizedCompactionKeys.add(payload.key);
+    return;
+  }
+
+  if (state.finalizedCompactionKeys.has(payload.key)) {
+    return;
+  }
+
+  const turnId = getTurnId(event.data);
+  state.messages.push({
+    kind: "operation",
+    id: messageId(event.threadId, "op", `compaction:${payload.key}`),
+    threadId: event.threadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    ...(turnId ? { turnId } : {}),
+    opType: "compaction",
+    title: "Context compacted",
+    detail: payload.detail,
+  });
+  state.finalizedCompactionKeys.add(payload.key);
+}
+
 function finalizePendingMessages(
   state: ProjectionState,
   options: ToUIMessagesOptions | undefined,
@@ -2671,6 +2782,17 @@ export function toUIMessages(
     if (fileEdit) {
       flushToolActivityBeforeNonToolMessage(state);
       upsertFileEdit(state, event, fileEdit);
+      continue;
+    }
+
+    const compactionEvent = parseCompactionLifecycleEvent(event, eventType);
+    if (compactionEvent) {
+      flushToolActivityBeforeNonToolMessage(state);
+      if (compactionEvent.kind === "begin") {
+        onCompactionBegin(state, event, compactionEvent);
+      } else {
+        onCompactionEnd(state, event, compactionEvent);
+      }
       continue;
     }
 

@@ -1379,7 +1379,92 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.detail).toBe("Server-assigned title");
   });
 
-  it("projects compaction events as operations", () => {
+  it("projects in-progress compaction items as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "compact-1",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("compaction");
+    expect(op?.title).toBe("Context compacting...");
+  });
+
+  it("coalesces compaction lifecycle events into a single completed operation", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "compact-1",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "compact-1",
+            type: "contextCompaction",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "thread/compacted",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const ops = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.opType).toBe("compaction");
+    expect(ops[0]?.title).toBe("Context compacted");
+    expect(ops[0]?.sourceSeqStart).toBe(1);
+    expect(ops[0]?.sourceSeqEnd).toBe(2);
+  });
+
+  it("projects legacy compaction events as operations", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
