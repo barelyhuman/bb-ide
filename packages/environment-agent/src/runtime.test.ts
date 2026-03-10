@@ -464,6 +464,153 @@ describe("EnvironmentAgentRuntime", () => {
       });
   });
 
+  it("nudges daemon delivery immediately for terminal provider events", async () => {
+    const deliveredSequences: number[][] = [];
+    const daemon = createServer((request, response) => {
+      if (request.url !== "/threads/thread-1/environment-agent/deliver") {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        body += chunk;
+      });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as {
+          afterSequence?: number;
+          events: Array<{ sequence: number }>;
+        };
+        deliveredSequences.push(parsed.events.map((event) => event.sequence));
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            threadId: "thread-1",
+            acknowledgedSequence:
+              parsed.events[parsed.events.length - 1]?.sequence ?? 0,
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => daemon.listen(0, "127.0.0.1", resolve));
+    cleanup.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          daemon.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    const address = daemon.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to resolve daemon server address");
+    }
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: `http://${address.address}:${address.port}`,
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+
+    runtime.start();
+    await expect.poll(() => deliveredSequences).toEqual([[1]]);
+
+    runtime.appendEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "thread/status/changed",
+      payload: { status: { type: "idle" } },
+    });
+    runtime.appendEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "turn/completed",
+      payload: { turn: { id: "turn-1", status: "completed", error: null } },
+    });
+
+    await expect.poll(() => deliveredSequences).toEqual([[1], [2], [3]]);
+    await expect
+      .poll(() => runtime.getStatusSnapshot())
+      .toMatchObject({
+        connectedToDaemon: true,
+        pendingEventCount: 0,
+        lastAckedSequence: 3,
+        deliveryState: "healthy",
+      });
+  });
+
+  it("drains pending daemon delivery synchronously during shutdown", async () => {
+    const deliveredSequences: number[][] = [];
+    const daemon = createServer((request, response) => {
+      if (request.url !== "/threads/thread-1/environment-agent/deliver") {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => {
+        body += chunk;
+      });
+      request.on("end", () => {
+        const parsed = JSON.parse(body) as {
+          events: Array<{ sequence: number }>;
+        };
+        deliveredSequences.push(parsed.events.map((event) => event.sequence));
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(
+          JSON.stringify({
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            threadId: "thread-1",
+            acknowledgedSequence:
+              parsed.events[parsed.events.length - 1]?.sequence ?? 0,
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => daemon.listen(0, "127.0.0.1", resolve));
+    cleanup.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          daemon.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    const address = daemon.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to resolve daemon server address");
+    }
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: `http://${address.address}:${address.port}`,
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+
+    runtime.start();
+    runtime.appendEvent({
+      type: "workspace.status.changed",
+      threadId: "thread-1",
+    });
+
+    await runtime.drainPendingDaemonDelivery({ timeoutMs: 500 });
+
+    expect(deliveredSequences.length).toBeGreaterThan(0);
+    expect(runtime.getStatusSnapshot()).toMatchObject({
+      connectedToDaemon: true,
+      pendingEventCount: 0,
+      lastAckedSequence: 2,
+      deliveryState: "healthy",
+    });
+  });
+
   it("caps debounced delivery with a max wait during sustained event bursts", async () => {
     const deliveredSequences: number[][] = [];
     const daemon = createServer((request, response) => {

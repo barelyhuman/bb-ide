@@ -2863,6 +2863,11 @@ export class Orchestrator implements ThreadOrchestrator {
       return;
     }
     if (event.sequence !== currentCursor + 1) {
+      console.warn(
+        `[thread ${threadId}] live environment-agent sequence gap: expected ${
+          currentCursor + 1
+        }, received ${event.sequence}`,
+      );
       return;
     }
 

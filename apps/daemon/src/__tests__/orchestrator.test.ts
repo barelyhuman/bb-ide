@@ -634,6 +634,42 @@ describe("Orchestrator", () => {
     });
   });
 
+  describe("live environment-agent ingestion", () => {
+    it("logs live sequence gaps with expected and actual sequence numbers", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "active",
+          environmentAgentCursor: 3,
+        }),
+      );
+
+      await (manager as unknown as {
+        _ingestLiveEnvironmentAgentEvent: (
+          threadId: string,
+          event: EnvironmentAgentEventEnvelope,
+        ) => Promise<void>;
+      })._ingestLiveEnvironmentAgentEvent("thread-1", {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        sequence: 5,
+        emittedAt: Date.now(),
+        threadId: "thread-1",
+        event: {
+          type: "provider.event",
+          threadId: "thread-1",
+          method: "turn/completed",
+          payload: {},
+        },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        "[thread thread-1] live environment-agent sequence gap: expected 4, received 5",
+      );
+    });
+  });
+
   describe("boot status healing", () => {
     function createBootManager(initialThreads: Thread[]) {
       const threadState = new Map(

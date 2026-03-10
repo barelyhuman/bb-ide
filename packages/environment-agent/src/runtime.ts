@@ -85,8 +85,6 @@ export class EnvironmentAgentRuntime {
       threadId: this.resolveThreadId(),
     });
 
-    this.triggerDaemonDelivery();
-
     return this.ensureProviderRunning();
   }
 
@@ -100,7 +98,9 @@ export class EnvironmentAgentRuntime {
     };
     this.events.push(envelope);
     this.emitEvent(envelope);
-    this.triggerDaemonDelivery();
+    this.triggerDaemonDelivery({
+      nudge: shouldNudgeDaemonDeliveryForEvent(event),
+    });
     return envelope;
   }
 
@@ -221,6 +221,52 @@ export class EnvironmentAgentRuntime {
       ...(this.nextRetryAt ? { nextRetryAt: this.nextRetryAt } : {}),
       ...(this.lastDeliveryError ? { lastDeliveryError: this.lastDeliveryError } : {}),
     };
+  }
+
+  async drainPendingDaemonDelivery(opts?: { timeoutMs?: number }): Promise<void> {
+    if (!this.hasDaemonDeliveryConfig()) {
+      this.connectedToDaemon = false;
+      return;
+    }
+
+    const timeoutMs = Math.max(0, opts?.timeoutMs ?? 2_000);
+    const deadline = Date.now() + timeoutMs;
+
+    while (this.sequence > this.lastAckedSequence) {
+      if (this.deliveryFlushTimer) {
+        clearTimeout(this.deliveryFlushTimer);
+        this.deliveryFlushTimer = undefined;
+      }
+      this.deliveryDebounceStartedAt = undefined;
+
+      if (this.deliveryRetryTimer) {
+        clearTimeout(this.deliveryRetryTimer);
+        this.deliveryRetryTimer = undefined;
+        this.nextRetryAt = undefined;
+      }
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs < 0) {
+        break;
+      }
+
+      if (this.deliveryInFlight) {
+        await Promise.race([
+          this.deliveryInFlight.catch(() => undefined),
+          delay(Math.min(remainingMs, 50)),
+        ]);
+        continue;
+      }
+
+      try {
+        await this.flushDaemonDelivery();
+      } catch {
+        if (Date.now() >= deadline) {
+          break;
+        }
+        await delay(Math.min(deadline - Date.now(), 50));
+      }
+    }
   }
 
   triggerDaemonDelivery(opts?: { nudge?: boolean }): void {
@@ -912,4 +958,38 @@ export class EnvironmentAgentRuntime {
     }
     return { code: "provider_rpc_error", message };
   }
+}
+
+function shouldNudgeDaemonDeliveryForEvent(
+  event: EnvironmentAgentEvent,
+): boolean {
+  if (event.type !== "provider.event") {
+    return false;
+  }
+
+  if (event.method === "turn/completed" || event.method === "turn/end") {
+    return true;
+  }
+
+  if (event.method !== "thread/status/changed") {
+    return false;
+  }
+
+  const payload = event.payload;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+
+  const status = (payload as { status?: unknown }).status;
+  if (!status || typeof status !== "object" || Array.isArray(status)) {
+    return false;
+  }
+
+  return (status as { type?: unknown }).type === "idle";
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, ms));
+  });
 }
