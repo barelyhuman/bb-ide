@@ -165,9 +165,11 @@ const DIFF_VIEW_STYLE = {
 export function FileEditRow({
   message,
   initialExpanded = false,
+  preferOngoingLabels = false,
 }: {
   message: UIFileEditMessage;
   initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const preferredTheme = usePreferredTheme();
@@ -203,15 +205,15 @@ export function FileEditRow({
   const actionLabel = useMemo(() => {
     if (message.status === "error") return "Failed";
     if (message.status === "interrupted") return "Declined";
-    if (message.status === "pending") return "Applying";
+    if (message.status === "pending" || preferOngoingLabels) return "Applying";
     if (message.changes.length === 0) return "Edited";
     const actions = message.changes.map((change) => fileChangeAction(change));
     const first = actions[0];
     const hasMixed = actions.some((action) => action !== first);
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
-  }, [message.changes, message.status]);
-  const isApplying = message.status === "pending";
+  }, [message.changes, message.status, preferOngoingLabels]);
+  const isApplying = message.status === "pending" || preferOngoingLabels;
   const tone = message.status === "error" ? "destructive" : "default";
   const summaryLabel =
     isExpanded && uniqueFileCount > 1

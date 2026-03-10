@@ -177,6 +177,7 @@ function ToolGroupEntry({
   isLoadingMessages,
   onLoadMessages,
   initialExpanded,
+  preferOngoingLabels,
 }: {
   projectId?: string;
   entry: ThreadDetailToolGroupRow;
@@ -184,6 +185,7 @@ function ToolGroupEntry({
   isLoadingMessages: boolean;
   onLoadMessages: () => void;
   initialExpanded: boolean;
+  preferOngoingLabels: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const count = entry.summaryCount;
@@ -237,14 +239,18 @@ function ToolGroupEntry({
                 <span className="animate-shine">Loading details...</span>
               </div>
             ) : null}
-            {messages.map((message, messageIndex) => (
-              <ConversationEntry
-                key={message.id}
-                message={message}
-                projectId={projectId}
-                initialExpanded={isExpanded && messageIndex === messages.length - 1}
-              />
-            ))}
+            {messages.map((message, messageIndex) => {
+              const isLatestMessage = messageIndex === messages.length - 1;
+              return (
+                <ConversationEntry
+                  key={message.id}
+                  message={message}
+                  projectId={projectId}
+                  initialExpanded={isExpanded && isLatestMessage}
+                  preferOngoingLabels={preferOngoingLabels && isLatestMessage}
+                />
+              );
+            })}
           </div>
         </ExpandablePanel>
       </div>
@@ -1585,12 +1591,14 @@ export function ThreadDetailView() {
                     isLoadingMessages={loadingToolGroupIds.has(entry.id)}
                     onLoadMessages={() => handleLoadToolGroupMessages(entry)}
                     initialExpanded={isLastRow}
+                    preferOngoingLabels={thread.status === "active" && isLastRow}
                   />
                 ) : (
                   <ConversationEntry
                     message={entry.message}
                     projectId={projectId}
                     initialExpanded={isLastRow}
+                    preferOngoingLabels={thread.status === "active" && isLastRow}
                   />
                 )}
               </div>

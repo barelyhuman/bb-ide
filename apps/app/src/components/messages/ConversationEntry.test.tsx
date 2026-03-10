@@ -369,6 +369,35 @@ describe("ConversationEntry", () => {
     expect(html).toContain("2 lists");
   });
 
+  it("renders pending exploring rows with a trailing ellipsis", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-exploring",
+      status: "pending",
+      calls: [
+        {
+          callId: "call-1",
+          command: "cat README.md",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          status: "pending",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain(">Exploring<");
+    expect(html).toContain(">...<");
+    expect(html).toContain("1 file");
+    expect(html).toContain("animate-shine");
+  });
+
   it("caps expanded exploring details in a scroll container", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -430,6 +459,56 @@ describe("ConversationEntry", () => {
     expect(pendingHtml).toContain("animate-shine");
     expect(completedHtml).toContain(">Searched<");
     expect(completedHtml).toContain("react suspense");
+  });
+
+  it("prefers ongoing labels for the latest completed exploring row", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-exploring",
+      status: "completed",
+      calls: [
+        {
+          callId: "call-1",
+          command: "cat README.md",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "cat README.md",
+              name: "README.md",
+              path: "/repo/README.md",
+            },
+          ],
+          status: "completed",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} preferOngoingLabels />,
+    );
+    expect(html).toContain("Exploring");
+    expect(html).toContain(">...<");
+    expect(html).toContain("1 file");
+    expect(html).toContain("animate-shine");
+    expect(html).not.toContain("Explored");
+  });
+
+  it("prefers ongoing labels for the latest completed web search row", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "web-search",
+      callId: "web-1",
+      query: "react suspense",
+      status: "completed",
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} preferOngoingLabels />,
+    );
+    expect(html).toContain(">Searching<");
+    expect(html).toContain("react suspense");
+    expect(html).toContain("animate-shine");
+    expect(html).not.toContain(">Searched<");
   });
 
   it("uses exploring count summary for latest exploring presentation", () => {

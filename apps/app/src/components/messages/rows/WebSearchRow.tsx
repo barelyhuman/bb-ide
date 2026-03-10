@@ -4,10 +4,12 @@ import { EventTitle } from "./shared";
 
 export function WebSearchRow({
   message,
+  preferOngoingLabels = false,
 }: {
   message: UIWebSearchMessage;
+  preferOngoingLabels?: boolean;
 }) {
-  const isSearching = message.status === "pending";
+  const isSearching = message.status === "pending" || preferOngoingLabels;
   const summary = (
     <EventTitle
       prefix={isSearching ? "Searching" : "Searched"}

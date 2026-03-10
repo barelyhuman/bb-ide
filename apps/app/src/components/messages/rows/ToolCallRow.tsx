@@ -19,9 +19,11 @@ function getToolCallTone(message: UIToolCallMessage): "default" | "destructive" 
 export function ToolCallRow({
   message,
   initialExpanded = false,
+  preferOngoingLabels = false,
 }: {
   message: UIToolCallMessage;
   initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const command = message.command ?? message.toolName;
@@ -31,11 +33,11 @@ export function ToolCallRow({
       ? "Failed"
       : message.status === "interrupted"
         ? "Declined"
-        : message.status === "pending"
+        : message.status === "pending" || preferOngoingLabels
           ? "Running"
           : "Ran";
   const duration = formatSummaryDuration(message.durationMs);
-  const isRunning = message.status === "pending";
+  const isRunning = message.status === "pending" || preferOngoingLabels;
   const tone = getToolCallTone(message);
   const summaryContent = (
     <EventTitle

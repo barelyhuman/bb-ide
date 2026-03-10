@@ -144,9 +144,11 @@ function formatExploringCountsLabel(counts: {
 export function ToolExploringRow({
   message,
   initialExpanded = false,
+  preferOngoingLabels = false,
 }: {
   message: UIToolExploringMessage;
   initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const detailLines = useMemo(
@@ -160,13 +162,19 @@ export function ToolExploringRow({
     });
   const counts = useMemo(() => summarizeExploringCounts(message.calls), [message.calls]);
   const hasDetails = detailLines.length > 0;
-  const isExploring = message.status === "pending";
+  const isExploring = message.status === "pending" || preferOngoingLabels;
   const summaryLabel = formatExploringCountsLabel(counts);
-  const summaryContent = (
+  const summaryContent = isExploring ? (
     <EventTitle
-      prefix={isExploring ? "Exploring" : "Explored"}
+      prefix="Exploring"
+      emphasis={summaryLabel || undefined}
+      suffix="..."
+      shimmerPrefix
+    />
+  ) : (
+    <EventTitle
+      prefix="Explored"
       emphasis={summaryLabel || "workspace"}
-      shimmerPrefix={isExploring}
     />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded);

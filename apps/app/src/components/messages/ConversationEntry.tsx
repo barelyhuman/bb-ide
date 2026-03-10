@@ -15,12 +15,14 @@ interface ConversationEntryProps {
   message: UIMessage;
   projectId?: string;
   initialExpanded?: boolean;
+  preferOngoingLabels?: boolean;
 }
 
 function ConversationEntryComponent({
   message,
   projectId,
   initialExpanded = false,
+  preferOngoingLabels = false,
 }: ConversationEntryProps) {
   if (message.kind === "user") {
     return <UserMessageRow message={message} projectId={projectId} />;
@@ -39,6 +41,7 @@ function ConversationEntryComponent({
       <ToolExploringRow
         message={message}
         initialExpanded={initialExpanded}
+        preferOngoingLabels={preferOngoingLabels}
       />
     );
   }
@@ -48,12 +51,15 @@ function ConversationEntryComponent({
       <ToolCallRow
         message={message}
         initialExpanded={initialExpanded}
+        preferOngoingLabels={preferOngoingLabels}
       />
     );
   }
 
   if (message.kind === "web-search") {
-    return <WebSearchRow message={message} />;
+    return (
+      <WebSearchRow message={message} preferOngoingLabels={preferOngoingLabels} />
+    );
   }
 
   if (message.kind === "file-edit") {
@@ -61,6 +67,7 @@ function ConversationEntryComponent({
       <FileEditRow
         message={message}
         initialExpanded={initialExpanded}
+        preferOngoingLabels={preferOngoingLabels}
       />
     );
   }
