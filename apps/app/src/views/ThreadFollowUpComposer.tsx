@@ -9,6 +9,9 @@ import {
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import {
+  ConversationStatusIndicator,
+} from "@/components/messages/ConversationStatusIndicator";
+import {
   PromptOptionPicker,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
@@ -22,7 +25,6 @@ import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
 } from "./threadQueuedMessages";
-import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 
 function QueuedFollowUpList({
   queuedMessages,

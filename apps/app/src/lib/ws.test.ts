@@ -1,5 +1,31 @@
-import { describe, expect, it } from "vitest"
-import { parseSubKey } from "./ws"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { parseSubKey, WebSocketManager } from "./ws"
+
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = []
+
+  readonly url: string
+  readonly sent: string[] = []
+  readyState = 0
+  onopen: (() => void) | null = null
+  onmessage: ((event: { data: string }) => void) | null = null
+  onclose: (() => void) | null = null
+  onerror: (() => void) | null = null
+
+  constructor(url: string) {
+    this.url = url
+    FakeWebSocket.instances.push(this)
+  }
+
+  send(message: string) {
+    this.sent.push(message)
+  }
+
+  close() {
+    this.readyState = 3
+    this.onclose?.()
+  }
+}
 
 describe("parseSubKey", () => {
   it("parses entity-only subscription keys", () => {
@@ -14,5 +40,64 @@ describe("parseSubKey", () => {
   it("rejects unknown entities", () => {
     expect(parseSubKey("project:p-1")).toBeNull()
     expect(parseSubKey("unknown")).toBeNull()
+  })
+})
+
+describe("WebSocketManager", () => {
+  const originalWindow = globalThis.window
+  const originalWebSocket = globalThis.WebSocket
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    FakeWebSocket.instances.length = 0
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        location: {
+          protocol: "http:",
+          host: "localhost:5173",
+        },
+      },
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "WebSocket", {
+      value: FakeWebSocket,
+      configurable: true,
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    Object.defineProperty(globalThis, "window", {
+      value: originalWindow,
+      configurable: true,
+    })
+    Object.defineProperty(globalThis, "WebSocket", {
+      value: originalWebSocket,
+      configurable: true,
+    })
+  })
+
+  it("does not schedule reconnects after an intentional disconnect", () => {
+    const manager = new WebSocketManager()
+
+    manager.connect()
+    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    manager.disconnect()
+    vi.advanceTimersByTime(3000)
+
+    expect(FakeWebSocket.instances).toHaveLength(1)
+  })
+
+  it("reconnects after an unexpected close", () => {
+    const manager = new WebSocketManager()
+
+    manager.connect()
+    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    FakeWebSocket.instances[0]?.onclose?.()
+    vi.advanceTimersByTime(3000)
+
+    expect(FakeWebSocket.instances).toHaveLength(2)
   })
 })

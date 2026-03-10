@@ -13,7 +13,7 @@ export type WebSocketConnectionState =
   | "connected"
   | "reconnecting";
 
-class WebSocketManager {
+export class WebSocketManager {
   private socket: WebSocket | null = null;
   private subscriptions = new Set<string>();
   private callbacks = new Set<ChangeCallback>();
@@ -23,9 +23,11 @@ class WebSocketManager {
   private connected = false;
   private hasConnected = false;
   private connectionState: WebSocketConnectionState = "connecting";
+  private shouldReconnect = true;
 
   connect(): void {
     if (this.socket) return;
+    this.shouldReconnect = true;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${window.location.host}/ws`;
@@ -70,6 +72,10 @@ class WebSocketManager {
     this.socket.onclose = () => {
       this.connected = false;
       this.socket = null;
+      if (!this.shouldReconnect) {
+        this.setConnectionState("connecting");
+        return;
+      }
       this.setConnectionState(this.hasConnected ? "reconnecting" : "connecting");
       this.scheduleReconnect();
     };
@@ -80,6 +86,7 @@ class WebSocketManager {
   }
 
   disconnect(): void {
+    this.shouldReconnect = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

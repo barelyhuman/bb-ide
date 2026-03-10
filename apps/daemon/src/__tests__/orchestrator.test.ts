@@ -4435,6 +4435,30 @@ describe("Orchestrator", () => {
       await expect(manager.listModels()).resolves.toEqual(models);
       expect(providerListModels).toHaveBeenCalledTimes(1);
     });
+
+    it("caches provider model listings briefly", async () => {
+      const models = [
+        {
+          id: "model-a",
+          model: "model-a",
+          displayName: "Model A",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ];
+
+      const providerListModels = vi.fn().mockResolvedValue(models);
+      asOrchestratorHarness(manager).provider.listModels = providerListModels;
+
+      await expect(manager.listModels()).resolves.toEqual(models);
+      await expect(manager.listModels()).resolves.toEqual(models);
+
+      expect(providerListModels).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("getOutput()", () => {

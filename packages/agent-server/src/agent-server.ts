@@ -29,6 +29,8 @@ import {
 import type { ProviderAdapter } from "./provider-adapter.js";
 import type { ProviderRuntimeNotification } from "./provider-runtime.js";
 
+const MODEL_LIST_CACHE_TTL_MS = 60_000;
+
 export type AgentServerSessionErrorCode =
   | "inactive_session"
   | "no_active_turn"
@@ -90,6 +92,13 @@ export class AgentServer {
   private readonly suppressedAuthStderrDepth = new Map<string, number>();
   private rpcIdCounter = 0;
   private readonly providerCatalog: SystemProviderInfo[];
+  private cachedModels:
+    | {
+        expiresAt: number;
+        value: AvailableModel[];
+      }
+    | undefined;
+  private pendingModelsRequest: Promise<AvailableModel[]> | null = null;
 
   constructor(private readonly opts: AgentServerOptions) {
     this.providerCatalog =
@@ -122,7 +131,27 @@ export class AgentServer {
     if (!this.opts.provider.capabilities.supportsModelList) {
       return [];
     }
-    return this.opts.provider.listModels();
+    const now = Date.now();
+    if (this.cachedModels && this.cachedModels.expiresAt > now) {
+      return this.cachedModels.value;
+    }
+    if (this.pendingModelsRequest) {
+      return this.pendingModelsRequest;
+    }
+
+    this.pendingModelsRequest = this.opts.provider.listModels()
+      .then((models) => {
+        this.cachedModels = {
+          value: models,
+          expiresAt: Date.now() + MODEL_LIST_CACHE_TTL_MS,
+        };
+        return models;
+      })
+      .finally(() => {
+        this.pendingModelsRequest = null;
+      });
+
+    return this.pendingModelsRequest;
   }
 
   normalizePromptInput(input: PromptInput[]): PromptInput[] {
