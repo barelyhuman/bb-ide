@@ -32,6 +32,13 @@ export interface ReceiveEnvironmentAgentSessionCommandResult {
   receipt: EnvironmentAgentCommandReceiptRecord;
 }
 
+export interface EnvironmentAgentSessionDrainSnapshot {
+  hasBoundSession: boolean;
+  pendingEventCount: number;
+  pendingCommandAckCount: number;
+  pendingCommandResultCount: number;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -84,6 +91,16 @@ export class EnvironmentAgentSessionRuntime {
 
   loadThreadState(threadId: string): EnvironmentAgentSessionStateRecord | undefined {
     return this.options.store.loadSessionState(threadId);
+  }
+
+  getDrainSnapshot(threadId: string): EnvironmentAgentSessionDrainSnapshot {
+    const state = this.options.store.loadSessionState(threadId);
+    return {
+      hasBoundSession: Boolean(state?.sessionId),
+      pendingEventCount: this.options.store.listUnackedOutbox({ threadId }).length,
+      pendingCommandAckCount: this.options.store.listPendingCommandAcks(threadId).length,
+      pendingCommandResultCount: this.options.store.listPendingCommandResults(threadId).length,
+    };
   }
 
   initializeThread(args: {

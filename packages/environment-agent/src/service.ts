@@ -38,6 +38,8 @@ export interface EnvironmentAgentServiceOptions {
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
+    enableSelfSuspend: boolean;
+    selfSuspendDebounceMs: number;
   };
 }
 
@@ -90,6 +92,8 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     session: {
       pollIntervalMs: 250,
       commandBatchLimit: 50,
+      enableSelfSuspend: true,
+      selfSuspendDebounceMs: 1_000,
     },
   };
 }
@@ -100,6 +104,7 @@ export async function startEnvironmentAgentService(
   runtime: EnvironmentAgentRuntime;
   server: EnvironmentAgentHttpServer;
   sessionSupervisor?: EnvironmentAgentSessionSupervisor;
+  close: () => Promise<void>;
 }> {
   const logger = createEnvironmentAgentFileLogger(options.logging.filePath);
   logger.log("info", "environment-agent starting", {
@@ -129,33 +134,6 @@ export async function startEnvironmentAgentService(
   });
   runtime.start();
 
-  let sessionSupervisor: EnvironmentAgentSessionSupervisor | undefined;
-  if (options.runtime.daemonConnection?.daemonUrl && options.runtime.threadId) {
-    const sessionStore = new InMemoryEnvironmentAgentSessionStore();
-    const sessionRuntime = new EnvironmentAgentSessionRuntime({ store: sessionStore });
-    const sessionClient = createEnvironmentAgentSessionHttpClientFromConnection(
-      options.runtime.daemonConnection,
-    );
-    const sessionSync = new EnvironmentAgentSessionSync({
-      runtime: sessionRuntime,
-      client: sessionClient,
-    });
-    sessionSupervisor = new EnvironmentAgentSessionSupervisor({
-      threadId: options.runtime.threadId,
-      runtime,
-      sessionRuntime,
-      sessionSync,
-      pollIntervalMs: options.session.pollIntervalMs,
-      commandBatchLimit: options.session.commandBatchLimit,
-      onError: (error) => {
-        logger.log("warn", "environment-agent session sync error", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      },
-    });
-    await sessionSupervisor.start();
-  }
-
   const server = await createEnvironmentAgentHttpServer({
     runtime,
     host: options.server.host,
@@ -167,5 +145,60 @@ export async function startEnvironmentAgentService(
     logFilePath: options.logging.filePath,
   });
 
-  return { runtime, server, ...(sessionSupervisor ? { sessionSupervisor } : {}) };
+  let sessionSupervisor: EnvironmentAgentSessionSupervisor | undefined;
+  let closePromise: Promise<void> | null = null;
+  const close = async (): Promise<void> => {
+    if (closePromise) {
+      return closePromise;
+    }
+    closePromise = (async () => {
+      await sessionSupervisor?.close();
+      await runtime.shutdown();
+      await server.close();
+    })();
+    return closePromise;
+  };
+  try {
+    if (options.runtime.daemonConnection?.daemonUrl && options.runtime.threadId) {
+      const sessionStore = new InMemoryEnvironmentAgentSessionStore();
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({ store: sessionStore });
+      const sessionClient = createEnvironmentAgentSessionHttpClientFromConnection(
+        options.runtime.daemonConnection,
+      );
+      const sessionSync = new EnvironmentAgentSessionSync({
+        runtime: sessionRuntime,
+        client: sessionClient,
+      });
+      sessionSupervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: options.runtime.threadId,
+        runtime,
+        sessionRuntime,
+        sessionSync,
+        pollIntervalMs: options.session.pollIntervalMs,
+        commandBatchLimit: options.session.commandBatchLimit,
+        onError: (error) => {
+          logger.log("warn", "environment-agent session sync error", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+        ...(options.session.enableSelfSuspend
+          ? {
+              onQuiescent: close,
+              selfSuspendDebounceMs: options.session.selfSuspendDebounceMs,
+            }
+          : {}),
+      });
+      await sessionSupervisor.start();
+    }
+  } catch (error) {
+    await close();
+    throw error;
+  }
+
+  return {
+    runtime,
+    server,
+    close,
+    ...(sessionSupervisor ? { sessionSupervisor } : {}),
+  };
 }

@@ -40,6 +40,10 @@ export class EnvironmentAgentCommandDispatcher {
     throw new Error(`Timed out waiting for active environment-agent session for thread ${args.threadId}`);
   }
 
+  hasActiveSession(threadId: string): boolean {
+    return this.sessions.getActiveByThreadId(threadId) !== undefined;
+  }
+
   async enqueueForActiveSession(args: {
     threadId: string;
     commandId: string;
@@ -116,6 +120,14 @@ export class EnvironmentAgentCommandDispatcher {
 
   getPendingCommandCount(threadId: string): number {
     return this.commands.listPendingByThreadId(threadId).length;
+  }
+
+  rebindPendingCommandsForThread(args: {
+    threadId: string;
+    sessionId: string;
+    now?: number;
+  }): number {
+    return this.commands.rebindPendingForThread(args);
   }
 
   recordDeliveryAck(args: {

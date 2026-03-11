@@ -38,6 +38,15 @@ export interface EnvironmentAgentRuntimeOptions {
   onStderrLine?: (line: string) => void;
 }
 
+export type EnvironmentAgentRuntimeTurnState = "unknown" | "active" | "idle";
+
+export interface EnvironmentAgentRuntimeQuiescenceSnapshot {
+  hasObservedWork: boolean;
+  commandExecutionCount: number;
+  pendingProviderRequestCount: number;
+  turnState: EnvironmentAgentRuntimeTurnState;
+}
+
 export class EnvironmentAgentRuntime {
   private readonly events: EnvironmentAgentEventEnvelope[] = [];
   private sequence = 0;
@@ -59,6 +68,9 @@ export class EnvironmentAgentRuntime {
   private providerStderrBuffer = "";
   private shuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
+  private commandExecutionCount = 0;
+  private hasObservedWork = false;
+  private turnState: EnvironmentAgentRuntimeTurnState = "unknown";
 
   constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {}
 
@@ -85,6 +97,7 @@ export class EnvironmentAgentRuntime {
   }
 
   appendEvent(event: EnvironmentAgentEvent): EnvironmentAgentEventEnvelope {
+    this.applyEventToQuiescenceState(event);
     const envelope: EnvironmentAgentEventEnvelope = {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       sequence: ++this.sequence,
@@ -184,9 +197,19 @@ export class EnvironmentAgentRuntime {
     };
   }
 
+  getQuiescenceSnapshot(): EnvironmentAgentRuntimeQuiescenceSnapshot {
+    return {
+      hasObservedWork: this.hasObservedWork,
+      commandExecutionCount: this.commandExecutionCount,
+      pendingProviderRequestCount: this.pendingProviderRequests.size,
+      turnState: this.turnState,
+    };
+  }
+
   async executeCommand(
     envelope: EnvironmentAgentCommandEnvelope,
   ): Promise<EnvironmentAgentCommandAck> {
+    this.commandExecutionCount += 1;
     try {
       const result =
         envelope.command.type === "provider.ensure"
@@ -194,6 +217,7 @@ export class EnvironmentAgentRuntime {
               this.toProviderEnsureSpec(envelope.command),
             )
           : await this.executeRpcCommand(envelope.command);
+      this.trackAcceptedCommand(envelope.command);
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
         idempotencyKey: envelope.meta.idempotencyKey,
@@ -202,6 +226,7 @@ export class EnvironmentAgentRuntime {
       });
     } catch (error) {
       const normalizedError = this.normalizeCommandError(error);
+      this.trackRejectedCommand();
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
         idempotencyKey: envelope.meta.idempotencyKey,
@@ -209,6 +234,8 @@ export class EnvironmentAgentRuntime {
         errorCode: normalizedError.code,
         message: normalizedError.message,
       });
+    } finally {
+      this.commandExecutionCount = Math.max(0, this.commandExecutionCount - 1);
     }
   }
 
@@ -234,6 +261,74 @@ export class EnvironmentAgentRuntime {
   private emitEvent(event: EnvironmentAgentEventEnvelope): void {
     for (const subscriber of this.eventSubscribers) {
       subscriber(event);
+    }
+  }
+
+  private trackAcceptedCommand(command: EnvironmentAgentCommand): void {
+    this.hasObservedWork = true;
+    switch (command.type) {
+      case "thread.start":
+      case "thread.resume":
+      case "turn.start":
+      case "turn.steer":
+        this.turnState = "active";
+        return;
+      case "thread.stop":
+        this.turnState = "idle";
+        return;
+      case "provider.ensure":
+      case "thread.rename":
+      case "workspace.status":
+      case "workspace.diff":
+        return;
+      default:
+        return command satisfies never;
+    }
+  }
+
+  private trackRejectedCommand(): void {
+    this.hasObservedWork = true;
+  }
+
+  private applyEventToQuiescenceState(event: EnvironmentAgentEvent): void {
+    switch (event.type) {
+      case "environment.ready":
+        return;
+      case "environment.degraded":
+        this.hasObservedWork = true;
+        this.turnState = "idle";
+        return;
+      case "thread.started":
+        this.hasObservedWork = true;
+        return;
+      case "thread.stopped":
+      case "turn.completed":
+        this.hasObservedWork = true;
+        this.turnState = "idle";
+        return;
+      case "turn.started":
+        this.hasObservedWork = true;
+        this.turnState = "active";
+        return;
+      case "provider.event": {
+        this.hasObservedWork = true;
+        const normalizedMethod = normalizeRuntimeEventMethod(event.method);
+        if (normalizedMethod === "turn/start" || normalizedMethod === "turn/started") {
+          this.turnState = "active";
+          return;
+        }
+        if (normalizedMethod === "turn/completed" || normalizedMethod === "turn/end") {
+          this.turnState = "idle";
+        }
+        return;
+      }
+      case "provider.stderr":
+      case "provider.rpc_error":
+      case "workspace.status.changed":
+        this.hasObservedWork = true;
+        return;
+      default:
+        return event satisfies never;
     }
   }
 
@@ -707,4 +802,8 @@ export class EnvironmentAgentRuntime {
     }
     return { code: "provider_rpc_error", message };
   }
+}
+
+function normalizeRuntimeEventMethod(method: string): string {
+  return method.toLowerCase().replaceAll(".", "/");
 }

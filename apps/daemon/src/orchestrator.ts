@@ -179,7 +179,6 @@ const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
 const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
-const DEFAULT_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS = 5 * 60 * 1000;
 const ARCHIVED_NOISE_EVENT_KEEP_RECENT = 120;
 const ACTIVE_NOISE_EVENT_KEEP_RECENT = 1_000;
 const ACTIVE_NOISE_PRUNE_MIN_SEQ_DELTA = 250;
@@ -444,11 +443,6 @@ export class Orchestrator implements ThreadOrchestrator {
   private activeTurnIdByThreadId = new Map<string, string>();
   /** Provider thread ids attached in the current daemon process. */
   private providerThreadIdByThreadId = new Map<string, string>();
-  /** Pending idle-suspend timers keyed by thread id. */
-  private idleEnvironmentSuspendTimersByThreadId = new Map<
-    string,
-    ReturnType<typeof setTimeout>
-  >();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
   /** Last event sequence where historical noise pruning ran for an active thread. */
@@ -599,8 +593,7 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Startup only reconstructs minimal daemon state:
    * - finalize archived environments that still claim persisted resources
-   * - re-arm idle environment suspension for persisted idle threads
-   * - nudge environment-agent delivery for last-known-active threads with persisted environments
+   * - leave non-archived environments to reconnect or restart lazily on demand
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
     const archivedThreadIds =
@@ -610,20 +603,6 @@ export class Orchestrator implements ThreadOrchestrator {
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
-
-    const idleThreadIdsWithPersistedEnvironments =
-      typeof this.threadRepo.listNonArchivedIdleIdsWithEnvironmentRecord === "function"
-        ? this.threadRepo.listNonArchivedIdleIdsWithEnvironmentRecord()
-        : [];
-    for (const threadId of idleThreadIdsWithPersistedEnvironments) {
-      this._resumeIdleEnvironmentSuspendOnBoot(threadId);
-    }
-
-    const activeThreadIdsWithPersistedEnvironments =
-      typeof this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord === "function"
-        ? this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord()
-        : [];
-    void activeThreadIdsWithPersistedEnvironments;
   }
 
   async reconcileManagedArtifacts(): Promise<void> {
@@ -1371,7 +1350,6 @@ export class Orchestrator implements ThreadOrchestrator {
     const shouldAppendInterruptedEvent =
       thread?.status === "active" || thread?.status === "provisioning";
 
-    this._cancelIdleEnvironmentSuspend(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -1395,7 +1373,6 @@ export class Orchestrator implements ThreadOrchestrator {
    * Archive a thread and destroy any persisted environment state.
    */
   private _finalizeManagedThreadCleanup(threadId: string, projectId: string): void {
-    this._cancelIdleEnvironmentSuspend(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
     this.queueDispatchInFlight.delete(threadId);
@@ -1416,7 +1393,6 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _forgetDeletedThreadState(threadId: string): void {
-    this._cancelIdleEnvironmentSuspend(threadId);
     this._discardQueuedProviderThreadChanged(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
@@ -2563,10 +2539,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
     this.projectOperationTransitionsInFlight.clear();
-    for (const timer of this.idleEnvironmentSuspendTimersByThreadId.values()) {
-      clearTimeout(timer);
-    }
-    this.idleEnvironmentSuspendTimersByThreadId.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
         clearTimeout(queued.timer);
@@ -2846,7 +2818,6 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _cleanupThreadRuntime(threadId: string): void {
-    this._cancelIdleEnvironmentSuspend(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -2943,12 +2914,15 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const runtime = this.environmentService.getEnvironmentRuntime(threadId);
     if (runtime?.agentConnectionTarget) {
-      return {
-        thread,
-        projectRootPath: "",
-        target: runtime.agentConnectionTarget,
-        resetReplayCursor: false,
-      };
+      if (this.environmentAgentCommandDispatcher?.hasActiveSession(threadId)) {
+        return {
+          thread,
+          projectRootPath: "",
+          target: runtime.agentConnectionTarget,
+          resetReplayCursor: false,
+        };
+      }
+      this.environmentService.suspendEnvironmentRuntime(threadId);
     }
 
     const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
@@ -4632,10 +4606,6 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     if (thread.archivedAt !== undefined && nextStatus === "active") return false;
 
-    if (nextStatus !== "idle") {
-      this._cancelIdleEnvironmentSuspend(threadId);
-    }
-
     if (thread.status === nextStatus) return false;
     if (!opts?.force && !canTransitionThreadStatus(thread.status, nextStatus)) {
       return false;
@@ -4659,81 +4629,9 @@ export class Orchestrator implements ThreadOrchestrator {
       if (updatedThread && updatedThread.archivedAt === undefined) {
         this._scheduleQueuedFollowUpDispatch(threadId);
         this._scheduleQueuedOperationDispatch(threadId);
-        this._scheduleIdleEnvironmentSuspend(threadId);
       }
     }
     return true;
-  }
-
-  private _resolveIdleEnvironmentSuspendTimeoutMs(): number {
-    const raw = this.runtimeEnv.BEANBAG_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS?.trim();
-    if (!raw) return DEFAULT_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      return DEFAULT_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS;
-    }
-    return parsed;
-  }
-
-  private _cancelIdleEnvironmentSuspend(threadId: string): void {
-    const timer = this.idleEnvironmentSuspendTimersByThreadId.get(threadId);
-    if (!timer) return;
-    clearTimeout(timer);
-    this.idleEnvironmentSuspendTimersByThreadId.delete(threadId);
-  }
-
-  private _scheduleIdleEnvironmentSuspend(threadId: string): void {
-    this._cancelIdleEnvironmentSuspend(threadId);
-    this._scheduleIdleEnvironmentSuspendAfter(
-      threadId,
-      this._resolveIdleEnvironmentSuspendTimeoutMs(),
-    );
-  }
-
-  private _scheduleIdleEnvironmentSuspendAfter(threadId: string, timeoutMs: number): void {
-    if (timeoutMs === 0) return;
-    const timer = setTimeout(() => {
-      this.idleEnvironmentSuspendTimersByThreadId.delete(threadId);
-      this._autoSuspendIdleThreadEnvironment(threadId);
-    }, timeoutMs);
-    timer.unref?.();
-    this.idleEnvironmentSuspendTimersByThreadId.set(threadId, timer);
-  }
-
-  private _resumeIdleEnvironmentSuspendOnBoot(threadId: string): void {
-    const timeoutMs = this._resolveIdleEnvironmentSuspendTimeoutMs();
-    if (timeoutMs === 0) {
-      return;
-    }
-
-    const thread = this.threadRepo.getById(threadId);
-    if (
-      !thread ||
-      thread.archivedAt !== undefined ||
-      thread.status !== "idle" ||
-      !thread.environmentRecord
-    ) {
-      return;
-    }
-
-    const elapsedMs = Math.max(0, Date.now() - thread.updatedAt);
-    const remainingMs = Math.max(0, timeoutMs - elapsedMs);
-    if (remainingMs === 0) {
-      this._autoSuspendIdleThreadEnvironment(threadId);
-      return;
-    }
-
-    this._scheduleIdleEnvironmentSuspendAfter(threadId, remainingMs);
-  }
-
-  private _autoSuspendIdleThreadEnvironment(threadId: string): void {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) return;
-    if (thread.archivedAt !== undefined) return;
-    if (thread.status !== "idle") return;
-    if (!thread.environmentRecord) return;
-    this.providerThreadIdByThreadId.delete(threadId);
-    this.environmentService.suspendEnvironmentRuntime(threadId);
   }
 
   private _broadcastThreadChanged(

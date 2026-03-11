@@ -58,6 +58,8 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 250,
         commandBatchLimit: 50,
+        enableSelfSuspend: true,
+        selfSuspendDebounceMs: 1_000,
       },
     });
   });
@@ -171,6 +173,8 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 10_000,
         commandBatchLimit: 10,
+        enableSelfSuspend: false,
+        selfSuspendDebounceMs: 1_000,
       },
     });
 
@@ -180,8 +184,6 @@ describe("environment-agent service config", () => {
       expect.objectContaining({ method: "POST" }),
     ]);
 
-    await started.sessionSupervisor?.close();
-    await started.runtime.shutdown();
-    await started.server.close();
+    await started.close();
   });
 });

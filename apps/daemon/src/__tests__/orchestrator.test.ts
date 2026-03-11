@@ -322,7 +322,6 @@ interface OrchestratorTestHarness {
     code: number | null,
     signal: string | null,
   ) => void;
-  _autoSuspendIdleThreadEnvironment: (threadId: string) => void;
 }
 
 function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
@@ -654,14 +653,6 @@ describe("Orchestrator", () => {
             thread.environmentRecord,
         )
         .map((thread) => thread.id);
-      const nonArchivedIdleIdsWithEnvironmentRecord = initialThreads
-        .filter(
-          (thread) =>
-            thread.archivedAt === undefined &&
-            thread.status === "idle" &&
-            thread.environmentRecord,
-        )
-        .map((thread) => thread.id);
       const bootThreadRepo = {
         create: vi.fn(),
         getById: vi.fn((threadId: string) => threadState.get(threadId)),
@@ -669,9 +660,6 @@ describe("Orchestrator", () => {
         listArchivedIdsWithEnvironmentRecord: vi.fn(() => archivedIdsWithEnvironmentRecord),
         listNonArchivedActiveIdsWithEnvironmentRecord: vi.fn(
           () => nonArchivedActiveIdsWithEnvironmentRecord,
-        ),
-        listNonArchivedIdleIdsWithEnvironmentRecord: vi.fn(
-          () => nonArchivedIdleIdsWithEnvironmentRecord,
         ),
         update: vi.fn((threadId: string, updates: Partial<Thread>) => {
           const existing = threadState.get(threadId);
@@ -762,8 +750,6 @@ describe("Orchestrator", () => {
       await bootManager.reconcileActiveThreadsOnBoot();
 
       expect(bootThreadRepo.listArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
-      expect(bootThreadRepo.listNonArchivedActiveIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
-      expect(bootThreadRepo.listNonArchivedIdleIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
         "boot-archived-with-environment",
@@ -826,8 +812,6 @@ describe("Orchestrator", () => {
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
-      expect(bootThreadRepo.listNonArchivedActiveIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
-      expect(bootThreadRepo.listNonArchivedIdleIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
       expect(createHttpEnvironmentAgentClient).not.toHaveBeenCalled();
     });
 
@@ -844,39 +828,6 @@ describe("Orchestrator", () => {
 
       expect(bootProjectRepo.list).not.toHaveBeenCalled();
       expect(bootThreadRepo.list).not.toHaveBeenCalled();
-    });
-
-    it("immediately suspends overdue idle persisted environments on boot", async () => {
-      const now = new Date("2026-03-11T18:37:42.000Z");
-      vi.useFakeTimers();
-      vi.setSystemTime(now);
-      try {
-        const { bootManager, bootThreadRepo } = createBootManager([
-          makeThread({
-            id: "boot-idle-overdue",
-            status: "idle",
-            updatedAt: now.getTime() - 10 * 60 * 1000,
-            environmentRecord: {
-              kind: "worktree",
-              state: {
-                workspaceRoot: "/tmp/worktree",
-                branchName: "bb/thread-1",
-              },
-            },
-          }),
-        ]);
-        const autoSuspendIdleThreadEnvironmentSpy = vi
-          .spyOn(asOrchestratorHarness(bootManager), "_autoSuspendIdleThreadEnvironment")
-          .mockImplementation(() => undefined);
-
-        await bootManager.reconcileActiveThreadsOnBoot();
-
-        expect(bootThreadRepo.listNonArchivedIdleIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
-        expect(autoSuspendIdleThreadEnvironmentSpy).toHaveBeenCalledTimes(1);
-        expect(autoSuspendIdleThreadEnvironmentSpy).toHaveBeenCalledWith("boot-idle-overdue");
-      } finally {
-        vi.useRealTimers();
-      }
     });
   });
 
@@ -1982,7 +1933,7 @@ describe("Orchestrator", () => {
       expect(cleanup).not.toHaveBeenCalled();
     });
 
-    it("auto-suspends idle environments after the configured timeout", async () => {
+    it("does not daemon-auto-suspend idle environments", async () => {
       vi.useFakeTimers();
       try {
         const thread = makeThread({
@@ -2025,9 +1976,9 @@ describe("Orchestrator", () => {
         await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
         await vi.runOnlyPendingTimersAsync();
 
-        expect(cleanup).toHaveBeenCalledTimes(1);
-        expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
-        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(false);
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
+        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(true);
       } finally {
         vi.useRealTimers();
       }

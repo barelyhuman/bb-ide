@@ -95,6 +95,15 @@ export interface DaemonE2eHarness {
   cleanup: () => Promise<void>;
 }
 
+function listPendingProvisioningTasks(
+  threadManager: unknown,
+): Promise<void>[] {
+  const rawThreadManager = threadManager as {
+    provisioningTasks?: Map<string, Promise<void>>;
+  };
+  return Array.from(rawThreadManager.provisioningTasks?.values() ?? []);
+}
+
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
@@ -154,25 +163,26 @@ export async function startDaemonE2eHarness(
     const environmentAgentCursorRepo = new EnvironmentAgentCursorRepository(db);
     const environmentAgentCommandRepo = new EnvironmentAgentCommandRepository(db);
 
-    const { app, injectWebSocket, wsManager, threadManager } = createServer({
-      projectRepo,
-      threadRepo,
-      eventRepo,
-      environmentAgentSessionRepo,
-      environmentAgentCursorRepo,
-      environmentAgentCommandRepo,
-      dbPath,
-      daemonLogFilePath: join(tempDir, "daemon.log"),
-      ...(opts?.port
-        ? { daemonBaseUrl: `http://127.0.0.1:${opts.port}/api/v1` }
-        : {}),
-      provider: createCodexProviderAdapter({
-        processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
-        processArgs: workspaceFakeCodexPath
-          ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
-          : ["app-server"],
-      }),
-    });
+    const { app, injectWebSocket, wsManager, threadManager, close: closeServer } =
+      createServer({
+        projectRepo,
+        threadRepo,
+        eventRepo,
+        environmentAgentSessionRepo,
+        environmentAgentCursorRepo,
+        environmentAgentCommandRepo,
+        dbPath,
+        daemonLogFilePath: join(tempDir, "daemon.log"),
+        ...(opts?.port
+          ? { daemonBaseUrl: `http://127.0.0.1:${opts.port}/api/v1` }
+          : {}),
+        provider: createCodexProviderAdapter({
+          processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
+          processArgs: workspaceFakeCodexPath
+            ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
+            : ["app-server"],
+        }),
+      });
 
     await threadManager.reconcileActiveThreadsOnBoot();
 
@@ -194,6 +204,7 @@ export async function startDaemonE2eHarness(
     const closeDaemon = async (): Promise<void> => {
       if (closed) return;
       closed = true;
+      closeServer();
       wsManager.close();
       if (httpServer) {
         await closeHttpServer(httpServer);
@@ -205,10 +216,14 @@ export async function startDaemonE2eHarness(
     const cleanup = async (): Promise<void> => {
       if (!stopped) {
         stopped = true;
+        const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
         threadManager.stopAll();
-        // stopAll sends SIGTERM and clears runtime state synchronously, but child
-        // "exit" callbacks can still run on the next ticks and touch repositories.
-        await sleep(120);
+        await Promise.race([
+          Promise.allSettled(pendingProvisioningTasks),
+          sleep(1_000),
+        ]);
+        // Child "exit" callbacks and command results can still land on following ticks.
+        await sleep(200);
       }
       await closeDaemon();
       if (!opts?.preserveTempDirOnCleanup) {
@@ -222,9 +237,14 @@ export async function startDaemonE2eHarness(
           stopAllSessions?: (reason?: string) => void;
         };
       };
+      const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
       rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
       threadManager.stopAll({ preserveEnvironments: true });
-      await sleep(120);
+      await Promise.race([
+        Promise.allSettled(pendingProvisioningTasks),
+        sleep(1_000),
+      ]);
+      await sleep(200);
       await closeDaemon();
     };
 
@@ -241,11 +261,7 @@ export async function startDaemonE2eHarness(
           }
         )._resolveEnvironmentAgentAuthorization(threadId),
       getEnvironmentAgentCursor: (threadId: string) =>
-        (
-          threadRepo.getById(threadId) as
-            | ({ environmentAgentCursor?: number } & Record<string, unknown>)
-            | undefined
-        )?.environmentAgentCursor ?? 0,
+        environmentAgentCursorRepo.getByThreadId(threadId)?.sequence ?? 0,
       shutdownForRestart,
       cleanup,
     };

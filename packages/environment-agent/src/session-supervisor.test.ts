@@ -221,4 +221,146 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       vi.useRealTimers();
     }
   });
+
+  it("self-suspends after observed work is fully drained", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryEnvironmentAgentSessionStore();
+      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+        store,
+        clock: () => 10_000,
+      });
+      const client = makeClientMock();
+      (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "session_welcome",
+        messageId: "msg-open",
+        sessionId: "sess-1",
+        sentAt: 2_000,
+        payload: {
+          leaseTtlMs: 30_000,
+          heartbeatIntervalMs: 10_000,
+          selectedTransport: "http-long-poll",
+          protocolVersion: 1,
+          channels: [],
+        },
+      });
+      (client.heartbeat as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "event_ack",
+        messageId: "msg-ack",
+        sessionId: "sess-1",
+        sentAt: 3_000,
+        payload: {
+          channels: [
+            {
+              channelId: "thread-1",
+              ackedThrough: { generation: 1, sequence: 1 },
+            },
+          ],
+        },
+      });
+      (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "command_batch",
+        messageId: "msg-cmd-empty",
+        sessionId: "sess-1",
+        sentAt: 3_500,
+        payload: { commands: [] },
+      });
+
+      let supervisor: EnvironmentAgentSessionSupervisor;
+      const onQuiescent = vi.fn(async () => {
+        await supervisor.close();
+      });
+      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      supervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: "thread-1",
+        runtime,
+        sessionRuntime,
+        sessionSync: sync,
+        pollIntervalMs: 5,
+        selfSuspendDebounceMs: 20,
+        onQuiescent,
+      });
+
+      await supervisor.start();
+      runtime.appendEvent({
+        type: "provider.event",
+        threadId: "thread-1",
+        method: "turn/completed",
+        payload: {},
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(onQuiescent).toHaveBeenCalledTimes(1);
+
+      await supervisor.close();
+      await runtime.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not self-suspend while daemon delivery is failing with pending events", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryEnvironmentAgentSessionStore();
+      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+        store,
+        clock: () => 10_000,
+      });
+      const client = makeClientMock();
+      (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "session_welcome",
+        messageId: "msg-open",
+        sessionId: "sess-1",
+        sentAt: 2_000,
+        payload: {
+          leaseTtlMs: 30_000,
+          heartbeatIntervalMs: 10_000,
+          selectedTransport: "http-long-poll",
+          protocolVersion: 1,
+          channels: [],
+        },
+      });
+      (client.heartbeat as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (client.pushEvents as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("fetch failed"));
+
+      const onQuiescent = vi.fn(async () => undefined);
+      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: "thread-1",
+        runtime,
+        sessionRuntime,
+        sessionSync: sync,
+        pollIntervalMs: 5,
+        selfSuspendDebounceMs: 20,
+        onQuiescent,
+      });
+
+      await supervisor.start();
+      runtime.appendEvent({
+        type: "provider.event",
+        threadId: "thread-1",
+        method: "turn/completed",
+        payload: {},
+      });
+
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(sessionRuntime.getDrainSnapshot("thread-1").pendingEventCount).toBeGreaterThan(0);
+      expect(onQuiescent).not.toHaveBeenCalled();
+
+      await supervisor.close();
+      await runtime.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

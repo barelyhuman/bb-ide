@@ -238,6 +238,60 @@ describe("EnvironmentAgentSessionService", () => {
     );
   });
 
+  it("rebinds pending queued commands onto a newly opened session", () => {
+    const threadId = createThreadId();
+    const first = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    commands.enqueue({
+      id: "cmd-queued",
+      threadId,
+      sessionId: first.session.id,
+      commandType: "workspace.status",
+      payload: {
+        type: "workspace.status",
+        threadId,
+      },
+      now: 1_500,
+    });
+
+    const second = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-2",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(commands.getById("cmd-queued")).toMatchObject({
+      sessionId: second.session.id,
+      state: "queued",
+    });
+  });
+
   it("applies event batches and requests replay when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({

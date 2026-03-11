@@ -49,6 +49,67 @@ describe("EnvironmentAgentRuntime", () => {
     ]);
   });
 
+  it("tracks quiescence lifecycle state from provider events and command failures", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+
+    expect(runtime.getQuiescenceSnapshot()).toEqual({
+      hasObservedWork: false,
+      commandExecutionCount: 0,
+      pendingProviderRequestCount: 0,
+      turnState: "unknown",
+    });
+
+    runtime.appendEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "turn.started",
+      payload: {},
+    });
+    expect(runtime.getQuiescenceSnapshot()).toEqual({
+      hasObservedWork: true,
+      commandExecutionCount: 0,
+      pendingProviderRequestCount: 0,
+      turnState: "active",
+    });
+
+    runtime.appendEvent({
+      type: "provider.event",
+      threadId: "thread-1",
+      method: "turn.completed",
+      payload: {},
+    });
+    expect(runtime.getQuiescenceSnapshot()).toEqual({
+      hasObservedWork: true,
+      commandExecutionCount: 0,
+      pendingProviderRequestCount: 0,
+      turnState: "idle",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-fail-1",
+        idempotencyKey: "cmd-fail-1",
+        sentAt: 123,
+      },
+      command: {
+        type: "workspace.status",
+        threadId: "thread-1",
+      },
+    });
+    expect(ack).toMatchObject({
+      commandId: "cmd-fail-1",
+      state: "rejected",
+      errorCode: "provider_unavailable",
+    });
+    expect(runtime.getQuiescenceSnapshot()).toEqual({
+      hasObservedWork: true,
+      commandExecutionCount: 0,
+      pendingProviderRequestCount: 0,
+      turnState: "idle",
+    });
+  });
+
   it("does not require a provider at startup when launched in control-plane mode", () => {
     const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
 

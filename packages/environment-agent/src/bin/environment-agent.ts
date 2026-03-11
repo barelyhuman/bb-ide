@@ -55,15 +55,13 @@ async function main(): Promise<void> {
       cli: parseArgs(process.argv.slice(2)),
       env: process.env,
     });
-    const { runtime, server, sessionSupervisor } = await startEnvironmentAgentService(options);
+    const { server, close } = await startEnvironmentAgentService(options);
     console.error(
       `environment-agent http listening on ${server.baseUrl} (log: ${options.logging.filePath})`,
     );
 
     const shutdown = async () => {
-      await sessionSupervisor?.close();
-      await runtime.shutdown();
-      await server.close();
+      await close();
       process.exit(0);
     };
     process.on("SIGINT", () => {
