@@ -5,11 +5,11 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types": "./src/index.ts"
+      "types": "./dist/index.d.ts"
     }
   },
   "main": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc && pnpm exec esbuild src/bin/environment-agent.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/environment-agent.bundle.mjs",
