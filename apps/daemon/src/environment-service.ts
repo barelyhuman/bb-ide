@@ -263,7 +263,7 @@ export class EnvironmentService {
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
     const existingRuntime = this.detachEnvironmentRuntime(threadId);
     if (existingRuntime) {
-      this.suspendDetachedRuntime(threadId, existingRuntime);
+      void this.suspendDetachedRuntime(threadId, existingRuntime);
     }
     const agentConnectionTarget = environment.getAgentConnectionTarget();
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
@@ -289,9 +289,13 @@ export class EnvironmentService {
   }
 
   suspendEnvironmentRuntime(threadId: string): void {
+    void this.suspendEnvironmentRuntimeAndWait(threadId);
+  }
+
+  async suspendEnvironmentRuntimeAndWait(threadId: string): Promise<void> {
     const runtime = this.detachEnvironmentRuntime(threadId);
     if (runtime) {
-      this.suspendDetachedRuntime(threadId, runtime);
+      await this.suspendDetachedRuntime(threadId, runtime);
       return;
     }
 
@@ -321,20 +325,19 @@ export class EnvironmentService {
 
     const environmentId = environment.kind;
     try {
-      void Promise.resolve(environment.suspend()).catch((error: unknown) =>
-        this.callbacks.onCleanupFailure(threadId, environmentId, error),
-      );
+      await Promise.resolve(environment.suspend());
     } catch (error) {
       this.callbacks.onCleanupFailure(threadId, environmentId, error);
     }
   }
 
-  private suspendDetachedRuntime(threadId: string, runtime: ActiveEnvironmentRuntime): void {
+  private async suspendDetachedRuntime(
+    threadId: string,
+    runtime: ActiveEnvironmentRuntime,
+  ): Promise<void> {
     const environmentId = runtime.environment.kind;
     try {
-      void Promise.resolve(runtime.environment.suspend()).catch((error: unknown) =>
-        this.callbacks.onCleanupFailure(threadId, environmentId, error),
-      );
+      await Promise.resolve(runtime.environment.suspend());
     } catch (error) {
       this.callbacks.onCleanupFailure(threadId, environmentId, error);
     }

@@ -431,6 +431,37 @@ describe("EnvironmentService", () => {
     expect(threadState.environmentRecord).not.toBeNull();
   });
 
+  it("can await active runtime suspension before reusing the environment", async () => {
+    let resolveSuspend: (() => void) | undefined;
+    const runtimeEnvironment: IEnvironment = {
+      ...createTestEnvironment({ existsInitially: true }),
+      suspend: vi.fn(
+        async () =>
+          await new Promise<void>((resolve) => {
+            resolveSuspend = resolve;
+          }),
+      ),
+    };
+    const { service } = createService({
+      existsInitially: true,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    let settled = false;
+    const suspendPromise = service.suspendEnvironmentRuntimeAndWait("thread-1").then(() => {
+      settled = true;
+    });
+
+    expect(runtimeEnvironment.suspend).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveSuspend?.();
+    await suspendPromise;
+
+    expect(settled).toBe(true);
+  });
+
   it("does not suspend persisted state when installing a restored runtime", () => {
     const persistedSuspendSpy = vi.fn();
     const restoreImpl = vi.fn(() =>

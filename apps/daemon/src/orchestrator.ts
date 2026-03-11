@@ -2960,7 +2960,7 @@ export class Orchestrator implements ThreadOrchestrator {
           resetReplayCursor: false,
         };
       }
-      this.environmentService.suspendEnvironmentRuntime(threadId);
+      await this.environmentService.suspendEnvironmentRuntimeAndWait(threadId);
     }
 
     const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
