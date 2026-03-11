@@ -4681,6 +4681,12 @@ export class Orchestrator implements ThreadOrchestrator {
   ): void {
     const uniqueChanges = Array.from(new Set(changes));
     if (uniqueChanges.length === 0) return;
+    const hasNonEventChange = uniqueChanges.some(
+      (change) => change !== "events-appended",
+    );
+    if (hasNonEventChange) {
+      this._flushQueuedProviderThreadChanged(threadId);
+    }
     this.ws.broadcast("thread", threadId, uniqueChanges);
   }
 

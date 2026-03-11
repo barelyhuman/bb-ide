@@ -4263,6 +4263,43 @@ describe("Orchestrator", () => {
         );
         expect(scheduleFollowUpSpy).toHaveBeenCalledWith("thread-1");
         expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
+        const firstEventsBroadcastOrder = (
+          ws.broadcast as ReturnType<typeof vi.fn>
+        ).mock.calls.find(([scope, id, changes]) =>
+          scope === "thread" &&
+          id === "thread-1" &&
+          Array.isArray(changes) &&
+          changes.includes("events-appended"),
+        )
+          ? (ws.broadcast as ReturnType<typeof vi.fn>).mock.invocationCallOrder[
+              (ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.findIndex(
+                ([scope, id, changes]) =>
+                  scope === "thread" &&
+                  id === "thread-1" &&
+                  Array.isArray(changes) &&
+                  changes.includes("events-appended"),
+              )
+            ]
+          : Number.POSITIVE_INFINITY;
+        const queueChangedBroadcastOrder = (
+          ws.broadcast as ReturnType<typeof vi.fn>
+        ).mock.calls.find(([scope, id, changes]) =>
+          scope === "thread" &&
+          id === "thread-1" &&
+          Array.isArray(changes) &&
+          changes.includes("queue-changed"),
+        )
+          ? (ws.broadcast as ReturnType<typeof vi.fn>).mock.invocationCallOrder[
+              (ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.findIndex(
+                ([scope, id, changes]) =>
+                  scope === "thread" &&
+                  id === "thread-1" &&
+                  Array.isArray(changes) &&
+                  changes.includes("queue-changed"),
+              )
+            ]
+          : Number.POSITIVE_INFINITY;
+        expect(firstEventsBroadcastOrder).toBeLessThan(queueChangedBroadcastOrder);
         expect(eventRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
             type: "system/thread_operation",
