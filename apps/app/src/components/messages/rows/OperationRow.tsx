@@ -377,10 +377,7 @@ function buildProvisioningTranscript(
   const setup = provisioning?.setup;
   const lines = [`environment: ${environmentLabel}`];
   const provisioningPhases = provisioning?.phases;
-  const orderedPhases: UIProvisioningPhase[] = [
-    "prepare_environment",
-    "start_provider_session",
-  ];
+  const orderedPhases: UIProvisioningPhase[] = ["start_provider_session"];
 
   for (const phase of orderedPhases) {
     const line = formatProvisioningPhaseLine(phase, provisioningPhases?.[phase], now);

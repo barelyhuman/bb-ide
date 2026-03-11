@@ -1120,6 +1120,40 @@ describe("ConversationEntry", () => {
     expect(html).toContain(".bb-env-setup.sh timed out after 10 minutes");
   });
 
+  it("omits prepare-environment transcript lines from provisioning rows", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioning environment",
+      startedAt: 1,
+      createdAt: 15_000,
+      status: "pending",
+      provisioning: {
+        environmentDisplayName: "Worktree",
+        phases: {
+          prepare_environment: {
+            status: "started",
+            startedAt: 1000,
+          },
+        },
+      },
+    };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(16_000);
+
+    try {
+      const html = renderToStaticMarkup(
+        <ConversationEntry message={message} initialExpanded />,
+      );
+      expect(html).not.toContain("preparing environment");
+      expect(html).not.toContain("prepared environment");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renders in-progress provisioning summaries without terminal duration copy", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -1158,7 +1192,7 @@ describe("ConversationEntry", () => {
       );
       expect(html).toContain("Provisioning");
       expect(html).toContain("Worktree");
-      expect(html).toContain("prepared environment in 1s");
+      expect(html).not.toContain("prepared environment in 1s");
       expect(html).toContain("starting provider session (15s)");
       expect(html).toContain("running .bb-env-setup.sh (5s)");
       expect(html).toContain("animate-shine");
