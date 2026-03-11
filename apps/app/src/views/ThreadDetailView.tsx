@@ -1149,6 +1149,7 @@ export function ThreadDetailView() {
     setContainerRef,
     handleScroll: baseHandleScroll,
     scrollToBottom: baseScrollToBottom,
+    isStickingToBottom,
   } = useAutoScroll(
     threadDetailRows,
     threadId,
@@ -1168,9 +1169,11 @@ export function ThreadDetailView() {
   const syncTimelineScrollAnchor = useCallback(() => {
     const scrollContainer = containerElement;
     if (!scrollContainer) return;
-    timelineScrollAnchorRef.current = captureTimelineScrollAnchor(scrollContainer);
+    timelineScrollAnchorRef.current = isStickingToBottom
+      ? null
+      : captureTimelineScrollAnchor(scrollContainer);
     timelineContainerWidthRef.current = scrollContainer.clientWidth;
-  }, [containerElement]);
+  }, [containerElement, isStickingToBottom]);
   const handleTimelineScroll = useCallback(() => {
     handleScroll();
     syncTimelineScrollAnchor();
@@ -1260,6 +1263,10 @@ export function ThreadDetailView() {
       if (previousHeight === null) return;
       const heightDelta = nextHeight - previousHeight;
       if (Math.abs(heightDelta) < 0.5) return;
+      if (isStickingToBottom) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        return;
+      }
       const maxScrollOffset = scrollContainer.scrollHeight - scrollContainer.clientHeight;
       const distanceFromBottom = maxScrollOffset - scrollContainer.scrollTop;
       if (distanceFromBottom <= SCROLL_THRESHOLD) {
@@ -1274,7 +1281,7 @@ export function ThreadDetailView() {
       observer.disconnect();
       promptComposerHeightRef.current = null;
     };
-  }, [containerElement, threadId]);
+  }, [containerElement, isStickingToBottom, threadId]);
 
   const sendFollowUpInput = useCallback(
     async ({

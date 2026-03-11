@@ -6,6 +6,7 @@ import {
 export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
+  const [isStickingToBottom, setIsStickingToBottom] = useState(true)
   const stickRef = useRef(true)
 
   const setContainerRef = useCallback((element: HTMLDivElement | null) => {
@@ -14,14 +15,20 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
       currentElement === element ? currentElement : element)
   }, [])
 
+  const setStickyState = useCallback((nextValue: boolean) => {
+    stickRef.current = nextValue
+    setIsStickingToBottom((currentValue) =>
+      currentValue === nextValue ? currentValue : nextValue)
+  }, [])
+
   const scrollToBottom = useCallback(() => {
     const el = containerRef.current
     if (!el) return
     // Manual/programmatic scroll requests should restore sticky-bottom mode.
     // Use an immediate jump so follow-up renders can't outrun a smooth animation.
-    stickRef.current = true
+    setStickyState(true)
     el.scrollTop = el.scrollHeight
-  }, [])
+  }, [setStickyState])
 
   const scrollToBottomIfSticking = useCallback(() => {
     const el = containerRef.current
@@ -33,8 +40,8 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     const el = containerRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    stickRef.current = distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX
-  }, [])
+    setStickyState(distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX)
+  }, [setStickyState])
 
   useEffect(() => {
     scrollToBottomIfSticking()
@@ -103,5 +110,12 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     }
   }, [containerElement, resetDep, scrollToBottom])
 
-  return { containerRef, containerElement, setContainerRef, handleScroll, scrollToBottom }
+  return {
+    containerRef,
+    containerElement,
+    setContainerRef,
+    handleScroll,
+    scrollToBottom,
+    isStickingToBottom,
+  }
 }

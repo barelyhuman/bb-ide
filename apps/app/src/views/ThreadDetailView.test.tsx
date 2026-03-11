@@ -216,6 +216,7 @@ vi.mock("@/hooks/useAutoScroll", () => ({
     setContainerRef: vi.fn(),
     handleScroll: vi.fn(),
     scrollToBottom: vi.fn(),
+    isStickingToBottom: true,
   }),
 }));
 
