@@ -1185,7 +1185,7 @@ export class Orchestrator implements ThreadOrchestrator {
         requested: request?.autoArchiveOnSuccess,
       })
     ) {
-      this.archive(thread.id);
+      await this.archive(thread.id);
     }
 
     return { message: result.message };
@@ -1285,7 +1285,7 @@ export class Orchestrator implements ThreadOrchestrator {
         requested: options.autoArchiveOnSuccess,
       })
     ) {
-      this.archive(thread.id);
+      await this.archive(thread.id);
     }
 
     return {
@@ -1349,12 +1349,11 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Archive a thread and destroy any persisted environment state.
    */
-  archive(threadId: string): void {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) return;
+  private _prepareThreadForManagedCleanup(threadId: string, projectId: string): void {
     this._cancelIdleEnvironmentSuspend(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
+    this.queueDispatchInFlight.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -1362,20 +1361,67 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
-    const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
+    this.provisioningTasks.delete(threadId);
+    this._discardQueuedProviderThreadChanged(threadId);
+
+    const activePromotion = this.primaryPromotionByProjectId.get(projectId);
     if (activePromotion?.threadId === threadId) {
-      this._clearPrimaryPromotionState(thread.projectId);
+      this._clearPrimaryPromotionState(projectId);
     }
-    this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
+  }
+
+  private _forgetDeletedThreadState(threadId: string): void {
+    this._cancelIdleEnvironmentSuspend(threadId);
+    this._discardQueuedProviderThreadChanged(threadId);
+    this.eventSeqCounters.delete(threadId);
+    this.lastNotifiedCompletionTurnIds.delete(threadId);
+    this.turnLifecycleEpochs.delete(threadId);
+    this.activeTurnIdByThreadId.delete(threadId);
+    this.providerThreadIdByThreadId.delete(threadId);
+    this.lastNotifiedCompletionEpochs.delete(threadId);
+    this.lastNoisePruneSeqByThread.delete(threadId);
+    this.lastNoisePruneAtByThread.delete(threadId);
+    this.queueDispatchInFlight.delete(threadId);
+    this.queuedOperationsByThreadId.delete(threadId);
+    this.operationDispatchInFlight.delete(threadId);
+    this.provisioningTasks.delete(threadId);
+    this.timelineByThread.delete(threadId);
+    this.titleFallbackByThreadId.delete(threadId);
+    this.lockedTitleThreadIds.delete(threadId);
+    this.autoTitleAttemptedThreadIds.delete(threadId);
+    this.provisioningCompletionStateByThreadId.delete(threadId);
+  }
+
+  async archive(threadId: string): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+    this._prepareThreadForManagedCleanup(threadId, thread.projectId);
+    await this.environmentService.destroyThreadEnvironment(threadId);
+
+    const refreshedThread = this.threadRepo.getById(threadId);
+    if (!refreshedThread) return;
     this.threadRepo.update(threadId, {
       status: "idle",
-      archivedAt: thread.archivedAt ?? Date.now(),
+      archivedAt: refreshedThread.archivedAt ?? Date.now(),
     });
     this._pruneHistoricalNoiseEvents(threadId, ARCHIVED_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, [
       ...THREAD_STATUS_CHANGE_KINDS,
       "archived-changed",
     ]);
+  }
+
+  async deleteThread(threadId: string): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+
+    this._prepareThreadForManagedCleanup(threadId, thread.projectId);
+    await this.environmentService.destroyThreadEnvironment(threadId);
+    this.environmentService.removeManagedThreadLogs(thread);
+    this.eventRepo.deleteByThreadId(threadId);
+    this.threadRepo.delete(threadId);
+    this._forgetDeletedThreadState(threadId);
+    this.ws.broadcast("thread", threadId, ["thread-deleted"]);
   }
 
   unarchive(threadId: string): void {
@@ -3522,6 +3568,15 @@ export class Orchestrator implements ThreadOrchestrator {
     const changes = Array.from(queued.changes);
     if (changes.length === 0) return;
     this._broadcastThreadChanged(threadId, changes);
+  }
+
+  private _discardQueuedProviderThreadChanged(threadId: string): void {
+    const queued = this.queuedProviderBroadcastsByThread.get(threadId);
+    if (!queued) return;
+    if (queued.timer !== null) {
+      clearTimeout(queued.timer);
+    }
+    this.queuedProviderBroadcastsByThread.delete(threadId);
   }
 
   private _enqueueProviderThreadChanged(

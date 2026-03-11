@@ -767,7 +767,7 @@ export function createThreadRoutes(
             }, 409);
           }
         }
-        threadManager.archive(threadId);
+        await threadManager.archive(threadId);
         return c.json({ ok: true });
       } catch (err) {
         return sendRouteError(c, err);

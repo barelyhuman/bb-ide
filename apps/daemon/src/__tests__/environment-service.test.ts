@@ -314,11 +314,7 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
-    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
-      projectId: "proj-1",
-      threadId: "thread-1",
-      environmentId: "worktree",
-    });
+    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
   });
@@ -341,11 +337,7 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
-    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
-      projectId: "proj-1",
-      threadId: "thread-1",
-      environmentId: "worktree",
-    });
+    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
   });
@@ -374,11 +366,7 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
-    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
-      projectId: "proj-1",
-      threadId: "thread-1",
-      environmentId: "worktree",
-    });
+    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
   });
@@ -410,6 +398,24 @@ describe("EnvironmentService", () => {
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).not.toBeNull();
     expect(threadState.environmentAgentCursor).toBe(12);
+  });
+
+  it("removes managed thread logs only when explicitly requested", () => {
+    const { service } = createService({
+      existsInitially: true,
+    });
+
+    service.removeManagedThreadLogs({
+      id: "thread-1",
+      projectId: "proj-1",
+      environmentId: "worktree",
+    });
+
+    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      threadId: "thread-1",
+      environmentId: "worktree",
+    });
   });
 
   it("stopAll cleans up persisted environments even when no runtime is restored", async () => {

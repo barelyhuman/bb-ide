@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { homedir } from "node:os";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Hono } from "hono";
 import type {
@@ -62,12 +62,14 @@ describe("Project routes", () => {
   let savePromptAttachment: ReturnType<typeof vi.fn>;
   let threadRepo: ReturnType<typeof mockThreadRepo>;
   let eventRepo: ReturnType<typeof mockEventRepo>;
+  let deleteThreadAsync: ReturnType<typeof vi.fn>;
   let app: Hono;
 
   beforeEach(() => {
     projectRepo = mockProjectRepo();
     threadRepo = mockThreadRepo();
     eventRepo = mockEventRepo();
+    deleteThreadAsync = vi.fn().mockResolvedValue(undefined);
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
       type: "localImage",
@@ -80,7 +82,11 @@ describe("Project routes", () => {
       projectRepo,
       findProjectFiles as SearchProjectFilesFn,
       savePromptAttachment as StorePromptAttachmentFn,
-      { threadRepo: threadRepo, eventRepo: eventRepo },
+      {
+        threadRepo: threadRepo,
+        eventRepo: eventRepo,
+        deleteThreadAsync,
+      },
     );
     app = new Hono().route("/projects", routes);
   });
@@ -249,7 +255,7 @@ describe("Project routes", () => {
   });
 
   describe("DELETE /projects/:id", () => {
-    it("removes the project and all associated thread/event rows", async () => {
+    it("removes the project after deleting thread artifacts and attachments", async () => {
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeProject({ id: "proj-2" }),
       );
@@ -257,6 +263,9 @@ describe("Project routes", () => {
         { id: "thread-1" },
         { id: "thread-2" },
       ]);
+      const attachmentsDir = resolve(homedir(), ".beanbag", "attachments", "proj-2");
+      mkdirSync(attachmentsDir, { recursive: true });
+      writeFileSync(resolve(attachmentsDir, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
       const res = await app.request("/projects/proj-2", {
         method: "DELETE",
@@ -268,10 +277,11 @@ describe("Project routes", () => {
         projectId: "proj-2",
         includeArchived: true,
       });
-      expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-1");
-      expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-2");
-      expect(threadRepo.delete).toHaveBeenCalledWith("thread-1");
-      expect(threadRepo.delete).toHaveBeenCalledWith("thread-2");
+      expect(deleteThreadAsync).toHaveBeenCalledWith("thread-1");
+      expect(deleteThreadAsync).toHaveBeenCalledWith("thread-2");
+      expect(eventRepo.deleteByThreadId).not.toHaveBeenCalled();
+      expect(threadRepo.delete).not.toHaveBeenCalled();
+      expect(existsSync(attachmentsDir)).toBe(false);
       expect(projectRepo.delete).toHaveBeenCalledWith("proj-2");
     });
 

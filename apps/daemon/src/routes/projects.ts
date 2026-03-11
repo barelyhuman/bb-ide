@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
@@ -170,6 +170,7 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
+    deleteThreadAsync?: (threadId: string) => Promise<void>;
     getProjectWorkspaceStatusAsync?: (
       projectId: string,
       rootPath: string,
@@ -217,11 +218,19 @@ export function createProjectRoutes(
             includeArchived: true,
           });
           for (const thread of projectThreads) {
-            deps.eventRepo.deleteByThreadId(thread.id);
-            deps.threadRepo.delete(thread.id);
+            if (deps.deleteThreadAsync) {
+              await deps.deleteThreadAsync(thread.id);
+            } else {
+              deps.eventRepo.deleteByThreadId(thread.id);
+              deps.threadRepo.delete(thread.id);
+            }
           }
         }
 
+        rmSync(resolveProjectAttachmentDirectory(projectId), {
+          recursive: true,
+          force: true,
+        });
         projectRepo.delete(projectId);
         return c.json({ ok: true });
       } catch (err) {

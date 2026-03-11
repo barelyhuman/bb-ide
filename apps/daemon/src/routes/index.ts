@@ -26,6 +26,7 @@ export interface ApiRouteDeps {
 
 export function createApiRoutes(deps: ApiRouteDeps) {
   const workspaceStatusAccessor = deps.threadManager as ThreadOrchestrator & {
+    deleteThread?: (threadId: string) => Promise<void>;
     getProjectWorkspaceStatusAsync?: (
       projectId: string,
       rootPath: string,
@@ -37,6 +38,10 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
+        deleteThreadAsync: (threadId) =>
+          workspaceStatusAccessor.deleteThread
+            ? workspaceStatusAccessor.deleteThread(threadId)
+            : Promise.reject(new Error("Thread deletion is unavailable")),
         getProjectWorkspaceStatusAsync: (projectId, rootPath) =>
           workspaceStatusAccessor.getProjectWorkspaceStatusAsync
             ? workspaceStatusAccessor.getProjectWorkspaceStatusAsync(projectId, rootPath)

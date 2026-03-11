@@ -299,9 +299,8 @@ export class EnvironmentService {
     }
   }
 
-  destroyEnvironmentRuntime(threadId: string): void {
+  async destroyThreadEnvironment(threadId: string): Promise<void> {
     const runtime = this.detachEnvironmentRuntime(threadId);
-    const thread = this.threadRepo.getById(threadId);
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
     const refresh = () => {
@@ -315,30 +314,34 @@ export class EnvironmentService {
       this.callbacks.onCleanupFailure(threadId, environmentId, error);
     };
 
-    if (!runtime) {
-      void this.destroyPersistedEnvironment(threadId)
-        .catch((error: unknown) => {
-          reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
-        })
-        .finally(refresh);
-      return;
-    }
-
-    const environmentId = runtime.environment.kind;
     try {
-      void Promise.resolve(runtime.environment.destroy())
-        .then(() => {
-          this.clearPersistedEnvironmentState(threadId);
-          if (thread) {
-            this.cleanupManagedThreadLogs(thread, environmentId);
-          }
-        })
-        .catch((error: unknown) => reportFailure(environmentId, error))
-        .finally(refresh);
-    } catch (error) {
-      reportFailure(environmentId, error);
+      if (!runtime) {
+        try {
+          await this.destroyPersistedEnvironment(threadId);
+        } catch (error) {
+          reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
+          throw error;
+        }
+        return;
+      }
+
+      const environmentId = runtime.environment.kind;
+      try {
+        await Promise.resolve(runtime.environment.destroy());
+        this.clearPersistedEnvironmentState(threadId);
+      } catch (error) {
+        reportFailure(environmentId, error);
+        throw error;
+      }
+    } finally {
       refresh();
     }
+  }
+
+  destroyEnvironmentRuntime(threadId: string): void {
+    void this.destroyThreadEnvironment(threadId).catch(() => {
+      // Errors are already reported via onCleanupFailure.
+    });
   }
 
   async destroyPersistedEnvironment(threadId: string): Promise<void> {
@@ -352,7 +355,6 @@ export class EnvironmentService {
     } catch (error) {
       if (isUnavailableCleanupTargetError(error)) {
         this.clearPersistedEnvironmentState(threadId);
-        this.cleanupManagedThreadLogs(thread);
         return;
       }
       throw error;
@@ -362,7 +364,6 @@ export class EnvironmentService {
     }
     await Promise.resolve(environment.destroy());
     this.clearPersistedEnvironmentState(threadId);
-    this.cleanupManagedThreadLogs(thread);
   }
 
   private clearPersistedEnvironmentState(threadId: string): void {
@@ -377,11 +378,10 @@ export class EnvironmentService {
     this.restoreFailuresByThreadId.delete(threadId);
   }
 
-  private cleanupManagedThreadLogs(
+  removeManagedThreadLogs(
     thread: Pick<Thread, "id" | "projectId" | "environmentId">,
-    fallbackEnvironmentId?: string,
   ): void {
-    const environmentId = thread.environmentId?.trim() || fallbackEnvironmentId?.trim();
+    const environmentId = thread.environmentId?.trim();
     if (!environmentId) {
       return;
     }
@@ -394,6 +394,7 @@ export class EnvironmentService {
       });
     } catch (error) {
       this.callbacks.onCleanupFailure(thread.id, environmentId, error);
+      throw error;
     }
   }
 

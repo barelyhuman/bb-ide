@@ -180,7 +180,7 @@ export interface ThreadOrchestrator {
     options?: ProviderExecutionOptions,
   ): Promise<void>;
   stop(threadId: string): void;
-  archive(threadId: string): void;
+  archive(threadId: string): Promise<void>;
   unarchive(threadId: string): void;
   requiresForceArchive(threadId: string): boolean;
   updateThread(threadId: string, request: { title?: string }): Thread;

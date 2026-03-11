@@ -491,6 +491,7 @@ function createMocks() {
     getLatestSeq: vi.fn(),
     getLatestByType: vi.fn(),
     getLatestExecutionOptions: vi.fn(),
+    deleteByThreadId: vi.fn(),
   } as unknown as EventRepository;
 
   const projectRepo = {
@@ -1987,12 +1988,12 @@ describe("Orchestrator", () => {
   });
 
   describe("archive()", () => {
-    it("marks a thread archived and broadcasts when no active process", () => {
+    it("marks a thread archived and broadcasts when no active process", async () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "idle" }),
       );
 
-      manager.archive("thread-1");
+      await manager.archive("thread-1");
 
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
@@ -2006,7 +2007,7 @@ describe("Orchestrator", () => {
     });
 
 
-    it("destroys workspace environment on archive", () => {
+    it("destroys workspace environment on archive", async () => {
       const cleanup = vi.fn();
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "idle" }),
@@ -2018,12 +2019,12 @@ describe("Orchestrator", () => {
         }),
       });
 
-      manager.archive("thread-1");
+      await manager.archive("thread-1");
 
       expect(cleanup).toHaveBeenCalledTimes(1);
     });
 
-    it("does not attempt legacy worktree cleanup when archive has no environment record", () => {
+    it("archives worktree threads even when no runtime is active", async () => {
       const projectRoot = "/tmp/proj-1";
       const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -2052,7 +2053,12 @@ describe("Orchestrator", () => {
               })
             : undefined,
       );
-      manager.archive("thread-1");
+      await manager.archive("thread-1");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+        archivedAt: expect.any(Number),
+      });
     });
 
     it("rebroadcasts work status after async workspace cleanup settles", async () => {
@@ -2073,25 +2079,35 @@ describe("Orchestrator", () => {
         }),
       });
 
-      manager.archive("thread-1");
+      const archivePromise = manager.archive("thread-1");
 
       expect(resolveCleanup).toBeTypeOf("function");
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+      expect(ws.broadcast).not.toHaveBeenCalledWith("thread", "thread-1", [
         "status-changed",
         "work-status-changed",
         "archived-changed",
       ]);
 
       resolveCleanup?.();
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await archivePromise;
 
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
         "work-status-changed",
+        "archived-changed",
+      ]);
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "work-status-changed",
+      ]);
+      expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.at(-2)).toEqual([
+        "thread",
+        "thread-1",
+        ["work-status-changed"],
       ]);
       expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual([
         "thread",
         "thread-1",
-        ["work-status-changed"],
+        ["status-changed", "work-status-changed", "archived-changed"],
       ]);
     });
   });
@@ -2625,7 +2641,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      manager.archive("thread-1");
+      const archivePromise = manager.archive("thread-1");
       const result = await manager.getWorkStatusAsync("thread-1");
 
       expect(result).toMatchObject({
@@ -2636,6 +2652,35 @@ describe("Orchestrator", () => {
       });
 
       resolveCleanup?.();
+      await archivePromise;
+    });
+  });
+
+  describe("deleteThread()", () => {
+    it("destroys managed artifacts before deleting thread rows", async () => {
+      const cleanup = vi.fn();
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        projectId: "proj-1",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup,
+        }),
+      });
+
+      await manager.deleteThread("thread-1");
+
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-1");
+      expect(threadRepo.delete).toHaveBeenCalledWith("thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "thread-deleted",
+      ]);
     });
   });
 
