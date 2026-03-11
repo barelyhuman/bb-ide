@@ -188,6 +188,7 @@ function mergeProvisioningMetadata(
     environmentDisplayName: incoming.environmentDisplayName ?? existing.environmentDisplayName,
     workspaceRoot: incoming.workspaceRoot ?? existing.workspaceRoot,
     branchName: incoming.branchName ?? existing.branchName,
+    headSha: incoming.headSha ?? existing.headSha,
     fallbackReason: incoming.fallbackReason ?? existing.fallbackReason,
     ...(phases ? { phases } : {}),
     ...(setup ? { setup } : {}),

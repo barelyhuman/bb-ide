@@ -1574,6 +1574,7 @@ function parseOperationMessage(
     const scriptPath = getStringField(payload, "scriptPath");
     const workspaceRoot = getStringField(payload, "workspaceRoot");
     const branchName = getStringField(payload, "branchName");
+    const headSha = getStringField(payload, "headSha");
     const timeoutMs = getNumberField(payload, "timeoutMs");
     const durationMs = getNumberField(payload, "durationMs");
     const output = getStringField(payload, "detail");
@@ -1595,6 +1596,7 @@ function parseOperationMessage(
             provisioning: {
               ...(workspaceRoot ? { workspaceRoot } : {}),
               ...(branchName ? { branchName } : {}),
+              ...(headSha ? { headSha } : {}),
               setup: {
                 status,
                 startedAt: event.createdAt,
@@ -1854,6 +1856,7 @@ function parseOperationMessage(
     });
     const workspaceRoot = getStringField(payload, "workspaceRoot");
     const branchName = getStringField(payload, "branchName");
+    const headSha = getStringField(payload, "headSha");
     const fallbackReason = getStringField(payload, "fallbackReason");
     return {
       kind: "operation",
@@ -1868,12 +1871,13 @@ function parseOperationMessage(
       title: "Provisioning ready",
       status: "completed",
       provisioning:
-        environmentId || environmentDisplayName || workspaceRoot || branchName || fallbackReason
+        environmentId || environmentDisplayName || workspaceRoot || branchName || headSha || fallbackReason
           ? {
               ...(environmentId ? { environmentId } : {}),
               ...(environmentDisplayName ? { environmentDisplayName } : {}),
               ...(workspaceRoot ? { workspaceRoot } : {}),
               ...(branchName ? { branchName } : {}),
+              ...(headSha ? { headSha } : {}),
               ...(fallbackReason ? { fallbackReason } : {}),
             }
           : undefined,

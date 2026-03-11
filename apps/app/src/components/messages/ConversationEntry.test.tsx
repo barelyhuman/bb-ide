@@ -967,6 +967,26 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("running .bb-env-setup.sh");
   });
 
+  it("renders checked out branch details for worktree provisioning", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned environment",
+      provisioning: {
+        environmentId: "worktree",
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+        branchName: "bb/thread-123",
+        headSha: "abcdef1234567890",
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("creating worktree");
+    expect(html).toContain("checked out branch bb/thread-123 (abcdef1)");
+  });
+
   it("does not show additional details when provisioning only has structured fields", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -1021,7 +1041,7 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("running .bb-env-setup.sh");
+    expect(html).toContain("ran .bb-env-setup.sh in 10s");
     expect(html).toContain("environment: Worktree");
     expect(html).not.toContain("Additional details");
   });
@@ -1048,7 +1068,7 @@ describe("ConversationEntry", () => {
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Provisioning");
     expect(html).toContain("environment: Worktree");
-    expect(html).toContain("running .bb-env-setup.sh");
+    expect(html).toContain("setup script failed: .bb-env-setup.sh in 6s");
     expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
   });
 
@@ -1168,7 +1188,7 @@ describe("ConversationEntry", () => {
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment setup");
     expect(html).toContain("completed");
-    expect(html).toContain("running .bb-env-setup.sh");
+    expect(html).toContain("ran .bb-env-setup.sh in 6s");
     expect(html).not.toContain("animate-shine");
   });
 

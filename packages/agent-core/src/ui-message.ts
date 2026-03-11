@@ -192,6 +192,7 @@ export interface UIProvisioningMetadata {
   environmentDisplayName?: string;
   workspaceRoot?: string;
   branchName?: string;
+  headSha?: string;
   fallbackReason?: string;
   phases?: Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>;
   setup?: UIProvisioningSetupMetadata;

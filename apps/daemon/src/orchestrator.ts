@@ -336,6 +336,25 @@ function getEnvironmentCurrentBranch(environment: IEnvironment): string | undefi
   }
 }
 
+async function getEnvironmentCheckoutSummary(environment: IEnvironment): Promise<{
+  branchName?: string;
+  headSha?: string;
+}> {
+  try {
+    const checkout = environment.getCheckoutSnapshotAsync
+      ? await environment.getCheckoutSnapshotAsync()
+      : environment.getCheckoutSnapshot();
+    return {
+      ...(checkout.branch?.trim() ? { branchName: checkout.branch.trim() } : {}),
+      ...(checkout.head?.trim() ? { headSha: checkout.head.trim() } : {}),
+    };
+  } catch {
+    return {
+      ...(getEnvironmentCurrentBranch(environment) ? { branchName: getEnvironmentCurrentBranch(environment) } : {}),
+    };
+  }
+}
+
 function toServiceTier(
   value: unknown,
 ): ThreadExecutionOptions["serviceTier"] | undefined {
@@ -2693,7 +2712,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const provisionedEnvironmentInfo = this.environmentRegistry.get(
       environmentRuntime.environment.kind,
     ).info;
-    const branchName = getEnvironmentCurrentBranch(environmentRuntime.environment);
+    const { branchName, headSha } = await getEnvironmentCheckoutSummary(
+      environmentRuntime.environment,
+    );
     const hydratedThread = this.threadRepo.getById(threadId);
     if (hydratedThread) {
       this._broadcastThreadChanged(threadId, ["work-status-changed"]);
@@ -2768,6 +2789,7 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentDisplayName: provisionedEnvironmentInfo.displayName,
       workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
       ...(branchName ? { branchName } : {}),
+      ...(headSha ? { headSha } : {}),
       reason: provisioningReason,
     });
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
@@ -3094,7 +3116,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const startedAt = Date.now();
     const workspaceRoot = environment.getWorkspaceRootUnsafe();
-    const branchName = getEnvironmentCurrentBranch(environment);
+    const { branchName, headSha } = await getEnvironmentCheckoutSummary(environment);
     const thread = this.threadRepo.getById(threadId);
     this._appendEnvironmentProvisioningEvent(threadId, {
       type: "env-setup",
@@ -3102,6 +3124,7 @@ export class Orchestrator implements ThreadOrchestrator {
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       workspaceRoot,
       ...(branchName ? { branchName } : {}),
+      ...(headSha ? { headSha } : {}),
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       reason,
     });
@@ -3171,6 +3194,7 @@ export class Orchestrator implements ThreadOrchestrator {
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       workspaceRoot,
       ...(branchName ? { branchName } : {}),
+      ...(headSha ? { headSha } : {}),
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       durationMs: Date.now() - startedAt,
       reason,
@@ -3181,6 +3205,7 @@ export class Orchestrator implements ThreadOrchestrator {
         environmentDisplayName: this.environmentRegistry.get(environment.kind).info.displayName,
         workspaceRoot,
         ...(branchName ? { branchName } : {}),
+        ...(headSha ? { headSha } : {}),
       });
     }
   }

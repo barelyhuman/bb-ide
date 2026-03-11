@@ -113,10 +113,36 @@ function formatProvisioningSetupLine(
   if (!setup) return undefined;
   const scriptPath = setup.scriptPath?.trim();
   if (!scriptPath) return undefined;
-  if (setup.status === "started" || setup.status === "running") {
-    return `running ${scriptPath}${formatProvisioningRunningSuffix(setup.startedAt, now)}`;
+  const durationText =
+    setup.durationMs !== undefined
+      ? ` in ${formatCompactDuration(setup.durationMs)}`
+      : "";
+
+  switch (setup.status) {
+    case "started":
+    case "running":
+      return `running ${scriptPath}${formatProvisioningRunningSuffix(setup.startedAt, now)}`;
+    case "completed":
+      return `ran ${scriptPath}${durationText}`;
+    case "failed":
+      return `setup script failed: ${scriptPath}${durationText}`;
+    default:
+      return assertNever(setup.status);
   }
-  return `running ${scriptPath}`;
+}
+
+function formatProvisioningBranchLine(provisioning: UIOperationMessage["provisioning"]): string | undefined {
+  const branchName = provisioning?.branchName?.trim();
+  const shortSha = provisioning?.headSha?.trim()?.slice(0, 7);
+
+  if (!branchName && !shortSha) return undefined;
+  if (branchName && shortSha) {
+    return `checked out branch ${branchName} (${shortSha})`;
+  }
+  if (branchName) {
+    return `checked out branch ${branchName}`;
+  }
+  return `checked out commit ${shortSha}`;
 }
 
 function extractPromptSections(detailText: string | undefined): {
@@ -367,8 +393,11 @@ function buildProvisioningTranscript(
   if (isWorktreeEnvironment) {
     lines.push("creating worktree");
   }
-  if (isWorktreeEnvironment && provisioning?.branchName) {
-    lines.push(`creating branch ${provisioning.branchName}`);
+  const branchLine = isWorktreeEnvironment
+    ? formatProvisioningBranchLine(provisioning)
+    : undefined;
+  if (branchLine) {
+    lines.push(branchLine);
   }
   const setupLine = formatProvisioningSetupLine(setup, now);
   if (setupLine) {

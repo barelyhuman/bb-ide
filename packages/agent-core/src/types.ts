@@ -264,6 +264,7 @@ export interface SystemProvisioningEnvSetupEventData {
   scriptPath: string;
   workspaceRoot?: string;
   branchName?: string;
+  headSha?: string;
   timeoutMs?: number;
   durationMs?: number;
   detail?: string;
@@ -282,6 +283,7 @@ export interface SystemProvisioningCompletedEventData {
   environmentDisplayName: string;
   workspaceRoot?: string;
   branchName?: string;
+  headSha?: string;
   fallbackReason?: string;
   reason?: ThreadProvisioningReason;
 }
