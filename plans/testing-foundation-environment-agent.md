@@ -13,6 +13,7 @@ In scope:
 - Describe the structural changes needed so end-to-end and regression coverage can grow with the product
 - Define the kinds of behaviors that should become permanent, stable regression targets
 - Clarify what should be treated as core contract coverage versus supporting unit and integration coverage
+- Define how to identify and remove low-value implementation-detail tests that create maintenance drag without increasing real confidence
 
 Out of scope:
 
@@ -47,6 +48,8 @@ Out of scope:
 3. Capture the gaps in the current setup
 
 - The environment-agent area has meaningful test coverage already, but it is still mostly proving local mechanics rather than serving as the main regression backbone.
+- A meaningful slice of the current suite asserts incidental implementation details such as exact call counts, specific polling sequences, or private helper behavior that is likely to change during refactors.
+- Those tests are not just low leverage; they actively make architectural changes harder by failing on harmless rewrites while still missing externally visible regressions.
 - Too much of the current daemon end-to-end foundation is still oriented around the daemon owning or simulating a direct provider child process, which is no longer the intended long-term architecture.
 - Existing end-to-end coverage proves a few valuable happy paths, but it does not yet provide a broad reusable regression matrix for lifecycle, failure, and recovery behavior.
 - Current fake runtime behavior is useful, but too scenario-specific and provider-shaped to serve as the long-term foundation for growing transport-level tests.
@@ -185,7 +188,29 @@ Out of scope:
   - private helper behavior already covered elsewhere
   - transport implementation details that are expected to change during migration
 
-11. Make shared lifecycle coverage reusable across environment kinds
+11. Define what should be removed, not just what should be added
+
+- Audit the current daemon/environment-agent tests and classify each test into one of three buckets:
+  - durable contract coverage worth keeping
+  - transitional coverage worth keeping temporarily during migration
+  - implementation-detail coverage that should be deleted
+- Delete tests whose primary value is asserting:
+  - the exact number of helper calls in a happy path
+  - exact polling cadence when cadence is not itself the product contract
+  - private sequencing inside one class when the externally visible behavior is already covered elsewhere
+  - mocks that simply restate the implementation without constraining observable behavior
+- Prefer removing low-value tests entirely over rewriting them into slightly different versions of the same implementation coupling.
+- When a low-value test is removed, replace it only if there is a clear external contract that is otherwise left uncovered.
+- The goal is not a smaller suite for its own sake; it is a suite whose failures mean something important broke.
+
+12. Introduce a practical decision rule for future test reviews
+
+- Keep a test if changing the implementation without changing product behavior would be expected to keep the test green.
+- Rewrite or remove a test if harmless refactors would predictably make it fail.
+- Keep mock-heavy tests only when they isolate a hard-to-reach edge that is not cheaper to express at a higher layer.
+- Prefer one durable scenario or contract test over many narrow implementation tests that all break on the same refactor.
+
+13. Make shared lifecycle coverage reusable across environment kinds
 
 - The same high-value lifecycle expectations should be reusable across current host-backed execution and future remote execution.
 - Environment-specific tests should focus on what is unique about provisioning, reachability, capabilities, and cleanup.
@@ -196,7 +221,7 @@ Out of scope:
   - if a scenario is about transport or lifecycle semantics, write it once in the shared matrix
   - if a scenario is about provisioning mechanics or reachability for one environment kind, keep it environment-specific
 
-12. Plan CI around confidence levels, not just one big test bucket
+14. Plan CI around confidence levels, not just one big test bucket
 
 - Keep fast unit and integration coverage on the default path.
 - Add a dedicated deterministic regression lane for transport and lifecycle behavior once the simulator foundation exists.
@@ -208,7 +233,7 @@ Out of scope:
   - lifecycle regression failure
   - real environment-backed failure
 
-13. Be explicit about what should wait until the migration stabilizes
+15. Be explicit about what should wait until the migration stabilizes
 
 - Do not over-invest in large numbers of new fake-provider daemon end-to-end tests.
 - Do not cement a simulator API that mirrors temporary transport implementation details.
@@ -223,6 +248,7 @@ Out of scope:
 - The plan reflects the repo’s current partial environment-agent landing rather than pretending the migration has not started yet.
 - The most important architectural contracts are identified clearly enough to become explicit suites later.
 - The future regression strategy is centered on lifecycle, replay, retry, and recovery behavior rather than only happy-path execution.
+- The plan makes subtraction explicit, so “improving the suite” includes deleting misleading tests rather than only increasing test count.
 - Shared lifecycle guarantees can be reused across multiple environment implementations with limited environment-specific branching.
 - The plan is specific enough that later implementation work can be broken into discrete tasks without redefining the strategy first.
 
@@ -234,3 +260,4 @@ Out of scope:
 - There will likely be a temporary period where legacy-path and new-path tests coexist; the main risk is accidentally treating that duplication as the permanent testing model.
 - The current fake provider/runtime harness is still useful during migration, but the plan should not allow it to remain the long-term center of end-to-end strategy once the environment-agent path becomes authoritative.
 - Because the environment-agent path now exists in partially landed form, there is also a risk of declaring victory too early and never consolidating the suite around the new boundary.
+- Test deletion needs discipline: removing low-value tests is good, but only if the remaining suite still covers the durable contracts the deleted tests were pretending to protect.
