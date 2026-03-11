@@ -118,6 +118,7 @@ import {
 
 const SCROLL_THRESHOLD = 40;
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
+const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
 const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
 const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;
 const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;
@@ -350,6 +351,7 @@ export function ThreadDetailView() {
   );
   const gitDiffPanelRef = useRef<HTMLElement | null>(null);
   const gitDiffResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
+  const lastGitDiffPanelSizeRef = useRef(TIMELINE_PANEL_DEFAULT_SIZE_PERCENT);
   const lastGitDiffWideEnoughRef = useRef<boolean | null>(null);
   const gitDiffFileRenderTimersRef = useRef<Map<string, number>>(new Map());
   const queuedGitDiffFileRenderKeysRef = useRef<Set<string>>(new Set());
@@ -462,7 +464,7 @@ export function ThreadDetailView() {
     }
 
     if (isGitDiffPanelOpen) {
-      panel.expand();
+      panel.expand(lastGitDiffPanelSizeRef.current);
       return;
     }
 
@@ -721,6 +723,13 @@ export function ThreadDetailView() {
       // Treat panel resizing as opting back into responsive split/stacked mode.
       setHasExplicitGitDiffDisplayMode(false);
     }
+  }, []);
+  const handleGitDiffPanelResize = useCallback((size: number) => {
+    if (size <= 0) {
+      return;
+    }
+
+    lastGitDiffPanelSizeRef.current = size;
   }, []);
 
   const handleLoadToolGroupMessages = useCallback(
@@ -1606,11 +1615,9 @@ export function ThreadDetailView() {
       ) : null}
       <ConversationTimeline>
         {isThreadTimelinePending ? (
-          <ConversationEmptyState
-            message="Loading thread..."
-            spacing="compact"
-            alignment="left"
-            className="w-full rounded-md px-2"
+          <ConversationWorkingIndicator
+            label="Loading thread..."
+            className="mt-6"
           />
         ) : threadDetailRows.length === 0 ? (
           <ConversationEmptyState message="No events yet" />
@@ -1782,7 +1789,11 @@ export function ThreadDetailView() {
       <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
         <Panel
           id="thread-detail-timeline-panel"
-          defaultSize={TIMELINE_PANEL_DEFAULT_SIZE_PERCENT}
+          defaultSize={
+            isGitDiffPanelOpen
+              ? TIMELINE_PANEL_DEFAULT_SIZE_PERCENT
+              : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
+          }
           minSize={30}
           order={1}
           className="min-w-0 overflow-hidden"
@@ -1798,6 +1809,7 @@ export function ThreadDetailView() {
           onCollapse={closeThreadGitDiffPanel}
           onClose={closeThreadGitDiffPanel}
           onDragging={handleGitDiffPanelDragging}
+          onResize={handleGitDiffPanelResize}
           gitDiffSelectValue={gitDiffSelectValue}
           gitDiffSelectOptions={gitDiffSelectOptions}
           onGitDiffSelectionChange={(value) => {

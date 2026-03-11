@@ -235,7 +235,17 @@ vi.mock("@/components/messages/ConversationEntry", () => ({
 }));
 
 vi.mock("@/components/messages/ConversationWorkingIndicator", () => ({
-  ConversationWorkingIndicator: () => <div>working</div>,
+  ConversationWorkingIndicator: ({
+    label,
+    isThinking,
+    className,
+  }: {
+    label?: string;
+    isThinking?: boolean;
+    className?: string;
+  }) => (
+    <div>{`${label ?? (isThinking ? "Thinking..." : "working")}|${className ?? ""}`}</div>
+  ),
 }));
 
 vi.mock("@/components/shared/StatusPillCommitPopover", () => ({

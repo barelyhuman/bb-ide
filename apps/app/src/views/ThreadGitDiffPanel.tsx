@@ -174,6 +174,7 @@ export function ThreadGitDiffPanel({
   onCollapse,
   onClose,
   onDragging,
+  onResize,
   gitDiffSelectValue,
   gitDiffSelectOptions,
   onGitDiffSelectionChange,
@@ -205,6 +206,7 @@ export function ThreadGitDiffPanel({
   onCollapse: () => void;
   onClose: () => void;
   onDragging: (isDragging: boolean) => void;
+  onResize: (size: number) => void;
   gitDiffSelectValue: string;
   gitDiffSelectOptions: readonly GitDiffSelectionOption[];
   onGitDiffSelectionChange: (value: string) => void;
@@ -266,10 +268,11 @@ export function ThreadGitDiffPanel({
         id="thread-detail-git-diff-panel"
         collapsible
         collapsedSize={0}
-        defaultSize={GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT}
+        defaultSize={isOpen ? GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT : 0}
         minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
         maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
         onCollapse={onCollapse}
+        onResize={onResize}
         order={2}
         className={cn(
           "min-w-0 overflow-hidden transition-[flex-grow,flex-basis,opacity]",
