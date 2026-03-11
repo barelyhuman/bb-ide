@@ -50,7 +50,12 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
+import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
+import {
+  ThreadGitActionDialog,
+  type ThreadGitActionDialogTarget,
+} from "@/components/thread/ThreadGitActionDialog";
 import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
@@ -63,7 +68,6 @@ import {
   ConversationTimeline,
   ExpandablePanel,
   StatusPill,
-  type StatusPillVariant,
 } from "@beanbag/ui-core";
 import {
   formatEnvironmentDisplayName,
@@ -81,12 +85,9 @@ import {
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { getEnvironmentIconInfo } from "@/lib/environment-icon";
-import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import {
-  threadWorktreeCleanLabel,
-  threadWorkStatusLabel,
-  threadWorkStatusVariant,
+  getThreadGitStatusDisplay,
 } from "@/lib/thread-work-status";
 import {
   formatChangeSummary,
@@ -362,6 +363,8 @@ export function ThreadDetailView() {
   const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
     null,
   );
+  const [threadGitActionTarget, setThreadGitActionTarget] =
+    useState<ThreadGitActionDialogTarget | null>(null);
   const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"unified" | "split">(
     "unified",
   );
@@ -1400,10 +1403,6 @@ export function ThreadDetailView() {
       ? parentThread.title
       : parentThreadId;
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
-  const primaryCheckoutStatusLabel = isPrimaryCheckoutActive ? "Active" : "Not active";
-  const primaryCheckoutStatusVariant: StatusPillVariant = isPrimaryCheckoutActive
-    ? "emphasis"
-    : "outline";
   const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
     ? demotePrimaryCheckout.isPending
@@ -1413,10 +1412,54 @@ export function ThreadDetailView() {
     ? "Promoting..."
     : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
-  const showPrimaryCheckoutMetadata = supportsPrimaryCheckout && !isArchivedThread;
-  const showWorkspaceStatus =
-    (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
-    !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
+  const showPrimaryCheckoutAction = supportsPrimaryCheckout && !isArchivedThread;
+  const isPrimaryCheckoutActionDisabled =
+    isPrimaryCheckoutMutationPending ||
+    (isPrimaryCheckoutActive
+      ? demoteAction?.available === false
+      : promoteAction?.available === false);
+  const isDirectThreadEnvironment =
+    environmentInfo?.capabilities.host_filesystem === true &&
+    environmentInfo.capabilities.isolated_workspace !== true;
+  const threadHeaderGitAction: {
+    target: ThreadGitActionDialogTarget;
+    label: string;
+  } | null = (() => {
+    if (!resolvedThreadWorkStatus || isArchivedThread) {
+      return null;
+    }
+
+    if (isDirectThreadEnvironment) {
+      if (!resolvedThreadWorkStatus.hasUncommittedChanges) {
+        return null;
+      }
+      return {
+        target: { kind: "commit" },
+        label: "Commit",
+      };
+    }
+
+    if (
+      supportsSquashMerge &&
+      (
+        resolvedThreadWorkStatus.hasCommittedUnmergedChanges ||
+        resolvedThreadWorkStatus.hasUncommittedChanges
+      )
+    ) {
+      return {
+        target: {
+          kind: resolvedThreadWorkStatus.hasUncommittedChanges
+            ? "commit_and_squash_merge"
+            : "squash_merge",
+        },
+        label: "Squash merge",
+      };
+    }
+
+    return null;
+  })();
+  const isThreadGitActionPending =
+    requestThreadCommitOperation.isPending || requestThreadSquashOperation.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
   const threadEnvironmentLabel =
     thread.environmentId
@@ -1472,6 +1515,30 @@ export function ThreadDetailView() {
     selectedMergeBaseBranch ??
     resolvedThreadWorkStatus?.mergeBaseBranch ??
     resolvedThreadWorkStatus?.mergeBaseBranches?.[0];
+  const showThreadWorkspaceStatus =
+    (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
+    !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
+  const threadGitStatusDisplay = getThreadGitStatusDisplay(
+    resolvedThreadWorkStatus,
+    {
+      mergeBaseBranch: threadMergeBaseBranch,
+      showBranchComparison: showBranchComparisonUi,
+    },
+  );
+  const threadGitStatusLabelClass = resolvedThreadWorkStatus?.state === "deleted"
+    ? "text-destructive"
+    : resolvedThreadWorkStatus?.state === "untracked"
+      ? "text-muted-foreground"
+      : "text-foreground";
+  const showThreadChangedFiles = Boolean(
+    resolvedThreadWorkStatus &&
+      (
+        resolvedThreadWorkStatus.state === "dirty_uncommitted" ||
+        resolvedThreadWorkStatus.state === "dirty_and_committed_unmerged" ||
+        resolvedThreadWorkStatus.state === "committed_unmerged"
+      ) &&
+      (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
+  );
   const showThreadMergeBase =
     Boolean(threadMergeBaseBranch) &&
     threadMergeBaseBranch !== resolvedThreadWorkStatus?.defaultBranch;
@@ -1480,9 +1547,9 @@ export function ThreadDetailView() {
       threadEnvironmentType ||
       threadBranchName ||
       showThreadMergeBase ||
-      thread.archivedAt !== undefined ||
-      showPrimaryCheckoutMetadata ||
-      showWorkspaceStatus,
+      showThreadWorkspaceStatus ||
+      showThreadChangedFiles ||
+      thread.archivedAt !== undefined,
   );
   const threadTitle = getThreadDisplayTitle(thread);
   const threadActionsDisabled =
@@ -1506,6 +1573,66 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
+  const handleTogglePrimaryCheckout = () => {
+    const action = isPrimaryCheckoutActive
+      ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
+      : promoteThread.mutateAsync({ id: thread.id });
+    void action.catch((err) => {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to update primary checkout state",
+      );
+    });
+  };
+  const handleCommitThread = async ({
+    includeUnstaged,
+    message,
+  }: {
+    includeUnstaged: boolean;
+    message?: string;
+  }) => {
+    if (!threadId) {
+      return;
+    }
+    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
+    await requestThreadCommitOperation.mutateAsync({
+      id: threadId,
+      operation: "commit",
+      options: {
+        includeUnstaged,
+        ...(message ? { message } : {}),
+        autoArchiveOnSuccess,
+      },
+    });
+  };
+  const handleSquashMergeThread = async ({
+    commitIfNeeded,
+    includeUnstaged,
+    commitMessage,
+    mergeBaseBranch,
+  }: {
+    commitIfNeeded: boolean;
+    includeUnstaged: boolean;
+    commitMessage?: string;
+    mergeBaseBranch?: string;
+  }) => {
+    if (!threadId) {
+      return;
+    }
+    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
+    await requestThreadSquashOperation.mutateAsync({
+      id: threadId,
+      operation: "squash_merge",
+      options: {
+        commitIfNeeded,
+        includeUnstaged,
+        ...(commitMessage ? { commitMessage } : {}),
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        autoArchiveOnSuccess,
+      },
+    });
+  };
   const renderThreadMetadataRows = () => (
     <>
       {parentThreadId ? (
@@ -1526,7 +1653,7 @@ export function ThreadDetailView() {
           label="Environment"
           valueClassName="min-w-0 truncate"
         >
-          <span className="font-medium">{threadEnvironmentType}</span>
+          {threadEnvironmentType}
         </DetailRow>
       ) : null}
       {threadBranchName ? (
@@ -1536,7 +1663,7 @@ export function ThreadDetailView() {
         >
           <button
             type="button"
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-foreground transition-colors hover:text-foreground/80"
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
             onClick={() => {
               void handleCopyThreadBranch();
             }}
@@ -1553,124 +1680,26 @@ export function ThreadDetailView() {
           label="Merge base"
           valueClassName="min-w-0 truncate"
         >
-          <span className="font-medium">{threadMergeBaseBranch}</span>
+          {threadMergeBaseBranch}
         </DetailRow>
       ) : null}
-      {showPrimaryCheckoutMetadata ? (
+      {showThreadWorkspaceStatus ? (
         <DetailRow
-          label="Primary checkout"
+          label="Git status"
+          align="start"
           valueClassName="min-w-0"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <StatusPill variant={primaryCheckoutStatusVariant}>
-              {primaryCheckoutStatusLabel}
-            </StatusPill>
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="h-auto px-0 py-0 ui-text-xs underline"
-              disabled={
-                thread.archivedAt !== undefined ||
-                isPrimaryCheckoutMutationPending ||
-                (isPrimaryCheckoutActive
-                  ? demoteAction?.available === false
-                  : promoteAction?.available === false)
-              }
-              onClick={() => {
-                const action = isPrimaryCheckoutActive
-                  ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
-                  : promoteThread.mutateAsync({ id: thread.id });
-                void action.catch((err) => {
-                  window.alert(
-                    err instanceof Error
-                      ? err.message
-                      : "Failed to update primary checkout state",
-                  );
-                });
-              }}
-            >
-              {primaryCheckoutActionLabel}
-            </Button>
+          <div
+            className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
+            title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
+          >
+            <span className={`shrink-0 font-medium ${threadGitStatusLabelClass}`}>
+              {threadGitStatusDisplay.label}
+            </span>
+            <span className="min-w-0 truncate text-muted-foreground">
+              {threadGitStatusDisplay.summary}
+            </span>
           </div>
-        </DetailRow>
-      ) : null}
-      {showWorkspaceStatus ? (
-        <DetailRow
-          label="Workspace status"
-          valueClassName="min-w-0"
-        >
-          <StatusPillCommitPopover
-            threadId={thread.id}
-            status={resolvedThreadWorkStatus}
-            label={threadWorkStatusLabel(resolvedThreadWorkStatus, {
-              cleanLabel:
-                showBranchComparisonUi
-                  ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
-                  : undefined,
-            })}
-            variant={threadWorkStatusVariant(resolvedThreadWorkStatus, {
-              isArchivedThread: thread.archivedAt !== undefined,
-            })}
-            cleanTitle={
-              showBranchComparisonUi
-                ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
-                : undefined
-            }
-            showMergeBaseDetails={showBranchComparisonUi}
-            mergeBaseBranch={
-              selectedMergeBaseBranch ?? resolvedThreadWorkStatus?.mergeBaseBranch
-            }
-            mergeBaseBranchOptions={resolvedThreadWorkStatus?.mergeBaseBranches}
-            onMergeBaseBranchChange={
-              showBranchComparisonUi
-                ? setSelectedMergeBaseBranch
-                : undefined
-            }
-            canCommit={Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)}
-            canSquashMerge={
-              squashMergeAction?.available === true &&
-              (
-                Boolean(resolvedThreadWorkStatus?.hasCommittedUnmergedChanges) ||
-                Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)
-              )
-            }
-            isCommitting={requestThreadCommitOperation.isPending}
-            isSquashMerging={requestThreadSquashOperation.isPending}
-            onCommit={async ({ includeUnstaged, message }) => {
-              if (!threadId) return;
-              const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-              await requestThreadCommitOperation.mutateAsync({
-                id: threadId,
-                operation: "commit",
-                options: {
-                  includeUnstaged,
-                  ...(message ? { message } : {}),
-                  autoArchiveOnSuccess,
-                },
-              });
-            }}
-            onSquashMerge={async ({
-              commitIfNeeded,
-              includeUnstaged,
-              commitMessage,
-              mergeBaseBranch,
-            }) => {
-              if (!threadId) return;
-              const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-              await requestThreadSquashOperation.mutateAsync({
-                id: threadId,
-                operation: "squash_merge",
-                options: {
-                  commitIfNeeded,
-                  includeUnstaged,
-                  ...(commitMessage ? { commitMessage } : {}),
-                  ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-                  autoArchiveOnSuccess,
-                },
-              });
-            }}
-          />
         </DetailRow>
       ) : null}
       {thread.archivedAt !== undefined ? (
@@ -1694,7 +1723,28 @@ export function ThreadDetailView() {
   const renderThreadMetadataCard = (className?: string) => (
     <DetailCard className={className}>
       {renderThreadMetadataRows()}
+      {showThreadChangedFiles ? (
+        <DetailRow
+          label="Changed files"
+          layout="vertical"
+          valueClassName="pt-0.5"
+        >
+          <WorkspaceChangesList
+            files={resolvedThreadWorkStatus?.files}
+            threadId={thread.id}
+            maxHeightClassName="max-h-48"
+          />
+        </DetailRow>
+      ) : null}
     </DetailCard>
+  );
+  const renderThreadMetadataContent = (className?: string) => (
+    renderThreadMetadataCard(
+      [
+        "rounded-none border-0 bg-transparent px-0 py-0",
+        className,
+      ].filter(Boolean).join(" "),
+    )
   );
   const threadActionsMenu = (
     <ThreadActionsMenu
@@ -1840,10 +1890,39 @@ export function ThreadDetailView() {
       <div className="flex h-12 items-center gap-3">
         <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
         <Separator orientation="vertical" className="h-4" />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 flex items-center gap-2">
           <p className="truncate text-sm font-semibold">{threadTitle}</p>
+          {isPrimaryCheckoutActive ? (
+            <StatusPill variant="emphasis">active</StatusPill>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {showPrimaryCheckoutAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 rounded-md border-border/70 px-2.5 text-xs font-medium shadow-sm hover:bg-muted/55"
+              disabled={isPrimaryCheckoutActionDisabled}
+              onClick={handleTogglePrimaryCheckout}
+            >
+              {primaryCheckoutActionLabel}
+            </Button>
+          ) : null}
+          {threadHeaderGitAction ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isThreadGitActionPending}
+              className="h-7 rounded-md border-border/70 px-2.5 text-xs font-medium shadow-sm hover:bg-muted/55"
+              onClick={() => {
+                setThreadGitActionTarget(threadHeaderGitAction.target);
+              }}
+            >
+              {threadHeaderGitAction.label}
+            </Button>
+          ) : null}
           {threadActionsMenu}
           <Button
             type="button"
@@ -2067,9 +2146,7 @@ export function ThreadDetailView() {
             activePanel={activeSecondaryPanel}
             metadataContent={
               showThreadMetadata ? (
-                <div>
-                  {renderThreadMetadataCard("rounded-none border-0 bg-transparent px-0 py-0")}
-                </div>
+                renderThreadMetadataContent()
               ) : (
                 <div className="pt-1 text-sm text-muted-foreground">
                   No thread details available.
@@ -2122,6 +2199,31 @@ export function ThreadDetailView() {
           }
         }}
         onRename={submitThreadRename}
+      />
+      <ThreadGitActionDialog
+        target={threadGitActionTarget}
+        pending={
+          threadGitActionTarget?.kind === "commit"
+            ? requestThreadCommitOperation.isPending
+            : requestThreadSquashOperation.isPending
+        }
+        showMergeBaseDetails={showBranchComparisonUi}
+        mergeBaseBranch={
+          selectedMergeBaseBranch ??
+          resolvedThreadWorkStatus?.mergeBaseBranch ??
+          resolvedThreadWorkStatus?.defaultBranch
+        }
+        mergeBaseBranchOptions={resolvedThreadWorkStatus?.mergeBaseBranches}
+        onMergeBaseBranchChange={
+          showBranchComparisonUi ? setSelectedMergeBaseBranch : undefined
+        }
+        onOpenChange={(open) => {
+          if (!open) {
+            setThreadGitActionTarget(null);
+          }
+        }}
+        onCommit={handleCommitThread}
+        onSquashMerge={handleSquashMergeThread}
       />
     </>
   );

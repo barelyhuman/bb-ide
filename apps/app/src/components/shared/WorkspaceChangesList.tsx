@@ -19,21 +19,24 @@ export function WorkspaceChangesList({
 }) {
   if (!files || files.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">{emptyMessage}</p>
+      <p className="ui-text-sm leading-5 text-muted-foreground">{emptyMessage}</p>
     );
   }
 
   return (
-    <ul className={cn("space-y-0.5 overflow-auto", maxHeightClassName)}>
+    <ul className={cn("space-y-1 overflow-auto", maxHeightClassName)}>
       {files.map((file) => (
-        <li key={`${file.status}:${file.path}`} className="flex items-center gap-2">
-          <span className="w-8 shrink-0 text-xs uppercase text-muted-foreground/80">
+        <li
+          key={`${file.status}:${file.path}`}
+          className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-3"
+        >
+          <span className="ui-text-sm leading-5 text-muted-foreground/80">
             {formatWorkspaceFileStatus(file.status)}
           </span>
           {threadId || onFileClick ? (
             <button
               type="button"
-              className="truncate text-left text-xs underline-offset-2 hover:underline"
+              className="min-w-0 truncate text-left ui-text-sm leading-5 underline-offset-2 hover:underline"
               title={file.path}
               onClick={() => {
                 if (onFileClick) {
@@ -51,7 +54,7 @@ export function WorkspaceChangesList({
               {file.path}
             </button>
           ) : (
-            <span className="truncate text-xs">{file.path}</span>
+            <span className="min-w-0 truncate ui-text-sm leading-5">{file.path}</span>
           )}
         </li>
       ))}

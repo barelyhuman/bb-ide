@@ -2,12 +2,14 @@ import { Fragment, createContext, useContext, type ReactNode } from "react";
 import { cx } from "./utils.js";
 
 const DETAIL_ROW_GRID_CLASS =
-  "grid grid-cols-[92px_minmax(0,1fr)] gap-2 text-sm sm:grid-cols-[124px_minmax(0,1fr)]";
+  "grid grid-cols-[92px_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[124px_minmax(0,1fr)]";
 const DETAIL_CARD_COLUMNS_CLASS =
-  "grid grid-cols-[92px_minmax(0,1fr)] gap-x-2 text-sm sm:grid-cols-[124px_minmax(0,1fr)]";
+  "grid grid-cols-[92px_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[124px_minmax(0,1fr)]";
+const DETAIL_LABEL_CLASS = "m-0 ui-text-sm leading-5 text-muted-foreground";
+const DETAIL_VALUE_CLASS = "m-0 min-w-0 ui-text-sm leading-5 text-foreground";
 
 type DetailCardLayout = "stack" | "columns";
-type DetailRowLayout = "stack" | "contents";
+type DetailRowLayout = "stack" | "contents" | "vertical";
 
 const DetailCardLayoutContext = createContext<DetailCardLayout>("stack");
 
@@ -23,6 +25,7 @@ function resolveDetailRowLayout(
     switch (layout) {
       case "stack":
       case "contents":
+      case "vertical":
         return layout;
     }
 
@@ -54,7 +57,7 @@ export function DetailCard({
     <DetailCardLayoutContext.Provider value={layout}>
       <dl
         className={cx(
-          "rounded-md border border-border/80 bg-background/40 px-2 py-1",
+          "rounded-md border border-border/80 bg-background/40 px-2.5 py-1.5",
           layout === "columns" ? DETAIL_CARD_COLUMNS_CLASS : null,
           className,
         )}
@@ -92,7 +95,8 @@ export function DetailRow({
       <Fragment>
         <dt
           className={cx(
-            "m-0 py-1 text-xs text-muted-foreground",
+            DETAIL_LABEL_CLASS,
+            "py-1.5",
             className,
             align === "center" ? "self-center" : "self-start",
             labelClassName,
@@ -102,7 +106,8 @@ export function DetailRow({
         </dt>
         <dd
           className={cx(
-            "m-0 min-w-0 py-1",
+            DETAIL_VALUE_CLASS,
+            "py-1.5",
             className,
             align === "center" ? "self-center" : "self-start",
             valueClassName,
@@ -114,16 +119,31 @@ export function DetailRow({
     );
   }
 
+  if (resolvedLayout === "vertical") {
+    return (
+      <div
+        className={cx(
+          "space-y-1.5 py-1.5",
+          inheritedLayout === "columns" ? "col-span-2" : null,
+          className,
+        )}
+      >
+        <dt className={cx(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
+        <dd className={cx(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cx(
         DETAIL_ROW_GRID_CLASS,
-        align === "center" ? "items-center py-1" : "py-1",
+        align === "center" ? "items-center py-1.5" : "py-1.5",
         className,
       )}
     >
-      <dt className={cx("m-0 text-xs text-muted-foreground", labelClassName)}>{label}</dt>
-      <dd className={cx("m-0 min-w-0", valueClassName)}>{children}</dd>
+      <dt className={cx(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
+      <dd className={cx(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
     </div>
   );
 }
@@ -140,7 +160,7 @@ export function DetailMessageRow({
   contentClassName,
 }: DetailMessageRowProps) {
   return (
-    <div className={cx(DETAIL_ROW_GRID_CLASS, "py-0.5", className)}>
+    <div className={cx(DETAIL_ROW_GRID_CLASS, "py-1.5", className)}>
       <div aria-hidden="true" />
       <div className={contentClassName}>{children}</div>
     </div>
