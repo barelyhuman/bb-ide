@@ -5,6 +5,7 @@ import {
   migrate,
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
+  type EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
   ProjectRepository,
   ThreadRepository,
@@ -33,6 +34,7 @@ describe("EnvironmentAgentSessionService", () => {
   let cursors: EnvironmentAgentCursorRepository;
   let commands: EnvironmentAgentCommandRepository;
   let service: EnvironmentAgentSessionService;
+  let onSessionInvalidated: (session: EnvironmentAgentSessionRecord) => void;
 
   beforeEach(() => {
     db = createConnection(":memory:");
@@ -43,6 +45,7 @@ describe("EnvironmentAgentSessionService", () => {
     sessions = new EnvironmentAgentSessionRepository(db);
     cursors = new EnvironmentAgentCursorRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
+    onSessionInvalidated = vi.fn<(session: EnvironmentAgentSessionRecord) => void>();
     service = new EnvironmentAgentSessionService(
       new EnvironmentAgentSessionManager(sessions),
       cursors,
@@ -53,6 +56,7 @@ describe("EnvironmentAgentSessionService", () => {
         eventApplier: new EnvironmentAgentEventApplier(cursors, {
           ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
         }),
+        onSessionInvalidated,
       },
     );
   });
@@ -495,6 +499,13 @@ describe("EnvironmentAgentSessionService", () => {
         closeReason: "lease_expired",
       }),
     ]);
+    expect(onSessionInvalidated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: opened.session.id,
+        threadId,
+        closeReason: "lease_expired",
+      }),
+    );
   });
 
   it("closes active sessions explicitly", () => {
@@ -529,6 +540,63 @@ describe("EnvironmentAgentSessionService", () => {
       closeReason: "agent_shutdown",
       closedAt: 2_000,
     });
+    expect(onSessionInvalidated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: opened.session.id,
+        threadId,
+        closeReason: "agent_shutdown",
+      }),
+    );
+  });
+
+  it("invalidates replaced sessions when a newer session opens", () => {
+    const threadId = createThreadId();
+    const first = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    const second = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-2",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 2,
+          },
+        ],
+      },
+    });
+
+    expect(second.replaced).toMatchObject({
+      id: first.session.id,
+      status: "replaced",
+      closeReason: "newer_session",
+    });
+    expect(onSessionInvalidated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: first.session.id,
+        threadId,
+        closeReason: "newer_session",
+      }),
+    );
   });
 
   it("records command acknowledgements and command results for the active session", () => {

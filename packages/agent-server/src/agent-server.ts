@@ -86,6 +86,14 @@ function toTurnLifecycleState(
   return undefined;
 }
 
+function isMissingProviderThreadMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("no rollout found for thread id") ||
+    normalized.includes("thread not found")
+  );
+}
+
 export class AgentServer {
   private readonly authRefreshWarningThreadIds = new Set<string>();
   private readonly suppressedAuthStderrDepth = new Map<string, number>();
@@ -404,7 +412,11 @@ export class AgentServer {
   isMissingProviderThreadError(error: unknown): boolean {
     return (
       error instanceof AgentServerSessionError &&
-      error.code === "missing_provider_thread"
+      (
+        error.code === "missing_provider_thread" ||
+        (error.code === "provider_rpc_error" &&
+          isMissingProviderThreadMessage(error.message))
+      )
     );
   }
 
@@ -570,6 +582,9 @@ export class AgentServer {
         return new AgentServerSessionError("unsupported_operation", message);
       case "provider_rpc_error":
       case undefined:
+        if (isMissingProviderThreadMessage(message)) {
+          return new AgentServerSessionError("missing_provider_thread", message);
+        }
         return new AgentServerSessionError("provider_rpc_error", message);
       default:
         return new AgentServerSessionError("provider_rpc_error", message);

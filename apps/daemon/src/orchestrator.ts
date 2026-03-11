@@ -924,6 +924,8 @@ export class Orchestrator implements ThreadOrchestrator {
     const activeTurnId =
       this.activeTurnIdByThreadId.get(threadId) ??
       this._resolvePersistedActiveTurnId(threadId);
+    const statusBeforeSend = thread.status;
+    const lifecycleEpochBeforeSend = this.turnLifecycleEpochs.get(threadId) ?? 0;
     if (activeTurnId) {
       this.activeTurnIdByThreadId.set(threadId, activeTurnId);
     }
@@ -967,6 +969,24 @@ export class Orchestrator implements ThreadOrchestrator {
         });
       });
     } catch (error) {
+      if (this.agentServer.isMissingProviderThreadError(error)) {
+        this.handleEnvironmentAgentSessionInvalidated(threadId);
+      }
+      if (
+        this._shouldRollbackTellFailure(
+          threadId,
+          statusBeforeSend,
+          activeTurnId,
+          lifecycleEpochBeforeSend,
+        )
+      ) {
+        this._setThreadStatus(threadId, statusBeforeSend);
+        this._appendEvent(
+          threadId,
+          "system/error",
+          this._createTellFailureEventData(error),
+        );
+      }
       this._rethrowAgentServerError(threadId, error);
     }
   }
@@ -1399,6 +1419,11 @@ export class Orchestrator implements ThreadOrchestrator {
     this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
     this._scheduleQueuedFollowUpDispatch(threadId);
+  }
+
+  handleEnvironmentAgentSessionInvalidated(threadId: string): void {
+    this.providerThreadIdByThreadId.delete(threadId);
+    this.agentServer.clearSessionState(threadId);
   }
 
   /**
@@ -3328,13 +3353,20 @@ export class Orchestrator implements ThreadOrchestrator {
     options?: PromptExecutionOptions,
   ): Promise<string> {
     const inMemoryThreadId = this.providerThreadIdByThreadId.get(threadId);
-    const persistedThreadId =
-      inMemoryThreadId ?? this._resolvePersistedProviderThreadId(threadId);
+    const hasActiveEnvironmentAgentSession =
+      this.environmentAgentCommandDispatcher?.hasActiveSession(threadId) ?? false;
 
-    if (inMemoryThreadId) {
+    if (
+      inMemoryThreadId &&
+      (!this.environmentAgentCommandDispatcher || hasActiveEnvironmentAgentSession)
+    ) {
       return inMemoryThreadId;
     }
+    if (inMemoryThreadId && this.environmentAgentCommandDispatcher) {
+      this.providerThreadIdByThreadId.delete(threadId);
+    }
 
+    const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
     if (!persistedThreadId) {
       throw inactiveSessionError(this.agentServer.getInactiveSessionMessage(threadId));
     }
@@ -3517,6 +3549,50 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _toErrorMessage(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
+  }
+
+  private _shouldRollbackTellFailure(
+    threadId: string,
+    statusBeforeSend: Thread["status"],
+    activeTurnIdBeforeSend: string | undefined,
+    lifecycleEpochBeforeSend: number,
+  ): boolean {
+    if (statusBeforeSend === "active" || activeTurnIdBeforeSend) {
+      return false;
+    }
+    if ((this.turnLifecycleEpochs.get(threadId) ?? 0) !== lifecycleEpochBeforeSend) {
+      return false;
+    }
+    return this._resolvePersistedActiveTurnId(threadId) === undefined;
+  }
+
+  private _createTellFailureEventData(
+    err: unknown,
+  ): ThreadEventDataForType<"system/error"> {
+    if (err instanceof AgentServerSessionError) {
+      switch (err.code) {
+        case "inactive_session":
+        case "no_active_turn":
+        case "unsupported_operation":
+        case "provider_rpc_error":
+        case "provider_timeout":
+        case "provider_unavailable":
+        case "missing_provider_thread":
+          return {
+            code: err.code,
+            message: "Failed to start turn",
+            detail: err.message,
+          };
+        default:
+          return assertNever(err.code);
+      }
+    }
+
+    return {
+      code: "turn_start_failed",
+      message: "Failed to start turn",
+      detail: this._toErrorMessage(err),
+    };
   }
 
   private _isSyncWorkspaceStatusUnsupportedError(err: unknown): boolean {

@@ -114,6 +114,9 @@ export function createServer(deps: ServerDeps) {
     {
       commandDispatcher: environmentAgentCommandDispatcher,
       eventApplier: environmentAgentEventApplier,
+      onSessionInvalidated: (session) => {
+        threadManager.handleEnvironmentAgentSessionInvalidated(session.threadId);
+      },
     },
   );
   threadManager = new Orchestrator(

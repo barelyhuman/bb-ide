@@ -35,6 +35,7 @@ export interface EnvironmentAgentSessionServiceOptions {
   preferredTransports?: readonly EnvironmentAgentSessionTransportKind[];
   commandDispatcher?: EnvironmentAgentCommandDispatcher;
   eventApplier?: EnvironmentAgentEventApplier;
+  onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
 }
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
@@ -149,6 +150,9 @@ export class EnvironmentAgentSessionService {
   private readonly preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
   private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
   private readonly eventApplier?: EnvironmentAgentEventApplier;
+  private readonly onSessionInvalidated?: (
+    session: EnvironmentAgentSessionRecord,
+  ) => void;
 
   constructor(
     private readonly sessions: EnvironmentAgentSessionManager,
@@ -166,6 +170,7 @@ export class EnvironmentAgentSessionService {
       options.preferredTransports ?? DEFAULT_PREFERRED_TRANSPORTS;
     this.commandDispatcher = options.commandDispatcher;
     this.eventApplier = options.eventApplier;
+    this.onSessionInvalidated = options.onSessionInvalidated;
   }
 
   openSession(args: {
@@ -216,6 +221,9 @@ export class EnvironmentAgentSessionService {
       sessionId: opened.active.id,
       now,
     });
+    if (opened.replaced) {
+      this.onSessionInvalidated?.(opened.replaced);
+    }
 
     let cursor = this.cursors.getByThreadId(args.threadId);
     if (cursor && channel.lastDaemonAcked === undefined) {
@@ -294,11 +302,16 @@ export class EnvironmentAgentSessionService {
     if (!closed) {
       throw new Error(`Unknown environment-agent session: ${args.sessionId}`);
     }
+    this.onSessionInvalidated?.(closed);
     return closed;
   }
 
   expireLeases(now?: number): EnvironmentAgentSessionRecord[] {
-    return this.sessions.expireLeases(now);
+    const expired = this.sessions.expireLeases(now);
+    for (const session of expired) {
+      this.onSessionInvalidated?.(session);
+    }
+    return expired;
   }
 
   getThreadStatus(threadId: string): EnvironmentAgentStatusSnapshot {

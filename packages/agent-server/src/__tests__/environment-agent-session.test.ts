@@ -219,6 +219,37 @@ describe("AgentServer environment-agent control plane", () => {
     } satisfies Partial<AgentServerSessionError>);
   });
 
+  it("treats provider thread-not-found rpc failures as missing provider threads", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    simulator.onProviderRequest("thread/resume", () => ({
+      error: {
+        code: -32_000,
+        message: "thread not found: provider-thread-1",
+      },
+    }));
+
+    await expect(
+      agentServer.resumeThreadCommand({
+        client: simulator.createClient(),
+        threadId: "thread-1",
+        projectId: "project-1",
+        providerThreadId: "provider-thread-1",
+        context: {
+          projectId: "project-1",
+          threadId: "thread-1",
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "missing_provider_thread",
+      name: "AgentServerSessionError",
+    } satisfies Partial<AgentServerSessionError>);
+  });
+
   it("ingests replayed provider notifications through the normal notification path", async () => {
     const onNotification = vi.fn();
     const agentServer = new AgentServer({

@@ -223,6 +223,9 @@ describe("environment-agent session orchestrator roundtrip", () => {
     sessionService = new EnvironmentAgentSessionService(sessionManager, cursors, {
       commandDispatcher,
       eventApplier,
+      onSessionInvalidated: (session) => {
+        threadManager.handleEnvironmentAgentSessionInvalidated(session.threadId);
+      },
     });
     threadManager = new Orchestrator(
       threads,
@@ -881,6 +884,297 @@ describe("environment-agent session orchestrator roundtrip", () => {
     expect(events.listByThread(threadId).map((event) => event.type)).toEqual(
       expect.arrayContaining(["client/turn/start", "turn/started", "turn/completed"]),
     );
+  });
+
+  it("revalidates the provider thread after an env-agent session closes and reopens", async () => {
+    const threadId = createThread("idle");
+    installRuntime(threadId);
+    const firstSessionId = openSession(threadId);
+    events.create({
+      threadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "codex",
+        method: "thread/started",
+        payload: {
+          thread: { id: "provider-thread-1" },
+        },
+      }),
+    });
+
+    const firstTell = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "First pass" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const firstEnsureForResume = completeCommand({
+      threadId,
+      sessionId: firstSessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const firstResume = completeCommand({
+      threadId,
+      sessionId: firstSessionId,
+      afterCursor: firstEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const firstEnsureForTurn = completeCommand({
+      threadId,
+      sessionId: firstSessionId,
+      afterCursor: firstResume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    completeCommand({
+      threadId,
+      sessionId: firstSessionId,
+      afterCursor: firstEnsureForTurn.commandCursor,
+      result: { ok: true },
+    });
+
+    await applyProviderEvent({
+      threadId,
+      sessionId: firstSessionId,
+      sequence: 1,
+      method: "turn/started",
+      payload: { turnId: "turn-1" },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId: firstSessionId,
+      sequence: 2,
+      method: "turn/completed",
+      payload: { turnId: "turn-1" },
+    });
+    await firstTell;
+
+    sessionService.closeSession({
+      threadId,
+      sessionId: firstSessionId,
+      reason: "agent_shutdown",
+      now: 3_000,
+    });
+    const secondSessionId = openSession(threadId);
+
+    const secondTell = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "After reconnect" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const secondEnsureForResume = completeCommand({
+      threadId,
+      sessionId: secondSessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(secondEnsureForResume.command).toMatchObject({
+      type: "provider.ensure",
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const secondResume = completeCommand({
+      threadId,
+      sessionId: secondSessionId,
+      afterCursor: secondEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    expect(secondResume.command).toMatchObject({
+      type: "thread.resume",
+      threadId,
+      providerThreadId: "provider-thread-1",
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const secondEnsureForTurn = completeCommand({
+      threadId,
+      sessionId: secondSessionId,
+      afterCursor: secondResume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    completeCommand({
+      threadId,
+      sessionId: secondSessionId,
+      afterCursor: secondEnsureForTurn.commandCursor,
+      result: { ok: true },
+    });
+
+    await applyProviderEvent({
+      threadId,
+      sessionId: secondSessionId,
+      sequence: 1,
+      method: "turn/started",
+      payload: { turnId: "turn-2" },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId: secondSessionId,
+      sequence: 2,
+      method: "turn/completed",
+      payload: { turnId: "turn-2" },
+    });
+    await secondTell;
+    expect(threads.getById(threadId)?.status).toBe("idle");
+  });
+
+  it("rolls idle threads back out of active and retries through resume after a stale turn.start failure", async () => {
+    const threadId = createThread("idle");
+    installRuntime(threadId);
+    const sessionId = openSession(threadId);
+    events.create({
+      threadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "codex",
+        method: "thread/started",
+        payload: {
+          thread: { id: "provider-thread-1" },
+        },
+      }),
+    });
+
+    const tellPromise = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "Retry stale turn start" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const providerEnsureForResume = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const resume = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const providerEnsureForTurn = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: resume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const failedTurnStart = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForTurn.commandCursor,
+      state: "failed",
+      errorCode: "provider_rpc_error",
+      errorMessage: "thread not found: provider-thread-1",
+    });
+    expect(failedTurnStart.command).toMatchObject({
+      type: "turn.start",
+      threadId,
+      providerThreadId: "provider-thread-1",
+    });
+
+    await expect(tellPromise).rejects.toThrow("thread not found: provider-thread-1");
+    expect(threads.getById(threadId)?.status).toBe("idle");
+    expect(
+      events.listByThread(threadId).find((event) => event.type === "system/error")?.data,
+    ).toMatchObject({
+      code: "missing_provider_thread",
+      message: "Failed to start turn",
+      detail: "thread not found: provider-thread-1",
+    });
+
+    const retryTell = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "Retry after stale id cleanup" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const retryEnsureForResume = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(retryEnsureForResume.command).toMatchObject({
+      type: "provider.ensure",
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const retryResume = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: retryEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    expect(retryResume.command).toMatchObject({
+      type: "thread.resume",
+      threadId,
+      providerThreadId: "provider-thread-1",
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const retryEnsureForTurn = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: retryResume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: retryEnsureForTurn.commandCursor,
+      result: { ok: true },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 1,
+      method: "turn/started",
+      payload: { turnId: "turn-2" },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 2,
+      method: "turn/completed",
+      payload: { turnId: "turn-2" },
+    });
+    await retryTell;
+
+    expect(threads.getById(threadId)?.status).toBe("idle");
   });
 
   it("rejects steer without an active turn before appending client turn start events", async () => {
