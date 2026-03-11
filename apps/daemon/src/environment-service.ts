@@ -13,9 +13,10 @@ import {
   type EnvironmentRegistry,
   type IEnvironment,
 } from "@beanbag/environment";
-import type {
-  EnvironmentAgentClient,
-  EnvironmentAgentConnectionTarget,
+import {
+  removeEnvironmentAgentDefaultLogArtifacts,
+  type EnvironmentAgentClient,
+  type EnvironmentAgentConnectionTarget,
 } from "@beanbag/environment-agent";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import {
@@ -300,6 +301,7 @@ export class EnvironmentService {
 
   destroyEnvironmentRuntime(threadId: string): void {
     const runtime = this.detachEnvironmentRuntime(threadId);
+    const thread = this.threadRepo.getById(threadId);
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
     const refresh = () => {
@@ -327,6 +329,9 @@ export class EnvironmentService {
       void Promise.resolve(runtime.environment.destroy())
         .then(() => {
           this.clearPersistedEnvironmentState(threadId);
+          if (thread) {
+            this.cleanupManagedThreadLogs(thread, environmentId);
+          }
         })
         .catch((error: unknown) => reportFailure(environmentId, error))
         .finally(refresh);
@@ -347,6 +352,7 @@ export class EnvironmentService {
     } catch (error) {
       if (isUnavailableCleanupTargetError(error)) {
         this.clearPersistedEnvironmentState(threadId);
+        this.cleanupManagedThreadLogs(thread);
         return;
       }
       throw error;
@@ -356,6 +362,7 @@ export class EnvironmentService {
     }
     await Promise.resolve(environment.destroy());
     this.clearPersistedEnvironmentState(threadId);
+    this.cleanupManagedThreadLogs(thread);
   }
 
   private clearPersistedEnvironmentState(threadId: string): void {
@@ -368,6 +375,26 @@ export class EnvironmentService {
       { touchUpdatedAt: false },
     );
     this.restoreFailuresByThreadId.delete(threadId);
+  }
+
+  private cleanupManagedThreadLogs(
+    thread: Pick<Thread, "id" | "projectId" | "environmentId">,
+    fallbackEnvironmentId?: string,
+  ): void {
+    const environmentId = thread.environmentId?.trim() || fallbackEnvironmentId?.trim();
+    if (!environmentId) {
+      return;
+    }
+
+    try {
+      removeEnvironmentAgentDefaultLogArtifacts({
+        projectId: thread.projectId,
+        threadId: thread.id,
+        environmentId,
+      });
+    } catch (error) {
+      this.callbacks.onCleanupFailure(thread.id, environmentId, error);
+    }
   }
 
   rebuildPrimaryPromotionStateFromGit(): void {

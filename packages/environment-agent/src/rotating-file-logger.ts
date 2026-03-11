@@ -1,12 +1,13 @@
 import {
   appendFileSync,
+  readdirSync,
   existsSync,
   mkdirSync,
   renameSync,
   rmSync,
   statSync,
 } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 export interface RotatingJsonLineFileWriterOptions {
   filePath: string;
@@ -31,6 +32,10 @@ function normalizeMaxFiles(value: number): number {
 
 function archivePath(filePath: string, index: number): string {
   return `${filePath}.${index}`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function readFileSizeBytes(filePath: string): number {
@@ -63,6 +68,21 @@ function rotateFiles(filePath: string, maxFiles: number): void {
   const firstArchivePath = archivePath(filePath, 1);
   rmSync(firstArchivePath, { force: true });
   renameSync(filePath, firstArchivePath);
+}
+
+export function removeRotatingJsonLineFileArtifacts(filePath: string): void {
+  const directoryPath = dirname(filePath);
+  const fileName = basename(filePath);
+  const archivePattern = new RegExp(`^${escapeRegExp(fileName)}(?:\\.\\d+)?$`);
+
+  try {
+    for (const entry of readdirSync(directoryPath)) {
+      if (!archivePattern.test(entry)) continue;
+      rmSync(join(directoryPath, entry), { force: true });
+    }
+  } catch {
+    rmSync(filePath, { force: true });
+  }
 }
 
 export function createRotatingJsonLineFileWriter(

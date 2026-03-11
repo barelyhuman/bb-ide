@@ -164,9 +164,21 @@ export {
 } from "./service.js";
 
 export type {
+  EnvironmentAgentLogIdentity,
+  EnvironmentAgentFileLogger,
+} from "./file-logger.js";
+export {
+  createEnvironmentAgentFileLogger,
+  removeEnvironmentAgentDefaultLogArtifacts,
+  resolveDefaultEnvironmentAgentLogFilePath,
+  resolveEnvironmentAgentLogFilePath,
+} from "./file-logger.js";
+
+export type {
   RotatingJsonLineFileWriterOptions,
   RotatingJsonLineFileWriter,
 } from "./rotating-file-logger.js";
 export {
   createRotatingJsonLineFileWriter,
+  removeRotatingJsonLineFileArtifacts,
 } from "./rotating-file-logger.js";

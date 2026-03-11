@@ -1,8 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createRotatingJsonLineFileWriter } from "./rotating-file-logger.js";
+import {
+  createRotatingJsonLineFileWriter,
+  removeRotatingJsonLineFileArtifacts,
+} from "./rotating-file-logger.js";
 
 const cleanupPaths: string[] = [];
 
@@ -58,5 +61,26 @@ describe("rotating file logger", () => {
     expect(JSON.parse(readFileSync(`${filePath}.2`, "utf8").trim())).toEqual({
       entry: 2,
     });
+  });
+
+  it("removes the active log file and retained archives", () => {
+    const dir = mkdtempSync(join(tmpdir(), "beanbag-rotating-logger-"));
+    cleanupPaths.push(dir);
+    const filePath = join(dir, "agent.log");
+    const writer = createRotatingJsonLineFileWriter({
+      filePath,
+      maxBytes: 1,
+      maxFiles: 4,
+    });
+
+    writer.write({ entry: 1 });
+    writer.write({ entry: 2 });
+    writer.write({ entry: 3 });
+
+    removeRotatingJsonLineFileArtifacts(filePath);
+
+    expect(existsSync(filePath)).toBe(false);
+    expect(existsSync(`${filePath}.1`)).toBe(false);
+    expect(existsSync(`${filePath}.2`)).toBe(false);
   });
 });

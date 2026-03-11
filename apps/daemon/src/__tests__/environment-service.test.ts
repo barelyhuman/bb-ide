@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   SystemEnvironmentInfo,
   Thread,
@@ -10,9 +10,18 @@ import {
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "@beanbag/environment";
+import { removeEnvironmentAgentDefaultLogArtifacts } from "@beanbag/environment-agent";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { EnvironmentService } from "../environment-service.js";
 import { resolveProjectCheckoutSnapshotAsync } from "../git-project.js";
+
+vi.mock("@beanbag/environment-agent", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@beanbag/environment-agent")>();
+  return {
+    ...actual,
+    removeEnvironmentAgentDefaultLogArtifacts: vi.fn(),
+  };
+});
 
 vi.mock("../git-project.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../git-project.js")>();
@@ -172,6 +181,7 @@ function createService(args: {
     id: "thread-1",
     projectId: "proj-1",
     status: "idle",
+    environmentId: "worktree",
     environmentRecord: {
       kind: "worktree",
       state: {},
@@ -248,6 +258,10 @@ function createService(args: {
 }
 
 describe("EnvironmentService", () => {
+  beforeEach(() => {
+    vi.mocked(removeEnvironmentAgentDefaultLogArtifacts).mockClear();
+  });
+
   it("runs optional setup only when provisioning creates the environment", async () => {
     const { service, runOptionalSetup } = createService({
       existsInitially: false,
@@ -300,6 +314,11 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
+    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      threadId: "thread-1",
+      environmentId: "worktree",
+    });
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
   });
@@ -322,6 +341,11 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
+    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      threadId: "thread-1",
+      environmentId: "worktree",
+    });
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
   });
@@ -350,6 +374,11 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
+    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
+      projectId: "proj-1",
+      threadId: "thread-1",
+      environmentId: "worktree",
+    });
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
   });
@@ -378,6 +407,7 @@ describe("EnvironmentService", () => {
       },
       { touchUpdatedAt: false },
     );
+    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).not.toBeNull();
     expect(threadState.environmentAgentCursor).toBe(12);
   });
