@@ -198,6 +198,7 @@ export interface ThreadOrchestrator {
     threadId: string,
     mergeBaseBranch?: string,
   ): Promise<ThreadWorkStatus | undefined>;
+  getMergeBaseBranchesAsync(threadId: string): Promise<string[] | undefined>;
   getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];
   getTimeline(
     threadId: string,

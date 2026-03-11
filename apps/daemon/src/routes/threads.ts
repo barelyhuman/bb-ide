@@ -259,6 +259,16 @@ async function getThreadForRouteLookup(
   return threadManager.getByIdAsync(threadId);
 }
 
+async function getThreadForFastRouteLookup(
+  threadManager: ThreadOrchestrator,
+  threadId: string,
+): Promise<Thread | undefined> {
+  return (
+    getThreadForLightweightRouteLookup(threadManager, threadId) ??
+    await getThreadForRouteLookup(threadManager, threadId)
+  );
+}
+
 function getThreadForLightweightRouteLookup(
   threadManager: ThreadOrchestrator,
   threadId: string,
@@ -833,7 +843,7 @@ export function createThreadRoutes(
     .get("/:id/work-status", zValidator("query", workStatusQuerySchema), async (c) => {
       try {
         const threadId = c.req.param("id");
-        const thread = await getThreadForRouteLookup(threadManager, threadId);
+        const thread = await getThreadForFastRouteLookup(threadManager, threadId);
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(threadId));
         }
@@ -845,6 +855,19 @@ export function createThreadRoutes(
         return c.json(
           workStatus ?? null,
         );
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get("/:id/merge-base-branches", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = await getThreadForFastRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        const mergeBaseBranches = await threadManager.getMergeBaseBranchesAsync(threadId);
+        return c.json(mergeBaseBranches ?? []);
       } catch (err) {
         return sendRouteError(c, err);
       }

@@ -548,6 +548,10 @@ export async function getThreadWorkStatus(
   );
 }
 
+export async function getThreadMergeBaseBranches(id: string): Promise<string[]> {
+  return request<string[]>("GET", `/threads/${id}/merge-base-branches`);
+}
+
 export async function getThreadPrimaryStatus(
   id: string,
 ): Promise<PrimaryCheckoutStatus> {

@@ -16,6 +16,7 @@ import {
 import {
   useThread,
   useThreadWorkStatus,
+  useThreadMergeBaseBranches,
   useThreadTimeline,
   useThreadGitDiff,
   useThreadToolGroupMessages,
@@ -311,6 +312,8 @@ export function ThreadDetailView() {
   const [selectedMergeBaseBranch, setSelectedMergeBaseBranch] = useState<string | undefined>(
     undefined,
   );
+  const [shouldLoadMergeBaseBranchOptions, setShouldLoadMergeBaseBranchOptions] = useState(false);
+  const [isMergeBaseBranchPickerOpen, setIsMergeBaseBranchPickerOpen] = useState(false);
   const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<string | null>(
     null,
   );
@@ -324,6 +327,15 @@ export function ThreadDetailView() {
     threadId ?? "",
     selectedMergeBaseBranch,
   );
+  const {
+    data: mergeBaseBranchOptions,
+    isLoading: isLoadingMergeBaseBranchOptions,
+  } = useThreadMergeBaseBranches(threadId ?? "", {
+    enabled:
+      Boolean(threadId) &&
+      shouldLoadMergeBaseBranchOptions &&
+      isMergeBaseBranchPickerOpen,
+  });
   const resolvedThreadWorkStatus =
     threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
@@ -676,6 +688,8 @@ export function ThreadDetailView() {
 
   useEffect(() => {
     setSelectedMergeBaseBranch(undefined);
+    setShouldLoadMergeBaseBranchOptions(false);
+    setIsMergeBaseBranchPickerOpen(false);
   }, [threadId]);
 
   useEffect(() => {
@@ -698,24 +712,6 @@ export function ThreadDetailView() {
   useEffect(() => {
     setPendingGitDiffScrollPath(null);
   }, [threadId]);
-
-  useEffect(() => {
-    if (!resolvedThreadWorkStatus) return;
-    const mergeBaseBranches = resolvedThreadWorkStatus.mergeBaseBranches ?? [];
-    const fallbackBranch =
-      resolvedThreadWorkStatus.mergeBaseBranch ?? mergeBaseBranches[0];
-    if (!fallbackBranch) return;
-    if (
-      selectedMergeBaseBranch &&
-      (
-        selectedMergeBaseBranch === resolvedThreadWorkStatus.mergeBaseBranch ||
-        mergeBaseBranches.includes(selectedMergeBaseBranch)
-      )
-    ) {
-      return;
-    }
-    setSelectedMergeBaseBranch(fallbackBranch);
-  }, [selectedMergeBaseBranch, resolvedThreadWorkStatus]);
 
   useEffect(() => {
     if (!threadGitDiff) return;
@@ -1478,10 +1474,12 @@ export function ThreadDetailView() {
       : isProvisioning
       ? "Provisioning..."
       : undefined;
+  const effectiveMergeBaseBranch =
+    selectedMergeBaseBranch ??
+    resolvedThreadWorkStatus?.mergeBaseBranch ??
+    resolvedThreadWorkStatus?.defaultBranch;
   const showBranchComparisonUi = Boolean(
-    resolvedThreadWorkStatus?.mergeBaseBranch ||
-      resolvedThreadWorkStatus?.defaultBranch ||
-      (resolvedThreadWorkStatus?.mergeBaseBranches?.length ?? 0) > 0,
+    effectiveMergeBaseBranch || resolvedThreadWorkStatus?.defaultBranch,
   );
   const promptBannerSummary = resolvedThreadWorkStatus
     ? showBranchComparisonUi
@@ -1504,19 +1502,13 @@ export function ThreadDetailView() {
     resolvedThreadWorkStatus &&
     (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
   );
-  const promptBannerMergeBaseBranch =
-    selectedMergeBaseBranch ??
-    resolvedThreadWorkStatus?.mergeBaseBranch ??
-    resolvedThreadWorkStatus?.defaultBranch;
+  const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     thread.environmentRecord?.kind ??
     undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
-  const threadMergeBaseBranch =
-    selectedMergeBaseBranch ??
-    resolvedThreadWorkStatus?.mergeBaseBranch ??
-    resolvedThreadWorkStatus?.mergeBaseBranches?.[0];
+  const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
     !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
@@ -2209,18 +2201,26 @@ export function ThreadDetailView() {
         changedFiles={resolvedThreadWorkStatus?.files}
         threadId={thread.id}
         showMergeBaseDetails={showBranchComparisonUi}
-        mergeBaseBranch={
-          selectedMergeBaseBranch ??
-          resolvedThreadWorkStatus?.mergeBaseBranch ??
-          resolvedThreadWorkStatus?.defaultBranch
-        }
-        mergeBaseBranchOptions={resolvedThreadWorkStatus?.mergeBaseBranches}
+        mergeBaseBranch={effectiveMergeBaseBranch}
+        mergeBaseBranchOptions={mergeBaseBranchOptions}
+        mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
         onMergeBaseBranchChange={
           showBranchComparisonUi ? setSelectedMergeBaseBranch : undefined
+        }
+        onMergeBaseBranchPickerOpenChange={
+          showBranchComparisonUi
+            ? (open) => {
+                if (open) {
+                  setShouldLoadMergeBaseBranchOptions(true);
+                }
+                setIsMergeBaseBranchPickerOpen(open);
+              }
+            : undefined
         }
         onOpenChange={(open) => {
           if (!open) {
             setThreadGitActionTarget(null);
+            setIsMergeBaseBranchPickerOpen(false);
           }
         }}
         onCommit={handleCommitThread}

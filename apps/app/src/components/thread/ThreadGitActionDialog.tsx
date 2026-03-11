@@ -40,7 +40,9 @@ interface ThreadGitActionDialogProps {
   showMergeBaseDetails?: boolean;
   mergeBaseBranch?: string;
   mergeBaseBranchOptions?: string[];
+  mergeBaseBranchOptionsLoading?: boolean;
   onMergeBaseBranchChange?: (branch: string) => void;
+  onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onCommit: (args: { includeUnstaged: boolean }) => Promise<void>;
   onSquashMerge: (args: {
@@ -84,14 +86,18 @@ function getDialogCopy(target: ThreadGitActionDialogTarget) {
 function MergeBaseBranchPicker({
   value,
   options,
+  loading = false,
   disabled,
   onChange,
+  onOpenChange,
   className,
 }: {
   value: string;
   options: readonly string[];
+  loading?: boolean;
   disabled?: boolean;
   onChange: (branch: string) => void;
+  onOpenChange?: (open: boolean) => void;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -124,7 +130,13 @@ function MergeBaseBranchPicker({
   }, [open]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        onOpenChange?.(nextOpen);
+      }}
+    >
       <PopoverTrigger asChild disabled={disabled}>
         <Button
           type="button"
@@ -202,7 +214,7 @@ function MergeBaseBranchPicker({
             ))
           ) : (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              No branches found.
+              {loading ? "Loading branches..." : "No branches found."}
             </p>
           )}
         </div>
@@ -222,7 +234,9 @@ export function ThreadGitActionDialog({
   showMergeBaseDetails = false,
   mergeBaseBranch,
   mergeBaseBranchOptions,
+  mergeBaseBranchOptionsLoading = false,
   onMergeBaseBranchChange,
+  onMergeBaseBranchPickerOpenChange,
   onOpenChange,
   onCommit,
   onSquashMerge,
@@ -350,8 +364,10 @@ export function ThreadGitActionDialog({
                         <MergeBaseBranchPicker
                           value={selectedMergeBaseBranch}
                           options={mergeBaseCandidates}
+                          loading={mergeBaseBranchOptionsLoading}
                           disabled={pending}
                           onChange={(branch) => onMergeBaseBranchChange?.(branch)}
+                          onOpenChange={onMergeBaseBranchPickerOpenChange}
                           className="max-w-full"
                         />
                       ) : (

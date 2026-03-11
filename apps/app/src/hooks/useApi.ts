@@ -44,6 +44,7 @@ import * as api from "../lib/api";
 import { wsManager } from "../lib/ws";
 
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
+const THREAD_MERGE_BASE_BRANCHES_QUERY_KEY = "threadMergeBaseBranches";
 const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
 const THREAD_QUERY_KEY = "thread";
 type ThreadScopedQueryKeyPrefix =
@@ -495,6 +496,18 @@ export function useThreadWorkStatus(
     enabled: (options?.enabled ?? true) && !!id,
     placeholderData: (previousData, previousQuery) =>
       resolveThreadWorkStatusPlaceholder(previousData, previousQuery?.queryKey, id),
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadMergeBaseBranches(
+  id: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<string[]>({
+    queryKey: [THREAD_MERGE_BASE_BRANCHES_QUERY_KEY, id],
+    queryFn: () => api.getThreadMergeBaseBranches(id),
+    enabled: (options?.enabled ?? true) && !!id,
     refetchOnWindowFocus: false,
   });
 }

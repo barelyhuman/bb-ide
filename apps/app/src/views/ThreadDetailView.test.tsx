@@ -74,7 +74,6 @@ const apiState = vi.hoisted(() => {
       workspaceDeletions: 1,
       currentBranch: "feature/thread-1",
       mergeBaseBranch: "main",
-      mergeBaseBranches: ["main"],
       defaultBranch: "main",
       workspaceChangedFiles: 2,
       aheadCount: 0,
@@ -83,6 +82,7 @@ const apiState = vi.hoisted(() => {
       hasUncommittedChanges: true,
       hasCommittedUnmergedChanges: false,
     } as ThreadWorkStatus,
+    mergeBaseBranchOptions: ["main"],
     gitDiff: {
       mode: "worktree_commits",
       selection: { type: "combined" },
@@ -126,6 +126,10 @@ vi.mock("../hooks/useApi", () => ({
   useThreadWorkStatus: () => ({
     data: apiState.workStatus,
     error: null,
+  }),
+  useThreadMergeBaseBranches: () => ({
+    data: apiState.mergeBaseBranchOptions,
+    isLoading: false,
   }),
   useThreadTimeline: () => ({
     data: apiState.timeline,
@@ -398,7 +402,7 @@ describe("ThreadDetailView", () => {
     apiState.workStatus.currentBranch = "feature/thread-1";
     apiState.workStatus.defaultBranch = undefined;
     apiState.workStatus.mergeBaseBranch = "release/1.0";
-    apiState.workStatus.mergeBaseBranches = ["main", "release/1.0"];
+    apiState.mergeBaseBranchOptions = ["main", "release/1.0"];
 
     const html = renderThreadDetailView(
       "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"

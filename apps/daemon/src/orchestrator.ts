@@ -68,6 +68,7 @@ import {
 import {
   EnvironmentRegistry,
   createDefaultEnvironmentRegistry,
+  listGitWorkspaceMergeBaseBranchesAsync,
   type CreateEnvironmentContext,
   type EnvironmentCommitSummary,
   type EnvironmentCheckoutSnapshot,
@@ -1881,6 +1882,25 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
     });
+  }
+
+  async getMergeBaseBranchesAsync(threadId: string): Promise<string[] | undefined> {
+    return measureAsync("orchestrator.getMergeBaseBranchesAsync", async () => {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return undefined;
+      const project = this.projectRepo.getById(thread.projectId);
+      if (!project) return undefined;
+
+      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+      if (!environment || this._shouldForceDeletedWorkStatus(thread)) {
+        return undefined;
+      }
+
+      const defaultBranch =
+        detectProjectDefaultBranch(project.rootPath) ??
+        await detectProjectDefaultBranchAsync(project.rootPath);
+      return listGitWorkspaceMergeBaseBranchesAsync(environment, defaultBranch);
+    }, { threadId });
   }
 
   async getProjectWorkspaceStatusAsync(

@@ -79,6 +79,8 @@ Status mapping is defined in `apps/daemon/src/routes/error-response.ts`.
   - response: `Thread`
 - `GET /threads/:id/work-status?mergeBaseBranch=`
   - response: `ThreadWorkStatus | null`
+- `GET /threads/:id/merge-base-branches`
+  - response: `string[]`
 - `GET /threads/:id/primary-status`
   - response: `PrimaryCheckoutStatus`
 - `GET /threads/:id/timeline?limit=&includeToolGroupMessages=`

@@ -820,6 +820,13 @@ async function listMergeBaseBranchesAsync(
   return [defaultBranch, ...branches.filter((branch) => branch !== defaultBranch)];
 }
 
+export async function listGitWorkspaceMergeBaseBranchesAsync(
+  environment: IEnvironment,
+  defaultBranch?: string,
+): Promise<string[]> {
+  return listMergeBaseBranchesAsync(environment, defaultBranch);
+}
+
 function resolveMergeBaseSelection(args: {
   environment: IEnvironment;
   defaultBranch: string | undefined;
@@ -1152,7 +1159,6 @@ export async function getGitWorkspaceStatusAsync(
   const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
 
   const currentBranch = await runGitAsync(environment, ["symbolic-ref", "--short", "HEAD"]);
-  const mergeBaseBranches = await listMergeBaseBranchesAsync(environment, defaultBranch);
   const mergeBaseSelection = await resolveMergeBaseSelectionAsync({
     environment,
     defaultBranch,
@@ -1161,10 +1167,6 @@ export async function getGitWorkspaceStatusAsync(
   const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
   const baseRef = mergeBaseSelection.baseRef;
   const mergeBaseDiffRef = await resolveMergeBaseDiffRefAsync(environment, baseRef);
-  const mergeBaseBranchOptions =
-    mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
-      ? [mergeBaseBranch, ...mergeBaseBranches]
-      : mergeBaseBranches;
   const mergeBaseDiff = await resolveMergeBaseDiffCountsAsync({
     environment,
     mergeBaseDiffRef,
@@ -1220,7 +1222,6 @@ export async function getGitWorkspaceStatusAsync(
     ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
     ...(defaultBranch ? { defaultBranch } : {}),
     ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-    ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
     ...(baseRef ? { baseRef } : {}),
     files,
   });

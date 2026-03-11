@@ -17,6 +17,7 @@ type LegacyThreadRouteMock = ThreadOrchestrator & {
   getByIdAsync: ReturnType<typeof vi.fn>;
   getWorkStatus: ReturnType<typeof vi.fn>;
   getWorkStatusAsync: ReturnType<typeof vi.fn>;
+  getMergeBaseBranchesAsync: ReturnType<typeof vi.fn>;
   getEnvironmentAgentStatus: ReturnType<typeof vi.fn>;
   listAsync: ReturnType<typeof vi.fn>;
   getGitDiff: ReturnType<typeof vi.fn>;
@@ -93,6 +94,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     getByIdAsync: vi.fn(),
     getWorkStatus: vi.fn(),
     getWorkStatusAsync: vi.fn(),
+    getMergeBaseBranchesAsync: vi.fn(),
     getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
     getEnvironmentAgentStatus: vi.fn(),
@@ -126,6 +128,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
         ) => ThreadWorkStatus | undefined
       )(threadId, mergeBaseBranch),
   );
+  orchestrator.getMergeBaseBranchesAsync.mockResolvedValue([]);
   orchestrator.listAsync.mockImplementation(async (filters) => orchestrator.list(filters));
   orchestrator.getGitDiffAsync.mockImplementation(
     async (threadId: string, selection, mergeBaseBranch?: string) =>
@@ -1701,6 +1704,41 @@ describe("Thread routes", () => {
         projectId: "proj-1",
         activeThreadId: "thread-1",
       });
+    });
+  });
+
+  describe("GET /threads/:id/work-status", () => {
+    it("uses lightweight lookup before reading async work status", async () => {
+      const thread = makeThread();
+      const workStatus = makeWorkStatus();
+      threadManager.getRawById.mockReturnValue(thread);
+      threadManager.getByIdAsync.mockResolvedValue(thread);
+      threadManager.getWorkStatusAsync.mockResolvedValue(workStatus);
+
+      const res = await app.request("/threads/thread-1/work-status");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(workStatus);
+      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.getByIdAsync).not.toHaveBeenCalled();
+      expect(threadManager.getWorkStatusAsync).toHaveBeenCalledWith("thread-1", undefined);
+    });
+  });
+
+  describe("GET /threads/:id/merge-base-branches", () => {
+    it("returns merge-base branch options without hydrating the thread", async () => {
+      const thread = makeThread();
+      threadManager.getRawById.mockReturnValue(thread);
+      threadManager.getByIdAsync.mockResolvedValue(thread);
+      threadManager.getMergeBaseBranchesAsync.mockResolvedValue(["main", "release/1.0"]);
+
+      const res = await app.request("/threads/thread-1/merge-base-branches");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(["main", "release/1.0"]);
+      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.getByIdAsync).not.toHaveBeenCalled();
+      expect(threadManager.getMergeBaseBranchesAsync).toHaveBeenCalledWith("thread-1");
     });
   });
 

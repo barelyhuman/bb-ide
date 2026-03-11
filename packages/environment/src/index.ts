@@ -37,6 +37,7 @@ export {
   createEnvironment,
   listAvailableEnvironmentInfos,
 } from "./default-registry.js";
+export { listGitWorkspaceMergeBaseBranchesAsync } from "./git-workspace.js";
 export { createLocalEnvironmentDefinition } from "./local-environment.js";
 export type {
   CreateWorktreeEnvironmentDefinitionOptions,
