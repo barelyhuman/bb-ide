@@ -137,11 +137,11 @@ function GitDiffSelector({
       <DropdownMenuTrigger asChild disabled={disabled}>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
           disabled={disabled}
           className={cn(
-            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border-border/70 bg-background/80 px-2.5 text-xs font-normal shadow-sm hover:bg-muted/55",
+            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border border-border/70 bg-transparent px-2.5 text-xs font-normal hover:bg-muted/45 hover:text-foreground",
             disabled && "opacity-60",
           )}
         >
@@ -545,19 +545,24 @@ export function ThreadGitDiffPanel({
                         <ChevronsUp className="size-3.5" />
                       )}
                     </Button>
-                    <div className="inline-flex items-center rounded-lg border border-border/70 bg-background p-0.5 shadow-sm">
+                    <div
+                      className="inline-flex items-center gap-1 rounded-lg border border-border/70 p-0.5"
+                      role="tablist"
+                      aria-label="Diff view mode"
+                    >
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className={cn(
-                          "h-6 w-6 rounded-md p-0",
+                          "h-7 w-7 rounded-md p-0",
                           gitDiffDisplayMode === "unified"
                             ? "bg-accent/35 text-foreground hover:bg-accent/45"
                             : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
                         )}
                         onClick={() => onGitDiffDisplayModeChange("unified")}
                         aria-label="Stacked diff view"
+                        aria-pressed={gitDiffDisplayMode === "unified"}
                         title="Stacked diff view"
                       >
                         <Rows2 className="size-3.5" />
@@ -567,13 +572,14 @@ export function ThreadGitDiffPanel({
                         variant="ghost"
                         size="sm"
                         className={cn(
-                          "h-6 w-6 rounded-md p-0",
+                          "h-7 w-7 rounded-md p-0",
                           gitDiffDisplayMode === "split"
                             ? "bg-accent/35 text-foreground hover:bg-accent/45"
                             : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
                         )}
                         onClick={() => onGitDiffDisplayModeChange("split")}
                         aria-label="Split diff view"
+                        aria-pressed={gitDiffDisplayMode === "split"}
                         title="Split diff view"
                       >
                         <Columns2 className="size-3.5" />
@@ -586,7 +592,7 @@ export function ThreadGitDiffPanel({
           </div>
           <div
             className={cn(
-              "min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-background px-3 pb-3",
+              "min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-background px-4 pb-3",
               isDiffPanelActive ? "pt-0" : "pt-1",
             )}
           >
