@@ -21,8 +21,13 @@ import {
 const DEFAULT_ARCHIVED_LOG_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_MANAGED_ARTIFACT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
+export type ManagedArtifactThreadRecord = Pick<
+  Thread,
+  "id" | "projectId" | "environmentId" | "archivedAt"
+>;
+
 function resolveManagedWorkspaceRoot(
-  thread: Pick<Thread, "id" | "projectId">,
+  thread: Pick<ManagedArtifactThreadRecord, "id" | "projectId">,
   project: Pick<Project, "id" | "rootPath">,
   runtimeEnv: NodeJS.ProcessEnv,
 ): string {
@@ -130,7 +135,7 @@ export interface ManagedArtifactReconcilerResult {
 }
 
 export interface ReconcileManagedArtifactStorageArgs {
-  threads: readonly Thread[];
+  threads: readonly ManagedArtifactThreadRecord[];
   projects: readonly Project[];
   runtimeEnv: NodeJS.ProcessEnv;
   now?: number;

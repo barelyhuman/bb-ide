@@ -116,7 +116,10 @@ import { InMemorySchedulerService } from "./scheduler-service.js";
 import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 import { EnvironmentAgentSessionCommandClient } from "./environment-agent-session-command-client.js";
-import { reconcileManagedArtifactStorage } from "./managed-artifact-reconciler.js";
+import {
+  reconcileManagedArtifactStorage,
+  resolveArchivedEnvironmentAgentLogRetentionMs,
+} from "./managed-artifact-reconciler.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 import {
   detectProjectDefaultBranch,
@@ -620,12 +623,19 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private async _reconcileManagedArtifactsInternal(): Promise<void> {
-    const threads = this.threadRepo.list({ includeArchived: true });
+    const now = Date.now();
+    const archivedLogRetentionMs =
+      resolveArchivedEnvironmentAgentLogRetentionMs(this.runtimeEnv);
+    const threads = this.threadRepo.listManagedArtifactRetentionRecords({
+      archivedLogCutoff: now - archivedLogRetentionMs,
+    });
     const projects = this.projectRepo.list();
     const result = reconcileManagedArtifactStorage({
       threads,
       projects,
       runtimeEnv: this.runtimeEnv,
+      now,
+      archivedLogRetentionMs,
     });
 
     if (

@@ -86,6 +86,13 @@ const STORAGE_RECLAIM_MIN_INTERVAL_MS = 60_000;
 const STORAGE_RECLAIM_MIN_FREE_PAGES = 2_048;
 const STORAGE_RECLAIM_MAX_INCREMENTAL_PAGES = 8_192;
 
+export interface ManagedArtifactThreadRetentionRecord {
+  id: string;
+  projectId: string;
+  environmentId?: string;
+  archivedAt?: number;
+}
+
 interface SqlitePragmaClient {
   pragma(sql: string): unknown;
   exec(sql: string): unknown;
@@ -420,6 +427,35 @@ export class ThreadRepository {
     return rows.map((row) =>
       this.rowToThread(row, queueByThreadId.get(row.id) ?? []),
     );
+  }
+
+  listManagedArtifactRetentionRecords(args: {
+    archivedLogCutoff: number;
+  }): ManagedArtifactThreadRetentionRecord[] {
+    return this.db
+      .select({
+        id: threads.id,
+        projectId: threads.projectId,
+        environmentId: threads.environmentId,
+        archivedAt: threads.archivedAt,
+      })
+      .from(threads)
+      .where(
+        and(
+          sql`${threads.environmentId} is not null`,
+          or(
+            isNull(threads.archivedAt),
+            sql`${threads.archivedAt} >= ${args.archivedLogCutoff}`,
+          ),
+        ),
+      )
+      .all()
+      .map((row) => ({
+        id: row.id,
+        projectId: row.projectId,
+        environmentId: row.environmentId ?? undefined,
+        archivedAt: row.archivedAt ?? undefined,
+      }));
   }
 
   listArchivedIdsWithEnvironmentRecord(): string[] {

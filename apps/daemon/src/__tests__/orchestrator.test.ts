@@ -476,6 +476,7 @@ function createMocks() {
     create: vi.fn(),
     getById: vi.fn(),
     list: vi.fn(),
+    listManagedArtifactRetentionRecords: vi.fn(() => []),
     update: vi.fn(),
     markRead: vi.fn(),
     delete: vi.fn(),
@@ -657,6 +658,24 @@ describe("Orchestrator", () => {
         create: vi.fn(),
         getById: vi.fn((threadId: string) => threadState.get(threadId)),
         list: vi.fn(() => Array.from(threadState.values())),
+        listManagedArtifactRetentionRecords: vi.fn((args: { archivedLogCutoff: number }) =>
+          Array.from(threadState.values())
+            .filter(
+              (thread) =>
+                typeof thread.environmentId === "string" &&
+                thread.environmentId.trim().length > 0 &&
+                (
+                  thread.archivedAt === undefined ||
+                  thread.archivedAt >= args.archivedLogCutoff
+                ),
+            )
+            .map((thread) => ({
+              id: thread.id,
+              projectId: thread.projectId,
+              environmentId: thread.environmentId,
+              archivedAt: thread.archivedAt,
+            }))
+        ),
         listArchivedIdsWithEnvironmentRecord: vi.fn(() => archivedIdsWithEnvironmentRecord),
         listNonArchivedActiveIdsWithEnvironmentRecord: vi.fn(
           () => nonArchivedActiveIdsWithEnvironmentRecord,
@@ -828,6 +847,34 @@ describe("Orchestrator", () => {
 
       expect(bootProjectRepo.list).not.toHaveBeenCalled();
       expect(bootThreadRepo.list).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("managed artifact reconciliation", () => {
+    it("uses targeted metadata queries instead of listing all threads", async () => {
+      (
+        threadRepo.listManagedArtifactRetentionRecords as ReturnType<typeof vi.fn>
+      ).mockReturnValue([
+        {
+          id: "boot-active-worktree",
+          projectId: "proj-1",
+          environmentId: "worktree",
+        },
+      ]);
+      const homeDir = mkdtempSync(join(tmpdir(), "beanbag-managed-artifacts-home-"));
+      const originalHome = process.env.HOME;
+      process.env.HOME = homeDir;
+      (projectRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([]);
+
+      try {
+        await manager.reconcileManagedArtifacts();
+      } finally {
+        process.env.HOME = originalHome;
+        rmSync(homeDir, { recursive: true, force: true });
+      }
+
+      expect(threadRepo.listManagedArtifactRetentionRecords).toHaveBeenCalledTimes(1);
+      expect(threadRepo.list).not.toHaveBeenCalled();
     });
   });
 

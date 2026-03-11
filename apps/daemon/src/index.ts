@@ -15,6 +15,7 @@ import {
 } from "@beanbag/db";
 import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
+import { scheduleManagedArtifactReconciliation } from "./startup-tasks.js";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -218,12 +219,9 @@ async function main(): Promise<void> {
   restartRecommendationMonitorRef = restartRecommendationMonitor;
   serverCloseRef = close;
 
-  console.log("Reconciling active threads with provider...");
+  console.log("Reconciling startup environment state...");
   await threadManager.reconcileActiveThreadsOnBoot();
   console.log("Startup reconciliation complete.");
-  console.log("Reconciling managed storage artifacts...");
-  await threadManager.reconcileManagedArtifacts();
-  console.log("Managed artifact reconciliation complete.");
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
@@ -250,6 +248,8 @@ async function main(): Promise<void> {
       console.log(`  Database: ${dbPath}`);
       console.log(`  Log file: ${logFilePath}`);
       console.log(`\nPress Ctrl+C to stop.\n`);
+      console.log("Managed artifact reconciliation scheduled in background.");
+      scheduleManagedArtifactReconciliation(threadManager);
     },
   );
 
