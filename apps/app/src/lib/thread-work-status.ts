@@ -199,10 +199,16 @@ export function threadWorkStatusDescription(
 
   switch (status.state) {
     case "clean": {
-      const isUpToDate = status.aheadCount === 0 && status.behindCount === 0;
-      return isUpToDate
-        ? "No local changes or unmerged commits."
-        : "No local file changes in the workspace.";
+      if (status.aheadCount > 0 && status.behindCount > 0) {
+        return "No local file changes, but this branch has diverged from its merge base.";
+      }
+      if (status.aheadCount > 0) {
+        return "No local file changes, but this branch has local commits waiting to be merged.";
+      }
+      if (status.behindCount > 0) {
+        return "No local file changes, but this branch is behind its merge base.";
+      }
+      return "No local changes or unmerged commits.";
     }
     case "untracked":
       return "Workspace is outside a Git repository.";
@@ -211,8 +217,17 @@ export function threadWorkStatusDescription(
     case "dirty_uncommitted":
       return "You have local changes that have not been committed yet.";
     case "committed_unmerged":
+      if (status.aheadCount > 0 && status.behindCount > 0) {
+        return "You have local commits waiting to be merged, and this branch is also behind its merge base.";
+      }
+      if (status.behindCount > 0) {
+        return "You have local commits waiting to be merged, and this branch is behind its merge base.";
+      }
       return "You have local commits that have not been merged yet.";
     case "dirty_and_committed_unmerged":
+      if (status.behindCount > 0) {
+        return "You have uncommitted changes and local commits waiting to be merged, and this branch is behind its merge base.";
+      }
       return "You have uncommitted changes and local commits waiting to be merged.";
     default:
       return assertNever(status.state);

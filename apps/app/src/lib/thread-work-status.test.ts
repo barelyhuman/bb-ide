@@ -64,6 +64,54 @@ describe("thread-work-status", () => {
     );
   });
 
+  it("describes clean branches that are behind their merge base", () => {
+    expect(
+      threadWorkStatusDescription({
+        ...makeStatus("clean"),
+        behindCount: 2,
+      }),
+    ).toBe(
+      "No local file changes, but this branch is behind its merge base.",
+    );
+  });
+
+  it("reports behind branches as an explicit git status display", () => {
+    expect(
+      getThreadGitStatusDisplay(
+        {
+          ...makeStatus("clean"),
+          behindCount: 3,
+        },
+        {
+          mergeBaseBranch: "main",
+          showBranchComparison: true,
+        },
+      ),
+    ).toEqual({
+      label: "Behind",
+      summary: "3 behind main",
+    });
+  });
+
+  it("reports diverged branches as an explicit git status display", () => {
+    expect(
+      getThreadGitStatusDisplay(
+        {
+          ...makeStatus("clean"),
+          aheadCount: 2,
+          behindCount: 1,
+        },
+        {
+          mergeBaseBranch: "main",
+          showBranchComparison: true,
+        },
+      ),
+    ).toEqual({
+      label: "Diverged",
+      summary: "2 ahead, 1 behind relative to main",
+    });
+  });
+
   it("reports ahead branches as an explicit git status display", () => {
     expect(
       getThreadGitStatusDisplay(

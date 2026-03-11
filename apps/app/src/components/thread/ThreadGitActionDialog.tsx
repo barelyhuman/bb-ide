@@ -105,6 +105,8 @@ function MergeBaseBranchPicker({
     }
     return options.filter((branch) => branch.toLowerCase().includes(normalizedQuery));
   }, [normalizedQuery, options]);
+  const enterSelection =
+    filteredOptions.find((branch) => branch === value) ?? filteredOptions[0];
 
   useEffect(() => {
     if (!open) {
@@ -153,6 +155,21 @@ function MergeBaseBranchPicker({
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (!enterSelection) {
+                  return;
+                }
+
+                onChange(enterSelection);
+                setOpen(false);
+              }}
               placeholder="Search branches"
               className="h-9 border-0 bg-transparent pl-9 shadow-none focus-visible:ring-0"
             />
@@ -245,6 +262,14 @@ export function ThreadGitActionDialog({
     Boolean(dialogCopy?.showMergeBase) &&
     showMergeBaseDetails &&
     (canSelectMergeBase || Boolean(selectedMergeBaseBranch));
+  const isStagedOnlyCommitScope =
+    Boolean(dialogCopy?.showCommitControls) && !includeUnstaged;
+  const displayedGitStatusLabel = isStagedOnlyCommitScope ? "Staged only" : gitStatusLabel;
+  const displayedGitStatusSummary = isStagedOnlyCommitScope
+    ? "Only staged changes will be included. Unstaged edits stay in the workspace."
+    : gitStatusSummary;
+  const shouldShowChangedFilesRow =
+    Boolean(changedFiles && changedFiles.length > 0) || isStagedOnlyCommitScope;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -295,7 +320,7 @@ export function ThreadGitActionDialog({
               <DialogDescription>{dialogCopy.description}</DialogDescription>
             </DialogHeader>
             <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
-              {branchName || gitStatusLabel || canShowMergeBase ? (
+              {branchName || displayedGitStatusLabel || canShowMergeBase || shouldShowChangedFilesRow ? (
                 <DetailCard className="border-border/70 bg-muted/20">
                   {branchName ? (
                     <DetailRow label="Branch" valueClassName="min-w-0 truncate">
@@ -304,16 +329,16 @@ export function ThreadGitActionDialog({
                       </span>
                     </DetailRow>
                   ) : null}
-                  {gitStatusLabel ? (
+                  {displayedGitStatusLabel ? (
                     <DetailRow label="Git status" valueClassName="min-w-0">
                       <div
                         className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-                        title={[gitStatusLabel, gitStatusSummary].filter(Boolean).join(" ")}
+                        title={[displayedGitStatusLabel, displayedGitStatusSummary].filter(Boolean).join(" ")}
                       >
-                        <span className="shrink-0 font-medium">{gitStatusLabel}</span>
-                        {gitStatusSummary ? (
+                        <span className="shrink-0 font-medium">{displayedGitStatusLabel}</span>
+                        {displayedGitStatusSummary ? (
                           <span className="min-w-0 truncate text-muted-foreground">
-                            {gitStatusSummary}
+                            {displayedGitStatusSummary}
                           </span>
                         ) : null}
                       </div>
@@ -352,17 +377,23 @@ export function ThreadGitActionDialog({
                       </div>
                     </DetailRow>
                   ) : null}
-                  {changedFiles && changedFiles.length > 0 ? (
+                  {shouldShowChangedFilesRow ? (
                     <DetailRow
                       label="Changed files"
                       layout="vertical"
                       valueClassName="pt-0.5"
                     >
-                      <WorkspaceChangesList
-                        files={changedFiles}
-                        threadId={threadId}
-                        maxHeightClassName="max-h-40"
-                      />
+                      {isStagedOnlyCommitScope ? (
+                        <p className="ui-text-sm leading-5 text-muted-foreground">
+                          Only staged changes will be committed. Per-file staged preview is not available here.
+                        </p>
+                      ) : (
+                        <WorkspaceChangesList
+                          files={changedFiles}
+                          threadId={threadId}
+                          maxHeightClassName="max-h-40"
+                        />
+                      )}
                     </DetailRow>
                   ) : null}
                 </DetailCard>

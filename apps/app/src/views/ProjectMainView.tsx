@@ -114,6 +114,31 @@ export function ProjectMainView() {
       };
     }
 
+    if (workspaceStatus?.state === "deleted") {
+      return {
+        label: "Deleted",
+        variant: "destructive",
+      };
+    }
+
+    if (
+      workspaceStatus &&
+      workspaceStatus.aheadCount > 0 &&
+      workspaceStatus.behindCount > 0
+    ) {
+      return {
+        label: "Diverged",
+        variant: "outline",
+      };
+    }
+
+    if (workspaceStatus?.behindCount && workspaceStatus.behindCount > 0) {
+      return {
+        label: "Behind",
+        variant: "outline",
+      };
+    }
+
     if (workspaceStatus?.hasCommittedUnmergedChanges) {
       return {
         label: "Ahead",

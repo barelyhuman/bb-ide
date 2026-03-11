@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ThreadWorkStatus } from "@beanbag/agent-core";
@@ -140,6 +140,24 @@ describe("ProjectMainView", () => {
       </MemoryRouter>,
     );
 
+  beforeEach(() => {
+    apiState.workspaceStatus = {
+      state: "clean",
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      workspaceChangedFiles: 0,
+      workspaceInsertions: 0,
+      workspaceDeletions: 0,
+      hasUncommittedChanges: false,
+      hasCommittedUnmergedChanges: false,
+      aheadCount: 0,
+      behindCount: 0,
+      currentBranch: "feature/project-main",
+      defaultBranch: "main",
+    };
+  });
+
   it("shows the non-default branch inline beside the status", () => {
     apiState.workspaceStatus.currentBranch = "feature/project-main";
     apiState.workspaceStatus.defaultBranch = "main";
@@ -158,5 +176,31 @@ describe("ProjectMainView", () => {
 
     expect(html).toContain("Clean");
     expect(html).not.toContain("default-branch");
+  });
+
+  it("shows behind when the repo is clean but behind the default branch", () => {
+    apiState.workspaceStatus.state = "clean";
+    apiState.workspaceStatus.hasUncommittedChanges = false;
+    apiState.workspaceStatus.hasCommittedUnmergedChanges = false;
+    apiState.workspaceStatus.aheadCount = 0;
+    apiState.workspaceStatus.behindCount = 2;
+
+    const html = renderProjectMainView();
+
+    expect(html).toContain("Behind");
+    expect(html).not.toContain("Clean");
+  });
+
+  it("shows diverged when the repo is both ahead and behind", () => {
+    apiState.workspaceStatus.state = "clean";
+    apiState.workspaceStatus.hasUncommittedChanges = false;
+    apiState.workspaceStatus.hasCommittedUnmergedChanges = true;
+    apiState.workspaceStatus.aheadCount = 2;
+    apiState.workspaceStatus.behindCount = 1;
+
+    const html = renderProjectMainView();
+
+    expect(html).toContain("Diverged");
+    expect(html).not.toContain("Ahead");
   });
 });
