@@ -26,6 +26,8 @@ pnpm install
 pnpm dev
 ```
 
+`pnpm install` also installs the repo's git hooks via `core.hooksPath`, so local commits run `pnpm build` before they are created.
+
 Endpoints:
 
 - Web UI: `http://localhost:5173`

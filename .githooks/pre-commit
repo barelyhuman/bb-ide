@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+printf '%s\n' 'Running pre-commit build check (pnpm build)...'
+pnpm run precommit:build
