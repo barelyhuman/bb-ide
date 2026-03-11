@@ -5,7 +5,6 @@ export const THREAD_CHANGE_KINDS = [
   "thread-deleted",
   "events-appended",
   "status-changed",
-  "metadata-changed",
   "title-changed",
   "queue-changed",
   "work-status-changed",

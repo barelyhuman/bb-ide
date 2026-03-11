@@ -183,10 +183,7 @@ export interface ThreadOrchestrator {
   archive(threadId: string): Promise<void>;
   unarchive(threadId: string): void;
   requiresForceArchive(threadId: string): boolean;
-  updateThread(
-    threadId: string,
-    request: { title?: string; mergeBaseBranchOverride?: string | null },
-  ): Thread;
+  updateThread(threadId: string, request: { title?: string }): Thread;
   markRead(threadId: string): Thread;
   markUnread(threadId: string): Thread;
   requestThreadOperation(

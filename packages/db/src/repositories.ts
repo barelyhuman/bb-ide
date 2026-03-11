@@ -378,7 +378,6 @@ export class ThreadRepository {
       environmentRecord: data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null,
-      mergeBaseBranchOverride: null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       lastReadAt: now,
@@ -510,7 +509,6 @@ export class ThreadRepository {
       title?: string;
       environmentId?: string | null;
       environmentRecord?: PersistedEnvironmentRecord | null;
-      mergeBaseBranchOverride?: string | null;
       archivedAt?: number | null;
       lastReadAt?: number;
     },
@@ -536,9 +534,6 @@ export class ThreadRepository {
       updates.environmentRecord = data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null;
-    }
-    if (data.mergeBaseBranchOverride !== undefined) {
-      updates.mergeBaseBranchOverride = data.mergeBaseBranchOverride;
     }
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
     if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
@@ -659,7 +654,6 @@ export class ThreadRepository {
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
       environmentRecord: parseEnvironmentRecord(row.environmentRecord),
-      mergeBaseBranchOverride: row.mergeBaseBranchOverride ?? undefined,
       queuedMessages,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
