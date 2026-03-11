@@ -4,7 +4,10 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IEnvironment } from "../contracts.js";
+import {
+  EnvironmentSquashMergeCommitFailureError,
+  type IEnvironment,
+} from "../contracts.js";
 import { createWorktreeEnvironmentDefinition } from "../worktree-environment.js";
 
 const tempDirs: string[] = [];
@@ -167,6 +170,27 @@ describe("WorktreeEnvironment", () => {
     );
   });
 
+  it("does not resolve a squash message when the squash merge conflicts", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
+    commitReadme(repoRoot, "initial\nmain change\n", "main change");
+    commitReadme(
+      environment.getWorkspaceRootUnsafe(),
+      "initial\nthread conflicting change\n",
+      "thread conflicting change",
+    );
+    const resolveMessage = vi.fn();
+
+    const result = await environment.squashMergeIntoDefaultBranch({
+      activeWorkspaceRoot: repoRoot,
+      defaultBranch: "main",
+      resolveMessage,
+    });
+
+    expect(result.merged).toBe(false);
+    expect(result.message).toContain("failed with conflicts");
+    expect(resolveMessage).not.toHaveBeenCalled();
+  });
+
   it("prefers explicit squash messages over resolved messages", async () => {
     const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
     const resolveMessage = vi.fn();
@@ -247,6 +271,50 @@ describe("WorktreeEnvironment", () => {
         commitSha: expect.any(String),
       }),
     );
+  });
+
+  it("re-checks for unresolved conflicts after squash message generation", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
+    const resolveMessage = vi.fn().mockImplementation(async ({
+      tempWorkspaceRoot,
+    }: {
+      tempWorkspaceRoot: string;
+    }) => {
+      const ours = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+        cwd: tempWorkspaceRoot,
+        encoding: "utf8",
+        input: "ours\n",
+      }).trim();
+      const theirs = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+        cwd: tempWorkspaceRoot,
+        encoding: "utf8",
+        input: "theirs\n",
+      }).trim();
+      execFileSync("git", ["update-index", "--force-remove", "README.md"], {
+        cwd: tempWorkspaceRoot,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      execFileSync("git", ["update-index", "--index-info"], {
+        cwd: tempWorkspaceRoot,
+        encoding: "utf8",
+        input: `100644 ${ours} 1\tREADME.md\n100644 ${ours} 2\tREADME.md\n100644 ${theirs} 3\tREADME.md\n`,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return "feat: integrate thread updates";
+    });
+
+    await expect(
+      environment.squashMergeIntoDefaultBranch({
+        activeWorkspaceRoot: repoRoot,
+        defaultBranch: "main",
+        resolveMessage,
+      }),
+    ).rejects.toMatchObject({
+      name: "EnvironmentSquashMergeCommitFailureError",
+      stage: "squash_commit",
+      message: expect.stringContaining("Squash merge has unresolved conflicts: README.md"),
+    } satisfies Partial<EnvironmentSquashMergeCommitFailureError>);
+    expect(resolveMessage).toHaveBeenCalledTimes(1);
   });
 
   it("reports committed branch work before the thread is merged", async () => {

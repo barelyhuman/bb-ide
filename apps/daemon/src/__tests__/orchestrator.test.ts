@@ -16,6 +16,8 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import {
+  buildCommitFailureFollowUpInstruction,
+  buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
   type SystemEnvironmentInfo,
   type Thread,
@@ -24,6 +26,7 @@ import {
 } from "@beanbag/agent-core";
 import {
   EnvironmentRegistry,
+  EnvironmentSquashMergeCommitFailureError,
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "@beanbag/environment";
@@ -4091,6 +4094,105 @@ describe("Orchestrator", () => {
         );
       });
 
+      it("queues follow-up side effects after commit failures are recorded", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Test",
+          rootPath: "/tmp/proj-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        (threadRepo.enqueueQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "queued-1",
+          input: [],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          createdAt: 1000,
+        });
+        (threadRepo.deleteQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue(false);
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          threadId: "thread-1",
+          projectId: "proj-1",
+          rootPath: "/tmp/proj-1",
+          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
+          branchName: "bb/thread-1",
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-1",
+            overrides: {
+              async commitWorkspace() {
+                throw new Error("Commit message is required");
+              },
+            },
+          }),
+        });
+        const scheduleFollowUpSpy = vi
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
+          .mockImplementation(() => {});
+
+        await (asOrchestratorHarness(manager) as any)._runQueuedThreadOperation(thread, {
+          operationId: "op-1",
+          requestedAt: 1000,
+          demotedPrimaryCheckout: false,
+          request: {
+            operation: "commit",
+            options: {
+              message: "feat: add tests",
+            },
+          },
+        });
+
+        expect(threadRepo.enqueueQueuedMessage).toHaveBeenCalledWith(
+          "thread-1",
+          expect.objectContaining({
+            input: [
+              {
+                type: "text",
+                text: buildCommitFailureFollowUpInstruction(
+                  {
+                    operation: "commit",
+                    options: {
+                      message: "feat: add tests",
+                    },
+                  },
+                  {
+                    errorMessage: "Commit message is required",
+                  },
+                ),
+              },
+            ],
+          }),
+        );
+        expect(scheduleFollowUpSpy).toHaveBeenCalledWith("thread-1");
+        expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "commit",
+              status: "failed",
+              operationId: "op-1",
+              message: "Commit message is required",
+            }),
+          }),
+        );
+      });
+
       it("returns deferred follow-up actions when squash merge hits conflicts", async () => {
         const thread = makeThread({
           id: "thread-1",
@@ -4154,7 +4256,7 @@ describe("Orchestrator", () => {
           message: "Squash merge has conflicts against main.",
           postActions: [
             {
-              type: "enqueue_queued_follow_up",
+              type: "enqueue_squash_merge_conflict_follow_up",
               request: {
                 operation: "squash_merge",
                 options: {
@@ -4316,6 +4418,125 @@ describe("Orchestrator", () => {
               ([event]) =>
                 event.type === "system/thread_operation" &&
                 event.data?.status === "completed" &&
+                event.data?.operationId === "op-1",
+            )
+          ] ?? Number.POSITIVE_INFINITY,
+        ).toBeLessThan(
+          (threadRepo.enqueueQueuedMessage as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0] ??
+            Number.POSITIVE_INFINITY,
+        );
+      });
+
+      it("queues follow-up side effects after squash merge commit-step failures are recorded", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Test",
+          rootPath: "/tmp/proj-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        (threadRepo.enqueueQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "queued-1",
+          input: [],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          createdAt: 1000,
+        });
+        (threadRepo.deleteQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue(false);
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          threadId: "thread-1",
+          projectId: "proj-1",
+          rootPath: "/tmp/proj-1",
+          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
+          branchName: "bb/thread-1",
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-1",
+            overrides: {
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
+              async squashMergeIntoDefaultBranch() {
+                throw new EnvironmentSquashMergeCommitFailureError(
+                  "squash_commit",
+                  "nothing to commit, working tree clean",
+                );
+              },
+            },
+          }),
+        });
+        const scheduleFollowUpSpy = vi
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
+          .mockImplementation(() => {});
+
+        await (asOrchestratorHarness(manager) as any)._runQueuedThreadOperation(thread, {
+          operationId: "op-1",
+          requestedAt: 1000,
+          demotedPrimaryCheckout: false,
+          request: {
+            operation: "squash_merge",
+            options: {
+              mergeBaseBranch: "main",
+            },
+          },
+        });
+
+        expect(threadRepo.enqueueQueuedMessage).toHaveBeenCalledWith(
+          "thread-1",
+          expect.objectContaining({
+            input: [
+              {
+                type: "text",
+                text: buildSquashMergeCommitFailureFollowUpInstruction(
+                  {
+                    operation: "squash_merge",
+                    options: {
+                      mergeBaseBranch: "main",
+                    },
+                  },
+                  {
+                    stage: "squash_commit",
+                    errorMessage: "nothing to commit, working tree clean",
+                  },
+                ),
+              },
+            ],
+          }),
+        );
+        expect(scheduleFollowUpSpy).toHaveBeenCalledWith("thread-1");
+        expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "squash_merge",
+              status: "failed",
+              operationId: "op-1",
+              message: "nothing to commit, working tree clean",
+            }),
+          }),
+        );
+        expect(
+          (eventRepo.create as ReturnType<typeof vi.fn>).mock.invocationCallOrder[
+            (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls.findIndex(
+              ([event]) =>
+                event.type === "system/thread_operation" &&
+                event.data?.status === "failed" &&
                 event.data?.operationId === "op-1",
             )
           ] ?? Number.POSITIVE_INFINITY,

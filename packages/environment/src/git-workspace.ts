@@ -79,6 +79,27 @@ async function runGitAsync(
   };
 }
 
+async function listUnmergedPathsAsync(environment: IEnvironment): Promise<string[]> {
+  const unmergedResult = await runGitAsync(environment, [
+    "diff",
+    "--name-only",
+    "--diff-filter=U",
+  ]);
+  if (!unmergedResult.ok || !unmergedResult.stdout) {
+    return [];
+  }
+  return unmergedResult.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function formatUnmergedPathsMessage(paths: readonly string[]): string {
+  return paths.length > 0
+    ? `Commit has unresolved conflicts: ${paths.join(", ")}`
+    : "Commit has unresolved conflicts";
+}
+
 function parseShortstat(value: string): { files: number; insertions: number; deletions: number } {
   if (!value) {
     return { files: 0, insertions: 0, deletions: 0 };
@@ -1391,6 +1412,11 @@ export function commitGitWorkspace(
       return result;
     }
 
+    const unmergedPathsBeforeMessage = await listUnmergedPathsAsync(environment);
+    if (unmergedPathsBeforeMessage.length > 0) {
+      throw new Error(formatUnmergedPathsMessage(unmergedPathsBeforeMessage));
+    }
+
     let commitMessage = args.message?.trim();
     if (!commitMessage) {
       commitMessage = (await generateCommitMessage?.({
@@ -1400,6 +1426,10 @@ export function commitGitWorkspace(
     }
     if (!commitMessage) {
       throw new Error("Commit message is required");
+    }
+    const unmergedPathsBeforeCommit = await listUnmergedPathsAsync(environment);
+    if (unmergedPathsBeforeCommit.length > 0) {
+      throw new Error(formatUnmergedPathsMessage(unmergedPathsBeforeCommit));
     }
     const commitResult = await runGitAsync(environment, ["commit", "-m", commitMessage]);
     if (!commitResult.ok) {

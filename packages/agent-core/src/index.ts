@@ -182,8 +182,11 @@ export { toUIMessages } from "./to-ui-messages.js";
 export { buildThreadDetailRows } from "./thread-detail-rows.js";
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 export {
+  buildCommitFailureFollowUpInstruction,
   buildThreadOperationInstruction,
+  buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
+  type SquashMergeCommitFailureStage,
   type ThreadOperationPromptTarget,
 } from "./thread-operation-prompts.js";
 export { assertNever } from "./assert-never.js";

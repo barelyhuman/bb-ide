@@ -2,6 +2,7 @@ import { assertNever } from "./assert-never.js";
 import type { ThreadOperationRequest } from "./api-types.js";
 
 export type ThreadOperationPromptTarget = "thread" | "project_main";
+export type SquashMergeCommitFailureStage = "prep_commit" | "squash_commit";
 
 function formatPromptTarget(target: ThreadOperationPromptTarget): string {
   switch (target) {
@@ -85,9 +86,56 @@ export function buildSquashMergeConflictFollowUpInstruction(
   if (conflictFiles.length > 0) {
     steps.push(`Conflicted files: ${conflictFiles.join(", ")}.`);
   }
-  steps.push(
-    "Please reply with what you rebased and resolved, whether the squash-merge retry succeeded, and any blockers.",
-  );
+  return steps.join("\n");
+}
+
+export function buildSquashMergeCommitFailureFollowUpInstruction(
+  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+  options: {
+    stage: SquashMergeCommitFailureStage;
+    errorMessage?: string;
+  },
+): string {
+  const mergeBaseBranch = request.options?.mergeBaseBranch?.trim() || "the default branch";
+  const steps: string[] = [];
+  switch (options.stage) {
+    case "prep_commit":
+      steps.push(
+        `Squash merge to ${mergeBaseBranch} could not create the prep commit. Please inspect the workspace, fix the commit blocker, create the needed prep commit, and retry the squash merge so the changes land on ${mergeBaseBranch}.`,
+      );
+      break;
+    case "squash_commit":
+      steps.push(
+        `Squash merge to ${mergeBaseBranch} applied changes but failed while creating the squash commit. Please inspect the merge result, fix the commit blocker, and retry the squash merge so the changes land on ${mergeBaseBranch}.`,
+      );
+      break;
+    default:
+      assertNever(options.stage);
+  }
+  const errorMessage = options.errorMessage?.trim();
+  if (errorMessage) {
+    steps.push(`Git reported: ${errorMessage}.`);
+  }
+  return steps.join("\n");
+}
+
+export function buildCommitFailureFollowUpInstruction(
+  request: Extract<ThreadOperationRequest, { operation: "commit" }>,
+  options?: {
+    target?: ThreadOperationPromptTarget;
+    errorMessage?: string;
+  },
+): string {
+  const steps = [
+    `Commit in ${formatPromptTarget(options?.target ?? "thread")} failed. Please inspect the workspace, fix the commit blocker, and retry the commit.`,
+  ];
+  if (request.options?.message?.trim()) {
+    steps.push(`Use this commit message exactly: "${request.options.message.trim()}".`);
+  }
+  const errorMessage = options?.errorMessage?.trim();
+  if (errorMessage) {
+    steps.push(`Git reported: ${errorMessage}.`);
+  }
   return steps.join("\n");
 }
 

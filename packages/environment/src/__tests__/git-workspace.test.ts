@@ -2,6 +2,7 @@ import { lstatSync, readdirSync, type Dirent } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IEnvironment, EnvironmentCommandResult } from "../contracts.js";
 import {
+  commitGitWorkspace,
   getGitWorkspaceDiffAsync,
   getGitWorkspaceStatusAsync,
   watchGitWorkspaceStatus,
@@ -259,6 +260,142 @@ describe("getGitWorkspaceStatusAsync", () => {
       { status: "M?", path: "README.md" },
       { status: "A?", path: ".pnpm-store/" },
     ]);
+  });
+});
+
+describe("commitGitWorkspace", () => {
+  it("checks for unresolved conflicts before generating a commit message", async () => {
+    const runAsync = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
+        return ok("true");
+      }
+      if (args[0] === "symbolic-ref" && args[1] === "--quiet") {
+        return ok("refs/remotes/origin/main");
+      }
+      if (args[0] === "status") {
+        return ok("UU README.md");
+      }
+      if (args[0] === "diff" && args[1] === "--shortstat") {
+        return ok("");
+      }
+      if (args[0] === "diff" && args[1] === "--cached" && args[2] === "--shortstat") {
+        return ok("");
+      }
+      if (args[0] === "symbolic-ref" && args[1] === "--short") {
+        return ok("feature");
+      }
+      if (args[0] === "for-each-ref") {
+        return ok("feature\nmain");
+      }
+      if (args[0] === "show-ref") {
+        return ok("");
+      }
+      if (args[0] === "merge-base") {
+        return ok("abc123");
+      }
+      if (args[0] === "rev-list") {
+        return ok("0\t0");
+      }
+      if (args[0] === "cherry") {
+        return ok("");
+      }
+      if (args[0] === "diff" && args[1] === "--cached" && args[2] === "--quiet") {
+        return { exitCode: 1, stdout: "", stderr: "" };
+      }
+      if (args[0] === "diff" && args[1] === "--name-only" && args[2] === "--diff-filter=U") {
+        return ok("README.md\n");
+      }
+      if (args[0] === "diff" && args[1] === "--name-only") {
+        return ok("");
+      }
+      if (args[0] === "diff" && args[1] === "--name-status") {
+        return ok("");
+      }
+      if (args[0] === "commit") {
+        throw new Error("commit should not be attempted");
+      }
+      return ok("");
+    });
+    const environment = {
+      ...createEnvironment(() => "UU README.md"),
+      runAsync,
+    } satisfies IEnvironment;
+    const generateCommitMessage = vi.fn().mockResolvedValue("feat: generated");
+
+    await expect(commitGitWorkspace(environment, {}, generateCommitMessage)).rejects.toThrow(
+      "Commit has unresolved conflicts: README.md",
+    );
+    expect(generateCommitMessage).not.toHaveBeenCalled();
+  });
+
+  it("re-checks for unresolved conflicts after generating a commit message", async () => {
+    let unmergedCheckCount = 0;
+    const runAsync = vi.fn(async (_command: string, args: string[]) => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
+        return ok("true");
+      }
+      if (args[0] === "symbolic-ref" && args[1] === "--quiet") {
+        return ok("refs/remotes/origin/main");
+      }
+      if (args[0] === "status") {
+        return ok("M README.md");
+      }
+      if (args[0] === "diff" && args[1] === "--shortstat") {
+        return ok("");
+      }
+      if (args[0] === "diff" && args[1] === "--cached" && args[2] === "--shortstat") {
+        return ok("");
+      }
+      if (args[0] === "symbolic-ref" && args[1] === "--short") {
+        return ok("feature");
+      }
+      if (args[0] === "for-each-ref") {
+        return ok("feature\nmain");
+      }
+      if (args[0] === "show-ref") {
+        return ok("");
+      }
+      if (args[0] === "merge-base") {
+        return ok("abc123");
+      }
+      if (args[0] === "rev-list") {
+        return ok("0\t0");
+      }
+      if (args[0] === "cherry") {
+        return ok("");
+      }
+      if (args[0] === "add" && args[1] === "-A") {
+        return ok("");
+      }
+      if (args[0] === "diff" && args[1] === "--cached" && args[2] === "--quiet") {
+        return { exitCode: 1, stdout: "", stderr: "" };
+      }
+      if (args[0] === "diff" && args[1] === "--name-only" && args[2] === "--diff-filter=U") {
+        unmergedCheckCount += 1;
+        return unmergedCheckCount === 1 ? ok("") : ok("README.md\n");
+      }
+      if (args[0] === "diff" && args[1] === "--name-only") {
+        return ok("");
+      }
+      if (args[0] === "diff" && args[1] === "--name-status") {
+        return ok("");
+      }
+      if (args[0] === "commit") {
+        throw new Error("commit should not be attempted");
+      }
+      return ok("");
+    });
+    const environment = {
+      ...createEnvironment(() => "M README.md"),
+      runAsync,
+    } satisfies IEnvironment;
+    const generateCommitMessage = vi.fn().mockResolvedValue("feat: generated");
+
+    await expect(commitGitWorkspace(environment, {}, generateCommitMessage)).rejects.toThrow(
+      "Commit has unresolved conflicts: README.md",
+    );
+    expect(generateCommitMessage).toHaveBeenCalledTimes(1);
+    expect(runAsync).not.toHaveBeenCalledWith("git", ["commit", "-m", "feat: generated"]);
   });
 });
 

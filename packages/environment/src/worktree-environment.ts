@@ -3,29 +3,30 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
-import type {
-  CreateEnvironmentContext,
-  DemoteEnvironmentOptions,
-  DemoteEnvironmentResult,
-  EnvironmentCommandOptions,
-  EnvironmentCommandResult,
-  EnvironmentSpawnOptions,
-  EnvironmentDefinition,
-  EnvironmentCheckoutSnapshot,
-  EnvironmentCommitSummary,
-  EnvironmentInfo,
-  EnvironmentWorkspaceCommitOptions,
-  EnvironmentWorkspaceCommitResult,
-  EnvironmentWorkspaceCommitsOptions,
-  EnvironmentWorkspaceDiffOptions,
-  EnvironmentWorkspaceDiffResult,
-  EnvironmentWorkspaceStatusOptions,
-  EnvironmentWorkStatus,
-  EnvironmentSquashMergeOptions,
-  EnvironmentSquashMergeResult,
-  IEnvironment,
-  PromoteEnvironmentOptions,
-  PromoteEnvironmentResult,
+import {
+  EnvironmentSquashMergeCommitFailureError,
+  type CreateEnvironmentContext,
+  type DemoteEnvironmentOptions,
+  type DemoteEnvironmentResult,
+  type EnvironmentCommandOptions,
+  type EnvironmentCommandResult,
+  type EnvironmentSpawnOptions,
+  type EnvironmentDefinition,
+  type EnvironmentCheckoutSnapshot,
+  type EnvironmentCommitSummary,
+  type EnvironmentInfo,
+  type EnvironmentWorkspaceCommitOptions,
+  type EnvironmentWorkspaceCommitResult,
+  type EnvironmentWorkspaceCommitsOptions,
+  type EnvironmentWorkspaceDiffOptions,
+  type EnvironmentWorkspaceDiffResult,
+  type EnvironmentWorkspaceStatusOptions,
+  type EnvironmentWorkStatus,
+  type EnvironmentSquashMergeOptions,
+  type EnvironmentSquashMergeResult,
+  type IEnvironment,
+  type PromoteEnvironmentOptions,
+  type PromoteEnvironmentResult,
 } from "./contracts.js";
 import {
   commitGitWorkspace,
@@ -52,6 +53,24 @@ export interface WorktreeEnvironmentState {
 export interface CreateWorktreeEnvironmentDefinitionOptions {
   worktreeRootName?: string;
   manageEnvironmentAgent?: boolean;
+}
+
+async function listUnmergedPathsAtAsync(
+  workspaceRoot: string,
+  env: Record<string, string | undefined>,
+): Promise<string[]> {
+  const result = await runGitAtPathAsync(workspaceRoot, [
+    "diff",
+    "--name-only",
+    "--diff-filter=U",
+  ], env);
+  if (!result.ok || !result.stdout) {
+    return [];
+  }
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
@@ -582,11 +601,19 @@ class WorktreeEnvironment implements IEnvironment {
       if (args.commitIfNeeded !== true) {
         throw new Error("Workspace has uncommitted changes; commit first");
       }
-      const commitResult = await this.commitWorkspace({
-        defaultBranch: mergeBaseBranch,
-        message: args.commitMessage?.trim(),
-        includeUnstaged: args.includeUnstaged,
-      });
+      let commitResult;
+      try {
+        commitResult = await this.commitWorkspace({
+          defaultBranch: mergeBaseBranch,
+          message: args.commitMessage?.trim(),
+          includeUnstaged: args.includeUnstaged,
+        });
+      } catch (error) {
+        throw new EnvironmentSquashMergeCommitFailureError(
+          "prep_commit",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       committed = commitResult.commitCreated;
       if (commitResult.commitCreated) {
         prepCommit = {
@@ -696,6 +723,14 @@ class WorktreeEnvironment implements IEnvironment {
         };
       }
 
+      const unmergedPathsBeforeMessage = await listUnmergedPathsAtAsync(tempWorkspaceRoot, this.env);
+      if (unmergedPathsBeforeMessage.length > 0) {
+        throw new EnvironmentSquashMergeCommitFailureError(
+          "squash_commit",
+          `Squash merge has unresolved conflicts: ${unmergedPathsBeforeMessage.join(", ")}`,
+        );
+      }
+
       const sourceBranch = await runGitAtPathAsync(
         this.rootPath,
         ["symbolic-ref", "--quiet", "--short", "HEAD"],
@@ -720,6 +755,13 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
       const finalMessage = message || defaultMessage;
+      const unmergedPathsBeforeCommit = await listUnmergedPathsAtAsync(tempWorkspaceRoot, this.env);
+      if (unmergedPathsBeforeCommit.length > 0) {
+        throw new EnvironmentSquashMergeCommitFailureError(
+          "squash_commit",
+          `Squash merge has unresolved conflicts: ${unmergedPathsBeforeCommit.join(", ")}`,
+        );
+      }
       const commitResult = await runGitAtPathAsync(tempWorkspaceRoot, [
         "commit",
         "--no-verify",
@@ -727,7 +769,10 @@ class WorktreeEnvironment implements IEnvironment {
         finalMessage,
       ], this.env);
       if (!commitResult.ok) {
-        throw new Error(commitResult.stderr || "Failed to commit squashed merge");
+        throw new EnvironmentSquashMergeCommitFailureError(
+          "squash_commit",
+          commitResult.stderr || "Failed to commit squashed merge",
+        );
       }
 
       const mergedHead = await runGitAtPathAsync(tempWorkspaceRoot, ["rev-parse", "HEAD"], this.env);

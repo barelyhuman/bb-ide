@@ -247,6 +247,20 @@ export interface EnvironmentSquashMergeOptions {
   resolveMessage?: EnvironmentSquashMergeMessageResolver;
 }
 
+export type EnvironmentSquashMergeCommitFailureStage =
+  | "prep_commit"
+  | "squash_commit";
+
+export class EnvironmentSquashMergeCommitFailureError extends Error {
+  readonly stage: EnvironmentSquashMergeCommitFailureStage;
+
+  constructor(stage: EnvironmentSquashMergeCommitFailureStage, message: string) {
+    super(message);
+    this.name = "EnvironmentSquashMergeCommitFailureError";
+    this.stage = stage;
+  }
+}
+
 export interface EnvironmentSquashMergeResult {
   merged: boolean;
   message: string;

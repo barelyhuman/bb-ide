@@ -8,12 +8,14 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import {
+  buildCommitFailureFollowUpInstruction,
   assertNever,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
   getStringField,
   resolveProviderEventMethod,
   buildThreadDetailRows,
+  buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
   extractThreadContextWindowUsage,
   toRecord,
@@ -67,11 +69,13 @@ import {
 } from "@beanbag/agent-core";
 import {
   EnvironmentRegistry,
+  EnvironmentSquashMergeCommitFailureError,
   createDefaultEnvironmentRegistry,
   listGitWorkspaceMergeBaseBranchesAsync,
   type CreateEnvironmentContext,
   type EnvironmentCommitSummary,
   type EnvironmentCheckoutSnapshot,
+  type EnvironmentSquashMergeCommitFailureStage,
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
 } from "@beanbag/environment";
@@ -152,13 +156,29 @@ interface QueuedThreadOperation {
   demotedPrimaryCheckout: boolean;
 }
 
-interface EnqueueQueuedFollowUpPostAction {
-  type: "enqueue_queued_follow_up";
+interface EnqueueSquashMergeConflictFollowUpPostAction {
+  type: "enqueue_squash_merge_conflict_follow_up";
   request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>;
   conflictFiles: string[];
 }
 
-type ThreadOperationPostAction = EnqueueQueuedFollowUpPostAction;
+interface EnqueueCommitFailureFollowUpPostAction {
+  type: "enqueue_commit_failure_follow_up";
+  request: Extract<ThreadOperationRequest, { operation: "commit" }>;
+  errorMessage: string;
+}
+
+interface EnqueueSquashMergeCommitFailureFollowUpPostAction {
+  type: "enqueue_squash_merge_commit_failure_follow_up";
+  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>;
+  stage: EnvironmentSquashMergeCommitFailureStage;
+  errorMessage: string;
+}
+
+type ThreadOperationPostAction =
+  | EnqueueCommitFailureFollowUpPostAction
+  | EnqueueSquashMergeConflictFollowUpPostAction
+  | EnqueueSquashMergeCommitFailureFollowUpPostAction;
 
 interface ThreadOperationRunResult {
   message: string;
@@ -1171,15 +1191,20 @@ export class Orchestrator implements ThreadOrchestrator {
 
       await this._applyThreadOperationPostActions(thread.id, postActions);
     } catch (err) {
+      const failureMessage = this._toErrorMessage(err);
       this._appendThreadOperationEvent(
         thread.id,
         queuedOperation.request.operation,
         "failed",
         {
           operationId: queuedOperation.operationId,
-          message: this._toErrorMessage(err),
+          message: failureMessage,
           demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
         },
+      );
+      await this._applyThreadOperationPostActions(
+        thread.id,
+        this._threadOperationFailurePostActions(queuedOperation.request, err, failureMessage),
       );
     } finally {
       this.projectOperationTransitionsInFlight.delete(thread.projectId);
@@ -1200,16 +1225,62 @@ export class Orchestrator implements ThreadOrchestrator {
     for (const postAction of postActions) {
       const postActionType = postAction.type;
       switch (postActionType) {
-        case "enqueue_queued_follow_up":
+        case "enqueue_commit_failure_follow_up":
+          this._enqueueCommitFailureFollowUp(
+            threadId,
+            postAction.request,
+            postAction.errorMessage,
+          );
+          break;
+        case "enqueue_squash_merge_conflict_follow_up":
           this._enqueueSquashMergeConflictFollowUp(
             threadId,
             postAction.request,
             postAction.conflictFiles,
           );
           break;
+        case "enqueue_squash_merge_commit_failure_follow_up":
+          this._enqueueSquashMergeCommitFailureFollowUp(
+            threadId,
+            postAction.request,
+            postAction.stage,
+            postAction.errorMessage,
+          );
+          break;
         default:
           assertNever(postActionType);
       }
+    }
+  }
+
+  private _threadOperationFailurePostActions(
+    request: ThreadOperationRequest,
+    error: unknown,
+    errorMessage: string,
+  ): ThreadOperationPostAction[] {
+    switch (request.operation) {
+      case "commit":
+        return [
+          {
+            type: "enqueue_commit_failure_follow_up",
+            request,
+            errorMessage,
+          },
+        ];
+      case "squash_merge":
+        if (!(error instanceof EnvironmentSquashMergeCommitFailureError)) {
+          return [];
+        }
+        return [
+          {
+            type: "enqueue_squash_merge_commit_failure_follow_up",
+            request,
+            stage: error.stage,
+            errorMessage,
+          },
+        ];
+      default:
+        return assertNever(request);
     }
   }
 
@@ -1341,7 +1412,7 @@ export class Orchestrator implements ThreadOrchestrator {
       !mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
         ? [
             {
-              type: "enqueue_queued_follow_up",
+              type: "enqueue_squash_merge_conflict_follow_up",
               request: {
                 operation: "squash_merge",
                 ...(request ? { options: request } : {}),
@@ -1379,6 +1450,58 @@ export class Orchestrator implements ThreadOrchestrator {
       {
         type: "text",
         text: buildSquashMergeConflictFollowUpInstruction(request, { conflictFiles }),
+      },
+    ];
+
+    this._normalizePromptInputForProvider(input);
+    const defaultOptions = this.getDefaultExecutionOptions(threadId);
+    this.threadRepo.enqueueQueuedMessage(threadId, {
+      input,
+      model: defaultOptions?.model,
+      reasoningLevel: normalizeQueuedReasoningLevel(defaultOptions?.reasoningLevel),
+      sandboxMode: normalizeQueuedSandboxMode(defaultOptions?.sandboxMode),
+    });
+    this._broadcastThreadChanged(threadId, ["queue-changed"]);
+    this._scheduleQueuedFollowUpDispatch(threadId);
+  }
+
+  private _enqueueCommitFailureFollowUp(
+    threadId: string,
+    request: Extract<ThreadOperationRequest, { operation: "commit" }>,
+    errorMessage: string,
+  ): void {
+    const input: PromptInput[] = [
+      {
+        type: "text",
+        text: buildCommitFailureFollowUpInstruction(request, { errorMessage }),
+      },
+    ];
+
+    this._normalizePromptInputForProvider(input);
+    const defaultOptions = this.getDefaultExecutionOptions(threadId);
+    this.threadRepo.enqueueQueuedMessage(threadId, {
+      input,
+      model: defaultOptions?.model,
+      reasoningLevel: normalizeQueuedReasoningLevel(defaultOptions?.reasoningLevel),
+      sandboxMode: normalizeQueuedSandboxMode(defaultOptions?.sandboxMode),
+    });
+    this._broadcastThreadChanged(threadId, ["queue-changed"]);
+    this._scheduleQueuedFollowUpDispatch(threadId);
+  }
+
+  private _enqueueSquashMergeCommitFailureFollowUp(
+    threadId: string,
+    request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+    stage: EnvironmentSquashMergeCommitFailureStage,
+    errorMessage: string,
+  ): void {
+    const input: PromptInput[] = [
+      {
+        type: "text",
+        text: buildSquashMergeCommitFailureFollowUpInstruction(request, {
+          stage,
+          errorMessage,
+        }),
       },
     ];
 
