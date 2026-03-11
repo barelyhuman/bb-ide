@@ -1,8 +1,9 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { formatWithOptions } from "node:util";
+import { createRotatingJsonLineFileWriter } from "@beanbag/environment-agent";
 
 type ConsoleMethod = "log" | "info" | "warn" | "error" | "debug";
+const DEFAULT_DAEMON_LOG_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_DAEMON_LOG_MAX_FILES = 5;
 
 interface ConsoleMethodEntry {
   (...args: unknown[]): void;
@@ -20,23 +21,26 @@ function serializeArgs(args: unknown[]): string {
   );
 }
 
-function writeLogLine(filePath: string, level: ConsoleMethod, args: unknown[]): void {
-  const entry = JSON.stringify({
+function writeLogEntry(level: ConsoleMethod, args: unknown[]): Record<string, unknown> {
+  return {
     timestamp: new Date().toISOString(),
     level,
     message: serializeArgs(args),
-  });
-  appendFileSync(filePath, `${entry}\n`, "utf8");
+  };
 }
 
 export function installConsoleFileLogger(filePath: string): void {
-  mkdirSync(dirname(filePath), { recursive: true });
+  const writer = createRotatingJsonLineFileWriter({
+    filePath,
+    maxBytes: DEFAULT_DAEMON_LOG_MAX_BYTES,
+    maxFiles: DEFAULT_DAEMON_LOG_MAX_FILES,
+  });
 
   for (const level of ["log", "info", "warn", "error", "debug"] as const) {
     const original = console[level].bind(console) as ConsoleMethodEntry;
     console[level] = ((...args: unknown[]) => {
       try {
-        writeLogLine(filePath, level, args);
+        writer.write(writeLogEntry(level, args));
       } catch {
         // Logging must never break daemon startup or request handling.
       }

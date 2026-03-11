@@ -162,3 +162,11 @@ export {
   resolveEnvironmentAgentServiceOptions,
   startEnvironmentAgentService,
 } from "./service.js";
+
+export type {
+  RotatingJsonLineFileWriterOptions,
+  RotatingJsonLineFileWriter,
+} from "./rotating-file-logger.js";
+export {
+  createRotatingJsonLineFileWriter,
+} from "./rotating-file-logger.js";

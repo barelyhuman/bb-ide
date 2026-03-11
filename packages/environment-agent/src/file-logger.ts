@@ -1,8 +1,10 @@
-import { appendFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { createRotatingJsonLineFileWriter } from "./rotating-file-logger.js";
 
 const BEANBAG_ENVIRONMENT_AGENT_LOG_FILE = "BEANBAG_ENVIRONMENT_AGENT_LOG_FILE";
+const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES = 5 * 1024 * 1024;
+const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES = 3;
 
 function sanitizeSegment(value: string | undefined): string {
   const normalized = (value ?? "")
@@ -38,25 +40,20 @@ export interface EnvironmentAgentFileLogger {
 export function createEnvironmentAgentFileLogger(
   filePath: string,
 ): EnvironmentAgentFileLogger {
-  try {
-    mkdirSync(dirname(filePath), { recursive: true });
-  } catch {
-    // Best-effort logging only.
-  }
-  return {
+  const writer = createRotatingJsonLineFileWriter({
     filePath,
+    maxBytes: DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES,
+    maxFiles: DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES,
+  });
+  return {
+    filePath: writer.filePath,
     log(level, message, meta) {
-      try {
-        const entry = JSON.stringify({
-          timestamp: new Date().toISOString(),
-          level,
-          message,
-          ...(meta ? { meta } : {}),
-        });
-        appendFileSync(filePath, `${entry}\n`, "utf8");
-      } catch {
-        // Best-effort logging only.
-      }
+      writer.write({
+        timestamp: new Date().toISOString(),
+        level,
+        message,
+        ...(meta ? { meta } : {}),
+      });
     },
   };
 }
