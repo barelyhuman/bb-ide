@@ -109,7 +109,8 @@ function formatProvisioningSetupLine(
   setup: UIProvisioningMetadata["setup"],
   now?: number,
 ): string | undefined {
-  const scriptPath = setup?.scriptPath?.trim();
+  if (!setup) return undefined;
+  const scriptPath = setup.scriptPath?.trim();
   if (!scriptPath) return undefined;
   if (setup.status === "started" || setup.status === "running") {
     return `running ${scriptPath}${formatProvisioningRunningSuffix(setup.startedAt, now)}`;
