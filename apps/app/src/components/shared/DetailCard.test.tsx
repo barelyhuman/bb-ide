@@ -26,4 +26,18 @@ describe("DetailCard", () => {
     expect(markup).toContain("<div");
     expect(markup).toContain(">Workflow</dt>");
   });
+
+  it("renders vertical rows as a single-column label/value block", () => {
+    const markup = renderToStaticMarkup(
+      <DetailCard>
+        <DetailRow label="Changed files" layout="vertical">
+          src/example.ts
+        </DetailRow>
+      </DetailCard>,
+    );
+
+    expect(markup).toContain("<div");
+    expect(markup).toContain(">Changed files</dt>");
+    expect(markup).toContain(">src/example.ts</dd>");
+  });
 });

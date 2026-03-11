@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { buildThreadOperationInstruction } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
+import { WorkspaceStatusIndicator } from "@/components/shared/WorkspaceStatusIndicator";
 import { type StatusPillVariant } from "@beanbag/ui-core";
 import {
   useProjectWorkspaceStatus,
@@ -32,7 +31,6 @@ export function ProjectMainView() {
   const { data: environments } = useSystemEnvironments();
   const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const spawnThread = useSpawnThread();
-  const spawnCommitThread = useSpawnThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const fileMentions = usePromptFileMentions(projectId);
@@ -101,13 +99,11 @@ export function ProjectMainView() {
   const projectWorkspaceStatus = useMemo<{
     label: string;
     variant: StatusPillVariant;
-    actionable: boolean;
   }>(() => {
     if (workspaceStatus?.state === "untracked") {
       return {
         label: "Untracked",
         variant: "outline",
-        actionable: false,
       };
     }
 
@@ -115,24 +111,32 @@ export function ProjectMainView() {
       return {
         label: formatDirtyWorkspaceLabel(workspaceStatus),
         variant: "secondary",
-        actionable: true,
       };
     }
 
     if (workspaceStatus?.hasCommittedUnmergedChanges) {
-      const branch = workspaceStatus.currentBranch;
       return {
-        label: branch ? `Ahead (${branch})` : "Ahead",
+        label: "Ahead",
         variant: "outline",
-        actionable: false,
       };
     }
 
     return {
       label: "Clean",
       variant: "outline",
-      actionable: false,
     };
+  }, [workspaceStatus]);
+  const projectBranchLabel = useMemo(() => {
+    const currentBranch = workspaceStatus?.currentBranch;
+    if (!currentBranch) {
+      return null;
+    }
+
+    if (workspaceStatus?.defaultBranch && currentBranch === workspaceStatus.defaultBranch) {
+      return null;
+    }
+
+    return currentBranch;
   }, [workspaceStatus]);
   const selectedEnvironment = useMemo(
     () => environments?.find((environment) => environment.id === environmentId),
@@ -298,37 +302,20 @@ export function ProjectMainView() {
             {!threadsLoading &&
             selectedEnvironment?.capabilities.host_filesystem === true &&
             selectedEnvironment.capabilities.isolated_workspace === false ? (
-              <div className="flex items-center">
-                <StatusPillCommitPopover
+              <div className="flex items-center gap-2">
+                <WorkspaceStatusIndicator
                   status={workspaceStatus}
                   label={projectWorkspaceStatus.label}
                   variant={projectWorkspaceStatus.variant}
-                  canCommit={Boolean(workspaceStatus?.hasUncommittedChanges)}
-                  isCommitting={spawnCommitThread.isPending}
-                  onCommit={async ({ includeUnstaged, message }) => {
-                    if (!projectId) return;
-                    const operationPrompt = buildThreadOperationInstruction(
-                      {
-                        operation: "commit",
-                        options: {
-                          includeUnstaged,
-                          ...(message ? { message } : {}),
-                        },
-                      },
-                      { target: "project_main" },
-                    );
-                    const thread = await spawnCommitThread.mutateAsync({
-                      projectId,
-                      input: [{ type: "text", text: operationPrompt }],
-                      model: activeModel?.model,
-                      reasoningLevel,
-                      sandboxMode,
-                      environmentId,
-                      title: "Commit workspace changes",
-                    });
-                    navigate(`/projects/${projectId}/threads/${thread.id}`);
-                  }}
                 />
+                {projectBranchLabel ? (
+                  <span
+                    className="max-w-[220px] truncate text-xs text-muted-foreground"
+                    title={projectBranchLabel}
+                  >
+                    {projectBranchLabel}
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>

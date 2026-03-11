@@ -138,6 +138,8 @@ import {
 import { toast } from "sonner";
 
 const SCROLL_THRESHOLD = 40;
+const THREAD_HEADER_ACTION_BUTTON_CLASS =
+  "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
 const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
@@ -1902,7 +1904,7 @@ export function ThreadDetailView() {
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 rounded-md border-border/70 px-2.5 text-xs font-medium shadow-sm hover:bg-muted/55"
+              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
               disabled={isPrimaryCheckoutActionDisabled}
               onClick={handleTogglePrimaryCheckout}
             >
@@ -1915,7 +1917,7 @@ export function ThreadDetailView() {
               variant="outline"
               size="sm"
               disabled={isThreadGitActionPending}
-              className="h-7 rounded-md border-border/70 px-2.5 text-xs font-medium shadow-sm hover:bg-muted/55"
+              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
               onClick={() => {
                 setThreadGitActionTarget(threadHeaderGitAction.target);
               }}

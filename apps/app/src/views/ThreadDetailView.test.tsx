@@ -258,10 +258,6 @@ vi.mock("@/components/messages/ConversationWorkingIndicator", () => ({
   ),
 }));
 
-vi.mock("@/components/shared/StatusPillCommitPopover", () => ({
-  StatusPillCommitPopover: ({ label }: { label: string }) => <div>{label}</div>,
-}));
-
 vi.mock("@/components/shared/StatusPill", () => ({
   StatusPill: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
@@ -273,6 +269,7 @@ vi.mock("@/components/shared/ArchiveTimestampAction", () => ({
 vi.mock("@beanbag/ui-core", () => ({
   DEFAULT_SCROLL_STICK_THRESHOLD_PX: 32,
   DetailCard: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  DetailMessageRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   DetailRow: ({
     label,
     children,
@@ -315,6 +312,10 @@ vi.mock("@/components/thread/ThreadActionsMenu", () => ({
 
 vi.mock("@/components/thread/ThreadRenameDialog", () => ({
   ThreadRenameDialog: () => null,
+}));
+
+vi.mock("@/components/thread/ThreadGitActionDialog", () => ({
+  ThreadGitActionDialog: () => null,
 }));
 
 vi.mock("./ThreadGitDiffPanel", () => ({
@@ -412,6 +413,33 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Copy branch name");
     expect(html).toContain("Merge base");
     expect(html).toContain("release/1.0");
+    expect(html).toContain("Git status");
+    expect(html).toContain("Dirty");
+    expect(html).toContain("2 files, +3 -1");
+    expect(html).toContain("Changed files");
+    expect(html).toContain("src/example.ts");
+    expect(html).not.toContain("Workspace status");
+    expect(html).not.toContain("Merge base status");
+    expect(html).not.toContain(">Changes<");
+  });
+
+  it("renders the active badge and header action buttons for actionable threads", () => {
+    apiState.thread.status = "idle";
+    apiState.timelineLoading = false;
+    apiState.thread.primaryCheckout = { isActive: true };
+    apiState.environments[0].capabilities = {
+      host_filesystem: true,
+      isolated_workspace: false,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("active");
+    expect(html).toContain("Demote");
+    expect(html).toContain("Commit");
+
+    apiState.thread.primaryCheckout = { isActive: false };
+    apiState.environments[0].capabilities = {};
   });
 
   it("hides the working indicator while the thread timeline is still loading", () => {

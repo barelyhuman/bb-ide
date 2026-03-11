@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadWorkStatus } from "@beanbag/agent-core";
 import {
+  getThreadGitStatusDisplay,
+  threadWorkStatusDescription,
   threadWorkStatusVariant,
   threadWorktreeCleanLabel,
 } from "./thread-work-status";
@@ -48,5 +50,49 @@ describe("thread-work-status", () => {
   it("shows untracked label for non-git workspaces", () => {
     expect(threadWorktreeCleanLabel(makeStatus("untracked"))).toBe("Untracked");
     expect(threadWorkStatusVariant(makeStatus("untracked"))).toBe("outline");
+  });
+
+  it("describes dirty workspaces with a short explanation", () => {
+    expect(threadWorkStatusDescription(makeStatus("dirty_uncommitted"))).toBe(
+      "You have local changes that have not been committed yet.",
+    );
+  });
+
+  it("describes synchronized clean workspaces as having no local changes", () => {
+    expect(threadWorkStatusDescription(makeStatus("clean"))).toBe(
+      "No local changes or unmerged commits.",
+    );
+  });
+
+  it("reports ahead branches as an explicit git status display", () => {
+    expect(
+      getThreadGitStatusDisplay(
+        {
+          ...makeStatus("committed_unmerged"),
+          aheadCount: 2,
+        },
+        {
+          mergeBaseBranch: "main",
+          showBranchComparison: true,
+        },
+      ),
+    ).toEqual({
+      label: "Ahead",
+      summary: "2 ahead of main",
+    });
+  });
+
+  it("reports dirty work with a change summary", () => {
+    expect(
+      getThreadGitStatusDisplay({
+        ...makeStatus("dirty_uncommitted"),
+        workspaceChangedFiles: 3,
+        workspaceInsertions: 8,
+        workspaceDeletions: 2,
+      }),
+    ).toEqual({
+      label: "Dirty",
+      summary: "3 files, +8 -2",
+    });
   });
 });
