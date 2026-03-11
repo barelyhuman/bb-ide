@@ -156,6 +156,15 @@ export function ProjectList({
     )
   }, [collapsedProjectIds])
 
+  useEffect(() => {
+    if (!archiveConfirmationThread || !threads) return
+
+    const nextThread = threads.find((thread) => thread.id === archiveConfirmationThread.id)
+    if (!nextThread || nextThread.archivedAt !== undefined) {
+      setArchiveConfirmationThread(null)
+    }
+  }, [archiveConfirmationThread, threads])
+
   const toggleProjectCollapsed = (projectId: string) => {
     setCollapsedProjectIds((current) => {
       const next = new Set(current)
@@ -275,6 +284,23 @@ export function ProjectList({
       {
         onSuccess: () => {
           setThreadRenameTarget(null)
+        },
+      }
+    )
+  }
+
+  const confirmArchiveThread = () => {
+    if (!archiveConfirmationThread || archiveThread.isPending) return
+
+    const threadId = archiveConfirmationThread.id
+    setArchiveConfirmationThread(null)
+    archiveThread.mutate(
+      { id: threadId, force: true },
+      {
+        onError: (error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to archive thread.",
+          )
         },
       }
     )
@@ -612,14 +638,7 @@ export function ProjectList({
               type="button"
               variant="destructive"
               disabled={!archiveConfirmationThread || archiveThread.isPending}
-              onClick={() => {
-                if (!archiveConfirmationThread) return
-                archiveThread.mutate({ id: archiveConfirmationThread.id, force: true }, {
-                  onSettled: () => {
-                    setArchiveConfirmationThread(null)
-                  },
-                })
-              }}
+              onClick={confirmArchiveThread}
             >
               Archive anyway
             </Button>
