@@ -76,7 +76,6 @@ export interface Thread {
   queuedMessages?: ThreadQueuedMessage[];
   environmentId?: string;
   environmentRecord?: PersistedEnvironmentRecord;
-  environmentAgentCursor?: number;
   builtInActions?: ThreadBuiltInAction[];
   defaultExecutionOptions?: ThreadExecutionOptions;
   parentThreadId?: string;

@@ -406,7 +406,6 @@ export class EnvironmentService {
       threadId,
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );

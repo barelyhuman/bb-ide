@@ -190,6 +190,13 @@
       "when": 1773139800000,
       "tag": "0026_environment_agent_session_protocol",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1773267079199,
+      "tag": "0027_drop_thread_environment_agent_cursor",
+      "breakpoints": true
     }
   ]
 }

@@ -186,7 +186,6 @@ function createService(args: {
       kind: "worktree",
       state: {},
     },
-    environmentAgentCursor: 12,
     createdAt: 1000,
     updatedAt: 1000,
   };
@@ -311,13 +310,11 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
-    expect(threadState.environmentAgentCursor).toBeNull();
   });
 
   it("preserves runtime and persisted state when runtime destruction fails", async () => {
@@ -351,12 +348,10 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(threadState.environmentRecord).not.toBeNull();
-    expect(threadState.environmentAgentCursor).toBe(12);
   });
 
   it("clears stale persisted environment state when the archived workspace is already gone", async () => {
@@ -373,13 +368,11 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
-    expect(threadState.environmentAgentCursor).toBeNull();
   });
 
   it("clears persisted environment state after destroying an active runtime", async () => {
@@ -403,13 +396,11 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
-    expect(threadState.environmentAgentCursor).toBeNull();
   });
 
   it("suspends an active runtime without clearing persisted environment state", async () => {
@@ -433,13 +424,11 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).not.toBeNull();
-    expect(threadState.environmentAgentCursor).toBe(12);
   });
 
   it("suspends a persisted environment even when no runtime is restored", async () => {
@@ -457,13 +446,11 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).not.toBeNull();
-    expect(threadState.environmentAgentCursor).toBe(12);
   });
 
   it("removes managed thread logs only when explicitly requested", () => {
@@ -499,12 +486,10 @@ describe("EnvironmentService", () => {
       "thread-1",
       {
         environmentRecord: null,
-        environmentAgentCursor: null,
       },
       { touchUpdatedAt: false },
     );
     expect(threadState.environmentRecord).toBeNull();
-    expect(threadState.environmentAgentCursor).toBeNull();
   });
 
   it("rebuilds primary promotion state through per-project environment candidates", async () => {

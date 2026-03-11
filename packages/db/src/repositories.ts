@@ -359,7 +359,6 @@ export class ThreadRepository {
     title?: string;
     environmentId?: string;
     environmentRecord?: PersistedEnvironmentRecord;
-    environmentAgentCursor?: number;
     parentThreadId?: string;
   }): Thread {
     const now = Date.now();
@@ -372,7 +371,6 @@ export class ThreadRepository {
       environmentRecord: data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null,
-      environmentAgentCursor: data.environmentAgentCursor ?? null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       lastReadAt: now,
@@ -475,7 +473,6 @@ export class ThreadRepository {
       title?: string;
       environmentId?: string | null;
       environmentRecord?: PersistedEnvironmentRecord | null;
-      environmentAgentCursor?: number | null;
       archivedAt?: number | null;
       lastReadAt?: number;
     },
@@ -501,9 +498,6 @@ export class ThreadRepository {
       updates.environmentRecord = data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null;
-    }
-    if (data.environmentAgentCursor !== undefined) {
-      updates.environmentAgentCursor = data.environmentAgentCursor;
     }
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
     if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
@@ -624,7 +618,6 @@ export class ThreadRepository {
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
       environmentRecord: parseEnvironmentRecord(row.environmentRecord),
-      environmentAgentCursor: row.environmentAgentCursor ?? undefined,
       queuedMessages,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
