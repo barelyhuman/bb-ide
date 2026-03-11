@@ -772,6 +772,154 @@ describe("environment-agent session orchestrator roundtrip", () => {
     );
   });
 
+  it("accepts resumed tell events after a fresh agent session resets a stale daemon cursor", async () => {
+    const threadId = createThread("idle");
+    installRuntime(threadId);
+    cursors.upsert(threadId, { generation: 1, sequence: 9 }, 900);
+    const sessionId = openSession(threadId);
+    events.create({
+      threadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "codex",
+        method: "thread/started",
+        payload: {
+          thread: { id: "provider-thread-1" },
+        },
+      }),
+    });
+
+    const tellPromise = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "Continue after restart" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
+    const providerEnsureForResume = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsureForResume.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
+    const resume = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    expect(resume.command).toMatchObject({
+      type: "thread.resume",
+      threadId,
+      providerThreadId: "provider-thread-1",
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
+    const providerEnsureForTurn = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: resume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    expect(providerEnsureForTurn.command).toMatchObject({
+      type: "provider.ensure",
+      command: "codex",
+      args: ["app-server"],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+
+    const turnStart = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForTurn.commandCursor,
+      result: { ok: true },
+    });
+    expect(turnStart.command).toMatchObject({
+      type: "turn.start",
+      threadId,
+      providerThreadId: "provider-thread-1",
+    });
+
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 1,
+      method: "turn/started",
+      payload: { turnId: "turn-2" },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 2,
+      method: "turn/completed",
+      payload: { turnId: "turn-2" },
+    });
+
+    await tellPromise;
+    expect(threads.getById(threadId)?.status).toBe("idle");
+    expect(cursors.getByThreadId(threadId)).toMatchObject({
+      generation: 1,
+      sequence: 2,
+    });
+    expect(events.listByThread(threadId).map((event) => event.type)).toEqual(
+      expect.arrayContaining(["client/turn/start", "turn/started", "turn/completed"]),
+    );
+  });
+
+  it("rejects steer without an active turn before appending client turn start events", async () => {
+    const threadId = createThread("active");
+    installRuntime(threadId);
+    const sessionId = openSession(threadId);
+    events.create({
+      threadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "codex",
+        method: "thread/started",
+        payload: {
+          thread: { id: "provider-thread-1" },
+        },
+      }),
+    });
+
+    await expect(
+      orchestrator.tell(threadId, {
+        input: [{ type: "text", text: "Please steer" }],
+        mode: "steer",
+      }),
+    ).rejects.toThrow(`Thread ${threadId} has no active turn to steer`);
+
+    expect(commands.listPendingByThreadId(threadId)).toHaveLength(0);
+    expect(events.listByThread(threadId).map((event) => event.type)).not.toContain(
+      "client/turn/start",
+    );
+    expect(sessionService.listCommands({
+      threadId,
+      sessionId,
+      afterCursor: 0,
+      limit: 10,
+      now: 2_000,
+    }).payload.commands).toHaveLength(0);
+  });
+
   it("marks spawn threads provisioning_failed when the queued thread.start command fails", async () => {
     installSpawnRuntime();
     const project = createProject();

@@ -167,7 +167,13 @@ export class EnvironmentAgentSessionService {
       now,
     });
 
-    const cursor = this.cursors.getByThreadId(args.threadId);
+    let cursor = this.cursors.getByThreadId(args.threadId);
+    if (cursor && channel.lastDaemonAcked === undefined) {
+      // A fresh environment-agent process has no local delivery state, so the
+      // daemon cursor must be reset to accept the restarted event stream.
+      this.cursors.deleteByThreadId(args.threadId);
+      cursor = undefined;
+    }
     return {
       ...(opened.replaced ? { replaced: opened.replaced } : {}),
       session: opened.active,

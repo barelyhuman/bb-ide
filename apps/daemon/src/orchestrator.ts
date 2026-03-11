@@ -891,7 +891,6 @@ export class Orchestrator implements ThreadOrchestrator {
       return;
     }
 
-    const providerThreadId = await this._ensureProviderSession(threadId, options);
     const tellMode = request.mode ?? "auto";
     const activeTurnId =
       this.activeTurnIdByThreadId.get(threadId) ??
@@ -899,6 +898,10 @@ export class Orchestrator implements ThreadOrchestrator {
     if (activeTurnId) {
       this.activeTurnIdByThreadId.set(threadId, activeTurnId);
     }
+    if (tellMode === "steer" && !activeTurnId) {
+      throw noActiveTurnError(threadId);
+    }
+    const providerThreadId = await this._ensureProviderSession(threadId, options);
 
     const project = this.projectRepo.getById(thread.projectId);
     if (project) {

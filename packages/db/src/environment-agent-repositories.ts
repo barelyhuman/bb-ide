@@ -628,6 +628,13 @@ export class EnvironmentAgentCursorRepository {
     return row ? rowToEnvironmentAgentCursorRecord(row) : undefined;
   }
 
+  deleteByThreadId(threadId: string): void {
+    this.db
+      .delete(environmentAgentCursors)
+      .where(eq(environmentAgentCursors.threadId, threadId))
+      .run();
+  }
+
   upsert(
     threadId: string,
     cursor: EnvironmentAgentCursorPosition,

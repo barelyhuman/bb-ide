@@ -158,6 +158,85 @@ describe("EnvironmentAgentSessionService", () => {
     ]);
   });
 
+  it("resets a stale daemon cursor when a fresh agent opens without lastDaemonAcked", async () => {
+    const threadId = createThreadId();
+    cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
+
+    const opened = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["http-long-poll"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(opened.welcome.payload.channels).toEqual([
+      {
+        channelId: threadId,
+        applyFrom: {
+          generation: 1,
+          sequenceExclusive: 0,
+        },
+        deliverCommandsAfter: 0,
+      },
+    ]);
+    expect(cursors.getByThreadId(threadId)).toBeUndefined();
+
+    const ack = await service.applyEventBatch({
+      threadId,
+      sessionId: opened.session.id,
+      now: 3_000,
+      payload: {
+        batches: [
+          {
+            channelId: threadId,
+            generation: 1,
+            events: [
+              {
+                sequence: 1,
+                eventId: "evt-1",
+                emittedAt: 2_500,
+                event: {
+                  type: "provider.stderr",
+                  threadId,
+                  line: "stderr 1",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(ack).toMatchObject({
+      type: "event_ack",
+      payload: {
+        channels: [
+          {
+            channelId: threadId,
+            ackedThrough: {
+              generation: 1,
+              sequence: 1,
+            },
+          },
+        ],
+      },
+    });
+    expect(cursors.getByThreadId(threadId)).toMatchObject({
+      generation: 1,
+      sequence: 1,
+    });
+  });
+
   it("replaces active sessions and rejects unsupported opens", () => {
     const threadId = createThreadId();
     const first = service.openSession({
