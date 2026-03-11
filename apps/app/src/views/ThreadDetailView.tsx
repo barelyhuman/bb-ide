@@ -1339,52 +1339,6 @@ export function ThreadDetailView() {
       }
     }
   }, [projectId, promptDraft, uploadPromptAttachment]);
-  const isTransientThreadLoadError =
-    Boolean(thread) &&
-    Boolean(error) &&
-    (!(error instanceof HttpError) || error.status >= 500);
-  const handleMergeBaseBranchChange = useCallback((branch: string) => {
-    if (!thread) {
-      return;
-    }
-
-    const normalizedBranch = branch.trim();
-    if (!normalizedBranch) {
-      return;
-    }
-
-    const defaultBranch = resolvedThreadWorkStatus?.defaultBranch;
-    const nextMergeBaseBranchOverride =
-      defaultBranch && normalizedBranch === defaultBranch
-        ? null
-        : normalizedBranch;
-    const currentMergeBaseBranchOverride = thread.mergeBaseBranchOverride ?? null;
-    if (nextMergeBaseBranchOverride === currentMergeBaseBranchOverride) {
-      return;
-    }
-
-    updateThread.mutate(
-      {
-        id: thread.id,
-        mergeBaseBranchOverride: nextMergeBaseBranchOverride,
-      },
-      {
-        onError: (error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "Failed to update merge base branch.",
-          );
-        },
-      },
-    );
-  }, [resolvedThreadWorkStatus?.defaultBranch, thread, updateThread]);
-  const handleMergeBaseBranchPickerOpenChange = useCallback((open: boolean) => {
-    if (open) {
-      setShouldLoadMergeBaseBranchOptions(true);
-    }
-    setIsMergeBaseBranchPickerOpen(open);
-  }, []);
 
   if (!projectId || !threadId) {
     return (
@@ -1400,6 +1354,10 @@ export function ThreadDetailView() {
       </PageShell>
     );
   }
+  const isTransientThreadLoadError =
+    Boolean(thread) &&
+    Boolean(error) &&
+    (!(error instanceof HttpError) || error.status >= 500);
   if (
     (!thread && Boolean(error)) ||
     !thread ||
@@ -1596,6 +1554,44 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
+  const handleMergeBaseBranchChange = useCallback((branch: string) => {
+    const normalizedBranch = branch.trim();
+    if (!normalizedBranch) {
+      return;
+    }
+
+    const defaultBranch = resolvedThreadWorkStatus?.defaultBranch;
+    const nextMergeBaseBranchOverride =
+      defaultBranch && normalizedBranch === defaultBranch
+        ? null
+        : normalizedBranch;
+    const currentMergeBaseBranchOverride = thread.mergeBaseBranchOverride ?? null;
+    if (nextMergeBaseBranchOverride === currentMergeBaseBranchOverride) {
+      return;
+    }
+
+    updateThread.mutate(
+      {
+        id: thread.id,
+        mergeBaseBranchOverride: nextMergeBaseBranchOverride,
+      },
+      {
+        onError: (error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to update merge base branch.",
+          );
+        },
+      },
+    );
+  }, [resolvedThreadWorkStatus?.defaultBranch, thread.id, thread.mergeBaseBranchOverride, updateThread]);
+  const handleMergeBaseBranchPickerOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      setShouldLoadMergeBaseBranchOptions(true);
+    }
+    setIsMergeBaseBranchPickerOpen(open);
+  }, []);
   const handleTogglePrimaryCheckout = () => {
     const action = isPrimaryCheckoutActive
       ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
