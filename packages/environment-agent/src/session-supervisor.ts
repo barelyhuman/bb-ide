@@ -19,6 +19,7 @@ export interface EnvironmentAgentSessionSupervisorOptions {
   agentInstanceId?: string;
   pollIntervalMs?: number;
   commandBatchLimit?: number;
+  eventFlushDebounceMs?: number;
   onError?: (error: unknown) => void;
 }
 
@@ -27,6 +28,7 @@ const DEFAULT_COMMAND_BATCH_LIMIT = 50;
 const DEFAULT_COMMAND_LONG_POLL_MS = 10_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const MAX_ERROR_BACKOFF_MS = 30_000;
+const DEFAULT_EVENT_FLUSH_DEBOUNCE_MS = 250;
 
 function normalizeHeartbeatIntervalMs(value: number): number {
   return Number.isFinite(value) && value > 0
@@ -71,14 +73,17 @@ export class EnvironmentAgentSessionSupervisor {
   private readonly agentInstanceId: string;
   private readonly pollIntervalMs: number;
   private readonly commandBatchLimit: number;
+  private readonly eventFlushDebounceMs: number;
   private readonly onError?: (error: unknown) => void;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
+  private eventFlushTimer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private cycleInFlight = false;
   private consecutiveFailureCount = 0;
   private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
   private nextHeartbeatAt = 0;
   private commandPullController: AbortController | undefined;
+  private lastCommandPullAbortAt = 0;
   private readonly unsubscribeRuntimeEvents: () => void;
 
   constructor(private readonly options: EnvironmentAgentSessionSupervisorOptions) {
@@ -86,6 +91,8 @@ export class EnvironmentAgentSessionSupervisor {
     this.agentInstanceId = options.agentInstanceId ?? randomUUID();
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
+    this.eventFlushDebounceMs =
+      options.eventFlushDebounceMs ?? DEFAULT_EVENT_FLUSH_DEBOUNCE_MS;
     this.onError = options.onError;
 
     this.options.sessionRuntime.initializeThread({
@@ -101,8 +108,7 @@ export class EnvironmentAgentSessionSupervisor {
         event: event.event,
         emittedAt: event.emittedAt,
       });
-      this.cancelPendingCommandPull();
-      this.scheduleImmediateCycle();
+      this.requestEventFlush();
     });
   }
 
@@ -136,6 +142,10 @@ export class EnvironmentAgentSessionSupervisor {
     if (this.pollTimer) {
       clearTimeout(this.pollTimer);
       this.pollTimer = undefined;
+    }
+    if (this.eventFlushTimer) {
+      clearTimeout(this.eventFlushTimer);
+      this.eventFlushTimer = undefined;
     }
     this.cancelPendingCommandPull();
     while (this.cycleInFlight) {
@@ -342,6 +352,37 @@ export class EnvironmentAgentSessionSupervisor {
 
   private isHeartbeatDue(now: number = Date.now()): boolean {
     return now >= this.nextHeartbeatAt;
+  }
+
+  private requestEventFlush(): void {
+    if (!this.running) {
+      return;
+    }
+    const now = Date.now();
+    const debounceRemaining = Math.max(
+      0,
+      this.eventFlushDebounceMs - (now - this.lastCommandPullAbortAt),
+    );
+
+    if (this.commandPullController && debounceRemaining === 0) {
+      this.lastCommandPullAbortAt = now;
+      this.cancelPendingCommandPull();
+      this.scheduleImmediateCycle();
+      return;
+    }
+
+    if (this.eventFlushTimer) {
+      return;
+    }
+    this.eventFlushTimer = setTimeout(() => {
+      this.eventFlushTimer = undefined;
+      if (!this.running) {
+        return;
+      }
+      this.lastCommandPullAbortAt = Date.now();
+      this.cancelPendingCommandPull();
+      this.scheduleImmediateCycle();
+    }, debounceRemaining);
   }
 
   private cancelPendingCommandPull(): void {

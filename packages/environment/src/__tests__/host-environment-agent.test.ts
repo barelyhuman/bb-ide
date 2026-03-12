@@ -279,4 +279,65 @@ describe("host environment-agent helper", () => {
       workspaceRootPath: workspaceRoot,
     })).toBeUndefined();
   });
+
+  it("keeps an adopted managed agent record when shutdown fails but the agent is still reachable", async () => {
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const runtimeEnv = { BEANBAG_ROOT: beanbagRoot };
+
+    await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-1",
+        projectId,
+        environmentId: "local",
+        runtimeEnv,
+        reconnectTarget: {
+          baseUrl: "http://127.0.0.1:4310",
+          authToken: "reconnect-token",
+        },
+      },
+      {
+        pingAgent: async () => true,
+        waitForAgent: async () => {
+          throw new Error("should not launch a new agent");
+        },
+      },
+    );
+
+    const requestShutdown = vi.fn(async () => {
+      throw new Error("shutdown failed");
+    });
+
+    await disposeManagedHostEnvironmentAgent(
+      {
+        projectId,
+        threadId: "thread-1",
+        environmentId: "local",
+        workspaceRootPath: workspaceRoot,
+        runtimeEnv,
+      },
+      {
+        requestShutdown,
+        pingAgent: async () => true,
+      },
+    );
+
+    expect(requestShutdown).toHaveBeenCalledWith(
+      "http://127.0.0.1:4310",
+      "reconnect-token",
+    );
+    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+      projectId,
+      threadId: "thread-1",
+      environmentId: "local",
+      workspaceRootPath: workspaceRoot,
+    })).toMatchObject({
+      baseUrl: "http://127.0.0.1:4310",
+      authToken: "reconnect-token",
+      pid: undefined,
+    });
+  });
 });

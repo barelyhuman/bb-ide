@@ -423,7 +423,10 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   environmentId: string;
   workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
-}, deps: Pick<EnsureManagedHostEnvironmentAgentDeps, "isProcessAlive" | "killProcess" | "sleepMs"> = {}): Promise<void> {
+}, deps: Pick<
+  EnsureManagedHostEnvironmentAgentDeps,
+  "isProcessAlive" | "killProcess" | "sleepMs" | "requestShutdown" | "pingAgent"
+> = {}): Promise<void> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return;
   }
@@ -451,13 +454,24 @@ export async function disposeManagedHostEnvironmentAgent(args: {
           sleepMs,
         });
       } else {
+        const requestShutdown = deps.requestShutdown ?? requestEnvironmentAgentShutdown;
+        const pingAgent = deps.pingAgent ?? pingEnvironmentAgent;
         try {
-          await requestEnvironmentAgentShutdown(
+          await requestShutdown(
             existing.baseUrl,
             existing.authToken,
           );
         } catch {
-          // Best-effort cleanup for already-exited or unreachable adopted agents.
+          // Keep adopted agents visible if they are still reachable so later
+          // cleanup or reuse can make progress without spawning duplicates.
+          const stillReachable = await pingAgent(
+            existing.baseUrl,
+            existing.authToken,
+            HEALTH_TIMEOUT_MS,
+          );
+          if (stillReachable) {
+            return;
+          }
         }
       }
     }
