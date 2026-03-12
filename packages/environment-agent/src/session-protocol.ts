@@ -44,13 +44,6 @@ export interface EnvironmentAgentSessionOpenPayload {
   channels: EnvironmentAgentSessionChannelBootstrap[];
 }
 
-export interface EnvironmentAgentSessionResumePayload {
-  previousSessionId: string;
-  agentId: string;
-  agentInstanceId: string;
-  channels: EnvironmentAgentSessionChannelBootstrap[];
-}
-
 export interface EnvironmentAgentSessionWelcomeChannel {
   channelId: string;
   applyFrom: EnvironmentAgentSessionCursorExclusive;
@@ -185,12 +178,6 @@ export interface EnvironmentAgentSessionOpenMessage
   payload: EnvironmentAgentSessionOpenPayload;
 }
 
-export interface EnvironmentAgentSessionResumeMessage
-  extends EnvironmentAgentSessionMessageBase {
-  type: "session_resume";
-  payload: EnvironmentAgentSessionResumePayload;
-}
-
 export interface EnvironmentAgentSessionWelcomeMessage
   extends EnvironmentAgentSessionBoundMessageBase {
   type: "session_welcome";
@@ -255,7 +242,6 @@ export interface EnvironmentAgentSessionReplacedMessage
 
 export type EnvironmentAgentSessionClientMessage =
   | EnvironmentAgentSessionOpenMessage
-  | EnvironmentAgentSessionResumeMessage
   | EnvironmentAgentSessionHeartbeatMessage
   | EnvironmentAgentSessionEventBatchMessage
   | EnvironmentAgentSessionCommandAckMessage
@@ -334,7 +320,6 @@ export function isEnvironmentAgentSessionMessage(
 
   switch (value.type) {
     case "session_open":
-    case "session_resume":
       return true;
     case "session_welcome":
     case "heartbeat":
@@ -358,7 +343,6 @@ export function isEnvironmentAgentSessionClientMessage(
   if (!isEnvironmentAgentSessionMessage(value)) return false;
   switch (value.type) {
     case "session_open":
-    case "session_resume":
     case "heartbeat":
     case "event_batch":
     case "command_ack":
@@ -389,7 +373,6 @@ export function isEnvironmentAgentSessionServerMessage(
     case "session_replaced":
       return true;
     case "session_open":
-    case "session_resume":
     case "heartbeat":
     case "event_batch":
     case "command_ack":

@@ -86,7 +86,7 @@ Fields:
 - `protocol`: closed/internal protocol id
 - `messageId`: stable id for dedupe and diagnostics
 - `sentAt`: sender timestamp in epoch milliseconds
-- `sessionId`: omitted only for `session_open` and `session_resume`
+- `sessionId`: omitted only for `session_open`
 - `type`: closed/internal union handled exhaustively
 - `payload`: type-specific payload
 
@@ -126,37 +126,9 @@ Sent by agent when no valid resumable session is known.
 
 `controlEndpoint` is optional restart metadata. When present, the daemon may use it to send `/control/session-sync` nudges after restart so a surviving agent resets reconnect backoff and checks in quickly.
 
-### `session_resume`
-
-Sent by agent when reconnecting after a disconnect/outage and attempting to resume an existing session.
-
-```json
-{
-  "protocol": "beanbag.env-agent.v1",
-  "messageId": "msg_resume_1",
-  "sentAt": 1770000005000,
-  "type": "session_resume",
-  "payload": {
-    "previousSessionId": "sess_123",
-    "agentId": "agent_thread_local_proj1_thread1",
-    "agentInstanceId": "agentinst_01",
-    "channels": [
-      {
-        "channelId": "thread-1",
-        "generation": 7,
-        "lastDaemonAcked": {
-          "generation": 7,
-          "sequence": 104
-        }
-      }
-    ]
-  }
-}
-```
-
 ### `session_welcome`
 
-Sent by daemon in response to `session_open` or `session_resume`.
+Sent by daemon in response to `session_open`.
 
 ```json
 {
@@ -468,7 +440,7 @@ The agent must durably persist:
 
 1. agent keeps unacked events in durable outbox
 2. transport disconnects
-3. agent reconnects and sends `session_resume`
+3. agent reconnects and sends `session_open`
 4. daemon responds with `session_welcome`
 5. daemon tells agent to resume from daemon cursor
 6. agent resends unacked events after that cursor
@@ -477,7 +449,7 @@ The agent must durably persist:
 ### Daemon restart while agent keeps running
 
 1. daemon restarts and restores persisted cursors/command log
-2. agent reconnects using `session_open` or `session_resume`
+2. agent reconnects using `session_open`
 3. daemon issues fresh `session_welcome`
 4. daemon requests events from its last durably applied cursor
 5. agent replays from durable outbox/store
@@ -565,7 +537,7 @@ The message model is transport-agnostic.
 One possible mapping:
 
 - `POST /sessions/open`
-  - carries `session_open` or `session_resume`
+  - carries `session_open`
   - returns `session_welcome`
 - `POST /sessions/:sessionId/push`
   - carries agent→daemon envelopes such as `heartbeat`, `event_batch`, `command_ack`, `command_result`
