@@ -250,13 +250,15 @@ export function createCodexProviderAdapter(
       providerThreadId: string,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
-      resumePath?: string,
+      _resumePath?: string,
     ): Record<string, unknown> {
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
           {
             threadId: providerThreadId,
-            ...(resumePath ? { path: resumePath } : {}),
+            // Codex currently rejects thread/resume.path unless experimentalApi
+            // is enabled. Keep the adapter compatible with the default provider
+            // surface and resume by thread id only.
             approvalPolicy: DEFAULT_APPROVAL_POLICY,
             sandbox: resolveSandboxMode(options?.sandboxMode),
           },

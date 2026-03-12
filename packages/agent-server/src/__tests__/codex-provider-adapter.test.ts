@@ -213,7 +213,6 @@ describe("codex provider adapter", () => {
       ),
     ).toMatchObject({
       threadId: "provider-thread-1",
-      path: "/tmp/codex-rollout-1.jsonl",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
       config: {
