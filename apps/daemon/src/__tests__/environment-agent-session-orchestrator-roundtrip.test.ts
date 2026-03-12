@@ -1091,8 +1091,14 @@ describe("environment-agent session orchestrator roundtrip", () => {
       threadId,
       providerThreadId: "provider-thread-1",
       params: expect.objectContaining({
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
         threadId: "provider-thread-1",
-        path: "/tmp/codex-rollout-1.jsonl",
+        config: expect.objectContaining({
+          "shell_environment_policy.set.BB_PROJECT_ID": expect.any(String),
+          "shell_environment_policy.set.BB_THREAD_ID": threadId,
+          "shell_environment_policy.set.PATH": expect.any(String),
+        }),
       }),
     });
     await vi.waitFor(() => {

@@ -157,6 +157,17 @@ export function createRestartRecommendationMonitor(
     watchers = [];
   };
 
+  const computeNextShouldRestart = () =>
+    watchRoots.some((rootPath) => hasChangesSince(rootPath, startedAt));
+
+  const updateShouldRestart = (nextShouldRestart: boolean) => {
+    if (nextShouldRestart === shouldRestart) {
+      return;
+    }
+    shouldRestart = nextShouldRestart;
+    options.onChange?.(shouldRestart);
+  };
+
   const refreshWatchers = () => {
     closeWatchers();
     const directories = watchRoots.flatMap((rootPath) => collectWatchDirectories(rootPath));
@@ -180,14 +191,7 @@ export function createRestartRecommendationMonitor(
       return;
     }
     refreshWatchers();
-    const nextShouldRestart = watchRoots.some((rootPath) =>
-      hasChangesSince(rootPath, startedAt)
-    );
-    if (nextShouldRestart === shouldRestart) {
-      return;
-    }
-    shouldRestart = nextShouldRestart;
-    options.onChange?.(shouldRestart);
+    updateShouldRestart(computeNextShouldRestart());
   };
 
   const scheduleRecompute = () => {
@@ -206,7 +210,14 @@ export function createRestartRecommendationMonitor(
   refreshWatchers();
 
   return {
-    shouldRestart: () => shouldRestart,
+    shouldRestart: () => {
+      if (!closed && !shouldRestart) {
+        // Filesystem watch events can be dropped under load; rescan on demand
+        // so callers still observe restart recommendations deterministically.
+        updateShouldRestart(computeNextShouldRestart());
+      }
+      return shouldRestart;
+    },
     close: () => {
       closed = true;
       if (pendingTimer !== null) {
