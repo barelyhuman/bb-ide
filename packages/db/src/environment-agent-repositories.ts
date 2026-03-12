@@ -462,6 +462,21 @@ export class EnvironmentAgentSessionRepository {
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
   }
 
+  listActive(now: number = Date.now()): EnvironmentAgentSessionRecord[] {
+    return this.db
+      .select()
+      .from(environmentAgentSessions)
+      .where(
+        and(
+          eq(environmentAgentSessions.status, "active"),
+          gt(environmentAgentSessions.leaseExpiresAt, now),
+        ),
+      )
+      .orderBy(desc(environmentAgentSessions.updatedAt))
+      .all()
+      .map(rowToEnvironmentAgentSessionRecord);
+  }
+
   listExpiringBefore(timestamp: number): EnvironmentAgentSessionRecord[] {
     return this.db
       .select()

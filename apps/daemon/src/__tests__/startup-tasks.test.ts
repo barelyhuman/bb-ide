@@ -1,5 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
-import { scheduleManagedArtifactReconciliation } from "../startup-tasks.js";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  recoverManagedEnvironmentAgentSessionsOnBoot,
+  scheduleManagedArtifactReconciliation,
+} from "../startup-tasks.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("startup tasks", () => {
   it("defers managed artifact reconciliation until after startup returns", async () => {
@@ -46,5 +56,67 @@ describe("startup tasks", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "Managed artifact cleanup skipped: boom",
     );
+  });
+
+  it("pokes reachable env-agents and closes unreachable active sessions on boot", async () => {
+    const beanbagRoot = mkdtempSync(join(tmpdir(), "bb-startup-tasks-"));
+    const stateDir = join(beanbagRoot, "environment-agents", "proj-1");
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(join(stateDir, "worktree-thread-1.json"), JSON.stringify({
+      version: 1,
+      baseUrl: "http://127.0.0.1:4310",
+      authToken: "token-1",
+      threadId: "thread-1",
+      projectId: "proj-1",
+      environmentId: "worktree",
+    }));
+    writeFileSync(join(stateDir, "worktree-thread-2.json"), JSON.stringify({
+      version: 1,
+      baseUrl: "http://127.0.0.1:4311",
+      authToken: "token-2",
+      threadId: "thread-2",
+      projectId: "proj-1",
+      environmentId: "worktree",
+    }));
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith("http://127.0.0.1:4310/")) {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`offline: ${url}`);
+    });
+
+    const sessionRepo = {
+      listActive: vi.fn().mockReturnValue([
+        { id: "sess-1", threadId: "thread-1" },
+        { id: "sess-2", threadId: "thread-2" },
+      ]),
+      markClosed: vi.fn(),
+    };
+
+    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+      runtimeEnv: { BEANBAG_ROOT: beanbagRoot } as NodeJS.ProcessEnv,
+      sessionRepo,
+      logger: {
+        log: vi.fn(),
+        warn: vi.fn(),
+      },
+    });
+
+    expect(result).toEqual({
+      activeSessionCount: 2,
+      pokedCount: 1,
+      closedCount: 1,
+    });
+    expect(sessionRepo.markClosed).toHaveBeenCalledWith({
+      sessionId: "sess-2",
+      reason: "daemon_shutdown",
+    });
+
+    rmSync(beanbagRoot, { recursive: true, force: true });
   });
 });

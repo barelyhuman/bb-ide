@@ -16,7 +16,10 @@ import {
 import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
 import { closeHttpServer } from "./http-server-close.js";
-import { scheduleManagedArtifactReconciliation } from "./startup-tasks.js";
+import {
+  recoverManagedEnvironmentAgentSessionsOnBoot,
+  scheduleManagedArtifactReconciliation,
+} from "./startup-tasks.js";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -207,10 +210,6 @@ async function main(): Promise<void> {
   restartRecommendationMonitorRef = restartRecommendationMonitor;
   serverCloseRef = close;
 
-  console.log("Reconciling startup environment state...");
-  await threadManager.reconcileActiveThreadsOnBoot();
-  console.log("Startup reconciliation complete.");
-
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("uncaughtException", (error) => {
@@ -220,6 +219,11 @@ async function main(): Promise<void> {
   process.on("unhandledRejection", (reason) => {
     console.error("Unhandled rejection:", reason);
     void shutdown("unhandledRejection", { exitCode: 1 });
+  });
+
+  let listeningResolve: (() => void) | undefined;
+  const listening = new Promise<void>((resolvePromise) => {
+    listeningResolve = resolvePromise;
   });
 
   // Start listening
@@ -238,11 +242,21 @@ async function main(): Promise<void> {
       console.log(`\nPress Ctrl+C to stop.\n`);
       console.log("Managed artifact reconciliation scheduled in background.");
       scheduleManagedArtifactReconciliation(threadManager);
+      listeningResolve?.();
     },
   );
 
   // Inject WebSocket support into the Node HTTP server
   injectWebSocket(httpServer);
+
+  await listening;
+  await recoverManagedEnvironmentAgentSessionsOnBoot({
+    runtimeEnv: process.env,
+    sessionRepo: environmentAgentSessionRepo,
+  });
+  console.log("Reconciling startup environment state...");
+  await threadManager.reconcileActiveThreadsOnBoot();
+  console.log("Startup reconciliation complete.");
 }
 
 main().catch((err) => {

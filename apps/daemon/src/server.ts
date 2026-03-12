@@ -95,9 +95,6 @@ export function createServer(deps: ServerDeps) {
     deps.environmentAgentSessionRepo,
     deps.environmentAgentCommandRepo,
   );
-  deps.environmentAgentSessionRepo.closeAllActive({
-    reason: "daemon_shutdown",
-  });
   const daemonRuntimeEnv = {
     ...(deps.runtimeEnv ?? process.env),
     ...(deps.daemonBaseUrl

@@ -130,6 +130,15 @@ export class EnvironmentAgentSessionSupervisor {
     this.scheduleNextCycle();
   }
 
+  poke(): void {
+    if (!this.running) {
+      return;
+    }
+    this.cancelSelfSuspend();
+    this.cancelPendingCommandPull();
+    this.scheduleImmediateCycle();
+  }
+
   async close(): Promise<void> {
     this.running = false;
     if (this.pollTimer) {

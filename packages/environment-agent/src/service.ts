@@ -162,6 +162,9 @@ export async function startEnvironmentAgentService(
     host: options.server.host,
     port: options.server.port,
     bearerToken: options.server.bearerToken,
+    onSessionSyncRequested: () => {
+      sessionSupervisor?.poke();
+    },
   });
   logger.log("info", "environment-agent http listening", {
     baseUrl: server.baseUrl,
