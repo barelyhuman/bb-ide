@@ -153,6 +153,7 @@ function mockEnvironmentAgentSessionService(): EnvironmentAgentSessionService {
     openSession: vi.fn(),
     recordHeartbeat: vi.fn(),
     applyEventBatch: vi.fn(),
+    listSessions: vi.fn(),
     listCommands: vi.fn(),
     waitForCommands: vi.fn(),
     recordCommandAck: vi.fn(),
@@ -435,6 +436,54 @@ describe("Thread routes", () => {
       expect(res.status).toBe(409);
       await expect(res.json()).resolves.toMatchObject({
         code: "inactive_session",
+      });
+    });
+  });
+
+  describe("GET /threads/:id/environment-agent/sessions", () => {
+    it("returns thread session inspection data", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      threadManager.getById.mockReturnValue(makeThread());
+      vi.mocked(sessionService.listSessions).mockReturnValue([
+        {
+          id: "sess-1",
+          threadId: "thread-1",
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          protocolVersion: 1,
+          status: "active",
+          leaseExpiresAt: 5_000,
+          lastHeartbeatAt: 4_500,
+          createdAt: 1_000,
+          updatedAt: 4_500,
+        },
+      ]);
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request("/threads/thread-1/environment-agent/sessions");
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        threadId: "thread-1",
+        sessions: [
+          {
+            id: "sess-1",
+            threadId: "thread-1",
+            agentId: "agent-1",
+            agentInstanceId: "instance-1",
+            protocolVersion: 1,
+            status: "active",
+            leaseExpiresAt: 5_000,
+            lastHeartbeatAt: 4_500,
+            createdAt: 1_000,
+            updatedAt: 4_500,
+          },
+        ],
       });
     });
   });

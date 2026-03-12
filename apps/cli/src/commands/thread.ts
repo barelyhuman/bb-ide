@@ -16,6 +16,43 @@ import {
 } from "../context-env.js";
 
 type ThreadStatusEventMode = "summary" | "raw";
+type ThreadWaitTarget =
+  | { kind: "status"; status: ThreadStatus }
+  | { kind: "event"; eventType: string };
+
+interface ThreadSessionsPayload {
+  threadId: string;
+  sessions: ThreadSessionDebugView[];
+}
+
+interface ThreadSessionDebugView {
+  id: string;
+  threadId: string;
+  agentId: string;
+  agentInstanceId: string;
+  protocolVersion: number;
+  status: "active" | "expired" | "closed" | "replaced";
+  leaseExpiresAt: number;
+  lastHeartbeatAt?: number;
+  closedAt?: number;
+  closeReason?:
+    | "agent_shutdown"
+    | "daemon_shutdown"
+    | "lease_expired"
+    | "newer_session"
+    | "migration"
+    | "internal_error";
+  controlBaseUrl?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+const THREAD_WAIT_EXIT_CODE_TIMEOUT = 2;
+const THREAD_WAIT_EXIT_CODE_INVALID_REQUEST = 3;
+const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
+const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
+
+class ThreadWaitTimeoutError extends Error {}
 
 function normalizeThreadEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -56,6 +93,61 @@ function parseThreadStatusEventMode(
   throw new Error(`Invalid event mode '${rawMode}'. Expected 'summary' or 'raw'.`);
 }
 
+function parseThreadWaitTimeoutSeconds(rawValue: string | undefined): number {
+  if (rawValue === undefined) return DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS;
+  const parsed = Number.parseFloat(rawValue);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error("Timeout must be a non-negative number of seconds.");
+  }
+  return parsed;
+}
+
+function parseThreadWaitPollIntervalMs(rawValue: string | undefined): number {
+  if (rawValue === undefined) return DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS;
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    throw new Error("Poll interval must be a positive integer number of milliseconds.");
+  }
+  return parsed;
+}
+
+function parseThreadWaitTarget(opts: {
+  status?: string;
+  event?: string;
+}): ThreadWaitTarget {
+  const hasStatus = Boolean(opts.status);
+  const hasEvent = Boolean(opts.event);
+  if (hasStatus === hasEvent) {
+    throw new Error("Provide exactly one of --status or --event.");
+  }
+
+  if (opts.status) {
+    switch (opts.status) {
+      case "created":
+      case "provisioning":
+      case "provisioned":
+      case "provisioning_failed":
+      case "error":
+      case "idle":
+      case "active":
+        return { kind: "status", status: opts.status };
+      default:
+        throw new Error(
+          `Invalid thread status '${opts.status}'. Expected one of created, provisioning, provisioned, provisioning_failed, error, idle, active.`,
+        );
+    }
+  }
+
+  return {
+    kind: "event",
+    eventType: normalizeThreadEventType(opts.event ?? ""),
+  };
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function printThreadOperationResult(result: ThreadOperationResponse): void {
   const flags = [
     result.executionStatus,
@@ -89,6 +181,99 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       }),
     );
   };
+
+  thread
+    .command("wait [id]")
+    .description("Wait for a thread status or event (defaults to BB_THREAD_ID)")
+    .option("--status <status>", "Wait until the thread reaches this status")
+    .option("--event <type>", "Wait until the thread log includes this event type")
+    .option(
+      "--timeout <seconds>",
+      `Timeout in seconds (default: ${DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS})`,
+    )
+    .option(
+      "--poll-interval <ms>",
+      `Polling interval in milliseconds (default: ${DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS})`,
+    )
+    .action(
+      async (
+        id: string | undefined,
+        opts: {
+          status?: string;
+          event?: string;
+          timeout?: string;
+          pollInterval?: string;
+        },
+      ) => {
+        const client = createClient(getUrl());
+        try {
+          const threadId = requireThreadId(id);
+          const target = parseThreadWaitTarget(opts);
+          const timeoutSeconds = parseThreadWaitTimeoutSeconds(opts.timeout);
+          const pollIntervalMs = parseThreadWaitPollIntervalMs(opts.pollInterval);
+          const deadline = Date.now() + timeoutSeconds * 1000;
+
+          while (true) {
+            if (target.kind === "status") {
+              const thread = await unwrap<Thread>(
+                client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+              );
+              if (thread.status === target.status) {
+                console.log(
+                  `Thread ${threadId} reached status ${target.status}.`,
+                );
+                return;
+              }
+            } else {
+              const events = await unwrap<ThreadEvent[]>(
+                client.api.v1.threads[":id"].events.$get({
+                  param: { id: threadId },
+                  query: {},
+                }),
+              );
+              const matched = events.find(
+                (event) =>
+                  normalizeThreadEventType(event.type) === target.eventType,
+              );
+              if (matched) {
+                console.log(
+                  `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,
+                );
+                return;
+              }
+            }
+
+            if (Date.now() >= deadline) {
+              throw new ThreadWaitTimeoutError(
+                target.kind === "status"
+                  ? `Timed out waiting for thread ${threadId} to reach status ${target.status}.`
+                  : `Timed out waiting for thread ${threadId} event ${target.eventType}.`,
+              );
+            }
+
+            await sleep(pollIntervalMs);
+          }
+        } catch (err: unknown) {
+          if (err instanceof ThreadWaitTimeoutError) {
+            console.error(`Error: ${err.message}`);
+            process.exit(THREAD_WAIT_EXIT_CODE_TIMEOUT);
+            return;
+          }
+          if (err instanceof Error && err.message.startsWith("Provide exactly one of")) {
+            console.error(`Error: ${err.message}`);
+            process.exit(THREAD_WAIT_EXIT_CODE_INVALID_REQUEST);
+            return;
+          }
+          if (err instanceof Error && err.message.startsWith("Invalid thread status")) {
+            console.error(`Error: ${err.message}`);
+            process.exit(THREAD_WAIT_EXIT_CODE_INVALID_REQUEST);
+            return;
+          }
+          console.error(`Error: ${(err as Error).message}`);
+          process.exit(1);
+        }
+      },
+    );
 
   thread
     .command("spawn")
@@ -173,6 +358,27 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           return;
         }
         printThreadTable(threads);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
+    .command("sessions [id]")
+    .description("Show environment-agent sessions for a thread (defaults to BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { json?: boolean }) => {
+      try {
+        const threadId = requireThreadId(id);
+        const response = await unwrap<ThreadSessionsPayload>(
+          fetch(buildThreadRouteUrl(getUrl(), threadId, "environment-agent/sessions")),
+        );
+        if (opts.json) {
+          console.log(JSON.stringify(response, null, 2));
+          return;
+        }
+        printThreadSessions(response);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
         process.exit(1);
@@ -712,5 +918,33 @@ function printThreadStatus(payload: ThreadStatusPayload): void {
   for (const event of recentEvents.events) {
     const at = new Date(event.createdAt).toLocaleTimeString();
     console.log(`- ${at} ${event.type}`);
+  }
+}
+
+function printThreadSessions(payload: ThreadSessionsPayload): void {
+  console.log(`Thread ${payload.threadId} environment-agent sessions`);
+  if (payload.sessions.length === 0) {
+    console.log("No sessions found");
+    return;
+  }
+
+  for (const session of payload.sessions) {
+    console.log("");
+    console.log(`- Session ${session.id}`);
+    console.log(`  Status ${session.status}`);
+    console.log(`  Agent ${session.agentId} (${session.agentInstanceId})`);
+    console.log(`  Lease expires ${new Date(session.leaseExpiresAt).toLocaleString()}`);
+    if (session.lastHeartbeatAt !== undefined) {
+      console.log(`  Last heartbeat ${new Date(session.lastHeartbeatAt).toLocaleString()}`);
+    }
+    if (session.closedAt !== undefined) {
+      console.log(`  Closed ${new Date(session.closedAt).toLocaleString()}`);
+    }
+    if (session.closeReason) {
+      console.log(`  Close reason ${session.closeReason}`);
+    }
+    if (session.controlBaseUrl) {
+      console.log(`  Control endpoint ${session.controlBaseUrl}`);
+    }
   }
 }

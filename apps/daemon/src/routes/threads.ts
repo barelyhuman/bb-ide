@@ -33,6 +33,7 @@ import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import { openPathInEditor } from "./system.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import type { EnvironmentAgentSessionRecord } from "@beanbag/db";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
@@ -282,6 +283,28 @@ async function getThreadForRouteLookup(
   return threadManager.getRawById(threadId);
 }
 
+function toEnvironmentAgentSessionDebugView(
+  session: EnvironmentAgentSessionRecord,
+): Record<string, unknown> {
+  return {
+    id: session.id,
+    threadId: session.threadId,
+    agentId: session.agentId,
+    agentInstanceId: session.agentInstanceId,
+    protocolVersion: session.protocolVersion,
+    status: session.status,
+    leaseExpiresAt: session.leaseExpiresAt,
+    ...(session.lastHeartbeatAt !== undefined
+      ? { lastHeartbeatAt: session.lastHeartbeatAt }
+      : {}),
+    ...(session.closedAt !== undefined ? { closedAt: session.closedAt } : {}),
+    ...(session.closeReason !== undefined ? { closeReason: session.closeReason } : {}),
+    ...(session.controlBaseUrl ? { controlBaseUrl: session.controlBaseUrl } : {}),
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
 export function createThreadRoutes(
   threadManager: ThreadOrchestrator,
   opts?: {
@@ -417,6 +440,27 @@ export function createThreadRoutes(
           threadId,
         );
         return c.json(status);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get("/:id/environment-agent/sessions", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        if (!environmentAgentSessionService) {
+          throw invalidRequestError("Environment-agent session inspection is unavailable");
+        }
+        const sessions = environmentAgentSessionService
+          .listSessions(threadId)
+          .map(toEnvironmentAgentSessionDebugView);
+        return c.json({
+          threadId,
+          sessions,
+        });
       } catch (err) {
         return sendRouteError(c, err);
       }

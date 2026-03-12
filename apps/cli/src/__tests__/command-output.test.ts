@@ -596,6 +596,102 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
+  it("bb thread sessions --json prints raw session inspection data", async () => {
+    const payload = {
+      threadId: "thread-sessions",
+      sessions: [
+        {
+          id: "sess-1",
+          threadId: "thread-sessions",
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          protocolVersion: 1,
+          status: "active",
+          leaseExpiresAt: 10,
+          lastHeartbeatAt: 9,
+          controlBaseUrl: "http://127.0.0.1:7777",
+          createdAt: 1,
+          updatedAt: 9,
+        },
+      ],
+    };
+    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
+      const response = await responsePromise as Response;
+      return response.json();
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await runCommand(["thread", "sessions", "thread-sessions", "--json"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      payload,
+    );
+  });
+
+  it("bb thread wait --status succeeds when the thread is already at the requested status", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-wait",
+      projectId: "proj-1",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "wait", "thread-wait", "--status", "idle"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-wait reached status idle.",
+    );
+  });
+
+  it("bb thread wait --status exits with timeout code when the status is not reached", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-wait-timeout",
+      projectId: "proj-1",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(
+        ["thread", "wait", "thread-wait-timeout", "--status", "idle", "--timeout", "0"],
+        (program) => registerThreadCommands(program, () => "http://daemon"),
+      ),
+    ).rejects.toThrow("process.exit:2");
+  });
+
   it("bb thread status --json prints thread and filtered recent events", async () => {
     const thread: Thread = {
       id: "thread-json-status",

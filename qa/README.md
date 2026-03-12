@@ -48,6 +48,7 @@ Our QA direction is to make passes:
 
 - **reliable**: assert durable lifecycle invariants, not fragile timing details
 - **operator-oriented**: prefer supported CLI/API surfaces over shell parsing
+- **invariant-friendly**: prefer `bb thread wait` and `bb thread sessions` over ad hoc sleep loops or raw DB checks
 - **efficient**: make failures easy to triage without rediscovering the system manually
 - **maintainable**: keep docs, invariants, and harness behavior aligned with architecture changes
 
@@ -75,8 +76,4 @@ Likely future additions:
 - `qa/regressions/`
 - `qa/artifacts/README.md`
 
-## Related planning docs
-
-- [`../plans/qa-roadmap-for-daemon-env-agent.md`](../plans/qa-roadmap-for-daemon-env-agent.md)
-
-That roadmap describes how we intend to improve QA reliability and efficiency beyond the current manual pass.
+The daemon/env-agent QA roadmap has been completed; keep this folder updated directly as the source of truth for future QA changes.

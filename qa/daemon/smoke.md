@@ -67,4 +67,10 @@ Record:
 - relevant CLI outputs
 - whether the failure looks like product bug, flake, or stale QA expectation
 
+Preferred bundle capture:
+
+```bash
+node scripts/qa/capture-thread-failure-bundle.mjs <thread-id> --scenario smoke
+```
+
 Then continue the remaining smoke scenarios if the daemon is still usable.
