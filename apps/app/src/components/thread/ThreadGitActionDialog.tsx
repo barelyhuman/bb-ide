@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
 import { DetailCard, DetailRow } from "@beanbag/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -94,44 +94,75 @@ export function ThreadGitActionDialog({
   onCommit,
   onSquashMerge,
 }: ThreadGitActionDialogProps) {
+  const dialogCopy = useMemo(() => (target ? getDialogCopy(target) : null), [target]);
+
+  return (
+    <Dialog open={target !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
+        {target && dialogCopy ? (
+          <ThreadGitActionDialogContent
+            key={target.kind}
+            target={target}
+            pending={pending}
+            branchName={branchName}
+            gitStatusLabel={gitStatusLabel}
+            gitStatusSummary={gitStatusSummary}
+            changedFiles={changedFiles}
+            threadId={threadId}
+            showMergeBaseDetails={showMergeBaseDetails}
+            mergeBaseBranch={mergeBaseBranch}
+            mergeBaseBranchOptions={mergeBaseBranchOptions}
+            mergeBaseBranchOptionsLoading={mergeBaseBranchOptionsLoading}
+            onMergeBaseBranchChange={onMergeBaseBranchChange}
+            onMergeBaseBranchPickerOpenChange={onMergeBaseBranchPickerOpenChange}
+            onOpenChange={onOpenChange}
+            onCommit={onCommit}
+            onSquashMerge={onSquashMerge}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ThreadGitActionDialogContent({
+  target,
+  pending,
+  branchName,
+  gitStatusLabel,
+  gitStatusSummary,
+  changedFiles,
+  threadId,
+  showMergeBaseDetails,
+  mergeBaseBranch,
+  mergeBaseBranchOptions,
+  mergeBaseBranchOptionsLoading,
+  onMergeBaseBranchChange,
+  onMergeBaseBranchPickerOpenChange,
+  onOpenChange,
+  onCommit,
+  onSquashMerge,
+}: Omit<ThreadGitActionDialogProps, "target"> & {
+  target: ThreadGitActionDialogTarget;
+}) {
   const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!target) {
-      setIncludeUnstaged(true);
-      setErrorMessage(null);
-      return;
-    }
-
-    setIncludeUnstaged(true);
-    setErrorMessage(null);
-  }, [target]);
-
-  const dialogCopy = useMemo(
-    () => (target ? getDialogCopy(target) : null),
-    [target],
-  );
-  const mergeBaseCandidates = useMemo(
-    () =>
-      getMergeBaseBranchCandidates({
-        mergeBaseBranch,
-        mergeBaseBranchOptions,
-      }),
-    [mergeBaseBranch, mergeBaseBranchOptions],
-  );
+  const dialogCopy = getDialogCopy(target);
+  const mergeBaseCandidates = getMergeBaseBranchCandidates({
+    mergeBaseBranch,
+    mergeBaseBranchOptions,
+  });
   const selectedMergeBaseBranch = mergeBaseBranch ?? mergeBaseCandidates[0];
   const canSelectMergeBase =
-    Boolean(dialogCopy?.showMergeBase) &&
-    showMergeBaseDetails &&
+    dialogCopy.showMergeBase &&
+    showMergeBaseDetails === true &&
     Boolean(onMergeBaseBranchChange) &&
     mergeBaseCandidates.length > 0;
   const canShowMergeBase =
-    Boolean(dialogCopy?.showMergeBase) &&
-    showMergeBaseDetails &&
+    dialogCopy.showMergeBase &&
+    showMergeBaseDetails === true &&
     (canSelectMergeBase || Boolean(selectedMergeBaseBranch));
-  const isStagedOnlyCommitScope =
-    Boolean(dialogCopy?.showCommitControls) && !includeUnstaged;
+  const isStagedOnlyCommitScope = dialogCopy.showCommitControls && !includeUnstaged;
   const displayedGitStatusLabel = isStagedOnlyCommitScope ? "Staged only" : gitStatusLabel;
   const displayedGitStatusSummary = isStagedOnlyCommitScope
     ? "Only staged changes will be included. Unstaged edits stay in the workspace."
@@ -141,7 +172,7 @@ export function ThreadGitActionDialog({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!target || pending) {
+    if (pending) {
       return;
     }
     setErrorMessage(null);
@@ -179,109 +210,103 @@ export function ThreadGitActionDialog({
   };
 
   return (
-    <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
-        {target && dialogCopy ? (
-          <>
-            <DialogHeader className="px-6 pt-5 pb-3">
-              <DialogTitle>{dialogCopy.title}</DialogTitle>
-              <DialogDescription>{dialogCopy.description}</DialogDescription>
-            </DialogHeader>
-            <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
-              {branchName || displayedGitStatusLabel || canShowMergeBase || shouldShowChangedFilesRow ? (
-                <DetailCard className="border-border/70 bg-muted/20">
-                  {branchName ? (
-                    <DetailRow label="Branch" valueClassName="min-w-0 truncate">
-                      <span className="block truncate" title={branchName}>
-                        {branchName}
-                      </span>
-                    </DetailRow>
+    <>
+      <DialogHeader className="px-6 pt-5 pb-3">
+        <DialogTitle>{dialogCopy.title}</DialogTitle>
+        <DialogDescription>{dialogCopy.description}</DialogDescription>
+      </DialogHeader>
+      <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
+        {branchName || displayedGitStatusLabel || canShowMergeBase || shouldShowChangedFilesRow ? (
+          <DetailCard className="border-border/70 bg-muted/20">
+            {branchName ? (
+              <DetailRow label="Branch" valueClassName="min-w-0 truncate">
+                <span className="block truncate" title={branchName}>
+                  {branchName}
+                </span>
+              </DetailRow>
+            ) : null}
+            {displayedGitStatusLabel ? (
+              <DetailRow label="Git status" valueClassName="min-w-0">
+                <div
+                  className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
+                  title={[displayedGitStatusLabel, displayedGitStatusSummary].filter(Boolean).join(" ")}
+                >
+                  <span className="shrink-0 font-medium">{displayedGitStatusLabel}</span>
+                  {displayedGitStatusSummary ? (
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      {displayedGitStatusSummary}
+                    </span>
                   ) : null}
-                  {displayedGitStatusLabel ? (
-                    <DetailRow label="Git status" valueClassName="min-w-0">
-                      <div
-                        className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-                        title={[displayedGitStatusLabel, displayedGitStatusSummary].filter(Boolean).join(" ")}
-                      >
-                        <span className="shrink-0 font-medium">{displayedGitStatusLabel}</span>
-                        {displayedGitStatusSummary ? (
-                          <span className="min-w-0 truncate text-muted-foreground">
-                            {displayedGitStatusSummary}
-                          </span>
-                        ) : null}
-                      </div>
-                    </DetailRow>
-                  ) : null}
-                  {canShowMergeBase && selectedMergeBaseBranch ? (
-                    <DetailRow label="Merge base" valueClassName="min-w-0">
-                      {canSelectMergeBase ? (
-                        <MergeBaseBranchPicker
-                          value={selectedMergeBaseBranch}
-                          options={mergeBaseCandidates}
-                          loading={mergeBaseBranchOptionsLoading}
-                          disabled={pending}
-                          onChange={(branch) => onMergeBaseBranchChange?.(branch)}
-                          onOpenChange={onMergeBaseBranchPickerOpenChange}
-                          className="max-w-full"
-                        />
-                      ) : (
-                        <span className="block truncate" title={selectedMergeBaseBranch}>
-                          {selectedMergeBaseBranch}
-                        </span>
-                      )}
-                    </DetailRow>
-                  ) : null}
-                  {dialogCopy.showCommitControls ? (
-                    <DetailRow label="Include unstaged" valueClassName="min-w-0">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <Switch
-                          checked={includeUnstaged}
-                          disabled={pending}
-                          aria-label="Include unstaged changes"
-                          onCheckedChange={setIncludeUnstaged}
-                          className="h-4 w-7 [&>span]:size-3 [&>span[data-state=checked]]:translate-x-3"
-                        />
-                        <span className="min-w-0 truncate text-muted-foreground">
-                          {includeUnstaged ? "All workspace changes" : "Only staged changes"}
-                        </span>
-                      </div>
-                    </DetailRow>
-                  ) : null}
-                  {shouldShowChangedFilesRow ? (
-                    <DetailRow
-                      label="Changed files"
-                      layout="vertical"
-                      valueClassName="pt-0.5"
-                    >
-                      {isStagedOnlyCommitScope ? (
-                        <p className="ui-text-sm leading-5 text-muted-foreground">
-                          Only staged changes will be committed. Per-file staged preview is not available here.
-                        </p>
-                      ) : (
-                        <WorkspaceChangesList
-                          files={changedFiles}
-                          threadId={threadId}
-                          maxHeightClassName="max-h-40"
-                        />
-                      )}
-                    </DetailRow>
-                  ) : null}
-                </DetailCard>
-              ) : null}
-              {errorMessage ? (
-                <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  {errorMessage}
-                </p>
-              ) : null}
-              <DialogFooter className="px-0 pt-4 sm:justify-end">
-                <Button type="submit" disabled={pending}>
-                  {pending ? "Starting..." : dialogCopy.submitLabel}
-                </Button>
-              </DialogFooter>
-            </form>
-          </>
+                </div>
+              </DetailRow>
+            ) : null}
+            {canShowMergeBase && selectedMergeBaseBranch ? (
+              <DetailRow label="Merge base" valueClassName="min-w-0">
+                {canSelectMergeBase ? (
+                  <MergeBaseBranchPicker
+                    value={selectedMergeBaseBranch}
+                    options={mergeBaseCandidates}
+                    loading={mergeBaseBranchOptionsLoading}
+                    disabled={pending}
+                    onChange={(branch) => onMergeBaseBranchChange?.(branch)}
+                    onOpenChange={onMergeBaseBranchPickerOpenChange}
+                    className="max-w-full"
+                  />
+                ) : (
+                  <span className="block truncate" title={selectedMergeBaseBranch}>
+                    {selectedMergeBaseBranch}
+                  </span>
+                )}
+              </DetailRow>
+            ) : null}
+            {dialogCopy.showCommitControls ? (
+              <DetailRow label="Include unstaged" valueClassName="min-w-0">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Switch
+                    checked={includeUnstaged}
+                    disabled={pending}
+                    aria-label="Include unstaged changes"
+                    onCheckedChange={setIncludeUnstaged}
+                    className="h-4 w-7 [&>span]:size-3 [&>span[data-state=checked]]:translate-x-3"
+                  />
+                  <span className="min-w-0 truncate text-muted-foreground">
+                    {includeUnstaged ? "All workspace changes" : "Only staged changes"}
+                  </span>
+                </div>
+              </DetailRow>
+            ) : null}
+            {shouldShowChangedFilesRow ? (
+              <DetailRow
+                label="Changed files"
+                layout="vertical"
+                valueClassName="pt-0.5"
+              >
+                {isStagedOnlyCommitScope ? (
+                  <p className="ui-text-sm leading-5 text-muted-foreground">
+                    Only staged changes will be committed. Per-file staged preview is not available here.
+                  </p>
+                ) : (
+                  <WorkspaceChangesList
+                    files={changedFiles}
+                    threadId={threadId}
+                    maxHeightClassName="max-h-40"
+                  />
+                )}
+              </DetailRow>
+            ) : null}
+          </DetailCard>
         ) : null}
-      </DialogContent>
-    </Dialog>
+        {errorMessage ? (
+          <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {errorMessage}
+          </p>
+        ) : null}
+        <DialogFooter className="px-0 pt-4 sm:justify-end">
+          <Button type="submit" disabled={pending}>
+            {pending ? "Starting..." : dialogCopy.submitLabel}
+          </Button>
+        </DialogFooter>
+      </form>
+    </>
   );
 }
