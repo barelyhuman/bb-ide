@@ -551,6 +551,43 @@ describe("EnvironmentService", () => {
     });
   });
 
+  it("refreshes an active runtime by preparing it again when the agent target is missing", async () => {
+    let targetAvailable = true;
+    const runtimeEnvironment: IEnvironment = {
+      ...createTestEnvironment({ existsInitially: true }),
+      prepare: vi.fn(async () => {
+        targetAvailable = true;
+      }),
+      getAgentConnectionTarget: vi.fn(() => {
+        if (!targetAvailable) {
+          throw new Error("Missing managed environment-agent target for worktree environment");
+        }
+        return {
+          transport: "http" as const,
+          baseUrl: "http://127.0.0.1:4312",
+        };
+      }),
+    };
+    const { service, threadState, runOptionalSetup } = createService({
+      existsInitially: true,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    targetAvailable = false;
+
+    const ensured = await service.ensureThreadEnvironmentRuntime(
+      threadState,
+      "/project/root",
+      "resume-existing-provider-session",
+    );
+
+    expect(runtimeEnvironment.prepare).toHaveBeenCalledTimes(1);
+    expect(ensured.runtime.agentConnectionTarget).toEqual({
+      transport: "http",
+      baseUrl: "http://127.0.0.1:4312",
+    });
+    expect(runOptionalSetup).not.toHaveBeenCalled();
+  });
+
   it("does not suspend persisted state when installing a restored runtime", () => {
     const persistedSuspendSpy = vi.fn();
     const restoreImpl = vi.fn(() =>

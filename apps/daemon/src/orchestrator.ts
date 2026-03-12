@@ -117,7 +117,9 @@ import {
   unsupportedOperationError,
 } from "./domain-errors.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
-import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
+import {
+  EnvironmentAgentCommandDispatcher,
+} from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 import { EnvironmentAgentSessionCommandClient } from "./environment-agent-session-command-client.js";
 import {
@@ -2986,18 +2988,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const providerStartStartedAt = Date.now();
     let started: { providerThreadId: string };
     try {
-      started = await this._withEnvironmentAgentTarget({
-        thread: hydratedThread ?? {
-          id: threadId,
-          projectId: req.projectId,
-          status: "provisioning",
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          environmentId: environmentRuntime.environment.kind,
-        } as Thread,
-        projectRootPath: project.rootPath,
-        target: environmentRuntime.agentConnectionTarget,
-        action: async ({ client, providerLaunch }) =>
+      started = await this._withEnvironmentAgentAccess(
+        threadId,
+        async ({ client, providerLaunch }) =>
           this.agentServer.startThreadCommand({
             client,
             threadId,
@@ -3006,7 +2999,7 @@ export class Orchestrator implements ThreadOrchestrator {
             context: providerContext,
             providerLaunch,
           }),
-      });
+      );
       this._appendProvisioningProgressEvent(threadId, "start_provider_session", "completed", {
         durationMs: Date.now() - providerStartStartedAt,
       });
@@ -3117,7 +3110,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(this.environmentAgentCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
         : {}),
-      recoverSession: async () => {
+      ensureSessionAccess: async () => {
         await this._ensureEnvironmentAgentAccess(args.thread.id);
       },
     });
@@ -3133,118 +3126,48 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _resolveEnvironmentAgentAccess(threadId: string): {
-    thread: Thread;
-    projectRootPath: string;
-    target: EnvironmentAgentConnectionTarget;
-  } {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-
-    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
-    const target =
-      runtime?.agentConnectionTarget ??
-      (project
-        ? this.environmentService
-            .restoreThreadEnvironment(thread, project.rootPath)
-            ?.getAgentConnectionTarget()
-        : undefined) ??
-      this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
-    if (!target) {
-      if (!project) {
-        throw projectNotFoundError(thread.projectId);
-      }
-      throw inactiveSessionError(threadId);
-    }
-    return {
-      thread,
-      projectRootPath: project?.rootPath ?? "",
-      target,
-    };
-  }
-
   private async _ensureEnvironmentAgentAccess(threadId: string): Promise<{
     thread: Thread;
     projectRootPath: string;
     target: EnvironmentAgentConnectionTarget;
-    resetReplayCursor: boolean;
   }> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
 
-    let resolved: {
-      thread: Thread;
-      projectRootPath: string;
-      target: EnvironmentAgentConnectionTarget;
-      resetReplayCursor: boolean;
-    };
-
-    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
-    if (runtime?.agentConnectionTarget) {
-      if (this.environmentAgentCommandDispatcher?.hasActiveSession(threadId)) {
-        resolved = {
-          thread,
-          projectRootPath: "",
-          target: runtime.agentConnectionTarget,
-          resetReplayCursor: false,
-        };
-      } else {
-        await this.environmentService.suspendEnvironmentRuntimeAndWait(threadId);
-        const project = this.projectRepo.getById(thread.projectId);
-        if (!project) {
-          throw projectNotFoundError(thread.projectId);
-        }
-        const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
-          thread,
-          project.rootPath,
-          "resume-existing-provider-session",
-        );
-        resolved = {
-          thread,
-          projectRootPath: project.rootPath,
-          target: ensured.runtime.agentConnectionTarget,
-          resetReplayCursor: ensured.resetReplayCursor,
-        };
+    const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
+    if (runtimeEnvTarget) {
+      if (this.environmentAgentCommandDispatcher) {
+        await this.environmentAgentCommandDispatcher.awaitActiveSession({ threadId });
       }
-    } else {
-      const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
-      if (runtimeEnvTarget) {
-        resolved = {
-          thread,
-          projectRootPath: "",
-          target: runtimeEnvTarget,
-          resetReplayCursor: false,
-        };
-      } else {
-        const project = this.projectRepo.getById(thread.projectId);
-        if (!project) {
-          throw projectNotFoundError(thread.projectId);
-        }
-
-        const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
-          thread,
-          project.rootPath,
-          "resume-existing-provider-session",
-        );
-        resolved = {
-          thread,
-          projectRootPath: project.rootPath,
-          target: ensured.runtime.agentConnectionTarget,
-          resetReplayCursor: ensured.resetReplayCursor,
-        };
-      }
+      return {
+        thread,
+        projectRootPath: "",
+        target: runtimeEnvTarget,
+      };
     }
+
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+
+    const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+      thread,
+      project.rootPath,
+      "resume-existing-provider-session",
+    );
 
     if (this.environmentAgentCommandDispatcher) {
       await this.environmentAgentCommandDispatcher.awaitActiveSession({ threadId });
     }
 
-    return resolved;
+    return {
+      thread,
+      projectRootPath: project.rootPath,
+      target: ensured.runtime.agentConnectionTarget,
+    };
   }
 
   private async _withEnvironmentAgentAccess<T>(
@@ -3616,26 +3539,23 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     try {
-      const access = await this._ensureEnvironmentAgentAccess(threadId);
-      const resumed = await this._withEnvironmentAgentTarget({
-        thread: access.thread,
-        projectRootPath: access.projectRootPath,
-        target: access.target,
-        action: async ({ client, providerLaunch }) =>
+      const resumed = await this._withEnvironmentAgentAccess(
+        threadId,
+        async ({ client, thread: latestThread, providerLaunch }) =>
           this.agentServer.resumeThreadCommand({
             client,
             threadId,
-            projectId: thread.projectId,
+            projectId: latestThread.projectId,
             providerThreadId: persistedThreadId,
             context: this._buildProviderThreadContext({
               threadId,
-              projectId: thread.projectId,
+              projectId: latestThread.projectId,
             }),
             options,
             resumePath,
             providerLaunch,
           }),
-      });
+      );
       this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);
       return resumed.providerThreadId;
     } catch (err) {

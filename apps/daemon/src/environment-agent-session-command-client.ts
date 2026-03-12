@@ -35,7 +35,7 @@ export interface EnvironmentAgentSessionCommandClientOptions {
   commandDispatcher: EnvironmentAgentCommandDispatcher;
   commandTimeoutMs?: number;
   pollIntervalMs?: number;
-  recoverSession?: () => Promise<void>;
+  ensureSessionAccess?: () => Promise<void>;
 }
 
 export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentClient {
@@ -49,13 +49,13 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
 
   private readonly commandTimeoutMs: number;
   private readonly pollIntervalMs: number;
-  private readonly recoverSession?: () => Promise<void>;
+  private readonly ensureSessionAccess?: () => Promise<void>;
   private closed = false;
 
   constructor(private readonly options: EnvironmentAgentSessionCommandClientOptions) {
     this.commandTimeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    this.recoverSession = options.recoverSession;
+    this.ensureSessionAccess = options.ensureSessionAccess;
   }
 
   async sendCommand(
@@ -178,13 +178,13 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
       } catch (error) {
         if (
           recovered ||
-          !this.recoverSession ||
+          !this.ensureSessionAccess ||
           !isEnvironmentAgentSessionUnavailableError(error)
         ) {
           throw error;
         }
         recovered = true;
-        await this.recoverSession();
+        await this.ensureSessionAccess();
       }
     }
   }

@@ -258,11 +258,27 @@ export class EnvironmentService {
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
   ): Promise<EnsureThreadEnvironmentRuntimeResult> {
+    const existingRuntime = this.environmentRuntimes.get(thread.id);
+    if (existingRuntime) {
+      return {
+        runtime: await this.ensureRuntimeAgentConnectionTarget(
+          thread.id,
+          existingRuntime,
+          reason,
+        ),
+        resetReplayCursor: false,
+      };
+    }
+
     return this.withThreadEnvironmentEnsure(thread.id, async () => {
-      const existingRuntime = this.environmentRuntimes.get(thread.id);
-      if (existingRuntime) {
+      const runtimeDuringEnsure = this.environmentRuntimes.get(thread.id);
+      if (runtimeDuringEnsure) {
         return {
-          runtime: existingRuntime,
+          runtime: await this.ensureRuntimeAgentConnectionTarget(
+            thread.id,
+            runtimeDuringEnsure,
+            reason,
+          ),
           resetReplayCursor: false,
         };
       }
@@ -304,6 +320,21 @@ export class EnvironmentService {
         resetReplayCursor: thread.status === "idle" && !hadAgentTarget,
       };
     });
+  }
+
+  private async ensureRuntimeAgentConnectionTarget(
+    threadId: string,
+    runtime: ActiveEnvironmentRuntime,
+    reason: ThreadEnvironmentStartReason,
+  ): Promise<ActiveEnvironmentRuntime> {
+    try {
+      runtime.agentConnectionTarget = runtime.environment.getAgentConnectionTarget();
+      return runtime;
+    } catch {
+      await this.prepareEnvironment(threadId, runtime.environment, reason);
+      runtime.agentConnectionTarget = runtime.environment.getAgentConnectionTarget();
+      return runtime;
+    }
   }
 
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
