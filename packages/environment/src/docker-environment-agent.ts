@@ -223,6 +223,23 @@ function removeRecord(args: {
   }
 }
 
+function toManagedDockerEnvironmentAgentTarget(args: {
+  record: ManagedDockerEnvironmentAgentRecord;
+  providerLaunch?: {
+    command: string;
+    args: string[];
+  };
+}): EnvironmentAgentConnectionTarget {
+  return {
+    transport: "http",
+    baseUrl: args.record.baseUrl,
+    headers: {
+      authorization: `Bearer ${args.record.authToken}`,
+    },
+    ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
+  };
+}
+
 async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Promise<void> {
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -385,9 +402,9 @@ export async function ensureManagedDockerEnvironmentAgent(
     generateAuthToken?: () => string;
     resolveArtifactEntry?: () => string;
   },
-): Promise<void> {
+): Promise<EnvironmentAgentConnectionTarget | undefined> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
-    return;
+    return undefined;
   }
 
   const stateIdentity: ManagedDockerEnvironmentAgentIdentity = {
@@ -396,6 +413,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
+  let managedTarget: EnvironmentAgentConnectionTarget | undefined;
   await withManagedDockerEnvironmentAgentLock(stateIdentity, async () => {
     const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
     const existing = readRecord(stateRecordIdentity);
@@ -494,7 +512,32 @@ export async function ensureManagedDockerEnvironmentAgent(
       containerPort,
       installRoot,
     });
+    managedTarget = toManagedDockerEnvironmentAgentTarget({
+      record: {
+        version: STATE_VERSION,
+        baseUrl,
+        authToken,
+        threadId: args.threadId,
+        projectId: args.projectId,
+        environmentId: args.environmentId,
+        workspaceRoot: args.workspaceRootPath,
+        containerName: args.containerName,
+        hostPort: args.hostPort,
+        containerPort,
+        installRoot,
+      },
+    });
   });
+  return managedTarget ?? (() => {
+    const record = readRecord({
+      projectId: args.projectId,
+      threadId: args.threadId,
+      environmentId: args.environmentId,
+      workspaceRootPath: args.workspaceRootPath,
+      runtimeEnv: args.runtimeEnv,
+    });
+    return record ? toManagedDockerEnvironmentAgentTarget({ record }) : undefined;
+  })();
 }
 
 export function resolveManagedDockerEnvironmentAgentTarget(args: {
@@ -513,14 +556,10 @@ export function resolveManagedDockerEnvironmentAgentTarget(args: {
     return undefined;
   }
 
-  return {
-    transport: "http",
-    baseUrl: record.baseUrl,
-    headers: {
-      authorization: `Bearer ${record.authToken}`,
-    },
-    ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
-  };
+  return toManagedDockerEnvironmentAgentTarget({
+    record,
+    providerLaunch: args.providerLaunch,
+  });
 }
 
 export function __testOnly__resolveDockerDaemonUrl(

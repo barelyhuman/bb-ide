@@ -210,6 +210,20 @@ function removeRecord(args: {
   }
 }
 
+function toManagedHostEnvironmentAgentTarget(args: {
+  record: ManagedHostEnvironmentAgentRecord;
+  providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
+}): EnvironmentAgentConnectionTarget {
+  return {
+    transport: "http",
+    baseUrl: args.record.baseUrl,
+    headers: {
+      authorization: `Bearer ${args.record.authToken}`,
+    },
+    ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
+  };
+}
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -319,9 +333,9 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   projectId: string;
   environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
-}, deps: EnsureManagedHostEnvironmentAgentDeps = {}): Promise<void> {
+}, deps: EnsureManagedHostEnvironmentAgentDeps = {}): Promise<EnvironmentAgentConnectionTarget | undefined> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
-    return;
+    return undefined;
   }
 
   const stateIdentity = {
@@ -335,6 +349,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     deps.killProcess ??
     ((pid: number, signal?: NodeJS.Signals | number) => process.kill(pid, signal));
 
+  let managedTarget: EnvironmentAgentConnectionTarget | undefined;
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
     const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
     const existing = readRecord(stateRecordIdentity);
@@ -393,7 +408,30 @@ export async function ensureManagedHostEnvironmentAgent(args: {
       environmentId: args.environmentId,
       workspaceRoot: args.workspaceRootPath,
     });
+    managedTarget = toManagedHostEnvironmentAgentTarget({
+      record: {
+        version: STATE_VERSION,
+        pid: child.pid!,
+        port,
+        baseUrl,
+        authToken,
+        threadId: args.threadId,
+        projectId: args.projectId,
+        environmentId: args.environmentId,
+        workspaceRoot: args.workspaceRootPath,
+      },
+    });
   });
+  return managedTarget ?? (() => {
+    const record = readRecord({
+      projectId: args.projectId,
+      threadId: args.threadId,
+      environmentId: args.environmentId,
+      workspaceRootPath: args.workspaceRootPath,
+      runtimeEnv: args.runtimeEnv,
+    });
+    return record ? toManagedHostEnvironmentAgentTarget({ record }) : undefined;
+  })();
 }
 
 export function resolveManagedHostEnvironmentAgentTarget(args: {
@@ -413,12 +451,7 @@ export function resolveManagedHostEnvironmentAgentTarget(args: {
     return undefined;
   }
   return {
-    transport: "http",
-    baseUrl: record.baseUrl,
-    headers: {
-      authorization: `Bearer ${record.authToken}`,
-    },
-    ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
+    ...toManagedHostEnvironmentAgentTarget({ record, providerLaunch: args.providerLaunch }),
   };
 }
 

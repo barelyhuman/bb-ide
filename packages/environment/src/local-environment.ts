@@ -37,7 +37,6 @@ import {
 import {
   disposeManagedHostEnvironmentAgent,
   ensureManagedHostEnvironmentAgent,
-  resolveManagedHostEnvironmentAgentTarget,
 } from "./host-environment-agent.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 
@@ -64,6 +63,7 @@ class LocalEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private managedAgentTarget?: EnvironmentAgentConnectionTarget;
 
   constructor(context: CreateEnvironmentContext) {
     this.projectId = context.projectId;
@@ -78,16 +78,20 @@ class LocalEnvironment implements IEnvironment {
   }
 
   async prepare(): Promise<void> {
-    await ensureManagedHostEnvironmentAgent({
+    const managedAgentTarget = await ensureManagedHostEnvironmentAgent({
       workspaceRootPath: this.rootPath,
       threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.kind,
       runtimeEnv: this.env,
     });
+    if (managedAgentTarget) {
+      this.managedAgentTarget = managedAgentTarget;
+    }
   }
 
   async suspend(): Promise<void> {
+    this.managedAgentTarget = undefined;
     await disposeManagedHostEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
@@ -114,13 +118,7 @@ class LocalEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
-      projectId: this.projectId,
-      threadId: this.threadId,
-      environmentId: this.kind,
-      workspaceRootPath: this.rootPath,
-      runtimeEnv: this.env,
-    });
+    const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for local environment");
     }
