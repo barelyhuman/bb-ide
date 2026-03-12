@@ -21,10 +21,13 @@ Use this guide when you want to validate user-visible behavior end-to-end, espec
 
 ## Prerequisites
 
-Build the CLI and daemon first:
+Build the daemon stack first:
 
 ```bash
-pnpm exec turbo run build --filter=@beanbag/daemon --filter=@beanbag/cli
+pnpm exec turbo run build \
+  --filter=@beanbag/environment-agent \
+  --filter=@beanbag/daemon \
+  --filter=@beanbag/cli
 ```
 
 Confirm Codex is available in `PATH` and can be used by the daemon.
@@ -81,6 +84,9 @@ node apps/cli/dist/index.js project create --name qa-standalone --root "$project
 node apps/cli/dist/index.js project list
 node apps/cli/dist/index.js project files --project <project-id> alpha
 ```
+
+Record the real `<project-id>` returned by `project create` and reuse it in later commands. Do not
+assume it is `project-1`.
 
 ### 4. Validate direct/local flows
 
@@ -141,6 +147,7 @@ node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread status <thread-id> --recent-events 10 --event-mode raw --include-low-signal
 node apps/cli/dist/index.js thread log <thread-id>
 node apps/cli/dist/index.js thread output <thread-id>
+find "$beanbag_root/environment-agents" -maxdepth 3 -type f | sort
 ```
 
 Expected result:
@@ -148,6 +155,8 @@ Expected result:
 - thread eventually reaches `idle`
 - `thread output` contains the exact requested token
 - `thread log` shows the expected `turn/started` and `turn/completed` events
+- while the local thread is active, a managed env-agent state file appears under `$beanbag_root/environment-agents`
+- after the local thread returns to `idle`, that local env-agent state file is removed within a short delay
 
 ### 5. Validate worktree flows
 
@@ -156,6 +165,7 @@ Required matrix:
 - `worktree` start thread
 - `worktree` follow-up
 - `worktree` stop then follow-up
+- `worktree` archive/unarchive
 - `worktree` restart recovery
 - `worktree` follow-up after restart recovery
 - `worktree` promote/demote
@@ -197,6 +207,36 @@ node apps/cli/dist/index.js thread demote <thread-id>
 node apps/cli/dist/index.js thread promote-status --project <project-id>
 ```
 
+Archive/unarchive checks:
+
+Wait until the worktree thread is back to `idle`, then:
+
+```bash
+node apps/cli/dist/index.js thread archive <thread-id>
+node apps/cli/dist/index.js thread show <thread-id>
+node apps/cli/dist/index.js thread tell <thread-id> \
+  'Reply with exactly SHOULD-NOT-RUN and finish.'
+```
+
+Expected while archived:
+
+- `thread show` prints an `Archived:` timestamp
+- `thread tell` fails with `HTTP 409`
+
+Then unarchive and confirm follow-up works again:
+
+```bash
+node apps/cli/dist/index.js thread unarchive <thread-id>
+node apps/cli/dist/index.js thread show <thread-id>
+node apps/cli/dist/index.js thread tell <thread-id> \
+  'Reply with exactly WORKTREE-POST-UNARCHIVE and finish.'
+```
+
+Expected after unarchive:
+
+- `thread show` no longer prints `Archived:`
+- `thread output` eventually contains `WORKTREE-POST-UNARCHIVE`
+
 ### 6. Validate standalone restart behavior
 
 Only do this on the standalone daemon you started for testing.
@@ -234,7 +274,8 @@ Expected:
 
 - CLI reports shutdown requested
 - daemon exits cleanly
-- after relaunching the daemon on the same `BEANBAG_ROOT`, the interrupted thread reconciles back to `idle`
+- after relaunching the daemon on the same `BEANBAG_ROOT`, the interrupted thread eventually returns to `idle`
+- the interrupted turn may resume or complete before the thread returns to `idle`; that is acceptable as long as recovery finishes cleanly
 - `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after relaunch
 
 Relaunch:
@@ -264,6 +305,7 @@ Use this when the user already has the main daemon running and wants direct QA a
   - `thread tell`
   - `thread steer`
   - `thread stop`
+  - `thread archive` / `thread unarchive`
   - worktree spawn/follow-up
 - Avoid unless explicitly approved:
   - `daemon restart`
@@ -272,7 +314,7 @@ Use this when the user already has the main daemon running and wants direct QA a
 
 1. Create a disposable git repo under `/tmp`.
 2. Register it with `bb project create`.
-3. Run the same local/worktree thread flows as above.
+3. Run the same local/worktree thread flows as above, including archive/unarchive coverage.
 4. Leave the disposable project on disk until all worktree checks are complete.
 5. Inspect failures with:
 
@@ -303,6 +345,10 @@ node apps/cli/dist/index.js daemon health
 - `thread tell` after `thread stop` fails with `Missing managed environment-agent target`:
   - This is a real environment re-prepare bug candidate.
   - Capture `thread show`, `thread log`, and daemon logs before retrying.
+
+- local thread reaches `idle`, but its env-agent state file or process still exists after a short delay:
+  - This is a real local cleanup bug candidate.
+  - Capture `thread show`, `thread log`, `find "$beanbag_root/environment-agents" -maxdepth 3 -type f`, and `ps` output before cleaning it up manually.
 
 ## QA Checklist
 
