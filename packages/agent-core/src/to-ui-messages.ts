@@ -1,5 +1,6 @@
 import type { ThreadEvent } from "./types.js";
 import { assertNever } from "./assert-never.js";
+import { getStringField, toRecord } from "./unknown-helpers.js";
 import { formatEnvironmentDisplayName } from "./environment-display-name.js";
 import {
   decodeLooseTextContent,
@@ -36,11 +37,6 @@ import type {
   UIWorktreeSquashMergeMetadata,
   UIUserMessage,
 } from "./ui-message.js";
-
-function toRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
 
 function toEventData(value: unknown): unknown {
   return unwrapProviderEventPayload(value);
@@ -93,14 +89,6 @@ function eventTypeMatchesAny(eventType: string, expected: string[]): boolean {
 
 function normalizeToken(value: string): string {
   return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
-}
-
-function getStringField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
-  const value = record?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function getNullableStringField(

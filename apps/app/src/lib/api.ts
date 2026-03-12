@@ -1,8 +1,11 @@
+import {
+  decodeSystemShutdownBlockedResponse,
+  toRecord,
+} from "@beanbag/agent-core";
 import type {
   Project,
   Thread,
   ThreadQueuedMessage,
-  ThreadStatus,
   CreateProjectRequest,
   UpdateProjectRequest,
   SpawnThreadRequest,
@@ -34,27 +37,14 @@ import type {
   SystemRestartAcceptedResponse,
   SystemRestartRequest,
   SystemShutdownAcceptedResponse,
-  SystemShutdownBlockedResponse,
-  SystemShutdownBlockingThread,
   SystemShutdownRequest,
+  SystemShutdownBlockingThread,
 } from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
-const THREAD_STATUSES: readonly ThreadStatus[] = [
-  "created",
-  "provisioning",
-  "provisioning_failed",
-  "idle",
-  "active",
-];
-
 const LEGACY_ERROR_KEYS = ["error", "detail"] as const;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function normalizeErrorText(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
@@ -64,55 +54,6 @@ function truncateErrorText(raw: string): string {
   return raw.length > MAX_ERROR_MESSAGE_LENGTH
     ? `${raw.slice(0, MAX_ERROR_MESSAGE_LENGTH - 1)}...`
     : raw;
-}
-
-function isThreadStatus(value: unknown): value is ThreadStatus {
-  return typeof value === "string" && THREAD_STATUSES.includes(value as ThreadStatus);
-}
-
-function parseShutdownBlockingThread(
-  value: unknown,
-): SystemShutdownBlockingThread | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const { id, projectId, status } = value;
-  if (
-    typeof id !== "string" ||
-    typeof projectId !== "string" ||
-    !isThreadStatus(status)
-  ) {
-    return null;
-  }
-  return {
-    id,
-    projectId,
-    status,
-  };
-}
-
-function parseShutdownBlockedResponse(
-  value: unknown,
-): SystemShutdownBlockedResponse | null {
-  if (!isRecord(value) || value.code !== "shutdown_blocked") {
-    return null;
-  }
-  const message =
-    typeof value.message === "string" && value.message.trim().length > 0
-      ? value.message
-      : "Daemon shutdown blocked by active thread work";
-  const blockingThreadsRaw = Array.isArray(value.blockingThreads)
-    ? value.blockingThreads
-    : [];
-  const blockingThreads = blockingThreadsRaw
-    .map((entry) => parseShutdownBlockingThread(entry))
-    .filter((entry): entry is SystemShutdownBlockingThread => entry !== null);
-
-  return {
-    code: "shutdown_blocked",
-    message,
-    blockingThreads,
-  };
 }
 
 export class SystemShutdownBlockedError extends Error {
@@ -163,17 +104,18 @@ function extractErrorMessage(value: unknown): string | null {
     }
     return null;
   }
-  if (!isRecord(value)) {
+  const record = toRecord(value);
+  if (!record) {
     return null;
   }
-  if (typeof value.message === "string") {
-    const message = extractErrorMessage(value.message);
+  if (typeof record.message === "string") {
+    const message = extractErrorMessage(record.message);
     if (message) {
       return message;
     }
   }
   for (const key of LEGACY_ERROR_KEYS) {
-    const message = extractErrorMessage(value[key]);
+    const message = extractErrorMessage(record[key]);
     if (message) {
       return message;
     }
@@ -243,11 +185,12 @@ function parseHttpErrorBody(
 }
 
 function extractErrorCode(value: unknown): string | undefined {
-  if (!isRecord(value)) {
+  const record = toRecord(value);
+  if (!record) {
     return undefined;
   }
-  return typeof value.code === "string" && value.code.trim().length > 0
-    ? value.code
+  return typeof record.code === "string" && record.code.trim().length > 0
+    ? record.code
     : undefined;
 }
 
@@ -673,7 +616,7 @@ export async function shutdownDaemon(
     if (normalized.length > 0) {
       try {
         const parsed = JSON.parse(normalized) as unknown;
-        const blocked = parseShutdownBlockedResponse(parsed);
+        const blocked = decodeSystemShutdownBlockedResponse(parsed);
         if (blocked) {
           throw new SystemShutdownBlockedError(
             blocked.message,
@@ -725,7 +668,7 @@ export async function restartDaemon(
     if (normalized.length > 0) {
       try {
         const parsed = JSON.parse(normalized) as unknown;
-        const blocked = parseShutdownBlockedResponse(parsed);
+        const blocked = decodeSystemShutdownBlockedResponse(parsed);
         if (blocked) {
           throw new SystemShutdownBlockedError(
             blocked.message,

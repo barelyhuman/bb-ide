@@ -8,7 +8,6 @@ import type {
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
   ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-  type EnvironmentAgentCommand,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentSessionCommandAckPayload,
   type EnvironmentAgentSessionCommandBatchMessage,
@@ -25,6 +24,7 @@ import {
 import type { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
 import { inactiveSessionError, invalidRequestError } from "./domain-errors.js";
+import { decodePersistedEnvironmentAgentCommand } from "./environment-agent-command-decoder.js";
 import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
 
 export interface EnvironmentAgentSessionServiceOptions {
@@ -58,27 +58,6 @@ function chooseSessionTransport(args: {
     }
   }
   throw new Error("No compatible environment-agent session transport");
-}
-
-function toEnvironmentAgentCommand(args: {
-  commandType: string;
-  payload: unknown;
-}): EnvironmentAgentCommand {
-  if (!args.payload || typeof args.payload !== "object" || Array.isArray(args.payload)) {
-    throw new Error(
-      `Invalid persisted environment-agent command payload for ${args.commandType}`,
-    );
-  }
-  const record = args.payload as Record<string, unknown>;
-  if ("type" in record && record.type !== args.commandType) {
-    throw new Error(
-      `Environment-agent command payload type mismatch for ${args.commandType}`,
-    );
-  }
-  return {
-    type: args.commandType,
-    ...record,
-  } as EnvironmentAgentCommand;
 }
 
 function cursorForReply(args: {
@@ -454,7 +433,7 @@ export class EnvironmentAgentSessionService {
             commandCursor: record.commandCursor,
             commandId: record.id,
             createdAt: record.createdAt,
-            command: toEnvironmentAgentCommand({
+            command: decodePersistedEnvironmentAgentCommand({
               commandType: record.commandType,
               payload: record.payload,
             }),

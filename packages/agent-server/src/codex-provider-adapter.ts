@@ -8,7 +8,12 @@ import type {
   Thread,
   ThreadEvent,
 } from "@beanbag/agent-core";
-import { assertNever, decodeThreadEventData } from "@beanbag/agent-core";
+import {
+  assertNever,
+  decodeThreadEventData,
+  decodeThreadIdFromWireValue,
+  toRecord,
+} from "@beanbag/agent-core";
 import { resolveCodexProviderLaunchConfiguration } from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
 import type {
@@ -33,11 +38,6 @@ const DEFAULT_WORKSPACE_WRITE_POLICY = {
   excludeTmpdirEnvVar: false,
   excludeSlashTmp: false,
 } as const;
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
 
 function normalizeProviderEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -85,7 +85,7 @@ function withConfigValues(
   if (entries.length === 0) return params;
 
   const nextConfig = {
-    ...(asRecord(params.config) ?? {}),
+    ...(toRecord(params.config) ?? {}),
     ...Object.fromEntries(entries),
   };
   return {
@@ -148,22 +148,6 @@ function deriveThreadTitleFromInput(input?: PromptInput[]): string | undefined {
   );
   if (!textChunk) return undefined;
   return normalizeTitle(textChunk.text);
-}
-
-function extractThreadIdFromResult(result: unknown): string | undefined {
-  const payload = asRecord(result);
-  if (!payload) return undefined;
-
-  if (typeof payload.threadId === "string" && payload.threadId.trim().length > 0) {
-    return payload.threadId;
-  }
-
-  const thread = asRecord(payload.thread);
-  if (thread && typeof thread.id === "string" && thread.id.trim().length > 0) {
-    return thread.id;
-  }
-
-  return undefined;
 }
 
 function outputFromEvent(event: ThreadEvent): string | undefined {
@@ -315,22 +299,8 @@ export function createCodexProviderAdapter(
           };
         }
       : undefined,
-    extractThreadIdFromResult,
-    extractThreadIdFromEventData(data: unknown): string | undefined {
-      const payload = asRecord(data);
-      if (!payload) return undefined;
-
-      if (typeof payload.threadId === "string" && payload.threadId.trim().length > 0) {
-        return payload.threadId;
-      }
-
-      const thread = asRecord(payload.thread);
-      if (thread && typeof thread.id === "string" && thread.id.trim().length > 0) {
-        return thread.id;
-      }
-
-      return undefined;
-    },
+    extractThreadIdFromResult: decodeThreadIdFromWireValue,
+    extractThreadIdFromEventData: decodeThreadIdFromWireValue,
     normalizeEventType(type: string): string {
       return normalizeProviderEventType(type);
     },
@@ -361,10 +331,10 @@ export function createCodexProviderAdapter(
     },
     titleFromEvent(method: string, data: unknown): string | undefined {
       const normalizedMethod = normalizeProviderEventType(method);
-      const payload = asRecord(data);
+      const payload = toRecord(data);
 
       if (normalizedMethod === "thread/started") {
-        const thread = asRecord(payload?.thread);
+        const thread = toRecord(payload?.thread);
         return normalizeTitle(thread?.preview);
       }
 
