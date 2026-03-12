@@ -116,6 +116,7 @@ Required matrix:
 
 - `local` start thread
 - `local` follow-up
+- `local` two immediate follow-ups in a row
 - `local` steer
 - `local` stop then follow-up
 - `local` restart while active -> surviving env-agent reconnect
@@ -188,6 +189,7 @@ Required matrix:
 
 - `worktree` start thread
 - `worktree` follow-up
+- `worktree` two immediate follow-ups in a row
 - `worktree` stop then follow-up
 - `worktree` restart while active -> surviving env-agent reconnect
 - `worktree` restart while active -> missing env-agent becomes \`error\`
@@ -258,6 +260,10 @@ Required matrix:
 - worktree idle thread follow-up after restart starts a fresh env-agent and closes the prior idle session cleanly
 - active-thread restart failure emits `system/error` with `provider_unavailable`
 - follow-up after restart failure clears `error` back to a healthy terminal state
+- restart during `provisioned` or just before first real `turn/started`
+- queued follow-up present while the env-agent is lost
+- archive/unarchive after worker-loss recovery
+- late old env-agent traffic after replacement does not change thread state
 
 For both environments, start a thread and wait until `thread status --recent-events ... --event-mode raw`
 shows a real `turn/started` event, then in another shell:
@@ -353,6 +359,83 @@ Expected result:
 - the previously idle session is closed or expires rather than remaining the live worker for the new follow-up
 - the daemon does not leave multiple live sessions competing for the same idle thread
 - by the time the follow-up settles back to `idle`, there may be zero active session rows because Beanbag intentionally retires the worker again; check for duplicate active rows during the run, not after final idle
+
+Additional rapid-repeat follow-up check for both `local` and `worktree`:
+
+1. Start a thread and wait for it to complete to `idle`.
+2. Send one follow-up immediately after `idle`.
+3. As soon as it returns to `idle`, send a second follow-up immediately.
+4. Confirm each turn completes successfully and inspect session rows:
+
+```bash
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select id,status,close_reason,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
+```
+
+Expected result:
+
+- neither follow-up fails with `agent_shutdown`
+- the thread reaches `idle` after each follow-up
+- session rows may grow, but there is never more than one active session for the thread at a time
+
+Recommended provisioning-boundary restart check:
+
+1. Spawn a fresh thread.
+2. Restart the daemon after `provisioned` work has begun but before the first real provider `turn/started` arrives.
+3. Relaunch the daemon and inspect:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-id>
+node apps/cli/dist/index.js thread log <thread-id>
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select id,status from threads where id='<thread-id>';"
+```
+
+Expected result:
+
+- the thread either continues into `active`/`idle` normally or lands in `provisioning_failed`
+- it must not silently jump straight to `idle` without a real turn
+- there must not be duplicate live env-agent sessions for the thread
+
+Recommended queued-follow-up worker-loss check:
+
+1. Start a long-running turn and wait for `turn/started`.
+2. Queue a follow-up while that turn is still active.
+3. Force-restart the daemon and hard-kill the env-agent.
+4. Relaunch the daemon and wait for the active thread to become `error`.
+5. Send a manual follow-up and then inspect the queue and events.
+
+Expected result:
+
+- the active turn becomes `error` with `provider_unavailable`
+- the queued follow-up is not silently lost or executed against the dead session
+- after recovery, the thread converges back to a healthy terminal state
+
+Recommended archive/unarchive recovery check:
+
+1. Drive a thread into `error` via the missing-worker restart path.
+2. Archive the thread.
+3. Verify the environment/worktree is cleaned up as expected.
+4. Unarchive the thread.
+5. Send a follow-up.
+
+Expected result:
+
+- archive succeeds without leaving duplicate session state behind
+- unarchive does not resurrect stale env-agent sessions
+- follow-up after unarchive still works
+
+Recommended late-old-agent noise check:
+
+1. Run a forced restart where the old env-agent does not reconnect successfully.
+2. Watch daemon logs for late 404s from the old env-agent.
+3. While that noise is happening, inspect the thread repeatedly.
+
+Expected result:
+
+- late old-agent `session/open` or `session/messages` 404s may appear in logs
+- thread status, events, and output do not regress or mutate because of that stale traffic
+- only the current accepted session can move the thread forward
 
 Missing-worker restart check:
 
@@ -461,6 +544,14 @@ sqlite3 "$beanbag_root/beanbag.db" \
 - `thread tell` after `thread stop` fails with missing session state:
   - This is a real recovery bug candidate.
   - Capture `thread show`, `thread log`, and daemon logs before retrying.
+
+- A follow-up fails with `Environment-agent session ... closed (...) while command execution was in progress`:
+  - This is a real session retirement / cleanup race.
+  - Capture session rows from SQLite and the daemon log around the failing `tell`.
+
+- Session rows look “wrong” after a successful follow-up:
+  - Do not assume a healthy thread must still have an active env-agent session after final `idle`.
+  - The real invariant is that there must not be duplicate active sessions competing for the same thread.
 
 ## QA Checklist
 
