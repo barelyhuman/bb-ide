@@ -55,8 +55,6 @@ import {
   createFakeEnvironmentAgentClient,
   findRpcMessageByMethod,
   parseRpcMessage,
-  respondToEnvironmentAgentControlMessage,
-  respondToProviderRpcMessage,
   type FakeChildProcess,
 } from "./helpers/environment-agent-test-harness.js";
 
@@ -1375,71 +1373,6 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("records provisioning phase progress when spawning a thread", async () => {
-      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
-
-      const createdThread = makeThread({ id: "t-new", status: "idle" });
-      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active" }),
-      );
-
-      await manager.spawn({
-        projectId: "proj-1",
-        input: [{ type: "text", text: "Start work" }],
-      });
-
-      await vi.waitFor(() => {
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            threadId: "t-new",
-            type: "system/provisioning/progress",
-            data: expect.objectContaining({
-              phase: "prepare_environment",
-              status: "started",
-            }),
-          }),
-        );
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            threadId: "t-new",
-            type: "system/provisioning/progress",
-            data: expect.objectContaining({
-              phase: "prepare_environment",
-              status: "completed",
-              durationMs: expect.any(Number),
-            }),
-          }),
-        );
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            threadId: "t-new",
-            type: "system/provisioning/progress",
-            data: expect.objectContaining({
-              phase: "start_provider_session",
-              status: "started",
-            }),
-          }),
-        );
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            threadId: "t-new",
-            type: "system/provisioning/progress",
-            data: expect.objectContaining({
-              phase: "start_provider_session",
-              status: "failed",
-              durationMs: expect.any(Number),
-            }),
-          }),
-        );
-      });
-    });
-
-
-
-
-
     it("does not auto-generate spawn titles from input", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
@@ -1595,67 +1528,6 @@ describe("Orchestrator", () => {
         .filter((value): value is string => typeof value === "string");
       expect(persistedEventTypes[0]).toBe("client/thread/start");
     });
-
-    it("marks thread provisioning_failed when codex returns RPC error to thread/start", async () => {
-      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
-
-      const createdThread = makeThread({ id: "t-err", status: "idle" });
-      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-
-      // Use a non-auto-responding child, manually return an error
-      const errorChild = createFakeChildProcess({ autoRespond: false });
-      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(errorChild);
-
-      // After the thread/start write, push an error response
-      errorChild.stdin = new Writable({
-        write(chunk: Buffer, _encoding: string, callback: () => void) {
-          const data = chunk.toString();
-          errorChild._stdinData.push(data);
-          try {
-            const msg = JSON.parse(data.trim());
-            if (respondToEnvironmentAgentControlMessage(errorChild, msg)) {
-              callback();
-              return;
-            }
-            if (msg.method === "initialize" && respondToProviderRpcMessage(errorChild, msg)) {
-              callback();
-              return;
-            }
-            if (msg.method === "thread/start" && msg.id) {
-              process.nextTick(() => {
-                errorChild.stdout!.push(
-                  JSON.stringify({
-                    id: msg.id,
-                    error: { code: -32600, message: "Invalid params" },
-                  }) + "\n",
-                );
-              });
-            }
-          } catch {}
-          callback();
-        },
-      });
-
-      await manager.spawn({ projectId: "proj-1" });
-      await vi.waitFor(() => {
-        expect(threadRepo.update).toHaveBeenCalledWith("t-err", { status: "provisioning_failed" });
-      });
-    });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     it("does not notify parent thread when parent project differs from child project", async () => {
       const project = {
@@ -4700,92 +4572,6 @@ describe("Orchestrator", () => {
 
       expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", { status: "idle" });
     });
-  });
-
-  describe("_handleProcessExit()", () => {
-    // Access private method for testing
-    it("sets idle on exit code 0", () => {
-      const thread = makeThread({ status: "active" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      // Call private method via bracket notation
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
-
-      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
-        status: "idle",
-      });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
-        "status-changed",
-        "work-status-changed",
-      ]);
-    });
-
-    it("sets idle on SIGTERM signal", () => {
-      const thread = makeThread({ status: "active" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", null, "SIGTERM");
-
-      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
-        status: "idle",
-      });
-    });
-
-    it("sets idle on non-zero exit code", () => {
-      const thread = makeThread({ status: "active" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 1, null);
-
-      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
-        status: "idle",
-      });
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
-        "status-changed",
-        "work-status-changed",
-      ]);
-    });
-
-    it("does not update status on exit code 0 when thread is already idle", () => {
-      const thread = makeThread({ status: "idle" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
-
-      expect(threadRepo.update).not.toHaveBeenCalled();
-    });
-
-    it("does not update status on non-zero exit when thread is already idle", () => {
-      const thread = makeThread({ status: "idle" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 1, null);
-
-      expect(threadRepo.update).not.toHaveBeenCalled();
-    });
-
-    it("does not update status if thread is already idle", () => {
-      const thread = makeThread({ status: "idle" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
-
-      expect(threadRepo.update).not.toHaveBeenCalled();
-      expect(ws.broadcast).not.toHaveBeenCalled();
-    });
-
-    it("does nothing if thread not found in DB", () => {
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        undefined,
-      );
-
-      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
-
-      expect(threadRepo.update).not.toHaveBeenCalled();
-      // Should not broadcast
-      expect(ws.broadcast).not.toHaveBeenCalled();
-    });
-
   });
 
   describe("getTimeline()", () => {

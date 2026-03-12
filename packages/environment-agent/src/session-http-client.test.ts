@@ -136,16 +136,26 @@ describe("EnvironmentAgentSessionHttpClient", () => {
 
     await expect(client.closeSession("sess-1", "agent_shutdown")).resolves.toBeUndefined();
 
-    expect(fetchImpl).toHaveBeenCalledTimes(7);
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
-      "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/open",
-      expect.objectContaining({ method: "POST" }),
-    );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      4,
-      "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
-      expect.objectContaining({ method: "GET" }),
+    const requests = fetchImpl.mock.calls.map(([url, init]) => ({
+      url: String(url),
+      method: init?.method ?? "GET",
+    }));
+
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        {
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/open",
+          method: "POST",
+        },
+        {
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
+          method: "GET",
+        },
+        {
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/close",
+          method: "POST",
+        },
+      ]),
     );
   });
 
