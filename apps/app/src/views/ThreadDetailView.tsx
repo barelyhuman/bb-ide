@@ -33,6 +33,10 @@ import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import {
+  getMergeBaseBranchCandidates,
+  MergeBaseBranchPicker,
+} from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import {
   ThreadGitActionDialog,
@@ -677,9 +681,16 @@ export function ThreadDetailView() {
       ) &&
       (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
   );
-  const showThreadMergeBase =
-    Boolean(threadMergeBaseBranch) &&
-    threadMergeBaseBranch !== resolvedThreadWorkStatus?.defaultBranch;
+  const showThreadMergeBase = showBranchComparisonUi && Boolean(threadMergeBaseBranch);
+  const threadMergeBaseCandidates = getMergeBaseBranchCandidates({
+    mergeBaseBranch: threadMergeBaseBranch,
+    mergeBaseBranchOptions,
+  });
+  const canSelectThreadMergeBase = Boolean(
+    showThreadMergeBase &&
+      threadMergeBaseBranch &&
+      threadMergeBaseCandidates.length > 0,
+  );
   const showThreadMetadata = Boolean(
     parentThreadId ||
       threadEnvironmentType ||
@@ -812,7 +823,19 @@ export function ThreadDetailView() {
           label="Merge base"
           valueClassName="min-w-0 truncate"
         >
-          {threadMergeBaseBranch}
+          {canSelectThreadMergeBase && threadMergeBaseBranch ? (
+            <MergeBaseBranchPicker
+              value={threadMergeBaseBranch}
+              options={threadMergeBaseCandidates}
+              variant="minimal"
+              loading={isLoadingMergeBaseBranchOptions}
+              onChange={handleThreadMergeBaseBranchChange}
+              onOpenChange={onMergeBaseBranchPickerOpenChange}
+              className="max-w-full text-foreground"
+            />
+          ) : (
+            threadMergeBaseBranch
+          )}
         </DetailRow>
       ) : null}
       {showThreadWorkspaceStatus ? (
@@ -1094,6 +1117,14 @@ export function ThreadDetailView() {
       promptBannerSummary={promptBannerSummary}
       showBranchComparisonUi={showBranchComparisonUi}
       promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
+      mergeBaseBranchOptions={mergeBaseBranchOptions}
+      mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
+      onPromptBannerMergeBaseBranchChange={
+        showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
+      }
+      onPromptBannerMergeBaseBranchPickerOpenChange={
+        showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
+      }
       resolvedThreadWorkStatus={resolvedThreadWorkStatus}
       threadId={thread.id}
       onPromptGitStatsBannerClick={handlePromptGitStatsBannerClick}

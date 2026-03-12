@@ -16,6 +16,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import {
+  getMergeBaseBranchCandidates,
+  MergeBaseBranchPicker,
+} from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
 import { PromptComposerShell } from "@beanbag/ui-core";
 import { cn } from "@/lib/utils";
@@ -144,6 +148,10 @@ export function ThreadFollowUpComposer({
   promptBannerSummary,
   showBranchComparisonUi,
   promptBannerMergeBaseBranch,
+  mergeBaseBranchOptions,
+  mergeBaseBranchOptionsLoading = false,
+  onPromptBannerMergeBaseBranchChange,
+  onPromptBannerMergeBaseBranchPickerOpenChange,
   resolvedThreadWorkStatus,
   threadId,
   onPromptGitStatsBannerClick,
@@ -203,6 +211,10 @@ export function ThreadFollowUpComposer({
   promptBannerSummary: string;
   showBranchComparisonUi: boolean;
   promptBannerMergeBaseBranch?: string;
+  mergeBaseBranchOptions?: readonly string[];
+  mergeBaseBranchOptionsLoading?: boolean;
+  onPromptBannerMergeBaseBranchChange?: (branch: string) => void;
+  onPromptBannerMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   resolvedThreadWorkStatus?: {
     files?: ComponentProps<typeof WorkspaceChangesList>["files"];
   } | null;
@@ -252,6 +264,17 @@ export function ThreadFollowUpComposer({
   environmentIcon?: ComponentType<{ className?: string }>;
   contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
 }) {
+  const promptBannerMergeBaseCandidates = getMergeBaseBranchCandidates({
+    mergeBaseBranch: promptBannerMergeBaseBranch,
+    mergeBaseBranchOptions,
+  });
+  const canSelectPromptBannerMergeBase = Boolean(
+    showBranchComparisonUi &&
+      promptBannerMergeBaseBranch &&
+      onPromptBannerMergeBaseBranchChange &&
+      promptBannerMergeBaseCandidates.length > 0,
+  );
+
   return (
     <div ref={composerRef}>
       <PromptComposerShell
@@ -295,11 +318,33 @@ export function ThreadFollowUpComposer({
                 <span className="truncate">{promptBannerSummary}</span>
               )}
               {showBranchComparisonUi ? (
-                <span className="shrink-0 text-xs text-muted-foreground/90">
-                  {promptBannerMergeBaseBranch
-                    ? `Merge base: ${promptBannerMergeBaseBranch}`
-                    : "Merge base comparison"}
-                </span>
+                canSelectPromptBannerMergeBase && promptBannerMergeBaseBranch ? (
+                  <div
+                    className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/90"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
+                  >
+                    <span className="shrink-0">Merge base:</span>
+                    <MergeBaseBranchPicker
+                      value={promptBannerMergeBaseBranch}
+                      options={promptBannerMergeBaseCandidates}
+                      variant="minimal"
+                      loading={mergeBaseBranchOptionsLoading}
+                      onChange={(branch) => {
+                        onPromptBannerMergeBaseBranchChange?.(branch);
+                      }}
+                      onOpenChange={onPromptBannerMergeBaseBranchPickerOpenChange}
+                      className="max-w-[10rem] text-muted-foreground/90"
+                    />
+                  </div>
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground/90">
+                    {promptBannerMergeBaseBranch
+                      ? `Merge base: ${promptBannerMergeBaseBranch}`
+                      : "Merge base comparison"}
+                  </span>
+                )
               ) : (
                 <span className="shrink-0 text-xs text-muted-foreground/90">
                   Includes all threads in this working directory
