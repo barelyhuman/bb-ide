@@ -7,7 +7,7 @@ export interface ThreadActivitySummary {
 }
 
 type ThreadVisibilityShape = Pick<Thread, "archivedAt" | "parentThreadId">
-type ThreadStatusShape = Pick<Thread, "status" | "lastReadAt" | "updatedAt">
+type ThreadStatusShape = Pick<Thread, "status" | "lastReadAt" | "updatedAt" | "pendingOperation">
 type ThreadActivityShape = ThreadVisibilityShape & ThreadStatusShape
 
 export function isVisibleProjectThread(
@@ -30,6 +30,14 @@ export function isRunningThreadStatus(status: ThreadStatus): boolean {
     default:
       return assertNever(status)
   }
+}
+
+export function hasPendingThreadOperation(thread: Pick<Thread, "pendingOperation">): boolean {
+  return thread.pendingOperation !== undefined
+}
+
+export function isBusyThread(thread: Pick<Thread, "status" | "pendingOperation">): boolean {
+  return isRunningThreadStatus(thread.status) || hasPendingThreadOperation(thread)
 }
 
 export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {
@@ -58,7 +66,7 @@ export function summarizeThreadActivity(
   for (const thread of threads) {
     if (!isVisibleProjectThread(thread)) continue
 
-    if (isRunningThreadStatus(thread.status)) {
+    if (isBusyThread(thread)) {
       running += 1
       continue
     }
@@ -113,14 +121,18 @@ export function formatThreadActivitySummaryForTitle(
 }
 
 export function getThreadStatusLabelForTitle(thread: ThreadStatusShape): string {
+  if (isBusyThread(thread)) {
+    return "Running"
+  }
+
   switch (thread.status) {
+    case "idle":
+      return isUnreadDoneThread(thread) ? "Unread done" : "Done"
     case "active":
     case "created":
     case "provisioning":
     case "provisioned":
       return "Running"
-    case "idle":
-      return isUnreadDoneThread(thread) ? "Unread done" : "Done"
     case "error":
       return "Error"
     case "provisioning_failed":

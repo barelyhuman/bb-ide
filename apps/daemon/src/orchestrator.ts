@@ -56,6 +56,7 @@ import {
   type ThreadOperationRequest,
   type ThreadOperationResponse,
   type ThreadOperationType,
+  type ThreadPendingOperation,
   type ThreadTimelineResponse,
   type ThreadGitDiffResponse,
   type ThreadGitDiffSelection,
@@ -544,6 +545,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private queuedOperationsByThreadId = new Map<string, QueuedThreadOperation[]>();
   /** Prevents concurrent operation queue-drain loops per thread. */
   private operationDispatchInFlight = new Set<string>();
+  /** Currently executing deterministic git operation keyed by thread id. */
+  private runningOperationByThreadId = new Map<string, QueuedThreadOperation>();
   /** Ensures only one deterministic git operation mutates a project at a time. */
   private projectOperationTransitionsInFlight = new Set<string>();
   /** Tracks threads whose workspace deletion is in progress. */
@@ -1291,6 +1294,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     this.projectOperationTransitionsInFlight.add(thread.projectId);
+    this.runningOperationByThreadId.set(thread.id, queuedOperation);
     this._appendThreadOperationEvent(
       thread.id,
       queuedOperation.request.operation,
@@ -1357,6 +1361,7 @@ export class Orchestrator implements ThreadOrchestrator {
         this._threadOperationFailurePostActions(queuedOperation.request, err, failureMessage),
       );
     } finally {
+      this.runningOperationByThreadId.delete(thread.id);
       this.projectOperationTransitionsInFlight.delete(thread.projectId);
       this._scheduleQueuedOperationDispatch(thread.id);
       for (const candidateThreadId of this.queuedOperationsByThreadId.keys()) {
@@ -1749,6 +1754,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _finalizeManagedThreadCleanup(threadId: string, projectId: string): void {
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
+    this.runningOperationByThreadId.delete(threadId);
     this.queueDispatchInFlight.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
@@ -1779,6 +1785,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queueDispatchInFlight.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
+    this.runningOperationByThreadId.delete(threadId);
     this.provisioningTasks.delete(threadId);
     this.timelineByThread.delete(threadId);
     this.titleFallbackByThreadId.delete(threadId);
@@ -2466,7 +2473,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }): Thread[] {
     const threads = this.threadRepo.list(filters);
     if (!filters?.includeWorkStatus) {
-      return threads.map((thread) => this._withPrimaryCheckoutState(thread));
+      return threads.map((thread) => this._withDerivedThreadState(thread));
     }
     return threads.map((thread) => this._hydrateThreadState(thread));
   }
@@ -2479,7 +2486,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }): Promise<Thread[]> {
     const threads = this.threadRepo.list(filters);
     if (!filters?.includeWorkStatus) {
-      return threads.map((thread) => this._withPrimaryCheckoutState(thread));
+      return threads.map((thread) => this._withDerivedThreadState(thread));
     }
     return Promise.all(
       threads.map((thread) => this._hydrateThreadStateAsync(thread)),
@@ -2970,6 +2977,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queueDispatchInFlight.clear();
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
+    this.runningOperationByThreadId.clear();
     this.projectOperationTransitionsInFlight.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
@@ -2995,6 +3003,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queueDispatchInFlight.clear();
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
+    this.runningOperationByThreadId.clear();
     this.projectOperationTransitionsInFlight.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
@@ -3296,6 +3305,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
+    this.runningOperationByThreadId.delete(threadId);
     if (opts?.retireActiveSession) {
       this.environmentAgentSessionService?.retireActiveSessionForThread({
         threadId,
@@ -4651,7 +4661,7 @@ export class Orchestrator implements ThreadOrchestrator {
             provisioningState,
           }
         : thread;
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
 
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
@@ -4661,7 +4671,7 @@ export class Orchestrator implements ThreadOrchestrator {
         builtInActions: this._buildThreadBuiltInActions({ thread }),
         ...(provisioningState ? { provisioningState } : {}),
       };
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
     if (this._shouldForceDeletedWorkStatus(thread)) {
       const hydrated: Thread = {
@@ -4674,7 +4684,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }),
         ...(provisioningState ? { provisioningState } : {}),
       };
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
     const defaultBranch = detectProjectDefaultBranch(project.rootPath);
     const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
@@ -4701,7 +4711,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }),
         ...(provisioningState ? { provisioningState } : {}),
       };
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
     const hydrated: Thread = {
       ...thread,
@@ -4713,7 +4723,7 @@ export class Orchestrator implements ThreadOrchestrator {
       }),
       ...(provisioningState ? { provisioningState } : {}),
     };
-    return this._withPrimaryCheckoutState(hydrated);
+    return this._withDerivedThreadState(hydrated);
   }
 
   private async _hydrateThreadStateAsync(
@@ -4729,7 +4739,7 @@ export class Orchestrator implements ThreadOrchestrator {
             provisioningState,
           }
         : thread;
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
 
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
@@ -4739,7 +4749,7 @@ export class Orchestrator implements ThreadOrchestrator {
         builtInActions: this._buildThreadBuiltInActions({ thread }),
         ...(provisioningState ? { provisioningState } : {}),
       };
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
     if (this._shouldForceDeletedWorkStatus(thread)) {
       const deletedWorkStatus = this._buildDeletedWorkStatus();
@@ -4753,7 +4763,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }),
         ...(provisioningState ? { provisioningState } : {}),
       };
-      return this._withPrimaryCheckoutState(hydrated);
+      return this._withDerivedThreadState(hydrated);
     }
     const defaultBranch =
       detectProjectDefaultBranch(project.rootPath) ??
@@ -4781,7 +4791,7 @@ export class Orchestrator implements ThreadOrchestrator {
       }),
       ...(provisioningState ? { provisioningState } : {}),
     };
-    return this._withPrimaryCheckoutState(hydrated);
+    return this._withDerivedThreadState(hydrated);
   }
 
   private _shouldForceDeletedWorkStatus(thread: Thread): boolean {
@@ -4802,6 +4812,46 @@ export class Orchestrator implements ThreadOrchestrator {
       aheadCount: 0,
       behindCount: 0,
     };
+  }
+
+  private _readPendingOperation(threadId: string): ThreadPendingOperation | undefined {
+    const runningOperation = this.runningOperationByThreadId.get(threadId);
+    if (runningOperation) {
+      return {
+        operation: runningOperation.request.operation,
+        status: "running",
+        operationId: runningOperation.operationId,
+        requestedAt: runningOperation.requestedAt,
+      };
+    }
+
+    const queuedOperation = this.queuedOperationsByThreadId.get(threadId)?.[0];
+    if (!queuedOperation) {
+      return undefined;
+    }
+
+    return {
+      operation: queuedOperation.request.operation,
+      status: "queued",
+      operationId: queuedOperation.operationId,
+      requestedAt: queuedOperation.requestedAt,
+    };
+  }
+
+  private _withPendingOperationState(thread: Thread): Thread {
+    const pendingOperation = this._readPendingOperation(thread.id);
+    if (!pendingOperation) {
+      return thread;
+    }
+
+    return {
+      ...thread,
+      pendingOperation,
+    };
+  }
+
+  private _withDerivedThreadState(thread: Thread): Thread {
+    return this._withPrimaryCheckoutState(this._withPendingOperationState(thread));
   }
 
   private _withPrimaryCheckoutState(thread: Thread): Thread {

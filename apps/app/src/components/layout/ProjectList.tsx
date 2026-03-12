@@ -29,7 +29,7 @@ import { getEnvironmentIconInfo } from "@/lib/environment-icon"
 import { cn } from "@/lib/utils"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
-  isRunningThreadStatus,
+  isBusyThread,
   isUnreadDoneThread,
   isVisibleProjectThread,
 } from "@/lib/thread-activity"
@@ -471,7 +471,7 @@ export function ProjectList({
                     ) : projectThreads.length > 0 ? (
                       <div className="space-y-1 group-data-[collapsible=icon]:hidden">
                         {projectThreads.map((thread) => {
-                          const isBusyThread = isRunningThreadStatus(thread.status)
+                          const threadIsBusy = isBusyThread(thread)
                           const showUnreadBadge = isUnreadDoneThread(thread)
                           const isThreadActionsOpen = openThreadActionsThreadId === thread.id
                           const isThreadActive = selectedThreadId === thread.id
@@ -500,7 +500,7 @@ export function ProjectList({
                                 className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
                               />
                               <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                                {isBusyThread ? (
+                                {threadIsBusy ? (
                                   <CircleDashed className="size-3.5 animate-spin" />
                                 ) : showUnreadBadge ? (
                                   <span

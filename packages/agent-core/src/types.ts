@@ -47,6 +47,17 @@ export interface ThreadBuiltInAction {
   requiresDemoteFirst: boolean;
 }
 
+export type ThreadPendingOperationType = "commit" | "squash_merge";
+
+export type ThreadPendingOperationStatus = "queued" | "running";
+
+export interface ThreadPendingOperation {
+  operation: ThreadPendingOperationType;
+  status: ThreadPendingOperationStatus;
+  operationId: string;
+  requestedAt: number;
+}
+
 export type ThreadStatus =
   | "created"
   | "provisioning"
@@ -77,6 +88,7 @@ export interface Thread {
   primaryCheckout?: ThreadPrimaryCheckoutState;
   provisioningState?: ThreadProvisioningState;
   queuedMessages?: ThreadQueuedMessage[];
+  pendingOperation?: ThreadPendingOperation;
   environmentId?: string;
   environmentRecord?: PersistedEnvironmentRecord;
   builtInActions?: ThreadBuiltInAction[];

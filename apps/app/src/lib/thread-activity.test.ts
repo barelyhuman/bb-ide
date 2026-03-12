@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   formatThreadActivitySummaryForTitle,
   getThreadStatusLabelForTitle,
+  hasPendingThreadOperation,
+  isBusyThread,
   isRunningThreadStatus,
   isUnreadDoneThread,
   isVisibleProjectThread,
@@ -26,6 +28,12 @@ describe("thread-activity", () => {
       },
       {
         status: "idle",
+        pendingOperation: {
+          operation: "commit",
+          status: "queued",
+          operationId: "op-1",
+          requestedAt: 250,
+        },
         updatedAt: 300,
         lastReadAt: 300,
         archivedAt: undefined,
@@ -46,9 +54,9 @@ describe("thread-activity", () => {
     ])
 
     expect(summary).toEqual({
-      running: 1,
+      running: 2,
       unreadDone: 1,
-      done: 2,
+      done: 1,
     })
   })
 
@@ -82,6 +90,19 @@ describe("thread-activity", () => {
     expect(
       getThreadStatusLabelForTitle({
         status: "active",
+        updatedAt: 100,
+      }),
+    ).toBe("Running")
+
+    expect(
+      getThreadStatusLabelForTitle({
+        status: "idle",
+        pendingOperation: {
+          operation: "squash_merge",
+          status: "running",
+          operationId: "op-2",
+          requestedAt: 125,
+        },
         updatedAt: 100,
       }),
     ).toBe("Running")
@@ -125,6 +146,28 @@ describe("thread-activity", () => {
     expect(isRunningThreadStatus("created")).toBe(true)
     expect(isRunningThreadStatus("error")).toBe(false)
     expect(isRunningThreadStatus("idle")).toBe(false)
+    expect(hasPendingThreadOperation({ pendingOperation: undefined })).toBe(false)
+    expect(
+      hasPendingThreadOperation({
+        pendingOperation: {
+          operation: "commit",
+          status: "queued",
+          operationId: "op-3",
+          requestedAt: 10,
+        },
+      }),
+    ).toBe(true)
+    expect(
+      isBusyThread({
+        status: "idle",
+        pendingOperation: {
+          operation: "commit",
+          status: "running",
+          operationId: "op-4",
+          requestedAt: 20,
+        },
+      }),
+    ).toBe(true)
 
     expect(
       isUnreadDoneThread({

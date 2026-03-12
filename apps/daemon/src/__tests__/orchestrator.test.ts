@@ -4128,6 +4128,86 @@ describe("Orchestrator", () => {
     });
 
     describe("requestThreadOperation()", () => {
+      it("exposes queued thread operations on hydrated thread state", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "idle",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+        (
+          asOrchestratorHarness(manager) as unknown as {
+            queuedOperationsByThreadId: Map<string, Array<{
+              operationId: string;
+              request: { operation: "commit"; options?: undefined };
+              requestedAt: number;
+              demotedPrimaryCheckout: boolean;
+            }>>;
+          }
+        ).queuedOperationsByThreadId.set("thread-1", [{
+          operationId: "op-1",
+          request: { operation: "commit" },
+          requestedAt: 123,
+          demotedPrimaryCheckout: false,
+        }]);
+
+        await expect(manager.getHydratedByIdAsync("thread-1")).resolves.toMatchObject({
+          pendingOperation: {
+            operation: "commit",
+            status: "queued",
+            operationId: "op-1",
+            requestedAt: 123,
+          },
+        });
+      });
+
+      it("includes pending operations in thread lists without work-status hydration", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "idle",
+        });
+        (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([thread]);
+
+        (
+          asOrchestratorHarness(manager) as unknown as {
+            queuedOperationsByThreadId: Map<string, Array<{
+              operationId: string;
+              request: { operation: "squash_merge"; options?: undefined };
+              requestedAt: number;
+              demotedPrimaryCheckout: boolean;
+            }>>;
+          }
+        ).queuedOperationsByThreadId.set("thread-1", [{
+          operationId: "op-2",
+          request: { operation: "squash_merge" },
+          requestedAt: 456,
+          demotedPrimaryCheckout: false,
+        }]);
+
+        expect(manager.list()).toMatchObject([
+          {
+            id: "thread-1",
+            pendingOperation: {
+              operation: "squash_merge",
+              status: "queued",
+              operationId: "op-2",
+              requestedAt: 456,
+            },
+          },
+        ]);
+        await expect(manager.listAsync()).resolves.toMatchObject([
+          {
+            id: "thread-1",
+            pendingOperation: {
+              operation: "squash_merge",
+              status: "queued",
+              operationId: "op-2",
+              requestedAt: 456,
+            },
+          },
+        ]);
+      });
+
       it("accepts commit operations and schedules deterministic execution for idle threads", async () => {
         const thread = makeThread({
           id: "thread-1",

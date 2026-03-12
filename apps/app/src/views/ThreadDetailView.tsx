@@ -49,14 +49,16 @@ import {
 import { DetailCard, DetailRow, StatusPill } from "@beanbag/ui-core";
 import {
   formatEnvironmentDisplayName,
-  type PromptInput,
   type ServiceTier,
-  type ThreadDetailRow,
 } from "@beanbag/agent-core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { getEnvironmentIconInfo } from "@/lib/environment-icon";
+import {
+  buildFollowUpSignatureFromInput,
+  buildFollowUpSignatureFromRow,
+} from "@/lib/thread-follow-up-signature";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { getThreadGitStatusDisplay } from "@/lib/thread-work-status";
 import {
@@ -89,108 +91,6 @@ interface PendingSubmittedFollowUp {
   signature: string;
   submittedAt: number;
 }
-
-interface FollowUpAttachmentSignature {
-  webImages: number;
-  localImages: number;
-  localFiles: number;
-  imageUrls?: string[];
-  localImagePaths?: string[];
-  localFilePaths?: string[];
-}
-
-function buildFollowUpText(input: PromptInput[]): string {
-  return input
-    .filter((entry): entry is Extract<PromptInput, { type: "text" }> => entry.type === "text")
-    .map((entry) => entry.text.trim())
-    .filter((entry) => entry.length > 0)
-    .join("\n\n");
-}
-
-function buildFollowUpAttachmentsSignature(input: PromptInput[]) {
-  let webImages = 0;
-  let localImages = 0;
-  let localFiles = 0;
-  const imageUrls: string[] = [];
-  const localImagePaths: string[] = [];
-  const localFilePaths: string[] = [];
-
-  for (const entry of input) {
-    switch (entry.type) {
-      case "text":
-        break;
-      case "image":
-        webImages += 1;
-        imageUrls.push(entry.url);
-        break;
-      case "localImage":
-        localImages += 1;
-        localImagePaths.push(entry.path);
-        break;
-      case "localFile":
-        localFiles += 1;
-        localFilePaths.push(entry.path);
-        break;
-    }
-  }
-
-  if (webImages === 0 && localImages === 0 && localFiles === 0) {
-    return null;
-  }
-
-  return {
-    webImages,
-    localImages,
-    localFiles,
-    ...(imageUrls.length > 0 ? { imageUrls } : {}),
-    ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
-    ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
-  };
-}
-
-function normalizeFollowUpAttachmentSignature(
-  attachments: FollowUpAttachmentSignature | null | undefined,
-): FollowUpAttachmentSignature {
-  if (!attachments) {
-    return {
-      webImages: 0,
-      localImages: 0,
-      localFiles: 0,
-    };
-  }
-
-  return {
-    webImages: attachments.webImages,
-    localImages: attachments.localImages,
-    localFiles: attachments.localFiles,
-    ...(attachments.imageUrls?.length ? { imageUrls: attachments.imageUrls } : {}),
-    ...(attachments.localImagePaths?.length
-      ? { localImagePaths: attachments.localImagePaths }
-      : {}),
-    ...(attachments.localFilePaths?.length ? { localFilePaths: attachments.localFilePaths } : {}),
-  };
-}
-
-export function buildFollowUpSignatureFromInput(input: PromptInput[]): string {
-  return JSON.stringify({
-    text: buildFollowUpText(input),
-    attachments: normalizeFollowUpAttachmentSignature(
-      buildFollowUpAttachmentsSignature(input),
-    ),
-  });
-}
-
-export function buildFollowUpSignatureFromRow(row: ThreadDetailRow): string | null {
-  if (row.kind !== "message" || row.message.kind !== "user") {
-    return null;
-  }
-
-  return JSON.stringify({
-    text: row.message.text,
-    attachments: normalizeFollowUpAttachmentSignature(row.message.attachments),
-  });
-}
-
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
     projectId: string;
