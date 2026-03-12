@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
-import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
+import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
 import { WorkspaceStatusIndicator } from "@/components/shared/WorkspaceStatusIndicator";
@@ -286,32 +286,23 @@ export function ProjectMainView() {
           isAttaching={uploadPromptAttachment.isPending}
           attachmentError={attachmentError}
           footerStart={
-            <>
-              {supportsModelList && modelOptions.length > 0 ? (
-                <PromptModelPicker
-                  value={activeModel?.model ?? selectedModel}
-                  options={modelOptions}
-                  onChange={setSelectedModel}
-                  fastModeEnabled={serviceTier === "fast"}
-                  onFastModeChange={(enabled) => setServiceTier(enabled ? "fast" : undefined)}
-                  showFastModeToggle={supportsServiceTier}
-                />
-              ) : null}
-              {supportsReasoningLevels && reasoningOptions.length > 0 ? (
-                <PromptOptionPicker
-                  label="Reasoning"
-                  value={reasoningLevel}
-                  options={reasoningOptions}
-                  onChange={setReasoningLevel}
-                />
-              ) : null}
-              <PromptOptionPicker
-                label="Sandbox"
-                value={sandboxMode}
-                options={sandboxOptions}
-                onChange={setSandboxMode}
-              />
-            </>
+            <PromptExecutionControls
+              supportsModelList={supportsModelList}
+              activeModel={activeModel}
+              selectedModel={selectedModel}
+              modelOptions={modelOptions}
+              onSelectedModelChange={setSelectedModel}
+              serviceTier={serviceTier}
+              onServiceTierChange={setServiceTier}
+              supportsServiceTier={supportsServiceTier}
+              supportsReasoningLevels={supportsReasoningLevels}
+              reasoningLevel={reasoningLevel}
+              reasoningOptions={reasoningOptions}
+              onReasoningLevelChange={setReasoningLevel}
+              sandboxMode={sandboxMode}
+              sandboxOptions={sandboxOptions}
+              onSandboxModeChange={setSandboxMode}
+            />
           }
         />
         <div className="flex items-center px-3.5">

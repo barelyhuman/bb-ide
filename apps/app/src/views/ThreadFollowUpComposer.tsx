@@ -7,12 +7,12 @@ import {
   type ThreadQueuedMessage,
 } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
-import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import {
   PromptOptionDisplay,
-  PromptOptionPicker,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
+import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
+import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import { Button } from "@/components/ui/button";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -412,34 +412,23 @@ export function ThreadFollowUpComposer({
           isAttaching={isAttaching}
           attachmentError={attachmentError}
           footerStart={
-            <>
-              {supportsModelList && modelOptions.length > 0 ? (
-                <PromptModelPicker
-                  value={activeModel?.model ?? selectedModel}
-                  options={modelOptions}
-                  onChange={onSelectedModelChange}
-                  fastModeEnabled={serviceTier === "fast"}
-                  onFastModeChange={(enabled) =>
-                    onServiceTierChange(enabled ? "fast" : undefined)
-                  }
-                  showFastModeToggle={supportsServiceTier}
-                />
-              ) : null}
-              {supportsReasoningLevels && reasoningOptions.length > 0 ? (
-                <PromptOptionPicker
-                  label="Reasoning"
-                  value={reasoningLevel}
-                  options={reasoningOptions}
-                  onChange={onReasoningLevelChange}
-                />
-              ) : null}
-              <PromptOptionPicker
-                label="Sandbox"
-                value={sandboxMode ?? sandboxOptions[0]?.value ?? "workspace-write"}
-                options={sandboxOptions}
-                onChange={onSandboxModeChange}
-              />
-            </>
+            <PromptExecutionControls
+              supportsModelList={supportsModelList}
+              activeModel={activeModel}
+              selectedModel={selectedModel}
+              modelOptions={modelOptions}
+              onSelectedModelChange={onSelectedModelChange}
+              serviceTier={serviceTier}
+              onServiceTierChange={onServiceTierChange}
+              supportsServiceTier={supportsServiceTier}
+              supportsReasoningLevels={supportsReasoningLevels}
+              reasoningLevel={reasoningLevel}
+              reasoningOptions={reasoningOptions}
+              onReasoningLevelChange={onReasoningLevelChange}
+              sandboxMode={sandboxMode}
+              sandboxOptions={sandboxOptions}
+              onSandboxModeChange={onSandboxModeChange}
+            />
           }
         />
         {environmentLabel || contextWindowUsage ? (
