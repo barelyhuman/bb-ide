@@ -6,7 +6,9 @@ describe("thread statusText()", () => {
   const cases: Array<{ status: ThreadStatus; text: string }> = [
     { status: "created", text: "created" },
     { status: "provisioning", text: "provisioning" },
+    { status: "provisioned", text: "provisioned" },
     { status: "provisioning_failed", text: "provisioning_failed" },
+    { status: "error", text: "error" },
     { status: "idle", text: "idle" },
     { status: "active", text: "active" },
   ];

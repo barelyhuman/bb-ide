@@ -64,11 +64,6 @@ function isUnavailableCleanupTargetError(error: unknown): boolean {
   return error.message.includes("workspace is unavailable");
 }
 
-function isMissingManagedEnvironmentAgentTargetError(error: unknown): boolean {
-  return error instanceof Error &&
-    error.message.includes("Missing managed environment-agent target");
-}
-
 function checkoutSnapshotsMatch(
   left: EnvironmentCheckoutSnapshot,
   right: EnvironmentCheckoutSnapshot,
@@ -90,6 +85,7 @@ export class EnvironmentService {
     string,
     Promise<EnsureThreadEnvironmentRuntimeResult>
   >();
+  readonly environmentRuntimeSuspendsByThreadId = new Map<string, Promise<void>>();
   readonly primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
   readonly primaryPromotionValidatedAtByProjectId = new Map<string, number>();
   readonly primaryPromotionWatchersByProjectId = new Map<string, () => void>();
@@ -214,6 +210,7 @@ export class EnvironmentService {
     reason: ThreadEnvironmentStartReason,
   ): Promise<ActiveEnvironmentRuntime> {
     const ensured = await this.withThreadEnvironmentEnsure(threadId, async () => {
+      await this.awaitEnvironmentRuntimeSuspension(threadId);
       const existingRuntime = this.environmentRuntimes.get(threadId);
       if (existingRuntime) {
         return {
@@ -254,14 +251,11 @@ export class EnvironmentService {
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
   ): Promise<EnsureThreadEnvironmentRuntimeResult> {
+    await this.awaitEnvironmentRuntimeSuspension(thread.id);
     const existingRuntime = this.environmentRuntimes.get(thread.id);
     if (existingRuntime) {
       return {
-        runtime: await this.ensureRuntimeAgentConnectionTarget(
-          thread.id,
-          existingRuntime,
-          reason,
-        ),
+        runtime: existingRuntime,
       };
     }
 
@@ -269,11 +263,7 @@ export class EnvironmentService {
       const runtimeDuringEnsure = this.environmentRuntimes.get(thread.id);
       if (runtimeDuringEnsure) {
         return {
-          runtime: await this.ensureRuntimeAgentConnectionTarget(
-            thread.id,
-            runtimeDuringEnsure,
-            reason,
-          ),
+          runtime: runtimeDuringEnsure,
         };
       }
 
@@ -307,21 +297,6 @@ export class EnvironmentService {
     });
   }
 
-  private async ensureRuntimeAgentConnectionTarget(
-    threadId: string,
-    runtime: ActiveEnvironmentRuntime,
-    reason: ThreadEnvironmentStartReason,
-  ): Promise<ActiveEnvironmentRuntime> {
-    try {
-      runtime.agentConnectionTarget = runtime.environment.getAgentConnectionTarget();
-      return runtime;
-    } catch {
-      await this.prepareEnvironment(threadId, runtime.environment, reason);
-      runtime.agentConnectionTarget = runtime.environment.getAgentConnectionTarget();
-      return runtime;
-    }
-  }
-
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
     const agentConnectionTarget = environment.getAgentConnectionTarget();
     this.installEnvironmentRuntime(threadId, environment, agentConnectionTarget);
@@ -353,24 +328,7 @@ export class EnvironmentService {
     threadId: string,
     environment: IEnvironment,
   ): Promise<void> {
-    try {
-      this.setEnvironmentRuntime(threadId, environment);
-      return;
-    } catch (error) {
-      if (
-        !isMissingManagedEnvironmentAgentTargetError(error) ||
-        typeof environment.prepare !== "function"
-      ) {
-        throw error;
-      }
-
-      // Managed environment-agent state can disappear between prepare() and
-      // runtime registration when a prior session is shutting down. Retry
-      // prepare once so the target is recreated before we attach the runtime.
-      await environment.prepare();
-      const agentConnectionTarget = environment.getAgentConnectionTarget();
-      this.installEnvironmentRuntime(threadId, environment, agentConnectionTarget);
-    }
+    this.setEnvironmentRuntime(threadId, environment);
   }
 
   detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
@@ -383,7 +341,10 @@ export class EnvironmentService {
   }
 
   suspendEnvironmentRuntime(threadId: string): void {
-    void this.suspendEnvironmentRuntimeAndWait(threadId);
+    this.trackEnvironmentRuntimeSuspension(
+      threadId,
+      this.suspendEnvironmentRuntimeAndWait(threadId),
+    );
   }
 
   async suspendEnvironmentRuntimeAndWait(threadId: string): Promise<void> {
@@ -435,6 +396,23 @@ export class EnvironmentService {
     } catch (error) {
       this.callbacks.onCleanupFailure(threadId, environmentId, error);
     }
+  }
+
+  private trackEnvironmentRuntimeSuspension(
+    threadId: string,
+    suspendPromise: Promise<void>,
+  ): Promise<void> {
+    const tracked = suspendPromise.finally(() => {
+      if (this.environmentRuntimeSuspendsByThreadId.get(threadId) === tracked) {
+        this.environmentRuntimeSuspendsByThreadId.delete(threadId);
+      }
+    });
+    this.environmentRuntimeSuspendsByThreadId.set(threadId, tracked);
+    return tracked;
+  }
+
+  private async awaitEnvironmentRuntimeSuspension(threadId: string): Promise<void> {
+    await this.environmentRuntimeSuspendsByThreadId.get(threadId);
   }
 
   async destroyThreadEnvironment(threadId: string): Promise<void> {

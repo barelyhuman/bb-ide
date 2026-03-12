@@ -37,7 +37,6 @@ const STORAGE_BUCKET_LABELS: Record<SystemHealthStorageBucketKey, string> = {
   database_shm: "Database SHM",
   daemon_logs: "Daemon Logs",
   environment_agent_logs: "Environment Agent Logs",
-  environment_agent_state: "Environment Agent State",
   worktrees: "Worktrees",
   attachments: "Attachments",
   backups: "Backups",
@@ -122,7 +121,9 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
   const statusCounts: Record<Thread["status"], number> = {
     created: 0,
     provisioning: 0,
+    provisioned: 0,
     provisioning_failed: 0,
+    error: 0,
     active: 0,
     idle: 0,
   };
@@ -140,7 +141,9 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
     archived,
     created: statusCounts.created,
     provisioning: statusCounts.provisioning,
+    provisioned: statusCounts.provisioned,
     provisioningFailed: statusCounts.provisioning_failed,
+    error: statusCounts.error,
     active: statusCounts.active,
     idle: statusCounts.idle,
   };
@@ -181,7 +184,6 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
       buildStorageBucket("database_shm", [`${args.dbPath}-shm`]),
       buildStorageBucket("daemon_logs", listRotatingLogArtifacts(args.daemonLogFilePath)),
       buildStorageBucket("environment_agent_logs", [join(beanbagRoot, "environment-agent-logs")]),
-      buildStorageBucket("environment_agent_state", [join(beanbagRoot, "environment-agents")]),
       buildStorageBucket("worktrees", resolveWorktreeBucketPaths(projects, args.runtimeEnv)),
       buildStorageBucket("attachments", [join(beanbagRoot, "attachments")]),
       buildStorageBucket("backups", [join(beanbagRoot, "backups")]),

@@ -16,6 +16,14 @@ const THREAD_STATUS_STATES = {
   },
   provisioning: {
     on: {
+      provisioned: "provisioned",
+      active: "active",
+      idle: "idle",
+      provisioning_failed: "provisioning_failed",
+    },
+  },
+  provisioned: {
+    on: {
       active: "active",
       idle: "idle",
       provisioning_failed: "provisioning_failed",
@@ -24,17 +32,28 @@ const THREAD_STATUS_STATES = {
   provisioning_failed: {
     on: {
       provisioning: "provisioning",
+      provisioned: "provisioned",
+      idle: "idle",
+    },
+  },
+  error: {
+    on: {
+      provisioning: "provisioning",
+      provisioned: "provisioned",
       idle: "idle",
     },
   },
   idle: {
     on: {
       active: "active",
+      error: "error",
       provisioning: "provisioning",
+      provisioned: "provisioned",
     },
   },
   active: {
     on: {
+      error: "error",
       idle: "idle",
     },
   },

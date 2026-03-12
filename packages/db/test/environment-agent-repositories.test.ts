@@ -59,7 +59,8 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "websocket",
+      controlBaseUrl: "http://127.0.0.1:4310",
+      controlAuthToken: "token-1",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -67,7 +68,8 @@ describe("environment-agent repositories", () => {
     expect(sessions.getActiveByThreadId(threadId, 1_000)).toMatchObject({
       id: "sess-1",
       status: "active",
-      transportKind: "websocket",
+      controlBaseUrl: "http://127.0.0.1:4310",
+      controlAuthToken: "token-1",
     });
 
     const touched = sessions.touchHeartbeat({
@@ -90,7 +92,8 @@ describe("environment-agent repositories", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         protocolVersion: 1,
-        transportKind: "http-long-poll",
+        controlBaseUrl: "http://127.0.0.1:4311",
+        controlAuthToken: "token-2",
         leaseExpiresAt: 15_000,
       },
     });
@@ -104,7 +107,8 @@ describe("environment-agent repositories", () => {
     expect(replaced.active).toMatchObject({
       id: "sess-2",
       status: "active",
-      transportKind: "http-long-poll",
+      controlBaseUrl: "http://127.0.0.1:4311",
+      controlAuthToken: "token-2",
     });
     expect(sessions.getActiveByThreadId(threadId, 3_000)).toMatchObject({
       id: "sess-2",
@@ -120,7 +124,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-expire",
       agentInstanceId: "instance-expire",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -155,7 +158,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -165,7 +167,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-2",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -196,17 +197,14 @@ describe("environment-agent repositories", () => {
       agentId: "agent-invalid",
       agentInstanceId: "instance-invalid",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
 
-    sqlite.exec(
-      "UPDATE environment_agent_sessions SET transport_kind='udp', status='broken' WHERE id='sess-invalid'",
-    );
+    sqlite.exec("UPDATE environment_agent_sessions SET status='broken' WHERE id='sess-invalid'");
 
     expect(() => sessions.getById("sess-invalid")).toThrow(
-      "Invalid persisted environment-agent session transport: udp",
+      "Invalid persisted environment-agent session status: broken",
     );
   });
 
@@ -289,7 +287,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-cmd",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -339,7 +336,7 @@ describe("environment-agent repositories", () => {
     ]);
   });
 
-  it("requeues received commands when pending work is rebound to a replacement session", () => {
+  it("keeps received commands bound to their original session", () => {
     const threadId = createThreadId();
     sessions.create({
       id: "sess-old",
@@ -347,7 +344,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-old",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -367,27 +363,16 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-new",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseExpiresAt: 6_000,
       now: 3_500,
     });
 
-    expect(
-      commands.rebindPendingForThread({
-        threadId,
-        sessionId: "sess-new",
-        now: 4_000,
-      }),
-    ).toBe(1);
-
     expect(commands.getById("cmd-received")).toMatchObject({
-      sessionId: "sess-new",
-      state: "queued",
-      updatedAt: 4_000,
+      sessionId: "sess-old",
+      state: "received",
+      updatedAt: 3_000,
     });
-    expect(commands.listDeliverableBySessionId("sess-new").map((command) => command.id)).toEqual([
-      "cmd-received",
-    ]);
+    expect(commands.listDeliverableBySessionId("sess-new")).toEqual([]);
   });
 
   it("treats stale command transitions idempotently and rejects conflicting terminal transitions", () => {

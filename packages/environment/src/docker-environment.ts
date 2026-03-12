@@ -33,7 +33,6 @@ import {
   ensureDockerEnvironmentImageAvailable,
   ensureManagedDockerEnvironmentAgent,
   resolveDockerEnvironmentImage,
-  resolveManagedDockerEnvironmentAgentTarget,
 } from "./docker-environment-agent.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 import {
@@ -159,6 +158,7 @@ function resolveContainerCwd(args: {
 class DockerEnvironment implements IEnvironment {
   readonly kind = "docker";
   readonly info = { ...DOCKER_ENVIRONMENT_INFO };
+  private managedAgentTarget?: EnvironmentAgentConnectionTarget;
 
   constructor(
     private readonly projectId: string,
@@ -204,7 +204,7 @@ class DockerEnvironment implements IEnvironment {
     }
     await this.verifyGitRepositoryAccessibleInContainerAsync();
 
-    await ensureManagedDockerEnvironmentAgent({
+    const managedAgentTarget = await ensureManagedDockerEnvironmentAgent({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
       threadId: this.threadId,
       projectId: this.projectId,
@@ -215,9 +215,13 @@ class DockerEnvironment implements IEnvironment {
       hostPort: this.state.agentHostPort,
       containerPort: this.state.agentContainerPort,
     });
+    if (managedAgentTarget) {
+      this.managedAgentTarget = managedAgentTarget;
+    }
   }
 
   async suspend(): Promise<void> {
+    this.managedAgentTarget = undefined;
     await disposeManagedDockerEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
@@ -249,13 +253,7 @@ class DockerEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    const managedTarget = resolveManagedDockerEnvironmentAgentTarget({
-      projectId: this.projectId,
-      threadId: this.threadId,
-      environmentId: this.kind,
-      workspaceRootPath: this.getWorkspaceRootUnsafe(),
-      runtimeEnv: this.runtimeEnv,
-    });
+    const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for docker environment");
     }

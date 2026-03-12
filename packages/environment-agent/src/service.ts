@@ -35,20 +35,24 @@ export interface EnvironmentAgentServiceOptions {
   logging: {
     filePath: string;
   };
+  control: {
+    endpoint?: {
+      baseUrl: string;
+      authToken: string;
+    };
+  };
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
-    enableSelfSuspend: boolean;
-    selfSuspendDebounceMs: number;
   };
 }
 
 const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
 const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
+const BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL =
+  "BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL";
 const BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS =
   "BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS";
-const BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS =
-  "BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS";
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -106,17 +110,20 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     logging: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
+    control: {
+      endpoint: args.env[BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL]?.trim()
+        ? {
+            baseUrl: args.env[BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL]!.trim(),
+            authToken,
+          }
+        : undefined,
+    },
     session: {
       pollIntervalMs:
         parsePositiveIntegerEnv(
           args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
         ) ?? 250,
       commandBatchLimit: 50,
-      enableSelfSuspend: true,
-      selfSuspendDebounceMs:
-        parsePositiveIntegerEnv(
-          args.env[BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS],
-        ) ?? 1_000,
     },
   };
 }
@@ -165,6 +172,7 @@ export async function startEnvironmentAgentService(
     onSessionSyncRequested: () => {
       sessionSupervisor?.poke();
     },
+    onShutdownRequested: () => close(),
   });
   logger.log("info", "environment-agent http listening", {
     baseUrl: server.baseUrl,
@@ -200,6 +208,7 @@ export async function startEnvironmentAgentService(
         runtime,
         sessionRuntime,
         sessionSync,
+        controlEndpoint: options.control.endpoint,
         pollIntervalMs: options.session.pollIntervalMs,
         commandBatchLimit: options.session.commandBatchLimit,
         onError: (error) => {
@@ -207,12 +216,6 @@ export async function startEnvironmentAgentService(
             error: error instanceof Error ? error.message : String(error),
           });
         },
-        ...(options.session.enableSelfSuspend
-          ? {
-              onQuiescent: close,
-              selfSuspendDebounceMs: options.session.selfSuspendDebounceMs,
-            }
-          : {}),
       });
       await sessionSupervisor.start();
     }

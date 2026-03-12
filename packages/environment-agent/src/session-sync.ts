@@ -6,9 +6,9 @@ import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
 import type {
   EnvironmentAgentSessionCommandAckItem,
   EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionReplayRequestMessage,
   EnvironmentAgentSessionWelcomeMessage,
 } from "./session-protocol.js";
+import { compareEnvironmentAgentSessionCursors } from "./session-protocol.js";
 import type { EnvironmentAgentSessionHttpClient } from "./session-http-client.js";
 
 export interface EnvironmentAgentSessionSyncOptions {
@@ -26,7 +26,10 @@ export interface EnvironmentAgentPulledCommand {
 export interface FlushEnvironmentAgentEventBatchResult {
   sessionId: string;
   acknowledged: boolean;
-  replayRequested?: EnvironmentAgentSessionReplayRequestMessage;
+  resetCursor?: {
+    generation: number;
+    sequence: number;
+  };
 }
 
 export class EnvironmentAgentSessionSync {
@@ -54,13 +57,6 @@ export class EnvironmentAgentSessionSync {
         },
         welcome.sentAt,
       );
-      if (channel.deliverCommandsAfter !== undefined) {
-        this.options.runtime.alignLastDeliveredCommandCursor(
-          args.threadId,
-          channel.deliverCommandsAfter,
-          welcome.sentAt,
-        );
-      }
     }
     return welcome;
   }
@@ -102,16 +98,19 @@ export class EnvironmentAgentSessionSync {
       sessionId: state.sessionId,
       payload: { batches: [batch] },
     });
-    if (response.type === "replay_request") {
-      return {
-        sessionId: state.sessionId,
-        acknowledged: false,
-        replayRequested: response,
-      };
-    }
-
     const ack = response.payload.channels.find((channel) => channel.channelId === threadId);
     if (ack) {
+      const batchTail = {
+        generation: batch.generation,
+        sequence: batch.events[batch.events.length - 1]!.sequence,
+      };
+      if (compareEnvironmentAgentSessionCursors(ack.ackedThrough, batchTail) < 0) {
+        return {
+          sessionId: state.sessionId,
+          acknowledged: false,
+          resetCursor: ack.ackedThrough,
+        };
+      }
       this.options.runtime.acknowledgeEvents({
         threadId,
         generation: ack.ackedThrough.generation,
@@ -166,14 +165,12 @@ export class EnvironmentAgentSessionSync {
       });
 
     if (pulled.length > 0) {
-      const deliveredThrough = pulled[pulled.length - 1]!.commandCursor;
       await this.options.client.acknowledgeCommands(state.sessionId, {
         commands: pulled.map((command) => ({
           commandId: command.commandId,
           channelId: args.threadId,
           state: command.ackState,
         })),
-        deliveredThrough,
       });
       for (const command of pulled) {
         if (command.ackState === "received") {

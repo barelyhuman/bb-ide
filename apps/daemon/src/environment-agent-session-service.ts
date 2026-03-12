@@ -3,7 +3,6 @@ import type {
   EnvironmentAgentCursorPosition,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRecord,
-  EnvironmentAgentSessionTransportKind,
 } from "@beanbag/db";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
@@ -16,8 +15,6 @@ import {
   type EnvironmentAgentSessionEventBatchPayload,
   type EnvironmentAgentSessionHeartbeatPayload,
   type EnvironmentAgentSessionOpenPayload,
-  type EnvironmentAgentSessionReplayRequestMessage,
-  type EnvironmentAgentSessionTransportKind as ClientEnvironmentAgentSessionTransportKind,
   type EnvironmentAgentSessionWelcomeMessage,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -33,7 +30,6 @@ export interface EnvironmentAgentSessionServiceOptions {
   commandLongPollTimeoutMs?: number;
   commandLongPollIntervalMs?: number;
   clock?: () => number;
-  preferredTransports?: readonly EnvironmentAgentSessionTransportKind[];
   commandDispatcher?: EnvironmentAgentCommandDispatcher;
   eventApplier?: EnvironmentAgentEventApplier;
   onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
@@ -43,22 +39,6 @@ const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
-const DEFAULT_PREFERRED_TRANSPORTS = [
-  "websocket",
-  "http-long-poll",
-] as const satisfies readonly EnvironmentAgentSessionTransportKind[];
-
-function chooseSessionTransport(args: {
-  supportedTransports: ClientEnvironmentAgentSessionTransportKind[];
-  preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
-}): EnvironmentAgentSessionTransportKind {
-  for (const preferred of args.preferredTransports) {
-    if (args.supportedTransports.includes(preferred)) {
-      return preferred;
-    }
-  }
-  throw new Error("No compatible environment-agent session transport");
-}
 
 function cursorForReply(args: {
   threadId: string;
@@ -135,7 +115,6 @@ export class EnvironmentAgentSessionService {
   private readonly heartbeatIntervalMs: number;
   private readonly commandLongPollTimeoutMs: number;
   private readonly commandLongPollIntervalMs: number;
-  private readonly preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
   private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
   private readonly eventApplier?: EnvironmentAgentEventApplier;
   private readonly onSessionInvalidated?: (
@@ -155,8 +134,6 @@ export class EnvironmentAgentSessionService {
       options.commandLongPollTimeoutMs ?? DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS;
     this.commandLongPollIntervalMs =
       options.commandLongPollIntervalMs ?? DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS;
-    this.preferredTransports =
-      options.preferredTransports ?? DEFAULT_PREFERRED_TRANSPORTS;
     this.commandDispatcher = options.commandDispatcher;
     this.eventApplier = options.eventApplier;
     this.onSessionInvalidated = options.onSessionInvalidated;
@@ -197,22 +174,14 @@ export class EnvironmentAgentSessionService {
       throw new Error("Multi-channel environment-agent sessions are not supported yet");
     }
 
-    const transportKind = chooseSessionTransport({
-      supportedTransports: args.payload.supportedTransports,
-      preferredTransports: this.preferredTransports,
-    });
     const opened = this.sessions.openSession({
       threadId: args.threadId,
       agentId: args.payload.agentId,
       agentInstanceId: args.payload.agentInstanceId,
       protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-      transportKind,
+      controlBaseUrl: args.payload.controlEndpoint?.baseUrl,
+      controlAuthToken: args.payload.controlEndpoint?.authToken,
       leaseTtlMs: this.leaseTtlMs,
-      now,
-    });
-    this.commandDispatcher?.rebindPendingCommandsForThread({
-      threadId: args.threadId,
-      sessionId: opened.active.id,
       now,
     });
     if (opened.replaced) {
@@ -238,7 +207,6 @@ export class EnvironmentAgentSessionService {
         payload: {
           leaseTtlMs: this.leaseTtlMs,
           heartbeatIntervalMs: this.heartbeatIntervalMs,
-          selectedTransport: transportKind,
           protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
           channels: [
             {
@@ -247,7 +215,6 @@ export class EnvironmentAgentSessionService {
                 generation: cursor?.generation ?? channel.generation,
                 sequenceExclusive: cursor?.sequence ?? 0,
               },
-              deliverCommandsAfter: 0,
             },
           ],
         },
@@ -302,6 +269,30 @@ export class EnvironmentAgentSessionService {
     return closed;
   }
 
+  retireActiveSessionForThread(args: {
+    threadId: string;
+    reason: "daemon_shutdown" | "migration" | "internal_error";
+    now?: number;
+  }): EnvironmentAgentSessionRecord | undefined {
+    const now = args.now ?? this.clock();
+    const active = this.sessions.getActiveSessionByThreadId(args.threadId, now);
+    if (!active) {
+      return undefined;
+    }
+
+    const closed = this.sessions.closeSession({
+      sessionId: active.id,
+      reason: args.reason,
+      now,
+    });
+    if (!closed) {
+      return undefined;
+    }
+
+    this.commandDispatcher?.invalidateCommandsForSession(closed, now);
+    return closed;
+  }
+
   expireLeases(now?: number): EnvironmentAgentSessionRecord[] {
     const expired = this.sessions.expireLeases(now);
     for (const session of expired) {
@@ -335,7 +326,7 @@ export class EnvironmentAgentSessionService {
     sessionId: string;
     payload: EnvironmentAgentSessionEventBatchPayload;
     now?: number;
-  }): Promise<EnvironmentAgentSessionEventAckMessage | EnvironmentAgentSessionReplayRequestMessage> {
+  }): Promise<EnvironmentAgentSessionEventAckMessage> {
     if (!this.eventApplier) {
       throw new Error("Environment-agent session event apply is unavailable");
     }
@@ -354,7 +345,7 @@ export class EnvironmentAgentSessionService {
       now,
     }).then((result) => {
       if (result.blockedReason === "gap") {
-        const replayFrom = cursorForReply({
+        const ackedThrough = cursorForReply({
           threadId: args.threadId,
           batchGeneration: batch.generation,
           acknowledgedCursor: result.acknowledgedCursor,
@@ -364,14 +355,17 @@ export class EnvironmentAgentSessionService {
         });
         return {
           protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-          type: "replay_request",
+          type: "event_ack",
           messageId: randomUUID(),
           sessionId: session.id,
           sentAt: now,
           payload: {
-            channelId: args.threadId,
-            generation: replayFrom.generation,
-            afterSequence: replayFrom.sequence,
+            channels: [
+              {
+                channelId: args.threadId,
+                ackedThrough,
+              },
+            ],
           },
         };
       }

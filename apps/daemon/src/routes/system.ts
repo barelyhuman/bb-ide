@@ -67,6 +67,8 @@ const shutdownRequestSchema = z.object({
 const RESTART_POLICY_BY_STATUS: Record<Thread["status"], string> = {
   created: "noop",
   provisioning: "noop",
+  provisioned: "noop",
+  error: "noop",
   active: "noop",
   idle: "noop",
   provisioning_failed: "noop",
@@ -76,9 +78,11 @@ function isShutdownBlockingStatus(status: Thread["status"]): boolean {
   switch (status) {
     case "created":
     case "provisioning":
+    case "provisioned":
     case "active":
       return true;
     case "idle":
+    case "error":
     case "provisioning_failed":
       return false;
     default:
@@ -217,9 +221,11 @@ export function createSystemRoutes(
             archived: threads.filter((thread) => thread.archivedAt !== undefined).length,
             created: threads.filter((thread) => thread.status === "created").length,
             provisioning: threads.filter((thread) => thread.status === "provisioning").length,
+            provisioned: threads.filter((thread) => thread.status === "provisioned").length,
             provisioningFailed: threads.filter(
               (thread) => thread.status === "provisioning_failed",
             ).length,
+            error: threads.filter((thread) => thread.status === "error").length,
             active: threads.filter((thread) => thread.status === "active").length,
             idle: threads.filter((thread) => thread.status === "idle").length,
           },
@@ -309,7 +315,7 @@ export function createSystemRoutes(
     .get("/restart-policy", async (c) => {
       return c.json({
         restartPolicyByStatus: RESTART_POLICY_BY_STATUS,
-        shutdownBlockingStatuses: ["created", "provisioning", "active"] as const,
+        shutdownBlockingStatuses: ["created", "provisioning", "provisioned", "active"] as const,
         shouldRestart: shouldRestart(),
       });
     })

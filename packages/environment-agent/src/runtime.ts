@@ -8,6 +8,8 @@ import {
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentCommandAck,
   type EnvironmentAgentDaemonConnectionConfig,
+  type EnvironmentAgentDeliveryReason,
+  type EnvironmentAgentDeliveryRuntimeState,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderFile,
@@ -71,6 +73,13 @@ export class EnvironmentAgentRuntime {
   private commandExecutionCount = 0;
   private hasObservedWork = false;
   private turnState: EnvironmentAgentRuntimeTurnState = "unknown";
+  private deliveryState: EnvironmentAgentDeliveryRuntimeState = "stopped";
+  private connectedToDaemon = false;
+  private retryAttemptCount = 0;
+  private lastAckedSequence: number | undefined;
+  private nextRetryAt: number | undefined;
+  private deliveryIssue: EnvironmentAgentDeliveryReason | undefined;
+  private lastDeliveryError: string | undefined;
 
   constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {}
 
@@ -183,18 +192,46 @@ export class EnvironmentAgentRuntime {
   }
 
   getStatusSnapshot(): EnvironmentAgentStatusSnapshot {
+    const pendingEventCount = Math.max(
+      0,
+      this.sequence - (this.lastAckedSequence ?? 0),
+    );
     return {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
       ...(this.opts.threadId ? { threadId: this.opts.threadId } : {}),
       ...(this.opts.projectId ? { projectId: this.opts.projectId } : {}),
       ...(this.opts.environmentId ? { environmentId: this.opts.environmentId } : {}),
       latestSequence: this.sequence,
-      connectedToDaemon: false,
-      pendingEventCount: this.sequence,
+      ...(this.lastAckedSequence !== undefined
+        ? { lastAckedSequence: this.lastAckedSequence }
+        : {}),
+      connectedToDaemon: this.connectedToDaemon,
+      pendingEventCount,
       pendingCommandCount: this.pendingProviderRequests.size,
-      deliveryState: "stopped",
-      retryAttemptCount: 0,
+      deliveryState: this.deliveryState,
+      ...(this.deliveryIssue ? { deliveryIssue: this.deliveryIssue } : {}),
+      retryAttemptCount: this.retryAttemptCount,
+      ...(this.nextRetryAt !== undefined ? { nextRetryAt: this.nextRetryAt } : {}),
+      ...(this.lastDeliveryError ? { lastDeliveryError: this.lastDeliveryError } : {}),
     };
+  }
+
+  setDaemonDeliveryState(args: {
+    connectedToDaemon: boolean;
+    deliveryState: EnvironmentAgentDeliveryRuntimeState;
+    retryAttemptCount: number;
+    lastAckedSequence?: number;
+    nextRetryAt?: number;
+    deliveryIssue?: EnvironmentAgentDeliveryReason;
+    lastDeliveryError?: string;
+  }): void {
+    this.connectedToDaemon = args.connectedToDaemon;
+    this.deliveryState = args.deliveryState;
+    this.retryAttemptCount = args.retryAttemptCount;
+    this.lastAckedSequence = args.lastAckedSequence;
+    this.nextRetryAt = args.nextRetryAt;
+    this.deliveryIssue = args.deliveryIssue;
+    this.lastDeliveryError = args.lastDeliveryError;
   }
 
   getQuiescenceSnapshot(): EnvironmentAgentRuntimeQuiescenceSnapshot {

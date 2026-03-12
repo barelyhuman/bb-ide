@@ -1,16 +1,11 @@
-import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { request as httpRequest } from "node:http";
-import { dirname, join } from "node:path";
+import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { runCommandAsync } from "./process.js";
 
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
-const HEALTH_TIMEOUT_MS = 500;
-const STATE_VERSION = 1 as const;
 const DOCKER_DAEMON_HOST_OVERRIDE_ENV = "BEANBAG_DOCKER_DAEMON_HOST";
 const DEFAULT_DOCKER_DAEMON_HOST = "host.docker.internal";
 export const DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT = 4310;
@@ -18,7 +13,6 @@ export const DEFAULT_DOCKER_ENVIRONMENT_IMAGE = "beanbag/environment:local";
 const DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT = "/opt/beanbag/environment-agent";
 
 export interface ManagedDockerEnvironmentAgentRecord {
-  version: typeof STATE_VERSION;
   baseUrl: string;
   authToken: string;
   threadId: string;
@@ -60,6 +54,7 @@ interface CommandExecutor {
 }
 
 const dockerEnvironmentAgentLocks = new Map<string, Promise<void>>();
+const managedDockerEnvironmentAgents = new Map<string, ManagedDockerEnvironmentAgentRecord>();
 
 function managedDockerEnvironmentAgentIdentityKey(
   args: ManagedDockerEnvironmentAgentIdentity,
@@ -93,178 +88,40 @@ async function withManagedDockerEnvironmentAgentLock(
   await inFlight;
 }
 
-function sanitizeSegment(value: string): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized.length > 0 ? normalized : "environment";
-}
-
-function hashWorkspaceRoot(workspaceRootPath: string): string {
-  return createHash("sha1")
-    .update(workspaceRootPath)
-    .digest("hex")
-    .slice(0, 12);
-}
-
-function resolveLegacyStateFilePath(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string {
-  return join(
-    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
-    sanitizeSegment(args.projectId),
-    `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}.json`,
-  );
-}
-
-function resolveStateFilePath(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string {
-  return join(
-    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
-    sanitizeSegment(args.projectId),
-    `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}-${hashWorkspaceRoot(args.workspaceRootPath)}.json`,
-  );
-}
-
-function resolveStateFilePathCandidates(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath?: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string[] {
-  const candidates: string[] = [];
-  if (args.workspaceRootPath) {
-    candidates.push(resolveStateFilePath({
-      projectId: args.projectId,
-      threadId: args.threadId,
-      environmentId: args.environmentId,
-      workspaceRootPath: args.workspaceRootPath,
-      runtimeEnv: args.runtimeEnv,
-    }));
-  }
-  candidates.push(resolveLegacyStateFilePath(args));
-  return Array.from(new Set(candidates));
-}
-
-function readRecord(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath?: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): ManagedDockerEnvironmentAgentRecord | undefined {
-  for (const stateFilePath of resolveStateFilePathCandidates(args)) {
-    if (!existsSync(stateFilePath)) {
-      continue;
-    }
-
-    try {
-      const parsed = JSON.parse(readFileSync(stateFilePath, "utf8")) as Partial<ManagedDockerEnvironmentAgentRecord>;
-      if (
-        parsed.version !== STATE_VERSION ||
-        typeof parsed.baseUrl !== "string" ||
-        typeof parsed.authToken !== "string" ||
-        typeof parsed.threadId !== "string" ||
-        typeof parsed.projectId !== "string" ||
-        typeof parsed.environmentId !== "string" ||
-        typeof parsed.workspaceRoot !== "string" ||
-        typeof parsed.containerName !== "string" ||
-        typeof parsed.hostPort !== "number" ||
-        typeof parsed.containerPort !== "number" ||
-        typeof parsed.installRoot !== "string"
-      ) {
-        continue;
-      }
-      return parsed as ManagedDockerEnvironmentAgentRecord;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
-}
-
-function writeRecord(
-  args: {
-    projectId: string;
-    threadId: string;
-    environmentId: string;
-    workspaceRootPath: string;
-    runtimeEnv?: Record<string, string | undefined>;
-  },
-  record: ManagedDockerEnvironmentAgentRecord,
-): void {
-  const stateFilePath = resolveStateFilePath(args);
-  mkdirSync(dirname(stateFilePath), { recursive: true });
-  writeFileSync(stateFilePath, JSON.stringify(record, null, 2), "utf8");
-  const legacyStateFilePath = resolveLegacyStateFilePath(args);
-  if (legacyStateFilePath !== stateFilePath) {
-    rmSync(legacyStateFilePath, { force: true });
-  }
-}
-
-function removeRecord(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath?: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): void {
-  for (const stateFilePath of resolveStateFilePathCandidates(args)) {
-    rmSync(stateFilePath, { force: true });
-  }
-}
-
-function pingEnvironmentAgent(
-  baseUrl: string,
-  authToken: string,
-  timeoutMs: number,
-): Promise<boolean> {
-  return new Promise((resolvePromise) => {
-    const url = new URL("/control/status", baseUrl);
-    const req = httpRequest(
-      {
-        method: "POST",
-        hostname: url.hostname,
-        port: url.port,
-        path: url.pathname,
-        timeout: timeoutMs,
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${authToken}`,
-        },
-      },
-      (response) => {
-        response.resume();
-        resolvePromise(response.statusCode === 200);
-      },
-    );
-    req.on("timeout", () => {
-      req.destroy();
-      resolvePromise(false);
-    });
-    req.on("error", () => {
-      resolvePromise(false);
-    });
-    req.end("{}");
-  });
+function toManagedDockerEnvironmentAgentTarget(args: {
+  record: ManagedDockerEnvironmentAgentRecord;
+  providerLaunch?: {
+    command: string;
+    args: string[];
+  };
+}): EnvironmentAgentConnectionTarget {
+  return {
+    transport: "http",
+    baseUrl: args.record.baseUrl,
+    headers: {
+      authorization: `Bearer ${args.record.authToken}`,
+    },
+    ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
+  };
 }
 
 async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Promise<void> {
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (await pingEnvironmentAgent(baseUrl, authToken, HEALTH_TIMEOUT_MS)) {
-      return;
+    try {
+      const response = await fetch(new URL("/control/status", baseUrl), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${authToken}`,
+        },
+        body: "{}",
+      });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Retry until the startup deadline expires.
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
   }
@@ -410,9 +267,9 @@ export async function ensureManagedDockerEnvironmentAgent(
     generateAuthToken?: () => string;
     resolveArtifactEntry?: () => string;
   },
-): Promise<void> {
+): Promise<EnvironmentAgentConnectionTarget | undefined> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
-    return;
+    return undefined;
   }
 
   const stateIdentity: ManagedDockerEnvironmentAgentIdentity = {
@@ -421,23 +278,12 @@ export async function ensureManagedDockerEnvironmentAgent(
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
+  let managedTarget: EnvironmentAgentConnectionTarget | undefined;
   await withManagedDockerEnvironmentAgentLock(stateIdentity, async () => {
-    const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
-    const existing = readRecord(stateRecordIdentity);
+    const identityKey = managedDockerEnvironmentAgentIdentityKey(stateIdentity);
+    const existing = managedDockerEnvironmentAgents.get(identityKey);
     if (existing) {
-      if (
-        existing.workspaceRoot === args.workspaceRootPath &&
-        existing.containerName === args.containerName &&
-        existing.hostPort === args.hostPort &&
-        await pingEnvironmentAgent(
-          existing.baseUrl,
-          existing.authToken,
-          HEALTH_TIMEOUT_MS,
-        )
-      ) {
-        return;
-      }
-      removeRecord(stateRecordIdentity);
+      managedDockerEnvironmentAgents.delete(identityKey);
     }
 
     const executor = deps?.run ?? runCommandAsync;
@@ -494,6 +340,8 @@ export async function ensureManagedDockerEnvironmentAgent(
         `BB_ENVIRONMENT_ID=${args.environmentId}`,
         "-e",
         `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
+        "-e",
+        `BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL=http://${HOST}:${args.hostPort}`,
         ...(args.runtimeEnv.BEANBAG_ROOT?.trim()
           ? ["-e", `BEANBAG_ROOT=${args.runtimeEnv.BEANBAG_ROOT}`]
           : []),
@@ -516,8 +364,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     const baseUrl = `http://${HOST}:${args.hostPort}`;
     await waitForAgent(baseUrl, authToken);
 
-    writeRecord(stateRecordIdentity, {
-      version: STATE_VERSION,
+    const record = {
       baseUrl,
       authToken,
       threadId: args.threadId,
@@ -528,34 +375,13 @@ export async function ensureManagedDockerEnvironmentAgent(
       hostPort: args.hostPort,
       containerPort,
       installRoot,
+    };
+    managedDockerEnvironmentAgents.set(identityKey, record);
+    managedTarget = toManagedDockerEnvironmentAgentTarget({
+      record,
     });
   });
-}
-
-export function resolveManagedDockerEnvironmentAgentTarget(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath: string;
-  runtimeEnv: Record<string, string | undefined>;
-  providerLaunch?: {
-    command: string;
-    args: string[];
-  };
-}): EnvironmentAgentConnectionTarget | undefined {
-  const record = readRecord(args);
-  if (!record) {
-    return undefined;
-  }
-
-  return {
-    transport: "http",
-    baseUrl: record.baseUrl,
-    headers: {
-      authorization: `Bearer ${record.authToken}`,
-    },
-    ...(args.providerLaunch ? { providerLaunch: args.providerLaunch } : {}),
-  };
+  return managedTarget;
 }
 
 export function __testOnly__resolveDockerDaemonUrl(
@@ -591,16 +417,15 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
         },
       );
     }
-    removeRecord(args);
+    managedDockerEnvironmentAgents.delete(managedDockerEnvironmentAgentIdentityKey(args));
   });
 }
 
-export function __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath(args: {
+export function __testOnly__getManagedDockerEnvironmentAgentRecord(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string {
-  return resolveStateFilePath(args);
+}): ManagedDockerEnvironmentAgentRecord | undefined {
+  return managedDockerEnvironmentAgents.get(managedDockerEnvironmentAgentIdentityKey(args));
 }

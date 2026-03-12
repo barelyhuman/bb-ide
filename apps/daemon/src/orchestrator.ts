@@ -92,6 +92,7 @@ import type {
   ThreadRepository,
   EventRepository,
   ProjectRepository,
+  EnvironmentAgentSessionRepository,
 } from "@beanbag/db";
 import {
   AgentServer,
@@ -563,6 +564,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private scheduler: SchedulerService = new InMemorySchedulerService(),
     private environmentAgentCommandDispatcher?: EnvironmentAgentCommandDispatcher,
     private environmentAgentSessionService?: EnvironmentAgentSessionService,
+    private environmentAgentSessionRepo?: EnvironmentAgentSessionRepository,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
@@ -659,6 +661,40 @@ export class Orchestrator implements ThreadOrchestrator {
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
+
+    const interruptedProvisioningThreadIds =
+      typeof this.threadRepo.listNonArchivedIdsByStatuses === "function"
+        ? this.threadRepo.listNonArchivedIdsByStatuses(["provisioning", "provisioned"])
+        : [];
+    for (const threadId of interruptedProvisioningThreadIds) {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread || thread.archivedAt !== undefined) {
+        continue;
+      }
+
+      const statusChanged = this._setThreadStatus(
+        threadId,
+        "provisioning_failed",
+        false,
+      );
+      const message =
+        thread.status === "provisioned"
+          ? "Daemon restart interrupted provider bootstrap before the thread became active."
+          : "Daemon restart interrupted environment provisioning before provider bootstrap completed.";
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message,
+      });
+      if (thread.status === "provisioned") {
+        this.environmentAgentSessionService?.retireActiveSessionForThread({
+          threadId,
+          reason: "migration",
+        });
+      }
+      if (statusChanged) {
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      }
+    }
   }
 
   async reconcileManagedArtifacts(): Promise<void> {
@@ -693,11 +729,10 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (
       result.removedLogArtifacts > 0 ||
-      result.removedStateFiles > 0 ||
       result.removedWorkspaceDirectories > 0
     ) {
       console.log(
-        `Managed artifact cleanup removed ${result.removedLogArtifacts} log sets, ${result.removedStateFiles} state files, ${result.removedWorkspaceDirectories} workspace directories.`,
+        `Managed artifact cleanup removed ${result.removedLogArtifacts} log sets and ${result.removedWorkspaceDirectories} workspace directories.`,
       );
     }
   }
@@ -932,7 +967,11 @@ export class Orchestrator implements ThreadOrchestrator {
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
-    if (thread.status === "created" || thread.status === "provisioning") {
+    if (
+      thread.status === "created" ||
+      thread.status === "provisioning" ||
+      thread.status === "provisioned"
+    ) {
       throw threadProvisioningError(threadId);
     }
     if (thread.status === "provisioning_failed") {
@@ -1075,7 +1114,13 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!thread) return;
       if (thread.archivedAt !== undefined) return;
       if (thread.status === "active") return;
-      if (thread.status === "created" || thread.status === "provisioning") return;
+      if (
+        thread.status === "created" ||
+        thread.status === "provisioning" ||
+        thread.status === "provisioned"
+      ) {
+        return;
+      }
 
       const queuedMessage = thread.queuedMessages?.[0];
       if (!queuedMessage) return;
@@ -1542,7 +1587,9 @@ export class Orchestrator implements ThreadOrchestrator {
   stop(threadId: string): void {
     const thread = this.threadRepo.getById(threadId);
     const shouldAppendInterruptedEvent =
-      thread?.status === "active" || thread?.status === "provisioning";
+      thread?.status === "active" ||
+      thread?.status === "provisioning" ||
+      thread?.status === "provisioned";
 
     this._cleanupThreadRuntime(threadId);
     if (shouldAppendInterruptedEvent) {
@@ -1557,8 +1604,39 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   handleEnvironmentAgentSessionInvalidated(threadId: string): void {
+    this._clearEnvironmentAgentRuntimeState(threadId);
+
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+
+    if (thread.status === "active") {
+      const statusChanged = this._setThreadStatus(threadId, "error", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent was lost while the thread was active.",
+      });
+      if (statusChanged) {
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      }
+      return;
+    }
+
+    if (thread.status === "provisioned") {
+      const statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent was lost before provider bootstrap completed.",
+      });
+      if (statusChanged) {
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      }
+    }
+  }
+
+  private _clearEnvironmentAgentRuntimeState(threadId: string): void {
     this.providerThreadIdByThreadId.delete(threadId);
     this.agentServer.clearSessionState(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
   }
 
   /**
@@ -2965,6 +3043,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (hydratedThread) {
       this._broadcastThreadChanged(threadId, ["work-status-changed"]);
     }
+    this._setThreadStatus(threadId, "provisioned");
     const providerInput = this._normalizePromptInputForProvider(requestedInput);
 
     const effectiveDeveloperInstructions = this._buildDeveloperInstructions({
@@ -3090,6 +3169,10 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
+    this.environmentAgentSessionService?.retireActiveSessionForThread({
+      threadId,
+      reason: "migration",
+    });
     this.environmentService.suspendEnvironmentRuntime(threadId);
   }
 
@@ -3272,6 +3355,16 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
+      managedEnvironmentAgentReconnectTarget: (() => {
+        const session = this.environmentAgentSessionRepo?.getLatestByThreadId(threadId);
+        if (!session?.controlBaseUrl) {
+          return undefined;
+        }
+        return {
+          baseUrl: session.controlBaseUrl,
+          ...(session.controlAuthToken ? { authToken: session.controlAuthToken } : {}),
+        };
+      })(),
       services: {
         llmCompletion: async ({ cwd, includeUnstaged }: LlmCommitMessageGenerationArgs) => {
           const generated = await this.llmCompletionService.generateCommitMessage({
@@ -3719,7 +3812,7 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!this.agentServer.isMissingProviderThreadError(error) || args.activeTurnId) {
         throw error;
       }
-      this.handleEnvironmentAgentSessionInvalidated(args.threadId);
+      this._clearEnvironmentAgentRuntimeState(args.threadId);
       const recoveredProviderThreadId =
         await this._restartProviderThreadAfterMissingTurnStart(
           args.threadId,
@@ -4088,9 +4181,12 @@ export class Orchestrator implements ThreadOrchestrator {
         return undefined;
       case "created":
       case "provisioning":
+      case "provisioned":
         return "Thread provisioning is in progress";
       case "provisioning_failed":
         return "Thread provisioning failed; reprovision the thread before requesting actions";
+      case "error":
+        return "Thread execution failed because its live environment-agent was lost; send a follow-up to recover";
       default:
         return assertNever(thread.status);
     }
@@ -4806,9 +4902,21 @@ export class Orchestrator implements ThreadOrchestrator {
 
     let statusChanged = false;
     if (thread.status === "active") {
-      statusChanged = this._setThreadStatus(threadId, "idle", false);
-    } else if (thread.status === "created" || thread.status === "provisioning") {
+      statusChanged = this._setThreadStatus(threadId, "error", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent exited while the thread was active.",
+      });
+    } else if (
+      thread.status === "created" ||
+      thread.status === "provisioning" ||
+      thread.status === "provisioned"
+    ) {
       statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent exited before thread provisioning completed.",
+      });
     }
 
     if (statusChanged) {

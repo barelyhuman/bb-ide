@@ -32,6 +32,33 @@ describe("EnvironmentAgentRuntime", () => {
     });
   });
 
+  it("updates daemon delivery status for retry visibility", () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+
+    runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
+    runtime.setDaemonDeliveryState({
+      connectedToDaemon: false,
+      deliveryState: "retrying",
+      retryAttemptCount: 2,
+      lastAckedSequence: 1,
+      nextRetryAt: 123_456,
+      deliveryIssue: "transport_error",
+      lastDeliveryError: "daemon unavailable",
+    });
+
+    expect(runtime.getStatusSnapshot()).toMatchObject({
+      latestSequence: 1,
+      lastAckedSequence: 1,
+      pendingEventCount: 0,
+      connectedToDaemon: false,
+      deliveryState: "retrying",
+      retryAttemptCount: 2,
+      nextRetryAt: 123_456,
+      deliveryIssue: "transport_error",
+      lastDeliveryError: "daemon unavailable",
+    });
+  });
+
   it("publishes appended events to subscribers", () => {
     const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
     const events: Array<{ sequence: number; type: string }> = [];

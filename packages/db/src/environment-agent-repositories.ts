@@ -5,9 +5,7 @@ import {
   eq,
   gt,
   inArray,
-  isNull,
   lte,
-  or,
   sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -18,10 +16,6 @@ import {
   environmentAgentCursors,
   environmentAgentSessions,
 } from "./schema.js";
-
-export type EnvironmentAgentSessionTransportKind =
-  | "websocket"
-  | "http-long-poll";
 
 export type EnvironmentAgentSessionStatus =
   | "active"
@@ -48,7 +42,8 @@ export interface EnvironmentAgentSessionRecord {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  transportKind: EnvironmentAgentSessionTransportKind;
+  controlBaseUrl?: string;
+  controlAuthToken?: string;
   status: EnvironmentAgentSessionStatus;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
@@ -104,7 +99,8 @@ export interface CreateEnvironmentAgentSessionInput {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  transportKind: EnvironmentAgentSessionTransportKind;
+  controlBaseUrl?: string;
+  controlAuthToken?: string;
   leaseExpiresAt: number;
   now?: number;
 }
@@ -127,19 +123,6 @@ const PENDING_ENVIRONMENT_AGENT_COMMAND_STATES: readonly EnvironmentAgentCommand
   "received",
   "started",
 ];
-
-function isEnvironmentAgentSessionTransportKind(
-  value: string,
-): value is EnvironmentAgentSessionTransportKind {
-  return value === "websocket" || value === "http-long-poll";
-}
-
-function normalizeEnvironmentAgentSessionTransportKind(
-  value: string,
-): EnvironmentAgentSessionTransportKind {
-  if (isEnvironmentAgentSessionTransportKind(value)) return value;
-  throw new Error(`Invalid persisted environment-agent session transport: ${value}`);
-}
 
 function isEnvironmentAgentSessionStatus(
   value: string,
@@ -218,7 +201,8 @@ function rowToEnvironmentAgentSessionRecord(
     agentId: row.agentId,
     agentInstanceId: row.agentInstanceId,
     protocolVersion: row.protocolVersion,
-    transportKind: normalizeEnvironmentAgentSessionTransportKind(row.transportKind),
+    ...(row.controlBaseUrl !== null ? { controlBaseUrl: row.controlBaseUrl } : {}),
+    ...(row.controlAuthToken !== null ? { controlAuthToken: row.controlAuthToken } : {}),
     status: normalizeEnvironmentAgentSessionStatus(row.status),
     leaseExpiresAt: row.leaseExpiresAt,
     ...(row.lastHeartbeatAt !== null ? { lastHeartbeatAt: row.lastHeartbeatAt } : {}),
@@ -421,7 +405,8 @@ export class EnvironmentAgentSessionRepository {
       agentId: args.agentId,
       agentInstanceId: args.agentInstanceId,
       protocolVersion: args.protocolVersion,
-      transportKind: args.transportKind,
+      controlBaseUrl: args.controlBaseUrl ?? null,
+      controlAuthToken: args.controlAuthToken ?? null,
       status: "active",
       leaseExpiresAt: args.leaseExpiresAt,
       lastHeartbeatAt: null,
@@ -457,6 +442,16 @@ export class EnvironmentAgentSessionRepository {
           gt(environmentAgentSessions.leaseExpiresAt, now),
         ),
       )
+      .orderBy(desc(environmentAgentSessions.updatedAt))
+      .get();
+    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
+  }
+
+  getLatestByThreadId(threadId: string): EnvironmentAgentSessionRecord | undefined {
+    const row = this.db
+      .select()
+      .from(environmentAgentSessions)
+      .where(eq(environmentAgentSessions.threadId, threadId))
       .orderBy(desc(environmentAgentSessions.updatedAt))
       .get();
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
@@ -641,7 +636,8 @@ export class EnvironmentAgentSessionRepository {
         agentId: args.nextSession.agentId,
         agentInstanceId: args.nextSession.agentInstanceId,
         protocolVersion: args.nextSession.protocolVersion,
-        transportKind: args.nextSession.transportKind,
+        controlBaseUrl: args.nextSession.controlBaseUrl ?? null,
+        controlAuthToken: args.nextSession.controlAuthToken ?? null,
         status: "active",
         leaseExpiresAt: args.nextSession.leaseExpiresAt,
         lastHeartbeatAt: null,
@@ -820,44 +816,6 @@ export class EnvironmentAgentCommandRepository {
     }
 
     return query.all().map(rowToEnvironmentAgentCommandRecord);
-  }
-
-  rebindPendingForThread(args: {
-    threadId: string;
-    sessionId: string;
-    now?: number;
-  }): number {
-    const now = args.now ?? Date.now();
-    return this.db.transaction((tx) => {
-      const pending = tx
-        .select()
-        .from(environmentAgentCommands)
-        .where(
-          and(
-            eq(environmentAgentCommands.threadId, args.threadId),
-            inArray(environmentAgentCommands.state, ["queued", "sent", "received"]),
-            or(
-              isNull(environmentAgentCommands.sessionId),
-              sql`${environmentAgentCommands.sessionId} <> ${args.sessionId}`,
-            ),
-          ),
-        )
-        .all();
-
-      for (const command of pending) {
-        tx
-          .update(environmentAgentCommands)
-          .set({
-            sessionId: args.sessionId,
-            state: command.state === "received" ? "queued" : command.state,
-            updatedAt: now,
-          })
-          .where(eq(environmentAgentCommands.id, command.id))
-          .run();
-      }
-
-      return pending.length;
-    });
   }
 
   markSent(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {

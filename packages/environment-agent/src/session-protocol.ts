@@ -7,10 +7,6 @@ export const ENVIRONMENT_AGENT_SESSION_PROTOCOL =
   "beanbag.env-agent.v1" as const;
 export const ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION = 1 as const;
 
-export type EnvironmentAgentSessionTransportKind =
-  | "websocket"
-  | "http-long-poll";
-
 export type EnvironmentAgentSessionCloseReason =
   | "agent_shutdown"
   | "daemon_shutdown"
@@ -35,31 +31,27 @@ export interface EnvironmentAgentSessionChannelBootstrap {
   lastDaemonAcked?: EnvironmentAgentSessionCursor;
 }
 
+export interface EnvironmentAgentSessionControlEndpoint {
+  baseUrl: string;
+  authToken: string;
+}
+
 export interface EnvironmentAgentSessionOpenPayload {
   agentId: string;
   agentInstanceId: string;
   supportedProtocolVersions: number[];
-  supportedTransports: EnvironmentAgentSessionTransportKind[];
-  channels: EnvironmentAgentSessionChannelBootstrap[];
-}
-
-export interface EnvironmentAgentSessionResumePayload {
-  previousSessionId: string;
-  agentId: string;
-  agentInstanceId: string;
+  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   channels: EnvironmentAgentSessionChannelBootstrap[];
 }
 
 export interface EnvironmentAgentSessionWelcomeChannel {
   channelId: string;
   applyFrom: EnvironmentAgentSessionCursorExclusive;
-  deliverCommandsAfter?: number;
 }
 
 export interface EnvironmentAgentSessionWelcomePayload {
   leaseTtlMs: number;
   heartbeatIntervalMs: number;
-  selectedTransport: EnvironmentAgentSessionTransportKind;
   protocolVersion: typeof ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION;
   channels: EnvironmentAgentSessionWelcomeChannel[];
 }
@@ -108,13 +100,6 @@ export interface EnvironmentAgentSessionEventAckPayload {
   channels: EnvironmentAgentSessionEventAckChannel[];
 }
 
-export interface EnvironmentAgentSessionReplayRequestPayload {
-  channelId: string;
-  generation: number;
-  afterSequence: number;
-  limit?: number;
-}
-
 export interface EnvironmentAgentSessionCommandBatchItem<
   TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
 > {
@@ -143,7 +128,6 @@ export interface EnvironmentAgentSessionCommandAckItem {
 
 export interface EnvironmentAgentSessionCommandAckPayload {
   commands: EnvironmentAgentSessionCommandAckItem[];
-  deliveredThrough?: number;
 }
 
 export type EnvironmentAgentSessionCommandResultState =
@@ -185,12 +169,6 @@ export interface EnvironmentAgentSessionOpenMessage
   payload: EnvironmentAgentSessionOpenPayload;
 }
 
-export interface EnvironmentAgentSessionResumeMessage
-  extends EnvironmentAgentSessionMessageBase {
-  type: "session_resume";
-  payload: EnvironmentAgentSessionResumePayload;
-}
-
 export interface EnvironmentAgentSessionWelcomeMessage
   extends EnvironmentAgentSessionBoundMessageBase {
   type: "session_welcome";
@@ -214,12 +192,6 @@ export interface EnvironmentAgentSessionEventAckMessage
   extends EnvironmentAgentSessionBoundMessageBase {
   type: "event_ack";
   payload: EnvironmentAgentSessionEventAckPayload;
-}
-
-export interface EnvironmentAgentSessionReplayRequestMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
-  type: "replay_request";
-  payload: EnvironmentAgentSessionReplayRequestPayload;
 }
 
 export interface EnvironmentAgentSessionCommandBatchMessage<
@@ -255,7 +227,6 @@ export interface EnvironmentAgentSessionReplacedMessage
 
 export type EnvironmentAgentSessionClientMessage =
   | EnvironmentAgentSessionOpenMessage
-  | EnvironmentAgentSessionResumeMessage
   | EnvironmentAgentSessionHeartbeatMessage
   | EnvironmentAgentSessionEventBatchMessage
   | EnvironmentAgentSessionCommandAckMessage
@@ -265,7 +236,6 @@ export type EnvironmentAgentSessionClientMessage =
 export type EnvironmentAgentSessionServerMessage =
   | EnvironmentAgentSessionWelcomeMessage
   | EnvironmentAgentSessionEventAckMessage
-  | EnvironmentAgentSessionReplayRequestMessage
   | EnvironmentAgentSessionCommandBatchMessage
   | EnvironmentAgentSessionSessionControlMessage;
 
@@ -334,13 +304,11 @@ export function isEnvironmentAgentSessionMessage(
 
   switch (value.type) {
     case "session_open":
-    case "session_resume":
       return true;
     case "session_welcome":
     case "heartbeat":
     case "event_batch":
     case "event_ack":
-    case "replay_request":
     case "command_batch":
     case "command_ack":
     case "command_result":
@@ -358,7 +326,6 @@ export function isEnvironmentAgentSessionClientMessage(
   if (!isEnvironmentAgentSessionMessage(value)) return false;
   switch (value.type) {
     case "session_open":
-    case "session_resume":
     case "heartbeat":
     case "event_batch":
     case "command_ack":
@@ -367,7 +334,6 @@ export function isEnvironmentAgentSessionClientMessage(
       return true;
     case "session_welcome":
     case "event_ack":
-    case "replay_request":
     case "command_batch":
     case "session_replaced":
       return false;
@@ -383,13 +349,11 @@ export function isEnvironmentAgentSessionServerMessage(
   switch (value.type) {
     case "session_welcome":
     case "event_ack":
-    case "replay_request":
     case "command_batch":
     case "session_close":
     case "session_replaced":
       return true;
     case "session_open":
-    case "session_resume":
     case "heartbeat":
     case "event_batch":
     case "command_ack":

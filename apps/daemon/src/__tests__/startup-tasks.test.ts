@@ -1,9 +1,7 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   recoverManagedEnvironmentAgentSessionsOnBoot,
+  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "../startup-tasks.js";
 
@@ -58,27 +56,7 @@ describe("startup tasks", () => {
     );
   });
 
-  it("pokes reachable env-agents and closes unreachable active sessions on boot", async () => {
-    const beanbagRoot = mkdtempSync(join(tmpdir(), "bb-startup-tasks-"));
-    const stateDir = join(beanbagRoot, "environment-agents", "proj-1");
-    mkdirSync(stateDir, { recursive: true });
-    writeFileSync(join(stateDir, "worktree-thread-1.json"), JSON.stringify({
-      version: 1,
-      baseUrl: "http://127.0.0.1:4310",
-      authToken: "token-1",
-      threadId: "thread-1",
-      projectId: "proj-1",
-      environmentId: "worktree",
-    }));
-    writeFileSync(join(stateDir, "worktree-thread-2.json"), JSON.stringify({
-      version: 1,
-      baseUrl: "http://127.0.0.1:4311",
-      authToken: "token-2",
-      threadId: "thread-2",
-      projectId: "proj-1",
-      environmentId: "worktree",
-    }));
-
+  it("pokes reachable env-agents and leaves unreachable sessions for heartbeat timeout handling", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.startsWith("http://127.0.0.1:4310/")) {
@@ -92,14 +70,22 @@ describe("startup tasks", () => {
 
     const sessionRepo = {
       listActive: vi.fn().mockReturnValue([
-        { id: "sess-1", threadId: "thread-1" },
-        { id: "sess-2", threadId: "thread-2" },
+        {
+          id: "sess-1",
+          threadId: "thread-1",
+          controlBaseUrl: "http://127.0.0.1:4310",
+          controlAuthToken: "token-1",
+        },
+        {
+          id: "sess-2",
+          threadId: "thread-2",
+          controlBaseUrl: "http://127.0.0.1:4311",
+          controlAuthToken: "token-2",
+        },
       ]),
-      markClosed: vi.fn(),
     };
 
     const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
-      runtimeEnv: { BEANBAG_ROOT: beanbagRoot } as NodeJS.ProcessEnv,
       sessionRepo,
       logger: {
         log: vi.fn(),
@@ -110,13 +96,72 @@ describe("startup tasks", () => {
     expect(result).toEqual({
       activeSessionCount: 2,
       pokedCount: 1,
-      closedCount: 1,
+      unreachableCount: 1,
     });
-    expect(sessionRepo.markClosed).toHaveBeenCalledWith({
-      sessionId: "sess-2",
-      reason: "daemon_shutdown",
+  });
+
+  it("defers env-agent startup recovery into the background", async () => {
+    const sessionRepo = {
+      listActive: vi.fn().mockReturnValue([]),
+    };
+    const logger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+    };
+
+    scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
+      sessionRepo,
+      logger,
     });
 
-    rmSync(beanbagRoot, { recursive: true, force: true });
+    expect(sessionRepo.listActive).not.toHaveBeenCalled();
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await Promise.resolve();
+
+    expect(logger.log).toHaveBeenCalledWith(
+      "Reconciling managed environment-agent sessions in background...",
+    );
+    expect(sessionRepo.listActive).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("times out slow env-agent pokes instead of hanging boot recovery", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        }),
+    );
+
+    const sessionRepo = {
+      listActive: vi.fn().mockReturnValue([
+        {
+          id: "sess-slow",
+          threadId: "thread-slow",
+          controlBaseUrl: "http://127.0.0.1:4310",
+          controlAuthToken: "token-slow",
+        },
+      ]),
+    };
+
+    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+      sessionRepo,
+      requestTimeoutMs: 10,
+      logger: {
+        log: vi.fn(),
+        warn: vi.fn(),
+      },
+    });
+
+    expect(result).toEqual({
+      activeSessionCount: 1,
+      pokedCount: 0,
+      unreachableCount: 1,
+    });
   });
 });

@@ -48,6 +48,7 @@ import {
 } from "@beanbag/agent-server";
 import { Orchestrator } from "../orchestrator.js";
 import type { EnvironmentService } from "../environment-service.js";
+import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
 import { WSManager } from "../ws.js";
 import {
   CODEX_THREAD_ID,
@@ -640,7 +641,15 @@ describe("Orchestrator", () => {
   });
 
   describe("boot status healing", () => {
-    function createBootManager(initialThreads: Thread[]) {
+    function createBootManager(
+      initialThreads: Thread[],
+      opts?: {
+        sessionService?: Pick<
+          EnvironmentAgentSessionService,
+          "retireActiveSessionForThread"
+        >;
+      },
+    ) {
       const threadState = new Map(
         initialThreads.map((thread) => [thread.id, { ...thread }]),
       );
@@ -653,6 +662,13 @@ describe("Orchestrator", () => {
             thread.archivedAt === undefined &&
             thread.status === "active" &&
             thread.environmentRecord,
+        )
+        .map((thread) => thread.id);
+      const nonArchivedProvisioningIds = initialThreads
+        .filter(
+          (thread) =>
+            thread.archivedAt === undefined &&
+            (thread.status === "provisioning" || thread.status === "provisioned"),
         )
         .map((thread) => thread.id);
       const bootThreadRepo = {
@@ -681,6 +697,7 @@ describe("Orchestrator", () => {
         listNonArchivedActiveIdsWithEnvironmentRecord: vi.fn(
           () => nonArchivedActiveIdsWithEnvironmentRecord,
         ),
+        listNonArchivedIdsByStatuses: vi.fn(() => nonArchivedProvisioningIds),
         update: vi.fn((threadId: string, updates: Partial<Thread>) => {
           const existing = threadState.get(threadId);
           if (!existing) return undefined;
@@ -728,6 +745,14 @@ describe("Orchestrator", () => {
         bootProjectRepo,
         bootWs,
         createMockLlmCompletionService(),
+        undefined,
+        process.env,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        opts?.sessionService as EnvironmentAgentSessionService | undefined,
       );
 
       return {
@@ -848,6 +873,79 @@ describe("Orchestrator", () => {
 
       expect(bootProjectRepo.list).not.toHaveBeenCalled();
       expect(bootThreadRepo.list).not.toHaveBeenCalled();
+    });
+
+    it("fails stranded provisioning threads during boot", async () => {
+      const {
+        bootManager,
+        bootEventRepo,
+        bootThreadRepo,
+        threadState,
+      } = createBootManager([
+        makeThread({ id: "boot-provisioning", status: "provisioning" }),
+      ]);
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(threadState.get("boot-provisioning")?.status).toBe("provisioning_failed");
+      expect(bootThreadRepo.listNonArchivedIdsByStatuses).toHaveBeenCalledWith([
+        "provisioning",
+        "provisioned",
+      ]);
+      expect(bootEventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "boot-provisioning",
+          type: "system/error",
+          data: expect.objectContaining({
+            code: "provider_unavailable",
+          }),
+        }),
+      );
+      expect(bootThreadRepo.list).not.toHaveBeenCalled();
+    });
+
+    it("fails stranded provisioned threads during boot and retires their sessions", async () => {
+      const sessionService = {
+        retireActiveSessionForThread: vi.fn(),
+      };
+      const {
+        bootManager,
+        bootEventRepo,
+        threadState,
+      } = createBootManager(
+        [
+          makeThread({
+            id: "boot-provisioned",
+            status: "provisioned",
+            environmentRecord: {
+              kind: "local",
+              state: {
+                workspaceRoot: "/tmp/project",
+              },
+            },
+          }),
+        ],
+        {
+          sessionService,
+        },
+      );
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(threadState.get("boot-provisioned")?.status).toBe("provisioning_failed");
+      expect(sessionService.retireActiveSessionForThread).toHaveBeenCalledWith({
+        threadId: "boot-provisioned",
+        reason: "migration",
+      });
+      expect(bootEventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "boot-provisioned",
+          type: "system/error",
+          data: expect.objectContaining({
+            code: "provider_unavailable",
+          }),
+        }),
+      );
     });
   });
 

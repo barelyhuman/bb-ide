@@ -26,7 +26,6 @@ describe("EnvironmentAgentSessionHttpClient", () => {
           payload: {
             leaseTtlMs: 30_000,
             heartbeatIntervalMs: 10_000,
-            selectedTransport: "http-long-poll",
             protocolVersion: 1,
             channels: [],
           },
@@ -75,7 +74,6 @@ describe("EnvironmentAgentSessionHttpClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       supportedProtocolVersions: [1],
-      supportedTransports: ["http-long-poll"],
       channels: [{ channelId: "thread-1", generation: 1 }],
     })).resolves.toMatchObject({ type: "session_welcome", sessionId: "sess-1" });
 
@@ -124,7 +122,6 @@ describe("EnvironmentAgentSessionHttpClient", () => {
           state: "received",
         },
       ],
-      deliveredThrough: 4,
     })).resolves.toBeUndefined();
 
     await expect(client.sendCommandResult("sess-1", {
@@ -152,7 +149,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
           method: "GET",
         },
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/close",
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/messages",
           method: "POST",
         },
       ]),

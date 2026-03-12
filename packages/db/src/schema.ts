@@ -42,6 +42,7 @@ export const threads = sqliteTable(
     index("threads_environment_idx").on(table.environmentId),
     index("threads_parent_thread_idx").on(table.parentThreadId),
     index("threads_archived_status_idx").on(table.archivedAt, table.status),
+    index("threads_archived_environment_idx").on(table.archivedAt, table.environmentId),
   ]
 );
 
@@ -103,7 +104,8 @@ export const environmentAgentSessions = sqliteTable(
     agentId: text("agent_id").notNull(),
     agentInstanceId: text("agent_instance_id").notNull(),
     protocolVersion: integer("protocol_version").notNull(),
-    transportKind: text("transport_kind").notNull(),
+    controlBaseUrl: text("control_base_url"),
+    controlAuthToken: text("control_auth_token"),
     status: text("status").notNull(),
     leaseExpiresAt: integer("lease_expires_at").notNull(),
     lastHeartbeatAt: integer("last_heartbeat_at"),

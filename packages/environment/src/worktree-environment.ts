@@ -42,7 +42,6 @@ import {
 import {
   disposeManagedHostEnvironmentAgent,
   ensureManagedHostEnvironmentAgent,
-  resolveManagedHostEnvironmentAgentTarget,
 } from "./host-environment-agent.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 
@@ -258,8 +257,10 @@ class WorktreeEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"];
   private readonly manageEnvironmentAgent: boolean;
   private preparePromise: Promise<void> | null = null;
+  private managedAgentTarget?: EnvironmentAgentConnectionTarget;
 
   constructor(
     projectId: string,
@@ -267,6 +268,7 @@ class WorktreeEnvironment implements IEnvironment {
     private readonly projectRoot: string,
     private readonly state: WorktreeEnvironmentState,
     runtimeEnv: Record<string, string | undefined>,
+    reconnectTarget?: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"],
     services?: CreateEnvironmentContext["services"],
     manageEnvironmentAgent = true,
   ) {
@@ -274,6 +276,7 @@ class WorktreeEnvironment implements IEnvironment {
     this.threadId = threadId;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
+    this.reconnectTarget = reconnectTarget;
     this.services = services;
     this.manageEnvironmentAgent = manageEnvironmentAgent;
   }
@@ -285,13 +288,17 @@ class WorktreeEnvironment implements IEnvironment {
   async prepare(): Promise<void> {
     if (existsSync(this.state.workspaceRoot)) {
       if (this.manageEnvironmentAgent) {
-        await ensureManagedHostEnvironmentAgent({
+        const managedAgentTarget = await ensureManagedHostEnvironmentAgent({
           workspaceRootPath: this.state.workspaceRoot,
           threadId: this.threadId,
           projectId: this.projectId,
           environmentId: this.kind,
           runtimeEnv: this.env,
+          reconnectTarget: this.reconnectTarget,
         });
+        if (managedAgentTarget) {
+          this.managedAgentTarget = managedAgentTarget;
+        }
       }
       return;
     }
@@ -345,17 +352,22 @@ class WorktreeEnvironment implements IEnvironment {
     }
 
     if (this.manageEnvironmentAgent) {
-      await ensureManagedHostEnvironmentAgent({
+      const managedAgentTarget = await ensureManagedHostEnvironmentAgent({
         workspaceRootPath: this.state.workspaceRoot,
         threadId: this.threadId,
         projectId: this.projectId,
         environmentId: this.kind,
         runtimeEnv: this.env,
+        reconnectTarget: this.reconnectTarget,
       });
+      if (managedAgentTarget) {
+        this.managedAgentTarget = managedAgentTarget;
+      }
     }
   }
 
   async suspend(): Promise<void> {
+    this.managedAgentTarget = undefined;
     if (this.manageEnvironmentAgent) {
       await disposeManagedHostEnvironmentAgent({
         projectId: this.projectId,
@@ -393,13 +405,7 @@ class WorktreeEnvironment implements IEnvironment {
     if (!this.manageEnvironmentAgent && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
       throw new Error("Worktree environment-agent management is disabled");
     }
-    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
-      projectId: this.projectId,
-      threadId: this.threadId,
-      environmentId: this.kind,
-      workspaceRootPath: this.rootPath,
-      runtimeEnv: this.env,
-    });
+    const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for worktree environment");
     }
@@ -887,6 +893,7 @@ export function createWorktreeEnvironmentDefinition(
           branchName,
         },
         context.runtimeEnv,
+        context.managedEnvironmentAgentReconnectTarget,
         context.services,
         manageEnvironmentAgent,
       );
@@ -901,6 +908,7 @@ export function createWorktreeEnvironmentDefinition(
         context.projectRootPath,
         state,
         context.runtimeEnv,
+        context.managedEnvironmentAgentReconnectTarget,
         context.services,
         manageEnvironmentAgent,
       );

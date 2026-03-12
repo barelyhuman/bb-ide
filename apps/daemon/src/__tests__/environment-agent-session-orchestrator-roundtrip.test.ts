@@ -47,7 +47,6 @@ function makeOpenPayload(threadId: string): EnvironmentAgentSessionOpenPayload {
     agentId: `agent:${threadId}`,
     agentInstanceId: `instance:${threadId}`,
     supportedProtocolVersions: [1],
-    supportedTransports: ["websocket"],
     channels: [
       {
         channelId: threadId,
@@ -346,7 +345,6 @@ describe("environment-agent session orchestrator roundtrip", () => {
             state: "received",
           },
         ],
-        deliveredThrough: commandEnvelope.commandCursor,
       },
       now: 2_100,
     });

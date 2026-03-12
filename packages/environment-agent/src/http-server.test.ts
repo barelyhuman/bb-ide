@@ -86,7 +86,39 @@ describe("environment-agent HTTP transport", () => {
     });
 
     expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      status: expect.objectContaining({
+        latestSequence: 0,
+        deliveryState: "stopped",
+      }),
+    });
     expect(onSessionSyncRequested).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a shutdown poke", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+    });
+    const onShutdownRequested = vi.fn();
+    const server = await createEnvironmentAgentHttpServer({
+      runtime,
+      bearerToken: "test-token",
+      onShutdownRequested,
+    });
+    cleanup.push(() => server.close());
+
+    const response = await fetch(`${server.baseUrl}/control/shutdown`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(202);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(onShutdownRequested).toHaveBeenCalledTimes(1);
   });
 });

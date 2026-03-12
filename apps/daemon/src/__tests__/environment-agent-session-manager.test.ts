@@ -47,7 +47,7 @@ describe("EnvironmentAgentSessionManager", () => {
     return threads.create({ projectId: project.id }).id;
   }
 
-  it("opens sessions with computed lease expiry and replaces active sessions", () => {
+  it("opens sessions with computed liveness deadlines and replaces active sessions", () => {
     const threadId = createThreadId();
 
     const first = manager.openSession({
@@ -55,7 +55,6 @@ describe("EnvironmentAgentSessionManager", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseTtlMs: 30_000,
       now: 1_000,
     });
@@ -63,7 +62,6 @@ describe("EnvironmentAgentSessionManager", () => {
       threadId,
       status: "active",
       leaseExpiresAt: 31_000,
-      transportKind: "websocket",
     });
 
     const second = manager.openSession({
@@ -71,7 +69,6 @@ describe("EnvironmentAgentSessionManager", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseTtlMs: 45_000,
       now: 2_000,
     });
@@ -83,19 +80,17 @@ describe("EnvironmentAgentSessionManager", () => {
     });
     expect(second.active).toMatchObject({
       status: "active",
-      transportKind: "http-long-poll",
       leaseExpiresAt: 47_000,
     });
   });
 
-  it("records heartbeats by extending the active lease", () => {
+  it("records heartbeats by extending the active liveness deadline", () => {
     const threadId = createThreadId();
     const opened = manager.openSession({
       threadId,
       agentId: "agent-heartbeat",
       agentInstanceId: "instance-heartbeat",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseTtlMs: 10_000,
       now: 1_000,
     });
@@ -121,7 +116,6 @@ describe("EnvironmentAgentSessionManager", () => {
       agentId: "agent-overdue",
       agentInstanceId: "instance-overdue",
       protocolVersion: 1,
-      transportKind: "websocket",
       leaseTtlMs: 1_000,
       now: 1_000,
     });

@@ -262,7 +262,6 @@ export type SystemHealthStorageBucketKey =
   | "database_shm"
   | "daemon_logs"
   | "environment_agent_logs"
-  | "environment_agent_state"
   | "worktrees"
   | "attachments"
   | "backups";
@@ -286,7 +285,9 @@ export interface SystemHealthThreadCounts {
   archived: number;
   created: number;
   provisioning: number;
+  provisioned: number;
   provisioningFailed: number;
+  error: number;
   active: number;
   idle: number;
 }

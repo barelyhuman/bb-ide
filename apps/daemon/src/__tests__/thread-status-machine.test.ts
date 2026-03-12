@@ -5,17 +5,21 @@ import { canTransitionThreadStatus } from "../thread-status-machine.js";
 const STATUSES: ThreadStatus[] = [
   "created",
   "provisioning",
+  "provisioned",
   "provisioning_failed",
+  "error",
   "idle",
   "active",
 ];
 
 const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
   created: ["provisioning", "provisioning_failed", "idle"],
-  provisioning: ["active", "idle", "provisioning_failed"],
-  provisioning_failed: ["provisioning", "idle"],
-  idle: ["active", "provisioning"],
-  active: ["idle"],
+  provisioning: ["provisioned", "active", "idle", "provisioning_failed"],
+  provisioned: ["active", "idle", "provisioning_failed"],
+  provisioning_failed: ["provisioning", "provisioned", "idle"],
+  error: ["provisioning", "provisioned", "idle"],
+  idle: ["active", "error", "provisioning", "provisioned"],
+  active: ["error", "idle"],
 };
 
 describe("thread status machine", () => {
@@ -31,4 +35,3 @@ describe("thread status machine", () => {
     }
   }
 });
-

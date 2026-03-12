@@ -470,6 +470,51 @@ describe("EnvironmentService", () => {
     expect(settled).toBe(true);
   });
 
+  it("waits for an in-flight runtime suspension before ensuring the environment again", async () => {
+    let resolveSuspend: (() => void) | undefined;
+    const runtimeEnvironment: IEnvironment = {
+      ...createTestEnvironment({ existsInitially: true }),
+      suspend: vi.fn(
+        async () =>
+          await new Promise<void>((resolve) => {
+            resolveSuspend = resolve;
+          }),
+      ),
+    };
+    const prepareSpy = vi.fn(async () => {});
+    const restoreImpl = vi.fn(() => ({
+      ...createTestEnvironment({ existsInitially: true }),
+      prepare: prepareSpy,
+    }));
+    const { service, threadState } = createService({
+      existsInitially: true,
+      restoreImpl,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    service.suspendEnvironmentRuntime("thread-1");
+    await Promise.resolve();
+    expect(runtimeEnvironment.suspend).toHaveBeenCalledTimes(1);
+
+    let ensured = false;
+    const ensurePromise = service.ensureThreadEnvironmentRuntime(
+      threadState,
+      "/project/root",
+      "resume-existing-provider-session",
+    ).then(() => {
+      ensured = true;
+    });
+
+    await Promise.resolve();
+    expect(ensured).toBe(false);
+    expect(prepareSpy).not.toHaveBeenCalled();
+
+    resolveSuspend?.();
+    await ensurePromise;
+
+    expect(prepareSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("coalesces concurrent runtime ensure calls for the same thread", async () => {
     const waitGate = createDeferred();
     const prepareSpy = vi.fn(async () => {
@@ -508,7 +553,7 @@ describe("EnvironmentService", () => {
     expect(service.getEnvironmentRuntime("thread-1")).toBe(firstResolved.runtime);
   });
 
-  it("retries prepare when the managed agent target disappears before runtime registration", async () => {
+  it("fails when a freshly prepared environment still has no managed agent target", async () => {
     let prepareCalls = 0;
     const restoreImpl = vi.fn(() => {
       let targetAvailable = false;
@@ -534,58 +579,15 @@ describe("EnvironmentService", () => {
       restoreImpl,
     });
 
-    const ensured = await service.ensureThreadEnvironmentRuntime(
-      threadState,
-      "/project/root",
-      "resume-existing-provider-session",
-    );
-
-    expect(prepareCalls).toBe(2);
-    expect(ensured.runtime.agentConnectionTarget).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4312",
-    });
-    expect(service.getEnvironmentRuntime("thread-1")?.agentConnectionTarget).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4312",
-    });
-  });
-
-  it("refreshes an active runtime by preparing it again when the agent target is missing", async () => {
-    let targetAvailable = true;
-    const runtimeEnvironment: IEnvironment = {
-      ...createTestEnvironment({ existsInitially: true }),
-      prepare: vi.fn(async () => {
-        targetAvailable = true;
-      }),
-      getAgentConnectionTarget: vi.fn(() => {
-        if (!targetAvailable) {
-          throw new Error("Missing managed environment-agent target for worktree environment");
-        }
-        return {
-          transport: "http" as const,
-          baseUrl: "http://127.0.0.1:4312",
-        };
-      }),
-    };
-    const { service, threadState, runOptionalSetup } = createService({
-      existsInitially: true,
-    });
-    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
-    targetAvailable = false;
-
-    const ensured = await service.ensureThreadEnvironmentRuntime(
-      threadState,
-      "/project/root",
-      "resume-existing-provider-session",
-    );
-
-    expect(runtimeEnvironment.prepare).toHaveBeenCalledTimes(1);
-    expect(ensured.runtime.agentConnectionTarget).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4312",
-    });
-    expect(runOptionalSetup).not.toHaveBeenCalled();
+    await expect(
+      service.ensureThreadEnvironmentRuntime(
+        threadState,
+        "/project/root",
+        "resume-existing-provider-session",
+      ),
+    ).rejects.toThrow("Missing managed environment-agent target for local environment");
+    expect(prepareCalls).toBe(1);
+    expect(service.getEnvironmentRuntime("thread-1")).toBeUndefined();
   });
 
   it("does not suspend persisted state when installing a restored runtime", () => {

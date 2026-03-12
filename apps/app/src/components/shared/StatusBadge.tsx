@@ -7,7 +7,9 @@ type Status = ThreadStatus;
 const variantMap: Record<Status, StatusPillVariant> = {
   created: "outline",
   provisioning: "outline",
+  provisioned: "outline",
   provisioning_failed: "destructive",
+  error: "destructive",
   active: "emphasis",
   idle: "outline",
 };

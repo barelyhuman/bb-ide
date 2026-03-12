@@ -89,7 +89,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll", "websocket"],
         channels: [
           {
             channelId: threadId,
@@ -107,7 +106,6 @@ describe("EnvironmentAgentSessionService", () => {
       threadId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
-      transportKind: "websocket",
       leaseExpiresAt: 47_000,
     });
     expect(opened.welcome).toMatchObject({
@@ -118,7 +116,6 @@ describe("EnvironmentAgentSessionService", () => {
       payload: {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
-        selectedTransport: "websocket",
         protocolVersion: 1,
         channels: [
           {
@@ -127,7 +124,6 @@ describe("EnvironmentAgentSessionService", () => {
               generation: 3,
               sequenceExclusive: 9,
             },
-            deliverCommandsAfter: 0,
           },
         ],
       },
@@ -144,7 +140,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -154,7 +149,6 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    expect(opened.welcome.payload.selectedTransport).toBe("http-long-poll");
     expect(opened.welcome.payload.channels).toEqual([
       {
         channelId: threadId,
@@ -162,7 +156,6 @@ describe("EnvironmentAgentSessionService", () => {
           generation: 5,
           sequenceExclusive: 0,
         },
-        deliverCommandsAfter: 0,
       },
     ]);
   });
@@ -178,7 +171,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -195,7 +187,6 @@ describe("EnvironmentAgentSessionService", () => {
           generation: 1,
           sequenceExclusive: 0,
         },
-        deliverCommandsAfter: 0,
       },
     ]);
     expect(cursors.getByThreadId(threadId)).toBeUndefined();
@@ -255,7 +246,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -272,7 +262,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -294,7 +283,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-3",
           supportedProtocolVersions: [99],
-          supportedTransports: ["websocket"],
           channels: [
             {
               channelId: threadId,
@@ -312,7 +300,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-4",
           supportedProtocolVersions: [1],
-          supportedTransports: ["websocket"],
           channels: [
             {
               channelId: "other-thread",
@@ -326,7 +313,7 @@ describe("EnvironmentAgentSessionService", () => {
     );
   });
 
-  it("rebinds pending queued commands onto a newly opened session", () => {
+  it("fails pending queued commands when a newer session replaces them", () => {
     const threadId = createThreadId();
     const first = service.openSession({
       threadId,
@@ -335,7 +322,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -364,7 +350,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -374,13 +359,15 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
+    expect(second.replaced?.id).toBe(first.session.id);
     expect(commands.getById("cmd-queued")).toMatchObject({
-      sessionId: second.session.id,
-      state: "queued",
+      sessionId: first.session.id,
+      state: "failed",
+      errorCode: "provider_unavailable",
     });
   });
 
-  it("requeues received commands and fails started commands when a newer session replaces them", () => {
+  it("fails received and started commands when a newer session replaces them", () => {
     const threadId = createThreadId();
     const first = service.openSession({
       threadId,
@@ -389,7 +376,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -433,7 +419,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -445,8 +430,9 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(second.replaced?.id).toBe(first.session.id);
     expect(commands.getById("cmd-received")).toMatchObject({
-      sessionId: second.session.id,
-      state: "queued",
+      sessionId: first.session.id,
+      state: "failed",
+      errorCode: "provider_unavailable",
     });
     expect(commands.getById("cmd-started")).toMatchObject({
       sessionId: first.session.id,
@@ -457,7 +443,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
-  it("applies event batches and requests replay when the daemon detects a gap", async () => {
+  it("applies event batches and resets the agent cursor when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({
       threadId,
@@ -466,7 +452,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -518,7 +503,7 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    const replayRequest = await service.applyEventBatch({
+    const replayAck = await service.applyEventBatch({
       threadId,
       sessionId: opened.session.id,
       now: 3_000,
@@ -544,13 +529,19 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    expect(replayRequest).toMatchObject({
-      type: "replay_request",
+    expect(replayAck).toMatchObject({
+      type: "event_ack",
       sessionId: opened.session.id,
       payload: {
-        channelId: threadId,
-        generation: 2,
-        afterSequence: 0,
+        channels: [
+          {
+            channelId: threadId,
+            ackedThrough: {
+              generation: 2,
+              sequence: 0,
+            },
+          },
+        ],
       },
     });
   });
@@ -564,7 +555,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -599,7 +589,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -643,7 +632,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -675,6 +663,39 @@ describe("EnvironmentAgentSessionService", () => {
     );
   });
 
+  it("retires the active session without triggering invalidation callbacks", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    const retired = service.retireActiveSessionForThread({
+      threadId,
+      reason: "migration",
+      now: 2_000,
+    });
+
+    expect(retired).toMatchObject({
+      id: opened.session.id,
+      status: "closed",
+      closeReason: "migration",
+      closedAt: 2_000,
+    });
+    expect(onSessionInvalidated).not.toHaveBeenCalled();
+  });
+
   it("invalidates replaced sessions when a newer session opens", () => {
     const threadId = createThreadId();
     const first = service.openSession({
@@ -684,7 +705,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -701,7 +721,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -734,7 +753,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -764,7 +782,6 @@ describe("EnvironmentAgentSessionService", () => {
             state: "received",
           },
         ],
-        deliveredThrough: 1,
       },
     });
     expect(commands.getById("cmd-1")).toMatchObject({ state: "received" });
@@ -795,7 +812,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -850,7 +866,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -895,7 +910,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -941,7 +955,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["websocket"],
         channels: [
           {
             channelId: threadId,
@@ -1004,7 +1017,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           supportedProtocolVersions: [1],
-          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: threadId,
@@ -1064,7 +1076,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           supportedProtocolVersions: [1],
-          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: threadId,

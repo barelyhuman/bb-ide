@@ -7,25 +7,24 @@ import type {
   EnvironmentAgentPulledCommand,
   EnvironmentAgentSessionSync,
 } from "./session-sync.js";
+import type { EnvironmentAgentSessionControlEndpoint } from "./session-protocol.js";
 
 export interface EnvironmentAgentSessionSupervisorOptions {
   threadId: string;
   runtime: EnvironmentAgentRuntime;
   sessionRuntime: EnvironmentAgentSessionRuntime;
   sessionSync: EnvironmentAgentSessionSync;
+  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   agentId?: string;
   agentInstanceId?: string;
   pollIntervalMs?: number;
   commandBatchLimit?: number;
   onError?: (error: unknown) => void;
-  onQuiescent?: () => void | Promise<void>;
-  selfSuspendDebounceMs?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_COMMAND_BATCH_LIMIT = 50;
 const DEFAULT_COMMAND_LONG_POLL_MS = 10_000;
-const DEFAULT_SELF_SUSPEND_DEBOUNCE_MS = 1_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const MAX_ERROR_BACKOFF_MS = 30_000;
 
@@ -73,13 +72,9 @@ export class EnvironmentAgentSessionSupervisor {
   private readonly pollIntervalMs: number;
   private readonly commandBatchLimit: number;
   private readonly onError?: (error: unknown) => void;
-  private readonly onQuiescent?: () => void | Promise<void>;
-  private readonly selfSuspendDebounceMs: number;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
-  private selfSuspendTimer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private cycleInFlight = false;
-  private selfSuspendInFlight = false;
   private consecutiveFailureCount = 0;
   private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
   private nextHeartbeatAt = 0;
@@ -92,9 +87,6 @@ export class EnvironmentAgentSessionSupervisor {
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
     this.onError = options.onError;
-    this.onQuiescent = options.onQuiescent;
-    this.selfSuspendDebounceMs =
-      options.selfSuspendDebounceMs ?? DEFAULT_SELF_SUSPEND_DEBOUNCE_MS;
 
     this.options.sessionRuntime.initializeThread({
       threadId: options.threadId,
@@ -109,7 +101,6 @@ export class EnvironmentAgentSessionSupervisor {
         event: event.event,
         emittedAt: event.emittedAt,
       });
-      this.cancelSelfSuspend();
       this.cancelPendingCommandPull();
       this.scheduleImmediateCycle();
     });
@@ -126,7 +117,7 @@ export class EnvironmentAgentSessionSupervisor {
     } catch (error) {
       this.handleError(error);
     }
-    this.refreshSelfSuspendState();
+    this.publishRuntimeDeliveryState();
     this.scheduleNextCycle();
   }
 
@@ -134,8 +125,9 @@ export class EnvironmentAgentSessionSupervisor {
     if (!this.running) {
       return;
     }
-    this.cancelSelfSuspend();
+    this.consecutiveFailureCount = 0;
     this.cancelPendingCommandPull();
+    this.publishRuntimeDeliveryState();
     this.scheduleImmediateCycle();
   }
 
@@ -145,12 +137,12 @@ export class EnvironmentAgentSessionSupervisor {
       clearTimeout(this.pollTimer);
       this.pollTimer = undefined;
     }
-    this.cancelSelfSuspend();
     this.cancelPendingCommandPull();
     while (this.cycleInFlight) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     this.unsubscribeRuntimeEvents();
+    this.publishRuntimeDeliveryState();
 
     const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
     if (!state?.sessionId) {
@@ -181,7 +173,9 @@ export class EnvironmentAgentSessionSupervisor {
         agentId: this.agentId,
         agentInstanceId: this.agentInstanceId,
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
+        ...(this.options.controlEndpoint
+          ? { controlEndpoint: this.options.controlEndpoint }
+          : {}),
         channels: [
           {
             channelId: this.options.threadId,
@@ -195,6 +189,7 @@ export class EnvironmentAgentSessionSupervisor {
       welcome.payload.heartbeatIntervalMs,
     );
     this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
+    this.publishRuntimeDeliveryState();
   }
 
   private scheduleNextCycle(): void {
@@ -235,14 +230,15 @@ export class EnvironmentAgentSessionSupervisor {
     try {
       await this.runCycle();
       this.consecutiveFailureCount = 0;
+      this.publishRuntimeDeliveryState();
     } catch (error) {
       const recovered = this.handleSessionError(error);
       this.consecutiveFailureCount = recovered
         ? 0
         : this.consecutiveFailureCount + 1;
+      this.publishRuntimeDeliveryState(error);
       this.handleError(error);
     } finally {
-      this.refreshSelfSuspendState();
       this.scheduleNextCycle();
     }
   }
@@ -317,6 +313,33 @@ export class EnvironmentAgentSessionSupervisor {
     return true;
   }
 
+  private publishRuntimeDeliveryState(error?: unknown): void {
+    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
+    const retryAttemptCount = this.consecutiveFailureCount;
+    const nextRetryAt = !this.running
+      ? undefined
+      : retryAttemptCount > 0
+        ? Date.now() + Math.min(
+            this.pollIntervalMs * 2 ** Math.min(retryAttemptCount, 7),
+            MAX_ERROR_BACKOFF_MS,
+          )
+        : undefined;
+
+    this.options.runtime.setDaemonDeliveryState({
+      connectedToDaemon: this.running && Boolean(state?.sessionId) && retryAttemptCount === 0,
+      deliveryState: !this.running
+        ? "stopped"
+        : retryAttemptCount > 0
+          ? "retrying"
+          : "healthy",
+      retryAttemptCount,
+      ...(state?.lastAcked ? { lastAckedSequence: state.lastAcked.sequence } : {}),
+      ...(nextRetryAt !== undefined ? { nextRetryAt } : {}),
+      ...(retryAttemptCount > 0 ? { deliveryIssue: "transport_error" as const } : {}),
+      ...(error instanceof Error ? { lastDeliveryError: error.message } : {}),
+    });
+  }
+
   private isHeartbeatDue(now: number = Date.now()): boolean {
     return now >= this.nextHeartbeatAt;
   }
@@ -368,93 +391,20 @@ export class EnvironmentAgentSessionSupervisor {
       const flushResult = await this.options.sessionSync.flushPendingEvents(
         this.options.threadId,
       );
-      if (flushResult.acknowledged || !flushResult.replayRequested) {
+      if (flushResult.acknowledged || !flushResult.resetCursor) {
         return;
       }
       this.options.sessionRuntime.alignEventCursor(
         this.options.threadId,
         {
-          generation: flushResult.replayRequested.payload.generation,
-          sequence: flushResult.replayRequested.payload.afterSequence,
+          generation: flushResult.resetCursor.generation,
+          sequence: flushResult.resetCursor.sequence,
         },
-        flushResult.replayRequested.sentAt,
+        Date.now(),
       );
     }
     throw new Error(
-      `Environment-agent replay did not converge for thread ${this.options.threadId}`,
+      `Environment-agent event reset did not converge for thread ${this.options.threadId}`,
     );
-  }
-
-  private cancelSelfSuspend(): void {
-    if (!this.selfSuspendTimer) {
-      return;
-    }
-    clearTimeout(this.selfSuspendTimer);
-    this.selfSuspendTimer = undefined;
-  }
-
-  private refreshSelfSuspendState(): void {
-    if (!this.onQuiescent) {
-      return;
-    }
-    if (!this.isQuiescentForSelfSuspend()) {
-      this.cancelSelfSuspend();
-      return;
-    }
-    if (this.selfSuspendTimer || this.selfSuspendInFlight) {
-      return;
-    }
-    this.selfSuspendTimer = setTimeout(() => {
-      this.selfSuspendTimer = undefined;
-      void this.triggerSelfSuspendIfStillQuiescent();
-    }, this.selfSuspendDebounceMs);
-    this.selfSuspendTimer.unref?.();
-  }
-
-  private async triggerSelfSuspendIfStillQuiescent(): Promise<void> {
-    if (!this.isQuiescentForSelfSuspend() || !this.onQuiescent) {
-      this.refreshSelfSuspendState();
-      return;
-    }
-    this.selfSuspendInFlight = true;
-    try {
-      await this.onQuiescent();
-    } catch (error) {
-      this.handleError(error);
-    } finally {
-      this.selfSuspendInFlight = false;
-    }
-  }
-
-  private isQuiescentForSelfSuspend(): boolean {
-    if (!this.running || this.cycleInFlight || this.selfSuspendInFlight) {
-      return false;
-    }
-    const runtimeSnapshot = this.options.runtime.getQuiescenceSnapshot();
-    const drainSnapshot = this.options.sessionRuntime.getDrainSnapshot(
-      this.options.threadId,
-    );
-    if (!runtimeSnapshot.hasObservedWork) {
-      return false;
-    }
-    if (runtimeSnapshot.turnState !== "idle") {
-      return false;
-    }
-    if (runtimeSnapshot.commandExecutionCount > 0) {
-      return false;
-    }
-    if (runtimeSnapshot.pendingProviderRequestCount > 0) {
-      return false;
-    }
-    if (drainSnapshot.pendingEventCount > 0) {
-      return false;
-    }
-    if (drainSnapshot.pendingCommandAckCount > 0) {
-      return false;
-    }
-    if (drainSnapshot.pendingCommandResultCount > 0) {
-      return false;
-    }
-    return true;
   }
 }

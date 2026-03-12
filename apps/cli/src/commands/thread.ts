@@ -544,8 +544,12 @@ export function statusText(status: ThreadStatus): string {
       return "created";
     case "provisioning":
       return "provisioning";
+    case "provisioned":
+      return "provisioned";
     case "provisioning_failed":
       return "provisioning_failed";
+    case "error":
+      return "error";
     case "idle":
       return "idle";
     case "active":

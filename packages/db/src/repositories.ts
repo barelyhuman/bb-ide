@@ -173,7 +173,9 @@ function isThreadStatus(status: string): status is ThreadStatus {
   return (
     status === "created" ||
     status === "provisioning" ||
+    status === "provisioned" ||
     status === "provisioning_failed" ||
+    status === "error" ||
     status === "active" ||
     status === "idle"
   );
@@ -467,7 +469,7 @@ export class ThreadRepository {
       .where(
         and(
           sql`${threads.archivedAt} is not null`,
-          sql`${threads.environmentRecord} is not null`,
+          sql`${threads.environmentId} is not null`,
         ),
       )
       .all()
@@ -483,6 +485,24 @@ export class ThreadRepository {
           isNull(threads.archivedAt),
           eq(threads.status, "active"),
           sql`${threads.environmentRecord} is not null`,
+        ),
+      )
+      .all()
+      .map((row) => row.id);
+  }
+
+  listNonArchivedIdsByStatuses(statuses: ThreadStatus[]): string[] {
+    if (statuses.length === 0) {
+      return [];
+    }
+
+    return this.db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(
+        and(
+          isNull(threads.archivedAt),
+          inArray(threads.status, statuses),
         ),
       )
       .all()

@@ -164,7 +164,9 @@ describe("System routes", () => {
           archived: 1,
           created: 0,
           provisioning: 1,
+          provisioned: 0,
           provisioningFailed: 0,
+          error: 0,
           active: 1,
           idle: 2,
         },
@@ -194,7 +196,9 @@ describe("System routes", () => {
           archived: 1,
           created: 0,
           provisioning: 1,
+          provisioned: 0,
           provisioningFailed: 0,
+          error: 0,
           active: 1,
           idle: 2,
         },
@@ -560,11 +564,13 @@ describe("System routes", () => {
         restartPolicyByStatus: {
           created: "noop",
           provisioning: "noop",
+          provisioned: "noop",
+          error: "noop",
           active: "noop",
           idle: "noop",
           provisioning_failed: "noop",
         },
-        shutdownBlockingStatuses: ["created", "provisioning", "active"],
+        shutdownBlockingStatuses: ["created", "provisioning", "provisioned", "active"],
         shouldRestart: false,
       });
     });
@@ -584,11 +590,13 @@ describe("System routes", () => {
         restartPolicyByStatus: {
           created: "noop",
           provisioning: "noop",
+          provisioned: "noop",
+          error: "noop",
           active: "noop",
           idle: "noop",
           provisioning_failed: "noop",
         },
-        shutdownBlockingStatuses: ["created", "provisioning", "active"],
+        shutdownBlockingStatuses: ["created", "provisioning", "provisioned", "active"],
         shouldRestart: true,
       });
     });

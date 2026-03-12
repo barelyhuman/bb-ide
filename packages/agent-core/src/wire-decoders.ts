@@ -8,7 +8,9 @@ import { getStringField, toRecord } from "./unknown-helpers.js";
 const THREAD_STATUSES = [
   "created",
   "provisioning",
+  "provisioned",
   "provisioning_failed",
+  "error",
   "idle",
   "active",
 ] as const satisfies readonly ThreadStatus[];

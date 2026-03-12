@@ -57,6 +57,8 @@ function printHealthReport(report: SystemHealthReport): void {
       `${report.threadCounts.archived} archived, ` +
       `${report.threadCounts.active} active, ` +
       `${report.threadCounts.idle} idle, ` +
+      `${report.threadCounts.error} error, ` +
+      `${report.threadCounts.provisioned} provisioned, ` +
       `${report.threadCounts.provisioning} provisioning, ` +
       `${report.threadCounts.created} created, ` +
       `${report.threadCounts.provisioningFailed} provisioning_failed`,

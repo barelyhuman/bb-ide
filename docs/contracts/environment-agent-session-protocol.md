@@ -1,16 +1,16 @@
 # Environment-Agent Session Protocol
 
-Status: draft
+Status: current
 
-This document specifies the proposed canonical protocol between the Beanbag daemon and environment-agent.
+This document specifies the current canonical protocol between the Beanbag daemon and environment-agent.
 
-It is intended to supersede the current split between live `/stream` ingestion and `/deliver` acknowledgement by defining one session-based model for liveness, command delivery, event delivery, replay, acknowledgement, and reconnect.
+It defines the session-based model used for liveness, command delivery, event delivery, acknowledgement, reconnect, and restart-time nudging of surviving agents.
 
 ## Goals
 
 - fast: low-latency command and event propagation over a live connection when available
-- reliable: durable acknowledgement semantics with idempotent retry behavior
-- resilient: survives daemon restart, daemon outage, and environment-agent reconnects
+- reliable: daemon-side durable acknowledgement semantics with idempotent retry behavior
+- resilient: surviving agents can reconnect after daemon restart or outage, but daemon correctness does not depend on agent-local durability
 - scalable: supports many concurrent agents without daemon-side polling of every agent
 - adaptable: message semantics stay stable across WebSocket, HTTP long-poll, SSE+POST, or future transports
 
@@ -29,7 +29,7 @@ It is intended to supersede the current split between live `/stream` ingestion a
 - **Channel**: an independently ordered logical stream carried inside a session. In v1, a channel is expected to map to a thread.
 - **Generation**: a monotonically changing identifier for a channel stream after agent-side restart/reset.
 - **Cursor**: the daemon's last durably applied position for a channel stream, expressed as `(generation, sequence)`.
-- **Outbox**: the agent's durable store of outbound messages/events not yet acknowledged by the daemon.
+- **Outbox**: the agent's local store of outbound messages/events not yet acknowledged by the daemon. In the current model this is best-effort, not crash-durable.
 
 ## Core Invariants
 
@@ -37,7 +37,7 @@ It is intended to supersede the current split between live `/stream` ingestion a
 2. Both sides must apply messages **idempotently** using stable ids.
 3. Ordering is guaranteed **per channel** only.
 4. The daemon advances a channel cursor only after it has **durably applied** the corresponding events.
-5. The agent removes outbound events from its durable outbox only after receiving a daemon ack that covers them.
+5. The agent removes outbound events from its local outbox only after receiving a daemon ack that covers them. If the agent crashes first, those uncommitted events may be lost.
 6. A new agent instance must not reuse an old channel stream without changing its **generation**.
 7. Session liveness is determined by **lease state**, not inferred from one-off request success.
 
@@ -53,7 +53,7 @@ Each session is associated with:
 - `agentInstanceId`: unique id for the current agent process instance
 - `sessionId`: server-issued id for the current session lease
 - `protocolVersion`: negotiated version
-- `capabilities`: negotiated transport/protocol features
+- `controlEndpoint`: optional daemon-reachable control URL and auth token used for restart nudges
 
 ### Channel Identity
 
@@ -85,7 +85,7 @@ Fields:
 - `protocol`: closed/internal protocol id
 - `messageId`: stable id for dedupe and diagnostics
 - `sentAt`: sender timestamp in epoch milliseconds
-- `sessionId`: omitted only for `session_open` and `session_resume`
+- `sessionId`: omitted only for `session_open`
 - `type`: closed/internal union handled exhaustively
 - `payload`: type-specific payload
 
@@ -105,7 +105,10 @@ Sent by agent when no valid resumable session is known.
     "agentId": "agent_thread_local_proj1_thread1",
     "agentInstanceId": "agentinst_01",
     "supportedProtocolVersions": [1],
-    "supportedTransports": ["websocket", "http-long-poll"],
+    "controlEndpoint": {
+      "baseUrl": "http://127.0.0.1:4310",
+      "authToken": "secret-token"
+    },
     "channels": [
       {
         "channelId": "thread-1",
@@ -120,37 +123,11 @@ Sent by agent when no valid resumable session is known.
 }
 ```
 
-### `session_resume`
-
-Sent by agent when reconnecting after a disconnect/outage and attempting to resume an existing session.
-
-```json
-{
-  "protocol": "beanbag.env-agent.v1",
-  "messageId": "msg_resume_1",
-  "sentAt": 1770000005000,
-  "type": "session_resume",
-  "payload": {
-    "previousSessionId": "sess_123",
-    "agentId": "agent_thread_local_proj1_thread1",
-    "agentInstanceId": "agentinst_01",
-    "channels": [
-      {
-        "channelId": "thread-1",
-        "generation": 7,
-        "lastDaemonAcked": {
-          "generation": 7,
-          "sequence": 104
-        }
-      }
-    ]
-  }
-}
-```
+`controlEndpoint` is optional restart metadata. When present, the daemon may use it to send `/control/session-sync` nudges after restart so a surviving agent resets reconnect backoff and checks in quickly.
 
 ### `session_welcome`
 
-Sent by daemon in response to `session_open` or `session_resume`.
+Sent by daemon in response to `session_open`.
 
 ```json
 {
@@ -162,7 +139,6 @@ Sent by daemon in response to `session_open` or `session_resume`.
   "payload": {
     "leaseTtlMs": 30000,
     "heartbeatIntervalMs": 10000,
-    "selectedTransport": "websocket",
     "protocolVersion": 1,
     "channels": [
       {
@@ -170,8 +146,7 @@ Sent by daemon in response to `session_open` or `session_resume`.
         "applyFrom": {
           "generation": 7,
           "sequenceExclusive": 104
-        },
-        "deliverCommandsAfter": 18
+        }
       }
     ]
   }
@@ -282,26 +257,6 @@ Sent by daemon after durable application.
 
 `event_ack` is authoritative. The agent may compact any outbox entries covered by the ack.
 
-### `replay_request`
-
-Sent by daemon when it needs a gap repaired explicitly.
-
-```json
-{
-  "protocol": "beanbag.env-agent.v1",
-  "messageId": "msg_replay_req_1",
-  "sentAt": 1770000013000,
-  "sessionId": "sess_124",
-  "type": "replay_request",
-  "payload": {
-    "channelId": "thread-1",
-    "generation": 7,
-    "afterSequence": 104,
-    "limit": 500
-  }
-}
-```
-
 ### `command_batch`
 
 Sent by daemon. Commands are durable before sending.
@@ -351,8 +306,7 @@ Sent by agent when commands are durably received and deduped.
         "channelId": "thread-1",
         "state": "received"
       }
-    ],
-    "deliveredThrough": 19
+    ]
   }
 }
 ```
@@ -419,23 +373,23 @@ A session is considered active when all of the following are true:
 
 - it has been accepted by the daemon
 - it has not been explicitly closed or replaced
-- its lease has not expired
+- its heartbeat deadline has not passed
 
-The daemon extends the lease when it receives timely heartbeats or other valid session traffic.
+The daemon extends the stored liveness deadline when it receives timely heartbeats or other valid session traffic.
 
 Suggested v1 defaults:
 
-- `leaseTtlMs`: 30_000
+- `livenessTimeoutMs`: 30_000
 - `heartbeatIntervalMs`: 10_000
-- daemon may expire a session after missing enough heartbeats to pass lease expiry
+- daemon may expire a session after missing enough heartbeats to pass the liveness deadline
 
 Important distinctions:
 
-- **active**: lease valid
+- **active**: heartbeat deadline still valid
 - **connected**: transport currently open
 - **healthy**: delivery is progressing normally
 
-A brief transport blip does not immediately make the session inactive if the lease is still valid.
+A brief transport blip does not immediately make the session inactive if the heartbeat deadline is still valid.
 
 ## Durable State Requirements
 
@@ -450,20 +404,20 @@ The daemon must durably persist:
 
 ### Environment-Agent
 
-The agent must durably persist:
+The agent keeps best-effort in-memory runtime state for:
 
 - outbound event outbox entries until covered by `event_ack`
 - received/executed command ids and their state to suppress duplicate execution
 - per-channel current generation and next sequence number
-- minimal replay metadata needed after reconnect or restart
+- minimal reset metadata needed after reconnect or restart
 
 ## Reconnect and Recovery Flows
 
 ### Agent reconnect after transient disconnect
 
-1. agent keeps unacked events in durable outbox
+1. agent keeps unacked events in its local outbox
 2. transport disconnects
-3. agent reconnects and sends `session_resume`
+3. agent reconnects and sends `session_open`
 4. daemon responds with `session_welcome`
 5. daemon tells agent to resume from daemon cursor
 6. agent resends unacked events after that cursor
@@ -472,18 +426,18 @@ The agent must durably persist:
 ### Daemon restart while agent keeps running
 
 1. daemon restarts and restores persisted cursors/command log
-2. agent reconnects using `session_open` or `session_resume`
+2. agent reconnects using `session_open`
 3. daemon issues fresh `session_welcome`
 4. daemon requests events from its last durably applied cursor
-5. agent replays from durable outbox/store
+5. agent resends any surviving local outbox events from that cursor
 6. daemon reissues still-outstanding commands after its last acknowledged command cursor
 
 ### Agent restart before daemon ack
 
-1. agent had durably written events but not received daemon ack
+1. agent had locally buffered events but not received daemon ack
 2. agent restarts
 3. agent increments channel generation if stream continuity is lost
-4. agent resumes from durable store
+4. agent resumes from empty or surviving local runtime state
 5. daemon either:
    - continues same generation if continuity is valid, or
    - accepts new generation and applies according to explicit generation rules
@@ -504,7 +458,7 @@ Generation change must be explicit; sequence reuse within the same generation is
 
 - Within a channel generation, the daemon applies only contiguous sequences.
 - Events with sequence less than or equal to the durable cursor are duplicates and must be ignored safely.
-- Events ahead of the cursor may trigger `replay_request` or be held/rejected according to implementation policy, but gaps must not silently advance the cursor.
+- Events ahead of the cursor must not silently advance the durable cursor. The daemon responds with an `event_ack` at the last contiguous cursor so the agent can reset and resend from there.
 - A generation mismatch must be handled explicitly, never heuristically.
 
 ### Commands
@@ -560,12 +514,12 @@ The message model is transport-agnostic.
 One possible mapping:
 
 - `POST /sessions/open`
-  - carries `session_open` or `session_resume`
+  - carries `session_open`
   - returns `session_welcome`
 - `POST /sessions/:sessionId/push`
   - carries agent→daemon envelopes such as `heartbeat`, `event_batch`, `command_ack`, `command_result`
 - `GET /sessions/:sessionId/pull?waitMs=30000`
-  - blocks until daemon has outbound envelopes such as `command_batch`, `event_ack`, `replay_request`, `session_replaced`
+  - blocks until daemon has outbound envelopes such as `command_batch`, `event_ack`, `session_replaced`
 
 This preserves the same session, cursor, and ack semantics without requiring WebSockets.
 
@@ -580,34 +534,18 @@ This preserves the same session, cursor, and ack semantics without requiring Web
 The daemon and agent negotiate:
 
 - protocol version
-- supported transports
-- optional features such as:
-  - dedicated `command_result`
-  - multi-channel sessions
-  - replay paging
-  - compression
 
-Unknown optional capabilities must be ignored safely. Unknown required protocol versions must fail fast.
+Unknown required protocol versions must fail fast.
 
-## Migration Notes
+## Current Implementation Notes
 
-This protocol is intended to replace the current model where:
+The current HTTP implementation uses:
 
-- live `/stream` acts as a low-latency path
-- `/deliver` acts as the acknowledged path
-- replay is partially backed by in-memory agent state
-- active/inactive is partly inferred from ad hoc transport behavior
+- `POST /threads/:id/environment-agent/session/open`
+  - agent opens or reopens a leased session
+- `POST /threads/:id/environment-agent/session/messages`
+  - agent sends `heartbeat`, `event_batch`, `command_ack`, `command_result`, and `session_close`
+- `GET /threads/:id/environment-agent/session/commands`
+  - agent long-polls for daemon `command_batch` responses
 
-Migration should proceed by:
-
-1. implementing the new protocol behind a feature flag or negotiated version
-2. moving one environment kind onto it first
-3. proving replay/restart/duplicate-command behavior in tests
-4. removing legacy transport semantics once the new session model is stable
-
-## Open Design Decisions
-
-- Whether a session carries exactly one thread channel in v1 or may multiplex multiple channels
-- Whether command completion should be represented canonically by `command_result`, normal events, or both
-- Whether generation is best represented as an integer counter, ULID, or daemon-issued token
-- Whether HTTP fallback should be long-poll, SSE+POST, or a single sync-style POST loop in v1
+This is the intentional v1 transport boundary for the current codebase.

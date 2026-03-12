@@ -25,10 +25,9 @@ Ownership: `ProjectRepository`.
 - `id` (PK)
 - `project_id` (FK -> `projects.id`)
 - `title` (nullable)
-- `status` (not null, default `created`)
+- `status` (not null, default `created`; `created | provisioning | provisioned | provisioning_failed | error | idle | active`)
 - `environment_id` (nullable)
 - `environment_record` (nullable JSON string)
-- `environment_agent_cursor` (nullable legacy cursor integer)
 - `parent_thread_id` (nullable)
 - `archived_at` (nullable)
 - `last_read_at` (not null, default `0`)
@@ -46,7 +45,7 @@ Ownership: `ThreadRepository`.
 
 Status invariant (`closed_internal`):
 
-- Valid values: `created`, `provisioning`, `provisioning_failed`, `idle`, `active`.
+- Valid values: `created`, `provisioning`, `provisioned`, `provisioning_failed`, `error`, `idle`, `active`.
 - Invalid persisted values throw on read.
 
 ## `queued_thread_messages`
@@ -100,7 +99,8 @@ Ownership: `EventRepository`.
 - `agent_id` (not null)
 - `agent_instance_id` (not null)
 - `protocol_version` (not null)
-- `transport_kind` (not null)
+- `control_base_url` (nullable)
+- `control_auth_token` (nullable)
 - `status` (not null)
 - `lease_expires_at` (not null)
 - `last_heartbeat_at` (nullable)
@@ -119,7 +119,7 @@ Ownership: `EnvironmentAgentSessionRepository`.
 
 Closed-internal invariants:
 
-- valid `transport_kind`: `websocket`, `http-long-poll`
+- `control_base_url` and `control_auth_token` are persisted restart hints for daemon nudges, not thread truth
 - valid `status`: `active`, `expired`, `closed`, `replaced`
 - valid `close_reason` when present:
   - `agent_shutdown`
