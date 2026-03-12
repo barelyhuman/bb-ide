@@ -1375,9 +1375,13 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const options = request ?? {};
+    const mergeBaseBranch = this._resolveThreadMergeBaseBranch(
+      thread,
+      options.mergeBaseBranch,
+    );
     const mergeResult = await environment.squashMergeIntoDefaultBranch({
       activeWorkspaceRoot: project.rootPath,
-      defaultBranch: options.mergeBaseBranch?.trim() || undefined,
+      defaultBranch: mergeBaseBranch,
       message: options.squashMessage,
       commitIfNeeded: options.commitIfNeeded,
       commitMessage: options.commitMessage,
@@ -1417,9 +1421,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...("commitSubject" in mergeResult && mergeResult.commitSubject
         ? { commitSubject: mergeResult.commitSubject }
         : {}),
-      ...(options.mergeBaseBranch?.trim()
-        ? { mergeBaseBranch: options.mergeBaseBranch.trim() }
-        : {}),
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
       ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
     }, { broadcastChanges: ["events-appended", "work-status-changed"] });
 
@@ -1443,7 +1445,7 @@ export class Orchestrator implements ThreadOrchestrator {
         thread,
         projectRootPath: project.rootPath,
         environment,
-        mergeBaseBranch: options.mergeBaseBranch?.trim() || undefined,
+        mergeBaseBranch,
         requested: options.autoArchiveOnSuccess,
       })
     ) {
@@ -1665,13 +1667,18 @@ export class Orchestrator implements ThreadOrchestrator {
     return environment?.isIsolatedWorkspace() === true;
   }
 
-  updateThread(threadId: string, request: { title?: string }): Thread {
+  updateThread(
+    threadId: string,
+    request: { title?: string; mergeBaseBranch?: string | null },
+  ): Thread {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
 
     let didChange = false;
+    let didChangeTitle = false;
+    let didChangeMergeBaseBranch = false;
     const nextTitle = this._normalizeThreadTitle(request.title);
     if (nextTitle && nextTitle !== thread.title) {
       this.threadRepo.update(threadId, { title: nextTitle });
@@ -1700,6 +1707,19 @@ export class Orchestrator implements ThreadOrchestrator {
         });
       }
       didChange = true;
+      didChangeTitle = true;
+    }
+
+    const nextMergeBaseBranch = this._normalizeThreadMergeBaseBranch(
+      request.mergeBaseBranch,
+    );
+    if (
+      request.mergeBaseBranch !== undefined &&
+      nextMergeBaseBranch !== (thread.mergeBaseBranch ?? undefined)
+    ) {
+      this.threadRepo.update(threadId, { mergeBaseBranch: nextMergeBaseBranch ?? null });
+      didChange = true;
+      didChangeMergeBaseBranch = true;
     }
 
     const updated = this.threadRepo.getById(threadId);
@@ -1707,7 +1727,14 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(threadId);
     }
     if (didChange) {
-      this._broadcastThreadChanged(threadId, ["title-changed"]);
+      const changes: ThreadChangeKind[] = [];
+      if (didChangeTitle) {
+        changes.push("title-changed");
+      }
+      if (didChangeMergeBaseBranch) {
+        changes.push("work-status-changed");
+      }
+      this._broadcastThreadChanged(threadId, changes);
     }
     return this._withPrimaryCheckoutState(updated);
   }
@@ -1883,14 +1910,18 @@ export class Orchestrator implements ThreadOrchestrator {
     const defaultBranch =
       detectProjectDefaultBranch(project.rootPath) ??
       await detectProjectDefaultBranchAsync(project.rootPath);
+    const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
+      thread,
+      mergeBaseBranch,
+    );
     const status = environment.getWorkspaceStatusAsync
       ? await environment.getWorkspaceStatusAsync({
           defaultBranch,
-          mergeBaseBranch,
+          mergeBaseBranch: resolvedMergeBaseBranch,
         })
       : environment.getWorkspaceStatus({
           defaultBranch,
-          mergeBaseBranch,
+          mergeBaseBranch: resolvedMergeBaseBranch,
         });
     if (status.baseRef) {
       const commits = environment.listWorkspaceCommitsSinceRefAsync
@@ -1973,9 +2004,13 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     if (environment.isIsolatedWorkspace()) {
       const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+      const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
+        thread,
+        mergeBaseBranch,
+      );
       const status = environment.getWorkspaceStatus({
         ...(defaultBranch ? { defaultBranch } : {}),
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        ...(resolvedMergeBaseBranch ? { mergeBaseBranch: resolvedMergeBaseBranch } : {}),
       });
       const commits = environment.listWorkspaceCommitsSinceRef({
         baseRef: status.baseRef,
@@ -2130,14 +2165,18 @@ export class Orchestrator implements ThreadOrchestrator {
       const defaultBranch =
         detectProjectDefaultBranch(project.rootPath) ??
         await detectProjectDefaultBranchAsync(project.rootPath);
+      const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
+        thread,
+        mergeBaseBranch,
+      );
       const workspaceStatus = environment.getWorkspaceStatusAsync
         ? await environment.getWorkspaceStatusAsync({
             defaultBranch,
-            mergeBaseBranch,
+            mergeBaseBranch: resolvedMergeBaseBranch,
           })
         : environment.getWorkspaceStatus({
             defaultBranch,
-            mergeBaseBranch,
+            mergeBaseBranch: resolvedMergeBaseBranch,
           });
       return { ...workspaceStatus };
     }, {
@@ -2188,9 +2227,13 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+    const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
+      thread,
+      mergeBaseBranch,
+    );
     const workspaceStatus = environment.getWorkspaceStatus({
       ...(defaultBranch ? { defaultBranch } : {}),
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+      ...(resolvedMergeBaseBranch ? { mergeBaseBranch: resolvedMergeBaseBranch } : {}),
     });
     return { ...workspaceStatus };
   }
@@ -4426,11 +4469,15 @@ export class Orchestrator implements ThreadOrchestrator {
       return this._withPrimaryCheckoutState(hydrated);
     }
     const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+    const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
+      thread,
+      opts?.mergeBaseBranch,
+    );
     let workspaceStatus: ThreadWorkStatus | undefined;
     try {
       workspaceStatus = environment.getWorkspaceStatus({
         defaultBranch,
-        mergeBaseBranch: opts?.mergeBaseBranch,
+        mergeBaseBranch: resolvedMergeBaseBranch,
       });
     } catch (err) {
       if (!this._isSyncWorkspaceStatusUnsupportedError(err)) {
@@ -4503,14 +4550,18 @@ export class Orchestrator implements ThreadOrchestrator {
     const defaultBranch =
       detectProjectDefaultBranch(project.rootPath) ??
       await detectProjectDefaultBranchAsync(project.rootPath);
+    const resolvedMergeBaseBranch = this._resolveThreadMergeBaseBranch(
+      thread,
+      opts?.mergeBaseBranch,
+    );
     const workspaceStatus = environment.getWorkspaceStatusAsync
       ? await environment.getWorkspaceStatusAsync({
           defaultBranch,
-          mergeBaseBranch: opts?.mergeBaseBranch,
+          mergeBaseBranch: resolvedMergeBaseBranch,
         })
       : environment.getWorkspaceStatus({
           defaultBranch,
-          mergeBaseBranch: opts?.mergeBaseBranch,
+          mergeBaseBranch: resolvedMergeBaseBranch,
         });
     const hydrated: Thread = {
       ...thread,
@@ -5175,6 +5226,22 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!normalized) return undefined;
     if (normalized.length <= 60) return normalized;
     return `${normalized.slice(0, 57).trimEnd()}...`;
+  }
+
+  private _normalizeThreadMergeBaseBranch(value: unknown): string | undefined {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value !== "string") return undefined;
+
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  private _resolveThreadMergeBaseBranch(
+    thread: Thread,
+    requestedMergeBaseBranch?: string,
+  ): string | undefined {
+    return this._normalizeThreadMergeBaseBranch(requestedMergeBaseBranch) ??
+      this._normalizeThreadMergeBaseBranch(thread.mergeBaseBranch);
   }
 
   private _normalizePromptInputForProvider(input: PromptInput[]): PromptInput[] {

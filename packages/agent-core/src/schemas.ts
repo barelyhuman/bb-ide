@@ -67,8 +67,12 @@ export const sendQueuedThreadMessageSchema = z.object({
 export const updateThreadSchema = z
   .object({
     title: z.string().min(1).optional(),
+    mergeBaseBranch: z.string().min(1).nullable().optional(),
   })
-  .refine((value) => value.title !== undefined, "At least one field must be provided");
+  .refine(
+    (value) => value.title !== undefined || value.mergeBaseBranch !== undefined,
+    "At least one field must be provided",
+  );
 
 // Project schemas
 export const createProjectSchema = z.object({

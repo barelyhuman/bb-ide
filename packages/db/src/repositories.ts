@@ -364,6 +364,7 @@ export class ThreadRepository {
   create(data: {
     projectId: string;
     title?: string;
+    mergeBaseBranch?: string;
     environmentId?: string;
     environmentRecord?: PersistedEnvironmentRecord;
     parentThreadId?: string;
@@ -378,6 +379,7 @@ export class ThreadRepository {
       environmentRecord: data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null,
+      mergeBaseBranch: data.mergeBaseBranch ?? null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       lastReadAt: now,
@@ -507,6 +509,7 @@ export class ThreadRepository {
     data: {
       status?: ThreadStatus;
       title?: string;
+      mergeBaseBranch?: string | null;
       environmentId?: string | null;
       environmentRecord?: PersistedEnvironmentRecord | null;
       archivedAt?: number | null;
@@ -529,6 +532,9 @@ export class ThreadRepository {
     }
     if (data.status !== undefined) updates.status = data.status;
     if (data.title !== undefined) updates.title = data.title;
+    if (data.mergeBaseBranch !== undefined) {
+      updates.mergeBaseBranch = data.mergeBaseBranch;
+    }
     if (data.environmentId !== undefined) updates.environmentId = data.environmentId;
     if (data.environmentRecord !== undefined) {
       updates.environmentRecord = data.environmentRecord
@@ -651,6 +657,7 @@ export class ThreadRepository {
       id: row.id,
       projectId: row.projectId,
       title: row.title ?? undefined,
+      mergeBaseBranch: row.mergeBaseBranch ?? undefined,
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
       environmentRecord: parseEnvironmentRecord(row.environmentRecord),

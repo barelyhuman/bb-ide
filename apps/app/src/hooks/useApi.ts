@@ -814,7 +814,9 @@ export function useStopThread() {
 export function useUpdateThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...req }: { id: string } & { title?: string }) =>
+    mutationFn: (
+      { id, ...req }: { id: string } & { title?: string; mergeBaseBranch?: string | null },
+    ) =>
       api.updateThread(id, req),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);

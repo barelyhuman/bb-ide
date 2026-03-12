@@ -12,6 +12,7 @@ import { inactiveSessionError, threadArchivedError } from "../../domain-errors.j
 import type { EnvironmentAgentSessionService } from "../../environment-agent-session-service.js";
 
 type LegacyThreadRouteMock = ThreadOrchestrator & {
+  updateThread: ReturnType<typeof vi.fn>;
   getRawById: ReturnType<typeof vi.fn>;
   getById: ReturnType<typeof vi.fn>;
   isPrimaryCheckoutActive: ReturnType<typeof vi.fn>;
@@ -86,6 +87,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     archive: vi.fn(),
     unarchive: vi.fn(),
     requiresForceArchive: vi.fn(),
+    updateThread: vi.fn(),
     promoteThread: vi.fn(),
     demotePrimaryCheckout: vi.fn(),
     requestThreadOperation: vi.fn(),
@@ -354,6 +356,48 @@ describe("Thread routes", () => {
       expect(body.error).toBe("Project not found");
     });
 
+  });
+
+  describe("PATCH /threads/:id", () => {
+    it("updates the persisted merge-base branch override", async () => {
+      const updatedThread = makeThread({ mergeBaseBranch: "release/1.0" });
+      threadManager.getById.mockReturnValue(makeThread());
+      threadManager.updateThread.mockReturnValue(updatedThread);
+
+      const res = await app.request("/threads/thread-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mergeBaseBranch: "release/1.0" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
+        title: undefined,
+        mergeBaseBranch: "release/1.0",
+      });
+      await expect(res.json()).resolves.toMatchObject({
+        id: "thread-1",
+        mergeBaseBranch: "release/1.0",
+      });
+    });
+
+    it("allows clearing the persisted merge-base branch override", async () => {
+      const updatedThread = makeThread({ mergeBaseBranch: undefined });
+      threadManager.getById.mockReturnValue(makeThread({ mergeBaseBranch: "release/1.0" }));
+      threadManager.updateThread.mockReturnValue(updatedThread);
+
+      const res = await app.request("/threads/thread-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mergeBaseBranch: null }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
+        title: undefined,
+        mergeBaseBranch: null,
+      });
+    });
   });
 
   describe("GET /threads/:id/environment-agent/status", () => {

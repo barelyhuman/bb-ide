@@ -68,6 +68,7 @@ export interface Thread {
   id: string;
   projectId: string;
   title?: string;
+  mergeBaseBranch?: string;
   titleFallback?: string;
   status: ThreadStatus;
   workStatus?: ThreadWorkStatus;

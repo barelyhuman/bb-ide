@@ -86,6 +86,7 @@ export interface SendQueuedThreadMessageResponse {
 
 export interface UpdateThreadRequest {
   title?: string;
+  mergeBaseBranch?: string | null;
 }
 
 export interface ThreadExecutionOptions {

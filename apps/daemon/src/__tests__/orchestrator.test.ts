@@ -1720,6 +1720,59 @@ describe("Orchestrator", () => {
 
   });
 
+  describe("updateThread()", () => {
+    it("persists a merge-base branch override on the thread", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        mergeBaseBranch: undefined,
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        mergeBaseBranch: "release/1.0",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      const result = manager.updateThread("thread-1", {
+        mergeBaseBranch: "release/1.0",
+      });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        mergeBaseBranch: "release/1.0",
+      });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "work-status-changed",
+      ]);
+      expect(result.mergeBaseBranch).toBe("release/1.0");
+    });
+
+    it("clears the merge-base branch override when null is provided", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        mergeBaseBranch: "release/1.0",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        mergeBaseBranch: undefined,
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      const result = manager.updateThread("thread-1", {
+        mergeBaseBranch: null,
+      });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        mergeBaseBranch: null,
+      });
+      expect(result.mergeBaseBranch).toBeUndefined();
+    });
+  });
+
   describe("tell()", () => {
     it("throws if thread not found", async () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -2744,6 +2797,52 @@ describe("Orchestrator", () => {
       resolveCleanup?.();
       await archivePromise;
     });
+
+    it("uses the stored thread merge-base branch when no request override is provided", async () => {
+      const getWorkspaceStatusAsync = vi.fn(async (args?: { mergeBaseBranch?: string }) =>
+        makeWorkspaceStatus({
+          mergeBaseBranch: args?.mergeBaseBranch,
+        })
+      );
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+        mergeBaseBranch: "release/1.0",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          kind: "worktree",
+          rootPath: "/tmp/worktrees/proj-1/thread-1",
+          overrides: {
+            getWorkspaceStatus() {
+              throw new Error(
+                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
+              );
+            },
+            getWorkspaceStatusAsync,
+          },
+        }),
+      });
+
+      const result = await manager.getWorkStatusAsync("thread-1");
+
+      expect(getWorkspaceStatusAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mergeBaseBranch: "release/1.0",
+        }),
+      );
+      expect(result?.mergeBaseBranch).toBe("release/1.0");
+    });
   });
 
   describe("deleteThread()", () => {
@@ -3056,6 +3155,60 @@ describe("Orchestrator", () => {
         type: "commit",
         commitSha: "abc123",
       });
+    });
+
+    it("prefers an explicit merge-base branch over the stored thread override", async () => {
+      const getWorkspaceStatusAsync = vi.fn(async (args?: { mergeBaseBranch?: string }) =>
+        makeWorkspaceStatus({
+          hasCommittedUnmergedChanges: true,
+          hasUncommittedChanges: false,
+          aheadCount: 1,
+          baseRef: "origin/release/2.0",
+          mergeBaseBranch: args?.mergeBaseBranch,
+        })
+      );
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+        mergeBaseBranch: "release/1.0",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktrees/proj-1/thread-1",
+          overrides: {
+            getWorkspaceStatus() {
+              throw new Error(
+                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
+              );
+            },
+            getWorkspaceStatusAsync,
+            async listWorkspaceCommitsSinceRefAsync() {
+              return [];
+            },
+            async getWorkspaceDiffAsync() {
+              return { diff: "", truncated: false };
+            },
+          },
+        }),
+      });
+
+      await manager.getGitDiffAsync("thread-1", { type: "combined" }, "release/2.0");
+
+      expect(getWorkspaceStatusAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mergeBaseBranch: "release/2.0",
+        }),
+      );
     });
   });
 

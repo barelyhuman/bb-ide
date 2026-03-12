@@ -269,6 +269,10 @@ export function ThreadDetailView() {
   const supportsSquashMerge = squashMergeAction?.available === true;
 
   useEffect(() => {
+    setSelectedMergeBaseBranch(thread?.mergeBaseBranch);
+  }, [setSelectedMergeBaseBranch, thread?.id, thread?.mergeBaseBranch]);
+
+  useEffect(() => {
     if (!thread) return;
     if ((thread.lastReadAt ?? 0) >= thread.updatedAt) return;
 
@@ -304,6 +308,46 @@ export function ThreadDetailView() {
       },
     );
   }, [updateThread]);
+
+  const handleThreadMergeBaseBranchChange = useCallback((branch: string) => {
+    if (!threadId || !thread) {
+      return;
+    }
+
+    const normalizedBranch = branch.trim();
+    const defaultBranch = resolvedThreadWorkStatus?.defaultBranch?.trim();
+    const nextPersistedMergeBaseBranch =
+      normalizedBranch.length > 0 && normalizedBranch !== defaultBranch
+        ? normalizedBranch
+        : null;
+    const currentPersistedMergeBaseBranch = thread.mergeBaseBranch ?? null;
+
+    setSelectedMergeBaseBranch(normalizedBranch);
+    if (nextPersistedMergeBaseBranch === currentPersistedMergeBaseBranch) {
+      return;
+    }
+
+    updateThread.mutate(
+      {
+        id: threadId,
+        mergeBaseBranch: nextPersistedMergeBaseBranch,
+      },
+      {
+        onError: (error) => {
+          setSelectedMergeBaseBranch(thread.mergeBaseBranch);
+          toast.error(
+            error instanceof Error ? error.message : "Failed to update merge base branch.",
+          );
+        },
+      },
+    );
+  }, [
+    resolvedThreadWorkStatus?.defaultBranch,
+    setSelectedMergeBaseBranch,
+    thread,
+    threadId,
+    updateThread,
+  ]);
 
   const toggleArchiveThread = useCallback(() => {
     if (!thread) return;
@@ -1210,7 +1254,7 @@ export function ThreadDetailView() {
         mergeBaseBranchOptions={mergeBaseBranchOptions}
         mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
         onMergeBaseBranchChange={
-          showBranchComparisonUi ? setSelectedMergeBaseBranch : undefined
+          showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
         }
         onMergeBaseBranchPickerOpenChange={
           showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined

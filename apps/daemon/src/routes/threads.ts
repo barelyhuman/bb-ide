@@ -619,8 +619,11 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
-          const { title } = c.req.valid("json");
-          const updated = threadManager.updateThread(c.req.param("id"), { title });
+          const { title, mergeBaseBranch } = c.req.valid("json");
+          const updated = threadManager.updateThread(c.req.param("id"), {
+            title,
+            mergeBaseBranch,
+          });
           return c.json(updated);
         } catch (err) {
           return sendRouteError(c, err);
