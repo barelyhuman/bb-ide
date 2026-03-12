@@ -64,11 +64,6 @@ function isUnavailableCleanupTargetError(error: unknown): boolean {
   return error.message.includes("workspace is unavailable");
 }
 
-function isMissingManagedEnvironmentAgentTargetError(error: unknown): boolean {
-  return error instanceof Error &&
-    error.message.includes("Missing managed environment-agent target");
-}
-
 function checkoutSnapshotsMatch(
   left: EnvironmentCheckoutSnapshot,
   right: EnvironmentCheckoutSnapshot,
@@ -353,24 +348,7 @@ export class EnvironmentService {
     threadId: string,
     environment: IEnvironment,
   ): Promise<void> {
-    try {
-      this.setEnvironmentRuntime(threadId, environment);
-      return;
-    } catch (error) {
-      if (
-        !isMissingManagedEnvironmentAgentTargetError(error) ||
-        typeof environment.prepare !== "function"
-      ) {
-        throw error;
-      }
-
-      // Managed environment-agent state can disappear between prepare() and
-      // runtime registration when a prior session is shutting down. Retry
-      // prepare once so the target is recreated before we attach the runtime.
-      await environment.prepare();
-      const agentConnectionTarget = environment.getAgentConnectionTarget();
-      this.installEnvironmentRuntime(threadId, environment, agentConnectionTarget);
-    }
+    this.setEnvironmentRuntime(threadId, environment);
   }
 
   detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {

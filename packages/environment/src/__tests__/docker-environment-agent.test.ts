@@ -6,7 +6,6 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -418,26 +417,10 @@ describe("docker environment-agent helper", () => {
     });
   });
 
-  it("reuses an already running environment-agent for the same docker container", async () => {
+  it("replaces an existing managed environment-agent for the same docker container", async () => {
     const beanbagRoot = makeTempDir("bb-docker-agent-existing-root-");
     process.env.BEANBAG_ROOT = beanbagRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-existing-workspace-");
-    const server = await new Promise<import("node:http").Server>((resolve) => {
-      const next = createServer((request, response) => {
-        if (request.url === "/control/status" && request.method === "POST") {
-          response.writeHead(200, { "content-type": "application/json" });
-          response.end("{}");
-          return;
-        }
-        response.writeHead(404);
-        response.end();
-      });
-      next.listen(0, "127.0.0.1", () => resolve(next));
-    });
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("Expected test server address");
-    }
     cleanupPaths.push(join(beanbagRoot, "environment-agents", "project-existing"));
 
     const stateFile = __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath({
@@ -452,14 +435,14 @@ describe("docker environment-agent helper", () => {
       JSON.stringify(
         {
           version: 1,
-          baseUrl: `http://127.0.0.1:${address.port}`,
+          baseUrl: "http://127.0.0.1:4311",
           authToken: "existing-auth-token",
           threadId: "thread-existing",
           projectId: "project-existing",
           environmentId: "docker",
           workspaceRoot,
           containerName: "beanbag-thread-thread-existing",
-          hostPort: address.port,
+          hostPort: 4311,
           containerPort: 4310,
           installRoot: "/opt/beanbag/environment-agent",
         },
@@ -469,46 +452,48 @@ describe("docker environment-agent helper", () => {
       "utf8",
     );
 
-    try {
-      const run = vi.fn(() => ({
-        exitCode: 0,
-        stdout: "",
-        stderr: "",
-      }));
+    const artifactRoot = makeTempDir("bb-docker-agent-existing-artifact-");
+    const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
+    mkdirSync(dirname(artifactEntry), { recursive: true });
+    writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
 
-      await ensureManagedDockerEnvironmentAgent({
-        workspaceRootPath: workspaceRoot,
-        threadId: "thread-existing",
+    const run = vi.fn(() => ({
+      exitCode: 0,
+      stdout: "",
+      stderr: "",
+    }));
+
+    await ensureManagedDockerEnvironmentAgent({
+      workspaceRootPath: workspaceRoot,
+      threadId: "thread-existing",
+      projectId: "project-existing",
+      environmentId: "docker",
+      runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      dockerBin: "docker",
+      containerName: "beanbag-thread-thread-existing",
+      hostPort: 4311,
+    }, {
+      run,
+      waitForAgent: async () => {},
+      generateAuthToken: () => "new-auth-token",
+      resolveArtifactEntry: () => artifactEntry,
+    });
+
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(
+      resolveManagedDockerEnvironmentAgentTarget({
         projectId: "project-existing",
+        threadId: "thread-existing",
         environmentId: "docker",
+        workspaceRootPath: workspaceRoot,
         runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
-        dockerBin: "docker",
-        containerName: "beanbag-thread-thread-existing",
-        hostPort: address.port,
-      }, {
-        run,
-      });
-
-      expect(run).not.toHaveBeenCalled();
-      expect(
-        resolveManagedDockerEnvironmentAgentTarget({
-          projectId: "project-existing",
-          threadId: "thread-existing",
-          environmentId: "docker",
-          workspaceRootPath: workspaceRoot,
-          runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
-        }),
-      ).toEqual({
-        transport: "http",
-        baseUrl: `http://127.0.0.1:${address.port}`,
-        headers: {
-          authorization: "Bearer existing-auth-token",
-        },
-      });
-    } finally {
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-      });
-    }
+      }),
+    ).toEqual({
+      transport: "http",
+      baseUrl: "http://127.0.0.1:4311",
+      headers: {
+        authorization: "Bearer new-auth-token",
+      },
+    });
   });
 });

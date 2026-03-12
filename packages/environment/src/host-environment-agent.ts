@@ -38,11 +38,6 @@ interface EnsureManagedHostEnvironmentAgentDeps {
   generateAuthToken?: () => string;
   isProcessAlive?: (pid: number) => boolean;
   killProcess?: (pid: number, signal?: NodeJS.Signals | number) => boolean;
-  pingAgent?: (
-    baseUrl: string,
-    authToken: string,
-    timeoutMs: number,
-  ) => Promise<boolean>;
   resolveLaunchCommand?: () => {
     command: string;
     args: string[];
@@ -335,7 +330,6 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
-  const pingAgent = deps.pingAgent ?? pingEnvironmentAgent;
   const checkProcessAlive = deps.isProcessAlive ?? isProcessAlive;
   const killProcess =
     deps.killProcess ??
@@ -345,13 +339,6 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
     const existing = readRecord(stateRecordIdentity);
     if (existing) {
-      if (
-        checkProcessAlive(existing.pid) &&
-        existing.workspaceRoot === args.workspaceRootPath &&
-        await pingAgent(existing.baseUrl, existing.authToken, HEALTH_TIMEOUT_MS)
-      ) {
-        return;
-      }
       if (checkProcessAlive(existing.pid)) {
         try {
           killProcess(existing.pid, "SIGTERM");

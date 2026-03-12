@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { request as httpRequest } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
@@ -9,7 +8,6 @@ import { runCommandAsync } from "./process.js";
 
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
-const HEALTH_TIMEOUT_MS = 500;
 const STATE_VERSION = 1 as const;
 const DOCKER_DAEMON_HOST_OVERRIDE_ENV = "BEANBAG_DOCKER_DAEMON_HOST";
 const DEFAULT_DOCKER_DAEMON_HOST = "host.docker.internal";
@@ -225,46 +223,23 @@ function removeRecord(args: {
   }
 }
 
-function pingEnvironmentAgent(
-  baseUrl: string,
-  authToken: string,
-  timeoutMs: number,
-): Promise<boolean> {
-  return new Promise((resolvePromise) => {
-    const url = new URL("/control/status", baseUrl);
-    const req = httpRequest(
-      {
+async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Promise<void> {
+  const deadline = Date.now() + START_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(new URL("/control/status", baseUrl), {
         method: "POST",
-        hostname: url.hostname,
-        port: url.port,
-        path: url.pathname,
-        timeout: timeoutMs,
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${authToken}`,
         },
-      },
-      (response) => {
-        response.resume();
-        resolvePromise(response.statusCode === 200);
-      },
-    );
-    req.on("timeout", () => {
-      req.destroy();
-      resolvePromise(false);
-    });
-    req.on("error", () => {
-      resolvePromise(false);
-    });
-    req.end("{}");
-  });
-}
-
-async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Promise<void> {
-  const deadline = Date.now() + START_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (await pingEnvironmentAgent(baseUrl, authToken, HEALTH_TIMEOUT_MS)) {
-      return;
+        body: "{}",
+      });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Retry until the startup deadline expires.
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
   }
@@ -425,18 +400,6 @@ export async function ensureManagedDockerEnvironmentAgent(
     const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
     const existing = readRecord(stateRecordIdentity);
     if (existing) {
-      if (
-        existing.workspaceRoot === args.workspaceRootPath &&
-        existing.containerName === args.containerName &&
-        existing.hostPort === args.hostPort &&
-        await pingEnvironmentAgent(
-          existing.baseUrl,
-          existing.authToken,
-          HEALTH_TIMEOUT_MS,
-        )
-      ) {
-        return;
-      }
       removeRecord(stateRecordIdentity);
     }
 

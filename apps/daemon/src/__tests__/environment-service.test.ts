@@ -508,7 +508,7 @@ describe("EnvironmentService", () => {
     expect(service.getEnvironmentRuntime("thread-1")).toBe(firstResolved.runtime);
   });
 
-  it("retries prepare when the managed agent target disappears before runtime registration", async () => {
+  it("fails when a freshly prepared environment still has no managed agent target", async () => {
     let prepareCalls = 0;
     const restoreImpl = vi.fn(() => {
       let targetAvailable = false;
@@ -534,21 +534,15 @@ describe("EnvironmentService", () => {
       restoreImpl,
     });
 
-    const ensured = await service.ensureThreadEnvironmentRuntime(
-      threadState,
-      "/project/root",
-      "resume-existing-provider-session",
-    );
-
-    expect(prepareCalls).toBe(2);
-    expect(ensured.runtime.agentConnectionTarget).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4312",
-    });
-    expect(service.getEnvironmentRuntime("thread-1")?.agentConnectionTarget).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4312",
-    });
+    await expect(
+      service.ensureThreadEnvironmentRuntime(
+        threadState,
+        "/project/root",
+        "resume-existing-provider-session",
+      ),
+    ).rejects.toThrow("Missing managed environment-agent target for local environment");
+    expect(prepareCalls).toBe(1);
+    expect(service.getEnvironmentRuntime("thread-1")).toBeUndefined();
   });
 
   it("refreshes an active runtime by preparing it again when the agent target is missing", async () => {
