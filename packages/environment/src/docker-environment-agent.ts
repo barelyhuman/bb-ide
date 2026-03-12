@@ -150,6 +150,7 @@ function resolveStateFilePathCandidates(args: {
       threadId: args.threadId,
       environmentId: args.environmentId,
       workspaceRootPath: args.workspaceRootPath,
+      runtimeEnv: args.runtimeEnv,
     }));
   }
   candidates.push(resolveLegacyStateFilePath(args));

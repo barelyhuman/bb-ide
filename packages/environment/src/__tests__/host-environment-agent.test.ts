@@ -110,6 +110,57 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
     });
   });
 
+  it("finds a managed agent record when only runtimeEnv overrides the beanbag root", () => {
+    vi.spyOn(process, "kill").mockImplementation((_pid: number, _signal?: string | number) => {
+      return true;
+    });
+
+    const beanbagRoot = makeTempDir();
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const runtimeEnv = { BEANBAG_ROOT: beanbagRoot };
+    const stateDir = join(beanbagRoot, "environment-agents", projectId);
+    cleanupPaths.push(stateDir);
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(
+      __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
+        projectId,
+        threadId: "thread-1",
+        environmentId: "worktree",
+        workspaceRootPath: workspaceRoot,
+        runtimeEnv,
+      }),
+      JSON.stringify({
+        version: 1,
+        pid: 4321,
+        port: 4123,
+        baseUrl: "http://127.0.0.1:4123",
+        authToken: "auth-token",
+        threadId: "thread-1",
+        projectId,
+        environmentId: "worktree",
+        workspaceRoot,
+      }),
+      "utf8",
+    );
+
+    expect(
+      resolveManagedHostEnvironmentAgentTarget({
+        projectId,
+        threadId: "thread-1",
+        environmentId: "worktree",
+        workspaceRootPath: workspaceRoot,
+        runtimeEnv,
+      }),
+    ).toEqual({
+      transport: "http",
+      baseUrl: "http://127.0.0.1:4123",
+      headers: {
+        authorization: "Bearer auth-token",
+      },
+    });
+  });
+
   it("coalesces concurrent managed agent startup for the same thread", async () => {
     const beanbagRoot = makeTempDir();
     process.env.BEANBAG_ROOT = beanbagRoot;
