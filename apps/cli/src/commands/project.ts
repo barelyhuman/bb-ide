@@ -9,12 +9,17 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
   project
     .command("list")
     .description("List projects")
-    .action(async () => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const projects = await unwrap<Project[]>(
           client.api.v1.projects.$get(),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(projects, null, 2));
+          return;
+        }
         if (projects.length === 0) {
           console.log("No projects found");
           return;

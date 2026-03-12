@@ -13,6 +13,7 @@ vi.mock("../client.js", () => {
 
 import { createClient, unwrap } from "../client.js";
 import { registerDaemonCommands } from "../commands/daemon.js";
+import { registerProjectCommands } from "../commands/project.js";
 import { registerStatusCommand } from "../commands/status.js";
 import { registerThreadCommands } from "../commands/thread.js";
 
@@ -67,6 +68,36 @@ describe("CLI command output contracts", () => {
     vi.restoreAllMocks();
   });
 
+
+  it("bb project list --json prints raw projects", async () => {
+    const projects = [
+      {
+        id: "proj-1",
+        name: "Alpha",
+        rootPath: "/tmp/alpha",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ];
+    const get = vi.fn(async () => projects);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          projects: {
+            $get: get,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["project", "list", "--json"], (program) =>
+      registerProjectCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      projects,
+    );
+  });
   it("bb status prints project/thread context", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     process.env.BB_THREAD_ID = "thread-1";
