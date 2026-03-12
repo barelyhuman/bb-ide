@@ -32,9 +32,8 @@ pnpm exec turbo run build \
 
 Confirm Codex is available in `PATH` and can be used by the daemon.
 
-Optional but strongly recommended during restart/liveness QA:
+Recommended during restart/liveness QA:
 
-- keep `sqlite3` available so you can inspect `threads`, `events`, and `environment_agent_sessions`
 - keep one shell tailing the daemon log:
 
 ```bash
@@ -50,6 +49,16 @@ first failure unless the daemon is completely unusable. The goal is to learn whi
 still work, not just which case fails first.
 
 ### 1. Prepare a disposable project
+
+Fast setup wrapper:
+
+```bash
+node scripts/qa/start-standalone-daemon-qa.mjs
+```
+
+That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, and daemon PID as JSON.
+
+Manual setup:
 
 ```bash
 tmp_root=$(mktemp -d /tmp/beanbag-qa-XXXXXX)
@@ -97,9 +106,21 @@ node apps/cli/dist/index.js project files --project <project-id> alpha
 Record the real `<project-id>` returned by `project create` and reuse it in later commands. Do not
 assume it is `project-1`.
 
-### 3a. DB inspection helpers
+### 3a. CLI inspection helpers
 
 Keep these handy during the pass:
+
+```bash
+node apps/cli/dist/index.js thread wait <thread-id> --status idle --timeout 90
+node apps/cli/dist/index.js thread wait <thread-id> --event turn/started --timeout 30
+node apps/cli/dist/index.js thread sessions <thread-id>
+node scripts/qa/thread-summary.mjs <thread-id>
+node apps/cli/dist/index.js thread status <thread-id> --recent-events 10 --event-mode raw --include-low-signal
+node apps/cli/dist/index.js thread log <thread-id> --json
+node apps/cli/dist/index.js thread output <thread-id>
+```
+
+Optional deeper debugging helpers:
 
 ```bash
 sqlite3 "$beanbag_root/beanbag.db" \
@@ -112,7 +133,7 @@ sqlite3 "$beanbag_root/beanbag.db" \
   "select thread_id,type,substr(json_data,1,160) from events order by seq desc limit 20;"
 ```
 
-Use them to confirm the daemon’s persisted view, not just CLI rendering.
+Use SQLite only when the CLI/API surfaces are insufficient and you need to confirm the daemon’s persisted view directly.
 
 ### 4. Validate direct/local flows
 
@@ -151,8 +172,7 @@ node apps/cli/dist/index.js thread spawn \
   --project <project-id> \
   --prompt 'Read every file carefully, think for a while, and produce a long structured summary.'
 
-Wait until `thread status --recent-events ... --event-mode raw` shows a real `turn/started`
-provider event for the new turn, then steer:
+Wait until `thread wait <thread-id> --event turn/started --timeout 30` succeeds, then steer:
 
 node apps/cli/dist/index.js thread steer <thread-id> \
   'Stop the previous plan. Reply with exactly LOCAL-STEER and finish.'
@@ -174,9 +194,8 @@ Useful checks while waiting:
 
 ```bash
 node apps/cli/dist/index.js thread show <thread-id>
-node apps/cli/dist/index.js thread status <thread-id> --recent-events 10 --event-mode raw --include-low-signal
-node apps/cli/dist/index.js thread log <thread-id>
-node apps/cli/dist/index.js thread output <thread-id>
+node apps/cli/dist/index.js thread wait <thread-id> --status idle --timeout 90
+node apps/cli/dist/index.js thread sessions <thread-id>
 find "$beanbag_root/environment-agents" -maxdepth 3 -type f | sort
 ```
 

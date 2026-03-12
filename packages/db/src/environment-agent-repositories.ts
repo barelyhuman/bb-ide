@@ -457,6 +457,16 @@ export class EnvironmentAgentSessionRepository {
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
   }
 
+  listByThreadId(threadId: string): EnvironmentAgentSessionRecord[] {
+    return this.db
+      .select()
+      .from(environmentAgentSessions)
+      .where(eq(environmentAgentSessions.threadId, threadId))
+      .orderBy(desc(environmentAgentSessions.updatedAt), desc(environmentAgentSessions.createdAt))
+      .all()
+      .map(rowToEnvironmentAgentSessionRecord);
+  }
+
   listActive(now: number = Date.now()): EnvironmentAgentSessionRecord[] {
     return this.db
       .select()

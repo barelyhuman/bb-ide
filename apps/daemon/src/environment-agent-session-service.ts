@@ -301,6 +301,10 @@ export class EnvironmentAgentSessionService {
     return expired;
   }
 
+  listSessions(threadId: string): EnvironmentAgentSessionRecord[] {
+    return this.sessions.listSessionsByThreadId(threadId);
+  }
+
   getThreadStatus(threadId: string): EnvironmentAgentStatusSnapshot {
     const session = this.sessions.getActiveSessionByThreadId(threadId, this.clock());
     if (!session) {
