@@ -42,6 +42,7 @@ export const threads = sqliteTable(
     index("threads_environment_idx").on(table.environmentId),
     index("threads_parent_thread_idx").on(table.parentThreadId),
     index("threads_archived_status_idx").on(table.archivedAt, table.status),
+    index("threads_archived_environment_idx").on(table.archivedAt, table.environmentId),
   ]
 );
 

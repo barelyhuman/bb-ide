@@ -6,6 +6,7 @@ import { registerEnvironmentAgentCommand } from "./commands/environment-agent.js
 import { registerProjectCommands } from "./commands/project.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread.js";
+import { normalizeCliArgv } from "./argv-normalization.js";
 import { resolveContextSnapshot, resolveDaemonUrl } from "./context-env.js";
 
 const program = new Command();
@@ -50,7 +51,7 @@ registerThreadCommands(program, getUrl);
 registerDaemonCommands(program, getUrl);
 registerEnvironmentAgentCommand(program);
 
-program.parseAsync(process.argv).catch((err) => {
+program.parseAsync(normalizeCliArgv(process.argv)).catch((err) => {
   console.error(err.message);
   process.exit(1);
 });

@@ -17,7 +17,7 @@ import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
 import { closeHttpServer } from "./http-server-close.js";
 import {
-  recoverManagedEnvironmentAgentSessionsOnBoot,
+  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "./startup-tasks.js";
 
@@ -250,7 +250,7 @@ async function main(): Promise<void> {
   injectWebSocket(httpServer);
 
   await listening;
-  await recoverManagedEnvironmentAgentSessionsOnBoot({
+  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
     sessionRepo: environmentAgentSessionRepo,
   });
   console.log("Reconciling startup environment state...");

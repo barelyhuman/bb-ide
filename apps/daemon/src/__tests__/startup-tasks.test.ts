@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   recoverManagedEnvironmentAgentSessionsOnBoot,
+  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "../startup-tasks.js";
 
@@ -95,6 +96,71 @@ describe("startup tasks", () => {
     expect(result).toEqual({
       activeSessionCount: 2,
       pokedCount: 1,
+      unreachableCount: 1,
+    });
+  });
+
+  it("defers env-agent startup recovery into the background", async () => {
+    const sessionRepo = {
+      listActive: vi.fn().mockReturnValue([]),
+    };
+    const logger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+    };
+
+    scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
+      sessionRepo,
+      logger,
+    });
+
+    expect(sessionRepo.listActive).not.toHaveBeenCalled();
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await Promise.resolve();
+
+    expect(logger.log).toHaveBeenCalledWith(
+      "Reconciling managed environment-agent sessions in background...",
+    );
+    expect(sessionRepo.listActive).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("times out slow env-agent pokes instead of hanging boot recovery", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new Error("aborted")),
+            { once: true },
+          );
+        }),
+    );
+
+    const sessionRepo = {
+      listActive: vi.fn().mockReturnValue([
+        {
+          id: "sess-slow",
+          threadId: "thread-slow",
+          controlBaseUrl: "http://127.0.0.1:4310",
+          controlAuthToken: "token-slow",
+        },
+      ]),
+    };
+
+    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+      sessionRepo,
+      requestTimeoutMs: 10,
+      logger: {
+        log: vi.fn(),
+        warn: vi.fn(),
+      },
+    });
+
+    expect(result).toEqual({
+      activeSessionCount: 1,
+      pokedCount: 0,
       unreachableCount: 1,
     });
   });

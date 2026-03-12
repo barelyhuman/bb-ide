@@ -6,6 +6,8 @@ interface StartupTaskLogger {
   warn(message: string): void;
 }
 
+const DEFAULT_SESSION_SYNC_TIMEOUT_MS = 2_000;
+
 // Defer startup maintenance until the daemon is already serving requests.
 export function scheduleManagedArtifactReconciliation(
   threadManager: Pick<Orchestrator, "reconcileManagedArtifacts">,
@@ -27,10 +29,12 @@ export function scheduleManagedArtifactReconciliation(
 
 async function requestEnvironmentAgentSessionSync(
   record: { controlBaseUrl: string; controlAuthToken: string },
+  timeoutMs: number,
 ): Promise<boolean> {
   try {
     const response = await fetch(new URL("/control/session-sync", record.controlBaseUrl), {
       method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         authorization: `Bearer ${record.controlAuthToken}`,
         "content-type": "application/json",
@@ -46,12 +50,15 @@ async function requestEnvironmentAgentSessionSync(
 export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
   sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
   logger?: StartupTaskLogger;
+  requestTimeoutMs?: number;
 }): Promise<{
   activeSessionCount: number;
   pokedCount: number;
   unreachableCount: number;
 }> {
   const logger = args.logger ?? console;
+  const requestTimeoutMs =
+    args.requestTimeoutMs ?? DEFAULT_SESSION_SYNC_TIMEOUT_MS;
   const activeSessions = args.sessionRepo.listActive();
   if (activeSessions.length === 0) {
     return {
@@ -61,22 +68,22 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
     };
   }
 
-  let pokedCount = 0;
-  let unreachableCount = 0;
-  for (const session of activeSessions) {
-    if (!session.controlBaseUrl || !session.controlAuthToken) {
-      unreachableCount += 1;
-      continue;
-    }
-    if (await requestEnvironmentAgentSessionSync({
-      controlBaseUrl: session.controlBaseUrl,
-      controlAuthToken: session.controlAuthToken,
-    })) {
-      pokedCount += 1;
-      continue;
-    }
-    unreachableCount += 1;
-  }
+  const results = await Promise.all(
+    activeSessions.map(async (session) => {
+      if (!session.controlBaseUrl || !session.controlAuthToken) {
+        return false;
+      }
+      return requestEnvironmentAgentSessionSync(
+        {
+          controlBaseUrl: session.controlBaseUrl,
+          controlAuthToken: session.controlAuthToken,
+        },
+        requestTimeoutMs,
+      );
+    }),
+  );
+  const pokedCount = results.filter(Boolean).length;
+  const unreachableCount = activeSessions.length - pokedCount;
 
   logger.log(
     `Environment-agent startup recovery poked ${pokedCount}/${activeSessions.length} active sessions; ${unreachableCount} are awaiting heartbeat timeout handling.`,
@@ -86,4 +93,20 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
     pokedCount,
     unreachableCount,
   };
+}
+
+export function scheduleManagedEnvironmentAgentSessionRecoveryOnBoot(args: {
+  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
+  logger?: StartupTaskLogger;
+  requestTimeoutMs?: number;
+}): void {
+  const logger = args.logger ?? console;
+  const task = setImmediate(() => {
+    logger.log("Reconciling managed environment-agent sessions in background...");
+    void recoverManagedEnvironmentAgentSessionsOnBoot(args).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`Managed environment-agent session recovery skipped: ${message}`);
+    });
+  });
+  task.unref();
 }

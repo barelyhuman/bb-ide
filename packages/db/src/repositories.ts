@@ -469,7 +469,7 @@ export class ThreadRepository {
       .where(
         and(
           sql`${threads.archivedAt} is not null`,
-          sql`${threads.environmentRecord} is not null`,
+          sql`${threads.environmentId} is not null`,
         ),
       )
       .all()
