@@ -407,39 +407,6 @@ export function createThreadRoutes(
       },
     )
     .post(
-      "/:id/environment-agent/session/commands",
-      zValidator("query", environmentAgentSessionCommandsQuerySchema),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          if (!environmentAgentSessionService) {
-            throw invalidRequestError("Environment-agent session command pull is unavailable");
-          }
-          const query = c.req.valid("query");
-          const response = await environmentAgentSessionService.waitForCommands({
-            threadId,
-            sessionId: query.sessionId,
-            ...(query.afterCursor !== undefined
-              ? { afterCursor: query.afterCursor }
-              : {}),
-            ...(query.limit !== undefined ? { limit: query.limit } : {}),
-            ...(query.waitMs !== undefined ? { waitMs: query.waitMs } : {}),
-            signal: c.req.raw.signal,
-          });
-          return c.json(response);
-        } catch (err) {
-          if (isAbortError(err)) {
-            return c.body(null, 204);
-          }
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
       "/:id/environment-agent/session/messages",
       zValidator("json", environmentAgentSessionMessageBodySchema),
       async (c) => {
