@@ -1037,58 +1037,6 @@ export function ThreadDetailView() {
     }
     gitDiffFileRefs.current.delete(fileKey);
   }, []);
-  const setThreadSecondaryPanel = useCallback(
-    (panel: ThreadSecondaryPanelTab | null) => {
-      setPersistedSecondaryPanel(panel);
-      setStoredThreadSecondaryPanel(panel);
-      const nextSearch = withThreadSecondaryPanel(location.search, panel);
-      navigate(
-        {
-          pathname: location.pathname,
-          search: nextSearch.length > 0 ? `?${nextSearch}` : "",
-        },
-        { replace: true },
-      );
-    },
-    [location.pathname, location.search, navigate],
-  );
-  const openThreadSecondaryPanel = useCallback(
-    (panel: ThreadSecondaryPanelTab) => {
-      if (activeSecondaryPanel === panel) {
-        return;
-      }
-      setThreadSecondaryPanel(panel);
-    },
-    [activeSecondaryPanel, setThreadSecondaryPanel],
-  );
-  const openThreadDiffPanel = useCallback(() => {
-    openThreadSecondaryPanel("git-diff");
-  }, [openThreadSecondaryPanel]);
-  const toggleThreadSecondaryPanel = useCallback(() => {
-    if (isSecondaryPanelOpen) {
-      setThreadSecondaryPanel(null);
-      return;
-    }
-    openThreadSecondaryPanel("thread-info");
-  }, [isSecondaryPanelOpen, openThreadSecondaryPanel, setThreadSecondaryPanel]);
-  const closeThreadSecondaryPanel = useCallback(() => {
-    if (!isSecondaryPanelOpen) {
-      return;
-    }
-    setThreadSecondaryPanel(null);
-  }, [isSecondaryPanelOpen, setThreadSecondaryPanel]);
-  const handlePromptGitStatsBannerClick = useCallback(() => {
-    openThreadDiffPanel();
-  }, [openThreadDiffPanel]);
-  const handlePromptBannerFileClick = useCallback(
-    (file: { path: string }) => {
-      setSelectedGitDiffCommitSha(null);
-      setPendingGitDiffScrollPath(file.path);
-      openThreadDiffPanel();
-    },
-    [openThreadDiffPanel],
-  );
-
   useEffect(() => {
     if (!pendingGitDiffScrollPath || !isDiffPanelActive) {
       return;
@@ -1166,7 +1114,7 @@ export function ThreadDetailView() {
       onBaseScrollToBottom: baseScrollToBottom,
       resetDep: threadId,
     });
-  const syncTimelineScrollAnchor = useCallback(() => {
+  const captureTimelineScrollPosition = useCallback(() => {
     const scrollContainer = containerElement;
     if (!scrollContainer) return;
     timelineScrollAnchorRef.current = isStickingToBottom
@@ -1174,10 +1122,65 @@ export function ThreadDetailView() {
       : captureTimelineScrollAnchor(scrollContainer);
     timelineContainerWidthRef.current = scrollContainer.clientWidth;
   }, [containerElement, isStickingToBottom]);
+  const syncTimelineScrollAnchor = useCallback(() => {
+    captureTimelineScrollPosition();
+  }, [captureTimelineScrollPosition]);
   const handleTimelineScroll = useCallback(() => {
     handleScroll();
     syncTimelineScrollAnchor();
   }, [handleScroll, syncTimelineScrollAnchor]);
+  const setThreadSecondaryPanel = useCallback(
+    (panel: ThreadSecondaryPanelTab | null) => {
+      captureTimelineScrollPosition();
+      setPersistedSecondaryPanel(panel);
+      setStoredThreadSecondaryPanel(panel);
+      const nextSearch = withThreadSecondaryPanel(location.search, panel);
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+        },
+        { replace: true },
+      );
+    },
+    [captureTimelineScrollPosition, location.pathname, location.search, navigate],
+  );
+  const openThreadSecondaryPanel = useCallback(
+    (panel: ThreadSecondaryPanelTab) => {
+      if (activeSecondaryPanel === panel) {
+        return;
+      }
+      setThreadSecondaryPanel(panel);
+    },
+    [activeSecondaryPanel, setThreadSecondaryPanel],
+  );
+  const openThreadDiffPanel = useCallback(() => {
+    openThreadSecondaryPanel("git-diff");
+  }, [openThreadSecondaryPanel]);
+  const toggleThreadSecondaryPanel = useCallback(() => {
+    if (isSecondaryPanelOpen) {
+      setThreadSecondaryPanel(null);
+      return;
+    }
+    openThreadSecondaryPanel("thread-info");
+  }, [isSecondaryPanelOpen, openThreadSecondaryPanel, setThreadSecondaryPanel]);
+  const closeThreadSecondaryPanel = useCallback(() => {
+    if (!isSecondaryPanelOpen) {
+      return;
+    }
+    setThreadSecondaryPanel(null);
+  }, [isSecondaryPanelOpen, setThreadSecondaryPanel]);
+  const handlePromptGitStatsBannerClick = useCallback(() => {
+    openThreadDiffPanel();
+  }, [openThreadDiffPanel]);
+  const handlePromptBannerFileClick = useCallback(
+    (file: { path: string }) => {
+      setSelectedGitDiffCommitSha(null);
+      setPendingGitDiffScrollPath(file.path);
+      openThreadDiffPanel();
+    },
+    [openThreadDiffPanel],
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") {
