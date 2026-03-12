@@ -50,6 +50,7 @@ export interface ThreadBuiltInAction {
 export type ThreadStatus =
   | "created"
   | "provisioning"
+  | "provisioned"
   | "provisioning_failed"
   | "idle"
   | "active";

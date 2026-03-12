@@ -164,6 +164,7 @@ describe("System routes", () => {
           archived: 1,
           created: 0,
           provisioning: 1,
+          provisioned: 0,
           provisioningFailed: 0,
           active: 1,
           idle: 2,

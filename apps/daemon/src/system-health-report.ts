@@ -122,6 +122,7 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
   const statusCounts: Record<Thread["status"], number> = {
     created: 0,
     provisioning: 0,
+    provisioned: 0,
     provisioning_failed: 0,
     active: 0,
     idle: 0,
@@ -140,6 +141,7 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
     archived,
     created: statusCounts.created,
     provisioning: statusCounts.provisioning,
+    provisioned: statusCounts.provisioned,
     provisioningFailed: statusCounts.provisioning_failed,
     active: statusCounts.active,
     idle: statusCounts.idle,

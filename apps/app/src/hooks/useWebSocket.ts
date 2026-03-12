@@ -77,6 +77,7 @@ function shouldBypassTimelineEventThrottle(
   switch (status) {
     case "created":
     case "provisioning":
+    case "provisioned":
     case "provisioning_failed":
       return true;
     case "active":

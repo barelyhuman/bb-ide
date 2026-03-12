@@ -4095,6 +4095,7 @@ export class Orchestrator implements ThreadOrchestrator {
         return undefined;
       case "created":
       case "provisioning":
+      case "provisioned":
         return "Thread provisioning is in progress";
       case "provisioning_failed":
         return "Thread provisioning failed; reprovision the thread before requesting actions";

@@ -46,7 +46,7 @@ Ownership: `ThreadRepository`.
 
 Status invariant (`closed_internal`):
 
-- Valid values: `created`, `provisioning`, `provisioning_failed`, `idle`, `active`.
+- Valid values: `created`, `provisioning`, `provisioned`, `provisioning_failed`, `idle`, `active`.
 - Invalid persisted values throw on read.
 
 ## `queued_thread_messages`

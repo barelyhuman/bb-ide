@@ -173,6 +173,7 @@ function isThreadStatus(status: string): status is ThreadStatus {
   return (
     status === "created" ||
     status === "provisioning" ||
+    status === "provisioned" ||
     status === "provisioning_failed" ||
     status === "active" ||
     status === "idle"

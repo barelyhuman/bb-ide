@@ -507,6 +507,7 @@ function shouldRenderThreadStartInput(
   switch (threadStatus) {
     case "created":
     case "provisioning":
+    case "provisioned":
     case "provisioning_failed":
     case "idle":
     case "active":
@@ -522,6 +523,7 @@ function shouldPreservePendingMessages(
   if (!threadStatus) return false;
   switch (threadStatus) {
     case "provisioning":
+    case "provisioned":
     case "active":
       return true;
     case "created":

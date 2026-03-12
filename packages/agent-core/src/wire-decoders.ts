@@ -8,6 +8,7 @@ import { getStringField, toRecord } from "./unknown-helpers.js";
 const THREAD_STATUSES = [
   "created",
   "provisioning",
+  "provisioned",
   "provisioning_failed",
   "idle",
   "active",

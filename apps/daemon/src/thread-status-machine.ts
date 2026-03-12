@@ -16,6 +16,14 @@ const THREAD_STATUS_STATES = {
   },
   provisioning: {
     on: {
+      provisioned: "provisioned",
+      active: "active",
+      idle: "idle",
+      provisioning_failed: "provisioning_failed",
+    },
+  },
+  provisioned: {
+    on: {
       active: "active",
       idle: "idle",
       provisioning_failed: "provisioning_failed",
@@ -24,6 +32,7 @@ const THREAD_STATUS_STATES = {
   provisioning_failed: {
     on: {
       provisioning: "provisioning",
+      provisioned: "provisioned",
       idle: "idle",
     },
   },
@@ -31,6 +40,7 @@ const THREAD_STATUS_STATES = {
     on: {
       active: "active",
       provisioning: "provisioning",
+      provisioned: "provisioned",
     },
   },
   active: {
