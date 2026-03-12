@@ -151,7 +151,8 @@ Provider and environment selection:
 Daemon e2e provider mode:
 
 - `BEANBAG_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider.
-- Default is `fake`.
+- The low-level e2e default is still `fake` when the variable is unset.
+- The checked-in daemon QA entrypoints (`pnpm qa:daemon:smoke`, `pnpm qa:daemon:stress`, `pnpm qa:daemon:regression`) override this to `real`.
 - `pnpm --filter @beanbag/daemon test:e2e:real` runs the fast daemon e2e suite in `real` mode.
 - Fake-only tests that depend on manual fake-codex event control are skipped automatically in `real` mode.
 

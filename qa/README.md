@@ -79,8 +79,8 @@ For checked-in daemon/env-agent automation tiers:
 - `pnpm qa:daemon:stress`
 - `pnpm qa:daemon:regression`
 
-These currently run the fake-provider-backed e2e harness so they stay deterministic and CI-friendly.
-Use the manual standalone daemon guide for real-provider validation.
+These default to the real provider. Fake-only recovery scenarios still skip automatically when they require fake Codex control hooks.
+Use the manual standalone daemon guide when you need the full direct-binary workflow and scenario checklist.
 
 Likely future additions:
 

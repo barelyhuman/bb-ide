@@ -23,7 +23,7 @@ For the checked-in regression seed suite:
 pnpm qa:daemon:regression
 ```
 
-Add new regression cases here and expand that automated suite when stable repro coverage is available.
+The checked-in regression seed suite now targets the real provider by default; fake-only recovery cases still skip automatically when they require fake Codex control.
 
 ## Current seed regression areas
 

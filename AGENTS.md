@@ -38,7 +38,7 @@
 ## Testing / QA
 
 - For daemon or environment-agent changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader daemon QA tiers when touching critical daemon/environment-agent code so regressions are caught early.
-- Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/daemon/package.json`; they are the canonical source for what automated QA is available and how to run it.
-- Use the fast e2e suite in `apps/daemon/src/__tests__/e2e/` for targeted scenario work, and use the real-provider e2e coverage when you need confidence that provider-facing behavior still works end to end.
+- Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/daemon/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for daemon/env-agent behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
+- Use the fast e2e suite in `apps/daemon/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
 - For the full manual daemon workflow and scenario checklist, see `qa/daemon/standalone-daemon-qa.md`.
 - For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@beanbag/<pkg>`.

@@ -29,7 +29,7 @@ For the checked-in deterministic harness:
 pnpm qa:daemon:smoke
 ```
 
-This is the fake-provider automation tier. Use the standalone manual guide for real-provider confirmation.
+This automation tier now targets the real provider. Fake-only recovery scenarios still skip automatically when they require fake Codex control.
 
 ## Required scenarios
 
