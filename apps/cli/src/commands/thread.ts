@@ -507,6 +507,9 @@ function printThread(thread: Thread): void {
   console.log(`  ID:       ${thread.id}`);
   console.log(`  Project:  ${thread.projectId}`);
   console.log(`  Status:   ${statusText(thread.status)}`);
+  if (thread.archivedAt !== undefined) {
+    console.log(`  Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
+  }
   console.log(`  Created:  ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`  Updated:  ${new Date(thread.updatedAt).toLocaleString()}`);
   console.log("");
@@ -514,7 +517,14 @@ function printThread(thread: Thread): void {
 
 function printThreadTable(threads: Thread[]): void {
   const idWidth = Math.max(4, ...threads.map((t) => t.id.length));
-  const statusWidth = 12;
+  const statusWidth = Math.max(
+    12,
+    ...threads.map((thread) =>
+      thread.archivedAt !== undefined
+        ? `${statusText(thread.status)} (archived)`.length
+        : statusText(thread.status).length
+    ),
+  );
   const projectWidth = Math.max(7, ...threads.map((t) => t.projectId.length));
 
   const header = [
@@ -528,10 +538,14 @@ function printThreadTable(threads: Thread[]): void {
   console.log("-".repeat(header.length));
 
   for (const thread of threads) {
+    const renderedStatus =
+      thread.archivedAt !== undefined
+        ? `${statusText(thread.status)} (archived)`
+        : statusText(thread.status);
     const row = [
       thread.id.padEnd(idWidth),
       thread.projectId.padEnd(projectWidth),
-      statusText(thread.status).padEnd(statusWidth),
+      renderedStatus.padEnd(statusWidth),
     ].join("  ");
     console.log(row);
   }

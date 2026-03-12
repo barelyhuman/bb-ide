@@ -322,6 +322,39 @@ describe("CLI command output contracts", () => {
     expect(lines).toContain("  /Users/test/.beanbag/worktrees");
   });
 
+  it("bb thread show prints archived timestamp for archived threads", async () => {
+    const thread: Thread = {
+      id: "thread-archived-1",
+      projectId: "proj-1",
+      status: "idle",
+      archivedAt: 1_700_000_000_000,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "show", "thread-archived-1"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      param: { id: "thread-archived-1" },
+    });
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
+  });
+
   it("bb daemon restart exits when shutdown is blocked by active work", async () => {
     const shutdownPost = vi.fn(async () =>
       new Response(

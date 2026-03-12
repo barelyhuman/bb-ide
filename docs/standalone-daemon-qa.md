@@ -314,6 +314,8 @@ Use this as the minimum direct-binary pass with the real provider:
 - local follow-up
 - local steer after confirmed `turn/started`
 - local stop then follow-up
+- local env-agent state file appears while active and is removed after the thread returns to `idle`
+- local env-agent process exits after the thread returns to `idle`
 - local blocked restart
 - local forced restart and recovery to `idle`
 - local follow-up after restart
@@ -321,6 +323,8 @@ Use this as the minimum direct-binary pass with the real provider:
 - worktree follow-up
 - worktree stop then follow-up
 - worktree promote-status, promote, demote
+- worktree archive removes the managed worktree and clears env-agent state
+- archived thread is visibly marked as archived in thread inspection output
 - worktree blocked restart
 - worktree forced restart and recovery to `idle`
 - worktree follow-up after restart
