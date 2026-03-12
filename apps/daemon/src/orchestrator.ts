@@ -661,6 +661,40 @@ export class Orchestrator implements ThreadOrchestrator {
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
+
+    const interruptedProvisioningThreadIds =
+      typeof this.threadRepo.listNonArchivedIdsByStatuses === "function"
+        ? this.threadRepo.listNonArchivedIdsByStatuses(["provisioning", "provisioned"])
+        : [];
+    for (const threadId of interruptedProvisioningThreadIds) {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread || thread.archivedAt !== undefined) {
+        continue;
+      }
+
+      const statusChanged = this._setThreadStatus(
+        threadId,
+        "provisioning_failed",
+        false,
+      );
+      const message =
+        thread.status === "provisioned"
+          ? "Daemon restart interrupted provider bootstrap before the thread became active."
+          : "Daemon restart interrupted environment provisioning before provider bootstrap completed.";
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message,
+      });
+      if (thread.status === "provisioned") {
+        this.environmentAgentSessionService?.retireActiveSessionForThread({
+          threadId,
+          reason: "migration",
+        });
+      }
+      if (statusChanged) {
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      }
+    }
   }
 
   async reconcileManagedArtifacts(): Promise<void> {

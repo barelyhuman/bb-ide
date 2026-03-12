@@ -137,6 +137,25 @@ describe("repository strict normalization", () => {
     expect(threads.listNonArchivedActiveIdsWithEnvironmentRecord()).toEqual([active.id]);
   });
 
+  it("lists non-archived thread ids for targeted status sets", () => {
+    const projectId = createProjectId();
+    const provisioning = threads.create({ projectId });
+    threads.update(provisioning.id, { status: "provisioning" });
+
+    const provisioned = threads.create({ projectId });
+    threads.update(provisioned.id, { status: "provisioned" });
+
+    const archived = threads.create({ projectId });
+    threads.update(archived.id, {
+      status: "provisioned",
+      archivedAt: Date.now(),
+    });
+
+    expect(
+      threads.listNonArchivedIdsByStatuses(["provisioning", "provisioned"]).sort(),
+    ).toEqual([provisioning.id, provisioned.id].sort());
+  });
+
   it("filters thread listings by parent thread id", () => {
     const projectId = createProjectId();
     const childThread = threads.create({
