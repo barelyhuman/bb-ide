@@ -548,6 +548,143 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     await runtime.shutdown();
   });
 
+  it("flushes buffered events and command results before closing the session", async () => {
+    const store = new InMemoryEnvironmentAgentSessionStore();
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      store,
+      clock: () => 10_000,
+    });
+    const client = makeClientMock();
+    (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "session_welcome",
+      messageId: "msg-open",
+      sessionId: "sess-1",
+      sentAt: 2_000,
+      payload: {
+        leaseTtlMs: 30_000,
+        heartbeatIntervalMs: 10_000,
+        selectedTransport: "http-long-poll",
+        protocolVersion: 1,
+        channels: [
+          {
+            channelId: "thread-1",
+            applyFrom: {
+              generation: 1,
+              sequenceExclusive: 0,
+            },
+            deliverCommandsAfter: 0,
+          },
+        ],
+      },
+    });
+    (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "event_ack",
+      messageId: "msg-ack",
+      sessionId: "sess-1",
+      sentAt: 3_000,
+      payload: {
+        channels: [
+          {
+            channelId: "thread-1",
+            ackedThrough: { generation: 1, sequence: 1 },
+          },
+        ],
+      },
+    });
+    (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "command_batch",
+      messageId: "msg-cmd-empty",
+      sessionId: "sess-1",
+      sentAt: 3_500,
+      payload: { commands: [] },
+    });
+    (client.sendCommandResult as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentAgentSessionSupervisor({
+      threadId: "thread-1",
+      runtime,
+      sessionRuntime,
+      sessionSync: sync,
+      pollIntervalMs: 1_000,
+    });
+
+    await supervisor.start();
+
+    sessionRuntime.recordEvent({
+      threadId: "thread-1",
+      eventId: "evt-1",
+      event: {
+        type: "provider.stderr",
+        threadId: "thread-1",
+        line: "stderr 1",
+      },
+      emittedAt: 4_000,
+    });
+    sessionRuntime.receiveCommand({
+      commandId: "cmd-1",
+      threadId: "thread-1",
+      commandCursor: 1,
+      commandType: "workspace.status",
+      now: 4_100,
+    });
+    sessionRuntime.markCommandAckReported("cmd-1", 4_150);
+    sessionRuntime.markCommandStarted("cmd-1", 4_200);
+    sessionRuntime.markCommandCompleted({
+      commandId: "cmd-1",
+      result: { ok: true },
+      now: 4_300,
+    });
+
+    await supervisor.close();
+    await runtime.shutdown();
+
+    expect(client.pushEvents).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      payload: {
+        batches: [
+          {
+            channelId: "thread-1",
+            generation: 1,
+            events: [
+              expect.objectContaining({
+                eventId: "evt-1",
+                event: {
+                  type: "provider.stderr",
+                  threadId: "thread-1",
+                  line: "stderr 1",
+                },
+              }),
+            ],
+          },
+        ],
+      },
+    });
+    expect(client.sendCommandResult).toHaveBeenCalledWith(
+      "sess-1",
+      expect.objectContaining({
+        commandId: "cmd-1",
+        state: "completed",
+        result: { ok: true },
+      }),
+    );
+    expect(
+      (client.closeSession as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+    ).toBeGreaterThan(
+      (client.pushEvents as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(
+      (client.closeSession as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+    ).toBeGreaterThan(
+      (client.sendCommandResult as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
   it("self-suspends after observed work is fully drained", async () => {
     vi.useFakeTimers();
     try {

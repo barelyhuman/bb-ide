@@ -138,17 +138,26 @@ export class EnvironmentAgentSessionSupervisor {
     }
     this.cancelSelfSuspend();
     this.cancelPendingCommandPull();
-    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
-    if (state?.sessionId) {
-      try {
-        await this.options.sessionSync.closeSession(this.options.threadId, "agent_shutdown");
-      } catch (error) {
-        this.handleError(error);
-      }
-    }
-    this.unsubscribeRuntimeEvents();
     while (this.cycleInFlight) {
       await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    this.unsubscribeRuntimeEvents();
+
+    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
+    if (!state?.sessionId) {
+      return;
+    }
+
+    try {
+      await this.flushPendingEventsWithReplay();
+      await this.options.sessionSync.flushPendingCommandResults(this.options.threadId);
+      await this.flushPendingEventsWithReplay();
+      await this.options.sessionSync.closeSession(this.options.threadId, "agent_shutdown");
+    } catch (error) {
+      const recovered = this.handleSessionError(error);
+      if (!recovered) {
+        this.handleError(error);
+      }
     }
   }
 
