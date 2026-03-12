@@ -33,6 +33,10 @@ Confirm Codex is available in `PATH` and can be used by the daemon.
 
 This path validates the standalone daemon process directly, with its own Beanbag root.
 
+Run the cases in order and record pass/fail for each one. Do not stop the whole pass after the
+first failure unless the daemon is completely unusable. The goal is to learn which recovery paths
+still work, not just which case fails first.
+
 ### 1. Prepare a disposable project
 
 ```bash
@@ -80,6 +84,15 @@ node apps/cli/dist/index.js project files --project <project-id> alpha
 
 ### 4. Validate direct/local flows
 
+Required matrix:
+
+- `local` start thread
+- `local` follow-up
+- `local` steer
+- `local` stop then follow-up
+- `local` restart recovery
+- `local` follow-up after restart recovery
+
 Spawn:
 
 ```bash
@@ -101,6 +114,9 @@ Steer:
 node apps/cli/dist/index.js thread spawn \
   --project <project-id> \
   --prompt 'Read every file carefully, think for a while, and produce a long structured summary.'
+
+Wait until `thread status --recent-events ... --event-mode raw` shows a real `turn/started`
+provider event for the new turn, then steer:
 
 node apps/cli/dist/index.js thread steer <thread-id> \
   'Stop the previous plan. Reply with exactly LOCAL-STEER and finish.'
@@ -135,6 +151,15 @@ Expected result:
 
 ### 5. Validate worktree flows
 
+Required matrix:
+
+- `worktree` start thread
+- `worktree` follow-up
+- `worktree` stop then follow-up
+- `worktree` restart recovery
+- `worktree` follow-up after restart recovery
+- `worktree` promote/demote
+
 Spawn a worktree thread:
 
 ```bash
@@ -151,7 +176,18 @@ node apps/cli/dist/index.js thread tell <thread-id> \
   'Reply with exactly WORKTREE-FOLLOWUP and finish.'
 ```
 
-Optional promote/demote checks:
+Stop then follow-up:
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-id> \
+  'Spend time inspecting the files before answering; do not finish quickly.'
+
+node apps/cli/dist/index.js thread stop <thread-id>
+node apps/cli/dist/index.js thread tell <thread-id> \
+  'Reply with exactly WORKTREE-POST-STOP and finish.'
+```
+
+Promote/demote checks:
 
 ```bash
 node apps/cli/dist/index.js thread promote-status --project <project-id>
@@ -165,7 +201,19 @@ node apps/cli/dist/index.js thread promote-status --project <project-id>
 
 Only do this on the standalone daemon you started for testing.
 
-Start a thread and wait until it is active, then in another shell:
+Required matrix:
+
+- blocked restart while local thread is active
+- forced restart while local thread is active
+- local thread reconciles to `idle` after relaunch
+- local thread accepts a follow-up after relaunch
+- blocked restart while worktree thread is active
+- forced restart while worktree thread is active
+- worktree thread reconciles to `idle` after relaunch
+- worktree thread accepts a follow-up after relaunch
+
+For both environments, start a thread and wait until `thread status --recent-events ... --event-mode raw`
+shows a real `turn/started` event, then in another shell:
 
 ```bash
 node apps/cli/dist/index.js daemon restart
@@ -187,6 +235,7 @@ Expected:
 - CLI reports shutdown requested
 - daemon exits cleanly
 - after relaunching the daemon on the same `BEANBAG_ROOT`, the interrupted thread reconciles back to `idle`
+- `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after relaunch
 
 Relaunch:
 
@@ -241,7 +290,7 @@ node apps/cli/dist/index.js daemon health
 
 - `thread steer` returns `HTTP 409`:
   - The thread has no active turn yet.
-  - Wait for an actual provider `turn/started` event, not just a transient thread status.
+  - Wait for an actual provider `turn/started` event, not just a transient thread status of `active`.
 
 - Restart appears to work, but thread never returns to `idle` after relaunch:
   - This is a real recovery bug candidate.
@@ -250,6 +299,31 @@ node apps/cli/dist/index.js daemon health
 - `thread tell` after `thread stop` fails with missing session state:
   - This is a real recovery bug candidate.
   - Capture `thread show`, `thread log`, and daemon logs before retrying.
+
+- `thread tell` after `thread stop` fails with `Missing managed environment-agent target`:
+  - This is a real environment re-prepare bug candidate.
+  - Capture `thread show`, `thread log`, and daemon logs before retrying.
+
+## QA Checklist
+
+Use this as the minimum direct-binary pass with the real provider:
+
+- standalone daemon health
+- project create, list, files
+- local start
+- local follow-up
+- local steer after confirmed `turn/started`
+- local stop then follow-up
+- local blocked restart
+- local forced restart and recovery to `idle`
+- local follow-up after restart
+- worktree start
+- worktree follow-up
+- worktree stop then follow-up
+- worktree promote-status, promote, demote
+- worktree blocked restart
+- worktree forced restart and recovery to `idle`
+- worktree follow-up after restart
 
 ## Cleanup
 
@@ -263,4 +337,3 @@ For main-daemon runs:
 
 - keep the temp project around until worktree checks are done
 - after QA completes, remove the temp repo manually
-

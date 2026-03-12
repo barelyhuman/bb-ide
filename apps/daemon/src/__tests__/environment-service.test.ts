@@ -508,6 +508,49 @@ describe("EnvironmentService", () => {
     expect(service.getEnvironmentRuntime("thread-1")).toBe(firstResolved.runtime);
   });
 
+  it("retries prepare when the managed agent target disappears before runtime registration", async () => {
+    let prepareCalls = 0;
+    const restoreImpl = vi.fn(() => {
+      let targetAvailable = false;
+      return {
+        ...createTestEnvironment({ existsInitially: true }),
+        async prepare() {
+          prepareCalls += 1;
+          targetAvailable = prepareCalls >= 2;
+        },
+        getAgentConnectionTarget() {
+          if (!targetAvailable) {
+            throw new Error("Missing managed environment-agent target for local environment");
+          }
+          return {
+            transport: "http" as const,
+            baseUrl: "http://127.0.0.1:4312",
+          };
+        },
+      };
+    });
+    const { service, threadState } = createService({
+      existsInitially: true,
+      restoreImpl,
+    });
+
+    const ensured = await service.ensureThreadEnvironmentRuntime(
+      threadState,
+      "/project/root",
+      "resume-existing-provider-session",
+    );
+
+    expect(prepareCalls).toBe(2);
+    expect(ensured.runtime.agentConnectionTarget).toEqual({
+      transport: "http",
+      baseUrl: "http://127.0.0.1:4312",
+    });
+    expect(service.getEnvironmentRuntime("thread-1")?.agentConnectionTarget).toEqual({
+      transport: "http",
+      baseUrl: "http://127.0.0.1:4312",
+    });
+  });
+
   it("does not suspend persisted state when installing a restored runtime", () => {
     const persistedSuspendSpy = vi.fn();
     const restoreImpl = vi.fn(() =>

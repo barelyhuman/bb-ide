@@ -65,6 +65,11 @@ function isUnavailableCleanupTargetError(error: unknown): boolean {
   return error.message.includes("workspace is unavailable");
 }
 
+function isMissingManagedEnvironmentAgentTargetError(error: unknown): boolean {
+  return error instanceof Error &&
+    error.message.includes("Missing managed environment-agent target");
+}
+
 function checkoutSnapshotsMatch(
   left: EnvironmentCheckoutSnapshot,
   right: EnvironmentCheckoutSnapshot,
@@ -234,7 +239,7 @@ export class EnvironmentService {
         throw error;
       }
 
-      this.setEnvironmentRuntime(threadId, environment);
+      await this.registerPreparedEnvironmentRuntime(threadId, environment);
       const runtime = this.environmentRuntimes.get(threadId);
       if (!runtime) {
         throw new Error(`Missing environment runtime for thread ${threadId}`);
@@ -289,7 +294,7 @@ export class EnvironmentService {
         throw error;
       }
 
-      this.setEnvironmentRuntime(thread.id, environment);
+      await this.registerPreparedEnvironmentRuntime(thread.id, environment);
       const runtime = this.environmentRuntimes.get(thread.id);
       if (!runtime) {
         throw new Error(`Missing environment runtime for thread ${thread.id}`);
@@ -302,11 +307,19 @@ export class EnvironmentService {
   }
 
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
+    const agentConnectionTarget = environment.getAgentConnectionTarget();
+    this.installEnvironmentRuntime(threadId, environment, agentConnectionTarget);
+  }
+
+  private installEnvironmentRuntime(
+    threadId: string,
+    environment: IEnvironment,
+    agentConnectionTarget: EnvironmentAgentConnectionTarget,
+  ): void {
     const existingRuntime = this.detachEnvironmentRuntime(threadId);
     if (existingRuntime) {
       void this.suspendDetachedRuntime(threadId, existingRuntime);
     }
-    const agentConnectionTarget = environment.getAgentConnectionTarget();
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
       if (!this.threadRepo.getById(threadId)) {
         return;
@@ -318,6 +331,30 @@ export class EnvironmentService {
       agentConnectionTarget,
       stopWatchingWorkspaceStatus,
     });
+  }
+
+  private async registerPreparedEnvironmentRuntime(
+    threadId: string,
+    environment: IEnvironment,
+  ): Promise<void> {
+    try {
+      this.setEnvironmentRuntime(threadId, environment);
+      return;
+    } catch (error) {
+      if (
+        !isMissingManagedEnvironmentAgentTargetError(error) ||
+        typeof environment.prepare !== "function"
+      ) {
+        throw error;
+      }
+
+      // Managed environment-agent state can disappear between prepare() and
+      // runtime registration when a prior session is shutting down. Retry
+      // prepare once so the target is recreated before we attach the runtime.
+      await environment.prepare();
+      const agentConnectionTarget = environment.getAgentConnectionTarget();
+      this.installEnvironmentRuntime(threadId, environment, agentConnectionTarget);
+    }
   }
 
   detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
