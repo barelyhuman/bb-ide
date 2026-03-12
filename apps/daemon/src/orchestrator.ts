@@ -932,7 +932,11 @@ export class Orchestrator implements ThreadOrchestrator {
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
-    if (thread.status === "created" || thread.status === "provisioning") {
+    if (
+      thread.status === "created" ||
+      thread.status === "provisioning" ||
+      thread.status === "provisioned"
+    ) {
       throw threadProvisioningError(threadId);
     }
     if (thread.status === "provisioning_failed") {
@@ -1075,7 +1079,13 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!thread) return;
       if (thread.archivedAt !== undefined) return;
       if (thread.status === "active") return;
-      if (thread.status === "created" || thread.status === "provisioning") return;
+      if (
+        thread.status === "created" ||
+        thread.status === "provisioning" ||
+        thread.status === "provisioned"
+      ) {
+        return;
+      }
 
       const queuedMessage = thread.queuedMessages?.[0];
       if (!queuedMessage) return;
@@ -1542,7 +1552,9 @@ export class Orchestrator implements ThreadOrchestrator {
   stop(threadId: string): void {
     const thread = this.threadRepo.getById(threadId);
     const shouldAppendInterruptedEvent =
-      thread?.status === "active" || thread?.status === "provisioning";
+      thread?.status === "active" ||
+      thread?.status === "provisioning" ||
+      thread?.status === "provisioned";
 
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
@@ -2972,6 +2984,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (hydratedThread) {
       this._broadcastThreadChanged(threadId, ["work-status-changed"]);
     }
+    this._setThreadStatus(threadId, "provisioned");
     const providerInput = this._normalizePromptInputForProvider(requestedInput);
 
     const effectiveDeveloperInstructions = this._buildDeveloperInstructions({
@@ -4815,7 +4828,11 @@ export class Orchestrator implements ThreadOrchestrator {
     let statusChanged = false;
     if (thread.status === "active") {
       statusChanged = this._setThreadStatus(threadId, "idle", false);
-    } else if (thread.status === "created" || thread.status === "provisioning") {
+    } else if (
+      thread.status === "created" ||
+      thread.status === "provisioning" ||
+      thread.status === "provisioned"
+    ) {
       statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
     }
 
