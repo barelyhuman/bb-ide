@@ -24,6 +24,7 @@ export interface ApiRouteDeps {
   requestRestart?: (reason: string) => void;
   shouldRestart?: () => boolean;
   getHealthReport?: () => SystemHealthReport;
+  runtimeEnv: NodeJS.ProcessEnv;
 }
 
 export function createApiRoutes(deps: ApiRouteDeps) {
@@ -40,6 +41,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
+        runtimeEnv: deps.runtimeEnv,
         deleteThreadAsync: (threadId) =>
           workspaceStatusAccessor.deleteThread
             ? workspaceStatusAccessor.deleteThread(threadId)

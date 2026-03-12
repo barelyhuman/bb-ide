@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -11,6 +10,7 @@ import {
   type ThreadWorkStatus,
   type UploadedPromptAttachment,
 } from "@beanbag/agent-core";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
@@ -48,7 +48,6 @@ type StorePromptAttachmentFn = (args: {
   file: File;
 }) => Promise<UploadedPromptAttachment>;
 
-const ATTACHMENTS_ROOT_PATH = resolve(homedir(), ".beanbag", "attachments");
 const MAX_PROMPT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_PROMPT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
@@ -74,11 +73,19 @@ function isImageAttachment(fileName: string, mimeType: string | undefined): bool
   return IMAGE_EXTENSION_PATTERN.test(fileName);
 }
 
+function resolveAttachmentsRootPath(runtimeEnv: NodeJS.ProcessEnv): string {
+  return resolveBeanbagPath(runtimeEnv, "attachments");
+}
+
 function resolvePromptAttachmentPath(
   projectId: string,
   fileName: string,
+  runtimeEnv: NodeJS.ProcessEnv,
 ): string {
-  const attachmentsDir = resolve(ATTACHMENTS_ROOT_PATH, sanitizePathSegment(projectId));
+  const attachmentsDir = resolve(
+    resolveAttachmentsRootPath(runtimeEnv),
+    sanitizePathSegment(projectId),
+  );
   mkdirSync(attachmentsDir, { recursive: true });
 
   const extension = extname(fileName);
@@ -95,8 +102,11 @@ function resolvePromptAttachmentPath(
   return destinationPath;
 }
 
-function resolveProjectAttachmentDirectory(projectId: string): string {
-  return resolve(ATTACHMENTS_ROOT_PATH, sanitizePathSegment(projectId));
+function resolveProjectAttachmentDirectory(
+  projectId: string,
+  runtimeEnv: NodeJS.ProcessEnv,
+): string {
+  return resolve(resolveAttachmentsRootPath(runtimeEnv), sanitizePathSegment(projectId));
 }
 
 function isPathWithinDirectory(path: string, directory: string): boolean {
@@ -122,6 +132,7 @@ function inferImageContentType(path: string): string {
 async function storePromptAttachment(args: {
   projectId: string;
   file: File;
+  runtimeEnv: NodeJS.ProcessEnv;
 }): Promise<UploadedPromptAttachment> {
   const safeName = sanitizeFileName(args.file.name);
   const mimeType = args.file.type.trim().length > 0 ? args.file.type : undefined;
@@ -143,7 +154,11 @@ async function storePromptAttachment(args: {
     );
   }
 
-  const destinationPath = resolvePromptAttachmentPath(args.projectId, safeName);
+  const destinationPath = resolvePromptAttachmentPath(
+    args.projectId,
+    safeName,
+    args.runtimeEnv,
+  );
   const bytes = Buffer.from(await args.file.arrayBuffer());
   writeFileSync(destinationPath, bytes);
 
@@ -166,10 +181,11 @@ function withProjectPathStatus(project: Project): Project {
 export function createProjectRoutes(
   projectRepo: ProjectRepository,
   findProjectFiles: SearchProjectFilesFn = searchProjectFiles,
-  savePromptAttachment: StorePromptAttachmentFn = storePromptAttachment,
+  savePromptAttachment?: StorePromptAttachmentFn,
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
+    runtimeEnv?: NodeJS.ProcessEnv;
     deleteThreadAsync?: (threadId: string) => Promise<void>;
     getProjectWorkspaceStatusAsync?: (
       projectId: string,
@@ -177,6 +193,15 @@ export function createProjectRoutes(
     ) => Promise<ThreadWorkStatus>;
   },
 ) {
+  const runtimeEnv = deps?.runtimeEnv ?? process.env;
+  const savePromptAttachmentFn = savePromptAttachment
+    ? savePromptAttachment
+    : (args: { projectId: string; file: File }) =>
+        storePromptAttachment({
+          ...args,
+          runtimeEnv,
+        });
+
   return new Hono()
     .post("/", zValidator("json", createProjectSchema), async (c) => {
       try {
@@ -227,7 +252,7 @@ export function createProjectRoutes(
           }
         }
 
-        rmSync(resolveProjectAttachmentDirectory(projectId), {
+        rmSync(resolveProjectAttachmentDirectory(projectId, runtimeEnv), {
           recursive: true,
           force: true,
         });
@@ -294,7 +319,7 @@ export function createProjectRoutes(
           throw invalidRequestError("Expected multipart file field named 'file'");
         }
 
-        const uploaded = await savePromptAttachment({
+        const uploaded = await savePromptAttachmentFn({
           projectId: project.id,
           file,
         });
@@ -312,7 +337,7 @@ export function createProjectRoutes(
         }
 
         const { path } = c.req.valid("query");
-        const attachmentsDir = resolveProjectAttachmentDirectory(project.id);
+        const attachmentsDir = resolveProjectAttachmentDirectory(project.id, runtimeEnv);
         const requestedPath = resolve(path);
         if (!isPathWithinDirectory(requestedPath, attachmentsDir)) {
           throw invalidRequestError("Attachment path is outside project scope");

@@ -7,6 +7,7 @@ import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { createSystemHealthReporter } from "../system-health-report.js";
 
 const originalHome = process.env.HOME;
+const originalBeanbagRoot = process.env.BEANBAG_ROOT;
 const cleanupPaths: string[] = [];
 
 function makeProject(overrides: Partial<Project> = {}): Project {
@@ -39,6 +40,7 @@ function writeBytes(path: string, content: string): void {
 
 afterEach(() => {
   process.env.HOME = originalHome;
+  process.env.BEANBAG_ROOT = originalBeanbagRoot;
   vi.restoreAllMocks();
   for (const path of cleanupPaths.splice(0)) {
     rmSync(path, { recursive: true, force: true });
@@ -50,22 +52,25 @@ describe("system health report", () => {
     const homeDir = mkdtempSync(join(tmpdir(), "beanbag-health-home-"));
     cleanupPaths.push(homeDir);
     process.env.HOME = homeDir;
+    const beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-health-root-"));
+    cleanupPaths.push(beanbagRoot);
+    process.env.BEANBAG_ROOT = beanbagRoot;
 
     const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-health-project-"));
     cleanupPaths.push(projectRoot);
-    const dbPath = resolve(homeDir, ".beanbag", "beanbag.db");
-    const daemonLogPath = resolve(homeDir, ".beanbag", "logs", "daemon.log");
+    const dbPath = resolve(beanbagRoot, "beanbag.db");
+    const daemonLogPath = resolve(beanbagRoot, "logs", "daemon.log");
 
     writeBytes(dbPath, "db!");
     writeBytes(`${dbPath}-wal`, "wal!");
     writeBytes(`${dbPath}-shm`, "shm");
     writeBytes(daemonLogPath, "daemon");
     writeBytes(`${daemonLogPath}.1`, "archive");
-    writeBytes(resolve(homeDir, ".beanbag", "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
-    writeBytes(resolve(homeDir, ".beanbag", "environment-agents", "proj-1", "worktree-thread-1.json"), "{}");
-    writeBytes(resolve(homeDir, ".beanbag", "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
-    writeBytes(resolve(homeDir, ".beanbag", "attachments", "proj-1", "image.png"), "img");
-    writeBytes(resolve(homeDir, ".beanbag", "backups", "daily.sql"), "backup");
+    writeBytes(resolve(beanbagRoot, "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
+    writeBytes(resolve(beanbagRoot, "environment-agents", "proj-1", "worktree-thread-1.json"), "{}");
+    writeBytes(resolve(beanbagRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
+    writeBytes(resolve(beanbagRoot, "attachments", "proj-1", "image.png"), "img");
+    writeBytes(resolve(beanbagRoot, "backups", "daily.sql"), "backup");
 
     const project = makeProject({ rootPath: projectRoot });
     const threads = [
@@ -136,34 +141,34 @@ describe("system health report", () => {
         key: "environment_agent_logs",
         label: "Environment Agent Logs",
         bytes: 6,
-        paths: [resolve(homeDir, ".beanbag", "environment-agent-logs")],
+        paths: [resolve(beanbagRoot, "environment-agent-logs")],
       },
       {
         key: "environment_agent_state",
         label: "Environment Agent State",
         bytes: 2,
-        paths: [resolve(homeDir, ".beanbag", "environment-agents")],
+        paths: [resolve(beanbagRoot, "environment-agents")],
       },
       {
         key: "worktrees",
         label: "Worktrees",
         bytes: 9,
-        paths: [resolve(homeDir, ".beanbag", "worktrees")],
+        paths: [resolve(beanbagRoot, "worktrees")],
       },
       {
         key: "attachments",
         label: "Attachments",
         bytes: 3,
-        paths: [resolve(homeDir, ".beanbag", "attachments")],
+        paths: [resolve(beanbagRoot, "attachments")],
       },
       {
         key: "backups",
         label: "Backups",
         bytes: 6,
-        paths: [resolve(homeDir, ".beanbag", "backups")],
+        paths: [resolve(beanbagRoot, "backups")],
       },
     ]);
-    expect(report.storage.disk?.path).toBe(resolve(homeDir, ".beanbag"));
+    expect(report.storage.disk?.path).toBe(beanbagRoot);
     expect(report.storage.disk?.availableBytes).toBeGreaterThan(0);
   });
 });

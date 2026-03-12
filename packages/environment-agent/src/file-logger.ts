@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import {
   createRotatingJsonLineFileWriter,
   removeRotatingJsonLineFileArtifacts,
@@ -13,6 +13,7 @@ export interface EnvironmentAgentLogIdentity {
   projectId: string | undefined;
   threadId: string | undefined;
   environmentId: string | undefined;
+  runtimeEnv?: NodeJS.ProcessEnv;
 }
 
 function sanitizeSegment(value: string | undefined): string {
@@ -36,6 +37,7 @@ export function resolveEnvironmentAgentLogFilePath(
     projectId: env.BB_PROJECT_ID,
     threadId: env.BB_THREAD_ID,
     environmentId: env.BB_ENVIRONMENT_ID,
+    runtimeEnv: env,
   });
 }
 
@@ -43,9 +45,7 @@ export function resolveDefaultEnvironmentAgentLogFilePath(
   identity: EnvironmentAgentLogIdentity,
 ): string {
   return join(
-    homedir(),
-    ".beanbag",
-    "environment-agent-logs",
+    resolveBeanbagPath(identity.runtimeEnv, "environment-agent-logs"),
     sanitizeSegment(identity.projectId),
     `${sanitizeSegment(identity.environmentId)}-${sanitizeSegment(identity.threadId)}.log`,
   );

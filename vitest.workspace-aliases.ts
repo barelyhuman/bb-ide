@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export const workspaceTestAliases = {
+  "@beanbag/agent-core/storage-paths": path.resolve(
+    repoRoot,
+    "packages/agent-core/src/storage-paths.ts",
+  ),
   "@beanbag/agent-core": path.resolve(repoRoot, "packages/agent-core/src/index.ts"),
   "@beanbag/environment": path.resolve(repoRoot, "packages/environment/src/index.ts"),
   "@beanbag/environment-agent": path.resolve(

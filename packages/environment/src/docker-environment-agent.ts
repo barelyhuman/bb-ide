@@ -1,10 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { runCommandAsync } from "./process.js";
 
 const HOST = "127.0.0.1";
@@ -113,11 +113,10 @@ function resolveLegacyStateFilePath(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string {
   return join(
-    homedir(),
-    ".beanbag",
-    "environment-agents",
+    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
     sanitizeSegment(args.projectId),
     `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}.json`,
   );
@@ -128,11 +127,10 @@ function resolveStateFilePath(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string {
   return join(
-    homedir(),
-    ".beanbag",
-    "environment-agents",
+    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
     sanitizeSegment(args.projectId),
     `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}-${hashWorkspaceRoot(args.workspaceRootPath)}.json`,
   );
@@ -143,6 +141,7 @@ function resolveStateFilePathCandidates(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath?: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string[] {
   const candidates: string[] = [];
   if (args.workspaceRootPath) {
@@ -162,6 +161,7 @@ function readRecord(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath?: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): ManagedDockerEnvironmentAgentRecord | undefined {
   for (const stateFilePath of resolveStateFilePathCandidates(args)) {
     if (!existsSync(stateFilePath)) {
@@ -199,6 +199,7 @@ function writeRecord(
     threadId: string;
     environmentId: string;
     workspaceRootPath: string;
+    runtimeEnv?: Record<string, string | undefined>;
   },
   record: ManagedDockerEnvironmentAgentRecord,
 ): void {
@@ -216,6 +217,7 @@ function removeRecord(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath?: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): void {
   for (const stateFilePath of resolveStateFilePathCandidates(args)) {
     rmSync(stateFilePath, { force: true });
@@ -419,7 +421,8 @@ export async function ensureManagedDockerEnvironmentAgent(
     workspaceRootPath: args.workspaceRootPath,
   };
   await withManagedDockerEnvironmentAgentLock(stateIdentity, async () => {
-    const existing = readRecord(stateIdentity);
+    const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
+    const existing = readRecord(stateRecordIdentity);
     if (existing) {
       if (
         existing.workspaceRoot === args.workspaceRootPath &&
@@ -433,7 +436,7 @@ export async function ensureManagedDockerEnvironmentAgent(
       ) {
         return;
       }
-      removeRecord(stateIdentity);
+      removeRecord(stateRecordIdentity);
     }
 
     const executor = deps?.run ?? runCommandAsync;
@@ -490,6 +493,9 @@ export async function ensureManagedDockerEnvironmentAgent(
         `BB_ENVIRONMENT_ID=${args.environmentId}`,
         "-e",
         `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
+        ...(args.runtimeEnv.BEANBAG_ROOT?.trim()
+          ? ["-e", `BEANBAG_ROOT=${args.runtimeEnv.BEANBAG_ROOT}`]
+          : []),
         ...(dockerDaemonUrl
           ? ["-e", `BEANBAG_DAEMON_URL=${dockerDaemonUrl}`]
           : []),
@@ -509,7 +515,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     const baseUrl = `http://${HOST}:${args.hostPort}`;
     await waitForAgent(baseUrl, authToken);
 
-    writeRecord(stateIdentity, {
+    writeRecord(stateRecordIdentity, {
       version: STATE_VERSION,
       baseUrl,
       authToken,
@@ -593,6 +599,7 @@ export function __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath(ar
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string {
   return resolveStateFilePath(args);
 }

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import {
 
 const tempDirs: string[] = [];
 const cleanupPaths: string[] = [];
+const originalBeanbagRoot = process.env.BEANBAG_ROOT;
 
 function makeTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "bb-host-env-agent-"));
@@ -33,6 +34,7 @@ function createDeferred() {
 }
 
 afterEach(() => {
+  process.env.BEANBAG_ROOT = originalBeanbagRoot;
   vi.restoreAllMocks();
   for (const path of cleanupPaths.splice(0)) {
     rmSync(path, { recursive: true, force: true });
@@ -63,9 +65,11 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
       return true;
     });
 
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
-    const stateDir = join(homedir(), ".beanbag", "environment-agents", projectId);
+    const stateDir = join(beanbagRoot, "environment-agents", projectId);
     cleanupPaths.push(stateDir);
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(
@@ -95,7 +99,7 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
         threadId: "thread-1",
         environmentId: "worktree",
         workspaceRootPath: workspaceRoot,
-        runtimeEnv: {},
+        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
       }),
     ).toEqual({
       transport: "http",
@@ -107,6 +111,8 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
   });
 
   it("coalesces concurrent managed agent startup for the same thread", async () => {
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
     const statePath = __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
@@ -115,7 +121,7 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
       environmentId: "worktree",
       workspaceRootPath: workspaceRoot,
     });
-    cleanupPaths.push(join(homedir(), ".beanbag", "environment-agents", projectId));
+    cleanupPaths.push(join(beanbagRoot, "environment-agents", projectId));
 
     const waitGate = createDeferred();
     const spawnProcess = vi.fn(() => ({
@@ -128,7 +134,7 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
       threadId: "thread-1",
       projectId,
       environmentId: "worktree",
-      runtimeEnv: {},
+      runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
     };
     const deps = {
       allocatePort: async () => 4123,

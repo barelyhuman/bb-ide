@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { homedir } from "node:os";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import type {
   Project,
@@ -65,8 +65,12 @@ describe("Project routes", () => {
   let eventRepo: ReturnType<typeof mockEventRepo>;
   let deleteThreadAsync: ReturnType<typeof vi.fn<DeleteThreadFn>>;
   let app: Hono;
+  let beanbagRoot: string;
+  const originalBeanbagRoot = process.env.BEANBAG_ROOT;
 
   beforeEach(() => {
+    beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-project-routes-root-"));
+    process.env.BEANBAG_ROOT = beanbagRoot;
     projectRepo = mockProjectRepo();
     threadRepo = mockThreadRepo();
     eventRepo = mockEventRepo();
@@ -86,10 +90,16 @@ describe("Project routes", () => {
       {
         threadRepo: threadRepo,
         eventRepo: eventRepo,
+        runtimeEnv: process.env,
         deleteThreadAsync,
       },
     );
     app = new Hono().route("/projects", routes);
+  });
+
+  afterEach(() => {
+    process.env.BEANBAG_ROOT = originalBeanbagRoot;
+    rmSync(beanbagRoot, { recursive: true, force: true });
   });
 
   describe("POST /projects", () => {
@@ -264,7 +274,7 @@ describe("Project routes", () => {
         { id: "thread-1" },
         { id: "thread-2" },
       ]);
-      const attachmentsDir = resolve(homedir(), ".beanbag", "attachments", "proj-2");
+      const attachmentsDir = resolve(beanbagRoot, "attachments", "proj-2");
       mkdirSync(attachmentsDir, { recursive: true });
       writeFileSync(resolve(attachmentsDir, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
@@ -462,7 +472,7 @@ describe("Project routes", () => {
         makeProject({ id: "proj-2", rootPath: "/repo/root" }),
       );
 
-      const attachmentsDir = resolve(homedir(), ".beanbag", "attachments", "proj-2");
+      const attachmentsDir = resolve(beanbagRoot, "attachments", "proj-2");
       const filePath = resolve(attachmentsDir, "image.png");
       mkdirSync(attachmentsDir, { recursive: true });
       writeFileSync(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));

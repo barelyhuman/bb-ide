@@ -5,15 +5,17 @@ import {
   readdirSync,
   rmSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Project, Thread } from "@beanbag/agent-core";
+import {
+  type Project,
+  type Thread,
+} from "@beanbag/agent-core";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import {
   removeRotatingJsonLineFileArtifacts,
   resolveDefaultEnvironmentAgentLogFilePath,
 } from "@beanbag/environment-agent";
 import {
-  DEFAULT_WORKTREE_ROOT,
   resolveManagedEnvironmentAgentStateFilePaths,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
@@ -196,6 +198,7 @@ export function reconcileManagedArtifactStorage(
           projectId: thread.projectId,
           threadId: thread.id,
           environmentId,
+          runtimeEnv: args.runtimeEnv,
         }));
       }
       if (thread.archivedAt === undefined) {
@@ -226,7 +229,8 @@ export function reconcileManagedArtifactStorage(
 
   let removedLogArtifacts = 0;
   const seenLogBasePaths = new Set<string>();
-  for (const filePath of scanFilesRecursively(join(homedir(), ".beanbag", "environment-agent-logs"))) {
+  const environmentAgentLogsRoot = resolveBeanbagPath(args.runtimeEnv, "environment-agent-logs");
+  for (const filePath of scanFilesRecursively(environmentAgentLogsRoot)) {
     const basePath = baseLogPath(filePath);
     if (seenLogBasePaths.has(basePath)) continue;
     seenLogBasePaths.add(basePath);
@@ -234,15 +238,16 @@ export function reconcileManagedArtifactStorage(
     removeRotatingJsonLineFileArtifacts(basePath);
     removedLogArtifacts += 1;
   }
-  removeEmptyDirectories(join(homedir(), ".beanbag", "environment-agent-logs"));
+  removeEmptyDirectories(environmentAgentLogsRoot);
 
   let removedStateFiles = 0;
-  for (const filePath of scanFilesRecursively(join(homedir(), ".beanbag", "environment-agents"))) {
+  const environmentAgentStateRoot = resolveBeanbagPath(args.runtimeEnv, "environment-agents");
+  for (const filePath of scanFilesRecursively(environmentAgentStateRoot)) {
     if (keptStatePaths.has(filePath)) continue;
     rmSync(filePath, { force: true });
     removedStateFiles += 1;
   }
-  removeEmptyDirectories(join(homedir(), ".beanbag", "environment-agents"));
+  removeEmptyDirectories(environmentAgentStateRoot);
 
   let removedWorkspaceDirectories = 0;
   for (const project of args.projects) {

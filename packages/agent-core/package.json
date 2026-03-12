@@ -6,6 +6,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./storage-paths": {
+      "import": "./dist/storage-paths.js",
+      "types": "./dist/storage-paths.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -24,6 +28,7 @@
   },
   "devDependencies": {
     "@beanbag/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   }
 }

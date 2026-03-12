@@ -5,21 +5,19 @@ import {
   readdirSync,
   statfsSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { expandHomeDirectory, resolveBeanbagRoot } from "@beanbag/agent-core/storage-paths";
+import { type Project, type Thread } from "@beanbag/agent-core";
 import type {
-  Project,
   SystemHealthDiskSummary,
   SystemHealthReport,
   SystemHealthStorageBucket,
   SystemHealthStorageBucketKey,
   SystemHealthThreadCounts,
-  Thread,
 } from "@beanbag/agent-core";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import {
-  DEFAULT_WORKTREE_ROOT,
-  expandHomeDirectory,
+  resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
 
@@ -152,12 +150,15 @@ function resolveWorktreeBucketPaths(
   projects: readonly Pick<Project, "id" | "rootPath">[],
   runtimeEnv: NodeJS.ProcessEnv,
 ): string[] {
-  const configuredRoot =
-    runtimeEnv.BEANBAG_WORKTREE_ROOT?.trim() || DEFAULT_WORKTREE_ROOT;
+  const configuredRoot = runtimeEnv.BEANBAG_WORKTREE_ROOT?.trim() ?? "";
   const normalizedRoot = expandHomeDirectory(configuredRoot);
 
   if (normalizedRoot.length === 0 || normalizedRoot.startsWith("/")) {
-    return [normalizedRoot.length === 0 ? expandHomeDirectory(DEFAULT_WORKTREE_ROOT) : normalizedRoot];
+    return [
+      normalizedRoot.length === 0
+        ? resolveDefaultManagedWorktreeRoot(runtimeEnv)
+        : normalizedRoot,
+    ];
   }
 
   if (projects.length === 0) {
@@ -173,7 +174,7 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
   return (): SystemHealthReport => {
     const projects = args.projectRepo.list();
     const threads = args.threadRepo.list({ includeArchived: true });
-    const beanbagRoot = resolve(homedir(), ".beanbag");
+    const beanbagRoot = resolveBeanbagRoot(args.runtimeEnv);
     const buckets = [
       buildStorageBucket("database", [args.dbPath]),
       buildStorageBucket("database_wal", [`${args.dbPath}-wal`]),

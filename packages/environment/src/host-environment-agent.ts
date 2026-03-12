@@ -3,10 +3,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
-import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { resolveDockerEnvironmentAgentArtifactEntry } from "./docker-environment-agent.js";
 
 const HOST = "127.0.0.1";
@@ -105,11 +105,10 @@ function resolveLegacyStateFilePath(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string {
   return join(
-    homedir(),
-    ".beanbag",
-    "environment-agents",
+    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
     sanitizeSegment(args.projectId),
     `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}.json`,
   );
@@ -120,11 +119,10 @@ function resolveStateFilePath(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string {
   return join(
-    homedir(),
-    ".beanbag",
-    "environment-agents",
+    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
     sanitizeSegment(args.projectId),
     `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}-${hashWorkspaceRoot(args.workspaceRootPath)}.json`,
   );
@@ -135,6 +133,7 @@ function resolveStateFilePathCandidates(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath?: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string[] {
   const candidates: string[] = [];
   if (args.workspaceRootPath) {
@@ -154,6 +153,7 @@ function readRecord(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath?: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): ManagedHostEnvironmentAgentRecord | undefined {
   for (const stateFilePath of resolveStateFilePathCandidates(args)) {
     if (!existsSync(stateFilePath)) {
@@ -189,6 +189,7 @@ function writeRecord(
     threadId: string;
     environmentId: string;
     workspaceRootPath: string;
+    runtimeEnv?: Record<string, string | undefined>;
   },
   record: ManagedHostEnvironmentAgentRecord,
 ): void {
@@ -206,6 +207,7 @@ function removeRecord(args: {
   threadId: string;
   environmentId: string;
   workspaceRootPath?: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): void {
   for (const stateFilePath of resolveStateFilePathCandidates(args)) {
     rmSync(stateFilePath, { force: true });
@@ -339,7 +341,8 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     ((pid: number, signal?: NodeJS.Signals | number) => process.kill(pid, signal));
 
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
-    const existing = readRecord(stateIdentity);
+    const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
+    const existing = readRecord(stateRecordIdentity);
     if (existing) {
       if (
         checkProcessAlive(existing.pid) &&
@@ -355,7 +358,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
           // Best-effort cleanup of stale managed agents.
         }
       }
-      removeRecord(stateIdentity);
+      removeRecord(stateRecordIdentity);
     }
 
     const port = await (deps.allocatePort ?? allocatePort)();
@@ -390,7 +393,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
 
     const baseUrl = `http://${HOST}:${port}`;
     await (deps.waitForAgent ?? waitForEnvironmentAgent)(baseUrl, authToken);
-    writeRecord(stateIdentity, {
+    writeRecord(stateRecordIdentity, {
       version: STATE_VERSION,
       pid: child.pid!,
       port,
@@ -448,7 +451,8 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   };
 
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
-    const existing = readRecord(stateIdentity);
+    const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
+    const existing = readRecord(stateRecordIdentity);
     if (existing && isProcessAlive(existing.pid)) {
       try {
         process.kill(existing.pid, "SIGTERM");
@@ -456,7 +460,7 @@ export async function disposeManagedHostEnvironmentAgent(args: {
         // Best-effort cleanup for already-exited processes.
       }
     }
-    removeRecord(stateIdentity);
+    removeRecord(stateRecordIdentity);
   });
 }
 
@@ -465,6 +469,7 @@ export function __testOnly__resolveManagedHostEnvironmentAgentStateFilePath(args
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
+  runtimeEnv?: Record<string, string | undefined>;
 }): string {
   return resolveStateFilePath(args);
 }

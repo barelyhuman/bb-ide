@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { homedir } from "node:os";
 import { serve } from "@hono/node-server";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import {
   createConnection,
   migrate,
@@ -25,8 +25,8 @@ import { scheduleManagedArtifactReconciliation } from "./startup-tasks.js";
 function parseArgs(): { port: number; dbPath: string; logFilePath: string } {
   const args = process.argv.slice(2);
   let port = 3333;
-  let dbPath = resolve(homedir(), ".beanbag", "beanbag.db");
-  let logFilePath = resolve(homedir(), ".beanbag", "logs", "daemon.log");
+  let dbPath = resolveBeanbagPath(process.env, "beanbag.db");
+  let logFilePath = resolveBeanbagPath(process.env, "logs", "daemon.log");
 
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
@@ -50,8 +50,8 @@ Usage: beanbag-daemon [options]
 
 Options:
   --port, -p <number>   Port to listen on (default: 3333)
-  --db, -d <path>       Path to SQLite database (default: ~/.beanbag/beanbag.db)
-  --log-file, -l <path> Path to daemon log file (default: ~/.beanbag/logs/daemon.log)
+  --db, -d <path>       Path to SQLite database (default: <beanbag-root>/beanbag.db)
+  --log-file, -l <path> Path to daemon log file (default: <beanbag-root>/logs/daemon.log)
   --help, -h            Show this help message
 `);
       process.exit(0);

@@ -187,6 +187,7 @@ export function createServer(deps: ServerDeps) {
       daemonLogFilePath: deps.daemonLogFilePath,
       runtimeEnv: daemonRuntimeEnv,
     }),
+    runtimeEnv: daemonRuntimeEnv,
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);

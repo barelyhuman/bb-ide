@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { expandHomeDirectory, resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import {
   EnvironmentSquashMergeCommitFailureError,
@@ -86,7 +87,6 @@ const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
     squash_merge: true,
   },
 };
-const DEFAULT_WORKTREE_ROOT = "~/.beanbag/worktrees";
 const WORKTREE_AGENT_INSTRUCTIONS = [
   "[Beanbag worktree environment]",
   "- You are working in an isolated per-thread git worktree on a dedicated branch.",
@@ -145,12 +145,6 @@ function toWorktreeBranchName(threadId: string): string {
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return `bb/thread-${normalized.length > 0 ? normalized : "thread"}`;
-}
-
-function expandHomeDirectory(path: string): string {
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) return resolve(homedir(), path.slice(2));
-  return path;
 }
 
 function resolveConfiguredWorktreeRoot(
@@ -859,10 +853,11 @@ class WorktreeEnvironment implements IEnvironment {
 export function createWorktreeEnvironmentDefinition(
   opts?: CreateWorktreeEnvironmentDefinitionOptions,
 ): EnvironmentDefinition<WorktreeEnvironmentState> {
-  const worktreeRootName =
-    opts?.worktreeRootName ??
-    process.env.BEANBAG_WORKTREE_ROOT ??
-    DEFAULT_WORKTREE_ROOT;
+  const configuredWorktreeRootName =
+    opts?.worktreeRootName ?? process.env.BEANBAG_WORKTREE_ROOT?.trim();
+  const worktreeRootName = configuredWorktreeRootName?.trim().length
+    ? configuredWorktreeRootName
+    : resolveBeanbagPath(process.env, "worktrees");
   const manageEnvironmentAgent = opts?.manageEnvironmentAgent ?? true;
 
   return {
