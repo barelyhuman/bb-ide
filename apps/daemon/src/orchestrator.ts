@@ -600,6 +600,7 @@ export class Orchestrator implements ThreadOrchestrator {
               message: "Environment cleanup failed",
               detail: message,
             },
+            { broadcastChanges: ["events-appended"] },
           );
         },
         onPrimaryCheckoutDemoted: ({ projectId, threadId, currentCheckout }) => {
@@ -684,19 +685,27 @@ export class Orchestrator implements ThreadOrchestrator {
         thread.status === "provisioned"
           ? "Daemon restart interrupted provider bootstrap before the thread became active."
           : "Daemon restart interrupted environment provisioning before provider bootstrap completed.";
-      this._appendEvent(threadId, "system/error", {
-        code: "provider_unavailable",
-        message,
-      });
+      this._appendEvent(
+        threadId,
+        "system/error",
+        {
+          code: "provider_unavailable",
+          message,
+        },
+        { broadcastChanges: false },
+      );
       if (thread.status === "provisioned") {
         this.environmentAgentSessionService?.retireActiveSessionForThread({
           threadId,
           reason: "migration",
         });
       }
-      if (statusChanged) {
-        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
-      }
+      this._broadcastThreadChanged(
+        threadId,
+        statusChanged
+          ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+          : ["events-appended"],
+      );
     }
   }
 
@@ -1078,6 +1087,7 @@ export class Orchestrator implements ThreadOrchestrator {
           threadId,
           "system/error",
           this._createTellFailureEventData(error),
+          { broadcastChanges: ["events-appended"] },
         );
       }
       this._rethrowAgentServerError(threadId, error);
@@ -1640,7 +1650,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
-      } as never);
+      } as never, { broadcastChanges: ["events-appended"] });
     }
     this.threadRepo.update(threadId, { status: "idle" });
     this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
@@ -1656,25 +1666,41 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (thread.status === "active") {
       const statusChanged = this._setThreadStatus(threadId, "error", false);
-      this._appendEvent(threadId, "system/error", {
-        code: "provider_unavailable",
-        message: "The live environment-agent was lost while the thread was active.",
-      });
-      if (statusChanged) {
-        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
-      }
+      this._appendEvent(
+        threadId,
+        "system/error",
+        {
+          code: "provider_unavailable",
+          message: "The live environment-agent was lost while the thread was active.",
+        },
+        { broadcastChanges: false },
+      );
+      this._broadcastThreadChanged(
+        threadId,
+        statusChanged
+          ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+          : ["events-appended"],
+      );
       return;
     }
 
     if (thread.status === "provisioned") {
       const statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
-      this._appendEvent(threadId, "system/error", {
-        code: "provider_unavailable",
-        message: "The live environment-agent was lost before provider bootstrap completed.",
-      });
-      if (statusChanged) {
-        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
-      }
+      this._appendEvent(
+        threadId,
+        "system/error",
+        {
+          code: "provider_unavailable",
+          message: "The live environment-agent was lost before provider bootstrap completed.",
+        },
+        { broadcastChanges: false },
+      );
+      this._broadcastThreadChanged(
+        threadId,
+        statusChanged
+          ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+          : ["events-appended"],
+      );
     }
   }
 
@@ -2973,6 +2999,7 @@ export class Orchestrator implements ThreadOrchestrator {
               threadId,
               "system/error",
               this._createProvisioningFailureEventData(err, req.projectId),
+              { broadcastChanges: ["events-appended"] },
             );
             const message = this._toErrorMessage(err);
             const reason = opts?.reason ? ` (${opts.reason})` : "";
@@ -3035,10 +3062,6 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Ensure provisioning starts from a clean runtime state.
     this._cleanupThreadRuntime(threadId);
-    this._setThreadStatus(threadId, "provisioning", true, {
-      force: true,
-    });
-
     const requestedEnvironmentId = this._resolveRequestedEnvironmentId(
       req.environmentId ?? thread?.environmentId,
     );
@@ -3046,11 +3069,25 @@ export class Orchestrator implements ThreadOrchestrator {
       this.threadRepo.update(threadId, { environmentId: requestedEnvironmentId });
     }
     const requestedEnvironmentInfo = this.environmentRegistry.get(requestedEnvironmentId).info;
-    this._appendEvent(threadId, "system/provisioning/started", {
-      environmentId: requestedEnvironmentId,
-      environmentDisplayName: requestedEnvironmentInfo.displayName,
-      reason: provisioningReason,
+    const provisioningStatusChanged = this._setThreadStatus(threadId, "provisioning", false, {
+      force: true,
     });
+    this._appendEvent(
+      threadId,
+      "system/provisioning/started",
+      {
+        environmentId: requestedEnvironmentId,
+        environmentDisplayName: requestedEnvironmentInfo.displayName,
+        reason: provisioningReason,
+      },
+      { broadcastChanges: false },
+    );
+    this._broadcastThreadChanged(
+      threadId,
+      provisioningStatusChanged
+        ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+        : ["events-appended"],
+    );
     this._appendProvisioningProgressEvent(threadId, "prepare_environment", "started");
 
     const prepareEnvironmentStartedAt = Date.now();
@@ -3145,15 +3182,20 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     let providerThreadId = started.providerThreadId;
     this.providerThreadIdByThreadId.set(threadId, providerThreadId);
-    this._appendEvent(threadId, "system/provisioning/completed", {
-      environmentId: environmentRuntime.environment.kind,
-      environmentDisplayName: provisionedEnvironmentInfo.displayName,
-      providerThreadId,
-      workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
-      ...(branchName ? { branchName } : {}),
-      ...(headSha ? { headSha } : {}),
-      reason: provisioningReason,
-    });
+    this._appendEvent(
+      threadId,
+      "system/provisioning/completed",
+      {
+        environmentId: environmentRuntime.environment.kind,
+        environmentDisplayName: provisionedEnvironmentInfo.displayName,
+        providerThreadId,
+        workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
+        ...(branchName ? { branchName } : {}),
+        ...(headSha ? { headSha } : {}),
+        reason: provisioningReason,
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
     if (
       hydratedThreadAfterStart?.title &&
@@ -3367,21 +3409,26 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     event: EnvironmentProvisioningEvent,
   ): void {
-    this._appendEvent(threadId, "system/provisioning/env_setup", {
-      status: event.status,
-      scriptPath: event.scriptPath,
-      ...(event.workspaceRoot ? { workspaceRoot: event.workspaceRoot } : {}),
-      ...("branchName" in event && event.branchName
-        ? { branchName: event.branchName }
-        : {}),
-      ...("headSha" in event && event.headSha
-        ? { headSha: event.headSha }
-        : {}),
-      ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
-      ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
-      ...(event.detail ? { detail: event.detail } : {}),
-      ...(event.reason ? { reason: event.reason } : {}),
-    });
+    this._appendEvent(
+      threadId,
+      "system/provisioning/env_setup",
+      {
+        status: event.status,
+        scriptPath: event.scriptPath,
+        ...(event.workspaceRoot ? { workspaceRoot: event.workspaceRoot } : {}),
+        ...("branchName" in event && event.branchName
+          ? { branchName: event.branchName }
+          : {}),
+        ...("headSha" in event && event.headSha
+          ? { headSha: event.headSha }
+          : {}),
+        ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
+        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+        ...(event.detail ? { detail: event.detail } : {}),
+        ...(event.reason ? { reason: event.reason } : {}),
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
   }
 
   private _appendProvisioningProgressEvent(
@@ -3392,11 +3439,16 @@ export class Orchestrator implements ThreadOrchestrator {
       durationMs?: number;
     },
   ): void {
-    this._appendEvent(threadId, "system/provisioning/progress", {
-      phase,
-      status,
-      ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
-    });
+    this._appendEvent(
+      threadId,
+      "system/provisioning/progress",
+      {
+        phase,
+        status,
+        ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
   }
 
   private _createEnvironmentContext(
@@ -3539,13 +3591,18 @@ export class Orchestrator implements ThreadOrchestrator {
       reason,
     });
     if (this.threadRepo.getById(threadId)?.status !== "provisioning") {
-      this._appendEvent(threadId, "system/provisioning/completed", {
-        environmentId: environment.kind,
-        environmentDisplayName: this.environmentRegistry.get(environment.kind).info.displayName,
-        workspaceRoot,
-        ...(branchName ? { branchName } : {}),
-        ...(headSha ? { headSha } : {}),
-      });
+      this._appendEvent(
+        threadId,
+        "system/provisioning/completed",
+        {
+          environmentId: environment.kind,
+          environmentDisplayName: this.environmentRegistry.get(environment.kind).info.displayName,
+          workspaceRoot,
+          ...(branchName ? { branchName } : {}),
+          ...(headSha ? { headSha } : {}),
+        },
+        { broadcastChanges: ["events-appended"] },
+      );
     }
   }
 
@@ -4182,8 +4239,8 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     type: ThreadEventType,
     data: ThreadEventData,
-    opts?: {
-      broadcastChanges?: readonly ThreadChangeKind[] | false;
+    opts: {
+      broadcastChanges: readonly ThreadChangeKind[] | false;
       connection?: DbExecutor;
     },
   ): ThreadEvent {
@@ -4206,7 +4263,7 @@ export class Orchestrator implements ThreadOrchestrator {
         });
     this.timelineByThread.delete(threadId);
     this._cacheProvisioningStateFromEvent(threadId, type, data);
-    const broadcastChanges = opts?.broadcastChanges ?? ["events-appended"];
+    const broadcastChanges = opts.broadcastChanges;
     if (broadcastChanges !== false) {
       this._broadcastThreadChanged(threadId, broadcastChanges);
     }
@@ -4824,7 +4881,7 @@ export class Orchestrator implements ThreadOrchestrator {
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
     opts?: {
-      broadcastChanges?: readonly ThreadChangeKind[] | false;
+      broadcastChanges: readonly ThreadChangeKind[] | false;
       connection?: DbExecutor;
     },
   ): ThreadEvent {
@@ -4836,7 +4893,12 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const eventData = this._buildOutboundStartEventData(type, params, input, meta);
-    return this._appendEvent(threadId, type, eventData, opts);
+    return this._appendEvent(
+      threadId,
+      type,
+      eventData,
+      opts ?? { broadcastChanges: ["events-appended"] },
+    );
   }
 
   private _buildOutboundStartEventData(
@@ -4976,24 +5038,34 @@ export class Orchestrator implements ThreadOrchestrator {
     let statusChanged = false;
     if (thread.status === "active") {
       statusChanged = this._setThreadStatus(threadId, "error", false);
-      this._appendEvent(threadId, "system/error", {
-        code: "provider_unavailable",
-        message: "The live environment-agent exited while the thread was active.",
-      });
+      this._appendEvent(
+        threadId,
+        "system/error",
+        {
+          code: "provider_unavailable",
+          message: "The live environment-agent exited while the thread was active.",
+        },
+        { broadcastChanges: false },
+      );
     } else if (
       thread.status === "created" ||
       thread.status === "provisioning" ||
       thread.status === "provisioned"
     ) {
       statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
-      this._appendEvent(threadId, "system/error", {
-        code: "provider_unavailable",
-        message: "The live environment-agent exited before thread provisioning completed.",
-      });
+      this._appendEvent(
+        threadId,
+        "system/error",
+        {
+          code: "provider_unavailable",
+          message: "The live environment-agent exited before thread provisioning completed.",
+        },
+        { broadcastChanges: false },
+      );
     }
 
     if (statusChanged) {
-      this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      this._broadcastThreadChanged(threadId, [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]);
     }
   }
 

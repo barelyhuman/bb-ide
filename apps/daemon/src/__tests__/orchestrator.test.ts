@@ -1445,6 +1445,7 @@ describe("Orchestrator", () => {
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new", [
         "status-changed",
         "work-status-changed",
+        "events-appended",
       ]);
     });
 
