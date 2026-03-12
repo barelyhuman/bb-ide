@@ -31,6 +31,13 @@ export interface ManagedDockerEnvironmentAgentRecord {
   installRoot: string;
 }
 
+interface ManagedDockerEnvironmentAgentIdentity {
+  projectId: string;
+  threadId: string;
+  environmentId: string;
+  workspaceRootPath: string;
+}
+
 interface CommandExecutor {
   (
     command: string,
@@ -50,6 +57,40 @@ interface CommandExecutor {
     stdout: string;
     stderr: string;
   }>;
+}
+
+const dockerEnvironmentAgentLocks = new Map<string, Promise<void>>();
+
+function managedDockerEnvironmentAgentIdentityKey(
+  args: ManagedDockerEnvironmentAgentIdentity,
+): string {
+  return [
+    args.projectId,
+    args.threadId,
+    args.environmentId,
+    args.workspaceRootPath,
+  ].join("\0");
+}
+
+async function withManagedDockerEnvironmentAgentLock(
+  args: ManagedDockerEnvironmentAgentIdentity,
+  action: () => Promise<void>,
+): Promise<void> {
+  const key = managedDockerEnvironmentAgentIdentityKey(args);
+  const existing = dockerEnvironmentAgentLocks.get(key);
+  if (existing) {
+    await existing;
+    return;
+  }
+
+  let inFlight: Promise<void>;
+  inFlight = action().finally(() => {
+    if (dockerEnvironmentAgentLocks.get(key) === inFlight) {
+      dockerEnvironmentAgentLocks.delete(key);
+    }
+  });
+  dockerEnvironmentAgentLocks.set(key, inFlight);
+  await inFlight;
 }
 
 function sanitizeSegment(value: string): string {
@@ -371,106 +412,116 @@ export async function ensureManagedDockerEnvironmentAgent(
     return;
   }
 
-  const stateIdentity = {
+  const stateIdentity: ManagedDockerEnvironmentAgentIdentity = {
     projectId: args.projectId,
     threadId: args.threadId,
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
-  const existing = readRecord(stateIdentity);
-  if (existing) {
-    if (
-      existing.workspaceRoot === args.workspaceRootPath &&
-      existing.containerName === args.containerName &&
-      existing.hostPort === args.hostPort &&
-      await pingEnvironmentAgent(existing.baseUrl, existing.authToken, HEALTH_TIMEOUT_MS)
-    ) {
-      return;
+  await withManagedDockerEnvironmentAgentLock(stateIdentity, async () => {
+    const existing = readRecord(stateIdentity);
+    if (existing) {
+      if (
+        existing.workspaceRoot === args.workspaceRootPath &&
+        existing.containerName === args.containerName &&
+        existing.hostPort === args.hostPort &&
+        await pingEnvironmentAgent(
+          existing.baseUrl,
+          existing.authToken,
+          HEALTH_TIMEOUT_MS,
+        )
+      ) {
+        return;
+      }
+      removeRecord(stateIdentity);
     }
-    removeRecord(stateIdentity);
-  }
 
-  const executor = deps?.run ?? runCommandAsync;
-  const waitForAgent = deps?.waitForAgent ?? waitForEnvironmentAgent;
-  const artifactEntry = (deps?.resolveArtifactEntry ?? resolveDockerEnvironmentAgentArtifactEntry)();
-  const authToken = (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
-  const containerPort = args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
-  const installRoot = args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
-  const dockerDaemonUrl = resolveDockerDaemonUrl(args.runtimeEnv);
+    const executor = deps?.run ?? runCommandAsync;
+    const waitForAgent = deps?.waitForAgent ?? waitForEnvironmentAgent;
+    const artifactEntry =
+      (deps?.resolveArtifactEntry ?? resolveDockerEnvironmentAgentArtifactEntry)();
+    const authToken =
+      (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
+    const containerPort =
+      args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
+    const installRoot =
+      args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
+    const dockerDaemonUrl = resolveDockerDaemonUrl(args.runtimeEnv);
 
-  await executeOrThrow({
-    executor,
-    command: args.dockerBin,
-    commandArgs: [
-      "exec",
-      args.containerName,
-      "mkdir",
-      "-p",
+    await executeOrThrow({
+      executor,
+      command: args.dockerBin,
+      commandArgs: [
+        "exec",
+        args.containerName,
+        "mkdir",
+        "-p",
+        installRoot,
+      ],
+      cwd: args.workspaceRootPath,
+      env: args.runtimeEnv,
+      description: "create docker environment-agent install directory",
+    });
+
+    await executeOrThrow({
+      executor,
+      command: args.dockerBin,
+      commandArgs: [
+        "cp",
+        artifactEntry,
+        `${args.containerName}:${installRoot}/environment-agent.bundle.mjs`,
+      ],
+      cwd: args.workspaceRootPath,
+      env: args.runtimeEnv,
+      description: "copy environment-agent artifact into docker container",
+    });
+
+    await executeOrThrow({
+      executor,
+      command: args.dockerBin,
+      commandArgs: [
+        "exec",
+        "-d",
+        "-e",
+        `BB_THREAD_ID=${args.threadId}`,
+        "-e",
+        `BB_PROJECT_ID=${args.projectId}`,
+        "-e",
+        `BB_ENVIRONMENT_ID=${args.environmentId}`,
+        "-e",
+        `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
+        ...(dockerDaemonUrl
+          ? ["-e", `BEANBAG_DAEMON_URL=${dockerDaemonUrl}`]
+          : []),
+        args.containerName,
+        "node",
+        `${installRoot}/environment-agent.bundle.mjs`,
+        "--http-host",
+        "0.0.0.0",
+        "--http-port",
+        String(containerPort),
+      ],
+      cwd: args.workspaceRootPath,
+      env: args.runtimeEnv,
+      description: "start docker environment-agent",
+    });
+
+    const baseUrl = `http://${HOST}:${args.hostPort}`;
+    await waitForAgent(baseUrl, authToken);
+
+    writeRecord(stateIdentity, {
+      version: STATE_VERSION,
+      baseUrl,
+      authToken,
+      threadId: args.threadId,
+      projectId: args.projectId,
+      environmentId: args.environmentId,
+      workspaceRoot: args.workspaceRootPath,
+      containerName: args.containerName,
+      hostPort: args.hostPort,
+      containerPort,
       installRoot,
-    ],
-    cwd: args.workspaceRootPath,
-    env: args.runtimeEnv,
-    description: "create docker environment-agent install directory",
-  });
-
-  await executeOrThrow({
-    executor,
-    command: args.dockerBin,
-    commandArgs: [
-      "cp",
-      artifactEntry,
-      `${args.containerName}:${installRoot}/environment-agent.bundle.mjs`,
-    ],
-    cwd: args.workspaceRootPath,
-    env: args.runtimeEnv,
-    description: "copy environment-agent artifact into docker container",
-  });
-
-  await executeOrThrow({
-    executor,
-    command: args.dockerBin,
-    commandArgs: [
-      "exec",
-      "-d",
-      "-e",
-      `BB_THREAD_ID=${args.threadId}`,
-      "-e",
-      `BB_PROJECT_ID=${args.projectId}`,
-      "-e",
-      `BB_ENVIRONMENT_ID=${args.environmentId}`,
-      "-e",
-      `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
-      ...(dockerDaemonUrl
-        ? ["-e", `BEANBAG_DAEMON_URL=${dockerDaemonUrl}`]
-        : []),
-      args.containerName,
-      "node",
-      `${installRoot}/environment-agent.bundle.mjs`,
-      "--http-host",
-      "0.0.0.0",
-      "--http-port",
-      String(containerPort),
-    ],
-    cwd: args.workspaceRootPath,
-    env: args.runtimeEnv,
-    description: "start docker environment-agent",
-  });
-
-  const baseUrl = `http://${HOST}:${args.hostPort}`;
-  await waitForAgent(baseUrl, authToken);
-
-  writeRecord(stateIdentity, {
-    version: STATE_VERSION,
-    baseUrl,
-    authToken,
-    threadId: args.threadId,
-    projectId: args.projectId,
-    environmentId: args.environmentId,
-    workspaceRoot: args.workspaceRootPath,
-    containerName: args.containerName,
-    hostPort: args.hostPort,
-    containerPort,
-    installRoot,
+    });
   });
 }
 
@@ -515,24 +566,26 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
   workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
 }): Promise<void> {
-  if (!args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
-    await runCommandAsync(
-      args.dockerBin,
-      [
-        "exec",
-        args.containerName,
-        "sh",
-        "-lc",
-        "pkill -f 'environment-agent.bundle.mjs' || true",
-      ],
-      {
-        cwd: args.workspaceRootPath,
-        env: args.runtimeEnv,
-        rawOutput: true,
-      },
-    );
-  }
-  removeRecord(args);
+  await withManagedDockerEnvironmentAgentLock(args, async () => {
+    if (!args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      await runCommandAsync(
+        args.dockerBin,
+        [
+          "exec",
+          args.containerName,
+          "sh",
+          "-lc",
+          "pkill -f 'environment-agent.bundle.mjs' || true",
+        ],
+        {
+          cwd: args.workspaceRootPath,
+          env: args.runtimeEnv,
+          rawOutput: true,
+        },
+      );
+    }
+    removeRecord(args);
+  });
 }
 
 export function __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath(args: {

@@ -55,6 +55,11 @@ interface EnvironmentServiceCallbacks {
   ) => Promise<void>;
 }
 
+interface EnsureThreadEnvironmentRuntimeResult {
+  runtime: ActiveEnvironmentRuntime;
+  resetReplayCursor: boolean;
+}
+
 function isUnavailableCleanupTargetError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.message.includes("workspace is unavailable");
@@ -77,6 +82,10 @@ function checkoutSnapshotsMatch(
 
 export class EnvironmentService {
   readonly environmentRuntimes = new Map<string, ActiveEnvironmentRuntime>();
+  readonly environmentRuntimeEnsuresByThreadId = new Map<
+    string,
+    Promise<EnsureThreadEnvironmentRuntimeResult>
+  >();
   readonly primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
   readonly primaryPromotionValidatedAtByProjectId = new Map<string, number>();
   readonly primaryPromotionWatchersByProjectId = new Map<string, () => void>();
@@ -168,82 +177,128 @@ export class EnvironmentService {
     return { existedBeforePrepare };
   }
 
+  private async withThreadEnvironmentEnsure(
+    threadId: string,
+    createEnsurePromise: () => Promise<EnsureThreadEnvironmentRuntimeResult>,
+  ): Promise<EnsureThreadEnvironmentRuntimeResult> {
+    const existingRuntime = this.environmentRuntimes.get(threadId);
+    if (existingRuntime) {
+      return {
+        runtime: existingRuntime,
+        resetReplayCursor: false,
+      };
+    }
+
+    const existingEnsure = this.environmentRuntimeEnsuresByThreadId.get(threadId);
+    if (existingEnsure) {
+      return existingEnsure;
+    }
+
+    let ensurePromise: Promise<EnsureThreadEnvironmentRuntimeResult>;
+    ensurePromise = createEnsurePromise().finally(() => {
+      if (this.environmentRuntimeEnsuresByThreadId.get(threadId) === ensurePromise) {
+        this.environmentRuntimeEnsuresByThreadId.delete(threadId);
+      }
+    });
+    this.environmentRuntimeEnsuresByThreadId.set(threadId, ensurePromise);
+    return ensurePromise;
+  }
+
   async provisionThreadEnvironment(
     threadId: string,
     projectRootPath: string,
     environmentKind: string,
     reason: ThreadEnvironmentStartReason,
   ): Promise<ActiveEnvironmentRuntime> {
-    const environment = this.environmentRegistry.create(
-      environmentKind,
-      this.callbacks.createContext(threadId, projectRootPath),
-    );
-    try {
-      await this.prepareEnvironment(threadId, environment, reason);
-    } catch (error) {
-      try {
-        await Promise.resolve(environment.destroy());
-      } catch {
-        // Best-effort cleanup for partially provisioned environments.
+    const ensured = await this.withThreadEnvironmentEnsure(threadId, async () => {
+      const existingRuntime = this.environmentRuntimes.get(threadId);
+      if (existingRuntime) {
+        return {
+          runtime: existingRuntime,
+          resetReplayCursor: false,
+        };
       }
-      throw error;
-    }
 
-    this.setEnvironmentRuntime(threadId, environment);
-    const thread = this.threadRepo.getById(threadId);
-    const runtime = this.environmentRuntimes.get(threadId);
-    if (!runtime) {
-      throw new Error(`Missing environment runtime for thread ${threadId}`);
-    }
-    return runtime;
+      const environment = this.environmentRegistry.create(
+        environmentKind,
+        this.callbacks.createContext(threadId, projectRootPath),
+      );
+      try {
+        await this.prepareEnvironment(threadId, environment, reason);
+      } catch (error) {
+        try {
+          await Promise.resolve(environment.destroy());
+        } catch {
+          // Best-effort cleanup for partially provisioned environments.
+        }
+        throw error;
+      }
+
+      this.setEnvironmentRuntime(threadId, environment);
+      const runtime = this.environmentRuntimes.get(threadId);
+      if (!runtime) {
+        throw new Error(`Missing environment runtime for thread ${threadId}`);
+      }
+      return {
+        runtime,
+        resetReplayCursor: false,
+      };
+    });
+
+    return ensured.runtime;
   }
 
   async ensureThreadEnvironmentRuntime(
     thread: Thread,
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
-  ): Promise<{ runtime: ActiveEnvironmentRuntime; resetReplayCursor: boolean }> {
-    const existingRuntime = this.environmentRuntimes.get(thread.id);
-    if (existingRuntime) {
-      return { runtime: existingRuntime, resetReplayCursor: false };
-    }
-
-    const environmentId = thread.environmentRecord?.kind ?? thread.environmentId ?? "local";
-    const environment =
-      this.restoreThreadEnvironment(thread, projectRootPath) ??
-      this.environmentRegistry.create(
-        environmentId,
-        this.callbacks.createContext(thread.id, projectRootPath),
-      );
-
-    let hadAgentTarget = false;
-    try {
-      environment.getAgentConnectionTarget();
-      hadAgentTarget = true;
-    } catch {
-      hadAgentTarget = false;
-    }
-
-    try {
-      await this.prepareEnvironment(thread.id, environment, reason);
-    } catch (error) {
-      try {
-        await Promise.resolve(environment.destroy());
-      } catch {
-        // Best-effort cleanup for partially restored environments.
+  ): Promise<EnsureThreadEnvironmentRuntimeResult> {
+    return this.withThreadEnvironmentEnsure(thread.id, async () => {
+      const existingRuntime = this.environmentRuntimes.get(thread.id);
+      if (existingRuntime) {
+        return {
+          runtime: existingRuntime,
+          resetReplayCursor: false,
+        };
       }
-      throw error;
-    }
 
-    this.setEnvironmentRuntime(thread.id, environment);
-    const runtime = this.environmentRuntimes.get(thread.id);
-    if (!runtime) {
-      throw new Error(`Missing environment runtime for thread ${thread.id}`);
-    }
-    return {
-      runtime,
-      resetReplayCursor: thread.status === "idle" && !hadAgentTarget,
-    };
+      const environmentId = thread.environmentRecord?.kind ?? thread.environmentId ?? "local";
+      const environment =
+        this.restoreThreadEnvironment(thread, projectRootPath) ??
+        this.environmentRegistry.create(
+          environmentId,
+          this.callbacks.createContext(thread.id, projectRootPath),
+        );
+
+      let hadAgentTarget = false;
+      try {
+        environment.getAgentConnectionTarget();
+        hadAgentTarget = true;
+      } catch {
+        hadAgentTarget = false;
+      }
+
+      try {
+        await this.prepareEnvironment(thread.id, environment, reason);
+      } catch (error) {
+        try {
+          await Promise.resolve(environment.destroy());
+        } catch {
+          // Best-effort cleanup for partially restored environments.
+        }
+        throw error;
+      }
+
+      this.setEnvironmentRuntime(thread.id, environment);
+      const runtime = this.environmentRuntimes.get(thread.id);
+      if (!runtime) {
+        throw new Error(`Missing environment runtime for thread ${thread.id}`);
+      }
+      return {
+        runtime,
+        resetReplayCursor: thread.status === "idle" && !hadAgentTarget,
+      };
+    });
   }
 
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {

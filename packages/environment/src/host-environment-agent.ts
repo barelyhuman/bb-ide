@@ -26,6 +26,65 @@ interface ManagedHostEnvironmentAgentRecord {
   workspaceRoot: string;
 }
 
+interface ManagedHostEnvironmentAgentIdentity {
+  projectId: string;
+  threadId: string;
+  environmentId: string;
+  workspaceRootPath: string;
+}
+
+interface EnsureManagedHostEnvironmentAgentDeps {
+  allocatePort?: () => Promise<number>;
+  generateAuthToken?: () => string;
+  isProcessAlive?: (pid: number) => boolean;
+  killProcess?: (pid: number, signal?: NodeJS.Signals | number) => boolean;
+  pingAgent?: (
+    baseUrl: string,
+    authToken: string,
+    timeoutMs: number,
+  ) => Promise<boolean>;
+  resolveLaunchCommand?: () => {
+    command: string;
+    args: string[];
+  };
+  spawnProcess?: typeof spawn;
+  waitForAgent?: (baseUrl: string, authToken: string) => Promise<void>;
+}
+
+const hostEnvironmentAgentLocks = new Map<string, Promise<void>>();
+
+function managedHostEnvironmentAgentIdentityKey(
+  args: ManagedHostEnvironmentAgentIdentity,
+): string {
+  return [
+    args.projectId,
+    args.threadId,
+    args.environmentId,
+    args.workspaceRootPath,
+  ].join("\0");
+}
+
+async function withManagedHostEnvironmentAgentLock(
+  args: ManagedHostEnvironmentAgentIdentity,
+  action: () => Promise<void>,
+): Promise<void> {
+  const key = managedHostEnvironmentAgentIdentityKey(args);
+  const existing = hostEnvironmentAgentLocks.get(key);
+  if (existing) {
+    await existing;
+    return;
+  }
+
+  let inFlight: Promise<void>;
+  inFlight = action().finally(() => {
+    if (hostEnvironmentAgentLocks.get(key) === inFlight) {
+      hostEnvironmentAgentLocks.delete(key);
+    }
+  });
+  hostEnvironmentAgentLocks.set(key, inFlight);
+  await inFlight;
+}
+
 function sanitizeSegment(value: string): string {
   const normalized = value
     .trim()
@@ -262,7 +321,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   projectId: string;
   environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
-}): Promise<void> {
+}, deps: EnsureManagedHostEnvironmentAgentDeps = {}): Promise<void> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return;
   }
@@ -273,65 +332,75 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
-  const existing = readRecord(stateIdentity);
-  if (existing) {
-    if (
-      isProcessAlive(existing.pid) &&
-      existing.workspaceRoot === args.workspaceRootPath &&
-      await pingEnvironmentAgent(existing.baseUrl, existing.authToken, HEALTH_TIMEOUT_MS)
-    ) {
-      return;
-    }
-    if (isProcessAlive(existing.pid)) {
-      try {
-        process.kill(existing.pid, "SIGTERM");
-      } catch {
-        // Best-effort cleanup of stale managed agents.
+  const pingAgent = deps.pingAgent ?? pingEnvironmentAgent;
+  const checkProcessAlive = deps.isProcessAlive ?? isProcessAlive;
+  const killProcess =
+    deps.killProcess ??
+    ((pid: number, signal?: NodeJS.Signals | number) => process.kill(pid, signal));
+
+  await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
+    const existing = readRecord(stateIdentity);
+    if (existing) {
+      if (
+        checkProcessAlive(existing.pid) &&
+        existing.workspaceRoot === args.workspaceRootPath &&
+        await pingAgent(existing.baseUrl, existing.authToken, HEALTH_TIMEOUT_MS)
+      ) {
+        return;
       }
+      if (checkProcessAlive(existing.pid)) {
+        try {
+          killProcess(existing.pid, "SIGTERM");
+        } catch {
+          // Best-effort cleanup of stale managed agents.
+        }
+      }
+      removeRecord(stateIdentity);
     }
-    removeRecord(stateIdentity);
-  }
 
-  const port = await allocatePort();
-  const authToken = randomBytes(24).toString("hex");
-  const { command, args: commandArgs } = resolveManagedHostEnvironmentAgentLaunchCommand();
-  const child = spawn(
-    command,
-    [
-      ...commandArgs,
-      "--http-host",
-      HOST,
-      "--http-port",
-      String(port),
-    ],
-    {
-      cwd: args.workspaceRootPath,
-      env: {
-        ...process.env,
-        ...args.runtimeEnv,
-        BB_THREAD_ID: args.threadId,
-        BB_PROJECT_ID: args.projectId,
-        BB_ENVIRONMENT_ID: args.environmentId,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: authToken,
+    const port = await (deps.allocatePort ?? allocatePort)();
+    const authToken =
+      (deps.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
+    const { command, args: commandArgs } =
+      (deps.resolveLaunchCommand ?? resolveManagedHostEnvironmentAgentLaunchCommand)();
+    const child = (deps.spawnProcess ?? spawn)(
+      command,
+      [
+        ...commandArgs,
+        "--http-host",
+        HOST,
+        "--http-port",
+        String(port),
+      ],
+      {
+        cwd: args.workspaceRootPath,
+        env: {
+          ...process.env,
+          ...args.runtimeEnv,
+          BB_THREAD_ID: args.threadId,
+          BB_PROJECT_ID: args.projectId,
+          BB_ENVIRONMENT_ID: args.environmentId,
+          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: authToken,
+        },
+        detached: true,
+        stdio: "ignore",
       },
-      detached: true,
-      stdio: "ignore",
-    },
-  );
-  child.unref?.();
+    );
+    child.unref?.();
 
-  const baseUrl = `http://${HOST}:${port}`;
-  await waitForEnvironmentAgent(baseUrl, authToken);
-  writeRecord(stateIdentity, {
-    version: STATE_VERSION,
-    pid: child.pid!,
-    port,
-    baseUrl,
-    authToken,
-    threadId: args.threadId,
-    projectId: args.projectId,
-    environmentId: args.environmentId,
-    workspaceRoot: args.workspaceRootPath,
+    const baseUrl = `http://${HOST}:${port}`;
+    await (deps.waitForAgent ?? waitForEnvironmentAgent)(baseUrl, authToken);
+    writeRecord(stateIdentity, {
+      version: STATE_VERSION,
+      pid: child.pid!,
+      port,
+      baseUrl,
+      authToken,
+      threadId: args.threadId,
+      projectId: args.projectId,
+      environmentId: args.environmentId,
+      workspaceRoot: args.workspaceRootPath,
+    });
   });
 }
 
@@ -371,21 +440,24 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return;
   }
-  const stateIdentity = {
+  const stateIdentity: ManagedHostEnvironmentAgentIdentity = {
     projectId: args.projectId,
     threadId: args.threadId,
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
-  const existing = readRecord(stateIdentity);
-  if (existing && isProcessAlive(existing.pid)) {
-    try {
-      process.kill(existing.pid, "SIGTERM");
-    } catch {
-      // Best-effort cleanup for already-exited processes.
+
+  await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
+    const existing = readRecord(stateIdentity);
+    if (existing && isProcessAlive(existing.pid)) {
+      try {
+        process.kill(existing.pid, "SIGTERM");
+      } catch {
+        // Best-effort cleanup for already-exited processes.
+      }
     }
-  }
-  removeRecord(stateIdentity);
+    removeRecord(stateIdentity);
+  });
 }
 
 export function __testOnly__resolveManagedHostEnvironmentAgentStateFilePath(args: {

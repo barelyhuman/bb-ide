@@ -252,6 +252,19 @@ function createService(args: {
   return { service, runOptionalSetup, threadRepo, threadState, onCleanupFailure };
 }
 
+function createDeferred() {
+  let resolvePromise: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve() {
+      resolvePromise?.();
+    },
+  };
+}
+
 describe("EnvironmentService", () => {
   beforeEach(() => {
     vi.mocked(removeEnvironmentAgentDefaultLogArtifacts).mockClear();
@@ -455,6 +468,44 @@ describe("EnvironmentService", () => {
     await suspendPromise;
 
     expect(settled).toBe(true);
+  });
+
+  it("coalesces concurrent runtime ensure calls for the same thread", async () => {
+    const waitGate = createDeferred();
+    const prepareSpy = vi.fn(async () => {
+      await waitGate.promise;
+    });
+    const restoreImpl = vi.fn(() => ({
+      ...createTestEnvironment({ existsInitially: true }),
+      prepare: prepareSpy,
+    }));
+    const { service, threadState } = createService({
+      existsInitially: true,
+      restoreImpl,
+    });
+
+    const first = service.ensureThreadEnvironmentRuntime(
+      threadState,
+      "/project/root",
+      "resume-existing-provider-session",
+    );
+    const second = service.ensureThreadEnvironmentRuntime(
+      threadState,
+      "/project/root",
+      "resume-existing-provider-session",
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(restoreImpl).toHaveBeenCalledTimes(1);
+    expect(prepareSpy).toHaveBeenCalledTimes(1);
+
+    waitGate.resolve();
+    const [firstResolved, secondResolved] = await Promise.all([first, second]);
+
+    expect(firstResolved.runtime).toBe(secondResolved.runtime);
+    expect(service.getEnvironmentRuntime("thread-1")).toBe(firstResolved.runtime);
   });
 
   it("does not suspend persisted state when installing a restored runtime", () => {

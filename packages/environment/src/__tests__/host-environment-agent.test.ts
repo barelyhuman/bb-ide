@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __testOnly__resolveManagedHostEnvironmentAgentStateFilePath,
+  ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentLaunchCommand,
   resolveManagedHostEnvironmentAgentTarget,
 } from "../host-environment-agent.js";
@@ -16,6 +17,19 @@ function makeTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "bb-host-env-agent-"));
   tempDirs.push(dir);
   return dir;
+}
+
+function createDeferred() {
+  let resolvePromise: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve() {
+      resolvePromise?.();
+    },
+  };
 }
 
 afterEach(() => {
@@ -89,6 +103,65 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
       headers: {
         authorization: "Bearer auth-token",
       },
+    });
+  });
+
+  it("coalesces concurrent managed agent startup for the same thread", async () => {
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const statePath = __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
+      projectId,
+      threadId: "thread-1",
+      environmentId: "worktree",
+      workspaceRootPath: workspaceRoot,
+    });
+    cleanupPaths.push(join(homedir(), ".beanbag", "environment-agents", projectId));
+
+    const waitGate = createDeferred();
+    const spawnProcess = vi.fn(() => ({
+      pid: 4321,
+      unref: vi.fn(),
+    })) as unknown as typeof import("node:child_process").spawn;
+
+    const ensureArgs = {
+      workspaceRootPath: workspaceRoot,
+      threadId: "thread-1",
+      projectId,
+      environmentId: "worktree",
+      runtimeEnv: {},
+    };
+    const deps = {
+      allocatePort: async () => 4123,
+      generateAuthToken: () => "auth-token",
+      resolveLaunchCommand: () => ({
+        command: process.execPath,
+        args: ["agent.mjs"],
+      }),
+      spawnProcess,
+      waitForAgent: async () => {
+        await waitGate.promise;
+      },
+    };
+
+    const first = ensureManagedHostEnvironmentAgent(ensureArgs, deps);
+    const second = ensureManagedHostEnvironmentAgent(ensureArgs, deps);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
+
+    waitGate.resolve();
+    await Promise.all([first, second]);
+
+    expect(JSON.parse(readFileSync(statePath, "utf8"))).toMatchObject({
+      pid: 4321,
+      port: 4123,
+      authToken: "auth-token",
+      threadId: "thread-1",
+      projectId,
+      environmentId: "worktree",
+      workspaceRoot,
     });
   });
 });

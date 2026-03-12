@@ -32,6 +32,19 @@ function makeTempDir(prefix: string): string {
   return dir;
 }
 
+function createDeferred() {
+  let resolvePromise: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve() {
+      resolvePromise?.();
+    },
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   for (const path of cleanupPaths.splice(0)) {
@@ -277,6 +290,74 @@ describe("docker environment-agent helper", () => {
 
     const stateDir = join(homedir(), ".beanbag", "environment-agents", "project-1");
     cleanupPaths.push(stateDir);
+  });
+
+  it("coalesces concurrent docker managed agent startup for the same thread", async () => {
+    const commands: Array<{ command: string; args: string[] }> = [];
+    const workspaceRoot = makeTempDir("bb-docker-agent-lock-workspace-");
+    const artifactRoot = makeTempDir("bb-docker-agent-lock-artifact-");
+    const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
+    mkdirSync(dirname(artifactEntry), { recursive: true });
+    writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
+
+    const statePath = __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath({
+      projectId: "project-lock",
+      threadId: "thread-lock",
+      environmentId: "docker",
+      workspaceRootPath: workspaceRoot,
+    });
+    cleanupPaths.push(join(homedir(), ".beanbag", "environment-agents", "project-lock"));
+
+    const waitGate = createDeferred();
+    const ensureArgs = {
+      workspaceRootPath: workspaceRoot,
+      threadId: "thread-lock",
+      projectId: "project-lock",
+      environmentId: "docker",
+      runtimeEnv: {
+        BEANBAG_DAEMON_URL: "http://127.0.0.1:9000",
+      },
+      dockerBin: "docker",
+      containerName: "beanbag-thread-thread-lock",
+      hostPort: 4311,
+    };
+    const deps = {
+      run(command: string, args: string[]) {
+        commands.push({ command, args });
+        return {
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+        };
+      },
+      waitForAgent: async () => {
+        await waitGate.promise;
+      },
+      generateAuthToken: () => "auth-token",
+      resolveArtifactEntry: () => artifactEntry,
+    };
+
+    const first = ensureManagedDockerEnvironmentAgent(ensureArgs, deps);
+    const second = ensureManagedDockerEnvironmentAgent(ensureArgs, deps);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    waitGate.resolve();
+    await Promise.all([first, second]);
+
+    expect(commands).toHaveLength(3);
+    expect(JSON.parse(readFileSync(statePath, "utf8"))).toMatchObject({
+      baseUrl: "http://127.0.0.1:4311",
+      authToken: "auth-token",
+      threadId: "thread-lock",
+      projectId: "project-lock",
+      environmentId: "docker",
+      workspaceRoot,
+      containerName: "beanbag-thread-thread-lock",
+      hostPort: 4311,
+      containerPort: 4310,
+    });
   });
 
   it("reuses an already running environment-agent for the same docker container", async () => {
