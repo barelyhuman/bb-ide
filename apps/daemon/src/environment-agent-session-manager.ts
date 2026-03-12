@@ -37,8 +37,11 @@ export class EnvironmentAgentSessionManager {
     return this.sessions.getById(sessionId);
   }
 
-  getActiveSessionByThreadId(threadId: string): EnvironmentAgentSessionRecord | undefined {
-    return this.sessions.getActiveByThreadId(threadId);
+  getActiveSessionByThreadId(
+    threadId: string,
+    now?: number,
+  ): EnvironmentAgentSessionRecord | undefined {
+    return this.sessions.getActiveByThreadId(threadId, now);
   }
 
   openSession(args: OpenEnvironmentAgentSessionInput): {

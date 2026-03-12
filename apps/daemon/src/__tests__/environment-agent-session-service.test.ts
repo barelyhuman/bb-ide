@@ -25,6 +25,8 @@ function sqliteClient(db: DbConnection): SqliteClient {
   return (db as unknown as { $client: SqliteClient }).$client;
 }
 
+const TEST_LEASE_NOW = 20_000;
+
 describe("EnvironmentAgentSessionService", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
@@ -52,7 +54,10 @@ describe("EnvironmentAgentSessionService", () => {
       {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
-        commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands),
+        clock: () => TEST_LEASE_NOW,
+        commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands, {
+          clock: () => TEST_LEASE_NOW,
+        }),
         eventApplier: new EnvironmentAgentEventApplier(cursors, {
           ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
         }),
@@ -756,6 +761,53 @@ describe("EnvironmentAgentSessionService", () => {
     expect(captured).toMatchObject({
       code: "inactive_session",
       message: `Environment-agent session ${opened.session.id} is not active`,
+    });
+  });
+
+  it("treats elapsed leases as inactive before the lease sweeper runs", () => {
+    const now = TEST_LEASE_NOW;
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: now - 50_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    let captured: unknown;
+    try {
+      service.recordHeartbeat({
+        threadId,
+        sessionId: opened.session.id,
+        now,
+        payload: {
+          agentObservedAt: now,
+          outboxDepth: 0,
+          channels: [{ channelId: threadId }],
+        },
+      });
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(isDomainError(captured)).toBe(true);
+    expect(captured).toMatchObject({
+      code: "inactive_session",
+      message: `Environment-agent session ${opened.session.id} is not active`,
+    });
+    expect(sessions.getById(opened.session.id)).toMatchObject({
+      status: "active",
+      leaseExpiresAt: now - 5_000,
     });
   });
 

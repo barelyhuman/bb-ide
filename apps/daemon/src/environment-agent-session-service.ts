@@ -32,6 +32,7 @@ export interface EnvironmentAgentSessionServiceOptions {
   heartbeatIntervalMs?: number;
   commandLongPollTimeoutMs?: number;
   commandLongPollIntervalMs?: number;
+  clock?: () => number;
   preferredTransports?: readonly EnvironmentAgentSessionTransportKind[];
   commandDispatcher?: EnvironmentAgentCommandDispatcher;
   eventApplier?: EnvironmentAgentEventApplier;
@@ -102,6 +103,13 @@ function inactiveEnvironmentAgentSessionError(sessionId: string): Error {
   return inactiveSessionError(`Environment-agent session ${sessionId} is not active`);
 }
 
+function isSessionLeaseActive(
+  session: Pick<EnvironmentAgentSessionRecord, "status" | "leaseExpiresAt">,
+  now: number,
+): boolean {
+  return session.status === "active" && session.leaseExpiresAt > now;
+}
+
 function normalizeCommandLongPollWaitMs(args: {
   requestedWaitMs?: number;
   maxWaitMs: number;
@@ -143,6 +151,7 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 export class EnvironmentAgentSessionService {
+  private readonly clock: () => number;
   private readonly leaseTtlMs: number;
   private readonly heartbeatIntervalMs: number;
   private readonly commandLongPollTimeoutMs: number;
@@ -159,6 +168,7 @@ export class EnvironmentAgentSessionService {
     private readonly cursors: EnvironmentAgentCursorRepository,
     options: EnvironmentAgentSessionServiceOptions = {},
   ) {
+    this.clock = options.clock ?? (() => Date.now());
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
     this.heartbeatIntervalMs =
       options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
@@ -182,7 +192,7 @@ export class EnvironmentAgentSessionService {
     replaced?: EnvironmentAgentSessionRecord;
     welcome: EnvironmentAgentSessionWelcomeMessage;
   } {
-    const now = args.now ?? Date.now();
+    const now = args.now ?? this.clock();
     if (
       !args.payload.supportedProtocolVersions.includes(
         ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
@@ -267,10 +277,12 @@ export class EnvironmentAgentSessionService {
     payload: EnvironmentAgentSessionHeartbeatPayload;
     now?: number;
   }): EnvironmentAgentSessionRecord {
+    const now = args.now ?? this.clock();
+    this.requireActiveSession(args.threadId, args.sessionId, now);
     const heartbeat = this.sessions.recordHeartbeat({
       sessionId: args.sessionId,
       leaseTtlMs: this.leaseTtlMs,
-      now: args.now,
+      now,
     });
     if (!heartbeat) {
       throw inactiveEnvironmentAgentSessionError(args.sessionId);
@@ -280,7 +292,7 @@ export class EnvironmentAgentSessionService {
         `Environment-agent session ${args.sessionId} does not belong to thread ${args.threadId}`,
       );
     }
-    if (heartbeat.status !== "active") {
+    if (!isSessionLeaseActive(heartbeat, now)) {
       throw inactiveEnvironmentAgentSessionError(args.sessionId);
     }
 
@@ -315,7 +327,7 @@ export class EnvironmentAgentSessionService {
   }
 
   getThreadStatus(threadId: string): EnvironmentAgentStatusSnapshot {
-    const session = this.sessions.getActiveSessionByThreadId(threadId);
+    const session = this.sessions.getActiveSessionByThreadId(threadId, this.clock());
     if (!session) {
       throw new Error(`No active environment-agent session for thread ${threadId}`);
     }
@@ -345,7 +357,7 @@ export class EnvironmentAgentSessionService {
     }
 
     const session = this.requireActiveSession(args.threadId, args.sessionId);
-    const now = args.now ?? Date.now();
+    const now = args.now ?? this.clock();
     const daemonCursor = this.cursors.getByThreadId(args.threadId);
     if (args.payload.batches.length !== 1) {
       throw new Error("Multi-channel environment-agent event batches are not supported yet");
@@ -421,7 +433,7 @@ export class EnvironmentAgentSessionService {
     }
 
     const session = this.requireActiveSession(args.threadId, args.sessionId);
-    const now = args.now ?? Date.now();
+    const now = args.now ?? this.clock();
     const records = this.commandDispatcher.listDeliverableCommandRecords({
       sessionId: session.id,
       afterCursor: args.afterCursor,
@@ -521,6 +533,7 @@ export class EnvironmentAgentSessionService {
   private requireActiveSession(
     threadId: string,
     sessionId: string,
+    now: number = this.clock(),
   ): EnvironmentAgentSessionRecord {
     const session = this.sessions.getSession(sessionId);
     if (!session) {
@@ -531,7 +544,7 @@ export class EnvironmentAgentSessionService {
         `Environment-agent session ${sessionId} does not belong to thread ${threadId}`,
       );
     }
-    if (session.status !== "active") {
+    if (!isSessionLeaseActive(session, now)) {
       throw inactiveEnvironmentAgentSessionError(sessionId);
     }
     return session;

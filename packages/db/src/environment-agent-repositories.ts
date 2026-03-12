@@ -231,6 +231,13 @@ function rowToEnvironmentAgentSessionRecord(
   };
 }
 
+function isEnvironmentAgentSessionLeaseActive(
+  session: Pick<EnvironmentAgentSessionRecord, "status" | "leaseExpiresAt">,
+  now: number,
+): boolean {
+  return session.status === "active" && session.leaseExpiresAt > now;
+}
+
 function rowToEnvironmentAgentCursorRecord(
   row: typeof environmentAgentCursors.$inferSelect,
 ): EnvironmentAgentCursorRecord {
@@ -436,7 +443,10 @@ export class EnvironmentAgentSessionRepository {
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
   }
 
-  getActiveByThreadId(threadId: string): EnvironmentAgentSessionRecord | undefined {
+  getActiveByThreadId(
+    threadId: string,
+    now: number = Date.now(),
+  ): EnvironmentAgentSessionRecord | undefined {
     const row = this.db
       .select()
       .from(environmentAgentSessions)
@@ -444,6 +454,7 @@ export class EnvironmentAgentSessionRepository {
         and(
           eq(environmentAgentSessions.threadId, threadId),
           eq(environmentAgentSessions.status, "active"),
+          gt(environmentAgentSessions.leaseExpiresAt, now),
         ),
       )
       .orderBy(desc(environmentAgentSessions.updatedAt))
@@ -473,7 +484,7 @@ export class EnvironmentAgentSessionRepository {
   }): EnvironmentAgentSessionRecord | undefined {
     const existing = this.getById(args.sessionId);
     if (!existing) return undefined;
-    if (existing.status !== "active") {
+    if (!isEnvironmentAgentSessionLeaseActive(existing, args.heartbeatAt)) {
       return existing;
     }
     this.db

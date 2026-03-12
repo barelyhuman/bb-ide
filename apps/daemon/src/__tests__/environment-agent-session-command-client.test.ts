@@ -20,6 +20,8 @@ function sqliteClient(db: DbConnection): SqliteClient {
   return (db as unknown as { $client: SqliteClient }).$client;
 }
 
+const TEST_LEASE_NOW = 20_000;
+
 describe("EnvironmentAgentSessionCommandClient", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
@@ -37,7 +39,9 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     threads = new ThreadRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
-    dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands);
+    dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
   });
 
   afterEach(() => {

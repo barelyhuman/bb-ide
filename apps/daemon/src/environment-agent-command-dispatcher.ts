@@ -30,10 +30,17 @@ export function isEnvironmentAgentSessionUnavailableError(
 }
 
 export class EnvironmentAgentCommandDispatcher {
+  private readonly clock: () => number;
+
   constructor(
     private readonly sessions: EnvironmentAgentSessionRepository,
     private readonly commands: EnvironmentAgentCommandRepository,
-  ) {}
+    options: {
+      clock?: () => number;
+    } = {},
+  ) {
+    this.clock = options.clock ?? (() => Date.now());
+  }
 
   async awaitActiveSession(args: {
     threadId: string;
@@ -45,7 +52,7 @@ export class EnvironmentAgentCommandDispatcher {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() <= deadline) {
-      const session = this.sessions.getActiveByThreadId(args.threadId);
+      const session = this.sessions.getActiveByThreadId(args.threadId, this.clock());
       if (session) {
         return session;
       }
@@ -56,7 +63,7 @@ export class EnvironmentAgentCommandDispatcher {
   }
 
   hasActiveSession(threadId: string): boolean {
-    return this.sessions.getActiveByThreadId(threadId) !== undefined;
+    return this.sessions.getActiveByThreadId(threadId, this.clock()) !== undefined;
   }
 
   async enqueueForActiveSession(args: {
@@ -327,7 +334,10 @@ export class EnvironmentAgentCommandDispatcher {
       case "sent":
       case "received":
       case "started": {
-        const activeSession = this.sessions.getActiveByThreadId(command.threadId);
+        const activeSession = this.sessions.getActiveByThreadId(
+          command.threadId,
+          this.clock(),
+        );
         if (!activeSession) {
           return true;
         }

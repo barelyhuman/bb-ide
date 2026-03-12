@@ -32,6 +32,8 @@ function sqliteClient(db: DbConnection): SqliteClient {
   return (db as unknown as { $client: SqliteClient }).$client;
 }
 
+const TEST_LEASE_NOW = 20_000;
+
 function createMockLlmCompletionService(): LlmCompletionService {
   return {
     displayName: "Mock LLM",
@@ -211,7 +213,9 @@ describe("environment-agent session orchestrator roundtrip", () => {
     } as unknown as WSManager;
 
     const sessionManager = new EnvironmentAgentSessionManager(sessions);
-    const commandDispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands);
+    const commandDispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
     let threadManager!: Orchestrator;
     const eventApplier = new EnvironmentAgentEventApplier(cursors, {
       ingestReplayedEnvironmentAgentEvents: ({ threadId, events: envelopes }) =>
@@ -221,6 +225,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
         }),
     });
     sessionService = new EnvironmentAgentSessionService(sessionManager, cursors, {
+      clock: () => TEST_LEASE_NOW,
       commandDispatcher,
       eventApplier,
       onSessionInvalidated: (session) => {

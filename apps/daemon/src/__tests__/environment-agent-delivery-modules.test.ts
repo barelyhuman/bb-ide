@@ -13,7 +13,10 @@ import type {
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentSessionEventBatchChannel,
 } from "@beanbag/environment-agent";
-import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
+import {
+  EnvironmentAgentCommandDispatcher,
+  EnvironmentAgentSessionUnavailableError,
+} from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
 
 interface SqliteClient {
@@ -23,6 +26,8 @@ interface SqliteClient {
 function sqliteClient(db: DbConnection): SqliteClient {
   return (db as unknown as { $client: SqliteClient }).$client;
 }
+
+const TEST_LEASE_NOW = 20_000;
 
 describe("environment-agent delivery modules", () => {
   let db: DbConnection;
@@ -209,7 +214,9 @@ describe("environment-agent delivery modules", () => {
   it("lists deliverable commands and records delivery acknowledgements", () => {
     const threadId = createThreadId();
     const sessionId = createActiveSession(threadId, "sess-deliver");
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands);
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
 
     commands.enqueue({
       id: "cmd-1",
@@ -256,7 +263,9 @@ describe("environment-agent delivery modules", () => {
 
   it("waits for active sessions and terminal command states", async () => {
     const threadId = createThreadId();
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands);
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
 
     setTimeout(() => {
       sessions.create({
@@ -308,10 +317,48 @@ describe("environment-agent delivery modules", () => {
     });
   });
 
+  it("does not treat elapsed leases as active sessions for command recovery", async () => {
+    const threadId = createThreadId();
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
+    const now = TEST_LEASE_NOW;
+
+    sessions.create({
+      id: "sess-expired",
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-expired",
+      protocolVersion: 1,
+      transportKind: "websocket",
+      leaseExpiresAt: now - 1_000,
+      now: now - 2_000,
+    });
+    commands.enqueue({
+      id: "cmd-expired",
+      threadId,
+      sessionId: "sess-expired",
+      commandType: "workspace.status",
+      payload: { type: "workspace.status", threadId },
+      now,
+    });
+
+    expect(dispatcher.hasActiveSession(threadId)).toBe(false);
+    await expect(
+      dispatcher.waitForTerminalState({
+        commandId: "cmd-expired",
+        timeoutMs: 50,
+        pollIntervalMs: 10,
+      }),
+    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+  });
+
   it("records command lifecycle results only for the matching active session", () => {
     const threadId = createThreadId();
     const sessionId = createActiveSession(threadId, "sess-results");
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands);
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
 
     commands.enqueue({
       id: "cmd-start",
