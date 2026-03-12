@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,23 @@ function ProjectSettingsEditor({
   onSave: (projectInstructions: string) => void;
 }) {
   const [projectInstructions, setProjectInstructions] = useState(initialInstructions);
+  const lastSyncedInstructionsRef = useRef(initialInstructions);
+  const pendingSavedInstructionsRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const previousSyncedInstructions = lastSyncedInstructionsRef.current;
+    const shouldResyncDraft =
+      projectInstructions === previousSyncedInstructions ||
+      projectInstructions === pendingSavedInstructionsRef.current;
+
+    lastSyncedInstructionsRef.current = initialInstructions;
+    if (shouldResyncDraft && projectInstructions !== initialInstructions) {
+      setProjectInstructions(initialInstructions);
+    }
+    if (pendingSavedInstructionsRef.current === initialInstructions) {
+      pendingSavedInstructionsRef.current = null;
+    }
+  }, [initialInstructions, projectInstructions]);
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-3">
@@ -69,6 +86,7 @@ function ProjectSettingsEditor({
             type="button"
             size="sm"
             onClick={() => {
+              pendingSavedInstructionsRef.current = projectInstructions;
               onSave(projectInstructions);
             }}
             disabled={isSaving}

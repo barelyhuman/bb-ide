@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { X } from "lucide-react";
 import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox";
 import type { PromptDraftAttachment } from "@/lib/prompt-draft";
@@ -34,6 +35,12 @@ export function PromptAttachmentPreview({
   const hasMultipleAttachmentImages = imageAttachments.length > 1;
   const currentAttachmentImage =
     expandedImageIndex !== null ? (attachmentImageItems[expandedImageIndex] ?? null) : null;
+
+  useEffect(() => {
+    if (expandedImageIndex === null) return;
+    if (expandedImageIndex < imageAttachments.length) return;
+    onExpandedImageIndexChange(null);
+  }, [expandedImageIndex, imageAttachments.length, onExpandedImageIndexChange]);
 
   if (attachments.length === 0) {
     return null;
