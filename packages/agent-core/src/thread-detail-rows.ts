@@ -250,6 +250,7 @@ function mergeProvisioningTranscriptEntry(
             ? Math.min(existing.sourceSeq, incoming.sourceSeq)
             : incoming.sourceSeq,
         branchName: incoming.branchName,
+        headSha: incoming.headSha ?? (existing.kind === "branch" ? existing.headSha : undefined),
       };
     case "setup":
       return {

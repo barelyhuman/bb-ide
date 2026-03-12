@@ -987,6 +987,42 @@ describe("ConversationEntry", () => {
     expect(html).toContain("checked out branch bb/thread-123 (abcdef1)");
   });
 
+  it("renders transcript branch lines with their captured sha", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned environment",
+      provisioning: {
+        environmentId: "worktree",
+        environmentDisplayName: "Worktree",
+        workspaceRoot: "/tmp/worktree",
+        branchName: "bb/thread-123",
+        headSha: "abcdef1234567890",
+        transcript: [
+          {
+            kind: "environment",
+            sourceSeq: 1,
+            environmentDisplayName: "Worktree",
+          },
+          {
+            kind: "worktree",
+            sourceSeq: 1,
+          },
+          {
+            kind: "branch",
+            sourceSeq: 2,
+            branchName: "bb/thread-123",
+            headSha: "abcdef1234567890",
+          },
+        ],
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("checked out branch bb/thread-123 (abcdef1)");
+  });
+
   it("does not show additional details when provisioning only has structured fields", () => {
     const message: UIMessage = {
       ...baseMessage(),

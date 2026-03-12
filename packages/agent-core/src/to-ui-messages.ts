@@ -1647,6 +1647,7 @@ function parseOperationMessage(
               kind: "branch" as const,
               sourceSeq: event.seq,
               branchName,
+              ...(headSha ? { headSha } : {}),
             },
           ]
         : []),
@@ -1951,6 +1952,7 @@ function parseOperationMessage(
               kind: "branch" as const,
               sourceSeq: event.seq,
               branchName,
+              ...(headSha ? { headSha } : {}),
             },
           ]
         : []),

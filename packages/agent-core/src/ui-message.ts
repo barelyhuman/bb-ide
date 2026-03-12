@@ -203,6 +203,7 @@ export interface UIProvisioningTranscriptBranchEntry {
   kind: "branch";
   sourceSeq: number;
   branchName: string;
+  headSha?: string;
 }
 
 export interface UIProvisioningTranscriptSetupEntry {

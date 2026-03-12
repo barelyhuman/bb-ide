@@ -769,6 +769,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
               kind: "branch",
               sourceSeq: 2,
               branchName: "feature/test",
+              headSha: "abcdef1234567890",
             },
             {
               kind: "setup",
@@ -832,6 +833,12 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
       kind: "phase",
       sourceSeq: 3,
       phase: "start_provider_session",
+    });
+    expect(rows[0]?.provisioning?.transcript?.[2]).toMatchObject({
+      kind: "branch",
+      sourceSeq: 2,
+      branchName: "feature/test",
+      headSha: "abcdef1234567890",
     });
   });
 

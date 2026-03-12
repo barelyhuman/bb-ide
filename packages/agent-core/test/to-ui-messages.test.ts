@@ -1889,6 +1889,53 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[1]?.detail).toContain("Branch: feat/example");
   });
 
+  it("captures checkout sha on provisioning branch transcript entries", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/provisioning/env_setup",
+        data: {
+          status: "started",
+          scriptPath: ".bb-env-setup.sh",
+          workspaceRoot: "/tmp/worktree",
+          branchName: "bb/thread-123",
+          headSha: "abcdef1234567890",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "provisioning",
+    });
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op?.opType).toBe("provisioning-env-setup");
+    expect(op?.provisioning?.headSha).toBe("abcdef1234567890");
+    expect(op?.provisioning?.transcript).toEqual([
+      {
+        kind: "branch",
+        sourceSeq: 1,
+        branchName: "bb/thread-123",
+        headSha: "abcdef1234567890",
+      },
+      {
+        kind: "setup",
+        sourceSeq: 1,
+        setup: {
+          status: "started",
+          startedAt: 1,
+          scriptPath: ".bb-env-setup.sh",
+        },
+      },
+    ]);
+  });
+
   it("projects thread operation intent lifecycle events as operations", () => {
     const events: ThreadEvent[] = [
       {

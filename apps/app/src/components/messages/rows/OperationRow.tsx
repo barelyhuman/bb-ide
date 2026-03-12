@@ -168,8 +168,8 @@ function formatProvisioningTranscriptEntry(
       return "creating worktree";
     case "branch":
       return formatProvisioningBranchLine({
-        ...provisioning,
         branchName: entry.branchName,
+        ...(entry.headSha ? { headSha: entry.headSha } : {}),
       });
     case "setup":
       return formatProvisioningSetupLine(entry.setup, now);
