@@ -64,6 +64,13 @@ function printThreadOperationResult(result: ThreadOperationResponse): void {
   console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
+function buildThreadRouteUrl(baseUrl: string, threadId: string, suffix: string): URL {
+  return new URL(
+    `/api/v1/threads/${encodeURIComponent(threadId)}/${suffix}`,
+    baseUrl,
+  );
+}
+
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
   const thread = program.command("thread").description("Manage threads");
   const postThreadMessage = async (
@@ -237,6 +244,52 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
         );
         printThread(thread);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
+    .command("archive [id]")
+    .description("Archive a thread (defaults to BB_THREAD_ID)")
+    .option(
+      "--force",
+      "Archive even when the thread workspace has uncommitted or unmerged work",
+    )
+    .action(async (id: string | undefined, opts: { force?: boolean }) => {
+      try {
+        const threadId = requireThreadId(id);
+        const requestInit: RequestInit = opts.force
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ force: true }),
+            }
+          : { method: "POST" };
+        await unwrap<{ ok: boolean }>(
+          fetch(buildThreadRouteUrl(getUrl(), threadId, "archive"), requestInit),
+        );
+        console.log(`Thread ${threadId} archived`);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
+    .command("unarchive [id]")
+    .description("Unarchive a thread (defaults to BB_THREAD_ID)")
+    .action(async (id: string | undefined) => {
+      const client = createClient(getUrl());
+      try {
+        const threadId = requireThreadId(id);
+        await unwrap<{ ok: boolean }>(
+          client.api.v1.threads[":id"].unarchive.$post({
+            param: { id: threadId },
+          }),
+        );
+        console.log(`Thread ${threadId} unarchived`);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
         process.exit(1);

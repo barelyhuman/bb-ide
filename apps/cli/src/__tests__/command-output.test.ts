@@ -45,6 +45,12 @@ describe("CLI command output contracts", () => {
     vi.spyOn(process, "exit").mockImplementation((code?: string | number | null) => {
       throw new Error(`process.exit:${code ?? 0}`);
     });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
 
     createClientMock.mockReset();
     unwrapMock.mockReset();
@@ -209,6 +215,66 @@ describe("CLI command output contracts", () => {
         environmentId: "local",
       },
     });
+  });
+
+  it("bb thread archive sends the thread id from args", async () => {
+    await runCommand(["thread", "archive", "thread-archive-1"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      new URL("http://daemon/api/v1/threads/thread-archive-1/archive"),
+      { method: "POST" },
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-archive-1 archived",
+    );
+  });
+
+  it("bb thread archive falls back to BB_THREAD_ID and forwards --force", async () => {
+    process.env.BB_THREAD_ID = "thread-archive-2";
+
+    await runCommand(["thread", "archive", "--force"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      new URL("http://daemon/api/v1/threads/thread-archive-2/archive"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      },
+    );
+  });
+
+  it("bb thread unarchive falls back to BB_THREAD_ID", async () => {
+    process.env.BB_THREAD_ID = "thread-unarchive-1";
+    const unarchivePost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              unarchive: {
+                $post: unarchivePost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "unarchive"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(unarchivePost).toHaveBeenCalledWith({
+      param: { id: "thread-unarchive-1" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-unarchive-1 unarchived",
+    );
   });
 
   it("bb daemon restart requests daemon shutdown", async () => {
