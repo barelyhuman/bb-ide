@@ -1,7 +1,10 @@
 import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react"
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
+  getScrollAnimationBehavior,
 } from "@beanbag/ui-core";
+
+const SMOOTH_AUTO_SCROLL_MAX_DELTA_PX = 160
 
 function shouldShowScrollToBottom(el: HTMLDivElement): boolean {
   const maxScrollOffset = el.scrollHeight - el.clientHeight
@@ -18,6 +21,7 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const [isStickingToBottom, setIsStickingToBottom] = useState(true)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const stickRef = useRef(true)
+  const scheduledFrameRef = useRef<number | null>(null)
 
   const setContainerRef = useCallback((element: HTMLDivElement | null) => {
     containerRef.current = element
@@ -41,11 +45,49 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     setShowScrollToBottom(false)
   }, [setStickyState])
 
-  const scrollToBottomIfSticking = useCallback(() => {
+  const scrollToBottomWithAnimation = useCallback(() => {
     const el = containerRef.current
     if (!el || !stickRef.current) return
-    el.scrollTop = el.scrollHeight
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distanceFromBottom <= 0) {
+      return
+    }
+
+    const behavior =
+      distanceFromBottom <= SMOOTH_AUTO_SCROLL_MAX_DELTA_PX
+        ? getScrollAnimationBehavior()
+        : "auto"
+
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior,
+    })
   }, [])
+
+  const scrollToBottomIfSticking = useCallback(() => {
+    scrollToBottomWithAnimation()
+  }, [scrollToBottomWithAnimation])
+
+  const scheduleScrollToBottomIfSticking = useCallback(() => {
+    if (typeof window === "undefined") {
+      scrollToBottomIfSticking()
+      return
+    }
+
+    if (scheduledFrameRef.current !== null) {
+      return
+    }
+
+    scheduledFrameRef.current = window.requestAnimationFrame(() => {
+      scheduledFrameRef.current = null
+      scrollToBottomIfSticking()
+      const el = containerRef.current
+      if (el) {
+        setShowScrollToBottom(shouldShowScrollToBottom(el))
+      }
+    })
+  }, [scrollToBottomIfSticking])
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current
@@ -57,24 +99,21 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   }, [setStickyState])
 
   useEffect(() => {
-    scrollToBottomIfSticking()
-    if (containerElement) {
-      setShowScrollToBottom(shouldShowScrollToBottom(containerElement))
+    scheduleScrollToBottomIfSticking()
+    return () => {
+      if (scheduledFrameRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(scheduledFrameRef.current)
+        scheduledFrameRef.current = null
+      }
     }
-  }, [containerElement, dep, scrollToBottomIfSticking])
+  }, [containerElement, dep, scheduleScrollToBottomIfSticking])
 
   useEffect(() => {
     const el = containerElement
     if (!el || typeof window === "undefined") return
 
-    let frameId: number | null = null
     const schedule = () => {
-      if (frameId !== null) return
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null
-        scrollToBottomIfSticking()
-        setShowScrollToBottom(shouldShowScrollToBottom(el))
-      })
+      scheduleScrollToBottomIfSticking()
     }
 
     let mutationObserver: MutationObserver | undefined
@@ -104,11 +143,12 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
       mutationObserver?.disconnect()
       resizeObserver?.disconnect()
       window.removeEventListener("resize", schedule)
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId)
+      if (scheduledFrameRef.current !== null) {
+        window.cancelAnimationFrame(scheduledFrameRef.current)
+        scheduledFrameRef.current = null
       }
     }
-  }, [containerElement, scrollToBottomIfSticking])
+  }, [containerElement, scheduleScrollToBottomIfSticking])
 
   useLayoutEffect(() => {
     if (resetDep === undefined) return
