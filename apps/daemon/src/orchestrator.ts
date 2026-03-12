@@ -3506,11 +3506,21 @@ export class Orchestrator implements ThreadOrchestrator {
     options?: PromptExecutionOptions,
   ): Promise<string> {
     const inMemoryThreadId = this.providerThreadIdByThreadId.get(threadId);
+    const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
     const hasActiveEnvironmentAgentSession =
       this.environmentAgentCommandDispatcher?.hasActiveSession(threadId) ?? false;
 
     if (
       inMemoryThreadId &&
+      persistedThreadId &&
+      persistedThreadId !== inMemoryThreadId
+    ) {
+      this.providerThreadIdByThreadId.delete(threadId);
+    }
+
+    if (
+      inMemoryThreadId &&
+      (!persistedThreadId || persistedThreadId === inMemoryThreadId) &&
       (!this.environmentAgentCommandDispatcher || hasActiveEnvironmentAgentSession)
     ) {
       return inMemoryThreadId;
@@ -3519,7 +3529,6 @@ export class Orchestrator implements ThreadOrchestrator {
       this.providerThreadIdByThreadId.delete(threadId);
     }
 
-    const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
     const resumePath = this._resolvePersistedProviderThreadResumePath(threadId);
     if (!persistedThreadId) {
       throw inactiveSessionError(this.agentServer.getInactiveSessionMessage(threadId));

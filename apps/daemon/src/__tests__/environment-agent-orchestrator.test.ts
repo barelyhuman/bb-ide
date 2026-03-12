@@ -584,6 +584,138 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(resumeThreadCommand).toHaveBeenCalledTimes(1);
   });
 
+  it("revalidates persisted provider thread ids when hot daemon state disagrees", async () => {
+    const thread = makeThread({
+      status: "idle",
+      environmentId: "worktree",
+    });
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (
+      eventRepo as unknown as {
+        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
+      }
+    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+
+    const dispatcher = {
+      hasActiveSession: vi.fn(() => true),
+      awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      enqueueForActiveSession: vi.fn(async () => ({
+        id: "cmd-resume",
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        commandCursor: 1,
+        commandType: "thread.resume",
+        payload: {
+          type: "thread.resume",
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+        },
+        state: "completed",
+        result: { threadId: "provider-thread-1" },
+        createdAt: 1_000,
+        updatedAt: 1_100,
+      })),
+    } as unknown as EnvironmentAgentCommandDispatcher;
+
+    const validateManager = new Orchestrator(
+      threadRepo,
+      eventRepo,
+      projectRepo,
+      ws,
+      createMockLlmCompletionService(),
+      undefined,
+      createTestRuntimeEnv({
+        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
+        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+      }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dispatcher,
+      sessionService as never,
+    );
+
+    const environmentService = (
+      validateManager as unknown as {
+        environmentService: Pick<
+          EnvironmentService,
+          "ensureThreadEnvironmentRuntime"
+        >;
+      }
+    ).environmentService;
+
+    const runtimeEnvironment = makeRuntimeEnvironment({
+      rootPath: "/test",
+      authorization: "Bearer test-token",
+    });
+    environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
+      runtime: {
+        environment: runtimeEnvironment,
+        agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
+      },
+    }));
+
+    (
+      validateManager as unknown as {
+        providerThreadIdByThreadId: Map<string, string>;
+      }
+    ).providerThreadIdByThreadId.set("thread-1", "provider-thread-stale");
+
+    const resumeThreadCommand = vi.fn(
+      async ({ client }: { client: environmentAgent.EnvironmentAgentClient }) => {
+        const ack = await client.sendCommand({
+          meta: {
+            protocolVersion: 1,
+            commandId: "cmd-resume",
+            idempotencyKey: "cmd-resume",
+            sentAt: 1_050,
+          },
+          command: {
+            type: "thread.resume",
+            threadId: "thread-1",
+            providerThreadId: "provider-thread-1",
+          } as never,
+        });
+        expect(ack).toMatchObject({
+          state: "accepted",
+          result: { threadId: "provider-thread-1" },
+        });
+        return { providerThreadId: "provider-thread-1" };
+      },
+    );
+
+    (
+      validateManager as unknown as {
+        agentServer: { resumeThreadCommand: typeof resumeThreadCommand };
+      }
+    ).agentServer.resumeThreadCommand = resumeThreadCommand;
+
+    const providerThreadId = await (
+      validateManager as unknown as {
+        _ensureProviderSession: (threadId: string) => Promise<string>;
+      }
+    )._ensureProviderSession("thread-1");
+
+    expect(providerThreadId).toBe("provider-thread-1");
+    expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(1);
+    expect(resumeThreadCommand).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        validateManager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.get("thread-1"),
+    ).toBe("provider-thread-1");
+  });
+
   it("reads environment-agent status from the session service", async () => {
     const thread = makeThread();
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
