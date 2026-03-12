@@ -81,13 +81,13 @@ function formatProvisioningPhaseLine(
 
   switch (phase) {
     case "prepare_environment":
+      // Intentionally omitted from the provisioning timeline row to reduce noise;
+      // the row title/status already captures environment preparation progress.
       switch (metadata.status) {
         case "started":
-          return `preparing environment${formatProvisioningRunningSuffix(metadata.startedAt, now)}`;
         case "completed":
-          return `prepared environment${durationText}`;
         case "failed":
-          return `environment preparation failed${durationText}`;
+          return undefined;
         default:
           return assertNever(metadata.status);
       }
