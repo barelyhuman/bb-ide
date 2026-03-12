@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { useHoverPopover } from "@/hooks/useHoverPopover";
 import {
   calculateContextWindowUsagePercent,
   formatCompactTokenCount,
@@ -16,47 +16,12 @@ interface ThreadContextWindowIndicatorProps {
   className?: string;
 }
 
-const POPOVER_CLOSE_DELAY_MS = 160;
-
 export function ThreadContextWindowIndicator({
   usage,
   className,
 }: ThreadContextWindowIndicatorProps) {
-  const [open, setOpen] = useState(false);
-  const [isPointerOverTrigger, setIsPointerOverTrigger] = useState(false);
-  const [isPointerOverContent, setIsPointerOverContent] = useState(false);
-  const closeTimeoutRef = useRef<number | null>(null);
-
-  const clearCloseTimeout = useCallback(() => {
-    if (closeTimeoutRef.current === null) return;
-    window.clearTimeout(closeTimeoutRef.current);
-    closeTimeoutRef.current = null;
-  }, []);
-
-  const isInteractive = useMemo(
-    () => isPointerOverTrigger || isPointerOverContent,
-    [isPointerOverContent, isPointerOverTrigger],
-  );
-
-  useEffect(() => {
-    clearCloseTimeout();
-
-    if (isInteractive) {
-      setOpen(true);
-      return;
-    }
-
-    closeTimeoutRef.current = window.setTimeout(() => {
-      setOpen(false);
-      closeTimeoutRef.current = null;
-    }, POPOVER_CLOSE_DELAY_MS);
-
-    return clearCloseTimeout;
-  }, [clearCloseTimeout, isInteractive]);
-
-  useEffect(() => {
-    return clearCloseTimeout;
-  }, [clearCloseTimeout]);
+  const { open, triggerHoverProps, contentHoverProps, handleOpenChange } =
+    useHoverPopover();
 
   const usedPercent = calculateContextWindowUsagePercent(usage);
   const leftPercent = Math.max(0, 100 - usedPercent);
@@ -74,26 +39,12 @@ export function ThreadContextWindowIndicator({
   return (
     <Popover
       open={open}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen) {
-          setOpen(true);
-          return;
-        }
-
-        setIsPointerOverTrigger(false);
-        setIsPointerOverContent(false);
-        setOpen(false);
-      }}
+      onOpenChange={handleOpenChange}
     >
       <PopoverTrigger asChild>
         <button
           type="button"
-          onPointerEnter={() => {
-            setIsPointerOverTrigger(true);
-          }}
-          onPointerLeave={() => {
-            setIsPointerOverTrigger(false);
-          }}
+          {...triggerHoverProps}
           className={cn(
             "inline-flex size-6 items-center justify-center rounded-full transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,
@@ -122,12 +73,7 @@ export function ThreadContextWindowIndicator({
         side="top"
         align="end"
         sideOffset={8}
-        onPointerEnter={() => {
-          setIsPointerOverContent(true);
-        }}
-        onPointerLeave={() => {
-          setIsPointerOverContent(false);
-        }}
+        {...contentHoverProps}
         className="w-auto max-w-[240px] border-border/80 bg-popover/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
       >
         <div className="space-y-1.5">
