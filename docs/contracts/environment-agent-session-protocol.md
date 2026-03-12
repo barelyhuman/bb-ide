@@ -2,9 +2,9 @@
 
 Status: draft
 
-This document specifies the proposed canonical protocol between the Beanbag daemon and environment-agent.
+This document specifies the current canonical protocol between the Beanbag daemon and environment-agent.
 
-It is intended to supersede the current split between live `/stream` ingestion and `/deliver` acknowledgement by defining one session-based model for liveness, command delivery, event delivery, replay, acknowledgement, reconnect, and restart-time nudging of surviving agents.
+It defines the session-based model used for liveness, command delivery, event delivery, acknowledgement, reconnect, and restart-time nudging of surviving agents.
 
 ## Goals
 
@@ -54,7 +54,6 @@ Each session is associated with:
 - `sessionId`: server-issued id for the current session lease
 - `protocolVersion`: negotiated version
 - `controlEndpoint`: optional daemon-reachable control URL and auth token used for restart nudges
-- `capabilities`: negotiated transport/protocol features
 
 ### Channel Identity
 
@@ -406,18 +405,18 @@ The daemon must durably persist:
 
 ### Environment-Agent
 
-The agent must durably persist:
+The agent keeps best-effort in-memory runtime state for:
 
 - outbound event outbox entries until covered by `event_ack`
 - received/executed command ids and their state to suppress duplicate execution
 - per-channel current generation and next sequence number
-- minimal replay metadata needed after reconnect or restart
+- minimal reset metadata needed after reconnect or restart
 
 ## Reconnect and Recovery Flows
 
 ### Agent reconnect after transient disconnect
 
-1. agent keeps unacked events in durable outbox
+1. agent keeps unacked events in its local outbox
 2. transport disconnects
 3. agent reconnects and sends `session_open`
 4. daemon responds with `session_welcome`
@@ -431,15 +430,15 @@ The agent must durably persist:
 2. agent reconnects using `session_open`
 3. daemon issues fresh `session_welcome`
 4. daemon requests events from its last durably applied cursor
-5. agent replays from durable outbox/store
+5. agent resends any surviving local outbox events from that cursor
 6. daemon reissues still-outstanding commands after its last acknowledged command cursor
 
 ### Agent restart before daemon ack
 
-1. agent had durably written events but not received daemon ack
+1. agent had locally buffered events but not received daemon ack
 2. agent restarts
 3. agent increments channel generation if stream continuity is lost
-4. agent resumes from durable store
+4. agent resumes from empty or surviving local runtime state
 5. daemon either:
    - continues same generation if continuity is valid, or
    - accepts new generation and applies according to explicit generation rules
@@ -536,14 +535,8 @@ This preserves the same session, cursor, and ack semantics without requiring Web
 The daemon and agent negotiate:
 
 - protocol version
-- supported transports
-- optional features such as:
-  - dedicated `command_result`
-  - multi-channel sessions
-  - replay paging
-  - compression
 
-Unknown optional capabilities must be ignored safely. Unknown required protocol versions must fail fast.
+Unknown required protocol versions must fail fast.
 
 ## Migration Notes
 
