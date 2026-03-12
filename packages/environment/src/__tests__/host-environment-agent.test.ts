@@ -160,4 +160,58 @@ describe("host environment-agent helper", () => {
       pid: undefined,
     });
   });
+
+  it("reuses an existing healthy managed agent instead of replacing it", async () => {
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+
+    const first = await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-1",
+        projectId,
+        environmentId: "local",
+        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      },
+      {
+        allocatePort: async () => 4311,
+        generateAuthToken: () => "auth-token",
+        resolveLaunchCommand: () => ({
+          command: process.execPath,
+          args: ["agent.mjs"],
+        }),
+        spawnProcess: vi.fn(() => ({
+          pid: 4321,
+          unref: vi.fn(),
+        })) as unknown as typeof import("node:child_process").spawn,
+        waitForAgent: async () => {},
+        isProcessAlive: () => true,
+        killProcess: vi.fn(),
+      },
+    );
+
+    const killProcess = vi.fn();
+    const second = await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-1",
+        projectId,
+        environmentId: "local",
+        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      },
+      {
+        spawnProcess: vi.fn() as unknown as typeof import("node:child_process").spawn,
+        waitForAgent: async () => {
+          throw new Error("should not relaunch");
+        },
+        isProcessAlive: () => true,
+        killProcess,
+      },
+    );
+
+    expect(second).toEqual(first);
+    expect(killProcess).not.toHaveBeenCalled();
+  });
 });

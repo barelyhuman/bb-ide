@@ -85,6 +85,7 @@ export class EnvironmentService {
     string,
     Promise<EnsureThreadEnvironmentRuntimeResult>
   >();
+  readonly environmentRuntimeSuspendsByThreadId = new Map<string, Promise<void>>();
   readonly primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
   readonly primaryPromotionValidatedAtByProjectId = new Map<string, number>();
   readonly primaryPromotionWatchersByProjectId = new Map<string, () => void>();
@@ -209,6 +210,7 @@ export class EnvironmentService {
     reason: ThreadEnvironmentStartReason,
   ): Promise<ActiveEnvironmentRuntime> {
     const ensured = await this.withThreadEnvironmentEnsure(threadId, async () => {
+      await this.awaitEnvironmentRuntimeSuspension(threadId);
       const existingRuntime = this.environmentRuntimes.get(threadId);
       if (existingRuntime) {
         return {
@@ -249,6 +251,7 @@ export class EnvironmentService {
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
   ): Promise<EnsureThreadEnvironmentRuntimeResult> {
+    await this.awaitEnvironmentRuntimeSuspension(thread.id);
     const existingRuntime = this.environmentRuntimes.get(thread.id);
     if (existingRuntime) {
       return {
@@ -338,7 +341,10 @@ export class EnvironmentService {
   }
 
   suspendEnvironmentRuntime(threadId: string): void {
-    void this.suspendEnvironmentRuntimeAndWait(threadId);
+    this.trackEnvironmentRuntimeSuspension(
+      threadId,
+      this.suspendEnvironmentRuntimeAndWait(threadId),
+    );
   }
 
   async suspendEnvironmentRuntimeAndWait(threadId: string): Promise<void> {
@@ -390,6 +396,23 @@ export class EnvironmentService {
     } catch (error) {
       this.callbacks.onCleanupFailure(threadId, environmentId, error);
     }
+  }
+
+  private trackEnvironmentRuntimeSuspension(
+    threadId: string,
+    suspendPromise: Promise<void>,
+  ): Promise<void> {
+    const tracked = suspendPromise.finally(() => {
+      if (this.environmentRuntimeSuspendsByThreadId.get(threadId) === tracked) {
+        this.environmentRuntimeSuspendsByThreadId.delete(threadId);
+      }
+    });
+    this.environmentRuntimeSuspendsByThreadId.set(threadId, tracked);
+    return tracked;
+  }
+
+  private async awaitEnvironmentRuntimeSuspension(threadId: string): Promise<void> {
+    await this.environmentRuntimeSuspendsByThreadId.get(threadId);
   }
 
   async destroyThreadEnvironment(threadId: string): Promise<void> {

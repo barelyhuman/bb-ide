@@ -121,7 +121,8 @@ Required matrix:
 - `local` restart while active -> surviving env-agent reconnect
 - `local` restart while active -> missing env-agent becomes \`error\`
 - `local` follow-up after restart failure
-- `local` restart while idle -> follow-up reuses surviving env-agent instead of spawning a duplicate
+- `local` immediate follow-up after idle completion
+- `local` restart while idle -> follow-up starts a fresh env-agent cleanly
 
 Spawn:
 
@@ -192,7 +193,8 @@ Required matrix:
 - `worktree` restart while active -> missing env-agent becomes \`error\`
 - `worktree` follow-up after restart failure
 - `worktree` promote/demote
-- `worktree` restart while idle -> follow-up reuses surviving env-agent instead of spawning a duplicate
+- `worktree` immediate follow-up after idle completion
+- `worktree` restart while idle -> follow-up starts a fresh env-agent cleanly
 
 Spawn a worktree thread:
 
@@ -247,15 +249,13 @@ Required matrix:
 - local thread stays `active` if the env-agent checks back in
 - local thread becomes `error` if the env-agent does not check back in
 - local thread accepts a follow-up after restart failure
-- local idle thread follow-up after restart does not create a duplicate env-agent if the old one is still alive
+- local idle thread follow-up after restart starts a fresh env-agent and closes the prior idle session cleanly
 - blocked restart while worktree thread is active
 - forced restart while worktree thread is active
 - worktree thread stays `active` if the env-agent checks back in
 - worktree thread becomes `error` if the env-agent does not check back in
 - worktree thread accepts a follow-up after restart failure
-- worktree idle thread follow-up after restart does not create a duplicate env-agent if the old one is still alive
-- local restart while idle -> persisted session endpoint remains stable across the first follow-up
-- worktree restart while idle -> persisted session endpoint remains stable across the first follow-up
+- worktree idle thread follow-up after restart starts a fresh env-agent and closes the prior idle session cleanly
 - active-thread restart failure emits `system/error` with `provider_unavailable`
 - follow-up after restart failure clears `error` back to a healthy terminal state
 
@@ -309,17 +309,20 @@ Daemon-log expectations after relaunch:
   - startup log reports at least one session is awaiting heartbeat timeout handling
   - later, the thread transitions to `error` without needing any manual cleanup
 
-Additional idle-thread reuse check for both `local` and `worktree`:
+Additional idle-thread follow-up checks for both `local` and `worktree`:
 
 1. Start a thread and let it complete to `idle`.
-2. Record the last active env-agent control endpoint from the Beanbag DB:
+2. Immediately send a follow-up before doing any restart.
+3. Verify that the follow-up succeeds without any transient `agent_shutdown` / session-closed failure.
+4. Start another thread and let it complete to `idle`.
+5. Record the last active env-agent control endpoint from the Beanbag DB:
 
 ```bash
 sqlite3 "$beanbag_root/beanbag.db" \
   "select control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at desc limit 1;"
 ```
 
-Also record the current session count and active-session row:
+Also record the current session count and all session rows:
 
 ```bash
 sqlite3 "$beanbag_root/beanbag.db" \
@@ -329,22 +332,27 @@ sqlite3 "$beanbag_root/beanbag.db" \
   "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
-3. Force-restart the daemon and relaunch it on the same `BEANBAG_ROOT` while leaving that env-agent process alive.
-4. Send a follow-up to the now-idle thread.
-5. Verify the daemon reused the surviving env-agent instead of spawning another one:
+6. Force-restart the daemon and relaunch it on the same `BEANBAG_ROOT`.
+7. Send a follow-up to the now-idle thread.
+8. Verify that the daemon starts a fresh env-agent session cleanly:
 
 ```bash
 sqlite3 "$beanbag_root/beanbag.db" \
   "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
+
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select id,status,close_reason,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
 Expected result:
 
 - the follow-up succeeds
 - the thread returns to `idle`
-- the session count for that thread does not increase just because of the restart
-- the original `control_base_url` remains the active session endpoint after the follow-up
-- there is no extra `replaced` session row created solely because the daemon restarted while the thread was idle
+- the immediate follow-up before restart does not fail with `agent_shutdown`
+- after restart, the session count increases by exactly one for the fresh follow-up session
+- the previously idle session is closed rather than left active
+- exactly one session row is active for the thread after the follow-up completes
+- the daemon does not leave multiple live sessions competing for the same idle thread
 
 Missing-worker restart check:
 

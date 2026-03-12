@@ -470,6 +470,51 @@ describe("EnvironmentService", () => {
     expect(settled).toBe(true);
   });
 
+  it("waits for an in-flight runtime suspension before ensuring the environment again", async () => {
+    let resolveSuspend: (() => void) | undefined;
+    const runtimeEnvironment: IEnvironment = {
+      ...createTestEnvironment({ existsInitially: true }),
+      suspend: vi.fn(
+        async () =>
+          await new Promise<void>((resolve) => {
+            resolveSuspend = resolve;
+          }),
+      ),
+    };
+    const prepareSpy = vi.fn(async () => {});
+    const restoreImpl = vi.fn(() => ({
+      ...createTestEnvironment({ existsInitially: true }),
+      prepare: prepareSpy,
+    }));
+    const { service, threadState } = createService({
+      existsInitially: true,
+      restoreImpl,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    service.suspendEnvironmentRuntime("thread-1");
+    await Promise.resolve();
+    expect(runtimeEnvironment.suspend).toHaveBeenCalledTimes(1);
+
+    let ensured = false;
+    const ensurePromise = service.ensureThreadEnvironmentRuntime(
+      threadState,
+      "/project/root",
+      "resume-existing-provider-session",
+    ).then(() => {
+      ensured = true;
+    });
+
+    await Promise.resolve();
+    expect(ensured).toBe(false);
+    expect(prepareSpy).not.toHaveBeenCalled();
+
+    resolveSuspend?.();
+    await ensurePromise;
+
+    expect(prepareSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("coalesces concurrent runtime ensure calls for the same thread", async () => {
     const waitGate = createDeferred();
     const prepareSpy = vi.fn(async () => {

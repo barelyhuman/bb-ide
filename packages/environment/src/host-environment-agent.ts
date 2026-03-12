@@ -263,7 +263,18 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     const identityKey = managedHostEnvironmentAgentIdentityKey(stateIdentity);
     const existing = managedHostEnvironmentAgents.get(identityKey);
     if (existing) {
-      if (existing.pid && checkProcessAlive(existing.pid)) {
+      const existingHealthy = existing.pid
+        ? checkProcessAlive(existing.pid)
+        : await (deps.pingAgent ?? pingEnvironmentAgent)(
+            existing.baseUrl,
+            existing.authToken,
+            HEALTH_TIMEOUT_MS,
+          );
+      if (existingHealthy) {
+        managedTarget = toManagedHostEnvironmentAgentTarget({ record: existing });
+        return;
+      }
+      if (existing.pid) {
         try {
           killProcess(existing.pid, "SIGTERM");
         } catch {
