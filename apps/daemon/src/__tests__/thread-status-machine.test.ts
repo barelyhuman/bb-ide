@@ -7,6 +7,7 @@ const STATUSES: ThreadStatus[] = [
   "provisioning",
   "provisioned",
   "provisioning_failed",
+  "error",
   "idle",
   "active",
 ];
@@ -16,8 +17,9 @@ const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
   provisioning: ["provisioned", "active", "idle", "provisioning_failed"],
   provisioned: ["active", "idle", "provisioning_failed"],
   provisioning_failed: ["provisioning", "provisioned", "idle"],
-  idle: ["active", "provisioning", "provisioned"],
-  active: ["idle"],
+  error: ["provisioning", "provisioned", "idle"],
+  idle: ["active", "error", "provisioning", "provisioned"],
+  active: ["error", "idle"],
 };
 
 describe("thread status machine", () => {

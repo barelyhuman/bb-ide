@@ -36,15 +36,24 @@ const THREAD_STATUS_STATES = {
       idle: "idle",
     },
   },
+  error: {
+    on: {
+      provisioning: "provisioning",
+      provisioned: "provisioned",
+      idle: "idle",
+    },
+  },
   idle: {
     on: {
       active: "active",
+      error: "error",
       provisioning: "provisioning",
       provisioned: "provisioned",
     },
   },
   active: {
     on: {
+      error: "error",
       idle: "idle",
     },
   },

@@ -9,6 +9,7 @@ const variantMap: Record<Status, StatusPillVariant> = {
   provisioning: "outline",
   provisioned: "outline",
   provisioning_failed: "destructive",
+  error: "destructive",
   active: "emphasis",
   idle: "outline",
 };

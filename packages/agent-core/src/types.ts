@@ -52,6 +52,7 @@ export type ThreadStatus =
   | "provisioning"
   | "provisioned"
   | "provisioning_failed"
+  | "error"
   | "idle"
   | "active";
 

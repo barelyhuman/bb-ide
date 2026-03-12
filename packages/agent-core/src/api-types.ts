@@ -288,6 +288,7 @@ export interface SystemHealthThreadCounts {
   provisioning: number;
   provisioned: number;
   provisioningFailed: number;
+  error: number;
   active: number;
   idle: number;
 }

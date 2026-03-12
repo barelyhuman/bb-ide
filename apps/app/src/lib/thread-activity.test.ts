@@ -108,6 +108,12 @@ describe("thread-activity", () => {
         updatedAt: 100,
       }),
     ).toBe("Provisioning failed")
+    expect(
+      getThreadStatusLabelForTitle({
+        status: "error",
+        updatedAt: 100,
+      }),
+    ).toBe("Error")
   })
 
   it("exposes shared visibility/running/unread helpers", () => {
@@ -117,6 +123,7 @@ describe("thread-activity", () => {
     expect(isVisibleProjectThread({ archivedAt: 1, parentThreadId: undefined })).toBe(false)
 
     expect(isRunningThreadStatus("created")).toBe(true)
+    expect(isRunningThreadStatus("error")).toBe(false)
     expect(isRunningThreadStatus("idle")).toBe(false)
 
     expect(

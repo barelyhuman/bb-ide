@@ -25,7 +25,7 @@ Ownership: `ProjectRepository`.
 - `id` (PK)
 - `project_id` (FK -> `projects.id`)
 - `title` (nullable)
-- `status` (not null, default `created`)
+- `status` (not null, default `created`; `created | provisioning | provisioned | provisioning_failed | error | idle | active`)
 - `environment_id` (nullable)
 - `environment_record` (nullable JSON string)
 - `environment_agent_cursor` (nullable legacy cursor integer)

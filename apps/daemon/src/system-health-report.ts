@@ -124,6 +124,7 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
     provisioning: 0,
     provisioned: 0,
     provisioning_failed: 0,
+    error: 0,
     active: 0,
     idle: 0,
   };
@@ -143,6 +144,7 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
     provisioning: statusCounts.provisioning,
     provisioned: statusCounts.provisioned,
     provisioningFailed: statusCounts.provisioning_failed,
+    error: statusCounts.error,
     active: statusCounts.active,
     idle: statusCounts.idle,
   };

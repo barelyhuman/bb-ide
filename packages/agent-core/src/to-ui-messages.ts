@@ -509,6 +509,7 @@ function shouldRenderThreadStartInput(
     case "provisioning":
     case "provisioned":
     case "provisioning_failed":
+    case "error":
     case "idle":
     case "active":
       return true;
@@ -528,6 +529,7 @@ function shouldPreservePendingMessages(
       return true;
     case "created":
     case "provisioning_failed":
+    case "error":
     case "idle":
       return false;
     default:

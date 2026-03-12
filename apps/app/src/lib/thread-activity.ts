@@ -23,6 +23,7 @@ export function isRunningThreadStatus(status: ThreadStatus): boolean {
     case "provisioning":
     case "provisioned":
       return true
+    case "error":
     case "idle":
     case "provisioning_failed":
       return false
@@ -39,6 +40,7 @@ export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {
     case "created":
     case "provisioning":
     case "provisioned":
+    case "error":
     case "provisioning_failed":
       return false
     default:
@@ -68,6 +70,7 @@ export function summarizeThreadActivity(
           unreadDone += 1
         }
         break
+      case "error":
       case "provisioning_failed":
         break
       case "active":
@@ -118,6 +121,8 @@ export function getThreadStatusLabelForTitle(thread: ThreadStatusShape): string 
       return "Running"
     case "idle":
       return isUnreadDoneThread(thread) ? "Unread done" : "Done"
+    case "error":
+      return "Error"
     case "provisioning_failed":
       return "Provisioning failed"
     default:

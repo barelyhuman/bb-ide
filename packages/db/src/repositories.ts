@@ -175,6 +175,7 @@ function isThreadStatus(status: string): status is ThreadStatus {
     status === "provisioning" ||
     status === "provisioned" ||
     status === "provisioning_failed" ||
+    status === "error" ||
     status === "active" ||
     status === "idle"
   );

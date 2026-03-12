@@ -10,6 +10,7 @@ const THREAD_STATUSES = [
   "provisioning",
   "provisioned",
   "provisioning_failed",
+  "error",
   "idle",
   "active",
 ] as const satisfies readonly ThreadStatus[];

@@ -1578,6 +1578,33 @@ export class Orchestrator implements ThreadOrchestrator {
   handleEnvironmentAgentSessionInvalidated(threadId: string): void {
     this.providerThreadIdByThreadId.delete(threadId);
     this.agentServer.clearSessionState(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
+
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+
+    if (thread.status === "active") {
+      const statusChanged = this._setThreadStatus(threadId, "error", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent was lost while the thread was active.",
+      });
+      if (statusChanged) {
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      }
+      return;
+    }
+
+    if (thread.status === "provisioned") {
+      const statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent was lost before provider bootstrap completed.",
+      });
+      if (statusChanged) {
+        this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
+      }
+    }
   }
 
   /**
@@ -4112,6 +4139,8 @@ export class Orchestrator implements ThreadOrchestrator {
         return "Thread provisioning is in progress";
       case "provisioning_failed":
         return "Thread provisioning failed; reprovision the thread before requesting actions";
+      case "error":
+        return "Thread execution failed because its live environment-agent was lost; send a follow-up to recover";
       default:
         return assertNever(thread.status);
     }
@@ -4827,13 +4856,21 @@ export class Orchestrator implements ThreadOrchestrator {
 
     let statusChanged = false;
     if (thread.status === "active") {
-      statusChanged = this._setThreadStatus(threadId, "idle", false);
+      statusChanged = this._setThreadStatus(threadId, "error", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent exited while the thread was active.",
+      });
     } else if (
       thread.status === "created" ||
       thread.status === "provisioning" ||
       thread.status === "provisioned"
     ) {
       statusChanged = this._setThreadStatus(threadId, "provisioning_failed", false);
+      this._appendEvent(threadId, "system/error", {
+        code: "provider_unavailable",
+        message: "The live environment-agent exited before thread provisioning completed.",
+      });
     }
 
     if (statusChanged) {

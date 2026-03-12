@@ -68,6 +68,7 @@ const RESTART_POLICY_BY_STATUS: Record<Thread["status"], string> = {
   created: "noop",
   provisioning: "noop",
   provisioned: "noop",
+  error: "noop",
   active: "noop",
   idle: "noop",
   provisioning_failed: "noop",
@@ -81,6 +82,7 @@ function isShutdownBlockingStatus(status: Thread["status"]): boolean {
     case "active":
       return true;
     case "idle":
+    case "error":
     case "provisioning_failed":
       return false;
     default:
@@ -223,6 +225,7 @@ export function createSystemRoutes(
             provisioningFailed: threads.filter(
               (thread) => thread.status === "provisioning_failed",
             ).length,
+            error: threads.filter((thread) => thread.status === "error").length,
             active: threads.filter((thread) => thread.status === "active").length,
             idle: threads.filter((thread) => thread.status === "idle").length,
           },
