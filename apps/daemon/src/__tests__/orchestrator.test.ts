@@ -1855,7 +1855,7 @@ describe("Orchestrator", () => {
       expect(cleanup).not.toHaveBeenCalled();
     });
 
-    it("does not daemon-auto-suspend idle environments", async () => {
+    it("suspends managed environments when threads become idle", async () => {
       vi.useFakeTimers();
       try {
         const thread = makeThread({
@@ -1895,12 +1895,11 @@ describe("Orchestrator", () => {
           _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
         })._setThreadStatus("thread-1", "idle");
 
-        await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-        await vi.runOnlyPendingTimersAsync();
+        await vi.runAllTimersAsync();
 
-        expect(cleanup).not.toHaveBeenCalled();
-        expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
-        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(true);
+        expect(cleanup).toHaveBeenCalledTimes(1);
+        expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
+        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(false);
       } finally {
         vi.useRealTimers();
       }

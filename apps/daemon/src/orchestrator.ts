@@ -4895,6 +4895,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     if (thread.status === "active" && nextStatus === "idle") {
       this._pruneHistoricalNoiseEvents(threadId);
+      this._cleanupThreadRuntime(threadId);
     }
 
     if (opts?.touchUpdatedAt !== undefined) {
