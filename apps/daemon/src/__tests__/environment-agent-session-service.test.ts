@@ -326,7 +326,7 @@ describe("EnvironmentAgentSessionService", () => {
     );
   });
 
-  it("rebinds pending queued commands onto a newly opened session", () => {
+  it("fails pending queued commands when a newer session replaces them", () => {
     const threadId = createThreadId();
     const first = service.openSession({
       threadId,
@@ -374,13 +374,15 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
+    expect(second.replaced?.id).toBe(first.session.id);
     expect(commands.getById("cmd-queued")).toMatchObject({
-      sessionId: second.session.id,
-      state: "queued",
+      sessionId: first.session.id,
+      state: "failed",
+      errorCode: "provider_unavailable",
     });
   });
 
-  it("requeues received commands and fails started commands when a newer session replaces them", () => {
+  it("fails received and started commands when a newer session replaces them", () => {
     const threadId = createThreadId();
     const first = service.openSession({
       threadId,
@@ -445,8 +447,9 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(second.replaced?.id).toBe(first.session.id);
     expect(commands.getById("cmd-received")).toMatchObject({
-      sessionId: second.session.id,
-      state: "queued",
+      sessionId: first.session.id,
+      state: "failed",
+      errorCode: "provider_unavailable",
     });
     expect(commands.getById("cmd-started")).toMatchObject({
       sessionId: first.session.id,

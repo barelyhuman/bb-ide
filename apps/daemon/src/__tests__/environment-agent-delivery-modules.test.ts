@@ -441,7 +441,7 @@ describe("environment-agent delivery modules", () => {
     ).toBeUndefined();
   });
 
-  it("fails only started commands when a session is invalidated", () => {
+  it("fails all pending commands bound to an invalidated session", () => {
     const threadId = createThreadId();
     const sessionId = createActiveSession(threadId, "sess-invalidated");
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
@@ -475,7 +475,12 @@ describe("environment-agent delivery modules", () => {
       closeReason: "newer_session",
     }, 2_400);
 
-    expect(result.failedStartedCommands).toEqual([
+    expect(result.failedCommands).toEqual([
+      expect.objectContaining({
+        id: "cmd-received",
+        state: "failed",
+        errorCode: "provider_unavailable",
+      }),
       expect.objectContaining({
         id: "cmd-started",
         state: "failed",
@@ -484,7 +489,7 @@ describe("environment-agent delivery modules", () => {
     ]);
     expect(commands.getById("cmd-received")).toMatchObject({
       sessionId,
-      state: "received",
+      state: "failed",
     });
     expect(commands.getById("cmd-started")).toMatchObject({
       sessionId,

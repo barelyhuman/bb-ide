@@ -339,7 +339,7 @@ describe("environment-agent repositories", () => {
     ]);
   });
 
-  it("requeues received commands when pending work is rebound to a replacement session", () => {
+  it("keeps received commands bound to their original session", () => {
     const threadId = createThreadId();
     sessions.create({
       id: "sess-old",
@@ -372,22 +372,12 @@ describe("environment-agent repositories", () => {
       now: 3_500,
     });
 
-    expect(
-      commands.rebindPendingForThread({
-        threadId,
-        sessionId: "sess-new",
-        now: 4_000,
-      }),
-    ).toBe(1);
-
     expect(commands.getById("cmd-received")).toMatchObject({
-      sessionId: "sess-new",
-      state: "queued",
-      updatedAt: 4_000,
+      sessionId: "sess-old",
+      state: "received",
+      updatedAt: 3_000,
     });
-    expect(commands.listDeliverableBySessionId("sess-new").map((command) => command.id)).toEqual([
-      "cmd-received",
-    ]);
+    expect(commands.listDeliverableBySessionId("sess-new")).toEqual([]);
   });
 
   it("treats stale command transitions idempotently and rejects conflicting terminal transitions", () => {

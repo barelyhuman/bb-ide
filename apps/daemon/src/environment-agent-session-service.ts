@@ -210,11 +210,6 @@ export class EnvironmentAgentSessionService {
       leaseTtlMs: this.leaseTtlMs,
       now,
     });
-    this.commandDispatcher?.rebindPendingCommandsForThread({
-      threadId: args.threadId,
-      sessionId: opened.active.id,
-      now,
-    });
     if (opened.replaced) {
       this.invalidateSession(opened.replaced);
     }

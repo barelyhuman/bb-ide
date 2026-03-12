@@ -5,9 +5,7 @@ import {
   eq,
   gt,
   inArray,
-  isNull,
   lte,
-  or,
   sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -820,44 +818,6 @@ export class EnvironmentAgentCommandRepository {
     }
 
     return query.all().map(rowToEnvironmentAgentCommandRecord);
-  }
-
-  rebindPendingForThread(args: {
-    threadId: string;
-    sessionId: string;
-    now?: number;
-  }): number {
-    const now = args.now ?? Date.now();
-    return this.db.transaction((tx) => {
-      const pending = tx
-        .select()
-        .from(environmentAgentCommands)
-        .where(
-          and(
-            eq(environmentAgentCommands.threadId, args.threadId),
-            inArray(environmentAgentCommands.state, ["queued", "sent", "received"]),
-            or(
-              isNull(environmentAgentCommands.sessionId),
-              sql`${environmentAgentCommands.sessionId} <> ${args.sessionId}`,
-            ),
-          ),
-        )
-        .all();
-
-      for (const command of pending) {
-        tx
-          .update(environmentAgentCommands)
-          .set({
-            sessionId: args.sessionId,
-            state: command.state === "received" ? "queued" : command.state,
-            updatedAt: now,
-          })
-          .where(eq(environmentAgentCommands.id, command.id))
-          .run();
-      }
-
-      return pending.length;
-    });
   }
 
   markSent(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {

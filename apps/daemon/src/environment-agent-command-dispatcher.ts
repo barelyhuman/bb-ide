@@ -16,7 +16,7 @@ export interface RecordEnvironmentAgentCommandAckResult {
 }
 
 export interface InvalidateEnvironmentAgentSessionCommandsResult {
-  failedStartedCommands: EnvironmentAgentCommandRecord[];
+  failedCommands: EnvironmentAgentCommandRecord[];
 }
 
 export class EnvironmentAgentSessionUnavailableError extends Error {
@@ -166,14 +166,6 @@ export class EnvironmentAgentCommandDispatcher {
     return this.commands.listPendingByThreadId(threadId).length;
   }
 
-  rebindPendingCommandsForThread(args: {
-    threadId: string;
-    sessionId: string;
-    now?: number;
-  }): number {
-    return this.commands.rebindPendingForThread(args);
-  }
-
   invalidateCommandsForSession(
     session: Pick<
       EnvironmentAgentSessionRecord,
@@ -181,11 +173,15 @@ export class EnvironmentAgentCommandDispatcher {
     >,
     now: number = Date.now(),
   ): InvalidateEnvironmentAgentSessionCommandsResult {
-    const failedStartedCommands = this.commands
+    const failedCommands = this.commands
       .listPendingByThreadId(session.threadId)
       .filter(
         (command) =>
-          command.sessionId === session.id && command.state === "started",
+          command.sessionId === session.id &&
+          (command.state === "queued" ||
+            command.state === "sent" ||
+            command.state === "received" ||
+            command.state === "started"),
       )
       .flatMap((command) => {
         const failed = this.commands.markFailed({
@@ -197,7 +193,7 @@ export class EnvironmentAgentCommandDispatcher {
         return failed ? [failed] : [];
       });
 
-    return { failedStartedCommands };
+    return { failedCommands };
   }
 
   recordDeliveryAck(args: {
@@ -325,18 +321,6 @@ export class EnvironmentAgentCommandDispatcher {
         return command;
       case "queued":
       case "sent": {
-        const session = await this.awaitActiveSession({
-          threadId: args.threadId,
-          timeoutMs: args.timeoutMs,
-          pollIntervalMs: args.pollIntervalMs,
-        });
-        if (command.sessionId !== session.id) {
-          this.rebindPendingCommandsForThread({
-            threadId: args.threadId,
-            sessionId: session.id,
-            now: args.sentAt,
-          });
-        }
         return this.waitForTerminalState({
           commandId: args.commandId,
           timeoutMs: args.timeoutMs,
