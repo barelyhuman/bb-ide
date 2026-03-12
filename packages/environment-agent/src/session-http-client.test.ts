@@ -149,7 +149,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
           method: "GET",
         },
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/close",
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/messages",
           method: "POST",
         },
       ]),

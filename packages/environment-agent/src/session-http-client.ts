@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { EnvironmentAgentDaemonConnectionConfig } from "./protocol.js";
 import type {
+  EnvironmentAgentSessionClientMessage,
   EnvironmentAgentSessionCommandAckPayload,
   EnvironmentAgentSessionCommandBatchMessage,
   EnvironmentAgentSessionCommandResultPayload,
@@ -9,6 +11,12 @@ import type {
   EnvironmentAgentSessionOpenPayload,
   EnvironmentAgentSessionWelcomeMessage,
 } from "./session-protocol.js";
+import { ENVIRONMENT_AGENT_SESSION_PROTOCOL } from "./session-protocol.js";
+
+type EnvironmentAgentSessionBoundClientMessage = Exclude<
+  EnvironmentAgentSessionClientMessage,
+  { type: "session_open" }
+>;
 
 export interface EnvironmentAgentSessionHttpClientOptions {
   daemonUrl: string;
@@ -97,27 +105,23 @@ export class EnvironmentAgentSessionHttpClient {
     sessionId: string,
     payload: EnvironmentAgentSessionHeartbeatPayload,
   ): Promise<void> {
-    await this.postNoContent(
-      `/threads/${this.threadId}/environment-agent/session/heartbeat`,
-      {
-        sessionId,
-        ...payload,
-      },
-    );
+    await this.postClientMessage({
+      type: "heartbeat",
+      sessionId,
+      payload,
+    });
   }
 
   pushEvents(args: {
     sessionId: string;
     payload: EnvironmentAgentSessionEventBatchPayload;
   }): Promise<EnvironmentAgentSessionEventAckMessage> {
-    return this.postJson(
-      `/threads/${this.threadId}/environment-agent/session/events`,
-      {
-        sessionId: args.sessionId,
-        ...args.payload,
-      },
-      200,
-    ) as Promise<EnvironmentAgentSessionEventAckMessage>;
+    return this.postClientMessage({
+      type: "event_batch",
+      sessionId: args.sessionId,
+      payload: args.payload,
+      responseStatus: 200,
+    }) as Promise<EnvironmentAgentSessionEventAckMessage>;
   }
 
   pullCommands(args: {
@@ -148,38 +152,61 @@ export class EnvironmentAgentSessionHttpClient {
     sessionId: string,
     payload: EnvironmentAgentSessionCommandAckPayload,
   ): Promise<void> {
-    await this.postNoContent(
-      `/threads/${this.threadId}/environment-agent/session/commands/ack`,
-      {
-        sessionId,
-        ...payload,
-      },
-    );
+    await this.postClientMessage({
+      type: "command_ack",
+      sessionId,
+      payload,
+    });
   }
 
   async sendCommandResult(
     sessionId: string,
     payload: EnvironmentAgentSessionCommandResultPayload,
   ): Promise<void> {
-    await this.postNoContent(
-      `/threads/${this.threadId}/environment-agent/session/commands/result`,
-      {
-        sessionId,
-        ...payload,
-      },
-    );
+    await this.postClientMessage({
+      type: "command_result",
+      sessionId,
+      payload,
+    });
   }
 
   async closeSession(
     sessionId: string,
     reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error",
   ): Promise<void> {
-    await this.postNoContent(
-      `/threads/${this.threadId}/environment-agent/session/close`,
-      {
-        sessionId,
-        reason,
-      },
+    await this.postClientMessage({
+      type: "session_close",
+      sessionId,
+      payload: { reason },
+    });
+  }
+
+  private postClientMessage<
+    TType extends EnvironmentAgentSessionBoundClientMessage["type"],
+  >(args: {
+    type: TType;
+    sessionId: string;
+    payload: Extract<EnvironmentAgentSessionBoundClientMessage, { type: TType }>["payload"];
+    responseStatus?: 200 | 204;
+  }): Promise<unknown> {
+    const message = {
+      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      messageId: randomUUID(),
+      sentAt: Date.now(),
+      sessionId: args.sessionId,
+      type: args.type,
+      payload: args.payload,
+    } as Extract<EnvironmentAgentSessionBoundClientMessage, { type: TType }>;
+    if (args.responseStatus === 200) {
+      return this.postJson(
+        `/threads/${this.threadId}/environment-agent/session/messages`,
+        message,
+        200,
+      );
+    }
+    return this.postNoContent(
+      `/threads/${this.threadId}/environment-agent/session/messages`,
+      message,
     );
   }
 

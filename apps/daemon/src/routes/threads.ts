@@ -18,12 +18,16 @@ import { z } from "zod";
 import { isAbsolute } from "node:path";
 import type {
   EnvironmentAgentEventEnvelope,
+  EnvironmentAgentSessionClientMessage,
   EnvironmentAgentSessionCommandAckPayload,
   EnvironmentAgentSessionCommandResultPayload,
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionHeartbeatPayload,
   EnvironmentAgentSessionOpenPayload,
   EnvironmentAgentStatusSnapshot,
+} from "@beanbag/environment-agent";
+import {
+  isEnvironmentAgentSessionClientMessage,
 } from "@beanbag/environment-agent";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
@@ -72,19 +76,6 @@ const environmentAgentSessionOpenBodySchema = z.object({
   channels: z.array(environmentAgentSessionChannelBootstrapSchema).min(1),
 });
 
-const environmentAgentSessionHeartbeatChannelSchema = z.object({
-  channelId: z.string().min(1),
-  lastSent: environmentAgentSessionCursorSchema.optional(),
-  lastAcked: environmentAgentSessionCursorSchema.optional(),
-});
-
-const environmentAgentSessionHeartbeatBodySchema = z.object({
-  sessionId: z.string().min(1),
-  agentObservedAt: z.number().int().nonnegative(),
-  outboxDepth: z.number().int().nonnegative(),
-  channels: z.array(environmentAgentSessionHeartbeatChannelSchema),
-});
-
 const environmentAgentSessionCommandsQuerySchema = z.object({
   sessionId: z.string().min(1),
   afterCursor: z
@@ -120,64 +111,15 @@ function isAbortError(error: unknown): error is Error {
   return error instanceof Error && error.name === "AbortError";
 }
 
-const environmentAgentSessionEventItemSchema = z.object({
-  sequence: z.number().int().nonnegative(),
-  eventId: z.string().min(1),
-  emittedAt: z.number().int().nonnegative(),
-  event: z.custom<EnvironmentAgentEventEnvelope["event"]>(),
-});
-
-const environmentAgentSessionEventBatchChannelSchema = z.object({
-  channelId: z.string().min(1),
-  generation: z.number().int().nonnegative(),
-  events: z.array(environmentAgentSessionEventItemSchema),
-});
-
-const environmentAgentSessionEventBatchBodySchema = z.object({
-  sessionId: z.string().min(1),
-  batches: z.array(environmentAgentSessionEventBatchChannelSchema).min(1),
-});
-
-const environmentAgentSessionCommandAckBodySchema = z.object({
-  sessionId: z.string().min(1),
-  commands: z.array(z.object({
-    commandId: z.string().min(1),
-    channelId: z.string().min(1),
-    state: z.enum(["received", "duplicate"]),
-  })),
-});
-
-const environmentAgentSessionCommandResultBodySchema = z.object({
-  sessionId: z.string().min(1),
-  commandId: z.string().min(1),
-  channelId: z.string().min(1),
-  state: z.enum(["started", "completed", "failed"]),
-  result: z.unknown().optional(),
-  errorCode: z.string().min(1).optional(),
-  errorMessage: z.string().min(1).optional(),
-}).superRefine((value, ctx) => {
-  switch (value.state) {
-    case "started":
-      return;
-    case "completed":
-      return;
-    case "failed":
-      if (!value.errorMessage && !value.errorCode) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Failed command results must include an errorCode or errorMessage",
-        });
-      }
-      return;
-    default:
-      assertNever(value.state);
-  }
-});
-
-const environmentAgentSessionCloseBodySchema = z.object({
-  sessionId: z.string().min(1),
-  reason: z.enum(["agent_shutdown", "daemon_shutdown", "migration", "internal_error"]),
-});
+const environmentAgentSessionMessageBodySchema =
+  z.custom<EnvironmentAgentSessionClientMessage>((value) => {
+    return (
+      isEnvironmentAgentSessionClientMessage(value) &&
+      value.type !== "session_open"
+    );
+  }, {
+    message: "Invalid environment-agent session message",
+  });
 
 const workStatusQuerySchema = z.object({
   mergeBaseBranch: z.string().trim().min(1).optional(),
@@ -431,32 +373,6 @@ export function createThreadRoutes(
         }
       },
     )
-    .post(
-      "/:id/environment-agent/session/heartbeat",
-      zValidator("json", environmentAgentSessionHeartbeatBodySchema),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          if (!environmentAgentSessionService) {
-            throw invalidRequestError("Environment-agent session heartbeat is unavailable");
-          }
-          const body =
-            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionHeartbeatPayload;
-          environmentAgentSessionService.recordHeartbeat({
-            threadId,
-            sessionId: body.sessionId,
-            payload: body,
-          });
-          return c.body(null, 204);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
     .get(
       "/:id/environment-agent/session/commands",
       zValidator("query", environmentAgentSessionCommandsQuerySchema),
@@ -491,8 +407,8 @@ export function createThreadRoutes(
       },
     )
     .post(
-      "/:id/environment-agent/session/events",
-      zValidator("json", environmentAgentSessionEventBatchBodySchema),
+      "/:id/environment-agent/session/commands",
+      zValidator("query", environmentAgentSessionCommandsQuerySchema),
       async (c) => {
         try {
           const threadId = c.req.param("id");
@@ -501,26 +417,31 @@ export function createThreadRoutes(
             return sendRouteError(c, threadNotFoundError(threadId));
           }
           if (!environmentAgentSessionService) {
-            throw invalidRequestError("Environment-agent session event push is unavailable");
+            throw invalidRequestError("Environment-agent session command pull is unavailable");
           }
-          const body =
-            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionEventBatchPayload;
-          const response = await environmentAgentSessionService.applyEventBatch({
+          const query = c.req.valid("query");
+          const response = await environmentAgentSessionService.waitForCommands({
             threadId,
-            sessionId: body.sessionId,
-            payload: {
-              batches: body.batches,
-            },
+            sessionId: query.sessionId,
+            ...(query.afterCursor !== undefined
+              ? { afterCursor: query.afterCursor }
+              : {}),
+            ...(query.limit !== undefined ? { limit: query.limit } : {}),
+            ...(query.waitMs !== undefined ? { waitMs: query.waitMs } : {}),
+            signal: c.req.raw.signal,
           });
           return c.json(response);
         } catch (err) {
+          if (isAbortError(err)) {
+            return c.body(null, 204);
+          }
           return sendRouteError(c, err);
         }
       },
     )
     .post(
-      "/:id/environment-agent/session/commands/ack",
-      zValidator("json", environmentAgentSessionCommandAckBodySchema),
+      "/:id/environment-agent/session/messages",
+      zValidator("json", environmentAgentSessionMessageBodySchema),
       async (c) => {
         try {
           const threadId = c.req.param("id");
@@ -529,79 +450,52 @@ export function createThreadRoutes(
             return sendRouteError(c, threadNotFoundError(threadId));
           }
           if (!environmentAgentSessionService) {
-            throw invalidRequestError("Environment-agent session command ack is unavailable");
+            throw invalidRequestError("Environment-agent session message handling is unavailable");
           }
-          const body =
-            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionCommandAckPayload;
-          environmentAgentSessionService.recordCommandAck({
-            threadId,
-            sessionId: body.sessionId,
-            payload: {
-              commands: body.commands,
-            },
-          });
-          return c.body(null, 204);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/environment-agent/session/commands/result",
-      zValidator("json", environmentAgentSessionCommandResultBodySchema),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
+          const body = c.req.valid("json") as Exclude<
+            EnvironmentAgentSessionClientMessage,
+            { type: "session_open" }
+          >;
+          switch (body.type) {
+            case "heartbeat":
+              environmentAgentSessionService.recordHeartbeat({
+                threadId,
+                sessionId: body.sessionId,
+                payload: body.payload as EnvironmentAgentSessionHeartbeatPayload,
+              });
+              return c.body(null, 204);
+            case "event_batch": {
+              const response = await environmentAgentSessionService.applyEventBatch({
+                threadId,
+                sessionId: body.sessionId,
+                payload: body.payload as EnvironmentAgentSessionEventBatchPayload,
+              });
+              return c.json(response);
+            }
+            case "command_ack":
+              environmentAgentSessionService.recordCommandAck({
+                threadId,
+                sessionId: body.sessionId,
+                payload: body.payload as EnvironmentAgentSessionCommandAckPayload,
+              });
+              return c.body(null, 204);
+            case "command_result":
+              environmentAgentSessionService.recordCommandResult({
+                threadId,
+                sessionId: body.sessionId,
+                payload: body.payload as EnvironmentAgentSessionCommandResultPayload,
+              });
+              return c.body(null, 204);
+            case "session_close":
+              environmentAgentSessionService.closeSession({
+                threadId,
+                sessionId: body.sessionId,
+                reason: (body.payload as { reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error" }).reason,
+              });
+              return c.body(null, 204);
+            default:
+              assertNever(body);
           }
-          if (!environmentAgentSessionService) {
-            throw invalidRequestError("Environment-agent session command result is unavailable");
-          }
-          const body =
-            c.req.valid("json") as { sessionId: string } & EnvironmentAgentSessionCommandResultPayload;
-          environmentAgentSessionService.recordCommandResult({
-            threadId,
-            sessionId: body.sessionId,
-            payload: {
-              commandId: body.commandId,
-              channelId: body.channelId,
-              state: body.state,
-              ...(body.result !== undefined ? { result: body.result } : {}),
-              ...(body.errorCode !== undefined ? { errorCode: body.errorCode } : {}),
-              ...(body.errorMessage !== undefined ? { errorMessage: body.errorMessage } : {}),
-            },
-          });
-          return c.body(null, 204);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/environment-agent/session/close",
-      zValidator("json", environmentAgentSessionCloseBodySchema),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          if (!environmentAgentSessionService) {
-            throw invalidRequestError("Environment-agent session close is unavailable");
-          }
-          const body = c.req.valid("json") as {
-            sessionId: string;
-            reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error";
-          };
-          environmentAgentSessionService.closeSession({
-            threadId,
-            sessionId: body.sessionId,
-            reason: body.reason,
-          });
-          return c.body(null, 204);
         } catch (err) {
           return sendRouteError(c, err);
         }

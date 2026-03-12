@@ -91,7 +91,7 @@ describe("environment-agent service config", () => {
   });
 
   it("starts session supervision when daemon config is present", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.includes("/environment-agent/session/open")) {
         return new Response(
@@ -111,9 +111,6 @@ describe("environment-agent service config", () => {
           { status: 201, headers: { "content-type": "application/json" } },
         );
       }
-      if (url.includes("/environment-agent/session/heartbeat")) {
-        return new Response(null, { status: 204 });
-      }
       if (url.includes("/environment-agent/session/commands")) {
         return new Response(
           JSON.stringify({
@@ -127,25 +124,29 @@ describe("environment-agent service config", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         );
       }
-      if (url.includes("/environment-agent/session/events")) {
-        return new Response(
-          JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
-            type: "event_ack",
-            messageId: "msg-ack",
-            sessionId: "sess-1",
-            sentAt: 1_200,
-            payload: {
-              channels: [
-                {
-                  channelId: "thread-1",
-                  ackedThrough: { generation: 1, sequence: 1 },
-                },
-              ],
-            },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
+      if (url.includes("/environment-agent/session/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string };
+        if (body.type === "event_batch") {
+          return new Response(
+            JSON.stringify({
+              protocol: "beanbag.env-agent.v1",
+              type: "event_ack",
+              messageId: "msg-ack",
+              sessionId: "sess-1",
+              sentAt: 1_200,
+              payload: {
+                channels: [
+                  {
+                    channelId: "thread-1",
+                    ackedThrough: { generation: 1, sequence: 1 },
+                  },
+                ],
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(null, { status: 204 });
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
