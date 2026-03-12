@@ -3,11 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ThreadTimelineResponse, ThreadWorkStatus } from "@beanbag/agent-core";
-import {
-  buildFollowUpSignatureFromInput,
-  buildFollowUpSignatureFromRow,
-  ThreadDetailView,
-} from "./ThreadDetailView";
+import { buildFollowUpSignatureFromInput, buildFollowUpSignatureFromRow } from "@/lib/thread-follow-up-signature";
+import { ThreadDetailView } from "./ThreadDetailView";
 
 const apiState = vi.hoisted(() => {
   const pendingMutation = {

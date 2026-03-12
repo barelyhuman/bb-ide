@@ -49,6 +49,7 @@ import {
 import { DetailCard, DetailRow, StatusPill } from "@beanbag/ui-core";
 import {
   formatEnvironmentDisplayName,
+  type PromptInput,
   type ServiceTier,
 } from "@beanbag/agent-core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
