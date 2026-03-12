@@ -90,6 +90,15 @@ interface PendingSubmittedFollowUp {
   submittedAt: number;
 }
 
+interface FollowUpAttachmentSignature {
+  webImages: number;
+  localImages: number;
+  localFiles: number;
+  imageUrls?: string[];
+  localImagePaths?: string[];
+  localFilePaths?: string[];
+}
+
 function buildFollowUpText(input: PromptInput[]): string {
   return input
     .filter((entry): entry is Extract<PromptInput, { type: "text" }> => entry.type === "text")
@@ -139,21 +148,46 @@ function buildFollowUpAttachmentsSignature(input: PromptInput[]) {
   };
 }
 
-function buildFollowUpSignatureFromInput(input: PromptInput[]): string {
+function normalizeFollowUpAttachmentSignature(
+  attachments: FollowUpAttachmentSignature | null | undefined,
+): FollowUpAttachmentSignature {
+  if (!attachments) {
+    return {
+      webImages: 0,
+      localImages: 0,
+      localFiles: 0,
+    };
+  }
+
+  return {
+    webImages: attachments.webImages,
+    localImages: attachments.localImages,
+    localFiles: attachments.localFiles,
+    ...(attachments.imageUrls?.length ? { imageUrls: attachments.imageUrls } : {}),
+    ...(attachments.localImagePaths?.length
+      ? { localImagePaths: attachments.localImagePaths }
+      : {}),
+    ...(attachments.localFilePaths?.length ? { localFilePaths: attachments.localFilePaths } : {}),
+  };
+}
+
+export function buildFollowUpSignatureFromInput(input: PromptInput[]): string {
   return JSON.stringify({
     text: buildFollowUpText(input),
-    attachments: buildFollowUpAttachmentsSignature(input),
+    attachments: normalizeFollowUpAttachmentSignature(
+      buildFollowUpAttachmentsSignature(input),
+    ),
   });
 }
 
-function buildFollowUpSignatureFromRow(row: ThreadDetailRow): string | null {
+export function buildFollowUpSignatureFromRow(row: ThreadDetailRow): string | null {
   if (row.kind !== "message" || row.message.kind !== "user") {
     return null;
   }
 
   return JSON.stringify({
     text: row.message.text,
-    attachments: row.message.attachments ?? null,
+    attachments: normalizeFollowUpAttachmentSignature(row.message.attachments),
   });
 }
 

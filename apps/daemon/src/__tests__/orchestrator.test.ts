@@ -1907,7 +1907,7 @@ describe("Orchestrator", () => {
       );
     });
 
-    it("broadcasts follow-up activation only after persisting the outbound turn start event", async () => {
+    it("acknowledges follow-ups at client turn requested before provider start completes", async () => {
       const thread = makeThread({
         id: "thread-1",
         status: "idle",
@@ -1937,6 +1937,10 @@ describe("Orchestrator", () => {
           "_ensureProviderSession",
         )
         .mockResolvedValue("provider-thread-1");
+      let resolveSend: ((value: string) => void) | undefined;
+      const sendPromise = new Promise<string>((resolve) => {
+        resolveSend = resolve;
+      });
       vi
         .spyOn(
           manager as unknown as {
@@ -1944,7 +1948,7 @@ describe("Orchestrator", () => {
           },
           "_sendTurnCommandWithStaleProviderRetry",
         )
-        .mockResolvedValue("provider-thread-1");
+        .mockReturnValue(sendPromise);
 
       await expect(
         manager.tell("thread-1", {
@@ -1956,7 +1960,7 @@ describe("Orchestrator", () => {
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "thread-1",
-          type: "client/turn/start",
+          type: "client/turn/requested",
         }),
         expect.objectContaining({
           connection: expect.any(Object),
@@ -1971,6 +1975,24 @@ describe("Orchestrator", () => {
         (eventRepo.create as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
       ).toBeLessThan(
         (ws.broadcast as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+      );
+      expect(eventRepo.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "client/turn/start",
+        }),
+        expect.anything(),
+      );
+
+      resolveSend?.("provider-thread-1");
+      await Promise.resolve();
+
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "client/turn/start",
+        }),
+        expect.anything(),
       );
     });
 

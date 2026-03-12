@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ThreadTimelineResponse, ThreadWorkStatus } from "@beanbag/agent-core";
-import { ThreadDetailView } from "./ThreadDetailView";
+import {
+  buildFollowUpSignatureFromInput,
+  buildFollowUpSignatureFromRow,
+  ThreadDetailView,
+} from "./ThreadDetailView";
 
 const apiState = vi.hoisted(() => {
   const pendingMutation = {
@@ -702,5 +706,34 @@ describe("ThreadDetailView", () => {
 
     expect(html).not.toContain("Loading thread...");
     expect(html).toContain("working");
+  });
+});
+
+describe("follow-up acknowledgment signatures", () => {
+  it("treats no attachments consistently between draft input and canonical user rows", () => {
+    const signatureFromInput = buildFollowUpSignatureFromInput([
+      { type: "text", text: "Follow up on this" },
+    ]);
+
+    const signatureFromRow = buildFollowUpSignatureFromRow({
+      kind: "message",
+      id: "user-1",
+      message: {
+        id: "user-1",
+        threadId: "thread-1",
+        kind: "user",
+        text: "Follow up on this",
+        attachments: {
+          webImages: 0,
+          localImages: 0,
+          localFiles: 0,
+        },
+        sourceSeqStart: 10,
+        sourceSeqEnd: 10,
+        createdAt: 10,
+      },
+    });
+
+    expect(signatureFromRow).toBe(signatureFromInput);
   });
 });

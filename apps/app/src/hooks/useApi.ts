@@ -46,11 +46,13 @@ import { wsManager } from "../lib/ws";
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
 const THREAD_MERGE_BASE_BRANCHES_QUERY_KEY = "threadMergeBaseBranches";
 const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
+const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 const THREAD_QUERY_KEY = "thread";
 type ThreadScopedQueryKeyPrefix =
   | typeof THREAD_QUERY_KEY
   | typeof THREAD_WORK_STATUS_QUERY_KEY
-  | typeof THREAD_GIT_DIFF_QUERY_KEY;
+  | typeof THREAD_GIT_DIFF_QUERY_KEY
+  | typeof THREAD_TIMELINE_QUERY_KEY;
 
 function extractThreadIdFromThreadScopedQueryKey(
   queryKey: QueryKey | undefined,
@@ -114,6 +116,19 @@ export function resolveThreadPlaceholder(
     previousQueryKey,
     nextThreadId,
     THREAD_QUERY_KEY,
+  );
+}
+
+export function resolveThreadTimelinePlaceholder(
+  previousData: ThreadTimelineResponse | undefined,
+  previousQueryKey: QueryKey | undefined,
+  nextThreadId: string,
+): ThreadTimelineResponse | undefined {
+  return resolveThreadScopedPlaceholder(
+    previousData,
+    previousQueryKey,
+    nextThreadId,
+    THREAD_TIMELINE_QUERY_KEY,
   );
 }
 
@@ -521,6 +536,8 @@ export function useThreadTimeline(
     queryFn: () => api.getThreadTimeline(id, options?.limit, false),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
+    placeholderData: (previousData, previousQuery) =>
+      resolveThreadTimelinePlaceholder(previousData, previousQuery?.queryKey, id),
   });
 }
 

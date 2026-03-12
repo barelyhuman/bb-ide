@@ -162,6 +162,7 @@ function parsePositiveIntegerEnv(
 
 interface TellContext {
   initiator: ThreadTurnInitiator;
+  awaitProviderStart: boolean;
 }
 
 interface ThreadTimelineCacheEntry {
@@ -842,7 +843,10 @@ export class Orchestrator implements ThreadOrchestrator {
     context?: { initiator?: ThreadTurnInitiator },
   ): Promise<void> {
     const initiator = context?.initiator ?? "agent";
-    await this._tell(threadId, request, options, { initiator });
+    await this._tell(threadId, request, options, {
+      initiator,
+      awaitProviderStart: false,
+    });
   }
 
   enqueueFollowUp(
@@ -957,7 +961,10 @@ export class Orchestrator implements ThreadOrchestrator {
     request: TellThreadRequest,
     options?: PromptExecutionOptions,
   ): Promise<void> {
-    await this._tell(threadId, request, options, { initiator: "system" });
+    await this._tell(threadId, request, options, {
+      initiator: "system",
+      awaitProviderStart: true,
+    });
   }
 
   private async _tell(
@@ -1029,19 +1036,31 @@ export class Orchestrator implements ThreadOrchestrator {
       );
     }
 
-    this._persistOutboundStartEvent(
-      threadId,
-      "client/turn/requested",
-      this._buildTurnStartParams(providerThreadId, providerInput, options),
-      requestedInput,
-      {
+    const requestedTurnParams = this._buildTurnStartParams(
+      providerThreadId,
+      providerInput,
+      options,
+    );
+    const statusChanged = this._activateThreadAndPersistOutboundStartEvent(threadId, {
+      type: "client/turn/requested",
+      params: requestedTurnParams,
+      input: requestedInput,
+      meta: {
         source: "tell",
         initiator: context.initiator,
       },
+    });
+    this._broadcastThreadChanged(
+      threadId,
+      statusChanged
+        ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+        : ["events-appended"],
     );
-    try {
-      const acceptedProviderThreadId =
-        await this._sendTurnCommandWithStaleProviderRetry({
+
+    const dispatchTurn = async () => {
+      try {
+        const acceptedProviderThreadId =
+          await this._sendTurnCommandWithStaleProviderRetry({
           threadId,
           projectId: thread.projectId,
           providerThreadId,
@@ -1050,54 +1069,61 @@ export class Orchestrator implements ThreadOrchestrator {
           options,
           mode: tellMode === "steer" ? "steer" : tellMode === "auto" ? "auto" : "start",
         });
-      const turnParams = this._buildTurnStartParams(
-        acceptedProviderThreadId,
-        providerInput,
-        options,
-      );
-      const statusChanged = this._activateThreadAndPersistOutboundStartEvent(threadId, {
-        type: "client/turn/start",
-        params: turnParams,
-        input: requestedInput,
-        meta: {
-          source: "tell",
-          initiator: context.initiator,
-        },
-      });
-      this._broadcastThreadChanged(
-        threadId,
-        statusChanged
-          ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
-          : ["events-appended"],
-      );
-    } catch (error) {
-      if (this.agentServer.isMissingProviderThreadError(error)) {
-        this.handleEnvironmentAgentSessionInvalidated(threadId);
-      }
-      if (
-        this._shouldRollbackTellFailure(
+        const turnParams = this._buildTurnStartParams(
+          acceptedProviderThreadId,
+          providerInput,
+          options,
+        );
+        this._persistOutboundStartEvent(
           threadId,
-          statusBeforeSend,
-          activeTurnId,
-          lifecycleEpochBeforeSend,
-        )
-      ) {
-        this._setThreadStatus(threadId, statusBeforeSend);
-        this._appendEvent(
-          threadId,
-          "system/error",
-          this._createTellFailureEventData(error),
+          "client/turn/start",
+          turnParams,
+          requestedInput,
+          {
+            source: "tell",
+            initiator: context.initiator,
+          },
           { broadcastChanges: ["events-appended"] },
         );
+      } catch (error) {
+        if (this.agentServer.isMissingProviderThreadError(error)) {
+          this.handleEnvironmentAgentSessionInvalidated(threadId);
+        }
+        if (
+          this._shouldRollbackTellFailure(
+            threadId,
+            statusBeforeSend,
+            activeTurnId,
+            lifecycleEpochBeforeSend,
+          )
+        ) {
+          this._setThreadStatus(threadId, statusBeforeSend);
+          this._appendEvent(
+            threadId,
+            "system/error",
+            this._createTellFailureEventData(error),
+            { broadcastChanges: ["events-appended"] },
+          );
+        }
+        this._rethrowAgentServerError(threadId, error);
       }
-      this._rethrowAgentServerError(threadId, error);
+    };
+
+    if (context.awaitProviderStart) {
+      await dispatchTurn();
+      return;
     }
+
+    void dispatchTurn().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[thread ${threadId}] follow-up dispatch failed: ${message}`);
+    });
   }
 
   private _activateThreadAndPersistOutboundStartEvent(
     threadId: string,
     args: {
-      type: "client/thread/start" | "client/turn/start";
+      type: "client/thread/start" | "client/turn/requested" | "client/turn/start";
       params: Record<string, unknown>;
       input: PromptInput[] | undefined;
       meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator };
@@ -1146,7 +1172,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ...(tellMode ? { mode: tellMode } : {}),
       },
       options,
-      { initiator: "agent" },
+      { initiator: "agent", awaitProviderStart: true },
     );
 
     const deleted = this.threadRepo.deleteQueuedMessage(threadId, queuedMessage.id);

@@ -10,6 +10,7 @@ import {
   buildOptimisticUserThreadRow,
   resolveThreadPlaceholder,
   resolveThreadGitDiffPlaceholder,
+  resolveThreadTimelinePlaceholder,
   resolveThreadWorkStatusPlaceholder,
 } from "./useApi";
 
@@ -122,6 +123,53 @@ describe("resolveThreadPlaceholder", () => {
       resolveThreadPlaceholder(
         previousThread,
         ["thread", "thread-1"],
+        "thread-2",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("resolveThreadTimelinePlaceholder", () => {
+  it("keeps previous timeline rows when the same thread query refreshes", () => {
+    const previousTimeline: ThreadTimelineResponse = {
+      rows: [
+        {
+          kind: "message",
+          id: "assistant-1",
+          message: {
+            id: "assistant-1",
+            kind: "assistant-text",
+            threadId: "thread-1",
+            text: "Done",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 1,
+            createdAt: 1,
+            status: "completed",
+          },
+        },
+      ],
+      contextWindowUsage: null,
+    };
+
+    expect(
+      resolveThreadTimelinePlaceholder(
+        previousTimeline,
+        ["threadTimeline", "thread-1", null],
+        "thread-1",
+      ),
+    ).toBe(previousTimeline);
+  });
+
+  it("drops previous timeline rows when switching to a different thread", () => {
+    const previousTimeline: ThreadTimelineResponse = {
+      rows: [],
+      contextWindowUsage: null,
+    };
+
+    expect(
+      resolveThreadTimelinePlaceholder(
+        previousTimeline,
+        ["threadTimeline", "thread-1", null],
         "thread-2",
       ),
     ).toBeUndefined();
