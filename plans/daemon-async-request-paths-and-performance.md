@@ -32,25 +32,16 @@ Out of scope:
 
 Current status:
 
-- Done:
-  - added daemon perf debug instrumentation hooks and request timing headers/logging
-  - added targeted orchestrator timings for thread, work-status, timeline, operation, and execution-options reads
-  - removed avoidable hydrated route lookups for `default-execution-options`, `PATCH /threads/:id`, and `GET /threads/:id/output`
-  - removed the thread-detail `default-execution-options` fetch by serving that data on the thread payload
-  - removed the thread-detail parent-thread network fetch in favor of cached thread-list data
-  - stopped the thread-detail view from eagerly fetching merge-base work status when the base thread payload already has the same branch
-  - removed the short-lived caching experiments in daemon/environment so the async migration is the primary fix path
-  - converted production child-process hot paths from sync to async across daemon, environment, docker environment, and agent-server code
-  - made thread detail, work-status, git diff, checkout snapshot, promote/demote, and docker container lifecycle paths prefer async environment APIs
-  - changed production sync environment/git/process helpers to fail fast instead of silently blocking the event loop
-  - added a repo lint guard that bans `spawnSync` / `execSync` / `execFileSync` in production TypeScript code
-  - reintroduced only default-branch caching in `git-project.ts`
-- In progress:
-  - removing remaining synchronous filesystem work in hot paths where it is still materially observable
-  - deciding the right long-term thread-detail read model (`GET /threads/:id` vs composite read endpoint)
+- The foundational async migration is done:
+  sync child-process hot paths are gone, timing instrumentation exists, and several avoidable hydrated reads were removed.
+- The remaining work is now mostly read-model and fan-out cleanup, not basic `spawnSync` removal.
+- The active open areas are:
+  - removing remaining synchronous filesystem work in materially hot paths
+  - deciding the long-term thread-detail read model (`GET /threads/:id` vs composite read endpoint)
   - defining the first safe post-async cache beyond default-branch detection
+  - reducing timeline and thread-detail refetch fan-out
 
-1. Confirm and instrument the blocking before broad refactors
+1. Confirm and instrument any remaining blocking before broad refactors
 
 - Add per-request metrics/log fields for:
   - request start timestamp
@@ -67,14 +58,11 @@ Current status:
 - Add a simple debug mode or structured log output that makes queueing visible without DevTools.
 - Measure with awareness that React `StrictMode` can duplicate mount/fetch behavior in development, so request-count baselines should also be checked in a production build.
 
-2. Remove avoidable route-level hydration mistakes first
+2. Remove remaining route-level hydration mistakes
 
 - Sweep thread routes and replace `threadManager.getById(...)` existence checks with raw lookup helpers where hydration is not required.
-- Prioritize the routes already identified:
-  - `GET /threads/:id/default-execution-options`
-  - `PATCH /threads/:id`
-  - `GET /threads/:id/output`
-- Keep `GET /threads/:id` as a separate redesign item rather than a mechanical swap, because its current payload shape depends on hydration.
+- Keep `GET /threads/:id` as the primary redesign target, because its current payload shape still depends on hydration.
+- Avoid reintroducing full hydration into newer route handlers as the surrounding read model changes.
 
 3. Eliminate sync process execution from production hot paths (async before cache)
 

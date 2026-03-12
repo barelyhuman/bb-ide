@@ -1,17 +1,26 @@
 # Goal
 
-Move Beanbag’s `docker` environment to a Terragon-style model where the `environment-agent` runs inside the container, the provider runtime also runs inside the container, and the same deployment model can later be reused for E2B sandboxes.
+Finish hardening Beanbag’s `docker` environment around the container-resident `environment-agent` model, so the provider runtime and env-agent both run inside the container and the same deployment shape can later be reused for E2B sandboxes.
 
 # Scope
 
-- Replace the current host-managed Docker environment-agent path with a container-resident agent.
+- Keep the existing container-resident Docker environment-agent path and remove remaining host-managed or opt-in assumptions around it.
 - Introduce a repo-owned Docker image definition that captures the runtime contract for containerized environments.
 - Add a distributable Beanbag environment-agent artifact that can be started inside Docker now and E2B later.
-- Remove the daemon-side Docker feature flag and make `docker` a first-class environment.
 - Preserve the existing host-managed model for `local` and `worktree`.
 - Keep the hybrid delivery architecture: environment-agent push to daemon with daemon nudge/replay as backstop.
 
 # Implementation Steps
+
+Current status:
+
+- Docker already provisions a direct environment-agent target and starts the env-agent inside the container.
+- Docker roundtrip coverage already exists, so the remaining work is about hardening and simplification rather than proving the model from scratch.
+- The main remaining gaps are:
+  - a repo-owned image/runtime contract
+  - cleaner bundle and boot semantics
+  - removal of leftover host-managed assumptions
+  - better readiness and availability reporting
 
 1. Add a repo-owned container image definition.
    - Create a Docker assets location in the repo, for example under `packages/environment/docker/`.
@@ -41,13 +50,14 @@ Move Beanbag’s `docker` environment to a Terragon-style model where the `envir
      - auth token
      - provider launch config
 
-4. Move Docker to an in-container agent lifecycle.
-   - Update [packages/environment/src/docker-environment.ts](/Users/michael/.codex/worktrees/76a3/bb/packages/environment/src/docker-environment.ts) so `prepare()`:
-     - creates or resumes the container
-     - installs or updates the environment-agent bundle in the container
-     - starts the environment-agent inside the container
-     - verifies agent readiness over HTTP
-   - Remove the dependency on [packages/environment/src/host-environment-agent.ts](/Users/michael/.codex/worktrees/76a3/bb/packages/environment/src/host-environment-agent.ts) for Docker.
+4. Harden and simplify the in-container agent lifecycle.
+   - Keep [docker-environment.ts](/Users/michael/Projects/bb/packages/environment/src/docker-environment.ts) focused on:
+     - creating or resuming the container
+     - ensuring the environment-agent bundle is present in the container
+     - starting or reconnecting to the container-local environment-agent
+     - verifying readiness over HTTP
+   - Keep Docker-specific environment-agent boot logic isolated in [docker-environment-agent.ts](/Users/michael/Projects/bb/packages/environment/src/docker-environment-agent.ts).
+   - Remove any remaining dependency on [host-environment-agent.ts](/Users/michael/Projects/bb/packages/environment/src/host-environment-agent.ts) for Docker paths.
    - Keep `local` and `worktree` on the host-managed agent path for now.
 
 5. Make the container agent reachable from the daemon.
@@ -57,10 +67,10 @@ Move Beanbag’s `docker` environment to a Terragon-style model where the `envir
    - Prefer a direct HTTP endpoint with an explicit per-thread auth token, because that matches the future E2B mental model.
    - Persist enough container/agent metadata in Docker environment state to reconnect cleanly after daemon restart.
 
-6. Remove the Docker feature flag and make Docker first-class.
-   - Update [apps/daemon/src/server.ts](/Users/michael/.codex/worktrees/76a3/bb/apps/daemon/src/server.ts) to always register Docker in the environment registry.
-   - Keep Docker visible by default even if the host is not ready.
-   - Replace feature-flag gating with targeted validation and explicit provisioning failures.
+6. Keep Docker first-class and remove remaining opt-in assumptions.
+   - Keep [server.ts](/Users/michael/Projects/bb/apps/daemon/src/server.ts) registering Docker by default.
+   - Remove docs, tests, or fallback logic that still describe Docker as host-agent-managed or feature-gated.
+   - Prefer targeted validation and explicit provisioning failures over hidden availability rules.
 
 7. Add Docker readiness and error handling.
    - Validate:
@@ -82,7 +92,7 @@ Move Beanbag’s `docker` environment to a Terragon-style model where the `envir
      - the same daemon callback/auth model
 
 9. Clean up obsolete Docker scaffolding.
-   - Remove Docker’s host-managed environment-agent path.
+   - Remove any leftover compatibility helpers that only exist for the older host-managed Docker path.
    - Remove any fallback assumptions that the provider wrapper alone is sufficient for Docker.
    - Update tests and docs so Docker is no longer described as opt-in or host-agent-managed.
 

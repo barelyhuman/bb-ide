@@ -14,7 +14,7 @@ This plan covers the cleanup work identified in the audit across:
 This plan does not cover:
 - generated schema cleanup under `packages/core/src/generated/**`
 - provider/runtime compatibility that is truly `open_external`
-- unrelated environment-boundary work already tracked in [environment-abstraction-leaks-plan.md](/Users/michael/.codex/worktrees/64fa/bb/plans/environment-abstraction-leaks-plan.md)
+- unrelated environment-boundary work already tracked in [environment-abstraction-leaks-plan.md](/Users/michael/Projects/bb/plans/environment-abstraction-leaks-plan.md)
 
 # Implementation Steps
 
