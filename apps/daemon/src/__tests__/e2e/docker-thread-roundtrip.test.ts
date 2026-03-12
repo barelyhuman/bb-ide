@@ -9,6 +9,7 @@ import {
   readJson,
   waitForThreadCondition,
 } from "./environment-agent-api.js";
+import { supportsFakeCodexControl } from "./provider-mode.js";
 
 function hasDocker(): boolean {
   const result = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], {
@@ -40,7 +41,10 @@ async function createDockerThread(baseUrl: string, projectId: string): Promise<T
     body: JSON.stringify({
       projectId,
       environmentId: "docker",
-      input: [{ type: "text", text: "Implement docker daemon coverage." }],
+      input: [{
+        type: "text",
+        text: "Reply with exactly DOCKER-ROUNDTRIP and finish. Do not run commands or add extra text.",
+      }],
     }),
   });
 }
@@ -83,7 +87,8 @@ async function waitForThreadRoundTrip(
   }));
 }
 
-const describeDocker = hasDocker() ? describe.sequential : describe.sequential.skip;
+const describeDocker =
+  hasDocker() && supportsFakeCodexControl() ? describe.sequential : describe.sequential.skip;
 
 describeDocker("e2e: daemon -> docker environment", () => {
   let harness: DaemonE2eHarness | undefined;

@@ -330,7 +330,9 @@ async function runEnvironmentBattery(
       baseUrl,
       projectId: project.id,
       environmentId,
-      prompt: `Battery start ${environmentId}`,
+      prompt:
+        `Reply with exactly BATTERY-START-${environmentId.toUpperCase()} and finish. ` +
+        "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, initialThreadId, 0);
     appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
@@ -340,7 +342,12 @@ async function runEnvironmentBattery(
     await expectCliSuccess(
       runCliCommand({
         baseUrl,
-        args: ["thread", "tell", initialThreadId, `Follow up ${environmentId}`],
+        args: [
+          "thread",
+          "tell",
+          initialThreadId,
+          `Reply with exactly BATTERY-FOLLOWUP-${environmentId.toUpperCase()} and finish. Do not run commands or add extra text.`,
+        ],
       }),
     );
     await waitForNextTurnStarted(
@@ -361,7 +368,9 @@ async function runEnvironmentBattery(
       baseUrl,
       projectId: project.id,
       environmentId,
-      prompt: `Restart ${environmentId}`,
+      prompt:
+        `Reply with exactly BATTERY-RESTART-${environmentId.toUpperCase()} and finish. ` +
+        "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, restartThreadId, 0);
     const restartResult = await expectCliSuccess(
@@ -395,25 +404,36 @@ async function runEnvironmentBattery(
       baseUrl,
       projectId: project.id,
       environmentId,
-      prompt: `Steer ${environmentId}`,
+      prompt:
+        `Reply with exactly BATTERY-STEER-START-${environmentId.toUpperCase()} and finish. ` +
+        "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, steerThreadId, 0);
     await expectCliSuccess(
       runCliCommand({
         baseUrl,
-        args: ["thread", "steer", steerThreadId, `Steer now ${environmentId}`],
+        args: [
+          "thread",
+          "steer",
+          steerThreadId,
+          `Reply with exactly BATTERY-STEERED-${environmentId.toUpperCase()} and finish. Do not run commands or add extra text.`,
+        ],
       }),
     );
     appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
     await waitForThreadStatus(baseUrl, steerThreadId, "idle", 20_000, wsUrl);
     const steerEvents = await listThreadEvents(baseUrl, steerThreadId);
-    expect(JSON.stringify(steerEvents)).toContain(`Steer now ${environmentId}`);
+    expect(JSON.stringify(steerEvents)).toContain(
+      `BATTERY-STEERED-${environmentId.toUpperCase()}`,
+    );
 
     const stopThreadId = await spawnThread({
       baseUrl,
       projectId: project.id,
       environmentId,
-      prompt: `Stop and follow up ${environmentId}`,
+      prompt:
+        `Reply with exactly BATTERY-STOP-${environmentId.toUpperCase()} and finish. ` +
+        "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, stopThreadId, 0);
     await expectCliSuccess(
@@ -427,7 +447,12 @@ async function runEnvironmentBattery(
     await expectCliSuccess(
       runCliCommand({
         baseUrl,
-        args: ["thread", "tell", stopThreadId, `Post-stop follow up ${environmentId}`],
+        args: [
+          "thread",
+          "tell",
+          stopThreadId,
+          `Reply with exactly BATTERY-POST-STOP-${environmentId.toUpperCase()} and finish. Do not run commands or add extra text.`,
+        ],
       }),
     );
     await waitForNextTurnStarted(

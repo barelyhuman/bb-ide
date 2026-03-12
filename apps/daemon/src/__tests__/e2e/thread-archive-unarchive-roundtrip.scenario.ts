@@ -12,6 +12,7 @@ import {
 import {
   startDaemonE2eHarness,
 } from "./harness.js";
+import { e2eTimeoutMs } from "./provider-mode.js";
 
 function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -115,11 +116,16 @@ export async function runThreadArchiveUnarchiveRoundtripScenario(): Promise<void
     const thread = await createThread(
       harness.baseUrl,
       project.id,
-      "Finish the initial roundtrip before archive coverage.",
+      "Reply with exactly ARCHIVE-INITIAL and finish. Do not run commands or add extra text.",
     );
 
-    await waitForThreadStatus(harness.baseUrl, thread.id, "idle", 12_000, harness.wsUrl);
-
+    await waitForThreadStatus(
+      harness.baseUrl,
+      thread.id,
+      "idle",
+      e2eTimeoutMs(12_000, 60_000),
+      harness.wsUrl,
+    );
     const initialEvents = await listThreadEvents(harness.baseUrl, thread.id);
     const initialCompletedTurns = countCompletedTurns(initialEvents);
     expect(initialCompletedTurns).toBeGreaterThan(0);
@@ -130,6 +136,7 @@ export async function runThreadArchiveUnarchiveRoundtripScenario(): Promise<void
       harness.wsUrl,
       thread.id,
       true,
+      e2eTimeoutMs(8_000, 30_000),
     );
     expect(archivedThread.archivedAt).toBeTypeOf("number");
 
@@ -154,13 +161,14 @@ export async function runThreadArchiveUnarchiveRoundtripScenario(): Promise<void
       harness.wsUrl,
       thread.id,
       false,
+      e2eTimeoutMs(8_000, 30_000),
     );
     expect(unarchivedThread.archivedAt).toBeUndefined();
 
     await tellThread(
       harness.baseUrl,
       thread.id,
-      "Continue with a follow-up after the archive roundtrip.",
+      "Reply with exactly ARCHIVE-FOLLOWUP and finish. Do not run commands or add extra text.",
     );
 
     const followUp = await waitForCompletedTurnAfterUnarchive(
@@ -168,6 +176,7 @@ export async function runThreadArchiveUnarchiveRoundtripScenario(): Promise<void
       harness.wsUrl,
       thread.id,
       initialCompletedTurns,
+      e2eTimeoutMs(12_000, 60_000),
     );
     expect(followUp.thread.status).toBe("idle");
     expect(followUp.completedTurns).toBeGreaterThan(initialCompletedTurns);

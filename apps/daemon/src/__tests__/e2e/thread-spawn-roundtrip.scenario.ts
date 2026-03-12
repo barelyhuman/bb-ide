@@ -8,6 +8,7 @@ import {
   readJson,
   waitForThreadCondition,
 } from "./environment-agent-api.js";
+import { e2eTimeoutMs } from "./provider-mode.js";
 
 function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -88,7 +89,7 @@ export async function runThreadSpawnRoundtripScenario(): Promise<void> {
         "--project",
         project.id,
         "--prompt",
-        "Implement deterministic e2e daemon coverage.",
+        "Reply with exactly E2E-SPAWN-ROUNDTRIP and finish. Do not run commands or add extra text.",
       ],
     });
 
@@ -102,6 +103,7 @@ export async function runThreadSpawnRoundtripScenario(): Promise<void> {
       harness.baseUrl,
       harness.wsUrl,
       threadId,
+      e2eTimeoutMs(8_000, 60_000),
     );
     expect(reachedActive).toBe(true);
     expect(thread.projectId).toBe(project.id);

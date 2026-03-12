@@ -30,6 +30,10 @@ import {
   createFakeCodexScriptFile,
   type FakeCodexOptions,
 } from "./fake-codex.js";
+import {
+  resolveE2eProviderMode,
+  type E2eProviderMode,
+} from "./provider-mode.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -108,6 +112,7 @@ async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
 }
 
 export interface StartDaemonE2eHarnessOptions {
+  providerMode?: E2eProviderMode;
   fakeCodex?: FakeCodexOptions;
   useWorkspaceFakeCodex?: boolean;
   initGitRepo?: boolean;
@@ -122,6 +127,7 @@ export interface DaemonE2eHarness {
   tempDir: string;
   dbPath: string;
   projectRoot: string;
+  providerMode: E2eProviderMode;
   getEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
   getEnvironmentAgentCursor: (threadId: string) => number;
   emitFakeCodexControlEvent: () => void;
@@ -143,15 +149,30 @@ function stopThreadManagerAndWait(
   opts?: { preserveEnvironments?: boolean },
 ): Promise<void> {
   const rawThreadManager = threadManager as {
+    stopAllAndWait?: (options?: { preserveEnvironments?: boolean }) => Promise<void>;
+    stopAll?: (options?: { preserveEnvironments?: boolean }) => void;
+  };
+  if (typeof rawThreadManager.stopAllAndWait === "function") {
+    return rawThreadManager.stopAllAndWait(opts);
+  }
+  rawThreadManager.stopAll?.(opts);
+  return Promise.resolve();
+}
+
+function stopThreadManager(
+  threadManager: unknown,
+  opts?: { preserveEnvironments?: boolean },
+): void {
+  const rawThreadManager = threadManager as {
     stopAll?: (options?: { preserveEnvironments?: boolean }) => void;
   };
   rawThreadManager.stopAll?.(opts);
-  return Promise.resolve();
 }
 
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
+  const providerMode = opts?.providerMode ?? resolveE2eProviderMode();
   const daemonPort = opts?.port ?? await allocatePort();
   const tempDir = opts?.tempDir ?? mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
@@ -170,12 +191,14 @@ export async function startDaemonE2eHarness(
   }
 
   const dbPath = join(tempDir, "beanbag.db");
-  const fakeCodexBinDir = createFakeCodexBinDir(tempDir, opts?.fakeCodex);
-  const fakeCodexCommand = join(fakeCodexBinDir, "codex");
   const fakeCodexControlFilePath = join(tempDir, "fake-codex-control", "events.log");
-  const workspaceFakeCodexPath = opts?.useWorkspaceFakeCodex
-    ? createFakeCodexScriptFile(projectRoot, opts.fakeCodex)
-    : undefined;
+  const fakeCodexBinDir =
+    providerMode === "fake" ? createFakeCodexBinDir(tempDir, opts?.fakeCodex) : undefined;
+  const fakeCodexCommand = fakeCodexBinDir ? join(fakeCodexBinDir, "codex") : undefined;
+  const workspaceFakeCodexPath =
+    providerMode === "fake" && opts?.useWorkspaceFakeCodex
+      ? createFakeCodexScriptFile(projectRoot, opts.fakeCodex)
+      : undefined;
   if (workspaceFakeCodexPath && opts?.initGitRepo) {
     execFileSync("git", ["add", ".beanbag-test/fake-codex.cjs"], {
       cwd: projectRoot,
@@ -190,7 +213,9 @@ export async function startDaemonE2eHarness(
   }
   const daemonRuntimeEnv: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
+    ...(fakeCodexBinDir
+      ? { PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir) }
+      : {}),
   };
 
   const db = createConnection(dbPath);
@@ -220,15 +245,18 @@ export async function startDaemonE2eHarness(
         dbPath,
         daemonLogFilePath: join(tempDir, "daemon.log"),
         daemonBaseUrl: `http://127.0.0.1:${daemonPort}/api/v1`,
-        provider: createCodexProviderAdapter({
-          processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
-          processArgs: workspaceFakeCodexPath
-            ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
-            : ["app-server"],
-          launchEnv: {
-            BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
-          },
-        }),
+        provider:
+          providerMode === "fake"
+            ? createCodexProviderAdapter({
+                processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
+                processArgs: workspaceFakeCodexPath
+                  ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
+                  : ["app-server"],
+                launchEnv: {
+                  BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
+                },
+              })
+            : createCodexProviderAdapter(),
       });
 
     await threadManager.reconcileActiveThreadsOnBoot();
@@ -283,7 +311,10 @@ export async function startDaemonE2eHarness(
       };
       const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
       rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
-      stopThreadManagerAndWait(threadManager, {
+      // Restart recovery expects managed environments to remain resumable after
+      // daemon shutdown, so use the non-awaiting shutdown path here rather than
+      // the full teardown wait used by ordinary cleanup.
+      stopThreadManager(threadManager, {
         preserveEnvironments: true,
       });
       await Promise.race([
@@ -299,6 +330,7 @@ export async function startDaemonE2eHarness(
       tempDir,
       dbPath,
       projectRoot,
+      providerMode,
       getEnvironmentAgentAuthorization: (threadId: string) =>
         (
           threadManager as unknown as {
@@ -308,6 +340,9 @@ export async function startDaemonE2eHarness(
       getEnvironmentAgentCursor: (threadId: string) =>
         environmentAgentCursorRepo.getByThreadId(threadId)?.sequence ?? 0,
       emitFakeCodexControlEvent: () => {
+        if (providerMode !== "fake") {
+          throw new Error("emitFakeCodexControlEvent is only available in fake e2e provider mode.");
+        }
         appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
       },
       shutdownForRestart,

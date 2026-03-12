@@ -11,6 +11,7 @@ import {
   startDaemonE2eHarness,
 } from "./harness.js";
 import { waitForThreadCondition } from "./environment-agent-api.js";
+import { e2eTimeoutMs } from "./provider-mode.js";
 
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
@@ -108,7 +109,10 @@ done
       body: JSON.stringify({
         projectId: project.id,
         environmentId: "worktree",
-        input: [{ type: "text", text: "Verify provisioning responsiveness." }],
+        input: [{
+          type: "text",
+          text: "Reply with exactly PROVISIONING-READY and finish. Do not run commands or add extra text.",
+        }],
       }),
     });
 
@@ -118,6 +122,7 @@ done
       harness.baseUrl,
       harness.wsUrl,
       thread.id,
+      e2eTimeoutMs(2_000, 20_000),
     );
 
     const [threadResult, timelineResult] = await Promise.all([
@@ -137,7 +142,7 @@ done
 
     const completedThread = await waitForThreadCondition({
       threadId: thread.id,
-      timeoutMs: 8_000,
+      timeoutMs: e2eTimeoutMs(8_000, 60_000),
       wsUrl: harness.wsUrl,
       load: async () =>
         readJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`),

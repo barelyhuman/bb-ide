@@ -8,6 +8,7 @@ import {
 import {
   startDaemonE2eHarness,
 } from "./harness.js";
+import { e2eTimeoutMs } from "./provider-mode.js";
 
 interface TurnProgressCounts {
   clientTurnStarts: number;
@@ -121,7 +122,7 @@ export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void
     const thread = await createWorktreeThread(
       harness.baseUrl,
       project.id,
-      "Complete the initial worktree turn.",
+      "Reply with exactly WORKTREE-INITIAL and finish. Do not run commands or add extra text.",
     );
 
     expect(thread.environmentId).toBe("worktree");
@@ -134,13 +135,14 @@ export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void
         clientTurnStarts: 0,
         completedTurns: 0,
       },
+      e2eTimeoutMs(20_000, 90_000),
     );
     expect(initialRoundTrip.thread.status).toBe("idle");
 
     await tellThread(
       harness.baseUrl,
       thread.id,
-      "Continue with a follow-up after the first turn completed.",
+      "Reply with exactly WORKTREE-FOLLOWUP and finish. Do not run commands or add extra text.",
     );
 
     const followUpRoundTrip = await waitForIdleAfterTurnProgress(
@@ -148,6 +150,7 @@ export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void
       harness.wsUrl,
       thread.id,
       initialRoundTrip.counts,
+      e2eTimeoutMs(20_000, 90_000),
     );
     expect(followUpRoundTrip.thread.status).toBe("idle");
     expect(followUpRoundTrip.counts.clientTurnStarts).toBeGreaterThan(

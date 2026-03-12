@@ -148,6 +148,13 @@ Provider and environment selection:
 - `BEANBAG_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.beanbag/worktrees`; absolute roots are scoped by project id).
 - `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
+Daemon e2e provider mode:
+
+- `BEANBAG_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider.
+- Default is `fake`.
+- `pnpm --filter @beanbag/daemon test:e2e:real` runs the fast daemon e2e suite in `real` mode.
+- Fake-only tests that depend on manual fake-codex event control are skipped automatically in `real` mode.
+
 ## Typed Codex Event Schema
 
 `packages/agent-core` derives thread event types from generated Codex app-server
