@@ -216,7 +216,6 @@ export class EnvironmentAgentSessionService {
                 generation: cursor?.generation ?? channel.generation,
                 sequenceExclusive: cursor?.sequence ?? 0,
               },
-              deliverCommandsAfter: 0,
             },
           ],
         },

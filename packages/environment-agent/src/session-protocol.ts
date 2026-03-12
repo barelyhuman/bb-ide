@@ -47,7 +47,6 @@ export interface EnvironmentAgentSessionOpenPayload {
 export interface EnvironmentAgentSessionWelcomeChannel {
   channelId: string;
   applyFrom: EnvironmentAgentSessionCursorExclusive;
-  deliverCommandsAfter?: number;
 }
 
 export interface EnvironmentAgentSessionWelcomePayload {

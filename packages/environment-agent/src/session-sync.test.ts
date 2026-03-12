@@ -236,7 +236,6 @@ describe("EnvironmentAgentSessionSync", () => {
               generation: 1,
               sequenceExclusive: 0,
             },
-            deliverCommandsAfter: 1,
           },
         ],
       },
@@ -264,7 +263,6 @@ describe("EnvironmentAgentSessionSync", () => {
         generation: 1,
         sequence: 0,
       },
-      lastDeliveredCommandCursor: 1,
     });
   });
 });

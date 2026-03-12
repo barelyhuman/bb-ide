@@ -124,7 +124,6 @@ describe("EnvironmentAgentSessionService", () => {
               generation: 3,
               sequenceExclusive: 9,
             },
-            deliverCommandsAfter: 0,
           },
         ],
       },
@@ -157,7 +156,6 @@ describe("EnvironmentAgentSessionService", () => {
           generation: 5,
           sequenceExclusive: 0,
         },
-        deliverCommandsAfter: 0,
       },
     ]);
   });
@@ -189,7 +187,6 @@ describe("EnvironmentAgentSessionService", () => {
           generation: 1,
           sequenceExclusive: 0,
         },
-        deliverCommandsAfter: 0,
       },
     ]);
     expect(cursors.getByThreadId(threadId)).toBeUndefined();

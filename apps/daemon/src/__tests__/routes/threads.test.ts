@@ -466,7 +466,6 @@ describe("Thread routes", () => {
                   generation: 1,
                   sequenceExclusive: 0,
                 },
-                deliverCommandsAfter: 0,
               },
             ],
           },

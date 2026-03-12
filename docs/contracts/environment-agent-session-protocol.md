@@ -147,8 +147,7 @@ Sent by daemon in response to `session_open`.
         "applyFrom": {
           "generation": 7,
           "sequenceExclusive": 104
-        },
-        "deliverCommandsAfter": 18
+        }
       }
     ]
   }

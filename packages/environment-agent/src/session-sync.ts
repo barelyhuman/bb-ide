@@ -54,13 +54,6 @@ export class EnvironmentAgentSessionSync {
         },
         welcome.sentAt,
       );
-      if (channel.deliverCommandsAfter !== undefined) {
-        this.options.runtime.alignLastDeliveredCommandCursor(
-          args.threadId,
-          channel.deliverCommandsAfter,
-          welcome.sentAt,
-        );
-      }
     }
     return welcome;
   }
