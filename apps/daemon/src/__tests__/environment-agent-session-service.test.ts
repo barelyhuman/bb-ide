@@ -749,7 +749,6 @@ describe("EnvironmentAgentSessionService", () => {
             state: "received",
           },
         ],
-        deliveredThrough: 1,
       },
     });
     expect(commands.getById("cmd-1")).toMatchObject({ state: "received" });

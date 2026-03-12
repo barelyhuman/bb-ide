@@ -247,11 +247,9 @@ describe("environment-agent delivery modules", () => {
           { commandId: "cmd-2", channelId: threadId, state: "duplicate" },
           { commandId: "cmd-2", channelId: "other-thread", state: "received" },
         ],
-        deliveredThrough: 2,
       },
     });
 
-    expect(acknowledged.deliveredThrough).toBe(2);
     expect(acknowledged.commands.map((command) => command.id)).toEqual([
       "cmd-1",
       "cmd-2",

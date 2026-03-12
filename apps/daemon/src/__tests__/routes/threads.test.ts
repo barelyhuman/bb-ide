@@ -698,7 +698,6 @@ describe("Thread routes", () => {
                 state: "received",
               },
             ],
-            deliveredThrough: 3,
           }),
         },
       );
@@ -715,7 +714,6 @@ describe("Thread routes", () => {
               state: "received",
             },
           ],
-          deliveredThrough: 3,
         },
       });
     });

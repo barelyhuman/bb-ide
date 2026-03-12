@@ -128,7 +128,6 @@ export interface EnvironmentAgentSessionCommandAckItem {
 
 export interface EnvironmentAgentSessionCommandAckPayload {
   commands: EnvironmentAgentSessionCommandAckItem[];
-  deliveredThrough?: number;
 }
 
 export type EnvironmentAgentSessionCommandResultState =

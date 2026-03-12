@@ -306,8 +306,7 @@ Sent by agent when commands are durably received and deduped.
         "channelId": "thread-1",
         "state": "received"
       }
-    ],
-    "deliveredThrough": 19
+    ]
   }
 }
 ```

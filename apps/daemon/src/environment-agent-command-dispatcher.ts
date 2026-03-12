@@ -12,7 +12,6 @@ import type {
 
 export interface RecordEnvironmentAgentCommandAckResult {
   commands: EnvironmentAgentCommandRecord[];
-  deliveredThrough?: number;
 }
 
 export interface InvalidateEnvironmentAgentSessionCommandsResult {
@@ -203,12 +202,7 @@ export class EnvironmentAgentCommandDispatcher {
   }): RecordEnvironmentAgentCommandAckResult {
     const session = this.sessions.getById(args.sessionId);
     if (!session || session.status !== "active") {
-      return {
-        commands: [],
-        ...(args.payload.deliveredThrough !== undefined
-          ? { deliveredThrough: args.payload.deliveredThrough }
-          : {}),
-      };
+      return { commands: [] };
     }
 
     const now = args.now ?? Date.now();
@@ -241,12 +235,7 @@ export class EnvironmentAgentCommandDispatcher {
       }
     }
 
-    return {
-      commands: updatedCommands,
-      ...(args.payload.deliveredThrough !== undefined
-        ? { deliveredThrough: args.payload.deliveredThrough }
-        : {}),
-    };
+    return { commands: updatedCommands };
   }
 
   recordCommandResult(args: {

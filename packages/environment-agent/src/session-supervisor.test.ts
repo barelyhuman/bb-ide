@@ -122,7 +122,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           state: "received",
         },
       ],
-      deliveredThrough: 1,
     });
     expect(client.sendCommandResult).toHaveBeenCalledWith(
       "sess-1",

@@ -122,7 +122,6 @@ describe("EnvironmentAgentSessionHttpClient", () => {
           state: "received",
         },
       ],
-      deliveredThrough: 4,
     })).resolves.toBeUndefined();
 
     await expect(client.sendCommandResult("sess-1", {

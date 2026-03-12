@@ -165,14 +165,12 @@ export class EnvironmentAgentSessionSync {
       });
 
     if (pulled.length > 0) {
-      const deliveredThrough = pulled[pulled.length - 1]!.commandCursor;
       await this.options.client.acknowledgeCommands(state.sessionId, {
         commands: pulled.map((command) => ({
           commandId: command.commandId,
           channelId: args.threadId,
           state: command.ackState,
         })),
-        deliveredThrough,
       });
       for (const command of pulled) {
         if (command.ackState === "received") {

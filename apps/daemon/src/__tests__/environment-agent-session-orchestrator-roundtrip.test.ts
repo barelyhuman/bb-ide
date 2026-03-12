@@ -345,7 +345,6 @@ describe("environment-agent session orchestrator roundtrip", () => {
             state: "received",
           },
         ],
-        deliveredThrough: commandEnvelope.commandCursor,
       },
       now: 2_100,
     });

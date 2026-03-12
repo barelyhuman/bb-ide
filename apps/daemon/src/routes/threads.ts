@@ -145,7 +145,6 @@ const environmentAgentSessionCommandAckBodySchema = z.object({
     channelId: z.string().min(1),
     state: z.enum(["received", "duplicate"]),
   })),
-  deliveredThrough: z.number().int().nonnegative().optional(),
 });
 
 const environmentAgentSessionCommandResultBodySchema = z.object({
@@ -539,9 +538,6 @@ export function createThreadRoutes(
             sessionId: body.sessionId,
             payload: {
               commands: body.commands,
-              ...(body.deliveredThrough !== undefined
-                ? { deliveredThrough: body.deliveredThrough }
-                : {}),
             },
           });
           return c.body(null, 204);
