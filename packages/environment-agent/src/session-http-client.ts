@@ -7,7 +7,6 @@ import type {
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionHeartbeatPayload,
   EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionReplayRequestMessage,
   EnvironmentAgentSessionWelcomeMessage,
 } from "./session-protocol.js";
 
@@ -110,7 +109,7 @@ export class EnvironmentAgentSessionHttpClient {
   pushEvents(args: {
     sessionId: string;
     payload: EnvironmentAgentSessionEventBatchPayload;
-  }): Promise<EnvironmentAgentSessionEventAckMessage | EnvironmentAgentSessionReplayRequestMessage> {
+  }): Promise<EnvironmentAgentSessionEventAckMessage> {
     return this.postJson(
       `/threads/${this.threadId}/environment-agent/session/events`,
       {
@@ -118,7 +117,7 @@ export class EnvironmentAgentSessionHttpClient {
         ...args.payload,
       },
       200,
-    ) as Promise<EnvironmentAgentSessionEventAckMessage | EnvironmentAgentSessionReplayRequestMessage>;
+    ) as Promise<EnvironmentAgentSessionEventAckMessage>;
   }
 
   pullCommands(args: {

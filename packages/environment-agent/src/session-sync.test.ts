@@ -142,7 +142,7 @@ describe("EnvironmentAgentSessionSync", () => {
     expect(client.closeSession).toHaveBeenCalledWith("sess-1", "agent_shutdown");
   });
 
-  it("returns replay requests without acknowledging the local outbox", async () => {
+  it("returns reset cursors without acknowledging the local outbox", async () => {
     const store = new InMemoryEnvironmentAgentSessionStore();
     const runtime = new EnvironmentAgentSessionRuntime({ store, clock: () => 10_000 });
     runtime.initializeThread({
@@ -166,28 +166,35 @@ describe("EnvironmentAgentSessionSync", () => {
     const client = makeClientMock();
     (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
       protocol: "beanbag.env-agent.v1",
-      type: "replay_request",
-      messageId: "msg-replay",
+      type: "event_ack",
+      messageId: "msg-ack",
       sessionId: "sess-1",
       sentAt: 3_000,
       payload: {
-        channelId: "thread-1",
-        generation: 2,
-        afterSequence: 0,
+        channels: [
+          {
+            channelId: "thread-1",
+            ackedThrough: {
+              generation: 2,
+              sequence: 0,
+            },
+          },
+        ],
       },
     });
 
     const sync = new EnvironmentAgentSessionSync({ runtime, client });
     await expect(sync.flushPendingEvents("thread-1")).resolves.toMatchObject({
       acknowledged: false,
-      replayRequested: {
-        type: "replay_request",
+      resetCursor: {
+        generation: 2,
+        sequence: 0,
       },
     });
     expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toBeDefined();
   });
 
-  it("applies daemon-requested replay and command cursors from session welcome", async () => {
+  it("applies daemon-requested event reset cursors from session welcome", async () => {
     const store = new InMemoryEnvironmentAgentSessionStore();
     const runtime = new EnvironmentAgentSessionRuntime({ store, clock: () => 10_000 });
     runtime.initializeThread({

@@ -443,7 +443,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
-  it("applies event batches and requests replay when the daemon detects a gap", async () => {
+  it("applies event batches and resets the agent cursor when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({
       threadId,
@@ -503,7 +503,7 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    const replayRequest = await service.applyEventBatch({
+    const replayAck = await service.applyEventBatch({
       threadId,
       sessionId: opened.session.id,
       now: 3_000,
@@ -529,13 +529,19 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    expect(replayRequest).toMatchObject({
-      type: "replay_request",
+    expect(replayAck).toMatchObject({
+      type: "event_ack",
       sessionId: opened.session.id,
       payload: {
-        channelId: threadId,
-        generation: 2,
-        afterSequence: 0,
+        channels: [
+          {
+            channelId: threadId,
+            ackedThrough: {
+              generation: 2,
+              sequence: 0,
+            },
+          },
+        ],
       },
     });
   });

@@ -476,7 +476,7 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     }
   });
 
-  it("replays buffered events when the daemon requests an older cursor", async () => {
+  it("resends buffered events when the daemon acks an older cursor", async () => {
     const store = new InMemoryEnvironmentAgentSessionStore();
     const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
     const sessionRuntime = new EnvironmentAgentSessionRuntime({
@@ -508,14 +508,17 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     (client.pushEvents as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
         protocol: "beanbag.env-agent.v1",
-        type: "replay_request",
-        messageId: "msg-replay",
+        type: "event_ack",
+        messageId: "msg-reset",
         sessionId: "sess-1",
         sentAt: 3_000,
         payload: {
-          channelId: "thread-1",
-          generation: 1,
-          afterSequence: 0,
+          channels: [
+            {
+              channelId: "thread-1",
+              ackedThrough: { generation: 1, sequence: 0 },
+            },
+          ],
         },
       })
       .mockResolvedValueOnce({

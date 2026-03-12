@@ -6,9 +6,9 @@ import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
 import type {
   EnvironmentAgentSessionCommandAckItem,
   EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionReplayRequestMessage,
   EnvironmentAgentSessionWelcomeMessage,
 } from "./session-protocol.js";
+import { compareEnvironmentAgentSessionCursors } from "./session-protocol.js";
 import type { EnvironmentAgentSessionHttpClient } from "./session-http-client.js";
 
 export interface EnvironmentAgentSessionSyncOptions {
@@ -26,7 +26,10 @@ export interface EnvironmentAgentPulledCommand {
 export interface FlushEnvironmentAgentEventBatchResult {
   sessionId: string;
   acknowledged: boolean;
-  replayRequested?: EnvironmentAgentSessionReplayRequestMessage;
+  resetCursor?: {
+    generation: number;
+    sequence: number;
+  };
 }
 
 export class EnvironmentAgentSessionSync {
@@ -95,16 +98,19 @@ export class EnvironmentAgentSessionSync {
       sessionId: state.sessionId,
       payload: { batches: [batch] },
     });
-    if (response.type === "replay_request") {
-      return {
-        sessionId: state.sessionId,
-        acknowledged: false,
-        replayRequested: response,
-      };
-    }
-
     const ack = response.payload.channels.find((channel) => channel.channelId === threadId);
     if (ack) {
+      const batchTail = {
+        generation: batch.generation,
+        sequence: batch.events[batch.events.length - 1]!.sequence,
+      };
+      if (compareEnvironmentAgentSessionCursors(ack.ackedThrough, batchTail) < 0) {
+        return {
+          sessionId: state.sessionId,
+          acknowledged: false,
+          resetCursor: ack.ackedThrough,
+        };
+      }
       this.options.runtime.acknowledgeEvents({
         threadId,
         generation: ack.ackedThrough.generation,

@@ -391,20 +391,20 @@ export class EnvironmentAgentSessionSupervisor {
       const flushResult = await this.options.sessionSync.flushPendingEvents(
         this.options.threadId,
       );
-      if (flushResult.acknowledged || !flushResult.replayRequested) {
+      if (flushResult.acknowledged || !flushResult.resetCursor) {
         return;
       }
       this.options.sessionRuntime.alignEventCursor(
         this.options.threadId,
         {
-          generation: flushResult.replayRequested.payload.generation,
-          sequence: flushResult.replayRequested.payload.afterSequence,
+          generation: flushResult.resetCursor.generation,
+          sequence: flushResult.resetCursor.sequence,
         },
-        flushResult.replayRequested.sentAt,
+        Date.now(),
       );
     }
     throw new Error(
-      `Environment-agent replay did not converge for thread ${this.options.threadId}`,
+      `Environment-agent event reset did not converge for thread ${this.options.threadId}`,
     );
   }
 }

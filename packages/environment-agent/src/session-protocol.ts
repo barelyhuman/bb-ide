@@ -100,13 +100,6 @@ export interface EnvironmentAgentSessionEventAckPayload {
   channels: EnvironmentAgentSessionEventAckChannel[];
 }
 
-export interface EnvironmentAgentSessionReplayRequestPayload {
-  channelId: string;
-  generation: number;
-  afterSequence: number;
-  limit?: number;
-}
-
 export interface EnvironmentAgentSessionCommandBatchItem<
   TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
 > {
@@ -202,12 +195,6 @@ export interface EnvironmentAgentSessionEventAckMessage
   payload: EnvironmentAgentSessionEventAckPayload;
 }
 
-export interface EnvironmentAgentSessionReplayRequestMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
-  type: "replay_request";
-  payload: EnvironmentAgentSessionReplayRequestPayload;
-}
-
 export interface EnvironmentAgentSessionCommandBatchMessage<
   TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
 > extends EnvironmentAgentSessionBoundMessageBase {
@@ -250,7 +237,6 @@ export type EnvironmentAgentSessionClientMessage =
 export type EnvironmentAgentSessionServerMessage =
   | EnvironmentAgentSessionWelcomeMessage
   | EnvironmentAgentSessionEventAckMessage
-  | EnvironmentAgentSessionReplayRequestMessage
   | EnvironmentAgentSessionCommandBatchMessage
   | EnvironmentAgentSessionSessionControlMessage;
 
@@ -324,7 +310,6 @@ export function isEnvironmentAgentSessionMessage(
     case "heartbeat":
     case "event_batch":
     case "event_ack":
-    case "replay_request":
     case "command_batch":
     case "command_ack":
     case "command_result":
@@ -350,7 +335,6 @@ export function isEnvironmentAgentSessionClientMessage(
       return true;
     case "session_welcome":
     case "event_ack":
-    case "replay_request":
     case "command_batch":
     case "session_replaced":
       return false;
@@ -366,7 +350,6 @@ export function isEnvironmentAgentSessionServerMessage(
   switch (value.type) {
     case "session_welcome":
     case "event_ack":
-    case "replay_request":
     case "command_batch":
     case "session_close":
     case "session_replaced":

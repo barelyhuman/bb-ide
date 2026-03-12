@@ -15,7 +15,6 @@ import {
   type EnvironmentAgentSessionEventBatchPayload,
   type EnvironmentAgentSessionHeartbeatPayload,
   type EnvironmentAgentSessionOpenPayload,
-  type EnvironmentAgentSessionReplayRequestMessage,
   type EnvironmentAgentSessionWelcomeMessage,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -303,7 +302,7 @@ export class EnvironmentAgentSessionService {
     sessionId: string;
     payload: EnvironmentAgentSessionEventBatchPayload;
     now?: number;
-  }): Promise<EnvironmentAgentSessionEventAckMessage | EnvironmentAgentSessionReplayRequestMessage> {
+  }): Promise<EnvironmentAgentSessionEventAckMessage> {
     if (!this.eventApplier) {
       throw new Error("Environment-agent session event apply is unavailable");
     }
@@ -322,7 +321,7 @@ export class EnvironmentAgentSessionService {
       now,
     }).then((result) => {
       if (result.blockedReason === "gap") {
-        const replayFrom = cursorForReply({
+        const ackedThrough = cursorForReply({
           threadId: args.threadId,
           batchGeneration: batch.generation,
           acknowledgedCursor: result.acknowledgedCursor,
@@ -332,14 +331,17 @@ export class EnvironmentAgentSessionService {
         });
         return {
           protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-          type: "replay_request",
+          type: "event_ack",
           messageId: randomUUID(),
           sessionId: session.id,
           sentAt: now,
           payload: {
-            channelId: args.threadId,
-            generation: replayFrom.generation,
-            afterSequence: replayFrom.sequence,
+            channels: [
+              {
+                channelId: args.threadId,
+                ackedThrough,
+              },
+            ],
           },
         };
       }

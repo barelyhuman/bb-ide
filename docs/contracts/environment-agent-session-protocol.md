@@ -258,26 +258,6 @@ Sent by daemon after durable application.
 
 `event_ack` is authoritative. The agent may compact any outbox entries covered by the ack.
 
-### `replay_request`
-
-Sent by daemon when it needs a gap repaired explicitly.
-
-```json
-{
-  "protocol": "beanbag.env-agent.v1",
-  "messageId": "msg_replay_req_1",
-  "sentAt": 1770000013000,
-  "sessionId": "sess_124",
-  "type": "replay_request",
-  "payload": {
-    "channelId": "thread-1",
-    "generation": 7,
-    "afterSequence": 104,
-    "limit": 500
-  }
-}
-```
-
 ### `command_batch`
 
 Sent by daemon. Commands are durable before sending.
@@ -480,7 +460,7 @@ Generation change must be explicit; sequence reuse within the same generation is
 
 - Within a channel generation, the daemon applies only contiguous sequences.
 - Events with sequence less than or equal to the durable cursor are duplicates and must be ignored safely.
-- Events ahead of the cursor may trigger `replay_request` or be held/rejected according to implementation policy, but gaps must not silently advance the cursor.
+- Events ahead of the cursor must not silently advance the durable cursor. The daemon responds with an `event_ack` at the last contiguous cursor so the agent can reset and resend from there.
 - A generation mismatch must be handled explicitly, never heuristically.
 
 ### Commands
@@ -541,7 +521,7 @@ One possible mapping:
 - `POST /sessions/:sessionId/push`
   - carries agent→daemon envelopes such as `heartbeat`, `event_batch`, `command_ack`, `command_result`
 - `GET /sessions/:sessionId/pull?waitMs=30000`
-  - blocks until daemon has outbound envelopes such as `command_batch`, `event_ack`, `replay_request`, `session_replaced`
+  - blocks until daemon has outbound envelopes such as `command_batch`, `event_ack`, `session_replaced`
 
 This preserves the same session, cursor, and ack semantics without requiring WebSockets.
 
