@@ -252,11 +252,7 @@ export class EnvironmentService {
     const existingRuntime = this.environmentRuntimes.get(thread.id);
     if (existingRuntime) {
       return {
-        runtime: await this.ensureRuntimeAgentConnectionTarget(
-          thread.id,
-          existingRuntime,
-          reason,
-        ),
+        runtime: existingRuntime,
       };
     }
 
@@ -264,11 +260,7 @@ export class EnvironmentService {
       const runtimeDuringEnsure = this.environmentRuntimes.get(thread.id);
       if (runtimeDuringEnsure) {
         return {
-          runtime: await this.ensureRuntimeAgentConnectionTarget(
-            thread.id,
-            runtimeDuringEnsure,
-            reason,
-          ),
+          runtime: runtimeDuringEnsure,
         };
       }
 
@@ -300,21 +292,6 @@ export class EnvironmentService {
         runtime,
       };
     });
-  }
-
-  private async ensureRuntimeAgentConnectionTarget(
-    threadId: string,
-    runtime: ActiveEnvironmentRuntime,
-    reason: ThreadEnvironmentStartReason,
-  ): Promise<ActiveEnvironmentRuntime> {
-    try {
-      runtime.agentConnectionTarget = runtime.environment.getAgentConnectionTarget();
-      return runtime;
-    } catch {
-      await this.prepareEnvironment(threadId, runtime.environment, reason);
-      runtime.agentConnectionTarget = runtime.environment.getAgentConnectionTarget();
-      return runtime;
-    }
   }
 
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
