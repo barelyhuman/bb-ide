@@ -61,9 +61,16 @@ Over time, this folder should become the home for:
 - guidance for collecting failure bundles
 - a changelog of newly added regression scenarios when useful
 
+Current daemon QA docs:
+
+- `qa/daemon/standalone-daemon-qa.md`
+- `qa/daemon/lifecycle-invariants.md`
+- `qa/daemon/smoke.md`
+- `qa/daemon/stress.md`
+- `qa/daemon/regressions.md`
+
 Likely future additions:
 
-- `qa/daemon/`
 - `qa/app/`
 - `qa/regressions/`
 - `qa/artifacts/README.md`
