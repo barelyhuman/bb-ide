@@ -1575,9 +1575,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   handleEnvironmentAgentSessionInvalidated(threadId: string): void {
-    this.providerThreadIdByThreadId.delete(threadId);
-    this.agentServer.clearSessionState(threadId);
-    this._cleanupEnvironmentRuntime(threadId);
+    this._clearEnvironmentAgentRuntimeState(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
@@ -1604,6 +1602,12 @@ export class Orchestrator implements ThreadOrchestrator {
         this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
       }
     }
+  }
+
+  private _clearEnvironmentAgentRuntimeState(threadId: string): void {
+    this.providerThreadIdByThreadId.delete(threadId);
+    this.agentServer.clearSessionState(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
   }
 
   /**
@@ -3765,7 +3769,7 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!this.agentServer.isMissingProviderThreadError(error) || args.activeTurnId) {
         throw error;
       }
-      this.handleEnvironmentAgentSessionInvalidated(args.threadId);
+      this._clearEnvironmentAgentRuntimeState(args.threadId);
       const recoveredProviderThreadId =
         await this._restartProviderThreadAfterMissingTurnStart(
           args.threadId,
