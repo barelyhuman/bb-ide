@@ -59,7 +59,7 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 250,
         commandBatchLimit: 50,
-        enableSelfSuspend: true,
+        enableSelfSuspend: false,
         selfSuspendDebounceMs: 1_000,
       },
     });

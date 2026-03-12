@@ -109,15 +109,12 @@ async function requestEnvironmentAgentSessionSync(
 
 export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
   runtimeEnv: NodeJS.ProcessEnv;
-  sessionRepo: Pick<
-    EnvironmentAgentSessionRepository,
-    "listActive" | "markClosed"
-  >;
+  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
   logger?: StartupTaskLogger;
 }): Promise<{
   activeSessionCount: number;
   pokedCount: number;
-  closedCount: number;
+  unreachableCount: number;
 }> {
   const logger = args.logger ?? console;
   const activeSessions = args.sessionRepo.listActive();
@@ -125,7 +122,7 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
     return {
       activeSessionCount: 0,
       pokedCount: 0,
-      closedCount: 0,
+      unreachableCount: 0,
     };
   }
 
@@ -135,26 +132,22 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
   );
 
   let pokedCount = 0;
-  let closedCount = 0;
+  let unreachableCount = 0;
   for (const session of activeSessions) {
     const record = recordsByThreadId.get(session.threadId);
     if (record && await requestEnvironmentAgentSessionSync(record)) {
       pokedCount += 1;
       continue;
     }
-    args.sessionRepo.markClosed({
-      sessionId: session.id,
-      reason: "daemon_shutdown",
-    });
-    closedCount += 1;
+    unreachableCount += 1;
   }
 
   logger.log(
-    `Environment-agent startup recovery poked ${pokedCount}/${activeSessions.length} active sessions and closed ${closedCount} stale sessions.`,
+    `Environment-agent startup recovery poked ${pokedCount}/${activeSessions.length} active sessions; ${unreachableCount} are awaiting heartbeat timeout handling.`,
   );
   return {
     activeSessionCount: activeSessions.length,
     pokedCount,
-    closedCount,
+    unreachableCount,
   };
 }

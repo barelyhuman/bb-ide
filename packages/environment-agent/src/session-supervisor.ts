@@ -126,6 +126,7 @@ export class EnvironmentAgentSessionSupervisor {
     } catch (error) {
       this.handleError(error);
     }
+    this.publishRuntimeDeliveryState();
     this.refreshSelfSuspendState();
     this.scheduleNextCycle();
   }
@@ -134,8 +135,10 @@ export class EnvironmentAgentSessionSupervisor {
     if (!this.running) {
       return;
     }
+    this.consecutiveFailureCount = 0;
     this.cancelSelfSuspend();
     this.cancelPendingCommandPull();
+    this.publishRuntimeDeliveryState();
     this.scheduleImmediateCycle();
   }
 
@@ -151,6 +154,7 @@ export class EnvironmentAgentSessionSupervisor {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
     this.unsubscribeRuntimeEvents();
+    this.publishRuntimeDeliveryState();
 
     const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
     if (!state?.sessionId) {
@@ -195,6 +199,7 @@ export class EnvironmentAgentSessionSupervisor {
       welcome.payload.heartbeatIntervalMs,
     );
     this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
+    this.publishRuntimeDeliveryState();
   }
 
   private scheduleNextCycle(): void {
@@ -235,11 +240,13 @@ export class EnvironmentAgentSessionSupervisor {
     try {
       await this.runCycle();
       this.consecutiveFailureCount = 0;
+      this.publishRuntimeDeliveryState();
     } catch (error) {
       const recovered = this.handleSessionError(error);
       this.consecutiveFailureCount = recovered
         ? 0
         : this.consecutiveFailureCount + 1;
+      this.publishRuntimeDeliveryState(error);
       this.handleError(error);
     } finally {
       this.refreshSelfSuspendState();
@@ -315,6 +322,33 @@ export class EnvironmentAgentSessionSupervisor {
     this.heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.nextHeartbeatAt = 0;
     return true;
+  }
+
+  private publishRuntimeDeliveryState(error?: unknown): void {
+    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
+    const retryAttemptCount = this.consecutiveFailureCount;
+    const nextRetryAt = !this.running
+      ? undefined
+      : retryAttemptCount > 0
+        ? Date.now() + Math.min(
+            this.pollIntervalMs * 2 ** Math.min(retryAttemptCount, 7),
+            MAX_ERROR_BACKOFF_MS,
+          )
+        : undefined;
+
+    this.options.runtime.setDaemonDeliveryState({
+      connectedToDaemon: this.running && Boolean(state?.sessionId) && retryAttemptCount === 0,
+      deliveryState: !this.running
+        ? "stopped"
+        : retryAttemptCount > 0
+          ? "retrying"
+          : "healthy",
+      retryAttemptCount,
+      ...(state?.lastAcked ? { lastAckedSequence: state.lastAcked.sequence } : {}),
+      ...(nextRetryAt !== undefined ? { nextRetryAt } : {}),
+      ...(retryAttemptCount > 0 ? { deliveryIssue: "transport_error" as const } : {}),
+      ...(error instanceof Error ? { lastDeliveryError: error.message } : {}),
+    });
   }
 
   private isHeartbeatDue(now: number = Date.now()): boolean {

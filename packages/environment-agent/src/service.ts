@@ -106,13 +106,13 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     logging: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
-    session: {
-      pollIntervalMs:
-        parsePositiveIntegerEnv(
-          args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
-        ) ?? 250,
+      session: {
+        pollIntervalMs:
+          parsePositiveIntegerEnv(
+            args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
+          ) ?? 250,
       commandBatchLimit: 50,
-      enableSelfSuspend: true,
+      enableSelfSuspend: false,
       selfSuspendDebounceMs:
         parsePositiveIntegerEnv(
           args.env[BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS],

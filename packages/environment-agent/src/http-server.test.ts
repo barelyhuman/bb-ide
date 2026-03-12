@@ -86,7 +86,13 @@ describe("environment-agent HTTP transport", () => {
     });
 
     expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toEqual({ ok: true });
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      status: expect.objectContaining({
+        latestSequence: 0,
+        deliveryState: "stopped",
+      }),
+    });
     expect(onSessionSyncRequested).toHaveBeenCalledTimes(1);
   });
 });

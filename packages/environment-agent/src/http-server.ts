@@ -68,7 +68,10 @@ export async function createEnvironmentAgentHttpServer(args: {
 
       if (method === "POST" && url.pathname === "/control/session-sync") {
         args.onSessionSyncRequested?.();
-        writeJson(response, 202, { ok: true });
+        writeJson(response, 202, {
+          ok: true,
+          status: args.runtime.getStatusSnapshot(),
+        });
         return;
       }
 

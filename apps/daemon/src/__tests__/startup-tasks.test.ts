@@ -58,7 +58,7 @@ describe("startup tasks", () => {
     );
   });
 
-  it("pokes reachable env-agents and closes unreachable active sessions on boot", async () => {
+  it("pokes reachable env-agents and leaves unreachable sessions for heartbeat timeout handling", async () => {
     const beanbagRoot = mkdtempSync(join(tmpdir(), "bb-startup-tasks-"));
     const stateDir = join(beanbagRoot, "environment-agents", "proj-1");
     mkdirSync(stateDir, { recursive: true });
@@ -95,7 +95,6 @@ describe("startup tasks", () => {
         { id: "sess-1", threadId: "thread-1" },
         { id: "sess-2", threadId: "thread-2" },
       ]),
-      markClosed: vi.fn(),
     };
 
     const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
@@ -110,11 +109,7 @@ describe("startup tasks", () => {
     expect(result).toEqual({
       activeSessionCount: 2,
       pokedCount: 1,
-      closedCount: 1,
-    });
-    expect(sessionRepo.markClosed).toHaveBeenCalledWith({
-      sessionId: "sess-2",
-      reason: "daemon_shutdown",
+      unreachableCount: 1,
     });
 
     rmSync(beanbagRoot, { recursive: true, force: true });

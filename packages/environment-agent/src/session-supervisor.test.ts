@@ -206,7 +206,7 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       });
 
       await supervisor.start();
-      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(120);
       await vi.advanceTimersByTimeAsync(10);
 
       expect(client.openSession).toHaveBeenCalledTimes(2);
@@ -277,6 +277,80 @@ describe("EnvironmentAgentSessionSupervisor", () => {
 
       await vi.advanceTimersByTimeAsync(50);
       expect(client.heartbeat).toHaveBeenCalledTimes(2);
+
+      await supervisor.close();
+      await runtime.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resets retry backoff when poked after a failed heartbeat", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryEnvironmentAgentSessionStore();
+      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+        store,
+        clock: () => 10_000,
+      });
+      const client = makeClientMock();
+      (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "session_welcome",
+        messageId: "msg-open",
+        sessionId: "sess-1",
+        sentAt: 2_000,
+        payload: {
+          leaseTtlMs: 30_000,
+          heartbeatIntervalMs: 5,
+          selectedTransport: "http-long-poll",
+          protocolVersion: 1,
+          channels: [],
+        },
+      });
+      (client.heartbeat as ReturnType<typeof vi.fn>)
+        .mockRejectedValueOnce(new Error("daemon unavailable"))
+        .mockResolvedValue(undefined);
+      (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "command_batch",
+        messageId: "msg-cmd-empty",
+        sessionId: "sess-1",
+        sentAt: 5_000,
+        payload: { commands: [] },
+      });
+      (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: "thread-1",
+        runtime,
+        sessionRuntime,
+        sessionSync: sync,
+        pollIntervalMs: 100,
+      });
+
+      await supervisor.start();
+      await vi.advanceTimersByTimeAsync(120);
+
+      expect(runtime.getStatusSnapshot()).toMatchObject({
+        connectedToDaemon: false,
+        deliveryState: "retrying",
+        retryAttemptCount: 1,
+      });
+
+      supervisor.poke();
+      expect(runtime.getStatusSnapshot()).toMatchObject({
+        retryAttemptCount: 0,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runtime.getStatusSnapshot()).toMatchObject({
+        connectedToDaemon: true,
+        deliveryState: "healthy",
+        retryAttemptCount: 0,
+      });
 
       await supervisor.close();
       await runtime.shutdown();
