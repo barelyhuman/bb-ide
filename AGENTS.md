@@ -34,3 +34,11 @@
 
 - Prefer `pnpm exec turbo run typecheck --filter=@beanbag/<pkg>` for package-scoped typechecks instead of `pnpm --filter @beanbag/<pkg> typecheck`; Turbo preserves upstream `^build` dependencies and package-script runs do not.
 - Do not "fix" workspace typecheck issues by pointing package `types` at `src/**` unless that source is also shipped in the packed artifact; keep package metadata valid for packed consumers.
+
+## Testing / QA
+
+- For daemon or environment-agent changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader daemon QA tiers when touching critical daemon/environment-agent code so regressions are caught early.
+- Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/daemon/package.json`; they are the canonical source for what automated QA is available and how to run it.
+- Use the fast e2e suite in `apps/daemon/src/__tests__/e2e/` for targeted scenario work, and use the real-provider e2e coverage when you need confidence that provider-facing behavior still works end to end.
+- For the full manual daemon workflow and scenario checklist, see `qa/daemon/standalone-daemon-qa.md`.
+- For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@beanbag/<pkg>`.

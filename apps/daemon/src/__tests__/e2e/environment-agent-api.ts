@@ -2,7 +2,33 @@ import { createServer } from "node:net";
 import type {
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
-import type { ChangedMessage, Project, Thread, ThreadEvent } from "@beanbag/agent-core";
+import type {
+  ChangedMessage,
+  Project,
+  Thread,
+  ThreadEvent,
+  ThreadQueuedMessage,
+} from "@beanbag/agent-core";
+import type {
+  EnvironmentAgentSessionCloseReason,
+  EnvironmentAgentSessionStatus,
+} from "@beanbag/db";
+
+export interface EnvironmentAgentSessionDebugView {
+  id: string;
+  threadId: string;
+  agentId: string;
+  agentInstanceId: string;
+  protocolVersion: number;
+  status: EnvironmentAgentSessionStatus;
+  leaseExpiresAt: number;
+  lastHeartbeatAt?: number;
+  closedAt?: number;
+  closeReason?: EnvironmentAgentSessionCloseReason;
+  controlBaseUrl?: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
 export async function readJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -40,14 +66,77 @@ export async function createThread(
   baseUrl: string,
   projectId: string,
   inputText: string = "Prepare a thread for environment-agent e2e.",
+  environmentId?: Thread["environmentId"],
 ): Promise<Thread> {
   return readJson<Thread>(`${baseUrl}/api/v1/threads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
+      ...(environmentId ? { environmentId } : {}),
       input: [{ type: "text", text: inputText }],
     }),
+  });
+}
+
+export async function tellThread(
+  baseUrl: string,
+  threadId: string,
+  inputText: string,
+): Promise<{ ok: boolean }> {
+  return readJson<{ ok: boolean }>(`${baseUrl}/api/v1/threads/${threadId}/tell`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input: [{ type: "text", text: inputText }],
+    }),
+  });
+}
+
+export async function enqueueThreadFollowUp(
+  baseUrl: string,
+  threadId: string,
+  inputText: string,
+): Promise<ThreadQueuedMessage> {
+  return readJson<ThreadQueuedMessage>(`${baseUrl}/api/v1/threads/${threadId}/queue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input: [{ type: "text", text: inputText }],
+    }),
+  });
+}
+
+export async function sendQueuedThreadFollowUp(
+  baseUrl: string,
+  threadId: string,
+  queuedMessageId: string,
+  mode: "auto" | "steer-if-active" | "steer" = "auto",
+): Promise<{ ok: boolean; queuedMessage: ThreadQueuedMessage }> {
+  return readJson<{ ok: boolean; queuedMessage: ThreadQueuedMessage }>(
+    `${baseUrl}/api/v1/threads/${threadId}/queue/${queuedMessageId}/send`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    },
+  );
+}
+
+export async function archiveThread(baseUrl: string, threadId: string): Promise<{ ok: boolean }> {
+  return readJson<{ ok: boolean }>(`${baseUrl}/api/v1/threads/${threadId}/archive`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function unarchiveThread(
+  baseUrl: string,
+  threadId: string,
+): Promise<{ ok: boolean }> {
+  return readJson<{ ok: boolean }>(`${baseUrl}/api/v1/threads/${threadId}/unarchive`, {
+    method: "POST",
   });
 }
 
@@ -83,6 +172,19 @@ export async function getEnvironmentAgentStatus(
   return readJson<EnvironmentAgentStatusSnapshot>(
     `${baseUrl}/api/v1/threads/${threadId}/environment-agent/status`,
   );
+}
+
+export async function listEnvironmentAgentSessions(
+  baseUrl: string,
+  threadId: string,
+): Promise<{
+  threadId: string;
+  sessions: EnvironmentAgentSessionDebugView[];
+}> {
+  return readJson<{
+    threadId: string;
+    sessions: EnvironmentAgentSessionDebugView[];
+  }>(`${baseUrl}/api/v1/threads/${threadId}/environment-agent/sessions`);
 }
 
 export function sleep(ms: number): Promise<void> {
