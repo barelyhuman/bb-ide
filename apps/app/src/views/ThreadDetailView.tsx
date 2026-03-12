@@ -134,6 +134,7 @@ export function ThreadDetailView() {
     useState<ThreadGitActionDialogTarget | null>(null);
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
+  const mergeBaseStateThreadIdRef = useRef<string | undefined>(undefined);
   const message = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -273,6 +274,10 @@ export function ThreadDetailView() {
   const supportsSquashMerge = squashMergeAction?.available === true;
 
   useEffect(() => {
+    if (mergeBaseStateThreadIdRef.current === thread?.id) {
+      return;
+    }
+    mergeBaseStateThreadIdRef.current = thread?.id;
     setSelectedMergeBaseBranch(thread?.mergeBaseBranch);
   }, [setSelectedMergeBaseBranch, thread?.id, thread?.mergeBaseBranch]);
 
