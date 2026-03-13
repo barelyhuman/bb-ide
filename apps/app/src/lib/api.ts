@@ -287,6 +287,10 @@ export async function createProject(req: CreateProjectRequest): Promise<Project>
   return request<Project>("POST", "/projects", req);
 }
 
+export async function hireProjectManager(projectId: string): Promise<Thread> {
+  return request<Thread>("POST", `/projects/${projectId}/manager`);
+}
+
 export async function updateProject(
   id: string,
   req: UpdateProjectRequest,

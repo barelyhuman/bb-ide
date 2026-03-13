@@ -22,6 +22,7 @@ import {
   useSystemEnvironments,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
+  useProjects,
   useUpdateThread,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
@@ -105,6 +106,7 @@ export function ThreadDetailView() {
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
     refetchOnMount: "always",
   });
+  const { data: projects } = useProjects();
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
@@ -584,7 +586,17 @@ export function ThreadDetailView() {
       : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
+  const project = projects?.find((candidate) => candidate.id === projectId);
+  const primaryManagerThreadId = project?.primaryManagerThreadId;
+  const isManagerThread = thread.type === "manager";
   const parentThreadId = thread.parentThreadId;
+  const canAssignToManager =
+    thread.type === "standard" &&
+    !thread.parentThreadId &&
+    Boolean(primaryManagerThreadId) &&
+    primaryManagerThreadId !== thread.id;
+  const canTakeOverThread =
+    thread.type === "standard" && Boolean(thread.parentThreadId);
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
@@ -823,9 +835,19 @@ export function ThreadDetailView() {
   };
   const renderThreadMetadataRows = () => (
     <>
+      <DetailRow
+        label="Type"
+        valueClassName="min-w-0 truncate"
+      >
+        {isManagerThread
+          ? "Manager"
+          : parentThreadId
+            ? "Managed thread"
+            : "Thread"}
+      </DetailRow>
       {parentThreadId ? (
         <DetailRow
-          label="Parent thread"
+          label="Managed by"
           valueClassName="min-w-0 truncate"
         >
           <Link
@@ -834,6 +856,48 @@ export function ThreadDetailView() {
           >
             {parentThreadDisplayName}
           </Link>
+        </DetailRow>
+      ) : null}
+      {canAssignToManager ? (
+        <DetailRow
+          label="Ownership"
+          valueClassName="min-w-0"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={updateThread.isPending || !primaryManagerThreadId}
+            onClick={() => {
+              updateThread.mutate({
+                id: thread.id,
+                parentThreadId: primaryManagerThreadId ?? null,
+              });
+            }}
+          >
+            Assign to manager
+          </Button>
+        </DetailRow>
+      ) : null}
+      {canTakeOverThread ? (
+        <DetailRow
+          label="Ownership"
+          valueClassName="min-w-0"
+        >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={updateThread.isPending}
+            onClick={() => {
+              updateThread.mutate({
+                id: thread.id,
+                parentThreadId: null,
+              });
+            }}
+          >
+            Take over
+          </Button>
         </DetailRow>
       ) : null}
       {threadEnvironmentType ? (

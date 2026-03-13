@@ -391,6 +391,40 @@ export function useCreateProject() {
   });
 }
 
+export function useHireProjectManager() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId }: { projectId: string }) => api.hireProjectManager(projectId),
+    onSuccess: (thread) => {
+      queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+
+      const existingThreadLists = queryClient.getQueriesData<Thread[]>({
+        queryKey: ["threads"],
+      });
+      for (const [queryKey, list] of existingThreadLists) {
+        if (!list) {
+          continue;
+        }
+        const filters = readThreadListFiltersFromQueryKey(queryKey);
+        if (filters === null) {
+          continue;
+        }
+        if (!threadMatchesListFilters(thread, filters)) {
+          continue;
+        }
+        const nextList = appendThreadIfMissing(list, thread);
+        if (nextList !== list) {
+          queryClient.setQueryData<Thread[]>(queryKey, nextList);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -813,7 +847,15 @@ export function useUpdateThread() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (
-      { id, ...req }: { id: string } & { title?: string; mergeBaseBranch?: string | null },
+      {
+        id,
+        ...req
+      }: {
+        id: string;
+        title?: string;
+        mergeBaseBranch?: string | null;
+        parentThreadId?: string | null;
+      },
     ) =>
       api.updateThread(id, req),
     onSuccess: (thread) => {

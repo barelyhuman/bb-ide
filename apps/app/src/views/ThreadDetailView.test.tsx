@@ -16,10 +16,20 @@ const apiState = vi.hoisted(() => {
 
   return {
     pendingMutation,
+    projects: [
+      {
+        id: "project-1",
+        name: "Project One",
+        rootPath: "/tmp/project-one",
+        rootPathExists: true,
+        primaryManagerThreadId: "thread-parent",
+      },
+    ],
     thread: {
       id: "thread-1",
       projectId: "project-1",
       createdAt: 20,
+      type: "standard",
       status: "idle",
       updatedAt: 20,
       lastReadAt: 20,
@@ -39,6 +49,7 @@ const apiState = vi.hoisted(() => {
       id: "thread-parent",
       projectId: "project-1",
       createdAt: 10,
+      type: "manager",
       status: "idle",
       updatedAt: 10,
       lastReadAt: 10,
@@ -120,6 +131,10 @@ vi.mock("../hooks/useApi", () => ({
     data: id === "thread-parent" ? apiState.parentThread : apiState.thread,
     isLoading: false,
     error: null,
+  }),
+  useProjects: () => ({
+    data: apiState.projects,
+    isLoading: false,
   }),
   useThreads: () => ({
     data: [apiState.thread, apiState.parentThread],
@@ -410,8 +425,11 @@ describe("ThreadDetailView", () => {
       "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
     );
 
-    expect(html).toContain("Parent thread");
+    expect(html).toContain("Type");
+    expect(html).toContain("Managed thread");
+    expect(html).toContain("Managed by");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
+    expect(html).toContain("Take over");
     expect(html).toContain("Environment");
     expect(html).toContain("Local Env");
     expect(html).toContain("Branch");
