@@ -221,6 +221,21 @@ export interface ProjectFileSuggestion {
   path: string;
 }
 
+export type PromptMentionSuggestion =
+  | {
+      kind: "file";
+      path: string;
+      replacement: string;
+    }
+  | {
+      kind: "thread";
+      path: string;
+      replacement: string;
+      threadId: string;
+      title?: string;
+      threadType: ThreadType;
+    };
+
 export interface UploadedPromptAttachment {
   type: "localImage" | "localFile";
   path: string;

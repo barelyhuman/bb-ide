@@ -141,7 +141,10 @@ export function ThreadDetailView() {
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const environmentCatalog = useSystemEnvironments();
-  const fileMentions = usePromptFileMentions(projectId);
+  const fileMentions = usePromptFileMentions(projectId, {
+    includeThreads: thread?.type === "manager",
+    currentThreadId: threadId,
+  });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [pendingSubmittedFollowUp, setPendingSubmittedFollowUp] =
     useState<PendingSubmittedFollowUp | null>(null);
@@ -1251,6 +1254,10 @@ export function ThreadDetailView() {
         <Separator orientation="vertical" className="h-4" />
         <div className="min-w-0 flex-1 flex items-center gap-2">
           <p className="truncate text-sm font-semibold">{threadTitle}</p>
+          {isManagerThread ? <StatusPill variant="outline">manager</StatusPill> : null}
+          {!isManagerThread && parentThreadId ? (
+            <StatusPill variant="outline">managed</StatusPill>
+          ) : null}
           {isPrimaryCheckoutActive ? (
             <StatusPill variant="emphasis">active</StatusPill>
           ) : null}

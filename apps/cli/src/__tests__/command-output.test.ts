@@ -804,6 +804,81 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
+  it("bb thread update sets the parent thread id", async () => {
+    const thread: Thread = {
+      id: "thread-update-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      parentThreadId: "thread-manager-1",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const patch = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "update", "thread-update-1", "--parent-thread", "thread-manager-1"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "thread-update-1" },
+      json: { parentThreadId: "thread-manager-1" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Managed by thread-manager-1",
+    );
+  });
+
+  it("bb thread update clears the parent thread id", async () => {
+    process.env.BB_THREAD_ID = "thread-update-2";
+    const thread: Thread = {
+      id: "thread-update-2",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const patch = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "update", "--clear-parent-thread"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "thread-update-2" },
+      json: { parentThreadId: null },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "No managing parent thread",
+    );
+  });
+
   it("bb thread sessions --json prints raw session inspection data", async () => {
     const payload = {
       threadId: "thread-sessions",

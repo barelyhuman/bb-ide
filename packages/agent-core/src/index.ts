@@ -107,6 +107,7 @@ export type {
   SystemProviderInfo,
   SystemEnvironmentInfo,
   ProjectFileSuggestion,
+  PromptMentionSuggestion,
   UploadedPromptAttachment,
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,

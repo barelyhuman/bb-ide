@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
 import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
-import type { ProjectFileSuggestion } from "@beanbag/agent-core"
+import type { PromptMentionSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
@@ -42,7 +42,7 @@ interface PromptBoxProps {
   isRunning?: boolean
   onStop?: () => void
   autoFocus?: boolean
-  mentionSuggestions?: ProjectFileSuggestion[]
+  mentionSuggestions?: PromptMentionSuggestion[]
   mentionLoading?: boolean
   mentionError?: boolean
   onMentionQueryChange?: (query: string | null) => void
@@ -285,13 +285,13 @@ export function PromptBox({
     })
   }, [mentionSuggestions.length, selectedMentionIndex, showMentionMenu])
 
-  const applyMention = useCallback((item: ProjectFileSuggestion) => {
+  const applyMention = useCallback((item: PromptMentionSuggestion) => {
     const textarea = textareaRef.current
     if (!textarea || !activeMention) return
 
     const mentionStart = activeMention.start
-    const mentionEnd = mentionStart + item.path.length + 1
-    const replacement = insertFileMention(value, activeMention, item.path)
+    const mentionEnd = mentionStart + item.replacement.length + 1
+    const replacement = insertFileMention(value, activeMention, item.replacement)
     onChange(replacement.value)
     mentionKeyRef.current = ""
     dismissedMentionRef.current = {
