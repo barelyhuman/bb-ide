@@ -29,6 +29,7 @@ import {
 } from "./git-project.js";
 
 export interface ActiveEnvironmentRuntime {
+  ownerThreadId: string;
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentAgentConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
@@ -87,11 +88,11 @@ function checkoutSnapshotsMatch(
 
 export class EnvironmentService {
   readonly environmentRuntimes = new Map<string, ActiveEnvironmentRuntime>();
-  readonly environmentRuntimeEnsuresByThreadId = new Map<
+  readonly environmentRuntimeEnsuresByScopeKey = new Map<
     string,
     Promise<EnsureThreadEnvironmentRuntimeResult>
   >();
-  readonly environmentRuntimeSuspendsByThreadId = new Map<string, Promise<void>>();
+  readonly environmentRuntimeSuspendsByScopeKey = new Map<string, Promise<void>>();
   readonly primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
   readonly primaryPromotionValidatedAtByProjectId = new Map<string, number>();
   readonly primaryPromotionWatchersByProjectId = new Map<string, () => void>();
@@ -131,6 +132,20 @@ export class EnvironmentService {
     };
   }
 
+  private getRuntimeScopeKey(threadId: string): string {
+    return this.resolveAttachedEnvironment(threadId)?.environmentId ?? `thread:${threadId}`;
+  }
+
+  private getThreadIdsForRuntimeScope(threadId: string): string[] {
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    if (!attachedEnvironment || !this.threadEnvironmentAttachmentRepo) {
+      return [threadId];
+    }
+    return this.threadEnvironmentAttachmentRepo
+      .listByEnvironmentId(attachedEnvironment.environmentId)
+      .map((attachment) => attachment.threadId);
+  }
+
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentRegistry.list().map((environment: SystemEnvironmentInfo) => ({
       ...environment,
@@ -147,7 +162,7 @@ export class EnvironmentService {
   }
 
   restoreThreadEnvironment(thread: Thread, projectRootPath: string): IEnvironment | undefined {
-    const runtime = this.environmentRuntimes.get(thread.id);
+    const runtime = this.environmentRuntimes.get(this.getRuntimeScopeKey(thread.id));
     if (runtime) {
       this.restoreFailuresByThreadId.delete(thread.id);
       return runtime.environment;
@@ -176,7 +191,7 @@ export class EnvironmentService {
   }
 
   getEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
-    return this.environmentRuntimes.get(threadId);
+    return this.environmentRuntimes.get(this.getRuntimeScopeKey(threadId));
   }
 
   async getProjectWorkspaceStatusAsync(projectId: string, rootPath: string): Promise<ThreadWorkStatus> {
@@ -213,25 +228,26 @@ export class EnvironmentService {
     threadId: string,
     createEnsurePromise: () => Promise<EnsureThreadEnvironmentRuntimeResult>,
   ): Promise<EnsureThreadEnvironmentRuntimeResult> {
-    const existingRuntime = this.environmentRuntimes.get(threadId);
+    const scopeKey = this.getRuntimeScopeKey(threadId);
+    const existingRuntime = this.environmentRuntimes.get(scopeKey);
     if (existingRuntime) {
       return {
         runtime: existingRuntime,
       };
     }
 
-    const existingEnsure = this.environmentRuntimeEnsuresByThreadId.get(threadId);
+    const existingEnsure = this.environmentRuntimeEnsuresByScopeKey.get(scopeKey);
     if (existingEnsure) {
       return existingEnsure;
     }
 
     let ensurePromise: Promise<EnsureThreadEnvironmentRuntimeResult>;
     ensurePromise = createEnsurePromise().finally(() => {
-      if (this.environmentRuntimeEnsuresByThreadId.get(threadId) === ensurePromise) {
-        this.environmentRuntimeEnsuresByThreadId.delete(threadId);
+      if (this.environmentRuntimeEnsuresByScopeKey.get(scopeKey) === ensurePromise) {
+        this.environmentRuntimeEnsuresByScopeKey.delete(scopeKey);
       }
     });
-    this.environmentRuntimeEnsuresByThreadId.set(threadId, ensurePromise);
+    this.environmentRuntimeEnsuresByScopeKey.set(scopeKey, ensurePromise);
     return ensurePromise;
   }
 
@@ -243,7 +259,7 @@ export class EnvironmentService {
   ): Promise<ActiveEnvironmentRuntime> {
     const ensured = await this.withThreadEnvironmentEnsure(threadId, async () => {
       await this.awaitEnvironmentRuntimeSuspension(threadId);
-      const existingRuntime = this.environmentRuntimes.get(threadId);
+      const existingRuntime = this.getEnvironmentRuntime(threadId);
       if (existingRuntime) {
         return {
           runtime: existingRuntime,
@@ -266,7 +282,7 @@ export class EnvironmentService {
       }
 
       await this.registerPreparedEnvironmentRuntime(threadId, environment);
-      const runtime = this.environmentRuntimes.get(threadId);
+      const runtime = this.getEnvironmentRuntime(threadId);
       if (!runtime) {
         throw new Error(`Missing environment runtime for thread ${threadId}`);
       }
@@ -284,7 +300,7 @@ export class EnvironmentService {
     reason: ThreadEnvironmentStartReason,
   ): Promise<EnsureThreadEnvironmentRuntimeResult> {
     await this.awaitEnvironmentRuntimeSuspension(thread.id);
-    const existingRuntime = this.environmentRuntimes.get(thread.id);
+    const existingRuntime = this.getEnvironmentRuntime(thread.id);
     if (existingRuntime) {
       return {
         runtime: existingRuntime,
@@ -292,7 +308,7 @@ export class EnvironmentService {
     }
 
     return this.withThreadEnvironmentEnsure(thread.id, async () => {
-      const runtimeDuringEnsure = this.environmentRuntimes.get(thread.id);
+      const runtimeDuringEnsure = this.getEnvironmentRuntime(thread.id);
       if (runtimeDuringEnsure) {
         return {
           runtime: runtimeDuringEnsure,
@@ -319,7 +335,7 @@ export class EnvironmentService {
       }
 
       await this.registerPreparedEnvironmentRuntime(thread.id, environment);
-      const runtime = this.environmentRuntimes.get(thread.id);
+      const runtime = this.getEnvironmentRuntime(thread.id);
       if (!runtime) {
         throw new Error(`Missing environment runtime for thread ${thread.id}`);
       }
@@ -339,17 +355,21 @@ export class EnvironmentService {
     environment: IEnvironment,
     agentConnectionTarget: EnvironmentAgentConnectionTarget,
   ): void {
+    const scopeKey = this.getRuntimeScopeKey(threadId);
     const existingRuntime = this.detachEnvironmentRuntime(threadId);
     if (existingRuntime) {
       void this.suspendDetachedRuntime(threadId, existingRuntime);
     }
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
-      if (!this.threadRepo.getById(threadId)) {
-        return;
+      for (const scopedThreadId of this.getThreadIdsForRuntimeScope(threadId)) {
+        if (!this.threadRepo.getById(scopedThreadId)) {
+          continue;
+        }
+        this.callbacks.onThreadChanged(scopedThreadId, ["work-status-changed"]);
       }
-      this.callbacks.onThreadChanged(threadId, ["work-status-changed"]);
     });
-    this.environmentRuntimes.set(threadId, {
+    this.environmentRuntimes.set(scopeKey, {
+      ownerThreadId: threadId,
       environment,
       agentConnectionTarget,
       stopWatchingWorkspaceStatus,
@@ -364,10 +384,11 @@ export class EnvironmentService {
   }
 
   detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
-    const runtime = this.environmentRuntimes.get(threadId);
+    const scopeKey = this.getRuntimeScopeKey(threadId);
+    const runtime = this.environmentRuntimes.get(scopeKey);
     if (runtime) {
       runtime.stopWatchingWorkspaceStatus?.();
-      this.environmentRuntimes.delete(threadId);
+      this.environmentRuntimes.delete(scopeKey);
     }
     return runtime;
   }
@@ -434,21 +455,22 @@ export class EnvironmentService {
     threadId: string,
     suspendPromise: Promise<void>,
   ): Promise<void> {
+    const scopeKey = this.getRuntimeScopeKey(threadId);
     const tracked = suspendPromise.finally(() => {
-      if (this.environmentRuntimeSuspendsByThreadId.get(threadId) === tracked) {
-        this.environmentRuntimeSuspendsByThreadId.delete(threadId);
+      if (this.environmentRuntimeSuspendsByScopeKey.get(scopeKey) === tracked) {
+        this.environmentRuntimeSuspendsByScopeKey.delete(scopeKey);
       }
     });
-    this.environmentRuntimeSuspendsByThreadId.set(threadId, tracked);
+    this.environmentRuntimeSuspendsByScopeKey.set(scopeKey, tracked);
     return tracked;
   }
 
   private async awaitEnvironmentRuntimeSuspension(threadId: string): Promise<void> {
-    await this.environmentRuntimeSuspendsByThreadId.get(threadId);
+    await this.environmentRuntimeSuspendsByScopeKey.get(this.getRuntimeScopeKey(threadId));
   }
 
   async destroyThreadEnvironment(threadId: string): Promise<void> {
-    const runtime = this.environmentRuntimes.get(threadId);
+    const runtime = this.getEnvironmentRuntime(threadId);
     const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
@@ -477,8 +499,6 @@ export class EnvironmentService {
       const environmentId = runtime.environment.kind;
       try {
         if (attachedEnvironment?.preserveWorkspace) {
-          await Promise.resolve(runtime.environment.suspend());
-          this.detachEnvironmentRuntime(threadId);
           this.clearPersistedEnvironmentState(threadId);
         } else {
           await Promise.resolve(runtime.environment.destroy());
@@ -885,8 +905,11 @@ export class EnvironmentService {
 
   stopAll(opts?: { preserveEnvironments?: boolean }): void {
     const preserveEnvironments = opts?.preserveEnvironments ?? false;
-    const runtimeThreadIds = new Set(this.environmentRuntimes.keys());
-    for (const [threadId] of this.environmentRuntimes) {
+    const runtimeThreadIds = new Set(
+      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
+    );
+    for (const runtime of this.environmentRuntimes.values()) {
+      const threadId = runtime.ownerThreadId;
       if (preserveEnvironments) {
         this.detachEnvironmentRuntime(threadId);
       } else {
@@ -928,9 +951,12 @@ export class EnvironmentService {
 
   async stopAllAndWait(opts?: { preserveEnvironments?: boolean }): Promise<void> {
     const preserveEnvironments = opts?.preserveEnvironments ?? false;
-    const runtimeThreadIds = new Set(this.environmentRuntimes.keys());
+    const runtimeThreadIds = new Set(
+      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
+    );
     const teardownTasks: Promise<void>[] = [];
-    for (const [threadId] of this.environmentRuntimes) {
+    for (const runtime of this.environmentRuntimes.values()) {
+      const threadId = runtime.ownerThreadId;
       if (preserveEnvironments) {
         teardownTasks.push(this.suspendEnvironmentRuntimeAndWait(threadId));
       } else {
