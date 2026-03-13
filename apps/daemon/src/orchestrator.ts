@@ -5386,7 +5386,13 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _buildParentThreadCompletionNotification(childThread: Thread): string {
-    return `[bb system] Thread ${childThread.id} is done.`;
+    const title = childThread.title?.trim();
+    const titleSuffix = title ? ` (${title})` : "";
+    return [
+      `[bb system] Managed thread complete: ${childThread.id}${titleSuffix}`,
+      "Review that thread's result and decide whether to update the user or delegate a follow-up.",
+      "Managed-thread work usually lives in that thread's worktree; do not reapply its edits into the manager checkout unless the user explicitly asked for that.",
+    ].join("\n");
   }
 
   private _extractExecutionOptionsFromParams(
