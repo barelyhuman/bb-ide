@@ -3128,4 +3128,71 @@ describe("toUIMessages replay coverage", () => {
     expect(error?.message).toContain("Project folder not found");
     expect(error?.message).toContain("Update the project path and retry");
   });
+
+  it("does not render system-initiated client start input as a user message", () => {
+    const projected = toUIMessages([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "system",
+          input: [{ type: "text", text: "[bb system] Welcome!" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+    ], { threadStatus: "idle" });
+
+    expect(projected).toEqual([]);
+  });
+
+  it("projects manager user messages and suppresses raw assistant text for manager threads", () => {
+    const projected = toUIMessages([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "internal manager chatter",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/manager/user_message",
+        data: {
+          text: "Visible manager update",
+          turnId: "turn-1",
+        },
+        createdAt: 2,
+      },
+    ], {
+      threadStatus: "idle",
+      threadType: "manager",
+    });
+
+    expect(projected).toHaveLength(1);
+    expect(projected[0]?.kind).toBe("assistant-text");
+    if (projected[0]?.kind === "assistant-text") {
+      expect(projected[0].text).toBe("Visible manager update");
+      expect(projected[0].turnId).toBe("turn-1");
+    }
+  });
 });

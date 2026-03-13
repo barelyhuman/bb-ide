@@ -109,6 +109,7 @@ import {
   AgentServerSessionError,
   type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
+  type ProviderToolHost,
   createProviderAdapter,
 } from "@beanbag/agent-server";
 import { WSManager } from "./ws.js";
@@ -559,6 +560,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private readonly agentServerByProviderId = new Map<ThreadProviderId, AgentServer>();
   private readonly defaultProviderId: ThreadProviderId;
   private readonly providerCatalog: SystemProviderInfo[];
+  private readonly providerToolHost?: ProviderToolHost;
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
@@ -587,6 +589,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private environmentAgentCommandDispatcher?: EnvironmentAgentCommandDispatcher,
     private environmentAgentSessionService?: EnvironmentAgentSessionService,
     private environmentAgentSessionRepo?: EnvironmentAgentSessionRepository,
+    providerToolHost?: ProviderToolHost,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
@@ -650,6 +653,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.workspaceCleanupInFlightThreadIds =
       this.environmentService.workspaceCleanupInFlightThreadIds;
     this.providerCatalog = providerCatalog ?? [];
+    this.providerToolHost = providerToolHost;
     const provider =
       agentServerOrProvider instanceof AgentServer
         ? undefined
@@ -667,6 +671,15 @@ export class Orchestrator implements ThreadOrchestrator {
       this.agentServerByProviderId.set(this.defaultProviderId, new AgentServer({
         provider: providerAdapter,
         ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
+        ...(this.providerToolHost
+          ? {
+              resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
+                request.type === "manager"
+                  ? this.providerToolHost?.listTools()
+                  : undefined,
+              toolHost: this.providerToolHost,
+            }
+          : {}),
         onNotification: (threadId, event) => {
           this._handleAgentServerNotification(threadId, event);
         },
@@ -808,6 +821,15 @@ export class Orchestrator implements ThreadOrchestrator {
     const server = new AgentServer({
       provider: createProviderAdapter({ providerId }),
       ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
+      ...(this.providerToolHost
+        ? {
+            resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
+              request.type === "manager"
+                ? this.providerToolHost?.listTools()
+                : undefined,
+            toolHost: this.providerToolHost,
+          }
+        : {}),
       onNotification: (threadId, event) => {
         this._handleAgentServerNotification(threadId, event);
       },
@@ -1074,6 +1096,42 @@ export class Orchestrator implements ThreadOrchestrator {
       initiator: "system",
       awaitProviderStart: true,
     });
+  }
+
+  async messageUser(
+    threadId: string,
+    request: {
+      text: string;
+      toolCallId?: string;
+      turnId?: string;
+    },
+  ): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+    if (thread.type !== "manager") {
+      throw invalidRequestError("Only manager threads can publish user messages");
+    }
+
+    const text = request.text.trim();
+    if (text.length === 0) {
+      throw invalidRequestError("Manager user messages must not be empty");
+    }
+
+    this._appendEvent(
+      threadId,
+      "system/manager/user_message",
+      {
+        text,
+        ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
+        ...(request.turnId ? { turnId: request.turnId } : {}),
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
   }
 
   private async _tell(
@@ -2170,9 +2228,18 @@ export class Orchestrator implements ThreadOrchestrator {
         includeDebugRawEvents: false,
         includeOptionalOperations: false,
         threadStatus: thread?.status,
+        threadType: thread?.type,
       });
       const visibleMessages = uiMessages.filter(
-        (entry) => entry.kind !== "assistant-reasoning",
+        (entry) => {
+          if (entry.kind === "assistant-reasoning") return false;
+          if (thread?.type !== "manager") return true;
+          return (
+            entry.kind === "user" ||
+            entry.kind === "assistant-text" ||
+            entry.kind === "error"
+          );
+        },
       );
       const rows = buildThreadDetailRows(visibleMessages, {
         includeToolGroupMessages,
@@ -2225,9 +2292,18 @@ export class Orchestrator implements ThreadOrchestrator {
       includeDebugRawEvents: false,
       includeOptionalOperations: false,
       threadStatus: thread?.status,
+      threadType: thread?.type,
     });
     const rowMessages = uiMessages.filter((entry) => {
       if (entry.kind === "assistant-reasoning") return false;
+      if (
+        thread?.type === "manager" &&
+        entry.kind !== "user" &&
+        entry.kind !== "assistant-text" &&
+        entry.kind !== "error"
+      ) {
+        return false;
+      }
       if ((entry.turnId ?? null) !== request.turnId) return false;
       return (
         entry.sourceSeqStart >= sourceSeqStart &&
@@ -2451,9 +2527,16 @@ export class Orchestrator implements ThreadOrchestrator {
    * completion event recognized by the active provider adapter.
    */
   getOutput(threadId: string): string | undefined {
+    const thread = this.threadRepo.getById(threadId);
     const allEvents = this.eventRepo.listByThread(threadId);
     // Walk backwards to find the last output event.
     for (let i = allEvents.length - 1; i >= 0; i--) {
+      if (thread?.type === "manager" && allEvents[i].type === "system/manager/user_message") {
+        const text = getStringField(toRecord(allEvents[i].data), "text");
+        if (typeof text === "string" && text.length > 0) {
+          return text;
+        }
+      }
       const hydratedEvent: ThreadEvent = {
         ...allEvents[i],
         data: unwrapProviderEventPayload(allEvents[i].data) as ThreadEvent["data"],

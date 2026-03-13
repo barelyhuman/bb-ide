@@ -14,6 +14,7 @@ import type {
   ThreadRepository,
   EventRepository,
 } from "@beanbag/db";
+import type { SpawnThreadRequest } from "@beanbag/agent-core";
 import {
   AgentServer,
   createCodexLlmCompletionService,
@@ -42,6 +43,7 @@ import {
   resolveEnvironmentAgentSessionTimingOptions,
   type EnvironmentAgentSessionTimingOptions,
 } from "./environment-agent-timing.js";
+import { createManagerProviderToolHost } from "./manager-tools.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -92,13 +94,17 @@ export function createServer(deps: ServerDeps) {
   const wsManager = new WSManager();
   const provider = deps.provider ?? createProviderAdapter();
   let threadManager: Orchestrator;
+  const providerToolHost =
+    deps.providerToolHost ??
+    createManagerProviderToolHost({
+      getThreadManager: () => threadManager,
+    });
   const configuredAgentServer = new AgentServer({
     provider,
     providerCatalog: listAvailableProviderInfos(),
-    ...(deps.providerToolHost
-      ? { dynamicTools: deps.providerToolHost.listTools() }
-      : {}),
-    ...(deps.providerToolHost ? { toolHost: deps.providerToolHost } : {}),
+    resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
+      request.type === "manager" ? providerToolHost.listTools() : undefined,
+    toolHost: providerToolHost,
     onNotification: (threadId, event) => {
       threadManager.handleAgentServerNotification(threadId, event);
     },
@@ -173,6 +179,7 @@ export function createServer(deps: ServerDeps) {
     environmentAgentCommandDispatcher,
     environmentAgentSessionService,
     deps.environmentAgentSessionRepo,
+    providerToolHost,
   );
   const environmentAgentLeaseSweepIntervalMs =
     environmentAgentSessionOptions.leaseSweepIntervalMs ?? 5_000;

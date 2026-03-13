@@ -310,4 +310,5 @@ export interface ToUIMessagesOptions {
   includeDebugRawEvents?: boolean;
   includeOptionalOperations?: boolean;
   threadStatus?: Thread["status"];
+  threadType?: Thread["type"];
 }

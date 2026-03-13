@@ -627,6 +627,9 @@ function parseUserFromClientStart(
   }
 
   const payload = toEventRecord(event.data);
+  if (getStringField(payload, "initiator") === "system") {
+    return null;
+  }
   const parsedInput = parsePromptInput(payload?.input);
   if (!parsedInput) return null;
   if (!shouldRenderThreadStartInput(options?.threadStatus)) {
@@ -655,6 +658,34 @@ function parseUserFromClientStart(
         ? { localFilePaths: parsedInput.localFilePaths }
         : {}),
     },
+  };
+}
+
+function parseManagerUserMessage(
+  event: ThreadEvent,
+  eventType: string,
+): UIAssistantTextMessage | null {
+  if (!eventTypeMatches(eventType, "system/manager/user_message")) {
+    return null;
+  }
+
+  const payload = toEventRecord(event.data);
+  const text = getStringField(payload, "text");
+  if (!text) {
+    return null;
+  }
+  const turnId = getStringField(payload, "turnId");
+
+  return {
+    kind: "assistant-text",
+    id: messageId(event.threadId, "assistant", `manager:${event.seq}`),
+    threadId: event.threadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    ...(turnId ? { turnId } : {}),
+    text,
+    status: "completed",
   };
 }
 
@@ -3197,6 +3228,13 @@ export function toUIMessages(
       continue;
     }
 
+    const managerUserMessage = parseManagerUserMessage(event, eventType);
+    if (managerUserMessage) {
+      flushToolActivityBeforeNonToolMessage(state);
+      state.messages.push(managerUserMessage);
+      continue;
+    }
+
     const userMessage = parseUserFromItemEvent(event, eventType);
     if (userMessage) {
       const signature = userMessageSignature({
@@ -3243,7 +3281,9 @@ export function toUIMessages(
       continue;
     }
 
-    const assistantDelta = parseAssistantDeltaText(event, eventType);
+    const assistantDelta = options?.threadType === "manager"
+      ? null
+      : parseAssistantDeltaText(event, eventType);
     if (assistantDelta) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
@@ -3276,7 +3316,9 @@ export function toUIMessages(
       continue;
     }
 
-    const assistantFinal = parseAssistantFinalText(event, eventType);
+    const assistantFinal = options?.threadType === "manager"
+      ? null
+      : parseAssistantFinalText(event, eventType);
     if (assistantFinal) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
@@ -3312,7 +3354,9 @@ export function toUIMessages(
       continue;
     }
 
-    const reasoningDelta = parseReasoningDeltaText(event, eventType);
+    const reasoningDelta = options?.threadType === "manager"
+      ? null
+      : parseReasoningDeltaText(event, eventType);
     if (reasoningDelta) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
@@ -3344,7 +3388,9 @@ export function toUIMessages(
       continue;
     }
 
-    const reasoningFinal = parseReasoningFinalText(event, eventType);
+    const reasoningFinal = options?.threadType === "manager"
+      ? null
+      : parseReasoningFinalText(event, eventType);
     if (reasoningFinal) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;

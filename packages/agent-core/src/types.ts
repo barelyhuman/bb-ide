@@ -162,6 +162,7 @@ export type AppThreadEventType =
   | "client/turn/requested"
   | "client/turn/start"
   | "system/error"
+  | "system/manager/user_message"
   | "system/thread/interrupted"
   | "system/thread-title/updated"
   | "system/thread_operation"
@@ -335,6 +336,12 @@ export interface SystemWorktreeSquashMergeEventData {
   conflictFiles?: string[];
 }
 
+export interface SystemManagerUserMessageEventData {
+  text: string;
+  toolCallId?: string;
+  turnId?: string;
+}
+
 export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
 
 export interface TurnLifecycleEventData {
@@ -347,6 +354,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/turn/requested": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
+  "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
   "system/thread_operation": SystemThreadOperationEventData;

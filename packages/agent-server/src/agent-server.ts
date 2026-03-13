@@ -68,6 +68,10 @@ export interface AgentServerOptions {
   provider: ProviderAdapter;
   providerCatalog?: SystemProviderInfo[];
   dynamicTools?: ProviderDynamicTool[];
+  resolveDynamicTools?: (args: {
+    request: SpawnThreadRequest;
+    context: ProviderThreadContext;
+  }) => ProviderDynamicTool[] | undefined;
   toolHost?: ProviderToolHost;
   onNotification?: (threadId: string, event: AgentServerNotification) => void;
   onProviderStderrLine?: (threadId: string, line: string) => void;
@@ -242,7 +246,10 @@ export class AgentServer {
       params: this.opts.provider.createThreadStartParams(
         args.request,
         args.context,
-        this.opts.dynamicTools,
+        this.opts.resolveDynamicTools?.({
+          request: args.request,
+          context: args.context,
+        }) ?? this.opts.dynamicTools,
       ),
       initialize: this.buildInitializeRequest(),
     });
