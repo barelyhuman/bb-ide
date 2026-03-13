@@ -835,6 +835,7 @@ export function ThreadDetailView() {
       threadMergeBaseCandidates.length > 0,
   );
   const showThreadMetadata = Boolean(
+    isManagerThread ||
     parentThreadId ||
       (!isManagerThread && threadEnvironmentType) ||
       (!isManagerThread && threadBranchName) ||
@@ -923,7 +924,7 @@ export function ThreadDetailView() {
   const renderThreadMetadataRows = () => (
     <>
       <DetailRow
-        label="Type"
+        label={isManagerThread ? "Kind" : "Type"}
         valueClassName="min-w-0 truncate"
       >
         {isManagerThread

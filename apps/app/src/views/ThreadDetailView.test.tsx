@@ -526,7 +526,8 @@ describe("ThreadDetailView", () => {
     expect(html).not.toContain("Squash merge");
     expect(html).toContain("git-tab-hidden");
     expect(html).not.toContain("2 files changed");
-    expect(html).toContain("No thread details available.");
+    expect(html).toContain("Kind");
+    expect(html).toContain("Manager");
 
     apiState.thread.type = "standard";
     apiState.thread.parentThreadId = "thread-parent";
@@ -558,7 +559,8 @@ describe("ThreadDetailView", () => {
       "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
     );
 
-    expect(html).toContain("No thread details available.");
+    expect(html).toContain("Kind");
+    expect(html).toContain("Manager");
     expect(html).not.toContain("Environment");
     expect(html).not.toContain("Branch");
     expect(html).not.toContain("Merge base");
