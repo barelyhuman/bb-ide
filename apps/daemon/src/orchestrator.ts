@@ -72,6 +72,7 @@ import {
   type ThreadEnvironmentStartReason,
   type ThreadProviderId,
 } from "@beanbag/agent-core";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import {
   EnvironmentRegistry,
   EnvironmentSquashMergeCommitFailureError,
@@ -147,6 +148,7 @@ import {
   type ActiveEnvironmentRuntime,
   type PrimaryPromotionState,
 } from "./environment-service.js";
+import { MANAGER_WORKSPACE_PATH_PLACEHOLDER } from "./manager-thread.js";
 import { measureAsync, measureSync } from "./perf.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
@@ -951,10 +953,22 @@ export class Orchestrator implements ThreadOrchestrator {
       this.lockedTitleThreadIds.add(thread.id);
     }
 
+    const provisioningRequest =
+      threadType === "manager" &&
+      req.developerInstructions?.includes(MANAGER_WORKSPACE_PATH_PLACEHOLDER)
+        ? {
+            ...req,
+            developerInstructions: req.developerInstructions.replaceAll(
+              MANAGER_WORKSPACE_PATH_PLACEHOLDER,
+              resolveBeanbagPath(this.runtimeEnv, "workspace", thread.id),
+            ),
+          }
+        : req;
+
     this._broadcastThreadChanged(thread.id, ["thread-created"]);
     this._scheduleProvisioning(
       thread.id,
-      { ...req, environmentId },
+      { ...provisioningRequest, environmentId },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",

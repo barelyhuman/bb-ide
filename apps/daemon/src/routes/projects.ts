@@ -14,7 +14,7 @@ import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
-import { MANAGER_THREAD_TITLE, DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS, MANAGER_WELCOME_MESSAGE, ensureManagerWorkspace } from "../manager-thread.js";
+import { MANAGER_THREAD_TITLE, MANAGER_WELCOME_MESSAGE, buildManagerDeveloperInstructions, ensureManagerWorkspace } from "../manager-thread.js";
 import {
   invalidRequestError,
   projectNotFoundError,
@@ -259,7 +259,7 @@ export function createProjectRoutes(
           type: "manager",
           title: MANAGER_THREAD_TITLE,
           environmentId: "local",
-          developerInstructions: DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS,
+          developerInstructions: buildManagerDeveloperInstructions(),
           input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
         });
 

@@ -326,6 +326,9 @@ describe("Project routes", () => {
           type: "manager",
           title: "Manager",
           environmentId: "local",
+          developerInstructions: expect.stringContaining(
+            "{{MANAGER_WORKSPACE_PATH}}",
+          ),
           input: [{ type: "text", text: "[bb system] Welcome!" }],
         }),
       );

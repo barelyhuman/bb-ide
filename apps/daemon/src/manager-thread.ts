@@ -10,6 +10,7 @@ export const DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS = renderTemplate(
 );
 
 export const MANAGER_WELCOME_MESSAGE = "[bb system] Welcome!";
+export const MANAGER_WORKSPACE_PATH_PLACEHOLDER = "{{MANAGER_WORKSPACE_PATH}}";
 
 export function resolveManagerWorkspacePath(
   runtimeEnv: NodeJS.ProcessEnv,
@@ -25,4 +26,14 @@ export function ensureManagerWorkspace(
   const workspacePath = resolveManagerWorkspacePath(runtimeEnv, threadId);
   mkdirSync(workspacePath, { recursive: true });
   return workspacePath;
+}
+
+export function buildManagerDeveloperInstructions(
+): string {
+  return [
+    DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS,
+    "",
+    `Your manager workspace path is: ${MANAGER_WORKSPACE_PATH_PLACEHOLDER}`,
+    "When writing manager memory or deliverables, write them at that path rather than in the repo root unless the user explicitly asked for repo files.",
+  ].join("\n");
 }
