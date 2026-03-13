@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import type { ThreadOrchestrator, ThreadWorkStatus } from "@beanbag/agent-core";
 import type {
+  EnvironmentRepository,
   EventRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@beanbag/db";
+import { createEnvironmentRoutes } from "./environments.js";
 import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
@@ -14,6 +17,8 @@ import type { SystemHealthReport } from "@beanbag/agent-core";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;
+  environmentRepo?: EnvironmentRepository;
+  threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   threadManager: ThreadOrchestrator;
@@ -57,9 +62,12 @@ export function createApiRoutes(deps: ApiRouteDeps) {
     .route(
       "/threads",
       createThreadRoutes(deps.threadManager, {
+        environmentRepo: deps.environmentRepo,
+        threadEnvironmentAttachmentRepo: deps.threadEnvironmentAttachmentRepo,
         environmentAgentSessionService: deps.environmentAgentSessionService,
       }),
     )
+    .route("/environments", createEnvironmentRoutes(deps.environmentRepo))
     .route(
       "/system",
       createSystemRoutes(deps.threadManager, deps.startTime, {

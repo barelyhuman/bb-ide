@@ -614,6 +614,23 @@ export class ThreadEnvironmentAttachmentRepository {
       .map((row) => this.rowToAttachment(row));
   }
 
+  listByThreadIds(threadIds: readonly string[]): ThreadEnvironmentAttachmentRecord[] {
+    if (threadIds.length === 0) {
+      return [];
+    }
+    return this.db
+      .select()
+      .from(threadEnvironmentAttachments)
+      .where(
+        inArray(
+          threadEnvironmentAttachments.threadId,
+          Array.from(new Set(threadIds)),
+        ),
+      )
+      .all()
+      .map((row) => this.rowToAttachment(row));
+  }
+
   deleteByThreadId(threadId: string, opts?: { connection?: DbExecutor }): void {
     const db = opts?.connection ?? this.db;
     db

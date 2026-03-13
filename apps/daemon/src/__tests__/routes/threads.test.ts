@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type {
+  EnvironmentRecord,
   Thread,
   ThreadEvent,
   ThreadOrchestrator,
@@ -10,6 +11,10 @@ import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import { createThreadRoutes } from "../../routes/threads.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
 import type { EnvironmentAgentSessionService } from "../../environment-agent-session-service.js";
+import type {
+  EnvironmentRepository,
+  ThreadEnvironmentAttachmentRepository,
+} from "@beanbag/db";
 
 type LegacyThreadRouteMock = ThreadOrchestrator & {
   updateThread: ReturnType<typeof vi.fn>;
@@ -167,13 +172,45 @@ function mockEnvironmentAgentSessionService(): EnvironmentAgentSessionService {
 
 describe("Thread routes", () => {
   let threadManager: ReturnType<typeof mockOrchestrator>;
+  let environmentRepo: Pick<EnvironmentRepository, "getById">;
+  let threadEnvironmentAttachmentRepo: Pick<
+    ThreadEnvironmentAttachmentRepository,
+    "getByThreadId" | "listByThreadIds"
+  >;
   let app: Hono;
 
   beforeEach(() => {
     threadManager = mockOrchestrator();
-    const routes = createThreadRoutes(threadManager);
+    environmentRepo = {
+      getById: vi.fn(),
+    };
+    threadEnvironmentAttachmentRepo = {
+      getByThreadId: vi.fn(),
+      listByThreadIds: vi.fn(() => []),
+    };
+    const routes = createThreadRoutes(threadManager, {
+      environmentRepo,
+      threadEnvironmentAttachmentRepo,
+    });
     app = new Hono().route("/threads", routes);
   });
+
+  function makeEnvironmentRecord(
+    overrides: Partial<EnvironmentRecord> = {},
+  ): EnvironmentRecord {
+    return {
+      id: "env-1",
+      projectId: "proj-1",
+      descriptor: {
+        type: "path",
+        path: "/tmp/project",
+      },
+      managed: false,
+      createdAt: 1000,
+      updatedAt: 1000,
+      ...overrides,
+    };
+  }
 
   describe("POST /threads", () => {
     it("spawns a thread and returns 201", async () => {
@@ -1139,6 +1176,35 @@ describe("Thread routes", () => {
       });
     });
 
+    it("hydrates listed threads with attached environments", async () => {
+      const threads = [makeThread(), makeThread({ id: "thread-2" })];
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue(threads);
+      (threadEnvironmentAttachmentRepo.listByThreadIds as ReturnType<typeof vi.fn>).mockReturnValue([
+        {
+          threadId: "thread-1",
+          environmentId: "env-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ]);
+      (environmentRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEnvironmentRecord(),
+      );
+
+      const res = await app.request("/threads");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body[0].attachedEnvironment).toMatchObject({
+        id: "env-1",
+        descriptor: {
+          type: "path",
+          path: "/tmp/project",
+        },
+      });
+      expect(body[1].attachedEnvironment).toBeUndefined();
+    });
+
   });
 
   describe("GET /threads/:id", () => {
@@ -1154,6 +1220,33 @@ describe("Thread routes", () => {
       const body = await res.json();
       expect(body.id).toBe("thread-1");
       expect(body.status).toBe("active");
+    });
+
+    it("hydrates thread detail with attached environment", async () => {
+      const thread = makeThread();
+      (threadManager.getHydratedByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
+        thread,
+      );
+      (threadEnvironmentAttachmentRepo.getByThreadId as ReturnType<typeof vi.fn>).mockReturnValue(
+        {
+          threadId: "thread-1",
+          environmentId: "env-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      );
+      (environmentRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEnvironmentRecord(),
+      );
+
+      const res = await app.request("/threads/thread-1");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.attachedEnvironment).toMatchObject({
+        id: "env-1",
+        managed: false,
+      });
     });
 
     it("returns 404 for nonexistent thread", async () => {

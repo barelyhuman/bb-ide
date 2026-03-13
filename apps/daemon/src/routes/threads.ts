@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
   assertNever,
+  type EnvironmentRecord,
   type OpenPathRequest,
   type ThreadOrchestrator,
   enqueueThreadMessageSchema,
@@ -34,7 +35,11 @@ import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import { openPathInEditor } from "./system.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
-import type { EnvironmentAgentSessionRecord } from "@beanbag/db";
+import type {
+  EnvironmentAgentSessionRecord,
+  EnvironmentRepository,
+  ThreadEnvironmentAttachmentRepository,
+} from "@beanbag/db";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
@@ -317,14 +322,68 @@ function toEnvironmentAgentSessionDebugView(
 export function createThreadRoutes(
   threadManager: ThreadOrchestrator,
   opts?: {
+    environmentRepo?: EnvironmentRepository;
+    threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository;
     openPath?: OpenPathFn;
     environmentAgentSessionService?: EnvironmentAgentSessionService;
   },
 ) {
   const openPath = opts?.openPath ?? openPathInEditor;
   const environmentAgentSessionService = opts?.environmentAgentSessionService;
+  const environmentRepo = opts?.environmentRepo;
+  const threadEnvironmentAttachmentRepo = opts?.threadEnvironmentAttachmentRepo;
   const environmentAgentAccessor =
     threadManager as RouteEnvironmentAgentCapableOrchestrator;
+  const hydrateThread = <TThread extends Thread>(thread: TThread): TThread => {
+    if (!environmentRepo || !threadEnvironmentAttachmentRepo) {
+      return thread;
+    }
+    const attachment = threadEnvironmentAttachmentRepo.getByThreadId(thread.id);
+    if (!attachment) {
+      return thread;
+    }
+    const attachedEnvironment = environmentRepo.getById(attachment.environmentId);
+    if (!attachedEnvironment) {
+      return thread;
+    }
+    return {
+      ...thread,
+      attachedEnvironment,
+    };
+  };
+  const hydrateThreads = <TThread extends Thread>(threads: readonly TThread[]): TThread[] => {
+    if (!environmentRepo || !threadEnvironmentAttachmentRepo || threads.length === 0) {
+      return [...threads];
+    }
+    const attachments = threadEnvironmentAttachmentRepo.listByThreadIds(
+      threads.map((thread) => thread.id),
+    );
+    if (attachments.length === 0) {
+      return [...threads];
+    }
+    const environmentIds = Array.from(new Set(attachments.map((attachment) => attachment.environmentId)));
+    const environmentById = new Map<string, EnvironmentRecord>();
+    for (const environmentId of environmentIds) {
+      const environment = environmentRepo.getById(environmentId);
+      if (environment) {
+        environmentById.set(environment.id, environment);
+      }
+    }
+    const attachmentByThreadId = new Map(
+      attachments.map((attachment) => [attachment.threadId, attachment] as const),
+    );
+    return threads.map((thread) => {
+      const attachment = attachmentByThreadId.get(thread.id);
+      const attachedEnvironment =
+        attachment ? environmentById.get(attachment.environmentId) : undefined;
+      return attachedEnvironment
+        ? {
+          ...thread,
+          attachedEnvironment,
+        }
+        : thread;
+    });
+  };
   return new Hono()
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
       try {
@@ -346,7 +405,7 @@ export function createThreadRoutes(
             ? { developerInstructions: body.developerInstructions }
             : {}),
         });
-        return c.json(thread, 201);
+        return c.json(hydrateThread(thread), 201);
       } catch (err) {
         return sendRouteError(c, err);
       }
@@ -405,7 +464,7 @@ export function createThreadRoutes(
           includeWorkStatus && asyncListAccessor.listAsync
             ? await asyncListAccessor.listAsync(threadFilters)
             : threadManager.list(threadFilters);
-        return c.json(threads);
+        return c.json(hydrateThreads(threads));
       } catch (err) {
         return sendRouteError(c, err);
       }
@@ -416,7 +475,7 @@ export function createThreadRoutes(
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
-        return c.json(thread);
+        return c.json(hydrateThread(thread));
       } catch (err) {
         return sendRouteError(c, err);
       }

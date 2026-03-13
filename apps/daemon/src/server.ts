@@ -216,6 +216,8 @@ export function createServer(deps: ServerDeps) {
   });
   const apiRoutes = createApiRoutes({
     projectRepo: deps.projectRepo,
+    environmentRepo: deps.environmentRepo,
+    threadEnvironmentAttachmentRepo: deps.threadEnvironmentAttachmentRepo,
     threadRepo: deps.threadRepo,
     eventRepo: deps.eventRepo,
     threadManager,
