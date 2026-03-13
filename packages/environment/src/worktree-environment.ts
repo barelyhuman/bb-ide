@@ -250,6 +250,7 @@ class WorktreeEnvironment implements IEnvironment {
   readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
   private readonly projectId: string;
   private readonly threadId: string;
+  private readonly environmentId: string;
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
@@ -270,6 +271,7 @@ class WorktreeEnvironment implements IEnvironment {
   ) {
     this.projectId = projectId;
     this.threadId = threadId;
+    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_RECORD_ID?.trim() || this.kind;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
     this.reconnectTarget = reconnectTarget;
@@ -288,7 +290,7 @@ class WorktreeEnvironment implements IEnvironment {
           workspaceRootPath: this.state.workspaceRoot,
           threadId: this.threadId,
           projectId: this.projectId,
-          environmentId: this.kind,
+          environmentId: this.environmentId,
           runtimeEnv: this.env,
           reconnectTarget: this.reconnectTarget,
         });
@@ -352,7 +354,7 @@ class WorktreeEnvironment implements IEnvironment {
         workspaceRootPath: this.state.workspaceRoot,
         threadId: this.threadId,
         projectId: this.projectId,
-        environmentId: this.kind,
+        environmentId: this.environmentId,
         runtimeEnv: this.env,
         reconnectTarget: this.reconnectTarget,
       });
@@ -368,7 +370,7 @@ class WorktreeEnvironment implements IEnvironment {
       await disposeManagedHostEnvironmentAgent({
         projectId: this.projectId,
         threadId: this.threadId,
-        environmentId: this.kind,
+        environmentId: this.environmentId,
         workspaceRootPath: this.rootPath,
         runtimeEnv: this.env,
       });

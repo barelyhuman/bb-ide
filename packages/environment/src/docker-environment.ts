@@ -159,6 +159,7 @@ function resolveContainerCwd(args: {
 class DockerEnvironment implements IEnvironment {
   readonly kind = "docker";
   readonly info = { ...DOCKER_ENVIRONMENT_INFO };
+  private readonly environmentId: string;
   private managedAgentTarget?: EnvironmentAgentConnectionTarget;
 
   constructor(
@@ -169,7 +170,9 @@ class DockerEnvironment implements IEnvironment {
     private readonly state: DockerEnvironmentState,
     private readonly runtimeEnv: Record<string, string | undefined>,
     private readonly dockerBin: string,
-  ) {}
+  ) {
+    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_RECORD_ID?.trim() || this.kind;
+  }
 
   serialize(): DockerEnvironmentState {
     return {
@@ -209,7 +212,7 @@ class DockerEnvironment implements IEnvironment {
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
       threadId: this.threadId,
       projectId: this.projectId,
-      environmentId: this.kind,
+      environmentId: this.environmentId,
       runtimeEnv: this.runtimeEnv,
       dockerBin: this.dockerBin,
       containerName: this.state.containerName,
@@ -226,7 +229,7 @@ class DockerEnvironment implements IEnvironment {
     await disposeManagedDockerEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
-      environmentId: this.kind,
+      environmentId: this.environmentId,
       dockerBin: this.dockerBin,
       containerName: this.state.containerName,
       workspaceRootPath: this.getWorkspaceRootUnsafe(),

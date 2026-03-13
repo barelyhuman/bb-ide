@@ -60,6 +60,7 @@ class LocalEnvironment implements IEnvironment {
   readonly info = { ...LOCAL_ENVIRONMENT_INFO };
   private readonly projectId: string;
   private readonly threadId: string;
+  private readonly environmentId: string;
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
@@ -69,6 +70,7 @@ class LocalEnvironment implements IEnvironment {
   constructor(context: CreateEnvironmentContext) {
     this.projectId = context.projectId;
     this.threadId = context.threadId;
+    this.environmentId = context.environmentRecordId ?? this.kind;
     this.rootPath = context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
@@ -84,7 +86,7 @@ class LocalEnvironment implements IEnvironment {
       workspaceRootPath: this.rootPath,
       threadId: this.threadId,
       projectId: this.projectId,
-      environmentId: this.kind,
+      environmentId: this.environmentId,
       runtimeEnv: this.env,
       reconnectTarget: this.reconnectTarget,
     });
@@ -98,7 +100,7 @@ class LocalEnvironment implements IEnvironment {
     await disposeManagedHostEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
-      environmentId: this.kind,
+      environmentId: this.environmentId,
       workspaceRootPath: this.rootPath,
       runtimeEnv: this.env,
     });

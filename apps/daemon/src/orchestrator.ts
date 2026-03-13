@@ -3665,6 +3665,7 @@ export class Orchestrator implements ThreadOrchestrator {
       projectId: thread?.projectId ?? "",
       threadId,
       projectRootPath,
+      ...(attachedEnvironmentId ? { environmentRecordId: attachedEnvironmentId } : {}),
       runtimeEnv: {
         ...this.runtimeEnv,
         ...(attachedEnvironmentId
