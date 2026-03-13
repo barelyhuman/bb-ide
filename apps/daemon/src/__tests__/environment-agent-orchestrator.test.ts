@@ -171,9 +171,6 @@ function makeRuntimeEnvironment(args: {
       return { diff: "", truncated: false };
     },
     spawn: vi.fn(),
-    shouldRunSetupScript() {
-      return false;
-    },
     supportsPromoteToActiveWorkspace() {
       return true;
     },

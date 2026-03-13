@@ -127,9 +127,6 @@ function createTestEnvironment(args: { existsInitially: boolean; destroySpy?: ()
     spawn() {
       return {} as never;
     },
-    shouldRunSetupScript() {
-      return true;
-    },
     supportsPromoteToActiveWorkspace() {
       return true;
     },
@@ -226,6 +223,7 @@ function createService(args: {
     (
       threadId: string,
       environmentArg: IEnvironment,
+      projectRootPath: string,
       reason: ThreadEnvironmentStartReason,
     ) => Promise<void>
   >().mockResolvedValue(undefined);
@@ -286,6 +284,7 @@ describe("EnvironmentService", () => {
     expect(runOptionalSetup).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ kind: "worktree" }),
+      "/project/root",
       "thread-created",
     );
   });

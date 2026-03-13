@@ -95,7 +95,6 @@ export interface IEnvironment {
     args: string[],
     options?: EnvironmentSpawnOptions,
   ): ChildProcess;
-  shouldRunSetupScript(): boolean;
   supportsPromoteToActiveWorkspace(): boolean;
   supportsDemoteFromActiveWorkspace(): boolean;
   supportsSquashMergeIntoDefaultBranch(): boolean;

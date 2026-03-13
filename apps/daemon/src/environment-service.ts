@@ -51,6 +51,7 @@ interface EnvironmentServiceCallbacks {
   runOptionalSetup: (
     threadId: string,
     environment: IEnvironment,
+    projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
   ) => Promise<void>;
 }
@@ -164,6 +165,7 @@ export class EnvironmentService {
 
   private async prepareEnvironment(
     threadId: string,
+    projectRootPath: string,
     environment: IEnvironment,
     reason: ThreadEnvironmentStartReason,
   ): Promise<{ existedBeforePrepare: boolean }> {
@@ -172,7 +174,7 @@ export class EnvironmentService {
       await environment.prepare();
     }
     if (!existedBeforePrepare) {
-      await this.callbacks.runOptionalSetup(threadId, environment, reason);
+      await this.callbacks.runOptionalSetup(threadId, environment, projectRootPath, reason);
     }
     return { existedBeforePrepare };
   }
@@ -223,7 +225,7 @@ export class EnvironmentService {
         this.callbacks.createContext(threadId, projectRootPath),
       );
       try {
-        await this.prepareEnvironment(threadId, environment, reason);
+        await this.prepareEnvironment(threadId, projectRootPath, environment, reason);
       } catch (error) {
         try {
           await Promise.resolve(environment.destroy());
@@ -276,7 +278,7 @@ export class EnvironmentService {
         );
 
       try {
-        await this.prepareEnvironment(thread.id, environment, reason);
+        await this.prepareEnvironment(thread.id, projectRootPath, environment, reason);
       } catch (error) {
         try {
           await Promise.resolve(environment.destroy());

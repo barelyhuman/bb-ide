@@ -96,7 +96,6 @@ function createEnvironment(getStatusOutput: () => string): IEnvironment {
     spawn: () => {
       throw new Error("not implemented");
     },
-    shouldRunSetupScript: () => false,
     supportsPromoteToActiveWorkspace: () => false,
     supportsDemoteFromActiveWorkspace: () => false,
     supportsSquashMergeIntoDefaultBranch: () => false,

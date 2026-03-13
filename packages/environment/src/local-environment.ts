@@ -229,10 +229,6 @@ class LocalEnvironment implements IEnvironment {
     });
   }
 
-  shouldRunSetupScript(): boolean {
-    return false;
-  }
-
   supportsPromoteToActiveWorkspace(): boolean {
     return false;
   }

@@ -154,9 +154,6 @@ function makeRuntimeEnvironment(rootPath: string): IEnvironment {
       return { diff: "", truncated: false };
     },
     spawn: vi.fn(),
-    shouldRunSetupScript() {
-      return false;
-    },
     supportsPromoteToActiveWorkspace() {
       return false;
     },

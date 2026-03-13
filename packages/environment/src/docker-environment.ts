@@ -362,10 +362,6 @@ class DockerEnvironment implements IEnvironment {
     );
   }
 
-  shouldRunSetupScript(): boolean {
-    return this.inner.shouldRunSetupScript();
-  }
-
   supportsPromoteToActiveWorkspace(): boolean {
     return this.inner.supportsPromoteToActiveWorkspace();
   }

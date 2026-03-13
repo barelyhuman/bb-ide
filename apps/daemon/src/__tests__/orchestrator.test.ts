@@ -234,9 +234,6 @@ function makeRuntimeEnvironment(args: {
         options,
       ) as unknown as ChildProcess;
     },
-    shouldRunSetupScript() {
-      return false;
-    },
     supportsPromoteToActiveWorkspace() {
       return kind === "worktree";
     },
@@ -1112,9 +1109,6 @@ describe("Orchestrator", () => {
               exists() {
                 return workspaceExists;
               },
-              shouldRunSetupScript() {
-                return true;
-              },
               runAsync: vi.fn().mockImplementation(async () => setupResult),
               run: vi.fn().mockReturnValue({
                 exitCode: 0,
@@ -1282,9 +1276,6 @@ describe("Orchestrator", () => {
               },
               exists() {
                 return workspaceExists;
-              },
-              shouldRunSetupScript() {
-                return true;
               },
               runAsync: vi.fn().mockImplementation(
                 async (
@@ -3008,9 +2999,6 @@ describe("Orchestrator", () => {
           getWorkspaceDiff() {
             return { diff: "", truncated: false };
           },
-          shouldRunSetupScript() {
-            return false;
-          },
           supportsPromoteToActiveWorkspace() {
             return false;
           },
@@ -3653,9 +3641,6 @@ describe("Orchestrator", () => {
           getWorkspaceDiff() {
             return { diff: "", truncated: false };
           },
-          shouldRunSetupScript() {
-            return false;
-          },
           supportsPromoteToActiveWorkspace() {
             return true;
           },
@@ -4019,9 +4004,6 @@ describe("Orchestrator", () => {
           getWorkspaceDiff() {
             return { diff: "", truncated: false };
           },
-          shouldRunSetupScript() {
-            return false;
-          },
           supportsPromoteToActiveWorkspace() {
             return true;
           },
@@ -4342,9 +4324,6 @@ describe("Orchestrator", () => {
             },
             getWorkspaceDiff() {
               return { diff: "", truncated: false };
-            },
-            shouldRunSetupScript() {
-              return false;
             },
             supportsPromoteToActiveWorkspace() {
               return false;

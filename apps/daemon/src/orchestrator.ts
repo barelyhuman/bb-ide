@@ -128,6 +128,7 @@ import {
   unsupportedOperationError,
 } from "./domain-errors.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
+import { EnvironmentFactory } from "./env-factory.js";
 import {
   EnvironmentAgentCommandDispatcher,
 } from "./environment-agent-command-dispatcher.js";
@@ -497,6 +498,7 @@ function normalizeQueuedSandboxMode(
 
 export class Orchestrator implements ThreadOrchestrator {
   private environmentService: EnvironmentService;
+  private readonly envFactory: EnvironmentFactory;
   private managedArtifactReconcileInFlight: Promise<void> | null = null;
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
@@ -591,6 +593,10 @@ export class Orchestrator implements ThreadOrchestrator {
     private environmentRepo?: EnvironmentRepository,
     private threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository,
   ) {
+    this.envFactory = new EnvironmentFactory(
+      this.environmentRepo,
+      this.threadEnvironmentAttachmentRepo,
+    );
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
       this.runtimeEnv[BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS],
@@ -641,8 +647,13 @@ export class Orchestrator implements ThreadOrchestrator {
           );
           this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
         },
-        runOptionalSetup: (threadId, environment, reason) =>
-          this._runOptionalEnvironmentSetup(threadId, environment, reason),
+        runOptionalSetup: (threadId, environment, projectRootPath, reason) =>
+          this._runOptionalEnvironmentSetup(
+            threadId,
+            environment,
+            projectRootPath,
+            reason,
+          ),
       },
     );
     this.primaryPromotionByProjectId = this.environmentService.primaryPromotionByProjectId;
@@ -3282,7 +3293,7 @@ export class Orchestrator implements ThreadOrchestrator {
       },
     });
     try {
-      this._syncFirstClassEnvironmentAttachment({
+      this.envFactory.syncThreadEnvironmentAttachment({
         threadId,
         projectId: project.id,
         projectRootPath: project.rootPath,
@@ -3675,9 +3686,10 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _runOptionalEnvironmentSetup(
     threadId: string,
     environment: IEnvironment,
+    projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
   ): Promise<void> {
-    if (!environment.shouldRunSetupScript()) {
+    if (!this.envFactory.shouldRunSetupScript({ environment, projectRootPath })) {
       return;
     }
     const scriptPath = join(
@@ -3801,47 +3813,6 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentKind,
       reason,
     );
-  }
-
-  private _syncFirstClassEnvironmentAttachment(args: {
-    threadId: string;
-    projectId: string;
-    projectRootPath: string;
-    environment: IEnvironment;
-  }): void {
-    if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
-      return;
-    }
-
-    const descriptor = {
-      type: "path" as const,
-      path: args.environment.getWorkspaceRootUnsafe(),
-    };
-    const normalizedWorkspaceRoot = resolve(descriptor.path);
-    const normalizedProjectRoot = resolve(args.projectRootPath);
-    const managed = normalizedWorkspaceRoot !== normalizedProjectRoot;
-    const existingEnvironment = this.environmentRepo.findByProjectDescriptor({
-      projectId: args.projectId,
-      descriptor,
-    });
-    const environmentRecord = existingEnvironment
-      ? this.environmentRepo.update(existingEnvironment.id, {
-        managed,
-      })
-      : this.environmentRepo.create({
-        projectId: args.projectId,
-        descriptor,
-        managed,
-      });
-
-    if (!environmentRecord) {
-      throw new Error(`Failed to persist first-class environment for ${descriptor.path}`);
-    }
-
-    this.threadEnvironmentAttachmentRepo.attachThread({
-      threadId: args.threadId,
-      environmentId: environmentRecord.id,
-    });
   }
 
   private _resolveEnvironmentAgentConnectionTargetFromRuntimeEnv():

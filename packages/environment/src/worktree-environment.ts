@@ -492,10 +492,6 @@ class WorktreeEnvironment implements IEnvironment {
     });
   }
 
-  shouldRunSetupScript(): boolean {
-    return true;
-  }
-
   supportsPromoteToActiveWorkspace(): boolean {
     return true;
   }
