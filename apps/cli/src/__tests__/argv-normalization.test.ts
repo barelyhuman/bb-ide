@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { normalizeCliArgv } from "../argv-normalization.js";
 
 describe("normalizeCliArgv", () => {
-  it("inserts -- before dash-prefixed tell thread ids", () => {
+  it("moves tell options ahead of dash-prefixed thread ids", () => {
     expect(
-      normalizeCliArgv(["node", "bb", "thread", "tell", "-thread-1", "hello"]),
-    ).toEqual(["node", "bb", "thread", "tell", "--", "-thread-1", "hello"]);
-  });
+      normalizeCliArgv(["node", "bb", "thread", "tell", "-thread-1", "hello", "--json"]),
+    ).toEqual(["node", "bb", "thread", "tell", "--json", "--", "-thread-1", "hello"]);
+    });
 
   it("preserves explicit separators", () => {
     expect(
@@ -41,5 +41,38 @@ describe("normalizeCliArgv", () => {
       "--",
       "-thread-1",
     ]);
+  });
+
+  it("moves wait options ahead of dash-prefixed thread ids", () => {
+    expect(
+      normalizeCliArgv([
+        "node",
+        "bb",
+        "thread",
+        "wait",
+        "-thread-1",
+        "--event",
+        "turn/started",
+        "--timeout",
+        "60",
+      ]),
+    ).toEqual([
+      "node",
+      "bb",
+      "thread",
+      "wait",
+      "--event",
+      "turn/started",
+      "--timeout",
+      "60",
+      "--",
+      "-thread-1",
+    ]);
+  });
+
+  it("moves show flags ahead of dash-prefixed thread ids", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "thread", "show", "-thread-1", "--json"]),
+    ).toEqual(["node", "bb", "thread", "show", "--json", "--", "-thread-1"]);
   });
 });

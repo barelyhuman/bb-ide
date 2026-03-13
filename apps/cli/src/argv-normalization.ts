@@ -1,39 +1,63 @@
 const THREAD_COMMAND_OPTION_SPECS: Record<
   string,
   {
+    positionalCount: number;
     optionsWithValues: Set<string>;
     flagOptions: Set<string>;
   }
 > = {
-  status: {
-    optionsWithValues: new Set(["--recent-events", "--event-mode"]),
-    flagOptions: new Set(["--include-low-signal"]),
-  },
-  show: {
-    optionsWithValues: new Set(),
+  wait: {
+    positionalCount: 1,
+    optionsWithValues: new Set(["--status", "--event", "--timeout", "--poll-interval"]),
     flagOptions: new Set(),
   },
+  sessions: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  status: {
+    positionalCount: 1,
+    optionsWithValues: new Set(["--recent-events", "--event-mode"]),
+    flagOptions: new Set(["--include-low-signal", "--json"]),
+  },
+  show: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
   archive: {
+    positionalCount: 1,
     optionsWithValues: new Set(),
     flagOptions: new Set(["--force"]),
   },
   unarchive: {
+    positionalCount: 1,
     optionsWithValues: new Set(),
     flagOptions: new Set(),
+  },
+  delete: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--yes"]),
   },
   tell: {
+    positionalCount: 2,
     optionsWithValues: new Set(),
-    flagOptions: new Set(),
+    flagOptions: new Set(["--json"]),
   },
   steer: {
+    positionalCount: 2,
     optionsWithValues: new Set(),
     flagOptions: new Set(),
   },
   commit: {
+    positionalCount: 1,
     optionsWithValues: new Set(["--message"]),
     flagOptions: new Set(["--staged-only"]),
   },
   "squash-merge": {
+    positionalCount: 1,
     optionsWithValues: new Set([
       "--commit-message",
       "--squash-message",
@@ -42,24 +66,29 @@ const THREAD_COMMAND_OPTION_SPECS: Record<
     flagOptions: new Set(["--commit-if-needed", "--staged-only"]),
   },
   stop: {
+    positionalCount: 1,
     optionsWithValues: new Set(),
     flagOptions: new Set(),
   },
   promote: {
+    positionalCount: 1,
     optionsWithValues: new Set(),
     flagOptions: new Set(),
   },
   demote: {
+    positionalCount: 1,
     optionsWithValues: new Set(["--project"]),
     flagOptions: new Set(),
   },
   log: {
+    positionalCount: 1,
     optionsWithValues: new Set(),
-    flagOptions: new Set(),
+    flagOptions: new Set(["--json"]),
   },
   output: {
+    positionalCount: 1,
     optionsWithValues: new Set(),
-    flagOptions: new Set(),
+    flagOptions: new Set(["--json"]),
   },
 };
 
@@ -81,31 +110,43 @@ function normalizeThreadSubcommandArgs(args: string[]): string[] {
     return args;
   }
 
-  const normalized: string[] = [group, subcommand];
-  let insertedSeparator = false;
+  const optionTokens: string[] = [];
+  const positionalTokens: string[] = [];
+  const trailingTokens: string[] = [];
+  let sawDashPrefixedPositional = false;
+
   for (let index = 0; index < rest.length; index += 1) {
     const value = rest[index];
-    if (!insertedSeparator && value.startsWith("-")) {
-      if (spec.flagOptions.has(value)) {
-        normalized.push(value);
-        continue;
-      }
-      if (spec.optionsWithValues.has(value)) {
-        normalized.push(value);
-        index += 1;
-        if (index < rest.length) {
-          normalized.push(rest[index]);
-        }
-        continue;
-      }
-      normalized.push("--");
-      insertedSeparator = true;
-    } else if (!insertedSeparator) {
-      insertedSeparator = true;
+    if (spec.flagOptions.has(value)) {
+      optionTokens.push(value);
+      continue;
     }
-    normalized.push(value);
+    if (spec.optionsWithValues.has(value)) {
+      optionTokens.push(value);
+      index += 1;
+      if (index < rest.length) {
+        optionTokens.push(rest[index]);
+      }
+      continue;
+    }
+    if (positionalTokens.length < spec.positionalCount) {
+      positionalTokens.push(value);
+      if (value.startsWith("-")) {
+        sawDashPrefixedPositional = true;
+      }
+      continue;
+    }
+    trailingTokens.push(value);
   }
 
+  if (!sawDashPrefixedPositional) {
+    return args;
+  }
+
+  const normalized: string[] = [group, subcommand, ...optionTokens, "--", ...positionalTokens];
+  if (trailingTokens.length > 0) {
+    normalized.push(...trailingTokens);
+  }
   return normalized;
 }
 
