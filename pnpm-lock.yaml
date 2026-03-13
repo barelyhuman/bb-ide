@@ -218,6 +218,9 @@ importers:
 
   packages/agent-core:
     dependencies:
+      '@beanbag/templates':
+        specifier: workspace:*
+        version: link:../templates
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -240,6 +243,9 @@ importers:
       '@beanbag/environment-agent':
         specifier: workspace:*
         version: link:../environment-agent
+      '@beanbag/templates':
+        specifier: workspace:*
+        version: link:../templates
       tsx:
         specifier: ^4.20.0
         version: 4.21.0
@@ -293,6 +299,9 @@ importers:
       '@beanbag/environment-agent':
         specifier: workspace:*
         version: link:../environment-agent
+      '@beanbag/templates':
+        specifier: workspace:*
+        version: link:../templates
     devDependencies:
       '@beanbag/tsconfig':
         specifier: workspace:*
