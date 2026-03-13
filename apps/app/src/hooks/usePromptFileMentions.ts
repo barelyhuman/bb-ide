@@ -1,9 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PromptMentionSuggestion } from "@beanbag/agent-core";
 import { useProjectFileSuggestions, useThreads } from "./useApi";
 
 const FILE_MENTION_DEBOUNCE_MS = 120;
 const FILE_MENTION_LIMIT = 8;
+
+function areSuggestionsEqual(
+  left: PromptMentionSuggestion[],
+  right: PromptMentionSuggestion[],
+): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftItem = left[index];
+    const rightItem = right[index];
+    if (
+      leftItem.kind !== rightItem.kind ||
+      leftItem.path !== rightItem.path ||
+      leftItem.replacement !== rightItem.replacement
+    ) {
+      return false;
+    }
+    if (leftItem.kind === "thread" && rightItem.kind === "thread") {
+      if (
+        leftItem.threadId !== rightItem.threadId ||
+        leftItem.title !== rightItem.title ||
+        leftItem.threadType !== rightItem.threadType
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 export function usePromptFileMentions(
   projectId: string | undefined,
@@ -46,48 +74,65 @@ export function usePromptFileMentions(
   const hasQuery = (query?.trim().length ?? 0) > 0;
   const isDebouncing = hasQuery && query !== debouncedQuery;
   const trimmedQuery = query?.trim().toLowerCase() ?? "";
-  const fileSuggestions = (search.data ?? []).map<PromptMentionSuggestion>((item) => ({
-    kind: "file",
-    path: item.path,
-    replacement: item.path,
-  }));
-  const threadSuggestions =
-    !options?.includeThreads || trimmedQuery.length === 0
-      ? []
-      : (threadsQuery.data ?? [])
-          .filter((thread) => thread.archivedAt === undefined)
-          .filter((thread) => thread.id !== options.currentThreadId)
-          .filter((thread) => {
-            const title = thread.title?.trim().toLowerCase() ?? "";
-            return (
-              thread.id.toLowerCase().includes(trimmedQuery) ||
-              title.includes(trimmedQuery)
-            );
-          })
-          .slice(0, FILE_MENTION_LIMIT)
-          .map<PromptMentionSuggestion>((thread) => ({
-            kind: "thread",
-            path: `thread:${thread.id}`,
-            replacement: `thread:${thread.id}`,
-            threadId: thread.id,
-            title: thread.title,
-            threadType: thread.type,
-          }));
-  const nextSuggestions = [...threadSuggestions, ...fileSuggestions].slice(
-    0,
-    FILE_MENTION_LIMIT,
+  const fileSuggestions = useMemo(
+    () =>
+      (search.data ?? []).map<PromptMentionSuggestion>((item) => ({
+        kind: "file",
+        path: item.path,
+        replacement: item.path,
+      })),
+    [search.data],
+  );
+  const threadSuggestions = useMemo(() => {
+    if (!options?.includeThreads || trimmedQuery.length === 0) {
+      return [];
+    }
+    return (threadsQuery.data ?? [])
+      .filter((thread) => thread.archivedAt === undefined)
+      .filter((thread) => thread.id !== options.currentThreadId)
+      .filter((thread) => {
+        const title = thread.title?.trim().toLowerCase() ?? "";
+        return (
+          thread.id.toLowerCase().includes(trimmedQuery) ||
+          title.includes(trimmedQuery)
+        );
+      })
+      .slice(0, FILE_MENTION_LIMIT)
+      .map<PromptMentionSuggestion>((thread) => ({
+        kind: "thread",
+        path: `thread:${thread.id}`,
+        replacement: `thread:${thread.id}`,
+        threadId: thread.id,
+        title: thread.title,
+        threadType: thread.type,
+      }));
+  }, [
+    options?.currentThreadId,
+    options?.includeThreads,
+    threadsQuery.data,
+    trimmedQuery,
+  ]);
+  const nextSuggestions = useMemo(
+    () =>
+      [...threadSuggestions, ...fileSuggestions].slice(
+        0,
+        FILE_MENTION_LIMIT,
+      ),
+    [fileSuggestions, threadSuggestions],
   );
   const suggestions = hasQuery ? (nextSuggestions.length > 0 ? nextSuggestions : staleSuggestions) : [];
 
   useEffect(() => {
     if (!hasQuery) {
-      setStaleSuggestions([]);
+      setStaleSuggestions((previous) => (previous.length === 0 ? previous : []));
       return;
     }
     if (search.data) {
-      setStaleSuggestions(nextSuggestions);
+      setStaleSuggestions((previous) =>
+        areSuggestionsEqual(previous, nextSuggestions) ? previous : nextSuggestions,
+      );
     }
-  }, [hasQuery, nextSuggestions]);
+  }, [hasQuery, nextSuggestions, search.data]);
 
   return {
     query,
