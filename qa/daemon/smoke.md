@@ -25,13 +25,16 @@ For standalone restart scenarios in this pass, pin the exact Node runtime report
 
 ## Automation entrypoint
 
-For the checked-in deterministic harness:
+For the checked-in automation tiers:
 
 ```bash
+pnpm qa:daemon:manual-smoke
 pnpm qa:daemon:smoke
 ```
 
-This automation tier now targets the real provider. Fake-only recovery scenarios still skip automatically when they require fake Codex control.
+`qa:daemon:manual-smoke` provisions a disposable standalone daemon and runs a representative CLI-first pass against the real provider.
+
+`qa:daemon:smoke` runs the real-provider scripted smoke suite. Some recovery scenarios still require fake Codex control and are covered separately by `pnpm qa:daemon:recovery:fake`.
 
 ## Required scenarios
 

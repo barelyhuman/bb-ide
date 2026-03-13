@@ -27,9 +27,14 @@ For the checked-in deterministic harness:
 
 ```bash
 pnpm qa:daemon:stress
+pnpm qa:daemon:recovery:fake
 ```
 
-This tier is intentionally small and high-value; keep real-provider restart/liveness confirmation in the manual pass when timing sensitivity matters.
+`qa:daemon:stress` is the real-provider scripted stress slice.
+
+`qa:daemon:recovery:fake` is the deterministic recovery slice for scenarios that require fake Codex control hooks, such as worker-loss injection, restart matrix coverage, and standalone restart cases that cannot be driven reliably through the real provider alone.
+
+Keep real-provider restart/liveness confirmation in the manual pass when timing sensitivity matters.
 
 ## Required scenarios
 

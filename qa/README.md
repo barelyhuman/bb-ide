@@ -65,8 +65,8 @@ Over time, this folder should become the home for:
 Current daemon QA docs:
 
 - `qa/daemon/standalone-daemon-qa.md`
-- `qa/daemon/lifecycle-invariants.md`
 - `qa/daemon/smoke.md`
+- `qa/daemon/lifecycle-invariants.md`
 - `qa/daemon/stress.md`
 - `qa/daemon/regressions.md`
 - `qa/artifacts/README.md`
@@ -75,12 +75,18 @@ Current daemon QA docs:
 
 For checked-in daemon/env-agent automation tiers:
 
+- `pnpm qa:daemon:manual-smoke`
 - `pnpm qa:daemon:smoke`
 - `pnpm qa:daemon:stress`
 - `pnpm qa:daemon:regression`
+- `pnpm qa:daemon:recovery:fake`
 
-These default to the real provider. Fake-only recovery scenarios still skip automatically when they require fake Codex control hooks.
-Use the manual standalone daemon guide when you need the full direct-binary workflow and scenario checklist.
+Provider coverage split:
+
+- `qa:daemon:manual-smoke`, `qa:daemon:smoke`, `qa:daemon:stress`, and `qa:daemon:regression` use the real provider.
+- `qa:daemon:recovery:fake` is the deterministic fake-provider recovery suite for worker-loss and forced-recovery paths that real-provider automation cannot reliably drive.
+
+Use the standalone daemon guide when you need the full direct-binary workflow and exhaustive scenario checklist.
 
 Likely future additions:
 
