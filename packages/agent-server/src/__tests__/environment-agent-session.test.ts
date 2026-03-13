@@ -284,6 +284,40 @@ describe("AgentServer environment-agent control plane", () => {
     );
   });
 
+  it("routes replayed provider notifications by the envelope event thread id", async () => {
+    const onNotification = vi.fn();
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      onNotification,
+    });
+
+    await agentServer.ingestReplayedEnvironmentAgentEvents({
+      threadId: "owner-thread",
+      events: [
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 5,
+          emittedAt: 1_000,
+          threadId: "owner-thread",
+          event: {
+            type: "provider.event",
+            threadId: "sibling-thread",
+            method: "turn/completed",
+            payload: { threadId: "provider-thread-2", turnId: "turn-2" },
+          },
+        },
+      ],
+    });
+
+    expect(onNotification).toHaveBeenCalledWith(
+      "sibling-thread",
+      expect.objectContaining({
+        method: "turn/completed",
+        normalizedMethod: "turn/completed",
+      }),
+    );
+  });
+
   it("ingests replayed provider stderr through the normal warning path", async () => {
     const logger = {
       warn: vi.fn(),

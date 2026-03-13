@@ -455,7 +455,8 @@ export class AgentServer {
     events: EnvironmentAgentEventEnvelope[];
   }): Promise<void> {
     for (const envelope of args.events) {
-      this.handleEnvironmentAgentEvent(args.threadId, envelope.event);
+      const replayThreadId = envelope.event.threadId || args.threadId;
+      this.handleEnvironmentAgentEvent(replayThreadId, envelope.event);
     }
   }
 

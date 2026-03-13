@@ -3366,8 +3366,6 @@ export class Orchestrator implements ThreadOrchestrator {
       },
     );
 
-    // Ensure provisioning starts from a clean runtime state.
-    this._cleanupThreadRuntime(threadId);
     let { attachedEnvironmentId, runtimeEnvironmentId: requestedEnvironmentId } =
       this._resolveEnvironmentSelection({
       projectId: req.projectId,
@@ -3384,6 +3382,10 @@ export class Orchestrator implements ThreadOrchestrator {
     const requestedEnvironmentReference = attachedEnvironmentId ?? requestedEnvironmentId;
     if (thread && thread.environmentId !== requestedEnvironmentReference) {
       this.threadRepo.update(threadId, { environmentId: requestedEnvironmentReference });
+    }
+    // Reusing a shared attached environment must preserve the live env-daemon runtime.
+    if (!(attachedEnvironmentId && this.environmentService.hasSharedAttachedEnvironment(threadId))) {
+      this._cleanupThreadRuntime(threadId);
     }
     const requestedEnvironmentInfo = this.environmentRegistry.get(requestedEnvironmentId).info;
     const provisioningStatusChanged = this._setThreadStatus(threadId, "provisioning", false, {

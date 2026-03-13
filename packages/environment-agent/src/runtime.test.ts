@@ -280,6 +280,127 @@ describe("EnvironmentAgentRuntime", () => {
     });
   });
 
+  it("routes provider notifications to the mapped shared thread channel", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "owner-thread",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        [
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) {",
+          "if (!line.trim()) continue;",
+          "const msg = JSON.parse(line);",
+          "if (msg.method === 'initialize') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+          "} else if (msg.method === 'thread/start') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+          "} else if (msg.method === 'turn/start') {",
+          "const threadId = msg.params.threadId;",
+          "const turnId = `turn-${threadId}`;",
+          "console.log(JSON.stringify({ id: msg.id, result: { threadId, turnId } }));",
+          "setTimeout(() => console.log(JSON.stringify({ method: 'turn/started', params: { threadId, turnId } })), 0);",
+          "setTimeout(() => console.log(JSON.stringify({ method: 'turn/completed', params: { threadId, turnId } })), 5);",
+          "}",
+          "}",
+          "});",
+        ].join(""),
+      ],
+    });
+    const providerEvents: Array<{ threadId: string; method: string }> = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.event") {
+        providerEvents.push({
+          threadId: event.event.threadId,
+          method: event.event.method,
+        });
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-start-1",
+        idempotencyKey: "cmd-start-1",
+        sentAt: 100,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-1",
+        projectId: "proj-1",
+        params: { threadId: "provider-thread-1" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+        },
+      },
+    });
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-start-2",
+        idempotencyKey: "cmd-start-2",
+        sentAt: 101,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-2",
+        projectId: "proj-1",
+        params: { threadId: "provider-thread-2" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+        },
+      },
+    });
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-turn-1",
+        idempotencyKey: "cmd-turn-1",
+        sentAt: 102,
+      },
+      command: {
+        type: "turn.start",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        params: { threadId: "provider-thread-1", input: [] },
+      },
+    });
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-turn-2",
+        idempotencyKey: "cmd-turn-2",
+        sentAt: 103,
+      },
+      command: {
+        type: "turn.start",
+        threadId: "thread-2",
+        providerThreadId: "provider-thread-2",
+        params: { threadId: "provider-thread-2", input: [] },
+      },
+    });
+
+    await expect.poll(
+      () =>
+        providerEvents.filter((event) => event.method === "turn/completed"),
+      { timeout: 5_000 },
+    ).toEqual(
+      expect.arrayContaining([
+        { threadId: "thread-1", method: "turn/completed" },
+        { threadId: "thread-2", method: "turn/completed" },
+      ]),
+    );
+  });
+
   it("captures provider stderr as events", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",

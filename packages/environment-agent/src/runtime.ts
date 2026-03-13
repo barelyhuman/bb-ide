@@ -56,6 +56,7 @@ export interface EnvironmentAgentRuntimeQuiescenceSnapshot {
 
 export class EnvironmentAgentRuntime {
   private readonly events: EnvironmentAgentEventEnvelope[] = [];
+  private readonly threadIdByProviderThreadId = new Map<string, string>();
   private sequence = 0;
   private providerRequestId = 0;
   private providerInitializedPid: number | undefined;
@@ -259,6 +260,7 @@ export class EnvironmentAgentRuntime {
               this.toProviderEnsureSpec(envelope.command),
             )
           : await this.executeRpcCommand(envelope.command);
+      this.learnProviderThreadMapping(envelope.command, result);
       this.trackAcceptedCommand(envelope.command);
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
@@ -578,6 +580,14 @@ export class EnvironmentAgentRuntime {
     return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
   }
 
+  private resolveProviderEventThreadId(params: unknown): string {
+    const providerThreadId = this.extractProviderThreadId(params);
+    if (!providerThreadId) {
+      return this.resolveThreadId();
+    }
+    return this.threadIdByProviderThreadId.get(providerThreadId) ?? this.resolveThreadId();
+  }
+
   private toProviderEvent(line: string): EnvironmentAgentEvent {
     let parsed: unknown;
     try {
@@ -612,10 +622,81 @@ export class EnvironmentAgentRuntime {
 
     return {
       type: "provider.event",
-      threadId: this.resolveThreadId(),
+      threadId: this.resolveProviderEventThreadId(record.params),
       method: record.method,
       payload: record.params ?? {},
     };
+  }
+
+  private learnProviderThreadMapping(
+    command: EnvironmentAgentCommand,
+    result: unknown,
+  ): void {
+    switch (command.type) {
+      case "thread.start":
+        this.recordProviderThreadMapping(
+          command.threadId,
+          this.extractProviderThreadId(result),
+        );
+        return;
+      case "thread.resume":
+        this.recordProviderThreadMapping(
+          command.threadId,
+          this.extractProviderThreadId(result) ?? command.providerThreadId,
+        );
+        return;
+      case "turn.start":
+      case "turn.steer":
+      case "thread.rename":
+        this.recordProviderThreadMapping(command.threadId, command.providerThreadId);
+        return;
+      case "thread.stop":
+      case "workspace.status":
+      case "workspace.diff":
+      case "provider.ensure":
+        return;
+      default:
+        return command satisfies never;
+    }
+  }
+
+  private recordProviderThreadMapping(
+    threadId: string,
+    providerThreadId: string | undefined,
+  ): void {
+    if (!providerThreadId) {
+      return;
+    }
+    this.threadIdByProviderThreadId.set(providerThreadId, threadId);
+  }
+
+  private extractProviderThreadId(value: unknown): string | undefined {
+    const record = this.asRecord(value);
+    if (!record) {
+      return undefined;
+    }
+    const directThreadId =
+      typeof record.threadId === "string" && record.threadId.length > 0
+        ? record.threadId
+        : undefined;
+    if (directThreadId) {
+      return directThreadId;
+    }
+    const nestedThread = this.asRecord(record.thread);
+    const nestedThreadId =
+      nestedThread && typeof nestedThread.id === "string" && nestedThread.id.length > 0
+        ? nestedThread.id
+        : undefined;
+    if (nestedThreadId) {
+      return nestedThreadId;
+    }
+    return undefined;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | undefined {
+    return value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
   }
 
   private toProviderEnsureSpec(

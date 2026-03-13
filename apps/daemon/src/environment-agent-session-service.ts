@@ -289,7 +289,7 @@ export class EnvironmentAgentSessionService {
     if (!heartbeat) {
       throw inactiveEnvironmentAgentSessionError(args.sessionId);
     }
-    if (heartbeat.threadId !== args.threadId) {
+    if (!heartbeat.environmentId && heartbeat.threadId !== args.threadId) {
       throw invalidRequestError(
         `Environment-agent session ${args.sessionId} does not belong to thread ${args.threadId}`,
       );

@@ -65,6 +65,12 @@ export class EnvironmentAgentSessionManager {
     active: EnvironmentAgentSessionRecord;
   } {
     const now = args.now ?? Date.now();
+    if (args.environmentId) {
+      const existing = this.sessions.getActiveByEnvironmentId(args.environmentId, now);
+      if (existing && existing.threadId !== args.threadId) {
+        return { active: existing };
+      }
+    }
     const nextSession = {
       threadId: args.threadId,
       ...(args.environmentId ? { environmentId: args.environmentId } : {}),

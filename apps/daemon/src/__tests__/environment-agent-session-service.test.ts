@@ -224,6 +224,67 @@ describe("EnvironmentAgentSessionService", () => {
     ]);
   });
 
+  it("accepts heartbeats from sibling routes for a shared environment session", () => {
+    const project = projects.create({
+      name: "daemon-session-service-shared-project",
+      rootPath: "/tmp/daemon-session-service-shared-project",
+    });
+    const firstThreadId = threads.create({ projectId: project.id }).id;
+    const secondThreadId = threads.create({ projectId: project.id }).id;
+    const environmentId = environments.create({
+      projectId: project.id,
+      descriptor: {
+        type: "path",
+        path: "/tmp/daemon-session-service-shared-project/.worktrees/shared",
+      },
+      managed: true,
+    }).id;
+    const attachmentsByThreadId = new Map([
+      [firstThreadId, environmentId],
+      [secondThreadId, environmentId],
+    ]);
+    const sharedService = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        resolveEnvironmentId: (candidateThreadId) => attachmentsByThreadId.get(candidateThreadId),
+        listAttachedThreadIds: (candidateEnvironmentId) =>
+          candidateEnvironmentId === environmentId
+            ? [firstThreadId, secondThreadId]
+            : [],
+      },
+    );
+
+    const opened = sharedService.openSession({
+      threadId: firstThreadId,
+      payload: {
+        agentId: "agent-shared",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: firstThreadId, generation: 1 }],
+      },
+      now: 1_000,
+    });
+
+    expect(
+      sharedService.recordHeartbeat({
+        threadId: secondThreadId,
+        sessionId: opened.session.id,
+        payload: {
+          agentObservedAt: 2_000,
+          outboxDepth: 0,
+          channels: [],
+        },
+        now: 2_000,
+      }),
+    ).toMatchObject({
+      id: opened.session.id,
+      environmentId,
+      status: "active",
+      leaseExpiresAt: expect.any(Number),
+    });
+  });
+
   it("does not apply a single-channel afterCursor to shared environment sessions", () => {
     const threadId = createThreadId();
     const siblingThreadId = createThreadId();

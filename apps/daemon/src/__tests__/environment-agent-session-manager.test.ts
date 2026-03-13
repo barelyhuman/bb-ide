@@ -178,7 +178,7 @@ describe("EnvironmentAgentSessionManager", () => {
     });
   });
 
-  it("replaces active sessions across sibling threads sharing one environment", () => {
+  it("reuses active sessions across sibling threads sharing one environment", () => {
     const project = createProject();
     const firstThreadId = createThreadId(project.id);
     const secondThreadId = createThreadId(project.id);
@@ -205,15 +205,16 @@ describe("EnvironmentAgentSessionManager", () => {
       now: 2_000,
     });
 
-    expect(second.replaced).toMatchObject({
+    expect(second.replaced).toBeUndefined();
+    expect(manager.getActiveSessionByEnvironmentId(environmentId, 2_500)).toMatchObject({
       id: first.active.id,
       threadId: firstThreadId,
       environmentId,
-      status: "replaced",
+      status: "active",
     });
-    expect(manager.getActiveSessionByEnvironmentId(environmentId, 2_500)).toMatchObject({
-      id: second.active.id,
-      threadId: secondThreadId,
+    expect(second.active).toMatchObject({
+      id: first.active.id,
+      threadId: firstThreadId,
       environmentId,
       status: "active",
     });

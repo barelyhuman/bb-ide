@@ -65,8 +65,8 @@ function buildFakeCodexScript(settings: Required<FakeCodexOptions>): string {
 
   return `#!/usr/bin/env node
 const { createInterface } = require("node:readline");
-const { mkdirSync, readFileSync, statSync, watch, writeFileSync } = require("node:fs");
-const { dirname } = require("node:path");
+const { existsSync, mkdirSync, readFileSync, statSync, watch, writeFileSync } = require("node:fs");
+const { dirname, join } = require("node:path");
 
 if (process.argv[2] !== "app-server") {
   process.stderr.write("fake codex only supports 'app-server'\\n");
@@ -93,8 +93,46 @@ const scenarioRaw = String(process.env.BEANBAG_FAKE_CODEX_SCENARIO || defaultSce
 const scenario = scenarioRaw.length > 0 ? scenarioRaw : "turn-complete";
 const controlFilePath = String(process.env.BEANBAG_FAKE_CODEX_CONTROL_FILE || "").trim();
 
-let nextThreadCounter = 1;
-let nextTurnCounter = 1;
+const stateFilePath = join(dirname(process.argv[1]), ".fake-codex-state.json");
+
+function readState() {
+  try {
+    if (!existsSync(stateFilePath)) {
+      return null;
+    }
+    const parsed = JSON.parse(readFileSync(stateFilePath, "utf8"));
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    const nextThreadCounter =
+      Number.isInteger(parsed.nextThreadCounter) && parsed.nextThreadCounter > 0
+        ? parsed.nextThreadCounter
+        : 1;
+    const nextTurnCounter =
+      Number.isInteger(parsed.nextTurnCounter) && parsed.nextTurnCounter > 0
+        ? parsed.nextTurnCounter
+        : 1;
+    return { nextThreadCounter, nextTurnCounter };
+  } catch {
+    return null;
+  }
+}
+
+function writeState() {
+  try {
+    writeFileSync(
+      stateFilePath,
+      JSON.stringify({ nextThreadCounter, nextTurnCounter }),
+      "utf8",
+    );
+  } catch {
+    // Best-effort only for fake e2e state.
+  }
+}
+
+const persistedState = readState();
+let nextThreadCounter = persistedState?.nextThreadCounter ?? 1;
+let nextTurnCounter = persistedState?.nextTurnCounter ?? 1;
 let controlFileOffset = 0;
 const queuedLifecycleSteps = [];
 let controlWatcher = null;
@@ -136,6 +174,7 @@ function resolveThreadId(params) {
   }
   const id = "fake-thread-" + nextThreadCounter;
   nextThreadCounter += 1;
+  writeState();
   return id;
 }
 
@@ -339,6 +378,7 @@ rl.on("line", (line) => {
       const threadId = resolveThreadId(params);
       const turnId = "fake-turn-" + nextTurnCounter;
       nextTurnCounter += 1;
+      writeState();
       reply(id, { threadId, turnId });
       scheduleTurnLifecycle(threadId, params.input, turnId);
       break;

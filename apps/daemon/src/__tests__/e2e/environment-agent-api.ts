@@ -171,7 +171,7 @@ export async function getEnvironmentAgentStatus(
   threadId: string,
 ): Promise<EnvironmentAgentStatusSnapshot> {
   return readJson<EnvironmentAgentStatusSnapshot>(
-    `${baseUrl}/api/v1/threads/${threadId}/environment-agent/status`,
+    `${baseUrl}/api/v1/threads/${threadId}/env-daemon/status`,
   );
 }
 
@@ -185,7 +185,7 @@ export async function listEnvironmentAgentSessions(
   return readJson<{
     threadId: string;
     sessions: EnvironmentAgentSessionDebugView[];
-  }>(`${baseUrl}/api/v1/threads/${threadId}/environment-agent/sessions`);
+  }>(`${baseUrl}/api/v1/threads/${threadId}/env-daemon/sessions`);
 }
 
 export function sleep(ms: number): Promise<void> {
