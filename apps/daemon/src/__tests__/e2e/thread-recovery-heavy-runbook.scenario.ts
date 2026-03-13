@@ -261,29 +261,44 @@ export async function runQueuedFollowUpWorkerLossScenario(
     });
     await sleep(250);
 
-    await waitForThreadStatus(
-      harness.baseUrl,
-      thread.id,
-      "error",
-      e2eTimeoutMs(45_000, 75_000),
-      harness.wsUrl,
-    );
-    debugLog(`queued-followup/${environmentId}: error after missing worker`);
+    await waitForThreadCondition({
+      wsUrl: harness.wsUrl,
+      threadId: thread.id,
+      timeoutMs: e2eTimeoutMs(45_000, 75_000),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.every((session) => session.status !== "active"),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} still has an active env-daemon session (${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
+    });
+    debugLog(`queued-followup/${environmentId}: old session retired after missing worker`);
 
-    const threadAtError = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`);
-    expect(threadAtError.queuedMessages?.map((message) => message.id)).toContain(queued.id);
+    const threadAfterWorkerLoss = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`);
+    expect(threadAfterWorkerLoss.queuedMessages?.map((message) => message.id)).toContain(queued.id);
     expect(
       countCompletedTurns(await listThreadEvents(harness.baseUrl, thread.id)),
     ).toBe(completedBeforeRestart);
 
     await sendQueuedThreadFollowUp(harness.baseUrl, thread.id, queued.id);
-    await waitForMinimumSessionCount({
-      baseUrl: harness.baseUrl,
+    await waitForThreadCondition({
       wsUrl: harness.wsUrl,
       threadId: thread.id,
-      minimumCount: sessionsBeforeRestart.sessions.length + 1,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.some(
+          (session) => session.status === "active" && session.id !== activeSession!.id,
+        ),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} never opened a fresh env-daemon session (sessions=${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
     });
+    await waitForThreadStatus(
+      harness.baseUrl,
+      thread.id,
+      "active",
+      e2eTimeoutMs(8_000, 20_000),
+      harness.wsUrl,
+    );
     const recoveredThread = await driveFakeCodexTurnToCompletion({
       harness,
       threadId: thread.id,
@@ -358,14 +373,17 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       await listThreadEvents(harness.baseUrl, thread.id),
     );
 
-    await waitForThreadStatus(
-      harness.baseUrl,
-      thread.id,
-      "error",
-      e2eTimeoutMs(45_000, 75_000),
-      harness.wsUrl,
-    );
-    debugLog("archive-after-worker-loss: error after missing worker");
+    await waitForThreadCondition({
+      wsUrl: harness.wsUrl,
+      threadId: thread.id,
+      timeoutMs: e2eTimeoutMs(45_000, 75_000),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.every((session) => session.status !== "active"),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} still has an active env-daemon session (${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
+    });
+    debugLog("archive-after-worker-loss: old session retired after missing worker");
 
     await archiveThread(harness.baseUrl, thread.id);
     const archivedThread = await waitForArchivedState({
@@ -412,13 +430,25 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       threadId: thread.id,
       inputText: "Reply with exactly ARCHIVE-AFTER-ERROR and finish. Do not run commands or add extra text.",
     });
-    await waitForMinimumSessionCount({
-      baseUrl: harness.baseUrl,
+    await waitForThreadCondition({
       wsUrl: harness.wsUrl,
       threadId: thread.id,
-      minimumCount: sessionsBeforeRestart.sessions.length + 1,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.some(
+          (session) => session.status === "active" && session.id !== activeSession!.id,
+        ),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} never opened a fresh env-daemon session (sessions=${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
     });
+    await waitForThreadStatus(
+      harness.baseUrl,
+      thread.id,
+      "active",
+      e2eTimeoutMs(8_000, 20_000),
+      harness.wsUrl,
+    );
     const recoveredThread = await driveFakeCodexTurnToCompletion({
       harness,
       threadId: thread.id,
@@ -437,7 +467,7 @@ async function postStaleEventBatch(args: {
   sessionId: string;
   eventId: string;
 }): Promise<{ status: number; body: string }> {
-  return readError(`${args.baseUrl}/api/v1/threads/${args.threadId}/environment-agent/session/messages`, {
+  return readError(`${args.baseUrl}/api/v1/threads/${args.threadId}/env-daemon/session/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -524,14 +554,17 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
     });
     await sleep(250);
 
-    await waitForThreadStatus(
-      harness.baseUrl,
-      thread.id,
-      "error",
-      e2eTimeoutMs(45_000, 75_000),
-      harness.wsUrl,
-    );
-    debugLog("stale-old-session-noise: error after missing worker");
+    await waitForThreadCondition({
+      wsUrl: harness.wsUrl,
+      threadId: thread.id,
+      timeoutMs: e2eTimeoutMs(45_000, 75_000),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.every((session) => session.status !== "active"),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} still has an active env-daemon session (${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
+    });
+    debugLog("stale-old-session-noise: old session retired after missing worker");
 
     await tellThreadWithRetry({
       baseUrl: harness.baseUrl,
@@ -546,6 +579,13 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       minimumCount: sessionsBeforeRestart.sessions.length + 1,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
     });
+    await waitForThreadStatus(
+      harness.baseUrl,
+      thread.id,
+      "active",
+      e2eTimeoutMs(8_000, 20_000),
+      harness.wsUrl,
+    );
 
     const staleResult = await postStaleEventBatch({
       baseUrl: harness.baseUrl,

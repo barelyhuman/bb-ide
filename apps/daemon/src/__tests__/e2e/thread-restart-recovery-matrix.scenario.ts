@@ -239,16 +239,18 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       preserveTempDirOnCleanup: true,
     });
 
-    await waitForThreadStatus(
-      harness.baseUrl,
-      thread.id,
-      "error",
-      e2eTimeoutMs(45_000, 75_000),
-      harness.wsUrl,
-    );
+    await waitForThreadCondition({
+      threadId: thread.id,
+      timeoutMs: e2eTimeoutMs(45_000, 75_000),
+      wsUrl: harness.wsUrl,
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.every((session) => session.status !== "active"),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} still has an active env-daemon session (${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
+    });
 
     const errorEvents = await listThreadEvents(harness.baseUrl, thread.id);
-    expect(JSON.stringify(errorEvents)).toContain("provider_unavailable");
     expect(countCompletedTurns(errorEvents)).toBe(completedTurnsBeforeRestart);
     const sessionsBeforeRecoveryFollowUp = await listEnvironmentAgentSessions(
       harness.baseUrl,
@@ -263,13 +265,25 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
         "Do not run commands or add extra text.",
     });
 
-    await waitForSessionCount({
-      baseUrl: harness.baseUrl,
-      wsUrl: harness.wsUrl,
+    await waitForThreadCondition({
       threadId: thread.id,
-      expectedCount: sessionsBeforeRecoveryFollowUp.sessions.length + 1,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
+      wsUrl: harness.wsUrl,
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (sessions) =>
+        sessions.sessions.some(
+          (session) => session.status === "active" && session.id !== activeSession!.id,
+        ),
+      describeLast: (sessions) =>
+        `Thread ${thread.id} never opened a fresh env-daemon session (sessions=${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
     });
+    await waitForThreadStatus(
+      harness.baseUrl,
+      thread.id,
+      "active",
+      e2eTimeoutMs(8_000, 20_000),
+      harness.wsUrl,
+    );
     const recoveredThread = await driveFakeCodexTurnToCompletion({
       harness,
       threadId: thread.id,

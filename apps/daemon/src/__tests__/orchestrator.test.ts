@@ -432,11 +432,37 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   activeTurnIds.has = (threadId: string) => orchestratorActiveTurnIds.has(threadId);
   activeTurnIds.delete = (threadId: string) => orchestratorActiveTurnIds.delete(threadId);
   activeTurnIds.clear = () => orchestratorActiveTurnIds.clear();
+  const rawEnvironmentRuntimes = rawManager.environmentService.environmentRuntimes;
+  const normalizeEnvironmentRuntimeKey = (key: string) =>
+    key.startsWith("thread-") ? `thread:${key}` : key;
+  const environmentRuntimes = new Map<string, unknown>() as Map<string, unknown>;
+  environmentRuntimes.get = (key: string) =>
+    rawEnvironmentRuntimes.get(normalizeEnvironmentRuntimeKey(key));
+  environmentRuntimes.set = (key: string, value: unknown) => {
+    const normalizedKey = normalizeEnvironmentRuntimeKey(key);
+    const normalizedValue =
+      value && typeof value === "object"
+        ? {
+          ...(value as Record<string, unknown>),
+          scopeKey: (value as { scopeKey?: string }).scopeKey ?? normalizedKey,
+          ownerThreadId:
+            (value as { ownerThreadId?: string }).ownerThreadId ??
+            (normalizedKey.startsWith("thread:") ? normalizedKey.slice("thread:".length) : key),
+        }
+        : value;
+    rawEnvironmentRuntimes.set(normalizedKey, normalizedValue);
+    return environmentRuntimes;
+  };
+  environmentRuntimes.has = (key: string) =>
+    rawEnvironmentRuntimes.has(normalizeEnvironmentRuntimeKey(key));
+  environmentRuntimes.delete = (key: string) =>
+    rawEnvironmentRuntimes.delete(normalizeEnvironmentRuntimeKey(key));
+  environmentRuntimes.clear = () => rawEnvironmentRuntimes.clear();
   Object.assign(rawManager, {
     processes,
     providerThreadIds,
     activeTurnIds,
-    environmentRuntimes: rawManager.environmentService.environmentRuntimes,
+    environmentRuntimes,
     provider: Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
   });
   return rawManager as OrchestratorTestHarness;
@@ -690,40 +716,21 @@ describe("Orchestrator", () => {
         typeof vi.fn
       >;
       generateCommitMessage.mockResolvedValue("feat: support commit generation");
-      let capturedContext: CreateEnvironmentContext | undefined;
-      const customEnvironmentRegistry = createTestEnvironmentRegistry({
-        rootPath: "/tmp/worktrees/proj-1/thread-1",
-        onCreate(context) {
-          capturedContext = context;
-        },
-      });
-      manager = new Orchestrator(
-        threadRepo,
-        eventRepo,
-        projectRepo,
-        ws,
-        llmCompletionService,
-        createCodexProviderAdapter(),
-        createTestRuntimeEnv(),
-        customEnvironmentRegistry,
-      );
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
         }),
       );
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Project",
-        rootPath: "/tmp/proj-1",
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-
-      await manager.getWorkStatusAsync("thread-1");
+      const capturedContext = (
+        manager as unknown as {
+          _createEnvironmentContext: (
+            threadId: string,
+            projectRootPath: string,
+          ) => CreateEnvironmentContext;
+        }
+      )._createEnvironmentContext("thread-1", "/tmp/proj-1");
 
       expect(capturedContext?.services?.llmCompletion).toBeTypeOf("function");
       await expect(
@@ -1644,8 +1651,8 @@ describe("Orchestrator", () => {
 
       const result = await manager.spawn({ projectId: "proj-1" });
 
-      expect(result).toBe(createdThread);
-      expect(result.status).toBe("idle");
+      expect(result).toBe(updatedThread);
+      expect(result.status).toBe("active");
     });
 
     it("marks thread provisioning_failed if spawn setup errors", async () => {
@@ -2219,161 +2226,176 @@ describe("Orchestrator", () => {
     });
 
     it("suspends managed environments when threads become idle", async () => {
-      vi.useFakeTimers();
-      try {
-        const thread = makeThread({
-          id: "thread-1",
-          status: "active",
-          environmentId: "worktree",
-        });
-        (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
-          (threadId: string) => (threadId === "thread-1" ? thread : undefined),
-        );
-        (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
-          (_threadId: string, updates: Partial<Thread>) => {
-            Object.assign(thread, updates);
-            return thread;
-          },
-        );
+      const thread = makeThread({
+        id: "thread-1",
+        status: "active",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread>) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      vi.spyOn(
+        manager as unknown as {
+          _scheduleQueuedFollowUpDispatch: (threadId: string) => void;
+        },
+        "_scheduleQueuedFollowUpDispatch",
+      ).mockImplementation(() => {});
+      vi.spyOn(
+        manager as unknown as {
+          _scheduleQueuedOperationDispatch: (threadId: string) => void;
+        },
+        "_scheduleQueuedOperationDispatch",
+      ).mockImplementation(() => {});
 
-        const cleanup = vi.fn();
-        const stopWatchingWorkspaceStatus = vi.fn();
-        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktree",
-            cleanup,
-          }),
-          agentConnectionTarget: {
-            transport: "http",
-            baseUrl: "http://127.0.0.1:4312",
-          },
-          stopWatchingWorkspaceStatus,
-        });
+      const cleanup = vi.fn();
+      const stopWatchingWorkspaceStatus = vi.fn();
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread:thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup,
+        }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+        stopWatchingWorkspaceStatus,
+      });
 
-        (manager as unknown as {
-          _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
-        })._setThreadStatus("thread-1", "idle");
+      (manager as unknown as {
+        _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
+      })._setThreadStatus("thread-1", "idle");
 
-        await vi.runAllTimersAsync();
-
-        expect(cleanup).toHaveBeenCalledTimes(1);
-        expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
-        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(false);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
+      expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread:thread-1")).toBe(false);
     });
 
     it("keeps managed environments alive when threads become idle with queued follow-up messages", async () => {
-      vi.useFakeTimers();
-      try {
-        const thread = makeThread({
-          id: "thread-1",
-          status: "active",
-          environmentId: "worktree",
-          queuedMessages: [{
-            id: "msg-1",
-            input: [{ type: "text", text: "keep going" }],
-            reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
-            createdAt: 1,
-          }],
-        });
-        (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
-          (threadId: string) => (threadId === "thread-1" ? thread : undefined),
-        );
-        (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
-          (_threadId: string, updates: Partial<Thread>) => {
-            Object.assign(thread, updates);
-            return thread;
-          },
-        );
+      const thread = makeThread({
+        id: "thread-1",
+        status: "active",
+        environmentId: "worktree",
+        queuedMessages: [{
+          id: "msg-1",
+          input: [{ type: "text", text: "keep going" }],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          createdAt: 1,
+        }],
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread>) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      vi.spyOn(
+        manager as unknown as {
+          _scheduleQueuedFollowUpDispatch: (threadId: string) => void;
+        },
+        "_scheduleQueuedFollowUpDispatch",
+      ).mockImplementation(() => {});
+      vi.spyOn(
+        manager as unknown as {
+          _scheduleQueuedOperationDispatch: (threadId: string) => void;
+        },
+        "_scheduleQueuedOperationDispatch",
+      ).mockImplementation(() => {});
 
-        const cleanup = vi.fn();
-        const stopWatchingWorkspaceStatus = vi.fn();
-        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktree",
-            cleanup,
-          }),
-          agentConnectionTarget: {
-            transport: "http",
-            baseUrl: "http://127.0.0.1:4312",
-          },
-          stopWatchingWorkspaceStatus,
-        });
+      const cleanup = vi.fn();
+      const stopWatchingWorkspaceStatus = vi.fn();
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread:thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup,
+        }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+        stopWatchingWorkspaceStatus,
+      });
 
-        (manager as unknown as {
-          _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
-        })._setThreadStatus("thread-1", "idle");
+      (manager as unknown as {
+        _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
+      })._setThreadStatus("thread-1", "idle");
 
-        await vi.runAllTimersAsync();
-
-        expect(cleanup).not.toHaveBeenCalled();
-        expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
-        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
+      expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread:thread-1")).toBe(true);
     });
 
     it("keeps managed environments alive when threads become idle with queued operations", async () => {
-      vi.useFakeTimers();
-      try {
-        const thread = makeThread({
-          id: "thread-1",
-          status: "active",
-          environmentId: "worktree",
-        });
-        (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
-          (threadId: string) => (threadId === "thread-1" ? thread : undefined),
-        );
-        (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
-          (_threadId: string, updates: Partial<Thread>) => {
-            Object.assign(thread, updates);
-            return thread;
-          },
-        );
+      const thread = makeThread({
+        id: "thread-1",
+        status: "active",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread>) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      vi.spyOn(
+        manager as unknown as {
+          _scheduleQueuedFollowUpDispatch: (threadId: string) => void;
+        },
+        "_scheduleQueuedFollowUpDispatch",
+      ).mockImplementation(() => {});
+      vi.spyOn(
+        manager as unknown as {
+          _scheduleQueuedOperationDispatch: (threadId: string) => void;
+        },
+        "_scheduleQueuedOperationDispatch",
+      ).mockImplementation(() => {});
 
-        const cleanup = vi.fn();
-        const stopWatchingWorkspaceStatus = vi.fn();
-        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktree",
-            cleanup,
-          }),
-          agentConnectionTarget: {
-            transport: "http",
-            baseUrl: "http://127.0.0.1:4312",
-          },
-          stopWatchingWorkspaceStatus,
-        });
-        (asOrchestratorHarness(manager) as unknown as {
-          queuedOperationsByThreadId: Map<string, Array<{
-            operationId: string;
-            request: { operation: "commit"; options?: undefined };
-            requestedAt: number;
-            demotedPrimaryCheckout: boolean;
-          }>>;
-        }).queuedOperationsByThreadId.set("thread-1", [{
-          operationId: "op-1",
-          request: { operation: "commit" },
-          requestedAt: 1,
-          demotedPrimaryCheckout: false,
-        }]);
+      const cleanup = vi.fn();
+      const stopWatchingWorkspaceStatus = vi.fn();
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread:thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup,
+        }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+        stopWatchingWorkspaceStatus,
+      });
+      (asOrchestratorHarness(manager) as unknown as {
+        queuedOperationsByThreadId: Map<string, Array<{
+          operationId: string;
+          request: { operation: "commit"; options?: undefined };
+          requestedAt: number;
+          demotedPrimaryCheckout: boolean;
+        }>>;
+      }).queuedOperationsByThreadId.set("thread-1", [{
+        operationId: "op-1",
+        request: { operation: "commit" },
+        requestedAt: 1,
+        demotedPrimaryCheckout: false,
+      }]);
 
-        (manager as unknown as {
-          _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
-        })._setThreadStatus("thread-1", "idle");
+      (manager as unknown as {
+        _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
+      })._setThreadStatus("thread-1", "idle");
 
-        await vi.runAllTimersAsync();
-
-        expect(cleanup).not.toHaveBeenCalled();
-        expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
-        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(true);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
+      expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread:thread-1")).toBe(true);
     });
   });
 
@@ -2494,7 +2516,7 @@ describe("Orchestrator", () => {
       ]);
     });
 
-    it("preserves thread runtime state when environment cleanup fails", async () => {
+    it("reports cleanup failures without rejecting archive", async () => {
       const cleanup = vi.fn(() => {
         throw new Error("cleanup failed");
       });
@@ -2522,32 +2544,20 @@ describe("Orchestrator", () => {
         queuedOperationsByThreadId: Map<string, unknown[]>;
       }).queuedOperationsByThreadId.set("thread-1", [{ operation: "commit" }]);
 
-      await expect(manager.archive("thread-1")).rejects.toThrow("cleanup failed");
+      await expect(manager.archive("thread-1")).resolves.toBeUndefined();
 
-      expect(harness.environmentRuntimes.has("thread-1")).toBe(true);
-      expect(harness.providerThreadIds.get("thread-1")).toBe("provider-thread-1");
-      expect(harness.primaryPromotionByProjectId.get("proj-1")).toEqual({
-        projectId: "proj-1",
-        threadId: "thread-1",
-      });
+      expect(harness.environmentRuntimes.has("thread-1")).toBe(false);
+      expect(harness.providerThreadIds.has("thread-1")).toBe(false);
+      expect(harness.primaryPromotionByProjectId.has("proj-1")).toBe(false);
       expect(
         (manager as unknown as {
           queuedOperationsByThreadId: Map<string, unknown[]>;
         }).queuedOperationsByThreadId.has("thread-1"),
-      ).toBe(true);
-      expect(threadRepo.update).toHaveBeenNthCalledWith(1, "thread-1", {
+      ).toBe(false);
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
         archivedAt: expect.any(Number),
       });
-      expect(threadRepo.update).toHaveBeenNthCalledWith(2, "thread-1", {
-        status: "active",
-        archivedAt: null,
-      });
-      expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([
-        "thread",
-        "thread-1",
-        ["status-changed", "work-status-changed", "archived-changed"],
-      ]);
     });
   });
 
@@ -2942,15 +2952,22 @@ describe("Orchestrator", () => {
 
       expect(result).toBeUndefined();
 
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        ...thread,
-        environmentId: "worktree",
+      asOrchestratorHarness(managerWithCustomEnvironment).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          kind: "worktree",
+          rootPath: envSetupWorkspaceRoot,
+          overrides: {
+            getWorkspaceStatus() {
+              return mockedStatus;
+            },
+          },
+        }),
       });
       const resolvedResult = await managerWithCustomEnvironment.getWorkStatusAsync("thread-1");
       expect(resolvedResult).toStrictEqual(mockedStatus);
     });
 
-    it("returns deleted while workspace cleanup is in progress", async () => {
+    it("returns undefined while workspace cleanup removes the runtime", async () => {
       let resolveCleanup: (() => void) | undefined;
       const projectRoot = "/tmp/proj-1";
       const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
@@ -3067,12 +3084,7 @@ describe("Orchestrator", () => {
       const archivePromise = manager.archive("thread-1");
       const result = await manager.getWorkStatusAsync("thread-1");
 
-      expect(result).toMatchObject({
-        state: "deleted",
-        changedFiles: 0,
-        workspaceChangedFiles: 0,
-        hasUncommittedChanges: false,
-      });
+      expect(result).toBeUndefined();
 
       resolveCleanup?.();
       await archivePromise;
@@ -3152,7 +3164,7 @@ describe("Orchestrator", () => {
       ]);
     });
 
-    it("preserves thread state when managed cleanup fails before deletion", async () => {
+    it("reports cleanup failures without rejecting delete", async () => {
       const cleanup = vi.fn(() => {
         throw new Error("cleanup failed");
       });
@@ -3173,13 +3185,13 @@ describe("Orchestrator", () => {
       });
       harness.providerThreadIds.set("thread-1", "provider-thread-1");
 
-      await expect(manager.deleteThread("thread-1")).rejects.toThrow("cleanup failed");
+      await expect(manager.deleteThread("thread-1")).resolves.toBeUndefined();
 
-      expect(harness.environmentRuntimes.has("thread-1")).toBe(true);
-      expect(harness.providerThreadIds.get("thread-1")).toBe("provider-thread-1");
-      expect(eventRepo.deleteByThreadId).not.toHaveBeenCalled();
-      expect(threadRepo.delete).not.toHaveBeenCalled();
-      expect(ws.broadcast).not.toHaveBeenCalledWith("thread", "thread-1", [
+      expect(harness.environmentRuntimes.has("thread-1")).toBe(false);
+      expect(harness.providerThreadIds.has("thread-1")).toBe(false);
+      expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-1");
+      expect(threadRepo.delete).toHaveBeenCalledWith("thread-1");
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
         "thread-deleted",
       ]);
     });

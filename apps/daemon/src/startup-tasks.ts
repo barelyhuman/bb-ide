@@ -48,7 +48,7 @@ async function requestEnvironmentAgentSessionSync(
 }
 
 export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
-  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
+  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive" | "markClosed">;
   logger?: StartupTaskLogger;
   requestTimeoutMs?: number;
 }): Promise<{
@@ -83,10 +83,18 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
     }),
   );
   const pokedCount = results.filter(Boolean).length;
-  const unreachableCount = activeSessions.length - pokedCount;
+  const unreachableSessions = activeSessions.filter((_, index) => !results[index]);
+  const unreachableCount = unreachableSessions.length;
+
+  for (const session of unreachableSessions) {
+    args.sessionRepo.markClosed({
+      sessionId: session.id,
+      reason: "internal_error",
+    });
+  }
 
   logger.log(
-    `Environment-agent startup recovery poked ${pokedCount}/${activeSessions.length} active sessions; ${unreachableCount} are awaiting heartbeat timeout handling.`,
+    `Environment-agent startup recovery poked ${pokedCount}/${activeSessions.length} active sessions; retired ${unreachableCount} unreachable sessions.`,
   );
   return {
     activeSessionCount: activeSessions.length,
@@ -96,7 +104,7 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
 }
 
 export function scheduleManagedEnvironmentAgentSessionRecoveryOnBoot(args: {
-  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
+  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive" | "markClosed">;
   logger?: StartupTaskLogger;
   requestTimeoutMs?: number;
 }): void {

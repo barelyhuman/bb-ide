@@ -19,7 +19,7 @@ import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
 import { closeHttpServer } from "./http-server-close.js";
 import {
-  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
+  recoverManagedEnvironmentAgentSessionsOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "./startup-tasks.js";
 import { resolveEnvironmentAgentStartupRecoveryRequestTimeoutMs } from "./environment-agent-timing.js";
@@ -228,12 +228,20 @@ async function main(): Promise<void> {
     void shutdown("unhandledRejection", { exitCode: 1 });
   });
 
+  await recoverManagedEnvironmentAgentSessionsOnBoot({
+    sessionRepo: environmentAgentSessionRepo,
+    requestTimeoutMs: resolveEnvironmentAgentStartupRecoveryRequestTimeoutMs(process.env),
+  });
+  console.log("Reconciling startup environment state...");
+  await threadManager.reconcileActiveThreadsOnBoot();
+  console.log("Startup reconciliation complete.");
+
   let listeningResolve: (() => void) | undefined;
   const listening = new Promise<void>((resolvePromise) => {
     listeningResolve = resolvePromise;
   });
 
-  // Start listening
+  // Start listening only after startup recovery is complete so "healthy" implies ready.
   httpServer = serve(
     {
       fetch: app.fetch,
@@ -257,13 +265,6 @@ async function main(): Promise<void> {
   injectWebSocket(httpServer);
 
   await listening;
-  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
-    sessionRepo: environmentAgentSessionRepo,
-    requestTimeoutMs: resolveEnvironmentAgentStartupRecoveryRequestTimeoutMs(process.env),
-  });
-  console.log("Reconciling startup environment state...");
-  await threadManager.reconcileActiveThreadsOnBoot();
-  console.log("Startup reconciliation complete.");
 }
 
 main().catch((err) => {

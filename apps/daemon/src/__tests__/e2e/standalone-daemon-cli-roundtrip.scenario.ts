@@ -9,6 +9,7 @@ import {
   createProject,
   listThreadEvents,
   readJson,
+  sleep,
   waitForThreadCondition,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
@@ -248,6 +249,41 @@ async function waitForIdleWithAnotherTurn(
   });
 }
 
+async function emitFakeCodexUntilIdleWithAnotherTurn(args: {
+  controlFilePath: string;
+  baseUrl: string;
+  wsUrl: string;
+  threadId: string;
+  previousCompletedTurns: number;
+  maxAttempts?: number;
+}): Promise<void> {
+  const maxAttempts = args.maxAttempts ?? 6;
+  let lastStatus = "unknown";
+  let lastCompletedTurns = args.previousCompletedTurns;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    appendFileSync(args.controlFilePath, "emit-next-event\n", "utf8");
+    await sleep(250);
+
+    const [thread, events] = await Promise.all([
+      readJson<{ status: string }>(`${args.baseUrl}/api/v1/threads/${args.threadId}`),
+      listThreadEvents(args.baseUrl, args.threadId),
+    ]);
+    lastStatus = thread.status;
+    lastCompletedTurns = countCompletedTurns(events);
+    if (thread.status === "idle" && lastCompletedTurns > args.previousCompletedTurns) {
+      return;
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error(
+    `Thread ${args.threadId} did not complete another turn after ${maxAttempts} fake-codex pulses ` +
+      `(status=${lastStatus}, completed=${lastCompletedTurns})`,
+  );
+}
+
 async function spawnThread(args: {
   baseUrl: string;
   projectId: string;
@@ -465,13 +501,13 @@ async function runEnvironmentBattery(
       stopThreadId,
       countStartedTurns(stoppedEvents),
     );
-    appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
-    await waitForIdleWithAnotherTurn(
+    await emitFakeCodexUntilIdleWithAnotherTurn({
+      controlFilePath: fakeCodexControlFilePath,
       baseUrl,
       wsUrl,
-      stopThreadId,
-      countCompletedTurns(stoppedEvents),
-    );
+      threadId: stopThreadId,
+      previousCompletedTurns: countCompletedTurns(stoppedEvents),
+    });
   } finally {
     await daemon.stop();
     rmSync(tempDir, { recursive: true, force: true });

@@ -30,6 +30,7 @@ import {
   type ProviderToolHost,
 } from "@beanbag/agent-server";
 import { createServer } from "../../server.js";
+import { recoverManagedEnvironmentAgentSessionsOnBoot } from "../../startup-tasks.js";
 import {
   createFakeCodexBinDir,
   createFakeCodexScriptFile,
@@ -315,6 +316,10 @@ export async function startDaemonE2eHarness(
             : createCodexProviderAdapter(),
       });
 
+    await recoverManagedEnvironmentAgentSessionsOnBoot({
+      sessionRepo: environmentAgentSessionRepo,
+      requestTimeoutMs: 250,
+    });
     await threadManager.reconcileActiveThreadsOnBoot();
 
     const listeningPort = await new Promise<number>((resolvePort) => {

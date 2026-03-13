@@ -472,8 +472,8 @@ describe("Thread routes", () => {
     });
   });
 
-  describe("GET /threads/:id/environment-agent/status", () => {
-    it("returns thread-scoped environment-agent status", async () => {
+  describe("GET /threads/:id/env-daemon/status", () => {
+    it("returns thread-scoped env-daemon status", async () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
       (threadManager.getEnvironmentAgentStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -486,7 +486,7 @@ describe("Thread routes", () => {
         retryAttemptCount: 0,
       });
 
-      const res = await app.request("/threads/thread-1/environment-agent/status");
+      const res = await app.request("/threads/thread-1/env-daemon/status");
 
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toMatchObject({
@@ -496,13 +496,13 @@ describe("Thread routes", () => {
       expect(threadManager.getEnvironmentAgentStatus).toHaveBeenCalledWith("thread-1");
     });
 
-    it("returns 409 when the environment-agent session is inactive", async () => {
+    it("returns 409 when the env-daemon session is inactive", async () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
       (threadManager.getEnvironmentAgentStatus as ReturnType<typeof vi.fn>).mockRejectedValue(
         inactiveSessionError("provider session is inactive"),
       );
 
-      const res = await app.request("/threads/thread-1/environment-agent/status");
+      const res = await app.request("/threads/thread-1/env-daemon/status");
 
       expect(res.status).toBe(409);
       await expect(res.json()).resolves.toMatchObject({
@@ -511,7 +511,7 @@ describe("Thread routes", () => {
     });
   });
 
-  describe("GET /threads/:id/environment-agent/sessions", () => {
+  describe("GET /threads/:id/env-daemon/sessions", () => {
     it("returns thread session inspection data", async () => {
       const sessionService = mockEnvironmentAgentSessionService();
       threadManager.getById.mockReturnValue(makeThread());
@@ -536,7 +536,7 @@ describe("Thread routes", () => {
         }),
       );
 
-      const res = await app.request("/threads/thread-1/environment-agent/sessions");
+      const res = await app.request("/threads/thread-1/env-daemon/sessions");
 
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({
@@ -559,7 +559,7 @@ describe("Thread routes", () => {
     });
   });
 
-  describe("POST /threads/:id/environment-agent/session/open", () => {
+  describe("POST /threads/:id/env-daemon/session/open", () => {
     it("opens a session and returns a welcome payload", async () => {
       const sessionService = mockEnvironmentAgentSessionService();
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -598,7 +598,7 @@ describe("Thread routes", () => {
         }),
       );
 
-      const res = await app.request("/threads/thread-1/environment-agent/session/open", {
+      const res = await app.request("/threads/thread-1/env-daemon/session/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -636,7 +636,7 @@ describe("Thread routes", () => {
     });
   });
 
-  describe("POST /threads/:id/environment-agent/session/messages", () => {
+  describe("POST /threads/:id/env-daemon/session/messages", () => {
     it("accepts session heartbeats", async () => {
       const sessionService = mockEnvironmentAgentSessionService();
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -655,7 +655,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -736,7 +736,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -812,7 +812,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -862,7 +862,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -923,7 +923,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -985,7 +985,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1021,7 +1021,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1051,7 +1051,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/messages",
+        "/threads/thread-1/env-daemon/session/messages",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1075,7 +1075,7 @@ describe("Thread routes", () => {
     });
   });
 
-  describe("GET /threads/:id/environment-agent/session/commands", () => {
+  describe("GET /threads/:id/env-daemon/session/commands", () => {
     it("returns command batches for the active session", async () => {
       const sessionService = mockEnvironmentAgentSessionService();
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -1110,7 +1110,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=1&limit=10&waitMs=5000",
+        "/threads/thread-1/env-daemon/session/commands?sessionId=sess-1&afterCursor=1&limit=10&waitMs=5000",
       );
 
       expect(res.status).toBe(200);
@@ -1144,7 +1144,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/commands?sessionId=sess-1",
+        "/threads/thread-1/env-daemon/session/commands?sessionId=sess-1",
       );
 
       expect(res.status).toBe(204);
@@ -1219,7 +1219,7 @@ describe("Thread routes", () => {
           path: "/tmp/project",
         },
       });
-      expect(body[0].attachedEnvironmentId).toBe("env-1");
+      expect(body[0].attachedEnvironment?.id).toBe("env-1");
       expect(body[1].attachedEnvironment).toBeUndefined();
     });
 
@@ -1261,7 +1261,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.attachedEnvironmentId).toBe("env-1");
+      expect(body.attachedEnvironment?.id).toBe("env-1");
       expect(body.attachedEnvironment).toMatchObject({
         id: "env-1",
         managed: false,
