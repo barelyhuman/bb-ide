@@ -50,3 +50,43 @@ export function createManagerProviderToolHost(args: {
 
   return new ProviderToolHost(tools);
 }
+
+export function composeProviderToolHosts(
+  hosts: Array<ProviderToolHost | undefined>,
+): ProviderToolHost | undefined {
+  const availableHosts = hosts.filter((host): host is ProviderToolHost => host !== undefined);
+  if (availableHosts.length === 0) {
+    return undefined;
+  }
+  if (availableHosts.length === 1) {
+    return availableHosts[0];
+  }
+
+  return {
+    listTools() {
+      const toolByName = new Map<string, ReturnType<ProviderToolHost["listTools"]>[number]>();
+      for (const host of availableHosts) {
+        for (const tool of host.listTools()) {
+          toolByName.set(tool.name, tool);
+        }
+      }
+      return Array.from(toolByName.values());
+    },
+    async execute(args) {
+      for (const host of availableHosts) {
+        if (host.listTools().some((tool) => tool.name === args.call.tool)) {
+          return host.execute(args);
+        }
+      }
+      return {
+        success: false,
+        contentItems: [
+          {
+            type: "inputText",
+            text: `Unknown tool: ${args.call.tool}`,
+          },
+        ],
+      };
+    },
+  } as ProviderToolHost;
+}

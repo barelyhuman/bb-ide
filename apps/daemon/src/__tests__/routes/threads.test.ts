@@ -1234,7 +1234,15 @@ describe("Thread routes", () => {
 
   describe("GET /threads/:id/manager-workspace/files", () => {
     it("lists manager workspace files for manager threads", async () => {
-      const workspacePath = resolveManagerWorkspacePath(process.env, "thread-1");
+      const runtimeEnv = {
+        ...process.env,
+        HOME: "/tmp/test-manager-home",
+      };
+      const app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, { runtimeEnv }),
+      );
+      const workspacePath = resolveManagerWorkspacePath(runtimeEnv, "thread-1");
       mkdirSync(workspacePath, { recursive: true });
       writeFileSync(`${workspacePath}/plan.md`, "# Plan");
       threadManager.getRawById.mockReturnValue(

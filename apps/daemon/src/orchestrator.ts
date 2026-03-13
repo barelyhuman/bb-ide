@@ -681,10 +681,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
         ...(this.providerToolHost
           ? {
-              resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
-                request.type === "manager"
-                  ? this.providerToolHost?.listTools()
-                  : undefined,
+              resolveDynamicTools: () => this.providerToolHost?.listTools(),
               toolHost: this.providerToolHost,
             }
           : {}),
@@ -831,10 +828,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
       ...(this.providerToolHost
         ? {
-            resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
-              request.type === "manager"
-                ? this.providerToolHost?.listTools()
-                : undefined,
+            resolveDynamicTools: () => this.providerToolHost?.listTools(),
             toolHost: this.providerToolHost,
           }
         : {}),
@@ -1157,6 +1151,48 @@ export class Orchestrator implements ThreadOrchestrator {
       },
       { broadcastChanges: ["events-appended"] },
     );
+  }
+
+  private _notifyManagersOfOwnershipChange(args: {
+    threadId: string;
+    threadTitle?: string;
+    previousParentThreadId?: string;
+    nextParentThreadId?: string;
+  }): void {
+    const threadLabel = `${args.threadId}: ${args.threadTitle ?? "Untitled"}`;
+
+    if (args.previousParentThreadId && args.previousParentThreadId !== args.nextParentThreadId) {
+      void this.systemTell(args.previousParentThreadId, {
+        input: [
+          {
+            type: "text",
+            text: `[bb system]: The following thread is no longer assigned to you:\n${threadLabel}`,
+          },
+        ],
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[thread ${args.threadId}] failed to notify prior manager ${args.previousParentThreadId}: ${message}`,
+        );
+      });
+    }
+
+    if (args.nextParentThreadId && args.nextParentThreadId !== args.previousParentThreadId) {
+      void this.systemTell(args.nextParentThreadId, {
+        input: [
+          {
+            type: "text",
+            text:
+              `[bb system]: The following thread is now assigned to you for management:\n${threadLabel}`,
+          },
+        ],
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[thread ${args.threadId}] failed to notify new manager ${args.nextParentThreadId}: ${message}`,
+        );
+      });
+    }
   }
 
   private async _tell(
@@ -2145,6 +2181,7 @@ export class Orchestrator implements ThreadOrchestrator {
       if (thread.type === "manager" && request.parentThreadId !== null) {
         throw invalidRequestError("Manager threads cannot be managed by a parent thread");
       }
+      const previousParentThreadId = thread.parentThreadId;
       const nextParentThreadId = request.parentThreadId ?? undefined;
       if (nextParentThreadId) {
         this._validateManagerParentThread({
@@ -2159,6 +2196,12 @@ export class Orchestrator implements ThreadOrchestrator {
         });
         didChange = true;
         didChangeParentThread = true;
+        this._notifyManagersOfOwnershipChange({
+          threadId,
+          threadTitle: thread.title,
+          previousParentThreadId,
+          nextParentThreadId,
+        });
       }
     }
 

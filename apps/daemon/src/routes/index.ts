@@ -59,6 +59,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       "/threads",
       createThreadRoutes(deps.threadManager, {
         environmentAgentSessionService: deps.environmentAgentSessionService,
+        runtimeEnv: deps.runtimeEnv,
       }),
     )
     .route(

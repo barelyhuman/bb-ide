@@ -43,7 +43,7 @@ import {
   resolveEnvironmentAgentSessionTimingOptions,
   type EnvironmentAgentSessionTimingOptions,
 } from "./environment-agent-timing.js";
-import { createManagerProviderToolHost } from "./manager-tools.js";
+import { composeProviderToolHosts, createManagerProviderToolHost } from "./manager-tools.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -94,17 +94,21 @@ export function createServer(deps: ServerDeps) {
   const wsManager = new WSManager();
   const provider = deps.provider ?? createProviderAdapter();
   let threadManager: Orchestrator;
-  const providerToolHost =
-    deps.providerToolHost ??
-    createManagerProviderToolHost({
-      getThreadManager: () => threadManager,
-    });
+  const managerToolHost = createManagerProviderToolHost({
+    getThreadManager: () => threadManager,
+  });
+  const providerToolHost = composeProviderToolHosts([
+    deps.providerToolHost,
+    managerToolHost,
+  ]);
   const configuredAgentServer = new AgentServer({
     provider,
     providerCatalog: listAvailableProviderInfos(),
     resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
-      request.type === "manager" ? providerToolHost.listTools() : undefined,
-    toolHost: providerToolHost,
+      request.type === "manager"
+        ? providerToolHost?.listTools()
+        : deps.providerToolHost?.listTools(),
+    ...(providerToolHost ? { toolHost: providerToolHost } : {}),
     onNotification: (threadId, event) => {
       threadManager.handleAgentServerNotification(threadId, event);
     },

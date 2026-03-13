@@ -358,10 +358,12 @@ export function createThreadRoutes(
   opts?: {
     openPath?: OpenPathFn;
     environmentAgentSessionService?: EnvironmentAgentSessionService;
+    runtimeEnv?: NodeJS.ProcessEnv;
   },
 ) {
   const openPath = opts?.openPath ?? openPathInEditor;
   const environmentAgentSessionService = opts?.environmentAgentSessionService;
+  const runtimeEnv = opts?.runtimeEnv ?? process.env;
   const environmentAgentAccessor =
     threadManager as RouteEnvironmentAgentCapableOrchestrator;
   return new Hono()
@@ -485,7 +487,7 @@ export function createThreadRoutes(
           throw invalidRequestError("Manager workspace is only available for manager threads");
         }
 
-        const workspacePath = resolveManagerWorkspacePath(process.env, thread.id);
+        const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
         const files = existsSync(workspacePath)
           ? listManagerWorkspaceFiles(workspacePath)
           : [];
@@ -508,7 +510,7 @@ export function createThreadRoutes(
             throw invalidRequestError("Manager workspace is only available for manager threads");
           }
 
-          const workspacePath = resolveManagerWorkspacePath(process.env, thread.id);
+          const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
           const { path } = c.req.valid("query");
           const requestedPath = resolve(workspacePath, path);
           if (!isPathWithinDirectory(requestedPath, workspacePath)) {

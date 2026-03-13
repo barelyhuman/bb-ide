@@ -1972,6 +1972,7 @@ describe("Orchestrator", () => {
         type: "standard",
         parentThreadId: "thread-manager-1",
       });
+      vi.spyOn(manager, "systemTell").mockResolvedValue();
       (threadRepo.getById as ReturnType<typeof vi.fn>)
         .mockReturnValueOnce(thread)
         .mockReturnValueOnce(parentThread)
@@ -1986,6 +1987,77 @@ describe("Orchestrator", () => {
         parentThreadId: "thread-manager-1",
       });
       expect(result.parentThreadId).toBe("thread-manager-1");
+    });
+
+    it("notifies the new manager when a thread is assigned", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+      });
+      const parentThread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+        parentThreadId: "thread-manager-1",
+      });
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      manager.updateThread("thread-1", {
+        parentThreadId: "thread-manager-1",
+      });
+
+      expect(systemTellSpy).toHaveBeenCalledWith("thread-manager-1", {
+        input: [
+          {
+            type: "text",
+            text:
+              "[bb system]: The following thread is now assigned to you for management:\nthread-1: Implement feature",
+          },
+        ],
+      });
+    });
+
+    it("notifies the prior manager when a thread is taken back", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+        parentThreadId: "thread-manager-1",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+      });
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      manager.updateThread("thread-1", {
+        parentThreadId: null,
+      });
+
+      expect(systemTellSpy).toHaveBeenCalledWith("thread-manager-1", {
+        input: [
+          {
+            type: "text",
+            text:
+              "[bb system]: The following thread is no longer assigned to you:\nthread-1: Implement feature",
+          },
+        ],
+      });
     });
 
     it("rejects assigning a non-manager parent on update", () => {
