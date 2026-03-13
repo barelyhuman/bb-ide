@@ -33,6 +33,7 @@ export interface EnvironmentRecord {
   projectId: string;
   descriptor: EnvironmentDescriptor;
   managed: boolean;
+  requestedRuntimeKind?: string;
   runtimeState?: PersistedEnvironmentRecord;
   createdAt: number;
   updatedAt: number;

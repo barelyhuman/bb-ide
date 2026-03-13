@@ -195,6 +195,27 @@ describe("repository strict normalization", () => {
     });
   });
 
+  it("persists requested runtime kind on first-class environments", () => {
+    const projectId = createProjectId();
+    const environment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: true,
+      requestedRuntimeKind: "docker",
+    });
+
+    expect(environment.requestedRuntimeKind).toBe("docker");
+
+    const updated = environments.update(environment.id, {
+      requestedRuntimeKind: "worktree",
+    });
+
+    expect(updated?.requestedRuntimeKind).toBe("worktree");
+  });
+
   it("throws for invalid persisted environment descriptor values", () => {
     const projectId = createProjectId();
     const environment = environments.create({

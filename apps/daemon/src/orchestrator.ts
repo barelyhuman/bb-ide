@@ -885,6 +885,13 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!attachedEnvironment || attachedEnvironment.projectId !== args.projectId) {
         throw new Error(`Environment not found: ${attachedEnvironmentId}`);
       }
+      const requestedRuntimeKind = attachedEnvironment.requestedRuntimeKind?.trim();
+      if (requestedRuntimeKind) {
+        return {
+          attachedEnvironmentId,
+          runtimeEnvironmentId: this._resolveRequestedEnvironmentId(requestedRuntimeKind),
+        };
+      }
       const project = this.projectRepo.getById(args.projectId);
       if (project) {
         const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({

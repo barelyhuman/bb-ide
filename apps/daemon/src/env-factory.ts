@@ -71,6 +71,7 @@ export class EnvironmentFactory {
             path: args.projectRootPath,
           },
           managed: false,
+          requestedRuntimeKind: "local",
           runtimeState: {
             kind: "local",
             state: {},
@@ -84,6 +85,7 @@ export class EnvironmentFactory {
             path: args.projectRootPath,
           },
           managed: true,
+          requestedRuntimeKind: args.requestedEnvironmentId,
         });
 
     this.threadEnvironmentAttachmentRepo.attachThread({
@@ -124,6 +126,7 @@ export class EnvironmentFactory {
       ? this.environmentRepo.update(existingEnvironment.id, {
           descriptor,
           managed,
+          requestedRuntimeKind: args.environment.kind,
           runtimeState: {
             kind: args.environment.kind,
             state: args.environment.serialize(),
@@ -133,6 +136,7 @@ export class EnvironmentFactory {
         projectId: args.projectId,
         descriptor,
         managed,
+        requestedRuntimeKind: args.environment.kind,
         runtimeState: {
           kind: args.environment.kind,
           state: args.environment.serialize(),

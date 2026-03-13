@@ -419,6 +419,7 @@ export class EnvironmentRepository {
     projectId: string;
     descriptor: EnvironmentDescriptor;
     managed: boolean;
+    requestedRuntimeKind?: string;
     runtimeState?: PersistedEnvironmentRecord;
   }): EnvironmentRecord {
     const now = Date.now();
@@ -427,6 +428,7 @@ export class EnvironmentRepository {
       projectId: data.projectId,
       descriptor: JSON.stringify(data.descriptor),
       managed: data.managed,
+      requestedRuntimeKind: data.requestedRuntimeKind ?? null,
       runtimeState: data.runtimeState ? JSON.stringify(data.runtimeState) : null,
       createdAt: now,
       updatedAt: now,
@@ -485,6 +487,7 @@ export class EnvironmentRepository {
     data: {
       descriptor?: EnvironmentDescriptor;
       managed?: boolean;
+      requestedRuntimeKind?: string | null;
       runtimeState?: PersistedEnvironmentRecord | null;
     },
     opts?: {
@@ -509,6 +512,9 @@ export class EnvironmentRepository {
     }
     if (data.managed !== undefined) {
       updates.managed = data.managed;
+    }
+    if (data.requestedRuntimeKind !== undefined) {
+      updates.requestedRuntimeKind = data.requestedRuntimeKind;
     }
     if (data.runtimeState !== undefined) {
       updates.runtimeState = data.runtimeState
@@ -537,6 +543,7 @@ export class EnvironmentRepository {
       projectId: row.projectId,
       descriptor: parseEnvironmentDescriptor(row.descriptor),
       managed: row.managed,
+      ...(row.requestedRuntimeKind ? { requestedRuntimeKind: row.requestedRuntimeKind } : {}),
       ...(row.runtimeState ? { runtimeState: parseEnvironmentRecord(row.runtimeState) } : {}),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
