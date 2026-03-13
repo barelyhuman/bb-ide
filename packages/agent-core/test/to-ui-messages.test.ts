@@ -3195,4 +3195,45 @@ describe("toUIMessages replay coverage", () => {
       expect(projected[0].turnId).toBe("turn-1");
     }
   });
+
+  it("suppresses internal [bb system] user messages from provider items", () => {
+    const projected = toUIMessages([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "userMessage",
+            id: "user-1",
+            content: [{ type: "text", text: "[bb system] Welcome!" }],
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/manager/user_message",
+        data: {
+          text: "Visible manager update",
+          turnId: "turn-1",
+        },
+        createdAt: 2,
+      },
+    ], {
+      threadStatus: "idle",
+      threadType: "manager",
+    });
+
+    expect(projected).toHaveLength(1);
+    expect(projected[0]?.kind).toBe("assistant-text");
+    if (projected[0]?.kind === "assistant-text") {
+      expect(projected[0].text).toBe("Visible manager update");
+    }
+  });
 });

@@ -500,6 +500,10 @@ function userMessageSignature(value: {
   return `${value.text}\u0000${totalImages}\u0000${value.localFiles}`;
 }
 
+function isInternalSystemText(text: string): boolean {
+  return text.trimStart().startsWith("[bb system]");
+}
+
 function shouldRenderThreadStartInput(
   threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
 ): boolean {
@@ -3169,6 +3173,9 @@ export function toUIMessages(
       options,
     );
     if (userFromClientThreadStart) {
+      if (isInternalSystemText(userFromClientThreadStart.text)) {
+        continue;
+      }
       const signature = userMessageSignature({
         text: userFromClientThreadStart.text,
         webImages: userFromClientThreadStart.attachments?.webImages ?? 0,
@@ -3237,6 +3244,9 @@ export function toUIMessages(
 
     const userMessage = parseUserFromItemEvent(event, eventType);
     if (userMessage) {
+      if (isInternalSystemText(userMessage.text)) {
+        continue;
+      }
       const signature = userMessageSignature({
         text: userMessage.text,
         webImages: userMessage.attachments?.webImages ?? 0,
