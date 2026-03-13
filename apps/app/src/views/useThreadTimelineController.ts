@@ -23,6 +23,7 @@ interface LoadToolGroupMessagesArgs {
   turnId: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
+  includeManagerDebugView?: boolean;
 }
 
 interface UseThreadTimelineControllerParams {

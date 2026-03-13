@@ -324,7 +324,11 @@ export function ThreadDetailView() {
     threadId,
     threadDetailRows,
     isSecondaryPanelOpen,
-    loadToolGroupMessages: threadToolGroupMessages.mutateAsync,
+    loadToolGroupMessages: (args) =>
+      threadToolGroupMessages.mutateAsync({
+        ...args,
+        includeManagerDebugView: showManagerDebugView,
+      }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;

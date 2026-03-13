@@ -239,6 +239,10 @@ const toolGroupMessagesQuerySchema = z.object({
     .string()
     .transform((value) => Number.parseInt(value, 10))
     .pipe(z.number().int().positive()),
+  includeManagerDebugView: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 const managerWorkspaceFileQuerySchema = z.object({
@@ -1009,13 +1013,19 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
-          const { turnId, sourceSeqStart, sourceSeqEnd } = c.req.valid("query");
+          const {
+            turnId,
+            sourceSeqStart,
+            sourceSeqEnd,
+            includeManagerDebugView,
+          } = c.req.valid("query");
           const messages = threadManager.getToolGroupMessages(
             c.req.param("id"),
             {
               turnId,
               sourceSeqStart,
               sourceSeqEnd,
+              includeManagerDebugView,
             },
           );
           return c.json(messages);

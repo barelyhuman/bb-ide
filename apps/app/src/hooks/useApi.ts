@@ -623,13 +623,21 @@ export function useThreadToolGroupMessages() {
       turnId,
       sourceSeqStart,
       sourceSeqEnd,
+      includeManagerDebugView,
     }: {
       id: string;
       turnId: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
+      includeManagerDebugView?: boolean;
     }): Promise<ThreadToolGroupMessagesResponse> =>
-      api.getThreadToolGroupMessages(id, turnId, sourceSeqStart, sourceSeqEnd),
+      api.getThreadToolGroupMessages(
+        id,
+        turnId,
+        sourceSeqStart,
+        sourceSeqEnd,
+        includeManagerDebugView ?? false,
+      ),
   });
 }
 

@@ -2385,12 +2385,23 @@ export class Orchestrator implements ThreadOrchestrator {
       .filter((event) => event.seq >= sourceSeqStart && event.seq <= sourceSeqEnd);
     const uiMessages = toUIMessages(eventsInRange, {
       includeDebugRawEvents: false,
+      includeInternalSystemMessages: request.includeManagerDebugView ?? false,
       includeOptionalOperations: false,
       threadStatus: thread?.status,
-      threadType: thread?.type,
+      threadType:
+        request.includeManagerDebugView && thread?.type === "manager"
+          ? "standard"
+          : thread?.type,
     });
     const rowMessages = uiMessages.filter((entry) => {
       if (entry.kind === "assistant-reasoning") return false;
+      if (request.includeManagerDebugView) {
+        if ((entry.turnId ?? null) !== request.turnId) return false;
+        return (
+          entry.sourceSeqStart >= sourceSeqStart &&
+          entry.sourceSeqEnd <= sourceSeqEnd
+        );
+      }
       if (
         thread?.type === "manager" &&
         entry.kind !== "user" &&

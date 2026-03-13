@@ -111,6 +111,7 @@ export interface ThreadToolGroupMessagesRequest {
   turnId: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
+  includeManagerDebugView?: boolean;
 }
 
 export interface ThreadToolGroupMessagesResponse {

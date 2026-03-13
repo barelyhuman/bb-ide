@@ -2194,6 +2194,7 @@ describe("Thread routes", () => {
         "thread-1",
         120,
         false,
+        false,
       );
     });
   });
@@ -2215,6 +2216,27 @@ describe("Thread routes", () => {
         turnId: "turn-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 8,
+        includeManagerDebugView: false,
+      });
+    });
+
+    it("passes manager debug view through for deferred tool-group messages", async () => {
+      const thread = makeThread({ type: "manager" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getToolGroupMessages as ReturnType<typeof vi.fn>).mockReturnValue({
+        messages: [],
+      });
+
+      const res = await app.request(
+        "/threads/thread-1/tool-group-messages?turnId=turn-1&sourceSeqStart=3&sourceSeqEnd=8&includeManagerDebugView=true",
+      );
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getToolGroupMessages).toHaveBeenCalledWith("thread-1", {
+        turnId: "turn-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 8,
+        includeManagerDebugView: true,
       });
     });
   });

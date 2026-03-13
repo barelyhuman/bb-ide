@@ -573,11 +573,13 @@ export async function getThreadToolGroupMessages(
   turnId: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
+  includeManagerDebugView: boolean = false,
 ): Promise<ThreadToolGroupMessagesResponse> {
   const params = new URLSearchParams();
   params.set("turnId", turnId);
   params.set("sourceSeqStart", String(sourceSeqStart));
   params.set("sourceSeqEnd", String(sourceSeqEnd));
+  if (includeManagerDebugView) params.set("includeManagerDebugView", "true");
   return request<ThreadToolGroupMessagesResponse>(
     "GET",
     `/threads/${id}/tool-group-messages?${params.toString()}`,
