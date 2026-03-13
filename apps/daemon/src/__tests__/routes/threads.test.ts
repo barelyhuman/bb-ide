@@ -305,6 +305,26 @@ describe("Thread routes", () => {
       });
     });
 
+    it("forwards attached environment id when provided", async () => {
+      const thread = makeThread({ id: "new-thread", attachedEnvironmentId: "env-1" });
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(thread);
+
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          attachedEnvironmentId: "env-1",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        attachedEnvironmentId: "env-1",
+      });
+    });
+
     it("forwards sandbox mode when provided", async () => {
       const thread = makeThread({ id: "new-thread" });
       (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(

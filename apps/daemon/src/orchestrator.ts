@@ -866,6 +866,39 @@ export class Orchestrator implements ThreadOrchestrator {
     return DEFAULT_THREAD_PROVIDER_ID;
   }
 
+  private _resolveRequestedRuntimeEnvironmentId(args: {
+    projectId: string;
+    environmentId?: string;
+    attachedEnvironmentId?: string;
+  }): string {
+    if (args.attachedEnvironmentId) {
+      if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
+        throw new Error("First-class environment attachments are unavailable");
+      }
+      const attachedEnvironment = this.environmentRepo.getById(args.attachedEnvironmentId);
+      if (!attachedEnvironment || attachedEnvironment.projectId !== args.projectId) {
+        throw new Error(`Environment not found: ${args.attachedEnvironmentId}`);
+      }
+      const siblingAttachments = this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
+        args.attachedEnvironmentId,
+      );
+      for (const attachment of siblingAttachments) {
+        const siblingThread = this.threadRepo.getById(attachment.threadId);
+        const runtimeKind = siblingThread?.environmentRecord?.kind;
+        if (runtimeKind) {
+          return this._resolveRequestedEnvironmentId(runtimeKind);
+        }
+      }
+      const project = this.projectRepo.getById(args.projectId);
+      if (project && attachedEnvironment.descriptor.path === project.rootPath) {
+        return "local";
+      }
+      return "worktree";
+    }
+
+    return this._resolveRequestedEnvironmentId(args.environmentId);
+  }
+
   private _stopAllPrimaryPromotionWatches(): void {
     this.environmentService.stopPrimaryPromotionWatches();
   }
@@ -894,7 +927,11 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
-    const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
+    const environmentId = this._resolveRequestedRuntimeEnvironmentId({
+      projectId: req.projectId,
+      environmentId: req.environmentId,
+      attachedEnvironmentId: req.attachedEnvironmentId,
+    });
     const providerId = this._resolveSpawnProviderId(req);
     const thread = this.threadRepo.create({
       projectId: req.projectId,
@@ -905,6 +942,12 @@ export class Orchestrator implements ThreadOrchestrator {
     });
     if (explicitTitle) {
       this.lockedTitleThreadIds.add(thread.id);
+    }
+    if (req.attachedEnvironmentId && this.threadEnvironmentAttachmentRepo) {
+      this.threadEnvironmentAttachmentRepo.attachThread({
+        threadId: thread.id,
+        environmentId: req.attachedEnvironmentId,
+      });
     }
 
     this._broadcastThreadChanged(thread.id, ["thread-created"]);
