@@ -201,6 +201,10 @@ export function reconcileManagedArtifactStorage(
     }
   }
 
+  const hasFirstClassManagedEnvironments =
+    Array.isArray(args.environments) &&
+    Array.isArray(args.environmentAttachments);
+
   for (const thread of args.threads) {
     const environmentId = thread.environmentId?.trim();
     if (environmentId) {
@@ -218,6 +222,7 @@ export function reconcileManagedArtifactStorage(
     }
 
     if (
+      !hasFirstClassManagedEnvironments &&
       thread.archivedAt === undefined &&
       (environmentId === "worktree" || environmentId === "docker")
     ) {
@@ -245,9 +250,6 @@ export function reconcileManagedArtifactStorage(
 
   let removedWorkspaceDirectories = 0;
   const activeManagedWorkspacePathsByProjectId = new Map<string, Set<string>>();
-  const hasFirstClassManagedEnvironments =
-    Array.isArray(args.environments) &&
-    Array.isArray(args.environmentAttachments);
 
   if (hasFirstClassManagedEnvironments) {
     const threadById = new Map(args.threads.map((thread) => [thread.id, thread]));

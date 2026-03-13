@@ -448,7 +448,7 @@ export class EnvironmentService {
     }
 
     const thread = this.threadRepo.getById(threadId);
-    if (!thread?.environmentRecord) {
+    if (!thread) {
       return;
     }
     const project = this.projectRepo.getById(thread.projectId);
