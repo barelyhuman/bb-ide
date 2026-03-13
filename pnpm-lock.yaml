@@ -181,6 +181,9 @@ importers:
       '@beanbag/environment-agent':
         specifier: workspace:*
         version: link:../../packages/environment-agent
+      '@beanbag/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.9(hono@4.11.9)
