@@ -991,7 +991,7 @@ function printThreadStatus(payload: ThreadStatusPayload): void {
 }
 
 function printThreadSessions(payload: ThreadSessionsPayload): void {
-  console.log(`Thread ${payload.threadId} environment-agent sessions`);
+  console.log(`Thread ${payload.threadId} env-daemon sessions`);
   if (payload.sessions.length === 0) {
     console.log("No sessions found");
     return;

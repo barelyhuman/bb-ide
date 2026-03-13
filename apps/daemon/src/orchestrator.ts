@@ -869,10 +869,13 @@ export class Orchestrator implements ThreadOrchestrator {
     return DEFAULT_THREAD_PROVIDER_ID;
   }
 
-  private _resolveRequestedRuntimeEnvironmentId(args: {
+  private _resolveEnvironmentSelection(args: {
     projectId: string;
     environmentId?: string;
-  }): string {
+  }): {
+    attachedEnvironmentId?: string;
+    runtimeEnvironmentId: string;
+  } {
     const attachedEnvironmentId = this._resolveSpawnAttachedEnvironmentId(args);
     if (attachedEnvironmentId) {
       if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
@@ -889,16 +892,24 @@ export class Orchestrator implements ThreadOrchestrator {
           projectRootPath: project.rootPath,
         });
         if (derivedRecord?.kind) {
-          return this._resolveRequestedEnvironmentId(derivedRecord.kind);
+          return {
+            attachedEnvironmentId,
+            runtimeEnvironmentId: this._resolveRequestedEnvironmentId(derivedRecord.kind),
+          };
         }
       }
-      if (project && attachedEnvironment.descriptor.path === project.rootPath) {
-        return "local";
-      }
-      return "worktree";
+      return {
+        attachedEnvironmentId,
+        runtimeEnvironmentId:
+          project && attachedEnvironment.descriptor.path === project.rootPath
+            ? "local"
+            : "worktree",
+      };
     }
 
-    return this._resolveRequestedEnvironmentId(args.environmentId);
+    return {
+      runtimeEnvironmentId: this._resolveRequestedEnvironmentId(args.environmentId),
+    };
   }
 
   private _resolveSpawnAttachedEnvironmentId(args: {
@@ -951,11 +962,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
-    const attachedEnvironmentId = this._resolveSpawnAttachedEnvironmentId({
-      projectId: req.projectId,
-      environmentId: req.environmentId,
-    });
-    const environmentId = this._resolveRequestedRuntimeEnvironmentId({
+    const { attachedEnvironmentId, runtimeEnvironmentId } = this._resolveEnvironmentSelection({
       projectId: req.projectId,
       environmentId: req.environmentId,
     });
@@ -964,7 +971,7 @@ export class Orchestrator implements ThreadOrchestrator {
       projectId: req.projectId,
       providerId,
       ...(explicitTitle ? { title: explicitTitle } : {}),
-      environmentId,
+      environmentId: runtimeEnvironmentId,
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     if (explicitTitle) {
@@ -981,7 +988,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this._broadcastThreadChanged(persistedThread.id, ["thread-created"]);
     this._scheduleProvisioning(
       persistedThread.id,
-      { ...req, environmentId },
+      { ...req, environmentId: runtimeEnvironmentId },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",
@@ -3318,14 +3325,11 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Ensure provisioning starts from a clean runtime state.
     this._cleanupThreadRuntime(threadId);
-    let attachedEnvironmentId = this._resolveSpawnAttachedEnvironmentId({
+    let { attachedEnvironmentId, runtimeEnvironmentId: requestedEnvironmentId } =
+      this._resolveEnvironmentSelection({
       projectId: req.projectId,
       environmentId: req.environmentId ?? thread?.environmentId,
-    });
-    const requestedEnvironmentId = this._resolveRequestedRuntimeEnvironmentId({
-      projectId: req.projectId,
-      environmentId: req.environmentId ?? thread?.environmentId,
-    });
+      });
     if (!attachedEnvironmentId) {
       attachedEnvironmentId = this.envFactory.reserveThreadEnvironment({
         threadId,
