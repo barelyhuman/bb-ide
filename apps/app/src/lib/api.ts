@@ -3,6 +3,7 @@ import {
   toRecord,
 } from "@beanbag/agent-core";
 import type {
+  EnvironmentRecord,
   Project,
   Thread,
   ThreadQueuedMessage,
@@ -599,6 +600,11 @@ export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
 
 export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]> {
   return request<SystemEnvironmentInfo[]>("GET", "/system/environments");
+}
+
+export async function listEnvironments(projectId?: string): Promise<EnvironmentRecord[]> {
+  const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+  return request<EnvironmentRecord[]>("GET", `/environments${query}`);
 }
 
 export async function getSystemRestartPolicy(): Promise<SystemRestartPolicy> {

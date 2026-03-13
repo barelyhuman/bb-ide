@@ -6,6 +6,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
+  EnvironmentRecord,
   PromptInput,
   Project,
   Thread,
@@ -631,6 +632,14 @@ export function useSystemEnvironments() {
     queryKey: ["systemEnvironments"],
     queryFn: () => api.listSystemEnvironments(),
     staleTime: 60_000,
+  });
+}
+
+export function useEnvironments(projectId?: string) {
+  return useQuery<EnvironmentRecord[]>({
+    queryKey: ["environments", projectId ?? ""],
+    queryFn: () => api.listEnvironments(projectId),
+    staleTime: 30_000,
   });
 }
 
