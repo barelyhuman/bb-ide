@@ -161,6 +161,8 @@ function createService(args: {
   existsInitially: boolean;
   destroySpy?: () => void;
   restoreImpl?: (state: unknown, context: CreateEnvironmentContext) => IEnvironment;
+  managed?: boolean;
+  siblingThreadIds?: string[];
 }) {
   const environment = createTestEnvironment(args);
   const environmentRegistry = new EnvironmentRegistry().register({
@@ -198,7 +200,7 @@ function createService(args: {
         type: "path",
         path: "/project/root/.worktrees/thread-1",
       },
-      managed: true,
+      managed: args.managed ?? true,
       runtimeState: {
         kind: "worktree",
         state: {},
@@ -208,18 +210,26 @@ function createService(args: {
     },
   ]]);
   let attachmentState:
-    | {
+    | Array<{
       threadId: string;
       environmentId: string;
       createdAt: number;
       updatedAt: number;
-    }
-    | undefined = {
-      threadId: "thread-1",
-      environmentId: "env-1",
-      createdAt: 1000,
-      updatedAt: 1000,
-    };
+    }>
+    | undefined = [
+      {
+        threadId: "thread-1",
+        environmentId: "env-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+      ...(args.siblingThreadIds ?? []).map((threadId) => ({
+        threadId,
+        environmentId: "env-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+    ];
   const threadRepo = {
     getById: vi.fn((_threadId: string) => threadState),
     update: vi.fn((_threadId: string, data: Parameters<ThreadRepository["update"]>[1]) => {
@@ -261,18 +271,18 @@ function createService(args: {
 
   const threadEnvironmentAttachmentRepo = {
     getByThreadId: vi.fn((threadId: string) =>
-      attachmentState?.threadId === threadId ? attachmentState : undefined
+      attachmentState?.find((attachment) => attachment.threadId === threadId)
     ),
     listByEnvironmentId: vi.fn((environmentId: string) =>
-      attachmentState?.environmentId === environmentId ? [attachmentState] : []
+      attachmentState?.filter((attachment) => attachment.environmentId === environmentId) ?? []
     ),
     deleteByThreadId: vi.fn(
       (
         threadId: string,
         opts?: { nextThreadEnvironmentId?: string | null },
       ) => {
-        if (attachmentState?.threadId === threadId) {
-          attachmentState = undefined;
+        if (attachmentState) {
+          attachmentState = attachmentState.filter((attachment) => attachment.threadId !== threadId);
         }
         if (Object.hasOwn(opts ?? {}, "nextThreadEnvironmentId")) {
           threadState.environmentId = opts?.nextThreadEnvironmentId ?? undefined;
@@ -715,6 +725,53 @@ describe("EnvironmentService", () => {
       { nextThreadEnvironmentId: "worktree" },
     );
     expect(threadState.environmentId).toBe("worktree");
+  });
+
+  it("destroys the last unmanaged attached runtime while preserving the environment record", async () => {
+    const destroySpy = vi.fn();
+    const { service, threadEnvironmentAttachmentRepo, threadState, environmentRepo } = createService({
+      existsInitially: true,
+      destroySpy,
+      managed: false,
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    destroySpy.mockClear();
+
+    await service.destroyThreadEnvironment("thread-1");
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(service.getEnvironmentRuntime("thread-1")).toBeUndefined();
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
+      "thread-1",
+      { nextThreadEnvironmentId: null },
+    );
+    expect(threadState.environmentId).toBeUndefined();
+    expect(environmentRepo.getById("env-1")).toBeDefined();
+  });
+
+  it("can tear down a shared runtime after the original owner detaches", async () => {
+    const destroySpy = vi.fn();
+    const { service, threadEnvironmentAttachmentRepo } = createService({
+      existsInitially: true,
+      destroySpy,
+      siblingThreadIds: ["thread-2"],
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    destroySpy.mockClear();
+
+    threadEnvironmentAttachmentRepo.deleteByThreadId("thread-1", { nextThreadEnvironmentId: null });
+
+    await service.stopAllAndWait();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
   it("rebuilds primary promotion state through per-project environment candidates", async () => {

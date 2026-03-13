@@ -31,6 +31,7 @@ import {
 import { derivePersistedEnvironmentRecordFromDescriptor } from "./env-factory.js";
 
 export interface ActiveEnvironmentRuntime {
+  scopeKey: string;
   ownerThreadId: string;
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentAgentConnectionTarget;
@@ -113,6 +114,7 @@ export class EnvironmentService {
 
   private resolveAttachedEnvironment(threadId: string): {
     environmentId: string;
+    hasSiblingAttachments: boolean;
     preserveWorkspace: boolean;
     managed: boolean;
   } | undefined {
@@ -127,9 +129,11 @@ export class EnvironmentService {
       .listByEnvironmentId(attachment.environmentId)
       .filter((record) => record.threadId !== threadId);
     const environmentRecord = this.environmentRepo?.getById(attachment.environmentId);
+    const hasSiblingAttachments = siblingAttachments.length > 0;
     return {
       environmentId: attachment.environmentId,
-      preserveWorkspace: siblingAttachments.length > 0 || !(environmentRecord?.managed ?? false),
+      hasSiblingAttachments,
+      preserveWorkspace: hasSiblingAttachments || !(environmentRecord?.managed ?? false),
       managed: environmentRecord?.managed ?? false,
     };
   }
@@ -435,6 +439,7 @@ export class EnvironmentService {
       }
     });
     this.environmentRuntimes.set(scopeKey, {
+      scopeKey,
       ownerThreadId: threadId,
       environment,
       agentConnectionTarget,
@@ -450,7 +455,10 @@ export class EnvironmentService {
   }
 
   detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
-    const scopeKey = this.getRuntimeScopeKey(threadId);
+    return this.detachEnvironmentRuntimeByScopeKey(this.getRuntimeScopeKey(threadId));
+  }
+
+  private detachEnvironmentRuntimeByScopeKey(scopeKey: string): ActiveEnvironmentRuntime | undefined {
     const runtime = this.environmentRuntimes.get(scopeKey);
     if (runtime) {
       runtime.stopWatchingWorkspaceStatus?.();
@@ -517,6 +525,16 @@ export class EnvironmentService {
     }
   }
 
+  private async destroyDetachedRuntime(
+    threadId: string,
+    runtime: ActiveEnvironmentRuntime,
+  ): Promise<void> {
+    const environmentId = runtime.environment.kind;
+    await Promise.resolve(runtime.environment.destroy());
+    this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
+    this.clearPersistedEnvironmentState(threadId);
+  }
+
   private trackEnvironmentRuntimeSuspension(
     threadId: string,
     suspendPromise: Promise<void>,
@@ -564,12 +582,10 @@ export class EnvironmentService {
 
       const environmentId = runtime.environment.kind;
       try {
-        if (attachedEnvironment?.preserveWorkspace) {
+        if (attachedEnvironment?.preserveWorkspace && attachedEnvironment.hasSiblingAttachments) {
           this.clearPersistedEnvironmentState(threadId);
         } else {
-          await Promise.resolve(runtime.environment.destroy());
-          this.detachEnvironmentRuntime(threadId);
-          this.clearPersistedEnvironmentState(threadId);
+          await this.destroyDetachedRuntime(threadId, runtime);
         }
       } catch (error) {
         reportFailure(environmentId, error);
@@ -996,12 +1012,14 @@ export class EnvironmentService {
     const runtimeThreadIds = new Set(
       Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
     );
-    for (const runtime of this.environmentRuntimes.values()) {
+    for (const runtime of Array.from(this.environmentRuntimes.values())) {
       const threadId = runtime.ownerThreadId;
       if (preserveEnvironments) {
-        this.detachEnvironmentRuntime(threadId);
+        this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
       } else {
-        this.destroyEnvironmentRuntime(threadId);
+        void this.destroyDetachedRuntime(threadId, runtime).catch(() => {
+          // Errors are already reported via onCleanupFailure on individual cleanup paths.
+        });
       }
     }
     if (!preserveEnvironments) {
@@ -1043,12 +1061,13 @@ export class EnvironmentService {
       Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
     );
     const teardownTasks: Promise<void>[] = [];
-    for (const runtime of this.environmentRuntimes.values()) {
+    for (const runtime of Array.from(this.environmentRuntimes.values())) {
       const threadId = runtime.ownerThreadId;
       if (preserveEnvironments) {
-        teardownTasks.push(this.suspendEnvironmentRuntimeAndWait(threadId));
+        teardownTasks.push(this.suspendDetachedRuntime(threadId, runtime));
+        this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
       } else {
-        teardownTasks.push(this.destroyThreadEnvironment(threadId));
+        teardownTasks.push(this.destroyDetachedRuntime(threadId, runtime));
       }
     }
     if (!preserveEnvironments) {

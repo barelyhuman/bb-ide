@@ -397,6 +397,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       authorization: "Bearer test-token",
     });
     const activeRuntime = {
+      scopeKey: "thread:thread-1",
       ownerThreadId: "thread-1",
       environment: runtimeEnvironment,
       agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
@@ -537,6 +538,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       authorization: "Bearer test-token",
     });
     const activeRuntime = {
+      scopeKey: "thread:thread-1",
       ownerThreadId: "thread-1",
       environment: runtimeEnvironment,
       agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
@@ -642,6 +644,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       authorization: "Bearer test-token",
     });
     const activeRuntime = {
+      scopeKey: "thread:thread-1",
       ownerThreadId: "thread-1",
       environment: runtimeEnvironment,
       agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
@@ -743,6 +746,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: {
+        scopeKey: "thread:thread-1",
         ownerThreadId: "thread-1",
         environment: runtimeEnvironment,
         agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
@@ -860,6 +864,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: {
+        scopeKey: "thread:thread-1",
         ownerThreadId: "thread-1",
         environment: runtimeEnvironment,
         agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
@@ -945,6 +950,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: {
+        scopeKey: "thread:thread-1",
         ownerThreadId: "thread-1",
         environment: runtimeEnvironment,
         agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
