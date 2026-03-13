@@ -17,6 +17,7 @@ import type {
 export interface EnvironmentAgentSessionDebugView {
   id: string;
   threadId: string;
+  environmentId?: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;

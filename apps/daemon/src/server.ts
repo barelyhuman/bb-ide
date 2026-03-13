@@ -116,9 +116,18 @@ export function createServer(deps: ServerDeps) {
   const environmentAgentSessionManager = new EnvironmentAgentSessionManager(
     deps.environmentAgentSessionRepo,
   );
+  const resolveAttachedEnvironmentId = (threadId: string): string | undefined =>
+    deps.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
+  const listAttachedThreadIds = (environmentId: string): string[] =>
+    deps.threadEnvironmentAttachmentRepo?.listByEnvironmentId(environmentId).map((row) =>
+      row.threadId
+    ) ?? [];
   const environmentAgentCommandDispatcher = new EnvironmentAgentCommandDispatcher(
     deps.environmentAgentSessionRepo,
     deps.environmentAgentCommandRepo,
+    {
+      resolveEnvironmentId: resolveAttachedEnvironmentId,
+    },
   );
   const daemonRuntimeEnv = {
     ...(deps.runtimeEnv ?? process.env),
@@ -154,7 +163,22 @@ export function createServer(deps: ServerDeps) {
         .catch((error: unknown) => ({
           errorMessage: error instanceof Error ? error.message : String(error),
         })),
+      resolveEnvironmentId: resolveAttachedEnvironmentId,
+      listAttachedThreadIds,
       onSessionInvalidated: (session) => {
+        if (session.environmentId && deps.threadEnvironmentAttachmentRepo) {
+          for (
+            const attachment of deps.threadEnvironmentAttachmentRepo.listByEnvironmentId(
+              session.environmentId,
+            )
+          ) {
+            threadManager.handleEnvironmentAgentSessionInvalidated(
+              attachment.threadId,
+              session.closeReason,
+            );
+          }
+          return;
+        }
         threadManager.handleEnvironmentAgentSessionInvalidated(
           session.threadId,
           session.closeReason,

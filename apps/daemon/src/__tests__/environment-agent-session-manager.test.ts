@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DbConnection } from "@beanbag/db";
 import {
   createConnection,
+  EnvironmentRepository,
   migrate,
   EnvironmentAgentSessionRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@beanbag/db";
 import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
@@ -21,7 +23,9 @@ describe("EnvironmentAgentSessionManager", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
+  let environments: EnvironmentRepository;
   let threads: ThreadRepository;
+  let attachments: ThreadEnvironmentAttachmentRepository;
   let sessions: EnvironmentAgentSessionRepository;
   let manager: EnvironmentAgentSessionManager;
 
@@ -30,7 +34,9 @@ describe("EnvironmentAgentSessionManager", () => {
     migrate(db);
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
+    environments = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
+    attachments = new ThreadEnvironmentAttachmentRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     manager = new EnvironmentAgentSessionManager(sessions);
   });
@@ -39,19 +45,41 @@ describe("EnvironmentAgentSessionManager", () => {
     sqlite.close();
   });
 
-  function createThreadId(): string {
-    const project = projects.create({
+  function createProject() {
+    return projects.create({
       name: "daemon-session-manager-project",
       rootPath: "/tmp/daemon-session-manager-project",
     });
-    return threads.create({ projectId: project.id }).id;
+  }
+
+  function createThreadId(projectId?: string): string {
+    return threads.create({ projectId: projectId ?? createProject().id }).id;
+  }
+
+  function attachThreadToEnvironment(threadId: string): string {
+    const thread = threads.getById(threadId);
+    if (!thread) {
+      throw new Error(`Missing thread ${threadId}`);
+    }
+    const environment = environments.create({
+      projectId: thread.projectId,
+      descriptor: {
+        type: "path",
+        path: `/tmp/daemon-session-manager-project/.worktrees/${threadId}`,
+      },
+      managed: true,
+    });
+    attachments.attachThread({ threadId, environmentId: environment.id });
+    return environment.id;
   }
 
   it("opens sessions with computed liveness deadlines and replaces active sessions", () => {
     const threadId = createThreadId();
+    const environmentId = attachThreadToEnvironment(threadId);
 
     const first = manager.openSession({
       threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
@@ -60,12 +88,14 @@ describe("EnvironmentAgentSessionManager", () => {
     });
     expect(first.active).toMatchObject({
       threadId,
+      environmentId,
       status: "active",
       leaseExpiresAt: 31_000,
     });
 
     const second = manager.openSession({
       threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
@@ -86,8 +116,10 @@ describe("EnvironmentAgentSessionManager", () => {
 
   it("records heartbeats by extending the active liveness deadline", () => {
     const threadId = createThreadId();
+    const environmentId = attachThreadToEnvironment(threadId);
     const opened = manager.openSession({
       threadId,
+      environmentId,
       agentId: "agent-heartbeat",
       agentInstanceId: "instance-heartbeat",
       protocolVersion: 1,
@@ -111,8 +143,10 @@ describe("EnvironmentAgentSessionManager", () => {
 
   it("expires overdue sessions and closes sessions explicitly", () => {
     const threadId = createThreadId();
+    const environmentId = attachThreadToEnvironment(threadId);
     const overdue = manager.openSession({
       threadId,
+      environmentId,
       agentId: "agent-overdue",
       agentInstanceId: "instance-overdue",
       protocolVersion: 1,
@@ -141,6 +175,47 @@ describe("EnvironmentAgentSessionManager", () => {
       status: "closed",
       closeReason: "migration",
       closedAt: 3_000,
+    });
+  });
+
+  it("replaces active sessions across sibling threads sharing one environment", () => {
+    const project = createProject();
+    const firstThreadId = createThreadId(project.id);
+    const secondThreadId = createThreadId(project.id);
+    const environmentId = attachThreadToEnvironment(firstThreadId);
+    attachments.attachThread({ threadId: secondThreadId, environmentId });
+
+    const first = manager.openSession({
+      threadId: firstThreadId,
+      environmentId,
+      agentId: "agent-shared",
+      agentInstanceId: "instance-1",
+      protocolVersion: 1,
+      leaseTtlMs: 10_000,
+      now: 1_000,
+    });
+
+    const second = manager.openSession({
+      threadId: secondThreadId,
+      environmentId,
+      agentId: "agent-shared",
+      agentInstanceId: "instance-2",
+      protocolVersion: 1,
+      leaseTtlMs: 10_000,
+      now: 2_000,
+    });
+
+    expect(second.replaced).toMatchObject({
+      id: first.active.id,
+      threadId: firstThreadId,
+      environmentId,
+      status: "replaced",
+    });
+    expect(manager.getActiveSessionByEnvironmentId(environmentId, 2_500)).toMatchObject({
+      id: second.active.id,
+      threadId: secondThreadId,
+      environmentId,
+      status: "active",
     });
   });
 });

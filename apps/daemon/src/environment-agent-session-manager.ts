@@ -6,6 +6,7 @@ import type {
 
 export interface OpenEnvironmentAgentSessionInput {
   threadId: string;
+  environmentId?: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
@@ -44,8 +45,19 @@ export class EnvironmentAgentSessionManager {
     return this.sessions.getActiveByThreadId(threadId, now);
   }
 
+  getActiveSessionByEnvironmentId(
+    environmentId: string,
+    now?: number,
+  ): EnvironmentAgentSessionRecord | undefined {
+    return this.sessions.getActiveByEnvironmentId(environmentId, now);
+  }
+
   listSessionsByThreadId(threadId: string): EnvironmentAgentSessionRecord[] {
     return this.sessions.listByThreadId(threadId);
+  }
+
+  listSessionsByEnvironmentId(environmentId: string): EnvironmentAgentSessionRecord[] {
+    return this.sessions.listByEnvironmentId(environmentId);
   }
 
   openSession(args: OpenEnvironmentAgentSessionInput): {
@@ -53,18 +65,27 @@ export class EnvironmentAgentSessionManager {
     active: EnvironmentAgentSessionRecord;
   } {
     const now = args.now ?? Date.now();
+    const nextSession = {
+      threadId: args.threadId,
+      ...(args.environmentId ? { environmentId: args.environmentId } : {}),
+      agentId: args.agentId,
+      agentInstanceId: args.agentInstanceId,
+      protocolVersion: args.protocolVersion,
+      controlBaseUrl: args.controlBaseUrl,
+      controlAuthToken: args.controlAuthToken,
+      leaseExpiresAt: now + args.leaseTtlMs,
+    };
+    if (args.environmentId) {
+      return this.sessions.replaceActiveForEnvironment({
+        environmentId: args.environmentId,
+        now,
+        nextSession,
+      });
+    }
     return this.sessions.replaceActiveForThread({
       threadId: args.threadId,
       now,
-      nextSession: {
-        threadId: args.threadId,
-        agentId: args.agentId,
-        agentInstanceId: args.agentInstanceId,
-        protocolVersion: args.protocolVersion,
-        controlBaseUrl: args.controlBaseUrl,
-        controlAuthToken: args.controlAuthToken,
-        leaseExpiresAt: now + args.leaseTtlMs,
-      },
+      nextSession,
     });
   }
 

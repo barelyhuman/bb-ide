@@ -303,6 +303,7 @@ function toEnvironmentAgentSessionDebugView(
   return {
     id: session.id,
     threadId: session.threadId,
+    ...(session.environmentId ? { environmentId: session.environmentId } : {}),
     agentId: session.agentId,
     agentInstanceId: session.agentInstanceId,
     protocolVersion: session.protocolVersion,

@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DbConnection } from "@beanbag/db";
 import {
   createConnection,
+  EnvironmentRepository,
   migrate,
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@beanbag/db";
 import type {
@@ -33,7 +35,9 @@ describe("environment-agent delivery modules", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
+  let environments: EnvironmentRepository;
   let threads: ThreadRepository;
+  let attachments: ThreadEnvironmentAttachmentRepository;
   let sessions: EnvironmentAgentSessionRepository;
   let cursors: EnvironmentAgentCursorRepository;
   let commands: EnvironmentAgentCommandRepository;
@@ -43,7 +47,9 @@ describe("environment-agent delivery modules", () => {
     migrate(db);
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
+    environments = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
+    attachments = new ThreadEnvironmentAttachmentRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     cursors = new EnvironmentAgentCursorRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
@@ -53,12 +59,32 @@ describe("environment-agent delivery modules", () => {
     sqlite.close();
   });
 
-  function createThreadId(): string {
-    const project = projects.create({
+  function createProject() {
+    return projects.create({
       name: "daemon-delivery-modules-project",
       rootPath: "/tmp/daemon-delivery-modules-project",
     });
-    return threads.create({ projectId: project.id }).id;
+  }
+
+  function createThreadId(projectId?: string): string {
+    return threads.create({ projectId: projectId ?? createProject().id }).id;
+  }
+
+  function attachThreadToEnvironment(threadId: string): string {
+    const thread = threads.getById(threadId);
+    if (!thread) {
+      throw new Error(`Missing thread ${threadId}`);
+    }
+    const environment = environments.create({
+      projectId: thread.projectId,
+      descriptor: {
+        type: "path",
+        path: `/tmp/daemon-delivery-modules-project/.worktrees/${threadId}`,
+      },
+      managed: true,
+    });
+    attachments.attachThread({ threadId, environmentId: environment.id });
+    return environment.id;
   }
 
   function createActiveSession(threadId: string, id: string = "sess-1"): string {
@@ -256,6 +282,41 @@ describe("environment-agent delivery modules", () => {
     ]);
     expect(commands.getById("cmd-1")).toMatchObject({ state: "received" });
     expect(commands.getById("cmd-2")).toMatchObject({ state: "received" });
+  });
+
+  it("reuses active sessions across threads attached to the same environment", async () => {
+    const project = createProject();
+    const firstThreadId = createThreadId(project.id);
+    const secondThreadId = createThreadId(project.id);
+    const environmentId = attachThreadToEnvironment(firstThreadId);
+    attachments.attachThread({ threadId: secondThreadId, environmentId });
+    const sessionId = sessions.create({
+      id: "sess-shared",
+      threadId: firstThreadId,
+      environmentId,
+      agentId: "agent-shared",
+      agentInstanceId: "sess-shared-instance",
+      protocolVersion: 1,
+      leaseExpiresAt: 30_000,
+      now: 1_000,
+    }).id;
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: (threadId) =>
+        attachments.getByThreadId(threadId)?.environmentId,
+    });
+
+    const active = await dispatcher.awaitActiveSession({
+      threadId: secondThreadId,
+      timeoutMs: 20,
+      pollIntervalMs: 1,
+    });
+
+    expect(active).toMatchObject({
+      id: sessionId,
+      threadId: firstThreadId,
+      environmentId,
+    });
   });
 
   it("waits for active sessions and terminal command states", async () => {

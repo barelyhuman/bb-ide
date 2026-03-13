@@ -136,6 +136,9 @@ export const environmentAgentSessions = sqliteTable(
     threadId: text("thread_id")
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
+    environmentId: text("environment_id").references(() => environments.id, {
+      onDelete: "cascade",
+    }),
     agentId: text("agent_id").notNull(),
     agentInstanceId: text("agent_instance_id").notNull(),
     protocolVersion: integer("protocol_version").notNull(),
@@ -152,6 +155,10 @@ export const environmentAgentSessions = sqliteTable(
   (table) => [
     index("environment_agent_sessions_thread_status_idx").on(
       table.threadId,
+      table.status,
+    ),
+    index("environment_agent_sessions_environment_status_idx").on(
+      table.environmentId,
       table.status,
     ),
     index("environment_agent_sessions_agent_status_idx").on(

@@ -38,6 +38,8 @@ export interface EnvironmentAgentSessionServiceOptions {
     threadId: string;
     request: EnvironmentAgentSessionProviderRequestPayload;
   }) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
+  resolveEnvironmentId?: (threadId: string) => string | undefined;
+  listAttachedThreadIds?: (environmentId: string) => string[];
   onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
 }
 
@@ -132,6 +134,8 @@ export class EnvironmentAgentSessionService {
   private readonly onSessionInvalidated?: (
     session: EnvironmentAgentSessionRecord,
   ) => void;
+  private readonly resolveEnvironmentId?: (threadId: string) => string | undefined;
+  private readonly listAttachedThreadIds?: (environmentId: string) => string[];
 
   constructor(
     private readonly sessions: EnvironmentAgentSessionManager,
@@ -149,7 +153,24 @@ export class EnvironmentAgentSessionService {
     this.commandDispatcher = options.commandDispatcher;
     this.eventApplier = options.eventApplier;
     this.providerRequestHandler = options.providerRequestHandler;
+    this.resolveEnvironmentId = options.resolveEnvironmentId;
+    this.listAttachedThreadIds = options.listAttachedThreadIds;
     this.onSessionInvalidated = options.onSessionInvalidated;
+  }
+
+  private getResolvedEnvironmentId(threadId: string): string | undefined {
+    return this.resolveEnvironmentId?.(threadId);
+  }
+
+  private getActiveSessionForThread(
+    threadId: string,
+    now: number = this.clock(),
+  ): EnvironmentAgentSessionRecord | undefined {
+    const environmentId = this.getResolvedEnvironmentId(threadId);
+    if (environmentId) {
+      return this.sessions.getActiveSessionByEnvironmentId(environmentId, now);
+    }
+    return this.sessions.getActiveSessionByThreadId(threadId, now);
   }
 
   private invalidateSession(session: EnvironmentAgentSessionRecord): void {
@@ -187,8 +208,10 @@ export class EnvironmentAgentSessionService {
       throw new Error("Multi-channel environment-agent sessions are not supported yet");
     }
 
+    const environmentId = this.getResolvedEnvironmentId(args.threadId);
     const opened = this.sessions.openSession({
       threadId: args.threadId,
+      ...(environmentId ? { environmentId } : {}),
       agentId: args.payload.agentId,
       agentInstanceId: args.payload.agentInstanceId,
       protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
@@ -288,7 +311,17 @@ export class EnvironmentAgentSessionService {
     now?: number;
   }): EnvironmentAgentSessionRecord | undefined {
     const now = args.now ?? this.clock();
-    const active = this.sessions.getActiveSessionByThreadId(args.threadId, now);
+    const environmentId = this.getResolvedEnvironmentId(args.threadId);
+    if (environmentId) {
+      const attachedThreadIds = this.listAttachedThreadIds?.(environmentId) ?? [];
+      const otherAttachedThreadIds = attachedThreadIds.filter(
+        (threadId) => threadId !== args.threadId,
+      );
+      if (otherAttachedThreadIds.length > 0) {
+        return undefined;
+      }
+    }
+    const active = this.getActiveSessionForThread(args.threadId, now);
     if (!active) {
       return undefined;
     }
@@ -315,11 +348,15 @@ export class EnvironmentAgentSessionService {
   }
 
   listSessions(threadId: string): EnvironmentAgentSessionRecord[] {
+    const environmentId = this.getResolvedEnvironmentId(threadId);
+    if (environmentId) {
+      return this.sessions.listSessionsByEnvironmentId(environmentId);
+    }
     return this.sessions.listSessionsByThreadId(threadId);
   }
 
   getThreadStatus(threadId: string): EnvironmentAgentStatusSnapshot {
-    const session = this.sessions.getActiveSessionByThreadId(threadId, this.clock());
+    const session = this.getActiveSessionForThread(threadId, this.clock());
     if (!session) {
       throw new Error(`No active environment-agent session for thread ${threadId}`);
     }
@@ -442,18 +479,16 @@ export class EnvironmentAgentSessionService {
       sessionId: args.sessionId,
       sentAt: now,
       payload: {
-        commands: records
-          .filter((record) => record.threadId === args.threadId)
-          .map((record) => ({
-            channelId: record.threadId,
-            commandCursor: record.commandCursor,
-            commandId: record.id,
-            createdAt: record.createdAt,
-            command: decodePersistedEnvironmentAgentCommand({
-              commandType: record.commandType,
-              payload: record.payload,
-            }),
-          })),
+        commands: records.map((record) => ({
+          channelId: record.threadId,
+          commandCursor: record.commandCursor,
+          commandId: record.id,
+          createdAt: record.createdAt,
+          command: decodePersistedEnvironmentAgentCommand({
+            commandType: record.commandType,
+            payload: record.payload,
+          }),
+        })),
       },
     };
   }
@@ -585,6 +620,15 @@ export class EnvironmentAgentSessionService {
     const session = this.sessions.getSession(sessionId);
     if (!session) {
       throw inactiveEnvironmentAgentSessionError(sessionId);
+    }
+    const environmentId = this.getResolvedEnvironmentId(threadId);
+    if (environmentId) {
+      if (session.environmentId !== environmentId) {
+        throw invalidRequestError(
+          `Environment-agent session ${sessionId} does not belong to environment ${environmentId}`,
+        );
+      }
+      return session;
     }
     if (session.threadId !== threadId) {
       throw invalidRequestError(
