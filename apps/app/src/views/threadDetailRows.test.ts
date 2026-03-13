@@ -451,6 +451,52 @@ describe("buildThreadDetailRows", () => {
     expect(group.messages[0].changes).toHaveLength(2);
   });
 
+  it("splits tool groups around assistant messages within the same turn", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("tool-1", 1),
+        kind: "tool-call",
+        turnId: "turn-1",
+        toolName: "shell",
+        callId: "call-1",
+        command: "pnpm test",
+        status: "completed",
+      },
+      {
+        ...baseMessage("assistant-1", 2),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "I’m delegating a verification run now.",
+        status: "completed",
+      },
+      {
+        ...baseMessage("tool-2", 3),
+        kind: "tool-call",
+        turnId: "turn-1",
+        toolName: "shell",
+        callId: "call-2",
+        command: "pnpm exec vitest",
+        status: "completed",
+      },
+      {
+        ...baseMessage("assistant-2", 4),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "The verification is done.",
+        status: "completed",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "tool-group",
+      "message",
+      "tool-group",
+      "message",
+    ]);
+  });
+
   it("merges consecutive provisioning operations into a single row", () => {
     const messages: UIMessage[] = [
       {
