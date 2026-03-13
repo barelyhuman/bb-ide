@@ -987,7 +987,7 @@ export function ThreadDetailView() {
                   updateThread.isPending ||
                   (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
                 }
-                className="h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-tight text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground"
+                className="h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-0 text-xs leading-tight text-foreground shadow-none hover:bg-transparent hover:text-foreground"
               >
                 <span className="truncate">
                   {managerSelectorOptions.find((option) => option.value === managerSelectorValue)
