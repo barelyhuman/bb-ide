@@ -114,6 +114,9 @@ export function ThreadDetailView() {
   const [showManagerDebugView, setShowManagerDebugView] = useState(false);
   const { data: projects } = useProjects();
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
+  const project = projects?.find((candidate) => candidate.id === projectId);
+  const primaryManagerThreadId = project?.primaryManagerThreadId;
+  const { data: primaryManagerThread } = useThread(primaryManagerThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
     {
@@ -670,8 +673,6 @@ export function ThreadDetailView() {
       : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
-  const project = projects?.find((candidate) => candidate.id === projectId);
-  const primaryManagerThreadId = project?.primaryManagerThreadId;
   const isManagerThread = thread.type === "manager";
   const canUseGitUi = !isManagerThread;
   const parentThreadId = thread.parentThreadId;
@@ -686,6 +687,37 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
+  const managerSelectorOptions = useMemo(() => {
+    if (isManagerThread) {
+      return [];
+    }
+
+    const options: Array<{ value: string; label: string }> = [{ value: "none", label: "None" }];
+    const seen = new Set<string>(["none"]);
+    const addOption = (value: string | undefined, label: string) => {
+      if (!value || value === thread.id || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      options.push({ value, label });
+    };
+
+    addOption(parentThreadId, parentThreadDisplayName ?? "Manager");
+    addOption(
+      primaryManagerThreadId ?? undefined,
+      primaryManagerThread?.title?.trim() ? primaryManagerThread.title : "Manager",
+    );
+
+    return options;
+  }, [
+    isManagerThread,
+    parentThreadDisplayName,
+    parentThreadId,
+    primaryManagerThread,
+    primaryManagerThreadId,
+    thread.id,
+  ]);
+  const managerSelectorValue = parentThreadId ?? "none";
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
   const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
@@ -933,59 +965,33 @@ export function ThreadDetailView() {
             ? "Managed thread"
             : "Thread"}
       </DetailRow>
-      {parentThreadId ? (
+      {!isManagerThread &&
+      (parentThreadId || canAssignToManager || canTakeOverThread) ? (
         <DetailRow
-          label="Managed by"
-          valueClassName="min-w-0 truncate"
-        >
-          <Link
-            to={`/projects/${projectId}/threads/${parentThreadId}`}
-            className="underline underline-offset-2"
-          >
-            {parentThreadDisplayName}
-          </Link>
-        </DetailRow>
-      ) : null}
-      {canAssignToManager ? (
-        <DetailRow
-          label="Ownership"
+          label="Manager"
           valueClassName="min-w-0"
         >
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={updateThread.isPending || !primaryManagerThreadId}
-            onClick={() => {
+          <select
+            className="h-8 min-w-0 max-w-full rounded-md border border-border/70 bg-background px-2 text-xs text-foreground outline-none ring-sidebar-ring transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+            value={managerSelectorValue}
+            disabled={
+              updateThread.isPending ||
+              (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
+            }
+            onChange={(event) => {
+              const nextValue = event.target.value;
               updateThread.mutate({
                 id: thread.id,
-                parentThreadId: primaryManagerThreadId ?? null,
+                parentThreadId: nextValue === "none" ? null : nextValue,
               });
             }}
           >
-            Assign to manager
-          </Button>
-        </DetailRow>
-      ) : null}
-      {canTakeOverThread ? (
-        <DetailRow
-          label="Ownership"
-          valueClassName="min-w-0"
-        >
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={updateThread.isPending}
-            onClick={() => {
-              updateThread.mutate({
-                id: thread.id,
-                parentThreadId: null,
-              });
-            }}
-          >
-            Take over
-          </Button>
+            {managerSelectorOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </DetailRow>
       ) : null}
       {!isManagerThread && threadEnvironmentType ? (
