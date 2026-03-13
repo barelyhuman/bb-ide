@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Copy, PanelRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, PanelRight } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
@@ -168,6 +168,10 @@ export function ThreadDetailView() {
   const [selectedManagerWorkspacePath, setSelectedManagerWorkspacePath] = useState<string | null>(
     null,
   );
+  const effectiveManagerWorkspacePath =
+    thread?.type === "manager"
+      ? selectedManagerWorkspacePath ?? managerWorkspaceFiles?.files?.[0]?.path ?? null
+      : null;
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
   const mergeBaseStateThreadIdRef = useRef<string | undefined>(undefined);
@@ -216,8 +220,8 @@ export function ThreadDetailView() {
     data: managerWorkspaceFile,
     isLoading: isManagerWorkspaceFileLoading,
     error: managerWorkspaceFileError,
-  } = useThreadManagerWorkspaceFile(threadId ?? "", selectedManagerWorkspacePath, {
-    enabled: thread?.type === "manager" && selectedManagerWorkspacePath !== null,
+  } = useThreadManagerWorkspaceFile(threadId ?? "", effectiveManagerWorkspacePath, {
+    enabled: thread?.type === "manager" && effectiveManagerWorkspacePath !== null,
   });
   const {
     selectedModel,
@@ -373,7 +377,7 @@ export function ThreadDetailView() {
     setSelectedManagerWorkspacePath((currentPath) =>
       currentPath && files.some((file) => file.path === currentPath)
         ? currentPath
-        : files[0]?.path ?? null,
+        : null,
     );
   }, [managerWorkspaceFiles?.files, thread?.type]);
 
@@ -1094,64 +1098,68 @@ export function ThreadDetailView() {
     )
   );
   const managerWorkspaceContent = thread.type === "manager" ? (
-    <div className="grid min-h-0 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-      <div className="min-h-0 rounded-lg border border-border/70 bg-background/45">
-        <div className="border-b border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground">
-          Workspace files
-        </div>
-        <div className="max-h-[50vh] overflow-y-auto p-2">
-          {(managerWorkspaceFiles?.files?.length ?? 0) > 0 ? (
-            <div className="space-y-1">
-              {managerWorkspaceFiles?.files.map((file) => (
-                <Button
-                  key={file.path}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={
-                    selectedManagerWorkspacePath === file.path
-                      ? "h-auto w-full justify-start rounded-md bg-accent/35 px-2 py-1.5 text-left text-xs"
-                      : "h-auto w-full justify-start rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground"
-                  }
-                  onClick={() => {
-                    setSelectedManagerWorkspacePath(file.path);
-                  }}
-                >
+    <div className="space-y-2">
+      {(managerWorkspaceFiles?.files?.length ?? 0) > 0 ? (
+        managerWorkspaceFiles?.files.map((file) => {
+          const isExpanded = effectiveManagerWorkspacePath === file.path;
+          const isActiveFile = isExpanded;
+
+          return (
+            <div
+              key={file.path}
+              className="overflow-hidden rounded-lg border border-border/70 bg-background/45"
+            >
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent/20"
+                onClick={() => {
+                  setSelectedManagerWorkspacePath((currentPath) =>
+                    currentPath === file.path ? null : file.path,
+                  );
+                }}
+                aria-expanded={isExpanded}
+              >
+                {isExpanded ? (
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
                   {file.path}
-                </Button>
-              ))}
+                </span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {file.size} B
+                </span>
+              </button>
+              {isExpanded ? (
+                <div className="border-t border-border/70 px-3 py-3">
+                  {isManagerWorkspaceFileLoading && isActiveFile ? (
+                    <p className="text-xs text-muted-foreground">Loading file…</p>
+                  ) : managerWorkspaceFileError && isActiveFile ? (
+                    <p className="text-xs text-destructive">
+                      {managerWorkspaceFileError instanceof Error
+                        ? managerWorkspaceFileError.message
+                        : "Failed to load workspace file"}
+                    </p>
+                  ) : managerWorkspaceFile && isActiveFile ? (
+                    <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+                      {managerWorkspaceFile.content}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Select a manager workspace file to view it.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
-          ) : (
-            <p className="px-1 py-2 text-xs text-muted-foreground">
-              No files yet.
-            </p>
-          )}
-        </div>
-      </div>
-      <div className="min-h-0 rounded-lg border border-border/70 bg-background/45">
-        <div className="border-b border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground">
-          {selectedManagerWorkspacePath ?? "Select a file"}
-        </div>
-        <div className="max-h-[50vh] overflow-auto p-3">
-          {isManagerWorkspaceFileLoading ? (
-            <p className="text-xs text-muted-foreground">Loading file…</p>
-          ) : managerWorkspaceFileError ? (
-            <p className="text-xs text-destructive">
-              {managerWorkspaceFileError instanceof Error
-                ? managerWorkspaceFileError.message
-                : "Failed to load workspace file"}
-            </p>
-          ) : managerWorkspaceFile ? (
-            <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-              {managerWorkspaceFile.content}
-            </pre>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Select a manager workspace file to view it.
-            </p>
-          )}
-        </div>
-      </div>
+          );
+        })
+      ) : (
+        <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+          No files yet.
+        </p>
+      )}
     </div>
   ) : undefined;
   const threadActionsMenu = (
