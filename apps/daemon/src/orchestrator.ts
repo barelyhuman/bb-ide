@@ -1026,9 +1026,10 @@ export class Orchestrator implements ThreadOrchestrator {
     context?: { initiator?: ThreadTurnInitiator },
   ): Promise<void> {
     const initiator = context?.initiator ?? "agent";
+    const existingThread = this.threadRepo.getById(threadId);
     await this._tell(threadId, request, options, {
       initiator,
-      awaitProviderStart: false,
+      awaitProviderStart: existingThread?.status !== "active",
     });
   }
 
@@ -3627,6 +3628,11 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
+  private async _recoverEnvironmentAgentAccess(threadId: string): Promise<void> {
+    await this._cleanupThreadRuntimeAndWait(threadId, { retireActiveSession: true });
+    await this._ensureEnvironmentAgentAccess(threadId);
+  }
+
   private async _withEnvironmentAgentClient<T>(
     threadId: string,
     action: (client: EnvironmentAgentClient) => Promise<T>,
@@ -3655,7 +3661,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._ensureEnvironmentAgentAccess(args.thread.id);
+        await this._recoverEnvironmentAgentAccess(args.thread.id);
       },
     });
     try {
@@ -4193,13 +4199,29 @@ export class Orchestrator implements ThreadOrchestrator {
         return resumed.providerThreadId;
       } catch (err) {
         lastResumeError = err;
-        this._cleanupThreadRuntime(threadId);
+        const lostSession =
+          err instanceof AgentServerSessionError &&
+          (err.code === "inactive_session" || err.code === "provider_unavailable");
+        if (lostSession) {
+          await this._cleanupThreadRuntimeAndWait(threadId, {
+            retireActiveSession: true,
+          });
+        } else {
+          this._cleanupThreadRuntime(threadId);
+        }
         const resumeTimedOut =
           (isDomainError(err) && err.code === "provider_timeout") ||
           (err instanceof AgentServerSessionError && err.code === "provider_timeout");
-        if (!this._getAgentServerForThread(thread).isMissingProviderThreadError(err) && !resumeTimedOut) {
+        if (
+          !lostSession &&
+          !this._getAgentServerForThread(thread).isMissingProviderThreadError(err) &&
+          !resumeTimedOut
+        ) {
           this._rethrowAgentServerError(threadId, err);
           throw err;
+        }
+        if (lostSession && attempt === 0) {
+          continue;
         }
         if (resumeTimedOut && attempt === 0) {
           continue;
@@ -4316,9 +4338,10 @@ export class Orchestrator implements ThreadOrchestrator {
     options?: PromptExecutionOptions;
     mode: "auto" | "steer" | "start";
   }): Promise<string> {
+    const agentServer = this._getAgentServerForThreadId(args.threadId);
     const sendTurn = async (providerThreadId: string): Promise<void> => {
       await this._withEnvironmentAgentAccess(args.threadId, async ({ client, providerLaunch }) => {
-        await this._getAgentServerForThreadId(args.threadId).sendTurnCommand({
+        await agentServer.sendTurnCommand({
           client,
           threadId: args.threadId,
           providerThreadId,
@@ -4340,7 +4363,20 @@ export class Orchestrator implements ThreadOrchestrator {
       return args.providerThreadId;
     } catch (error) {
       if (
-        !this._getAgentServerForThreadId(args.threadId).isMissingProviderThreadError(error) ||
+        error instanceof AgentServerSessionError &&
+        (error.code === "inactive_session" || error.code === "provider_unavailable") &&
+        !args.activeTurnId
+      ) {
+        await this._recoverEnvironmentAgentAccess(args.threadId);
+        try {
+          await sendTurn(args.providerThreadId);
+          return args.providerThreadId;
+        } catch (recoveredError) {
+          error = recoveredError;
+        }
+      }
+      if (
+        !agentServer.isMissingProviderThreadError(error) ||
         args.activeTurnId
       ) {
         throw error;

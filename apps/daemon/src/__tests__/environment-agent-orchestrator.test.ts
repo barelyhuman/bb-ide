@@ -202,7 +202,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   let projectRepo: ReturnType<typeof createMocks>["projectRepo"];
   let ws: ReturnType<typeof createMocks>["ws"];
   let manager: Orchestrator;
-  let sessionService: { getThreadStatus: ReturnType<typeof vi.fn> };
+  let sessionService: {
+    getThreadStatus: ReturnType<typeof vi.fn>;
+    retireActiveSessionForThread: ReturnType<typeof vi.fn>;
+  };
 
   function installAuthorizedEnvironmentRuntime(
     threadId: string,
@@ -230,6 +233,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     ws = mocks.ws;
     sessionService = {
       getThreadStatus: vi.fn(),
+      retireActiveSessionForThread: vi.fn(),
     };
     manager = new Orchestrator(
       threadRepo,

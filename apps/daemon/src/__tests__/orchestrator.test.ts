@@ -2034,11 +2034,16 @@ describe("Orchestrator", () => {
         )
         .mockResolvedValue("provider-thread-1");
 
-      await expect(
-        manager.tell("thread-1", {
+      let settled = false;
+      const tellPromise = manager
+        .tell("thread-1", {
           input: [{ type: "text", text: "hello" }],
-        }),
-      ).resolves.toBeUndefined();
+        })
+        .finally(() => {
+          settled = true;
+        });
+
+      await Promise.resolve();
 
       expect(thread.status).toBe("active");
       expect(eventRepo.create).toHaveBeenCalledWith(
@@ -2067,10 +2072,10 @@ describe("Orchestrator", () => {
         }),
         expect.anything(),
       );
+      expect(settled).toBe(false);
 
       resolveEnsureProviderSession?.("provider-thread-1");
-      await Promise.resolve();
-      await Promise.resolve();
+      await expect(tellPromise).resolves.toBeUndefined();
 
       const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls.map(
         (call) => call[0],

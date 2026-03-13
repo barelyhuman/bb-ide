@@ -83,7 +83,6 @@ describe("startup tasks", () => {
           controlAuthToken: "token-2",
         },
       ]),
-      markClosed: vi.fn(),
     };
 
     const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
@@ -99,17 +98,11 @@ describe("startup tasks", () => {
       pokedCount: 1,
       unreachableCount: 1,
     });
-    expect(sessionRepo.markClosed).toHaveBeenCalledTimes(1);
-    expect(sessionRepo.markClosed).toHaveBeenCalledWith({
-      sessionId: "sess-2",
-      reason: "internal_error",
-    });
   });
 
   it("defers env-agent startup recovery into the background", async () => {
     const sessionRepo = {
       listActive: vi.fn().mockReturnValue([]),
-      markClosed: vi.fn(),
     };
     const logger = {
       log: vi.fn(),
@@ -154,7 +147,6 @@ describe("startup tasks", () => {
           controlAuthToken: "token-slow",
         },
       ]),
-      markClosed: vi.fn(),
     };
 
     const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
@@ -170,10 +162,6 @@ describe("startup tasks", () => {
       activeSessionCount: 1,
       pokedCount: 0,
       unreachableCount: 1,
-    });
-    expect(sessionRepo.markClosed).toHaveBeenCalledWith({
-      sessionId: "sess-slow",
-      reason: "internal_error",
     });
   });
 });
