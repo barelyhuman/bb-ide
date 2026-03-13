@@ -1,11 +1,21 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import type { IEnvironment } from "@beanbag/environment";
 import type { EnvironmentDescriptor, PersistedEnvironmentRecord } from "@beanbag/agent-core";
 import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
 } from "@beanbag/db";
+
+interface PrimaryWorkspaceAwareEnvironment {
+  getWorkspaceRootUnsafe(): string;
+  isPrimaryWorkspace?(projectRootPath: string): boolean;
+}
+
+interface PersistableEnvironment extends PrimaryWorkspaceAwareEnvironment {
+  kind: string;
+  serialize(): unknown;
+  isContainerBacked?(): boolean;
+}
 
 export class EnvironmentFactory {
   constructor(
@@ -15,7 +25,7 @@ export class EnvironmentFactory {
 
   isPrimaryWorkspace(args: {
     projectRootPath: string;
-    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
+    environment: PrimaryWorkspaceAwareEnvironment;
   }): boolean {
     return args.environment.isPrimaryWorkspace
       ? args.environment.isPrimaryWorkspace(args.projectRootPath)
@@ -24,16 +34,70 @@ export class EnvironmentFactory {
 
   shouldRunSetupScript(args: {
     projectRootPath: string;
-    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
+    environment: PrimaryWorkspaceAwareEnvironment;
   }): boolean {
     return !this.isPrimaryWorkspace(args);
+  }
+
+  reserveThreadEnvironment(args: {
+    threadId: string;
+    projectId: string;
+    projectRootPath: string;
+    requestedEnvironmentId: string;
+  }): string | undefined {
+    if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
+      return undefined;
+    }
+
+    const existingAttachment = this.threadEnvironmentAttachmentRepo.getByThreadId(args.threadId);
+    if (existingAttachment) {
+      return existingAttachment.environmentId;
+    }
+
+    const isPrimaryWorkspace = args.requestedEnvironmentId === "local";
+    const environmentRecord = isPrimaryWorkspace
+      ? (
+        this.environmentRepo.findByProjectDescriptor({
+          projectId: args.projectId,
+          descriptor: {
+            type: "path",
+            path: args.projectRootPath,
+          },
+        }) ??
+        this.environmentRepo.create({
+          projectId: args.projectId,
+          descriptor: {
+            type: "path",
+            path: args.projectRootPath,
+          },
+          managed: false,
+          runtimeState: {
+            kind: "local",
+            state: {},
+          },
+        })
+      )
+      : this.environmentRepo.create({
+          projectId: args.projectId,
+          descriptor: {
+            type: "path",
+            path: args.projectRootPath,
+          },
+          managed: true,
+        });
+
+    this.threadEnvironmentAttachmentRepo.attachThread({
+      threadId: args.threadId,
+      environmentId: environmentRecord.id,
+    });
+    return environmentRecord.id;
   }
 
   syncThreadEnvironmentAttachment(args: {
     threadId: string;
     projectId: string;
     projectRootPath: string;
-    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
+    environment: PersistableEnvironment;
   }): { environmentId: string; managed: boolean } | undefined {
     if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
       return undefined;
@@ -47,16 +111,32 @@ export class EnvironmentFactory {
       projectRootPath: args.projectRootPath,
       environment: args.environment,
     });
-    const existingEnvironment = this.environmentRepo.findByProjectDescriptor({
-      projectId: args.projectId,
-      descriptor,
-    });
+    const existingAttachment = this.threadEnvironmentAttachmentRepo.getByThreadId(args.threadId);
+    const existingEnvironment = existingAttachment
+      ? this.environmentRepo.getById(existingAttachment.environmentId)
+      : args.environment.isContainerBacked?.()
+      ? undefined
+      : this.environmentRepo.findByProjectDescriptor({
+          projectId: args.projectId,
+          descriptor,
+        });
     const environmentRecord = existingEnvironment
-      ? this.environmentRepo.update(existingEnvironment.id, { managed })
+      ? this.environmentRepo.update(existingEnvironment.id, {
+          descriptor,
+          managed,
+          runtimeState: {
+            kind: args.environment.kind,
+            state: args.environment.serialize(),
+          },
+        })
       : this.environmentRepo.create({
         projectId: args.projectId,
         descriptor,
         managed,
+        runtimeState: {
+          kind: args.environment.kind,
+          state: args.environment.serialize(),
+        },
       });
 
     if (!environmentRecord) {

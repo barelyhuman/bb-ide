@@ -34,7 +34,6 @@ export const spawnThreadSchema = z.object({
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .optional(),
   environmentId: z.string().min(1).optional(),
-  attachedEnvironmentId: z.string().min(1).optional(),
   developerInstructions: z.string().optional(),
   parentThreadId: z.string().optional(),
 });

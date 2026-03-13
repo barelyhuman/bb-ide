@@ -97,7 +97,7 @@ export class EnvironmentAgentSessionHttpClient {
     payload: EnvironmentAgentSessionOpenPayload,
   ): Promise<EnvironmentAgentSessionWelcomeMessage> {
     return this.postJson(
-      `/threads/${this.threadId}/environment-agent/session/open`,
+      `/threads/${this.threadId}/env-daemon/session/open`,
       payload,
       201,
     ) as Promise<EnvironmentAgentSessionWelcomeMessage>;
@@ -144,7 +144,7 @@ export class EnvironmentAgentSessionHttpClient {
       search.set("waitMs", String(Math.floor(args.waitMs ?? 0)));
     }
     return this.getJson(
-      `/threads/${this.threadId}/environment-agent/session/commands?${search.toString()}`,
+      `/threads/${this.threadId}/env-daemon/session/commands?${search.toString()}`,
       200,
       { signal: args.signal },
     ) as Promise<EnvironmentAgentSessionCommandBatchMessage>;
@@ -213,13 +213,13 @@ export class EnvironmentAgentSessionHttpClient {
     } as Extract<EnvironmentAgentSessionBoundClientMessage, { type: TType }>;
     if (args.responseStatus === 200) {
       return this.postJson(
-        `/threads/${this.threadId}/environment-agent/session/messages`,
+        `/threads/${this.threadId}/env-daemon/session/messages`,
         message,
         200,
       );
     }
     return this.postNoContent(
-      `/threads/${this.threadId}/environment-agent/session/messages`,
+      `/threads/${this.threadId}/env-daemon/session/messages`,
       message,
     );
   }

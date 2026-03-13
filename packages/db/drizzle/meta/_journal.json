@@ -288,6 +288,13 @@
       "when": 1773475200000,
       "tag": "0040_backfill_thread_environment_ids_from_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1773478800000,
+      "tag": "0041_environment_runtime_state",
+      "breakpoints": true
     }
   ]
 }

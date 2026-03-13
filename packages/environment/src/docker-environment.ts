@@ -89,10 +89,10 @@ function sanitizeContainerSegment(value: string): string {
 }
 
 function resolveContainerName(args: {
-  threadId: string;
+  environmentId: string;
   containerPrefix: string;
 }): string {
-  return `${args.containerPrefix}-${sanitizeContainerSegment(args.threadId)}`;
+  return `${args.containerPrefix}-${sanitizeContainerSegment(args.environmentId)}`;
 }
 
 function toDockerExecArgs(args: {
@@ -641,7 +641,7 @@ export function createDockerEnvironmentDefinition(
         {
           worktree: worktreeState,
           containerName: resolveContainerName({
-            threadId: context.threadId,
+            environmentId: context.environmentRecordId ?? context.threadId,
             containerPrefix,
           }),
           image,

@@ -419,6 +419,7 @@ export class EnvironmentRepository {
     projectId: string;
     descriptor: EnvironmentDescriptor;
     managed: boolean;
+    runtimeState?: PersistedEnvironmentRecord;
   }): EnvironmentRecord {
     const now = Date.now();
     const row = {
@@ -426,6 +427,7 @@ export class EnvironmentRepository {
       projectId: data.projectId,
       descriptor: JSON.stringify(data.descriptor),
       managed: data.managed,
+      runtimeState: data.runtimeState ? JSON.stringify(data.runtimeState) : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -483,6 +485,7 @@ export class EnvironmentRepository {
     data: {
       descriptor?: EnvironmentDescriptor;
       managed?: boolean;
+      runtimeState?: PersistedEnvironmentRecord | null;
     },
     opts?: {
       touchUpdatedAt?: boolean;
@@ -507,6 +510,11 @@ export class EnvironmentRepository {
     if (data.managed !== undefined) {
       updates.managed = data.managed;
     }
+    if (data.runtimeState !== undefined) {
+      updates.runtimeState = data.runtimeState
+        ? JSON.stringify(data.runtimeState)
+        : null;
+    }
 
     db.update(environments).set(updates).where(eq(environments.id, id)).run();
     const updated = db
@@ -529,6 +537,7 @@ export class EnvironmentRepository {
       projectId: row.projectId,
       descriptor: parseEnvironmentDescriptor(row.descriptor),
       managed: row.managed,
+      ...(row.runtimeState ? { runtimeState: parseEnvironmentRecord(row.runtimeState) } : {}),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

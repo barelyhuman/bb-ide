@@ -152,11 +152,14 @@ export class EnvironmentService {
     threadId: string,
   ): PersistedEnvironmentRecord | undefined {
     const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
-    if (!attachedEnvironment || !this.threadEnvironmentAttachmentRepo) {
+    if (!attachedEnvironment) {
       return undefined;
     }
     const attachedEnvironmentRecord = this.environmentRepo?.getById(attachedEnvironment.environmentId);
     if (attachedEnvironmentRecord) {
+      if (attachedEnvironmentRecord.runtimeState) {
+        return attachedEnvironmentRecord.runtimeState;
+      }
       const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
         descriptor: attachedEnvironmentRecord.descriptor,
         projectRootPath:
@@ -167,17 +170,42 @@ export class EnvironmentService {
         return derivedRecord;
       }
     }
-    const siblingAttachments = this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
-      attachedEnvironment.environmentId,
-    );
-    for (const attachment of siblingAttachments) {
-      if (attachment.threadId === threadId) continue;
-      const siblingThread = this.threadRepo.getById(attachment.threadId);
-      if (siblingThread?.environmentRecord) {
-        return siblingThread.environmentRecord;
+    return undefined;
+  }
+
+  private resolveThreadRuntimeKind(
+    thread: Thread,
+    projectRootPath: string,
+  ): string {
+    const attachedEnvironmentRecord = this.resolveAttachedPersistedEnvironmentRecord(thread.id);
+    const candidateKinds = [
+      attachedEnvironmentRecord?.kind,
+      thread.environmentId,
+      "local",
+    ];
+    for (const candidateKind of candidateKinds) {
+      if (!candidateKind) {
+        continue;
+      }
+      const normalized = candidateKind.trim();
+      if (!normalized) {
+        continue;
+      }
+      if (this.environmentRegistry.has(normalized)) {
+        return normalized;
+      }
+      const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+        descriptor: {
+          type: "path",
+          path: projectRootPath,
+        },
+        projectRootPath,
+      });
+      if (derivedRecord?.kind && this.environmentRegistry.has(derivedRecord.kind)) {
+        return derivedRecord.kind;
       }
     }
-    return undefined;
+    return "local";
   }
 
   listEnvironments(): SystemEnvironmentInfo[] {
@@ -201,8 +229,7 @@ export class EnvironmentService {
       this.restoreFailuresByThreadId.delete(thread.id);
       return runtime.environment;
     }
-    const environmentRecord =
-      thread.environmentRecord ?? this.resolveAttachedPersistedEnvironmentRecord(thread.id);
+    const environmentRecord = this.resolveAttachedPersistedEnvironmentRecord(thread.id);
     if (!environmentRecord) {
       this.restoreFailuresByThreadId.delete(thread.id);
       return undefined;
@@ -350,12 +377,7 @@ export class EnvironmentService {
         };
       }
 
-      const attachedEnvironmentRecord = this.resolveAttachedPersistedEnvironmentRecord(thread.id);
-      const environmentId =
-        thread.environmentRecord?.kind ??
-        attachedEnvironmentRecord?.kind ??
-        thread.environmentId ??
-        "local";
+      const environmentId = this.resolveThreadRuntimeKind(thread, projectRootPath);
       const environment =
         this.restoreThreadEnvironment(thread, projectRootPath) ??
         this.environmentRegistry.create(
@@ -462,7 +484,7 @@ export class EnvironmentService {
     } catch (error) {
       this.callbacks.onCleanupFailure(
         threadId,
-        thread.environmentRecord.kind,
+        this.resolveAttachedEnvironment(threadId)?.environmentId ?? thread.environmentId ?? "unknown",
         error,
       );
       return;

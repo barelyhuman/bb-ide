@@ -349,7 +349,6 @@ export function createThreadRoutes(
     }
     return {
       ...thread,
-      attachedEnvironmentId: attachment.environmentId,
       attachedEnvironment,
     };
   };
@@ -381,7 +380,6 @@ export function createThreadRoutes(
       return attachedEnvironment
         ? {
           ...thread,
-          attachedEnvironmentId: attachment.environmentId,
           attachedEnvironment,
         }
         : thread;
@@ -403,9 +401,6 @@ export function createThreadRoutes(
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.environmentId ? { environmentId: body.environmentId } : {}),
-          ...(body.attachedEnvironmentId
-            ? { attachedEnvironmentId: body.attachedEnvironmentId }
-            : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.developerInstructions !== undefined
             ? { developerInstructions: body.developerInstructions }

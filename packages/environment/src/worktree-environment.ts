@@ -133,13 +133,13 @@ async function resolveWorktreeStartRefAsync(
   return headBranch.ok && headBranch.stdout.length > 0 ? headBranch.stdout : undefined;
 }
 
-function toWorktreeBranchName(threadId: string): string {
-  const normalized = threadId
+function toWorktreeBranchName(environmentId: string): string {
+  const normalized = environmentId
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `bb/thread-${normalized.length > 0 ? normalized : "thread"}`;
+  return `bb/env-${normalized.length > 0 ? normalized : "env"}`;
 }
 
 function resolveConfiguredWorktreeRoot(
@@ -882,8 +882,9 @@ export function createWorktreeEnvironmentDefinition(
       const worktreeRoot = isGlobalRoot
         ? resolve(configuredWorktreeRoot, context.projectId)
         : configuredWorktreeRoot;
-      const workspaceRoot = resolve(worktreeRoot, context.threadId);
-      const branchName = toWorktreeBranchName(context.threadId);
+      const worktreeId = context.environmentRecordId ?? context.threadId;
+      const workspaceRoot = resolve(worktreeRoot, worktreeId);
+      const branchName = toWorktreeBranchName(worktreeId);
       mkdirSync(worktreeRoot, { recursive: true });
 
       return new WorktreeEnvironment(

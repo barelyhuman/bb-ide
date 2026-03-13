@@ -28,6 +28,7 @@ export const environments = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     descriptor: text("descriptor").notNull(),
     managed: integer("managed", { mode: "boolean" }).notNull().default(false),
+    runtimeState: text("runtime_state"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

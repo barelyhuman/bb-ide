@@ -706,9 +706,7 @@ export function ThreadDetailView() {
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
-    (thread.attachedEnvironment ? thread.attachedEnvironment.descriptor.type : undefined) ??
-    thread.environmentRecord?.kind ??
-    undefined;
+    (thread.attachedEnvironment ? thread.attachedEnvironment.descriptor.type : undefined);
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =
