@@ -171,7 +171,7 @@ class DockerEnvironment implements IEnvironment {
     private readonly runtimeEnv: Record<string, string | undefined>,
     private readonly dockerBin: string,
   ) {
-    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_RECORD_ID?.trim() || this.kind;
+    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_ID?.trim() || this.kind;
   }
 
   serialize(): DockerEnvironmentState {
@@ -641,7 +641,7 @@ export function createDockerEnvironmentDefinition(
         {
           worktree: worktreeState,
           containerName: resolveContainerName({
-            environmentId: context.environmentRecordId ?? context.threadId,
+            environmentId: context.environmentId ?? context.threadId,
             containerPrefix,
           }),
           image,

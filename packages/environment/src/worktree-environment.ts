@@ -271,7 +271,7 @@ class WorktreeEnvironment implements IEnvironment {
   ) {
     this.projectId = projectId;
     this.threadId = threadId;
-    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_RECORD_ID?.trim() || this.kind;
+    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_ID?.trim() || this.kind;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
     this.reconnectTarget = reconnectTarget;
@@ -882,7 +882,7 @@ export function createWorktreeEnvironmentDefinition(
       const worktreeRoot = isGlobalRoot
         ? resolve(configuredWorktreeRoot, context.projectId)
         : configuredWorktreeRoot;
-      const worktreeId = context.environmentRecordId ?? context.threadId;
+      const worktreeId = context.environmentId ?? context.threadId;
       const workspaceRoot = resolve(worktreeRoot, worktreeId);
       const branchName = toWorktreeBranchName(worktreeId);
       mkdirSync(worktreeRoot, { recursive: true });

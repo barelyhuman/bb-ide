@@ -615,7 +615,6 @@ export class EnvironmentService {
       threadId,
       {
         environmentId: null,
-        environmentRecord: null,
       },
       { touchUpdatedAt: false },
     );

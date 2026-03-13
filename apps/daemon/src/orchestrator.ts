@@ -3394,7 +3394,6 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     this.threadRepo.update(threadId, {
       environmentId: attachedEnvironmentIdAfterProvision ?? environmentRuntime.environment.kind,
-      environmentRecord: null,
     });
     const provisionedEnvironmentInfo = this.environmentRegistry.get(
       environmentRuntime.environment.kind,
@@ -3748,11 +3747,11 @@ export class Orchestrator implements ThreadOrchestrator {
       projectId: thread?.projectId ?? "",
       threadId,
       projectRootPath,
-      ...(attachedEnvironmentId ? { environmentRecordId: attachedEnvironmentId } : {}),
+      ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
       runtimeEnv: {
         ...this.runtimeEnv,
         ...(attachedEnvironmentId
-          ? { BEANBAG_ENVIRONMENT_RECORD_ID: attachedEnvironmentId }
+          ? { BEANBAG_ENVIRONMENT_ID: attachedEnvironmentId }
           : {}),
       },
       managedEnvironmentAgentReconnectTarget: (() => {

@@ -48,7 +48,6 @@ export const threads = sqliteTable(
     title: text("title"),
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id"),
-    environmentRecord: text("environment_record"),
     mergeBaseBranch: text("merge_base_branch"),
     parentThreadId: text("parent_thread_id"),
     archivedAt: integer("archived_at"),

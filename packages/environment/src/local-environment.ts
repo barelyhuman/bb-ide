@@ -70,7 +70,7 @@ class LocalEnvironment implements IEnvironment {
   constructor(context: CreateEnvironmentContext) {
     this.projectId = context.projectId;
     this.threadId = context.threadId;
-    this.environmentId = context.environmentRecordId ?? this.kind;
+    this.environmentId = context.environmentId ?? this.kind;
     this.rootPath = context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
