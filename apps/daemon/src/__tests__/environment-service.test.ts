@@ -832,7 +832,7 @@ describe("EnvironmentService", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-1",
         createdAt: 1000,
         updatedAt: 1000,
       })),
@@ -861,6 +861,37 @@ describe("EnvironmentService", () => {
       head: "abc123",
       detached: false,
     });
+    const environmentRepo = {
+      getById: vi.fn(() => ({
+        id: "env-1",
+        projectId: "proj-1",
+        descriptor: {
+          type: "path" as const,
+          path: "/project/root/.worktrees/thread-1",
+        },
+        managed: true,
+        runtimeState: {
+          kind: "worktree",
+          state: {},
+        },
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+    } as unknown as EnvironmentRepository;
+    const threadEnvironmentAttachmentRepo = {
+      getByThreadId: vi.fn(() => ({
+        threadId: "thread-1",
+        environmentId: "env-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+      listByEnvironmentId: vi.fn(() => ([{
+        threadId: "thread-1",
+        environmentId: "env-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      }])),
+    } as unknown as ThreadEnvironmentAttachmentRepository;
 
     const service = new EnvironmentService(
       threadRepo,
@@ -879,6 +910,8 @@ describe("EnvironmentService", () => {
         onPrimaryCheckoutDemoted: vi.fn(),
         runOptionalSetup: vi.fn().mockResolvedValue(undefined),
       },
+      environmentRepo,
+      threadEnvironmentAttachmentRepo,
     );
 
     await service.rebuildPrimaryPromotionStateFromGitAsync();
@@ -951,7 +984,7 @@ describe("EnvironmentService", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-1",
         createdAt: 1000,
         updatedAt: 1000,
       })),
@@ -980,6 +1013,37 @@ describe("EnvironmentService", () => {
       head: "abc123",
       detached: false,
     });
+    const environmentRepo = {
+      getById: vi.fn(() => ({
+        id: "env-1",
+        projectId: "proj-1",
+        descriptor: {
+          type: "path" as const,
+          path: "/project/root/.worktrees/thread-1",
+        },
+        managed: true,
+        runtimeState: {
+          kind: "worktree",
+          state: {},
+        },
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+    } as unknown as EnvironmentRepository;
+    const threadEnvironmentAttachmentRepo = {
+      getByThreadId: vi.fn(() => ({
+        threadId: "thread-1",
+        environmentId: "env-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+      listByEnvironmentId: vi.fn(() => ([{
+        threadId: "thread-1",
+        environmentId: "env-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      }])),
+    } as unknown as ThreadEnvironmentAttachmentRepository;
 
     const service = new EnvironmentService(
       threadRepo,
@@ -998,6 +1062,8 @@ describe("EnvironmentService", () => {
         onPrimaryCheckoutDemoted: vi.fn(),
         runOptionalSetup: vi.fn().mockResolvedValue(undefined),
       },
+      environmentRepo,
+      threadEnvironmentAttachmentRepo,
     );
 
     await service.ensurePrimaryPromotionStateIsCurrentAsync("proj-1");
