@@ -982,22 +982,23 @@ export class Orchestrator implements ThreadOrchestrator {
         environmentId: attachedEnvironmentId,
       });
     }
+    const persistedThread = this.threadRepo.getById(thread.id) ?? thread;
 
-    this._broadcastThreadChanged(thread.id, ["thread-created"]);
+    this._broadcastThreadChanged(persistedThread.id, ["thread-created"]);
     this._scheduleProvisioning(
-      thread.id,
+      persistedThread.id,
       { ...req, environmentId, ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}) },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",
       },
     );
-    const hydratedThread = this._withPrimaryCheckoutState(thread);
+    const hydratedThread = this._withPrimaryCheckoutState(persistedThread);
     const promptTitleFallback = this._derivePromptFallbackTitle(req.input);
     if (!promptTitleFallback || hydratedThread.title) {
       return hydratedThread;
     }
-    this.titleFallbackByThreadId.set(thread.id, promptTitleFallback);
+    this.titleFallbackByThreadId.set(persistedThread.id, promptTitleFallback);
     return {
       ...hydratedThread,
       titleFallback: promptTitleFallback,
