@@ -253,6 +253,13 @@
       "when": 1773338700000,
       "tag": "0035_threads_archived_environment_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1773403200000,
+      "tag": "0036_thread_provider_id",
+      "breakpoints": true
     }
   ]
 }

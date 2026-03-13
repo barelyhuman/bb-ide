@@ -14,6 +14,7 @@ Use this guide when you want to validate user-visible behavior end-to-end, espec
 - Use the built binaries directly:
   - `node apps/daemon/dist/index.js`
   - `node apps/cli/dist/index.js`
+- For restart and relaunch checks, use the exact Node binary that started the standalone daemon. Do not assume plain `node` resolves to the same runtime across shells.
 - Use the real Codex provider. Do not use the fake-codex test harness for this QA pass.
 - Prefer disposable test repositories and disposable Beanbag roots so failures do not contaminate real projects.
 - When testing a user’s already-running main daemon, do not run `bb daemon restart` unless they explicitly want that daemon restarted.
@@ -40,6 +41,8 @@ Recommended during restart/liveness QA:
 tail -f "$beanbag_root/logs/daemon.log"
 ```
 
+- keep a separate persistent shell or terminal tab for daemon relaunches; avoid backgrounding the relaunched daemon from a one-shot shell command
+
 ## Standalone Daemon QA
 
 This path validates the standalone daemon process directly, with its own Beanbag root.
@@ -56,7 +59,9 @@ Fast setup wrapper:
 node scripts/qa/start-standalone-daemon-qa.mjs
 ```
 
-That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, and daemon PID as JSON.
+That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, daemon PID, exact Node runtime details, and a ready-to-run `relaunchCommand` as JSON.
+
+Keep the reported `nodePath`, `nodeVersion`, and `nodeAbi` with your QA notes. If you later relaunch the daemon under a different Node ABI, native modules such as `better-sqlite3` can fail before Beanbag finishes booting.
 
 Manual setup:
 
@@ -357,9 +362,21 @@ Expected:
 Relaunch:
 
 ```bash
-BEANBAG_ROOT="$beanbag_root" \
-node apps/daemon/dist/index.js --port 4311
+node scripts/qa/relaunch-standalone-daemon-qa.mjs \
+  --beanbag-root "$beanbag_root" \
+  --port 4311
 ```
+
+If you used `start-standalone-daemon-qa.mjs`, prefer its printed `relaunchCommand` or pass the reported `nodePath` explicitly:
+
+```bash
+node scripts/qa/relaunch-standalone-daemon-qa.mjs \
+  --beanbag-root "$beanbag_root" \
+  --port 4311 \
+  --node-path "/absolute/path/to/node"
+```
+
+Avoid `bash -lc '... node ...'` for this step unless you first verify that `command -v node` resolves to the same runtime as the setup output. Different login shells can put different Node installations first in `PATH`, which can break native modules and create a false QA failure.
 
 Then re-check:
 

@@ -167,6 +167,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-1",
       projectId: "proj-1",
+      providerId: "codex",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -199,6 +200,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-json-spawn",
       projectId: "proj-1",
+      providerId: "codex",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -228,6 +230,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-2",
       projectId: "proj-1",
+      providerId: "codex",
       status: "created",
       parentThreadId: "thread-parent",
       createdAt: 1,
@@ -263,6 +266,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-env-1",
       projectId: "proj-1",
+      providerId: "codex",
       status: "created",
       environmentId: "worktree",
       createdAt: 1,
@@ -299,6 +303,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-env-2",
       projectId: "proj-1",
+      providerId: "codex",
       status: "created",
       environmentId: "local",
       createdAt: 1,
@@ -611,6 +616,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-archived-1",
       projectId: "proj-1",
+      providerId: "codex",
       status: "idle",
       archivedAt: 1_700_000_000_000,
       createdAt: 1,
@@ -758,6 +764,7 @@ describe("CLI JSON output contracts", () => {
     const thread: Thread = {
       id: "thread-json-show",
       projectId: "proj-1",
+      providerId: "codex",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -854,6 +861,7 @@ describe("CLI JSON output contracts", () => {
     const get = vi.fn(async () => ({
       id: "thread-wait",
       projectId: "proj-1",
+      providerId: "codex",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -883,6 +891,7 @@ describe("CLI JSON output contracts", () => {
     const get = vi.fn(async () => ({
       id: "thread-wait-timeout",
       projectId: "proj-1",
+      providerId: "codex",
       status: "active",
       createdAt: 1,
       updatedAt: 2,
@@ -911,6 +920,7 @@ describe("CLI JSON output contracts", () => {
     const thread: Thread = {
       id: "thread-json-status",
       projectId: "proj-1",
+      providerId: "codex",
       status: "active",
       createdAt: 1,
       updatedAt: 2,

@@ -26,6 +26,7 @@ export const threads = sqliteTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id),
+    providerId: text("provider_id").notNull().default("codex"),
     title: text("title"),
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id"),
