@@ -1,4 +1,4 @@
-import type { SystemEnvironmentInfo } from "@beanbag/agent-core"
+import type { EnvironmentRecord, SystemEnvironmentInfo } from "@beanbag/agent-core"
 import { Container, FolderGit2, Laptop, type LucideIcon } from "lucide-react"
 
 interface EnvironmentIconInfo {
@@ -6,7 +6,9 @@ interface EnvironmentIconInfo {
   ariaLabel: string
 }
 
-type EnvironmentIconSource = Pick<SystemEnvironmentInfo, "id" | "capabilities">
+type EnvironmentIconSource =
+  | Pick<SystemEnvironmentInfo, "id" | "capabilities">
+  | Pick<EnvironmentRecord, "managed">
 
 export function getEnvironmentIconInfo(
   environment?: EnvironmentIconSource | null,
@@ -16,21 +18,31 @@ export function getEnvironmentIconInfo(
   // Environment ids are open_external runtime values, so only known special
   // cases get id-specific icons. Unknown ids intentionally fall back to
   // capability-based icons when possible.
-  if (environment.id === "docker") {
+  if ("id" in environment && environment.id === "docker") {
     return {
       icon: Container,
       ariaLabel: "Docker thread",
     }
   }
 
-  if (environment.capabilities.isolated_workspace) {
+  if ("managed" in environment && environment.managed) {
+    return {
+      icon: FolderGit2,
+      ariaLabel: "Managed environment",
+    }
+  }
+
+  if ("capabilities" in environment && environment.capabilities.isolated_workspace) {
     return {
       icon: FolderGit2,
       ariaLabel: "Worktree thread",
     }
   }
 
-  if (environment.capabilities.host_filesystem) {
+  if (
+    ("capabilities" in environment && environment.capabilities.host_filesystem) ||
+    ("managed" in environment && !environment.managed)
+  ) {
     return {
       icon: Laptop,
       ariaLabel: "Direct thread",

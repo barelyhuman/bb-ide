@@ -249,9 +249,11 @@ export function ProjectList({
   const requestArchiveThread = (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    const environmentInfo = thread.environmentId
-      ? environmentById.get(thread.environmentId)
-      : undefined
+    const environmentInfo = thread.attachedEnvironment ?? (
+      thread.environmentId
+        ? environmentById.get(thread.environmentId)
+        : undefined
+    )
     if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
       setArchiveConfirmationThread(thread)
       return
@@ -504,9 +506,11 @@ export function ProjectList({
                           const isThreadActionsOpen = openThreadActionsThreadId === thread.id
                           const isThreadActive = selectedThreadId === thread.id
                           const threadTitle = getThreadDisplayTitle(thread)
-                          const environmentInfo = thread.environmentId
-                            ? environmentById.get(thread.environmentId)
-                            : undefined
+                          const environmentInfo = thread.attachedEnvironment ?? (
+                            thread.environmentId
+                              ? environmentById.get(thread.environmentId)
+                              : undefined
+                          )
                           const environmentIconInfo = getEnvironmentIconInfo(environmentInfo)
                           const ThreadEnvironmentIcon = environmentIconInfo?.icon
 

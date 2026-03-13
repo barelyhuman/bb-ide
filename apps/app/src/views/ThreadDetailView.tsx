@@ -86,6 +86,11 @@ import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { toast } from "sonner";
 
+function formatAttachedEnvironmentLabel(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments.at(-1) ?? path;
+}
+
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
   "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
@@ -652,14 +657,18 @@ export function ThreadDetailView() {
     requestThreadCommitOperation.isPending || requestThreadSquashOperation.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
   const threadEnvironmentLabel =
-    thread.environmentId
-      ? (
-          formatEnvironmentDisplayName({
-            id: thread.environmentId,
-            displayName: environmentInfo?.displayName,
-          }) ?? thread.environmentId
-        )
-      : undefined;
+    thread.attachedEnvironment
+      ? (thread.attachedEnvironment.managed
+        ? formatAttachedEnvironmentLabel(thread.attachedEnvironment.descriptor.path)
+        : "Primary workspace")
+      : thread.environmentId
+        ? (
+            formatEnvironmentDisplayName({
+              id: thread.environmentId,
+              displayName: environmentInfo?.displayName,
+            }) ?? thread.environmentId
+          )
+        : undefined;
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -697,6 +706,7 @@ export function ThreadDetailView() {
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
+    (thread.attachedEnvironment ? thread.attachedEnvironment.descriptor.type : undefined) ??
     thread.environmentRecord?.kind ??
     undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
