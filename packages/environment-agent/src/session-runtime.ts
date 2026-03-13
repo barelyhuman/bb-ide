@@ -90,6 +90,10 @@ export class EnvironmentAgentSessionRuntime {
     this.clock = options.clock ?? (() => Date.now());
   }
 
+  listThreadIds(): string[] {
+    return this.options.store.listThreadIds();
+  }
+
   loadThreadState(threadId: string): EnvironmentAgentSessionStateRecord | undefined {
     return this.options.store.loadSessionState(threadId);
   }

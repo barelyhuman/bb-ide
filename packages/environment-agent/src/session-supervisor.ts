@@ -103,8 +103,9 @@ export class EnvironmentAgentSessionSupervisor {
       generation: 1,
     });
     this.unsubscribeRuntimeEvents = this.options.runtime.subscribeToEvents((event) => {
+      this.ensureThreadState(event.threadId);
       this.options.sessionRuntime.recordEvent({
-        threadId: options.threadId,
+        threadId: event.threadId,
         eventId: `evt-${event.sequence}`,
         event: event.event,
         emittedAt: event.emittedAt,
@@ -162,7 +163,9 @@ export class EnvironmentAgentSessionSupervisor {
 
     try {
       await this.flushPendingEventsWithReplay();
-      await this.options.sessionSync.flushPendingCommandResults(this.options.threadId);
+      await this.options.sessionSync.flushPendingCommandResultsForThreads(
+        this.getThreadIds(),
+      );
       await this.flushPendingEventsWithReplay();
       await this.options.sessionSync.closeSession(this.options.threadId, "agent_shutdown");
     } catch (error) {
@@ -213,6 +216,11 @@ export class EnvironmentAgentSessionSupervisor {
     this.heartbeatIntervalMs = normalizeHeartbeatIntervalMs(
       welcome.payload.heartbeatIntervalMs,
     );
+    this.options.sessionSync.bindWelcomeChannels({
+      welcome,
+      agentId: this.agentId,
+      agentInstanceId: this.agentInstanceId,
+    });
     this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
     this.publishRuntimeDeliveryState();
   }
@@ -275,13 +283,19 @@ export class EnvironmentAgentSessionSupervisor {
     this.cycleInFlight = true;
     try {
       await this.openSession();
+      const threadIds = this.getThreadIds();
       if (this.isHeartbeatDue()) {
-        await this.options.sessionSync.sendHeartbeat(this.options.threadId);
+        await this.options.sessionSync.sendHeartbeat(threadIds);
         this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
       }
       await this.flushPendingEventsWithReplay();
       const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
-      const commands = await this.pullCommands(state?.lastDeliveredCommandCursor);
+      const commands = await this.pullCommands({
+        threadIds,
+        ...(threadIds.length === 1 && state?.lastDeliveredCommandCursor !== undefined
+          ? { afterCursor: state.lastDeliveredCommandCursor }
+          : {}),
+      });
       if (!this.running) {
         return;
       }
@@ -290,10 +304,10 @@ export class EnvironmentAgentSessionSupervisor {
           continue;
         }
         this.options.sessionRuntime.markCommandStarted(command.commandId);
-        await this.options.sessionSync.flushPendingCommandResults(this.options.threadId);
+        await this.options.sessionSync.flushPendingCommandResults(command.threadId);
         const ack = await this.options.runtime.executeCommand(
           toCommandEnvelope({
-            threadId: this.options.threadId,
+            threadId: command.threadId,
             commandId: command.commandId,
             command: command.command,
             sentAt: Date.now(),
@@ -310,13 +324,13 @@ export class EnvironmentAgentSessionSupervisor {
             ...normalizeRejectedCommandError(ack),
           });
         }
-        await this.options.sessionSync.flushPendingCommandResults(this.options.threadId);
+        await this.options.sessionSync.flushPendingCommandResults(command.threadId);
       }
       if (commands.length === 0) {
-        await this.options.sessionSync.flushPendingCommandResults(this.options.threadId);
+        await this.options.sessionSync.flushPendingCommandResultsForThreads(threadIds);
       }
       if (this.isHeartbeatDue()) {
-        await this.options.sessionSync.sendHeartbeat(this.options.threadId);
+        await this.options.sessionSync.sendHeartbeat(threadIds);
         this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
       }
     } finally {
@@ -332,7 +346,9 @@ export class EnvironmentAgentSessionSupervisor {
     if (!isEnvironmentAgentSessionInactiveError(error)) {
       return false;
     }
-    this.options.sessionRuntime.clearSession(this.options.threadId);
+    for (const threadId of this.getThreadIds()) {
+      this.options.sessionRuntime.clearSession(threadId);
+    }
     this.heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.nextHeartbeatAt = 0;
     return true;
@@ -417,15 +433,16 @@ export class EnvironmentAgentSessionSupervisor {
     );
   }
 
-  private async pullCommands(
-    afterCursor?: number,
-  ): Promise<EnvironmentAgentPulledCommand[]> {
+  private async pullCommands(args: {
+    threadIds: readonly string[];
+    afterCursor?: number;
+  }): Promise<EnvironmentAgentPulledCommand[]> {
     const controller = new AbortController();
     this.commandPullController = controller;
     try {
       return await this.options.sessionSync.pullCommands({
-        threadId: this.options.threadId,
-        ...(afterCursor !== undefined ? { afterCursor } : {}),
+        threadIds: args.threadIds,
+        ...(args.afterCursor !== undefined ? { afterCursor: args.afterCursor } : {}),
         limit: this.commandBatchLimit,
         waitMs: this.getCommandPullWaitMs(),
         signal: controller.signal,
@@ -445,22 +462,45 @@ export class EnvironmentAgentSessionSupervisor {
   private async flushPendingEventsWithReplay(): Promise<void> {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const flushResult = await this.options.sessionSync.flushPendingEvents(
-        this.options.threadId,
+        this.getThreadIds(),
       );
-      if (flushResult.acknowledged || !flushResult.resetCursor) {
+      const needsReset = flushResult.channelResults.filter((result) => !result.acknowledged);
+      if (needsReset.length === 0) {
         return;
       }
-      this.options.sessionRuntime.alignEventCursor(
-        this.options.threadId,
-        {
-          generation: flushResult.resetCursor.generation,
-          sequence: flushResult.resetCursor.sequence,
-        },
-        Date.now(),
-      );
+      for (const result of needsReset) {
+        if (!result.resetCursor) {
+          continue;
+        }
+        this.options.sessionRuntime.alignEventCursor(
+          result.threadId,
+          {
+            generation: result.resetCursor.generation,
+            sequence: result.resetCursor.sequence,
+          },
+          Date.now(),
+        );
+      }
     }
     throw new Error(
       `Environment-agent event reset did not converge for thread ${this.options.threadId}`,
     );
+  }
+
+  private ensureThreadState(threadId: string): void {
+    if (this.options.sessionRuntime.loadThreadState(threadId)) {
+      return;
+    }
+    this.options.sessionRuntime.initializeThread({
+      threadId,
+      agentId: this.agentId,
+      agentInstanceId: this.agentInstanceId,
+      generation: 1,
+    });
+  }
+
+  private getThreadIds(): string[] {
+    const threadIds = this.options.sessionRuntime.listThreadIds();
+    return threadIds.length > 0 ? threadIds : [this.options.threadId];
   }
 }

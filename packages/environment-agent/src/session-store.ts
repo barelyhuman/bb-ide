@@ -137,6 +137,7 @@ export interface ReconcileEnvironmentAgentEventCursorInput {
 }
 
 export interface EnvironmentAgentSessionStore {
+  listThreadIds(): string[];
   loadSessionState(threadId: string): EnvironmentAgentSessionStateRecord | undefined;
   initializeThreadState(
     input: InitializeEnvironmentAgentThreadStateInput,

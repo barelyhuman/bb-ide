@@ -106,15 +106,16 @@ describe("EnvironmentAgentSessionSync", () => {
       },
       emittedAt: 2_500,
     });
-    await expect(sync.flushPendingEvents("thread-1")).resolves.toEqual({
+    await expect(sync.flushPendingEvents(["thread-1"])).resolves.toEqual({
       sessionId: "sess-1",
-      acknowledged: true,
+      channelResults: [{ threadId: "thread-1", acknowledged: true }],
     });
     expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toBeUndefined();
 
-    const pulled = await sync.pullCommands({ threadId: "thread-1" });
+    const pulled = await sync.pullCommands({ threadIds: ["thread-1"] });
     expect(pulled).toEqual([
       {
+        threadId: "thread-1",
         commandId: "cmd-1",
         commandCursor: 1,
         command: {
@@ -184,12 +185,15 @@ describe("EnvironmentAgentSessionSync", () => {
     });
 
     const sync = new EnvironmentAgentSessionSync({ runtime, client });
-    await expect(sync.flushPendingEvents("thread-1")).resolves.toMatchObject({
-      acknowledged: false,
-      resetCursor: {
-        generation: 2,
-        sequence: 0,
-      },
+    await expect(sync.flushPendingEvents(["thread-1"])).resolves.toMatchObject({
+      channelResults: [{
+        threadId: "thread-1",
+        acknowledged: false,
+        resetCursor: {
+          generation: 2,
+          sequence: 0,
+        },
+      }],
     });
     expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toBeDefined();
   });

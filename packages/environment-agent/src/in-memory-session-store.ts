@@ -87,6 +87,10 @@ export class InMemoryEnvironmentAgentSessionStore
   private readonly outboxByThread = new Map<string, EnvironmentAgentOutboxEventRecord[]>();
   private readonly commandReceipts = new Map<string, EnvironmentAgentCommandReceiptRecord>();
 
+  listThreadIds(): string[] {
+    return [...this.threadStates.keys()].sort();
+  }
+
   loadSessionState(threadId: string): EnvironmentAgentSessionStateRecord | undefined {
     const state = this.threadStates.get(threadId);
     return state ? cloneSessionState(state) : undefined;

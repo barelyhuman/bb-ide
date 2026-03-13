@@ -18,6 +18,7 @@ export interface EnvironmentAgentSessionSyncOptions {
 }
 
 export interface EnvironmentAgentPulledCommand {
+  threadId: string;
   commandId: string;
   commandCursor: number;
   command: EnvironmentAgentCommand;
@@ -26,11 +27,14 @@ export interface EnvironmentAgentPulledCommand {
 
 export interface FlushEnvironmentAgentEventBatchResult {
   sessionId: string;
-  acknowledged: boolean;
-  resetCursor?: {
-    generation: number;
-    sequence: number;
-  };
+  channelResults: Array<{
+    threadId: string;
+    acknowledged: boolean;
+    resetCursor?: {
+      generation: number;
+      sequence: number;
+    };
+  }>;
 }
 
 export class EnvironmentAgentSessionSync {
@@ -62,14 +66,53 @@ export class EnvironmentAgentSessionSync {
     return welcome;
   }
 
-  async sendHeartbeat(threadId: string): Promise<void> {
-    const state = this.requireSessionState(threadId);
-    const pendingBatch = this.options.runtime.getPendingEventBatch({ threadId });
+  bindWelcomeChannels(args: {
+    welcome: EnvironmentAgentSessionWelcomeMessage;
+    agentId: string;
+    agentInstanceId: string;
+    now?: number;
+  }): void {
+    const now = args.now ?? args.welcome.sentAt;
+    for (const channel of args.welcome.payload.channels) {
+      const existing = this.options.runtime.loadThreadState(channel.channelId);
+      if (!existing) {
+        this.options.runtime.initializeThread({
+          threadId: channel.channelId,
+          agentId: args.agentId,
+          agentInstanceId: args.agentInstanceId,
+          generation: Math.max(1, channel.applyFrom.generation),
+          now,
+        });
+      }
+      this.options.runtime.bindSession({
+        threadId: channel.channelId,
+        sessionId: args.welcome.sessionId,
+        now,
+      });
+      this.options.runtime.alignEventCursor(
+        channel.channelId,
+        {
+          generation: channel.applyFrom.generation,
+          sequence: channel.applyFrom.sequenceExclusive,
+        },
+        now,
+      );
+    }
+  }
+
+  async sendHeartbeat(threadIds: readonly string[]): Promise<void> {
+    const state = this.requireSessionState(threadIds[0]!);
     await this.options.client.heartbeat(state.sessionId, {
       agentObservedAt: Date.now(),
-      outboxDepth: pendingBatch?.events.length ?? 0,
-      channels: [
-        {
+      outboxDepth: threadIds.reduce(
+        (count, threadId) =>
+          count + (this.options.runtime.getPendingEventBatch({ threadId })?.events.length ?? 0),
+        0,
+      ),
+      channels: threadIds.map((threadId) => {
+        const channelState = this.requireSessionState(threadId);
+        const pendingBatch = this.options.runtime.getPendingEventBatch({ threadId });
+        return {
           channelId: threadId,
           ...(pendingBatch?.events.length
             ? {
@@ -79,85 +122,99 @@ export class EnvironmentAgentSessionSync {
                 },
               }
             : {}),
-          ...(state.lastAcked ? { lastAcked: state.lastAcked } : {}),
-        },
-      ],
+          ...(channelState.lastAcked ? { lastAcked: channelState.lastAcked } : {}),
+        };
+      }),
     });
   }
 
-  async flushPendingEvents(threadId: string): Promise<FlushEnvironmentAgentEventBatchResult> {
-    const state = this.requireSessionState(threadId);
-    const batch = this.options.runtime.getPendingEventBatch({ threadId });
-    if (!batch) {
+  async flushPendingEvents(
+    threadIds: readonly string[],
+  ): Promise<FlushEnvironmentAgentEventBatchResult> {
+    const state = this.requireSessionState(threadIds[0]!);
+    const batches = threadIds
+      .map((threadId) => this.options.runtime.getPendingEventBatch({ threadId }))
+      .filter((batch) => batch !== undefined);
+    if (batches.length === 0) {
       return {
         sessionId: state.sessionId,
-        acknowledged: true,
+        channelResults: threadIds.map((threadId) => ({
+          threadId,
+          acknowledged: true,
+        })),
       };
     }
 
     const response = await this.options.client.pushEvents({
       sessionId: state.sessionId,
-      payload: { batches: [batch] },
+      payload: { batches },
     });
-    const ack = response.payload.channels.find((channel) => channel.channelId === threadId);
-    if (ack) {
-      const batchTail = {
-        generation: batch.generation,
-        sequence: batch.events[batch.events.length - 1]!.sequence,
-      };
-      if (compareEnvironmentAgentSessionCursors(ack.ackedThrough, batchTail) < 0) {
-        return {
-          sessionId: state.sessionId,
-          acknowledged: false,
-          resetCursor: ack.ackedThrough,
-        };
-      }
-      this.options.runtime.acknowledgeEvents({
-        threadId,
-        generation: ack.ackedThrough.generation,
-        sequence: ack.ackedThrough.sequence,
-        ackedAt: response.sentAt,
-      });
-    }
-
     return {
       sessionId: state.sessionId,
-      acknowledged: true,
+      channelResults: batches.map((batch) => {
+        const ack = response.payload.channels.find(
+          (channel) => channel.channelId === batch.channelId,
+        );
+        if (!ack) {
+          return { threadId: batch.channelId, acknowledged: true };
+        }
+        const batchTail = {
+          generation: batch.generation,
+          sequence: batch.events[batch.events.length - 1]!.sequence,
+        };
+        if (compareEnvironmentAgentSessionCursors(ack.ackedThrough, batchTail) < 0) {
+          return {
+            threadId: batch.channelId,
+            acknowledged: false,
+            resetCursor: ack.ackedThrough,
+          };
+        }
+        this.options.runtime.acknowledgeEvents({
+          threadId: batch.channelId,
+          generation: ack.ackedThrough.generation,
+          sequence: ack.ackedThrough.sequence,
+          ackedAt: response.sentAt,
+        });
+        return { threadId: batch.channelId, acknowledged: true };
+      }),
     };
   }
 
   async pullCommands(args: {
-    threadId: string;
+    threadIds: readonly string[];
     afterCursor?: number;
     limit?: number;
     waitMs?: number;
     signal?: AbortSignal;
   }): Promise<EnvironmentAgentPulledCommand[]> {
-    const state = this.requireSessionState(args.threadId);
+    const state = this.requireSessionState(args.threadIds[0]!);
     const batch = await this.options.client.pullCommands({
       sessionId: state.sessionId,
-      ...(args.afterCursor !== undefined ? { afterCursor: args.afterCursor } : {}),
+      ...(args.afterCursor !== undefined && args.threadIds.length === 1
+        ? { afterCursor: args.afterCursor }
+        : {}),
       ...(args.limit !== undefined ? { limit: args.limit } : {}),
       ...(args.waitMs !== undefined ? { waitMs: args.waitMs } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
     });
 
     const pulled = batch.payload.commands
-      .filter((command) => command.channelId === args.threadId)
+      .filter((command) => args.threadIds.includes(command.channelId))
       .map((command) => {
         const received = this.options.runtime.receiveCommand({
           commandId: command.commandId,
-          threadId: args.threadId,
+          threadId: command.channelId,
           commandCursor: command.commandCursor,
           commandType: command.command.type,
           now: batch.sentAt,
         });
         this.options.runtime.setLastDeliveredCommandCursor({
-          threadId: args.threadId,
+          threadId: command.channelId,
           commandCursor: command.commandCursor,
           now: batch.sentAt,
         });
         return {
+          threadId: command.channelId,
           commandId: command.commandId,
           commandCursor: command.commandCursor,
           command: command.command,
@@ -169,7 +226,7 @@ export class EnvironmentAgentSessionSync {
       await this.options.client.acknowledgeCommands(state.sessionId, {
         commands: pulled.map((command) => ({
           commandId: command.commandId,
-          channelId: args.threadId,
+          channelId: command.threadId,
           state: command.ackState,
         })),
       });
@@ -235,6 +292,16 @@ export class EnvironmentAgentSessionSync {
       }
     }
 
+    return sent;
+  }
+
+  async flushPendingCommandResultsForThreads(
+    threadIds: readonly string[],
+  ): Promise<EnvironmentAgentCommandReceiptRecord[]> {
+    const sent: EnvironmentAgentCommandReceiptRecord[] = [];
+    for (const threadId of threadIds) {
+      sent.push(...await this.flushPendingCommandResults(threadId));
+    }
     return sent;
   }
 
