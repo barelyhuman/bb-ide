@@ -21,9 +21,10 @@ For the checked-in regression seed suite:
 
 ```bash
 pnpm qa:daemon:regression
+pnpm qa:daemon:recovery:fake
 ```
 
-The checked-in regression seed suite now targets the real provider by default; fake-only recovery cases still skip automatically when they require fake Codex control.
+The checked-in regression seed suite targets the real provider by default. Recovery regressions that require fake Codex control should also be covered by `qa:daemon:recovery:fake`.
 
 ## Current seed regression areas
 

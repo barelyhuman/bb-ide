@@ -9,6 +9,14 @@ Use this guide when you want to validate user-visible behavior end-to-end, espec
 - worktree provisioning and recovery
 - CLI commands that should work against a running daemon
 
+For a faster representative pass, use:
+
+```bash
+pnpm qa:daemon:manual-smoke
+```
+
+That script runs a disposable standalone daemon against the real provider and exercises a smaller CLI-first matrix. Use this full guide when you need exhaustive coverage or failure triage.
+
 ## Rules
 
 - Use the built binaries directly:
@@ -16,6 +24,7 @@ Use this guide when you want to validate user-visible behavior end-to-end, espec
   - `node apps/cli/dist/index.js`
 - For restart and relaunch checks, use the exact Node binary that started the standalone daemon. Do not assume plain `node` resolves to the same runtime across shells.
 - Use the real Codex provider. Do not use the fake-codex test harness for this QA pass.
+- Some recovery scenarios in the automated suite are fake-provider-only because they require explicit worker-loss control hooks. Those are covered by `pnpm qa:daemon:recovery:fake`, not by the real-provider scripts.
 - Prefer disposable test repositories and disposable Beanbag roots so failures do not contaminate real projects.
 - When testing a user’s already-running main daemon, do not run `bb daemon restart` unless they explicitly want that daemon restarted.
 - If a test project root is temporary, keep it on disk until all worktree checks finish. Cleaning it up early will correctly fail with `project_root_missing`, which is a test setup mistake, not a daemon bug.
