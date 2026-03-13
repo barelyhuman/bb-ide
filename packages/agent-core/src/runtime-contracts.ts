@@ -26,6 +26,7 @@ import type {
   SandboxMode,
   ServiceTier,
 } from "./shared-types.js";
+import type { ThreadProviderId } from "./thread-provider.js";
 import type {
   Thread,
   ThreadEnvironmentStartReason,
@@ -79,7 +80,7 @@ export interface ProviderLaunchConfiguration {
 }
 
 export interface ProviderAdapter {
-  id: string;
+  id: ThreadProviderId;
   displayName: string;
   capabilities: ProviderCapabilities;
   processCommand: string;

@@ -32,6 +32,12 @@ export type {
   ThreadEventOfType,
   ThreadEvent,
 } from "./types.js";
+export type { ThreadProviderId } from "./thread-provider.js";
+export {
+  DEFAULT_THREAD_PROVIDER_ID,
+  THREAD_PROVIDER_IDS,
+  isThreadProviderId,
+} from "./thread-provider.js";
 
 export type {
   ServerNotification,

@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
+  ThreadProviderId,
   PersistedEnvironmentRecord,
   PromptInput,
   Project,
@@ -29,6 +30,8 @@ import type {
   PersistedThreadEventData,
 } from "@beanbag/agent-core";
 import {
+  DEFAULT_THREAD_PROVIDER_ID,
+  isThreadProviderId,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
   getStringField,
@@ -371,6 +374,7 @@ export class ThreadRepository {
 
   create(data: {
     projectId: string;
+    providerId?: ThreadProviderId;
     title?: string;
     mergeBaseBranch?: string;
     environmentId?: string;
@@ -381,6 +385,7 @@ export class ThreadRepository {
     const row = {
       id: nanoid(),
       projectId: data.projectId,
+      providerId: data.providerId ?? DEFAULT_THREAD_PROVIDER_ID,
       title: data.title ?? null,
       status: "created" as const,
       environmentId: data.environmentId ?? null,
@@ -689,9 +694,13 @@ export class ThreadRepository {
     row: typeof threads.$inferSelect,
     queuedMessages: ThreadQueuedMessage[],
   ): Thread {
+    if (!isThreadProviderId(row.providerId)) {
+      throw new Error(`Invalid persisted thread provider: ${row.providerId}`);
+    }
     const thread = {
       id: row.id,
       projectId: row.projectId,
+      providerId: row.providerId,
       title: row.title ?? undefined,
       mergeBaseBranch: row.mergeBaseBranch ?? undefined,
       status: normalizeThreadStatus(row.status),

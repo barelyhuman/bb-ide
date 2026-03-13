@@ -109,9 +109,17 @@ async function main() {
 
   const port = await allocatePort();
   const daemonUrl = `http://127.0.0.1:${port}`;
+  const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
+  const relaunchCommand = [
+    `BEANBAG_ROOT="${beanbagRoot}"`,
+    `"${process.execPath}"`,
+    `"${daemonEntry}"`,
+    "--port",
+    String(port),
+  ].join(" ");
   const daemonChild = spawn(
     process.execPath,
-    [resolve(workspaceRoot, "apps", "daemon", "dist", "index.js"), "--port", String(port)],
+    [daemonEntry, "--port", String(port)],
     {
       cwd: workspaceRoot,
       env: {
@@ -133,9 +141,13 @@ async function main() {
     beanbagRoot,
     port,
     daemonUrl,
+    nodePath: process.execPath,
+    nodeVersion: process.version,
+    nodeAbi: process.versions.modules,
     daemonPid: daemonChild.pid,
     daemonLogPath: join(beanbagRoot, "logs", "daemon.log"),
     projectId: project.id,
+    relaunchCommand,
   }, null, 2));
 }
 

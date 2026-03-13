@@ -180,6 +180,7 @@ function createService(args: {
   const threadState: Thread = {
     id: "thread-1",
     projectId: "proj-1",
+    providerId: "codex",
     status: "idle",
     environmentId: "worktree",
     environmentRecord: {

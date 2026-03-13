@@ -330,13 +330,13 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
     activeTurnIdByThreadId: Map<string, string>;
     providerThreadIdByThreadId: Map<string, string>;
-    agentServer: {
+    agentServerByProviderId: Map<string, {
       opts: {
         provider: {
           listModels: (...args: unknown[]) => unknown;
         };
       };
-    };
+    }>;
     environmentService: {
       environmentRuntimes: Map<string, unknown>;
     };
@@ -440,7 +440,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     providerThreadIds,
     activeTurnIds,
     environmentRuntimes: rawManager.environmentService.environmentRuntimes,
-    provider: rawManager.agentServer.opts.provider,
+    provider: Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
   });
   return rawManager as OrchestratorTestHarness;
 }
@@ -449,6 +449,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {
     id: "thread-1",
     projectId: "proj-1",
+    providerId: "codex",
     status: "active",
     createdAt: 1000,
     updatedAt: 1000,
@@ -1017,6 +1018,7 @@ describe("Orchestrator", () => {
 
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
+        providerId: "codex",
         environmentId: "local",
       });
     });
@@ -1509,6 +1511,7 @@ describe("Orchestrator", () => {
 
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
+        providerId: "codex",
         environmentId: "local",
       });
     });

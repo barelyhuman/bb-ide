@@ -7,6 +7,7 @@ import type {
   SpawnThreadRequest,
   Thread,
   ThreadEvent,
+  ThreadProviderId,
 } from "@beanbag/agent-core";
 import {
   assertNever,
@@ -160,7 +161,7 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
 }
 
 export interface CreateCodexProviderAdapterOptions {
-  id?: string;
+  id?: ThreadProviderId;
   displayName?: string;
   processCommand?: string;
   processArgs?: string[];

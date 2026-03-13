@@ -92,6 +92,7 @@ describe("resolveThreadPlaceholder", () => {
     const previousThread: Thread = {
       id: "thread-1",
       projectId: "project-1",
+      providerId: "codex",
       createdAt: 1,
       status: "idle",
       updatedAt: 1,
@@ -112,6 +113,7 @@ describe("resolveThreadPlaceholder", () => {
     const previousThread: Thread = {
       id: "thread-1",
       projectId: "project-1",
+      providerId: "codex",
       createdAt: 1,
       status: "idle",
       updatedAt: 1,

@@ -9,6 +9,7 @@ import type {
   ServiceTier,
 } from "./shared-types.js";
 import type { ThreadExecutionOptions } from "./api-types.js";
+import type { ThreadProviderId } from "./thread-provider.js";
 
 // Project
 export interface Project {
@@ -80,6 +81,7 @@ export interface ThreadQueuedMessage {
 export interface Thread {
   id: string;
   projectId: string;
+  providerId: ThreadProviderId;
   title?: string;
   mergeBaseBranch?: string;
   titleFallback?: string;

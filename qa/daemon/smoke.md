@@ -21,6 +21,8 @@ Confirm the most important daemon/env-agent flows still work end-to-end against 
 Use the full setup instructions in:
 - [`./standalone-daemon-qa.md`](./standalone-daemon-qa.md)
 
+For standalone restart scenarios in this pass, pin the exact Node runtime reported by `start-standalone-daemon-qa.mjs` or use `scripts/qa/relaunch-standalone-daemon-qa.mjs` instead of plain `node`.
+
 ## Automation entrypoint
 
 For the checked-in deterministic harness:
