@@ -3434,6 +3434,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     const provisioningReason = opts?.reason ?? "thread-created";
     const startSource = provisioningReason === "tell-after-provisioning-failure" ? "tell" : "spawn";
+    const spawnInitiator = req.spawnInitiator ?? "agent";
     const persistedThreadStartEvent = this._persistOutboundStartEvent(
       threadId,
       "client/thread/start",
@@ -3441,7 +3442,7 @@ export class Orchestrator implements ThreadOrchestrator {
       requestedInput,
       {
         source: startSource,
-        initiator: "agent",
+        initiator: spawnInitiator,
       },
     );
 
@@ -3540,7 +3541,7 @@ export class Orchestrator implements ThreadOrchestrator {
       requestedInput,
       {
         source: startSource,
-        initiator: "agent",
+        initiator: spawnInitiator,
       },
     );
     this._appendProvisioningProgressEvent(threadId, "start_provider_session", "started");
@@ -3622,7 +3623,7 @@ export class Orchestrator implements ThreadOrchestrator {
         input: requestedInput,
         meta: {
           source: "spawn",
-          initiator: "agent",
+          initiator: spawnInitiator,
         },
       });
       this._broadcastThreadChanged(

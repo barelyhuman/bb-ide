@@ -261,6 +261,7 @@ export function createProjectRoutes(
           environmentId: "local",
           developerInstructions: buildManagerDeveloperInstructions(),
           input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
+          spawnInitiator: "system",
         });
 
         try {

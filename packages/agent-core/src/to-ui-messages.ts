@@ -500,10 +500,6 @@ function userMessageSignature(value: {
   return `${value.text}\u0000${totalImages}\u0000${value.localFiles}`;
 }
 
-function isInternalSystemText(text: string): boolean {
-  return text.trimStart().startsWith("[bb system]");
-}
-
 function shouldRenderThreadStartInput(
   threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
 ): boolean {
@@ -3167,15 +3163,77 @@ export function toUIMessages(
       flushBufferedAssistantMessages(state);
     }
 
+    if (
+      eventTypeMatchesAny(eventType, [
+        "client/thread/start",
+        "client/turn/requested",
+        "client/turn/start",
+      ])
+    ) {
+      const startPayload = toEventRecord(event.data);
+      if (getStringField(startPayload, "initiator") === "system") {
+        const parsedInput = parsePromptInput(startPayload?.input);
+        if (parsedInput && shouldRenderThreadStartInput(options?.threadStatus)) {
+          const signature = userMessageSignature({
+            text: parsedInput.text,
+            webImages: parsedInput.webImages,
+            localImages: parsedInput.localImages,
+            localFiles: parsedInput.localFiles,
+          });
+          const startSource = getStringField(startPayload, "source");
+          const isClientThreadStart = eventTypeMatches(eventType, "client/thread/start");
+          const isClientTurnRequested = eventTypeMatches(eventType, "client/turn/requested");
+          const isClientTurnStart = eventTypeMatches(eventType, "client/turn/start");
+          const pendingThreadStartCount =
+            pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
+          const pendingRequestedCount =
+            pendingClientRequestedUserSignatureCounts.get(signature) ?? 0;
+          const pendingProviderCount =
+            pendingProviderUserSignatureCounts.get(signature) ?? 0;
+          if (isClientTurnStart && startSource === "spawn" && pendingThreadStartCount > 0) {
+            continue;
+          }
+          if (isClientTurnStart && pendingRequestedCount > 0) {
+            continue;
+          }
+          if (isClientTurnStart && pendingProviderCount > 0) {
+            if (pendingProviderCount === 1) {
+              pendingProviderUserSignatureCounts.delete(signature);
+            } else {
+              pendingProviderUserSignatureCounts.set(
+                signature,
+                pendingProviderCount - 1,
+              );
+            }
+            continue;
+          }
+          pendingClientStartUserSignatureCounts.set(
+            signature,
+            (pendingClientStartUserSignatureCounts.get(signature) ?? 0) + 1,
+          );
+          if (isClientThreadStart) {
+            pendingClientThreadStartUserSignatureCounts.set(
+              signature,
+              pendingThreadStartCount + 1,
+            );
+          }
+          if (isClientTurnRequested) {
+            pendingClientRequestedUserSignatureCounts.set(
+              signature,
+              pendingRequestedCount + 1,
+            );
+          }
+        }
+        continue;
+      }
+    }
+
     const userFromClientThreadStart = parseUserFromClientStart(
       event,
       eventType,
       options,
     );
     if (userFromClientThreadStart) {
-      if (isInternalSystemText(userFromClientThreadStart.text)) {
-        continue;
-      }
       const signature = userMessageSignature({
         text: userFromClientThreadStart.text,
         webImages: userFromClientThreadStart.attachments?.webImages ?? 0,
@@ -3244,9 +3302,6 @@ export function toUIMessages(
 
     const userMessage = parseUserFromItemEvent(event, eventType);
     if (userMessage) {
-      if (isInternalSystemText(userMessage.text)) {
-        continue;
-      }
       const signature = userMessageSignature({
         text: userMessage.text,
         webImages: userMessage.attachments?.webImages ?? 0,

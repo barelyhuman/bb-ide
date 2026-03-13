@@ -12,6 +12,7 @@ import type {
   ThreadBuiltInActionId,
   ThreadQueuedMessage,
   ThreadStatus,
+  ThreadTurnInitiator,
   ThreadType,
   ThreadWorkStatus,
 } from "./types.js";
@@ -55,6 +56,10 @@ export interface SpawnThreadRequest {
   environmentId?: string;
   developerInstructions?: string;
   parentThreadId?: string;
+  /**
+   * Internal-only override for daemon-authored bootstrap/system turns.
+   */
+  spawnInitiator?: ThreadTurnInitiator;
 }
 
 export type TellThreadMode = "auto" | "start" | "steer";

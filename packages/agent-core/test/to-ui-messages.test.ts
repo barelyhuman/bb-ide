@@ -3202,6 +3202,24 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "system",
+          input: [{ type: "text", text: "[bb system] Welcome!" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
         type: "item/completed",
         data: {
           threadId: "thread-1",
@@ -3212,12 +3230,12 @@ describe("toUIMessages replay coverage", () => {
             content: [{ type: "text", text: "[bb system] Welcome!" }],
           },
         },
-        createdAt: 1,
+        createdAt: 2,
       },
       {
-        id: "evt-2",
+        id: "evt-3",
         threadId: "thread-1",
-        seq: 2,
+        seq: 3,
         type: "system/manager/user_message",
         data: {
           text: "Visible manager update",
