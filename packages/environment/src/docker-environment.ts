@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import { renderTemplate } from "@beanbag/templates";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -283,8 +284,7 @@ class DockerEnvironment implements IEnvironment {
 
   buildAgentInstructions(): string | undefined {
     const base = this.inner.buildAgentInstructions?.();
-    const dockerNote =
-      "- Commands run inside a per-thread Docker container backed by the isolated workspace.";
+    const dockerNote = renderTemplate("dockerAgentNote", {});
     return base ? `${base}\n${dockerNote}` : dockerNote;
   }
 

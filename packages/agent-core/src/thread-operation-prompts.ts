@@ -1,5 +1,6 @@
 import { assertNever } from "./assert-never.js";
 import type { ThreadOperationRequest } from "./api-types.js";
+import { renderTemplate } from "@beanbag/templates";
 
 export type ThreadOperationPromptTarget = "thread" | "project_main";
 export type SquashMergeCommitFailureStage = "prep_commit" | "squash_commit";
@@ -23,19 +24,15 @@ function buildCommitInstruction(
   const includeUnstaged = options?.includeUnstaged !== false;
   const commitMessageHint = options?.message?.trim();
 
-  const steps = [
-    `Please commit the changes in ${formatPromptTarget(target)}.`,
-    "Please review git status and the diff before committing.",
-    includeUnstaged
+  return renderTemplate("threadOperationCommit", {
+    targetDescription: formatPromptTarget(target),
+    stageInstruction: includeUnstaged
       ? "Please stage relevant tracked and untracked changes before committing."
       : "Please commit only currently staged changes and leave unstaged edits untouched.",
-    commitMessageHint
+    commitMessageInstruction: commitMessageHint
       ? `Please use this commit message exactly: "${commitMessageHint}".`
       : "If no commit message is provided, please create a concise conventional commit message.",
-    "Please create at most one commit.",
-    "Please reply with whether a commit was created, the commit SHA if present, and any blockers.",
-  ];
-  return steps.join("\n");
+  });
 }
 
 function buildSquashMergeInstruction(
@@ -49,26 +46,25 @@ function buildSquashMergeInstruction(
   const includeUnstaged = options?.includeUnstaged !== false;
   const commitIfNeeded = options?.commitIfNeeded === true;
 
-  const steps = [
-    `Please squash-merge the changes in ${formatPromptTarget(target)}.`,
-    mergeBaseBranch
+  return renderTemplate("threadOperationSquashMerge", {
+    targetDescription: formatPromptTarget(target),
+    mergeBaseInstruction: mergeBaseBranch
       ? `Please use "${mergeBaseBranch}" as the merge base/target branch.`
       : "Please use the default merge-base branch reported by git.",
-    commitIfNeeded
+    prepCommitInstruction: commitIfNeeded
       ? includeUnstaged
         ? "If the workspace is dirty, please stage relevant changes and create a prep commit before squash merging."
         : "If the workspace is dirty, please create a prep commit from currently staged changes before squash merging."
       : "Please do not create a prep commit unless explicitly required to complete the merge.",
-    commitMessage
+    commitMessageInstruction: commitMessage
       ? `If a prep commit is required, please use this commit message: "${commitMessage}".`
       : "If a prep commit is required and no message is provided, please generate a concise commit message.",
-    squashMessage
+    squashMessageInstruction: squashMessage
       ? `Please use this squash-merge message: "${squashMessage}".`
       : "If no squash message is provided, please write a concise squash-merge message.",
-    "If conflicts occur, please resolve them, run relevant checks, and summarize what was resolved.",
-    "Please reply with whether the squash merge completed and list any blockers.",
-  ];
-  return steps.join("\n");
+    conflictInstruction:
+      "If conflicts occur, please resolve them, run relevant checks, and summarize what was resolved.",
+  });
 }
 
 export function buildSquashMergeConflictFollowUpInstruction(
@@ -80,13 +76,10 @@ export function buildSquashMergeConflictFollowUpInstruction(
 ): string {
   const conflictFiles = options?.conflictFiles?.filter((file) => file.trim().length > 0) ?? [];
   const mergeBaseBranch = request.options?.mergeBaseBranch?.trim() || "the default branch";
-  const steps = [
-    `Squash merge to ${mergeBaseBranch} failed with conflicts. Please rebase this branch onto ${mergeBaseBranch}, resolve the conflicts, and then retry the squash merge so the changes land on ${mergeBaseBranch}.`,
-  ];
-  if (conflictFiles.length > 0) {
-    steps.push(`Conflicted files: ${conflictFiles.join(", ")}.`);
-  }
-  return steps.join("\n");
+  return renderTemplate("threadOperationSquashMergeConflictFollowUp", {
+    mergeBaseBranch,
+    ...(conflictFiles.length > 0 ? { conflictFiles: conflictFiles.join(", ") } : {}),
+  });
 }
 
 export function buildSquashMergeCommitFailureFollowUpInstruction(
@@ -112,11 +105,10 @@ export function buildSquashMergeCommitFailureFollowUpInstruction(
     default:
       assertNever(options.stage);
   }
-  const errorMessage = options.errorMessage?.trim();
-  if (errorMessage) {
-    steps.push(`Git reported: ${errorMessage}.`);
-  }
-  return steps.join("\n");
+  return renderTemplate("threadOperationSquashMergeCommitFailureFollowUp", {
+    failureInstruction: steps.join("\n"),
+    ...(options.errorMessage?.trim() ? { errorMessage: options.errorMessage.trim() } : {}),
+  });
 }
 
 export function buildCommitFailureFollowUpInstruction(
@@ -126,17 +118,16 @@ export function buildCommitFailureFollowUpInstruction(
     errorMessage?: string;
   },
 ): string {
-  const steps = [
-    `Commit in ${formatPromptTarget(options?.target ?? "thread")} failed. Please inspect the workspace, fix the commit blocker, and retry the commit.`,
-  ];
-  if (request.options?.message?.trim()) {
-    steps.push(`Use this commit message exactly: "${request.options.message.trim()}".`);
-  }
-  const errorMessage = options?.errorMessage?.trim();
-  if (errorMessage) {
-    steps.push(`Git reported: ${errorMessage}.`);
-  }
-  return steps.join("\n");
+  const exactCommitMessage = request.options?.message?.trim();
+  return renderTemplate("threadOperationCommitFailureFollowUp", {
+    targetDescription: formatPromptTarget(options?.target ?? "thread"),
+    ...(exactCommitMessage
+      ? {
+          exactCommitMessageInstruction: `Use this commit message exactly: "${exactCommitMessage}".`,
+        }
+      : {}),
+    ...(options?.errorMessage?.trim() ? { errorMessage: options.errorMessage.trim() } : {}),
+  });
 }
 
 export function buildThreadOperationInstruction(

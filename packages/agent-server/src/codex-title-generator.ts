@@ -1,4 +1,5 @@
 import type { PromptInput } from "@beanbag/agent-core";
+import { renderTemplate } from "@beanbag/templates";
 import type { LlmThreadTitleGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 
@@ -37,19 +38,7 @@ function cleanPromptText(value: string): string {
 }
 
 function buildRunMetadataPrompt(cleanedPrompt: string): string {
-  return (
-    "You create concise run metadata for a coding task.\n" +
-    "Return ONLY a JSON object with keys:\n" +
-    "- title: short, clear, 3-7 words, Title Case\n" +
-    "- worktreeName: lower-case, kebab-case slug prefixed with one of: feat/, fix/, chore/, test/, docs/, refactor/, perf/, build/, ci/, style/.\n\n" +
-    "Choose fix/ when the task is a bug fix, error, regression, crash, or cleanup. Use the closest match for chores/tests/docs/refactors/perf/build/ci/style. Otherwise use feat/.\n\n" +
-    "Examples:\n" +
-    "{\"title\":\"Fix Login Redirect Loop\",\"worktreeName\":\"fix/login-redirect-loop\"}\n" +
-    "{\"title\":\"Add Workspace Home View\",\"worktreeName\":\"feat/workspace-home\"}\n" +
-    "{\"title\":\"Update Lint Config\",\"worktreeName\":\"chore/update-lint-config\"}\n" +
-    "{\"title\":\"Add Coverage Tests\",\"worktreeName\":\"test/add-coverage-tests\"}\n\n" +
-    `Task:\n${cleanedPrompt}`
-  );
+  return renderTemplate("codexRunMetadata", { cleanedPrompt });
 }
 
 function extractJsonValue(raw: string): Record<string, unknown> | null {

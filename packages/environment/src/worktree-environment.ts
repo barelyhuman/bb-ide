@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { expandHomeDirectory, resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import { renderTemplate } from "@beanbag/templates";
 import {
   EnvironmentSquashMergeCommitFailureError,
   type CreateEnvironmentContext,
@@ -86,12 +87,7 @@ const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
     squash_merge: true,
   },
 };
-const WORKTREE_AGENT_INSTRUCTIONS = [
-  "[Beanbag worktree environment]",
-  "- You are working in an isolated per-thread git worktree on a dedicated branch.",
-  "- Commit meaningful work before reporting completion so changes are not stranded in the worktree.",
-  "- Use the primary checkout only for manual verification when needed, then demote back to the thread worktree.",
-].join("\n");
+const WORKTREE_AGENT_INSTRUCTIONS = renderTemplate("worktreeAgentInstructions", {});
 
 async function runGitAtPathAsync(
   cwd: string,

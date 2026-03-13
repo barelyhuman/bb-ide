@@ -21,6 +21,7 @@
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
     "@beanbag/environment-agent": "workspace:*",
+    "@beanbag/templates": "workspace:*",
     "tsx": "^4.20.0"
   },
   "devDependencies": {

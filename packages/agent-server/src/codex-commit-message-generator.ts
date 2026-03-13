@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { renderTemplate } from "@beanbag/templates";
 import type { LlmCommitMessageGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 
@@ -48,25 +49,12 @@ function buildPrompt(args: {
   patch: string;
   diffDescription: string;
 }): string {
-  return [
-    `Write a concise git commit message for ${args.diffDescription}.`,
-    "Rules:",
-    "- Return ONLY JSON: {\"message\":\"...\"}",
-    "- Use conventional commit style (feat|fix|refactor|test|docs|chore|perf|build|ci|style).",
-    "- Prefer specific types like feat/fix/refactor/test/docs/perf over chore.",
-    "- Use chore only for housekeeping (deps, tooling, CI, formatting, repo maintenance).",
-    "- Use imperative mood, max 72 characters.",
-    "- Single line only, no body.",
-    "",
-    "Shortstat:",
-    args.shortstat || "(none)",
-    "",
-    "Files (name-status):",
-    args.files || "(none)",
-    "",
-    "Patch excerpt:",
-    args.patch || "(none)",
-  ].join("\n");
+  return renderTemplate("codexCommitMessage", {
+    diffDescription: args.diffDescription,
+    files: args.files || "(none)",
+    patch: args.patch || "(none)",
+    shortstat: args.shortstat || "(none)",
+  });
 }
 
 interface CommitDiffSnapshot {

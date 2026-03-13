@@ -18,6 +18,7 @@ import {
   decodeThreadIdFromWireValue,
   toRecord,
 } from "@beanbag/agent-core";
+import { renderTemplate } from "@beanbag/templates";
 import { resolveCodexProviderLaunchConfiguration } from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
 import type {
@@ -26,8 +27,7 @@ import type {
   ProviderThreadContext,
 } from "./provider-adapter.js";
 
-const DEFAULT_BASE_INSTRUCTIONS =
-  "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
+const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("codexBaseInstructions", {});
 const DEFAULT_APPROVAL_POLICY = "never";
 const DEFAULT_SANDBOX_MODE = "danger-full-access";
 // Ask Codex to suppress noisy legacy notifications at source.

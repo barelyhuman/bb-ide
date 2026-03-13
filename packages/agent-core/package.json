@@ -24,6 +24,7 @@
     "gen:codex-event-types": "node ./scripts/generate-codex-event-types.mjs"
   },
   "dependencies": {
+    "@beanbag/templates": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {

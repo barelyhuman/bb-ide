@@ -3,12 +3,15 @@ import {
   resolveApiKeyFromCodexAuthFile,
   type CodexAuthFile,
 } from "./codex-auth.js";
+import { renderTemplate } from "@beanbag/templates";
 
 const DEFAULT_API_KEY_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const DEFAULT_TITLE_MODEL = "gpt-5.1-codex-mini";
-const DEFAULT_RESPONSES_INSTRUCTIONS =
-  "You are a concise assistant. Follow the user request and return only the requested output.";
+const DEFAULT_RESPONSES_INSTRUCTIONS = renderTemplate(
+  "openaiResponsesDefaultInstructions",
+  {},
+);
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_UPSTREAM_ERROR_LENGTH = 220;
 
