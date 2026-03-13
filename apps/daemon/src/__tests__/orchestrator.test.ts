@@ -5714,14 +5714,18 @@ describe("Orchestrator", () => {
           row.kind === "message",
       );
 
-      expect(messageRows).toHaveLength(2);
-      expect(messageRows[0]?.message.kind).toBe("assistant-text");
-      if (messageRows[0]?.message.kind === "assistant-text") {
-        expect(messageRows[0].message.text).toBe("internal manager chatter");
+      expect(messageRows).toHaveLength(3);
+      expect(messageRows[0]?.message.kind).toBe("user");
+      if (messageRows[0]?.message.kind === "user") {
+        expect(messageRows[0].message.text).toBe("[bb system] Welcome!");
       }
       expect(messageRows[1]?.message.kind).toBe("assistant-text");
       if (messageRows[1]?.message.kind === "assistant-text") {
-        expect(messageRows[1].message.text).toBe("Visible manager update");
+        expect(messageRows[1].message.text).toBe("internal manager chatter");
+      }
+      expect(messageRows[2]?.message.kind).toBe("assistant-text");
+      if (messageRows[2]?.message.kind === "assistant-text") {
+        expect(messageRows[2].message.text).toBe("Visible manager update");
       }
     });
   });

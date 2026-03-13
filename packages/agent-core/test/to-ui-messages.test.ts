@@ -3254,4 +3254,68 @@ describe("toUIMessages replay coverage", () => {
       expect(projected[0].text).toBe("Visible manager update");
     }
   });
+
+  it("includes internal [bb system] messages when internal system messages are enabled", () => {
+    const projected = toUIMessages([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "system",
+          input: [{ type: "text", text: "[bb system] Welcome!" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "userMessage",
+            id: "user-1",
+            content: [{ type: "text", text: "[bb system] Welcome!" }],
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/manager/user_message",
+        data: {
+          text: "Visible manager update",
+          turnId: "turn-1",
+        },
+        createdAt: 3,
+      },
+    ], {
+      threadStatus: "idle",
+      threadType: "manager",
+      includeInternalSystemMessages: true,
+    });
+
+    expect(projected).toHaveLength(2);
+    expect(projected[0]?.kind).toBe("user");
+    if (projected[0]?.kind === "user") {
+      expect(projected[0].text).toBe("[bb system] Welcome!");
+    }
+    expect(projected[1]?.kind).toBe("assistant-text");
+    if (projected[1]?.kind === "assistant-text") {
+      expect(projected[1].text).toBe("Visible manager update");
+    }
+  });
 });

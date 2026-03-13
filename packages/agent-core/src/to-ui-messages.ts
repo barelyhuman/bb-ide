@@ -627,7 +627,10 @@ function parseUserFromClientStart(
   }
 
   const payload = toEventRecord(event.data);
-  if (getStringField(payload, "initiator") === "system") {
+  if (
+    getStringField(payload, "initiator") === "system" &&
+    !options?.includeInternalSystemMessages
+  ) {
     return null;
   }
   const parsedInput = parsePromptInput(payload?.input);
@@ -3132,6 +3135,8 @@ export function toUIMessages(
 
   const state = createProjectionState();
   const includeDebugRawEvents = options?.includeDebugRawEvents ?? false;
+  const includeInternalSystemMessages =
+    options?.includeInternalSystemMessages ?? false;
 
   let areEventsOrdered = true;
   for (let index = 1; index < events.length; index += 1) {
@@ -3171,7 +3176,10 @@ export function toUIMessages(
       ])
     ) {
       const startPayload = toEventRecord(event.data);
-      if (getStringField(startPayload, "initiator") === "system") {
+      if (
+        getStringField(startPayload, "initiator") === "system" &&
+        !includeInternalSystemMessages
+      ) {
         const parsedInput = parsePromptInput(startPayload?.input);
         if (parsedInput && shouldRenderThreadStartInput(options?.threadStatus)) {
           const signature = userMessageSignature({

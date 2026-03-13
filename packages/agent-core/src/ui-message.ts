@@ -309,6 +309,7 @@ export type UIMessage =
 export interface ToUIMessagesOptions {
   includeDebugRawEvents?: boolean;
   includeOptionalOperations?: boolean;
+  includeInternalSystemMessages?: boolean;
   threadStatus?: Thread["status"];
   threadType?: Thread["type"];
 }

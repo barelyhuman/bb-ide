@@ -2317,6 +2317,7 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const uiMessages = toUIMessages(events, {
         includeDebugRawEvents: false,
+        includeInternalSystemMessages: includeManagerDebugView,
         includeOptionalOperations: false,
         threadStatus: thread?.status,
         threadType:
