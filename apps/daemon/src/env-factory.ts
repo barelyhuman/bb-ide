@@ -34,9 +34,9 @@ export class EnvironmentFactory {
     projectId: string;
     projectRootPath: string;
     environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
-  }): void {
+  }): { environmentId: string; managed: boolean } | undefined {
     if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
-      return;
+      return undefined;
     }
 
     const descriptor = {
@@ -67,7 +67,10 @@ export class EnvironmentFactory {
       threadId: args.threadId,
       environmentId: environmentRecord.id,
     });
-
+    return {
+      environmentId: environmentRecord.id,
+      managed,
+    };
   }
 }
 

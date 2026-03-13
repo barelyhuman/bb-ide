@@ -918,6 +918,13 @@ export class Orchestrator implements ThreadOrchestrator {
     return environment.id;
   }
 
+  private _resolveThreadEnvironmentReference(threadId: string): string | undefined {
+    return (
+      this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId ??
+      this.threadRepo.getById(threadId)?.environmentId
+    );
+  }
+
   private _stopAllPrimaryPromotionWatches(): void {
     this.environmentService.stopPrimaryPromotionWatches();
   }
@@ -1163,7 +1170,7 @@ export class Orchestrator implements ThreadOrchestrator {
           serviceTier: options?.serviceTier,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
-          environmentId: thread.environmentId,
+          environmentId: this._resolveThreadEnvironmentReference(threadId),
         },
         {
           reason: "tell-after-provisioning-failure",
@@ -3314,11 +3321,19 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Ensure provisioning starts from a clean runtime state.
     this._cleanupThreadRuntime(threadId);
-    const requestedEnvironmentId = this._resolveRequestedEnvironmentId(
-      req.environmentId ?? thread?.environmentId,
-    );
-    if (thread && thread.environmentId !== requestedEnvironmentId) {
-      this.threadRepo.update(threadId, { environmentId: requestedEnvironmentId });
+    const attachedEnvironmentId = this._resolveSpawnAttachedEnvironmentId({
+      projectId: req.projectId,
+      environmentId: req.environmentId ?? thread?.environmentId,
+      attachedEnvironmentId: req.attachedEnvironmentId,
+    });
+    const requestedEnvironmentId = this._resolveRequestedRuntimeEnvironmentId({
+      projectId: req.projectId,
+      environmentId: req.environmentId ?? thread?.environmentId,
+      attachedEnvironmentId,
+    });
+    const requestedEnvironmentReference = attachedEnvironmentId ?? requestedEnvironmentId;
+    if (thread && thread.environmentId !== requestedEnvironmentReference) {
+      this.threadRepo.update(threadId, { environmentId: requestedEnvironmentReference });
     }
     const requestedEnvironmentInfo = this.environmentRegistry.get(requestedEnvironmentId).info;
     const provisioningStatusChanged = this._setThreadStatus(threadId, "provisioning", false, {
@@ -3360,26 +3375,27 @@ export class Orchestrator implements ThreadOrchestrator {
       });
       throw error;
     }
-    this.threadRepo.update(threadId, {
-      environmentId: environmentRuntime.environment.kind,
-      environmentRecord: {
-        kind: environmentRuntime.environment.kind,
-        state: environmentRuntime.environment.serialize(),
-      },
-    });
+    let attachedEnvironmentIdAfterProvision: string | undefined;
     try {
-      this.envFactory.syncThreadEnvironmentAttachment({
+      attachedEnvironmentIdAfterProvision = this.envFactory.syncThreadEnvironmentAttachment({
         threadId,
         projectId: project.id,
         projectRootPath: project.rootPath,
         environment: environmentRuntime.environment,
-      });
+      })?.environmentId;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
         `[thread ${threadId}] failed to sync first-class environment attachment: ${message}`,
       );
     }
+    this.threadRepo.update(threadId, {
+      environmentId: attachedEnvironmentIdAfterProvision ?? environmentRuntime.environment.kind,
+      environmentRecord: {
+        kind: environmentRuntime.environment.kind,
+        state: environmentRuntime.environment.serialize(),
+      },
+    });
     const provisionedEnvironmentInfo = this.environmentRegistry.get(
       environmentRuntime.environment.kind,
     ).info;
@@ -4094,7 +4110,7 @@ export class Orchestrator implements ThreadOrchestrator {
         serviceTier: options?.serviceTier,
         reasoningLevel: options?.reasoningLevel,
         sandboxMode: options?.sandboxMode,
-        environmentId: thread.environmentId,
+        environmentId: this._resolveThreadEnvironmentReference(threadId),
       },
       {
         rootPathHint: project.rootPath,
@@ -4157,7 +4173,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(options?.sandboxMode ?? defaultOptions?.sandboxMode
         ? { sandboxMode: options?.sandboxMode ?? defaultOptions?.sandboxMode }
         : {}),
-      environmentId: thread.environmentId,
+      environmentId: this._resolveThreadEnvironmentReference(threadId),
     };
     const providerContext = this._buildProviderThreadContext({
       threadId,
