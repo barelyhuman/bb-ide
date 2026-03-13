@@ -468,7 +468,7 @@ export class EnvironmentAgentSessionService {
     const now = args.now ?? this.clock();
     const records = this.commandDispatcher.listDeliverableCommandRecords({
       sessionId: session.id,
-      afterCursor: args.afterCursor,
+      afterCursor: session.environmentId ? undefined : args.afterCursor,
       limit: args.limit,
     });
 

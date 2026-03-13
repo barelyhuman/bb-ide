@@ -17,8 +17,10 @@ import {
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRepository,
+  EnvironmentRepository,
   EventRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
   createConnection,
   migrate,
@@ -277,6 +279,8 @@ export async function startDaemonE2eHarness(
     const projectRepo = new ProjectRepository(db);
     const threadRepo = new ThreadRepository(db);
     const eventRepo = new EventRepository(db);
+    const environmentRepo = new EnvironmentRepository(db);
+    const threadEnvironmentAttachmentRepo = new ThreadEnvironmentAttachmentRepository(db);
     const environmentAgentSessionRepo = new EnvironmentAgentSessionRepository(db);
     const environmentAgentCursorRepo = new EnvironmentAgentCursorRepository(db);
     const environmentAgentCommandRepo = new EnvironmentAgentCommandRepository(db);
@@ -286,6 +290,8 @@ export async function startDaemonE2eHarness(
         projectRepo,
         threadRepo,
         eventRepo,
+        environmentRepo,
+        threadEnvironmentAttachmentRepo,
         environmentAgentSessionRepo,
         environmentAgentCursorRepo,
         environmentAgentCommandRepo,

@@ -224,6 +224,88 @@ describe("EnvironmentAgentSessionService", () => {
     ]);
   });
 
+  it("does not apply a single-channel afterCursor to shared environment sessions", () => {
+    const threadId = createThreadId();
+    const siblingThreadId = createThreadId();
+    const projectId = threads.getById(threadId)?.projectId;
+    if (!projectId) {
+      throw new Error("Missing project for thread");
+    }
+    const sharedEnvironment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/daemon-session-service-project/.worktrees/env-shared",
+      },
+      managed: true,
+    });
+    const sharedService = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        clock: () => TEST_LEASE_NOW,
+        commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands, {
+          clock: () => TEST_LEASE_NOW,
+          resolveEnvironmentId: (candidateThreadId) =>
+            candidateThreadId === threadId || candidateThreadId === siblingThreadId
+              ? sharedEnvironment.id
+              : undefined,
+        }),
+        resolveEnvironmentId: (candidateThreadId) =>
+          candidateThreadId === threadId || candidateThreadId === siblingThreadId
+            ? sharedEnvironment.id
+            : undefined,
+      },
+    );
+
+    const opened = sharedService.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: threadId, generation: 1 }],
+      },
+    }).session;
+
+    commands.enqueue({
+      id: "cmd-thread-1",
+      threadId,
+      sessionId: opened.id,
+      commandType: "provider.ensure",
+      payload: { initialize: null, command: "codex", args: ["exec"] },
+      now: 1_500,
+    });
+    commands.enqueue({
+      id: "cmd-thread-2",
+      threadId: siblingThreadId,
+      sessionId: opened.id,
+      commandType: "provider.ensure",
+      payload: { initialize: null, command: "codex", args: ["exec"] },
+      now: 1_600,
+    });
+
+    const listed = sharedService.listCommands({
+      threadId,
+      sessionId: opened.id,
+      afterCursor: 99,
+      limit: 50,
+      now: 2_000,
+    });
+
+    expect(listed.payload.commands).toEqual([
+      expect.objectContaining({
+        channelId: threadId,
+        commandId: "cmd-thread-1",
+      }),
+      expect.objectContaining({
+        channelId: siblingThreadId,
+        commandId: "cmd-thread-2",
+      }),
+    ]);
+  });
+
   it("resets a stale daemon cursor when a fresh agent opens without lastDaemonAcked", async () => {
     const threadId = createThreadId();
     cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
