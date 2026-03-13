@@ -82,6 +82,7 @@ interface ProjectListProps {
 }
 
 const COLLAPSED_PROJECTS_STORAGE_KEY = "beanbag.sidebar.collapsedProjects"
+const COLLAPSED_MANAGERS_STORAGE_KEY = "beanbag.sidebar.collapsedManagers"
 
 export function ProjectList({
   onNewProject,
@@ -121,6 +122,19 @@ export function ProjectList({
       }
     }
   )
+  const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+
+    try {
+      const raw = window.localStorage.getItem(COLLAPSED_MANAGERS_STORAGE_KEY)
+      if (!raw) return new Set()
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return new Set()
+      return new Set(parsed.filter((value): value is string => typeof value === "string"))
+    } catch {
+      return new Set()
+    }
+  })
   const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
   const [openThreadActionsThreadId, setOpenThreadActionsThreadId] = useState<string | null>(null)
   const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
@@ -161,6 +175,14 @@ export function ProjectList({
   }, [collapsedProjectIds])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(
+      COLLAPSED_MANAGERS_STORAGE_KEY,
+      JSON.stringify(Array.from(collapsedManagerIds))
+    )
+  }, [collapsedManagerIds])
+
+  useEffect(() => {
     if (!archiveConfirmationThread || !threads) return
 
     const nextThread = threads.find((thread) => thread.id === archiveConfirmationThread.id)
@@ -176,6 +198,18 @@ export function ProjectList({
         next.delete(projectId)
       } else {
         next.add(projectId)
+      }
+      return next
+    })
+  }
+
+  const toggleManagerCollapsed = (threadId: string) => {
+    setCollapsedManagerIds((current) => {
+      const next = new Set(current)
+      if (next.has(threadId)) {
+        next.delete(threadId)
+      } else {
+        next.add(threadId)
       }
       return next
     })
@@ -340,6 +374,8 @@ export function ProjectList({
     options?: {
       isManagedChild?: boolean
       isManager?: boolean
+      hasManagedChildren?: boolean
+      isManagerCollapsed?: boolean
     }
   ) => {
     const threadIsBusy = isBusyThread(thread)
@@ -354,13 +390,15 @@ export function ProjectList({
     const ThreadEnvironmentIcon = environmentIconInfo?.icon
     const isManager = options?.isManager === true
     const isManagedChild = options?.isManagedChild === true
+    const hasManagedChildren = options?.hasManagedChildren === true
+    const isManagerCollapsed = options?.isManagerCollapsed === true
 
     return (
       <div
         key={thread.id}
         className={cn(
           "group/thread-row relative flex h-8 w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
-          isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
+          isManagedChild ? "pl-2 text-sidebar-foreground/70" : "pl-2",
           isThreadActive
             ? "bg-sidebar-border/80 text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -373,17 +411,48 @@ export function ProjectList({
           title={`Open ${threadTitle}`}
           className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
         />
-        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-          {threadIsBusy ? (
-            <CircleDashed className="size-3.5 animate-spin" />
-          ) : showUnreadBadge ? (
-            <span
-              className="size-1.5 rounded-full bg-primary"
-              aria-label="Unread completed thread"
-              title="Unread completion"
+        {isManagedChild ? (
+          <span
+            aria-hidden
+            className="relative inline-flex h-4 w-5 shrink-0 items-center justify-center text-sidebar-foreground/35"
+          >
+            <span className="absolute left-2 top-[-14px] h-[22px] w-px bg-sidebar-border/70" />
+            <span className="absolute left-2 top-1/2 h-px w-3 -translate-y-1/2 bg-sidebar-border/70" />
+          </span>
+        ) : isManager && hasManagedChildren ? (
+          <button
+            type="button"
+            aria-expanded={!isManagerCollapsed}
+            aria-label={
+              isManagerCollapsed
+                ? `Expand ${threadTitle} threads`
+                : `Collapse ${threadTitle} threads`
+            }
+            title={isManagerCollapsed ? "Expand managed threads" : "Collapse managed threads"}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              toggleManagerCollapsed(thread.id)
+            }}
+            className="relative z-10 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+          >
+            <ChevronRight
+              className={cn("size-3.5 transition-transform", !isManagerCollapsed && "rotate-90")}
             />
-          ) : null}
-        </span>
+          </button>
+        ) : (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+            {threadIsBusy ? (
+              <CircleDashed className="size-3.5 animate-spin" />
+            ) : showUnreadBadge ? (
+              <span
+                className="size-1.5 rounded-full bg-primary"
+                aria-label="Unread completed thread"
+                title="Unread completion"
+              />
+            ) : null}
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
         <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
           {thread.primaryCheckout?.isActive ? (
@@ -647,12 +716,25 @@ export function ProjectList({
                       <div className="space-y-1 group-data-[collapsible=icon]:hidden">
                         {managerThreads.map((thread) => (
                           <div key={thread.id} className="space-y-1">
-                            {renderThreadRow(project.id, thread, { isManager: true })}
-                            {(managedThreadsByManagerId.get(thread.id) ?? []).map((childThread) =>
-                              renderThreadRow(project.id, childThread, {
-                                isManagedChild: true,
-                              })
-                            )}
+                            {renderThreadRow(project.id, thread, {
+                              isManager: true,
+                              hasManagedChildren:
+                                (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0,
+                              isManagerCollapsed: collapsedManagerIds.has(thread.id),
+                            })}
+                            {!collapsedManagerIds.has(thread.id) &&
+                            (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0 ? (
+                              <div className="relative ml-3 pl-3">
+                                <div className="absolute inset-y-1 left-2 w-px bg-sidebar-border/70" />
+                                <div className="space-y-1">
+                                  {(managedThreadsByManagerId.get(thread.id) ?? []).map((childThread) =>
+                                    renderThreadRow(project.id, childThread, {
+                                      isManagedChild: true,
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                         {otherThreads.map((thread) => renderThreadRow(project.id, thread))}
