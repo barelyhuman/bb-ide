@@ -576,6 +576,14 @@ export class ThreadEnvironmentAttachmentRepository {
         })
         .run();
     }
+    db
+      .update(threads)
+      .set({
+        environmentId: data.environmentId,
+        updatedAt: now,
+      })
+      .where(eq(threads.id, data.threadId))
+      .run();
 
     const row = db
       .select()
@@ -633,9 +641,18 @@ export class ThreadEnvironmentAttachmentRepository {
 
   deleteByThreadId(threadId: string, opts?: { connection?: DbExecutor }): void {
     const db = opts?.connection ?? this.db;
+    const now = Date.now();
     db
       .delete(threadEnvironmentAttachments)
       .where(eq(threadEnvironmentAttachments.threadId, threadId))
+      .run();
+    db
+      .update(threads)
+      .set({
+        environmentId: null,
+        updatedAt: now,
+      })
+      .where(eq(threads.id, threadId))
       .run();
   }
 

@@ -592,6 +592,7 @@ export class EnvironmentService {
     this.threadRepo.update(
       threadId,
       {
+        environmentId: null,
         environmentRecord: null,
       },
       { touchUpdatedAt: false },
