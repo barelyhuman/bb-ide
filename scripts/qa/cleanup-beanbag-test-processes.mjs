@@ -2,8 +2,22 @@
 
 import { readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const WORKSPACE_ROOT = resolve(__dirname, "..", "..");
+const KNOWN_TEST_PROCESS_PATTERNS = [
+  resolve(WORKSPACE_ROOT, "packages", "environment-agent", "dist", "environment-agent.bundle.mjs"),
+  resolve(WORKSPACE_ROOT, "apps", "daemon", "dist", "index.js"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "run-fake-recovery-suite.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "cleanup-beanbag-test-processes.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "start-standalone-daemon-qa.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "stop-standalone-daemon-qa.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "relaunch-standalone-daemon-qa.mjs"),
+];
 
 const KNOWN_TMP_PREFIXES = [
   "beanbag-daemon-e2e-",
@@ -81,6 +95,10 @@ function commandMatchesKnownTmpPrefixes(command) {
   return KNOWN_TMP_PREFIXES.some((prefix) => command.includes(prefix));
 }
 
+function commandMatchesKnownTestProcess(command) {
+  return KNOWN_TEST_PROCESS_PATTERNS.some((pattern) => command.includes(pattern));
+}
+
 function collectTargetPids(processes, options) {
   const targets = new Set();
   const byParent = new Map();
@@ -101,6 +119,10 @@ function collectTargetPids(processes, options) {
       continue;
     }
     if (options.beanbagRoot && processInfo.command.includes(options.beanbagRoot)) {
+      targets.add(processInfo.pid);
+      continue;
+    }
+    if (commandMatchesKnownTestProcess(processInfo.command)) {
       targets.add(processInfo.pid);
       continue;
     }
