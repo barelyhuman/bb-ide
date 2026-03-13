@@ -19,6 +19,23 @@ export const projects = sqliteTable("projects", {
   index("projects_primary_checkout_thread_idx").on(table.primaryCheckoutThreadId),
 ]);
 
+export const environments = sqliteTable(
+  "environments",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    descriptor: text("descriptor").notNull(),
+    managed: integer("managed", { mode: "boolean" }).notNull().default(false),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("environments_project_updated_idx").on(table.projectId, table.updatedAt),
+  ],
+);
+
 export const threads = sqliteTable(
   "threads",
   {

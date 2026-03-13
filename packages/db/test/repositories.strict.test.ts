@@ -3,6 +3,7 @@ import type { DbConnection } from "../src/connection.js";
 import { createConnection } from "../src/connection.js";
 import { migrate } from "../src/migrate.js";
 import {
+  EnvironmentRepository,
   ProjectRepository,
   ThreadRepository,
 } from "../src/repositories.js";
@@ -19,6 +20,7 @@ function sqliteClient(db: DbConnection): SqliteClient {
 describe("repository strict normalization", () => {
   let db: DbConnection;
   let projects: ProjectRepository;
+  let environments: EnvironmentRepository;
   let threads: ThreadRepository;
   let sqlite: SqliteClient;
 
@@ -27,6 +29,7 @@ describe("repository strict normalization", () => {
     migrate(db);
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
+    environments = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
   });
 
@@ -97,6 +100,96 @@ describe("repository strict normalization", () => {
       id: thread.id,
       environmentId: "worktree",
     });
+  });
+
+  it("persists and loads first-class environments", () => {
+    const projectId = createProjectId();
+    const environment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: false,
+    });
+
+    expect(environments.getById(environment.id)).toEqual(environment);
+  });
+
+  it("lists first-class environments by project", () => {
+    const projectId = createProjectId();
+    const otherProjectId = projects.create({
+      name: "other-project",
+      rootPath: "/tmp/other-project",
+    }).id;
+    const kept = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: false,
+    });
+    environments.create({
+      projectId: otherProjectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/other-project",
+      },
+      managed: true,
+    });
+
+    expect(environments.list({ projectId })).toEqual([kept]);
+  });
+
+  it("updates first-class environment descriptors and managed state", () => {
+    const projectId = createProjectId();
+    const environment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: false,
+    });
+
+    const updated = environments.update(environment.id, {
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project/.worktrees/thread-1",
+      },
+      managed: true,
+    });
+
+    expect(updated).toMatchObject({
+      id: environment.id,
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project/.worktrees/thread-1",
+      },
+      managed: true,
+    });
+  });
+
+  it("throws for invalid persisted environment descriptor values", () => {
+    const projectId = createProjectId();
+    const environment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: false,
+    });
+    sqlite.exec("PRAGMA ignore_check_constraints = ON");
+    sqlite.exec(
+      `UPDATE environments SET descriptor='{\"type\":\"container_path\"}' WHERE id='${environment.id}'`,
+    );
+
+    expect(() => environments.getById(environment.id)).toThrow(
+      "Invalid persisted environment descriptor type: container_path",
+    );
   });
 
   it("lists only non-archived active threads with persisted environments", () => {

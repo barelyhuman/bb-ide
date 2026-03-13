@@ -1,5 +1,7 @@
 export type {
   Project,
+  EnvironmentDescriptor,
+  EnvironmentRecord,
   Thread,
   ThreadStatus,
   ThreadWorkState,

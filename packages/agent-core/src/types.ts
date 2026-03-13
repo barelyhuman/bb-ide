@@ -23,6 +23,20 @@ export interface Project {
   updatedAt: number;
 }
 
+export interface EnvironmentDescriptor {
+  type: "path";
+  path: string;
+}
+
+export interface EnvironmentRecord {
+  id: string;
+  projectId: string;
+  descriptor: EnvironmentDescriptor;
+  managed: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // Thread
 export type EnvironmentCapability =
   | "host_filesystem"

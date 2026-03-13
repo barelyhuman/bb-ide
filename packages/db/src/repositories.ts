@@ -14,6 +14,8 @@ import {
 import { nanoid } from "nanoid";
 import type {
   ThreadProviderId,
+  EnvironmentDescriptor,
+  EnvironmentRecord,
   PersistedEnvironmentRecord,
   PromptInput,
   Project,
@@ -44,6 +46,7 @@ import type { DbConnection } from "./connection.js";
 type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
 import {
   projects,
+  environments,
   threads,
   queuedThreadMessages,
   events,
@@ -253,6 +256,42 @@ function parseQueuedPromptInput(rawInput: string): PromptInput[] {
   return validationResult.data;
 }
 
+function parseEnvironmentDescriptor(
+  value: string | null | undefined,
+): EnvironmentDescriptor {
+  if (!value) {
+    throw new Error("Missing persisted environment descriptor");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("Invalid persisted environment descriptor JSON");
+  }
+
+  const record = toRecord(parsed);
+  if (!record) {
+    throw new Error("Invalid persisted environment descriptor payload");
+  }
+
+  const type = getStringField(record, "type");
+  switch (type) {
+    case "path": {
+      const path = getStringField(record, "path");
+      if (!path) {
+        throw new Error("Invalid persisted environment path descriptor");
+      }
+      return {
+        type,
+        path,
+      };
+    }
+    default:
+      throw new Error(`Invalid persisted environment descriptor type: ${type ?? "missing"}`);
+  }
+}
+
 function toReasoningLevel(value: string): ReasoningLevel {
   if (
     value === "low" ||
@@ -358,6 +397,116 @@ export class ProjectRepository {
 
   delete(id: string): void {
     this.db.delete(projects).where(eq(projects.id, id)).run();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EnvironmentRepository
+// ---------------------------------------------------------------------------
+
+export class EnvironmentRepository {
+  constructor(private db: DbConnection) {}
+
+  create(data: {
+    projectId: string;
+    descriptor: EnvironmentDescriptor;
+    managed: boolean;
+  }): EnvironmentRecord {
+    const now = Date.now();
+    const row = {
+      id: nanoid(),
+      projectId: data.projectId,
+      descriptor: JSON.stringify(data.descriptor),
+      managed: data.managed,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db.insert(environments).values(row).run();
+    return this.rowToEnvironment(row);
+  }
+
+  getById(id: string): EnvironmentRecord | undefined {
+    const row = this.db
+      .select()
+      .from(environments)
+      .where(eq(environments.id, id))
+      .get();
+    return row ? this.rowToEnvironment(row) : undefined;
+  }
+
+  list(filters?: {
+    projectId?: string;
+  }): EnvironmentRecord[] {
+    const conditions = [];
+    if (filters?.projectId) {
+      conditions.push(eq(environments.projectId, filters.projectId));
+    }
+
+    let query = this.db.select().from(environments);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+
+    return query
+      .orderBy(desc(environments.updatedAt))
+      .all()
+      .map((row) => this.rowToEnvironment(row));
+  }
+
+  update(
+    id: string,
+    data: {
+      descriptor?: EnvironmentDescriptor;
+      managed?: boolean;
+    },
+    opts?: {
+      touchUpdatedAt?: boolean;
+      connection?: DbExecutor;
+    },
+  ): EnvironmentRecord | undefined {
+    const db = opts?.connection ?? this.db;
+    const existing = db
+      .select()
+      .from(environments)
+      .where(eq(environments.id, id))
+      .get();
+    if (!existing) return undefined;
+
+    const updates: Record<string, unknown> = {};
+    if (opts?.touchUpdatedAt !== false) {
+      updates.updatedAt = Date.now();
+    }
+    if (data.descriptor !== undefined) {
+      updates.descriptor = JSON.stringify(data.descriptor);
+    }
+    if (data.managed !== undefined) {
+      updates.managed = data.managed;
+    }
+
+    db.update(environments).set(updates).where(eq(environments.id, id)).run();
+    const updated = db
+      .select()
+      .from(environments)
+      .where(eq(environments.id, id))
+      .get();
+    return updated ? this.rowToEnvironment(updated) : undefined;
+  }
+
+  delete(id: string): void {
+    this.db.delete(environments).where(eq(environments.id, id)).run();
+  }
+
+  private rowToEnvironment(
+    row: typeof environments.$inferSelect,
+  ): EnvironmentRecord {
+    return {
+      id: row.id,
+      projectId: row.projectId,
+      descriptor: parseEnvironmentDescriptor(row.descriptor),
+      managed: row.managed,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
   }
 }
 

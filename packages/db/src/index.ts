@@ -5,6 +5,7 @@ export * from "./schema.js";
 
 export {
   ProjectRepository,
+  EnvironmentRepository,
   ThreadRepository,
   EventRepository,
 } from "./repositories.js";
