@@ -128,7 +128,10 @@ import {
   unsupportedOperationError,
 } from "./domain-errors.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
-import { EnvironmentFactory } from "./env-factory.js";
+import {
+  derivePersistedEnvironmentRecordFromDescriptor,
+  EnvironmentFactory,
+} from "./env-factory.js";
 import {
   EnvironmentAgentCommandDispatcher,
 } from "./environment-agent-command-dispatcher.js";
@@ -879,17 +882,16 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!attachedEnvironment || attachedEnvironment.projectId !== args.projectId) {
         throw new Error(`Environment not found: ${args.attachedEnvironmentId}`);
       }
-      const siblingAttachments = this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
-        args.attachedEnvironmentId,
-      );
-      for (const attachment of siblingAttachments) {
-        const siblingThread = this.threadRepo.getById(attachment.threadId);
-        const runtimeKind = siblingThread?.environmentRecord?.kind;
-        if (runtimeKind) {
-          return this._resolveRequestedEnvironmentId(runtimeKind);
+      const project = this.projectRepo.getById(args.projectId);
+      if (project) {
+        const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+          descriptor: attachedEnvironment.descriptor,
+          projectRootPath: project.rootPath,
+        });
+        if (derivedRecord?.kind) {
+          return this._resolveRequestedEnvironmentId(derivedRecord.kind);
         }
       }
-      const project = this.projectRepo.getById(args.projectId);
       if (project && attachedEnvironment.descriptor.path === project.rootPath) {
         return "local";
       }
