@@ -153,10 +153,12 @@ describe("managed artifact reconciler", () => {
       environmentId: "worktree",
       archivedAt: Date.now() - 1_000,
     });
-
     const worktreeRoot = resolve(beanbagRoot, "worktrees", "proj-1");
-    mkdirSync(join(worktreeRoot, "live-thread"), { recursive: true });
-    mkdirSync(join(worktreeRoot, "archived-thread"), { recursive: true });
+    const liveWorkspacePath = join(worktreeRoot, "live-shared-env");
+    const archivedWorkspacePath = join(worktreeRoot, "archived-shared-env");
+
+    mkdirSync(liveWorkspacePath, { recursive: true });
+    mkdirSync(archivedWorkspacePath, { recursive: true });
     mkdirSync(join(worktreeRoot, "orphan-thread"), { recursive: true });
     mkdirSync(resolve(beanbagRoot, "worktrees", "orphan-project", "thread-1"), {
       recursive: true,
@@ -164,6 +166,36 @@ describe("managed artifact reconciler", () => {
 
     const result = reconcileManagedArtifactStorage({
       threads: [liveThread, archivedThread],
+      environments: [
+        {
+          id: "env-live",
+          projectId: "proj-1",
+          descriptor: {
+            type: "path",
+            path: liveWorkspacePath,
+          },
+          managed: true,
+        },
+        {
+          id: "env-archived",
+          projectId: "proj-1",
+          descriptor: {
+            type: "path",
+            path: archivedWorkspacePath,
+          },
+          managed: true,
+        },
+      ],
+      environmentAttachments: [
+        {
+          threadId: liveThread.id,
+          environmentId: "env-live",
+        },
+        {
+          threadId: archivedThread.id,
+          environmentId: "env-archived",
+        },
+      ],
       projects: [project],
       runtimeEnv: process.env,
       now: Date.now(),
@@ -171,8 +203,8 @@ describe("managed artifact reconciler", () => {
     });
 
     expect(result.removedWorkspaceDirectories).toBe(3);
-    expect(existsSync(join(worktreeRoot, "live-thread"))).toBe(true);
-    expect(existsSync(join(worktreeRoot, "archived-thread"))).toBe(false);
+    expect(existsSync(liveWorkspacePath)).toBe(true);
+    expect(existsSync(archivedWorkspacePath)).toBe(false);
     expect(existsSync(join(worktreeRoot, "orphan-thread"))).toBe(false);
     expect(existsSync(resolve(beanbagRoot, "worktrees", "orphan-project"))).toBe(false);
   });

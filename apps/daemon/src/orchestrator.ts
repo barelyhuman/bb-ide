@@ -770,6 +770,12 @@ export class Orchestrator implements ThreadOrchestrator {
     const projects = this.projectRepo.list();
     const result = reconcileManagedArtifactStorage({
       threads,
+      ...(this.environmentRepo
+        ? { environments: this.environmentRepo.list() }
+        : {}),
+      ...(this.threadEnvironmentAttachmentRepo
+        ? { environmentAttachments: this.threadEnvironmentAttachmentRepo.list() }
+        : {}),
       projects,
       runtimeEnv: this.runtimeEnv,
       now,

@@ -7,9 +7,12 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import {
+  type EnvironmentDescriptor,
+  type EnvironmentRecord,
   type Project,
   type Thread,
 } from "@beanbag/agent-core";
+import type { ThreadEnvironmentAttachmentRecord } from "@beanbag/db";
 import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import {
   removeRotatingJsonLineFileArtifacts,
@@ -25,6 +28,11 @@ const DEFAULT_MANAGED_ARTIFACT_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 export type ManagedArtifactThreadRecord = Pick<
   Thread,
   "id" | "projectId" | "environmentId" | "archivedAt"
+>;
+
+export type ManagedArtifactEnvironmentRecord = Pick<
+  EnvironmentRecord,
+  "id" | "projectId" | "descriptor" | "managed"
 >;
 
 function resolveManagedWorkspaceRoot(
@@ -136,10 +144,19 @@ export interface ManagedArtifactReconcilerResult {
 
 export interface ReconcileManagedArtifactStorageArgs {
   threads: readonly ManagedArtifactThreadRecord[];
+  environments?: readonly ManagedArtifactEnvironmentRecord[];
+  environmentAttachments?: readonly Pick<
+    ThreadEnvironmentAttachmentRecord,
+    "threadId" | "environmentId"
+  >[];
   projects: readonly Project[];
   runtimeEnv: NodeJS.ProcessEnv;
   now?: number;
   archivedLogRetentionMs?: number;
+}
+
+function environmentPathFromDescriptor(descriptor: EnvironmentDescriptor): string | undefined {
+  return resolve(descriptor.path);
 }
 
 export function resolveArchivedEnvironmentAgentLogRetentionMs(
@@ -227,15 +244,48 @@ export function reconcileManagedArtifactStorage(
   removeEmptyDirectories(environmentAgentLogsRoot);
 
   let removedWorkspaceDirectories = 0;
+  const activeManagedWorkspacePathsByProjectId = new Map<string, Set<string>>();
+  const hasFirstClassManagedEnvironments =
+    Array.isArray(args.environments) &&
+    Array.isArray(args.environmentAttachments);
+
+  if (hasFirstClassManagedEnvironments) {
+    const threadById = new Map(args.threads.map((thread) => [thread.id, thread]));
+    const environmentById = new Map(
+      args.environments!.map((environment) => [environment.id, environment]),
+    );
+
+    for (const attachment of args.environmentAttachments!) {
+      const thread = threadById.get(attachment.threadId);
+      if (!thread || thread.archivedAt !== undefined) continue;
+      const environment = environmentById.get(attachment.environmentId);
+      if (!environment?.managed) continue;
+      const workspaceRoot = environmentPathFromDescriptor(environment.descriptor);
+      if (!workspaceRoot) continue;
+
+      const keepPaths = activeManagedWorkspacePathsByProjectId.get(environment.projectId);
+      if (keepPaths) {
+        keepPaths.add(workspaceRoot);
+      } else {
+        activeManagedWorkspacePathsByProjectId.set(environment.projectId, new Set([workspaceRoot]));
+      }
+    }
+  }
+
   for (const project of args.projects) {
     const worktreeRoot = worktreeRootsByProjectId.get(project.id);
     if (!worktreeRoot || !existsSync(worktreeRoot)) continue;
     const keepThreadIds = activeThreadIdsByProjectId.get(project.id) ?? new Set<string>();
+    const keepWorkspacePaths = activeManagedWorkspacePathsByProjectId.get(project.id) ?? new Set<string>();
     const entries = readdirSync(worktreeRoot, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
-      if (keepThreadIds.has(entry.name)) continue;
-      removeManagedWorktreePath(project.rootPath, join(worktreeRoot, entry.name));
+      const workspacePath = resolve(join(worktreeRoot, entry.name));
+      const shouldKeep = hasFirstClassManagedEnvironments
+        ? keepWorkspacePaths.has(workspacePath)
+        : keepThreadIds.has(entry.name);
+      if (shouldKeep) continue;
+      removeManagedWorktreePath(project.rootPath, workspacePath);
       removedWorkspaceDirectories += 1;
     }
     removeDirectoryIfEmpty(worktreeRoot);
