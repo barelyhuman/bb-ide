@@ -397,6 +397,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-delete-1",
       projectId: "proj-1",
+      providerId: "codex",
       status: "idle",
       title: "Delete me",
       createdAt: 1,
@@ -437,6 +438,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-delete-2",
       projectId: "proj-1",
+      providerId: "codex",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -473,6 +475,7 @@ describe("CLI command output contracts", () => {
     const thread: Thread = {
       id: "thread-delete-3",
       projectId: "proj-1",
+      providerId: "codex",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,

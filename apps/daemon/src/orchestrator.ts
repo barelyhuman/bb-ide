@@ -563,6 +563,14 @@ export class Orchestrator implements ThreadOrchestrator {
   private environmentCatalog: SystemEnvironmentInfo[];
   private environmentAgentCommandPollIntervalMs: number | undefined;
 
+  private get agentServer(): AgentServer {
+    const server = this.agentServerByProviderId.get(this.defaultProviderId);
+    if (!server) {
+      throw new Error(`Missing agent server for provider "${this.defaultProviderId}"`);
+    }
+    return server;
+  }
+
   constructor(
     private threadRepo: ThreadRepository,
     private eventRepo: EventRepository,
@@ -3050,7 +3058,7 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(args.threadId);
     }
 
-    return this.agentServer.handleProviderRequest({
+    return this._getAgentServerForThread(thread).handleProviderRequest({
       threadId: args.threadId,
       context: this._buildProviderThreadContext({
         threadId: args.threadId,
