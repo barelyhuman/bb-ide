@@ -6,9 +6,7 @@ import {
 } from "./thread-recovery-heavy-runbook.scenario.js";
 import { supportsFakeCodexControl } from "./provider-mode.js";
 
-// TODO: restore fake-provider worker-loss runbooks once the lazy env-daemon
-// replacement model has dedicated assertions for first-use recovery.
-const itWithSupportedProvider = supportsFakeCodexControl() ? it.skip : it.skip;
+const itWithSupportedProvider = supportsFakeCodexControl() ? it : it.skip;
 
 describe.sequential("e2e: recovery-heavy runbook scenarios", () => {
   itWithSupportedProvider(

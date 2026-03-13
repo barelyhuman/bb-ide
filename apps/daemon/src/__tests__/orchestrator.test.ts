@@ -711,6 +711,21 @@ describe("Orchestrator", () => {
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
+    it("ignores active session invalidation during migration-driven replacement", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          status: "active",
+        }),
+      );
+
+      manager.handleEnvironmentAgentSessionInvalidated("thread-1", "migration");
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(eventRepo.create).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
     it("injects llm completion into environment creation context", async () => {
       const generateCommitMessage = llmCompletionService.generateCommitMessage as ReturnType<
         typeof vi.fn

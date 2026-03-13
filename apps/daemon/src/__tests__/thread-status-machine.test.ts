@@ -17,7 +17,7 @@ const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
   provisioning: ["provisioned", "active", "idle", "provisioning_failed"],
   provisioned: ["active", "idle", "provisioning_failed"],
   provisioning_failed: ["provisioning", "provisioned", "idle"],
-  error: ["provisioning", "provisioned", "idle"],
+  error: ["active", "provisioning", "provisioned", "idle"],
   idle: ["active", "error", "provisioning", "provisioned"],
   active: ["error", "idle"],
 };

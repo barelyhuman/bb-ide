@@ -38,6 +38,7 @@ const THREAD_STATUS_STATES = {
   },
   error: {
     on: {
+      active: "active",
       provisioning: "provisioning",
       provisioned: "provisioned",
       idle: "idle",

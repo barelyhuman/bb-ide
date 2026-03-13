@@ -1921,7 +1921,7 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     closeReason?: EnvironmentAgentSessionCloseReason,
   ): void {
-    if (closeReason === "newer_session") {
+    if (closeReason === "newer_session" || closeReason === "migration") {
       return;
     }
 
