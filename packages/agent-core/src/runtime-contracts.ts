@@ -228,7 +228,11 @@ export interface ThreadOrchestrator {
   requiresForceArchive(threadId: string): boolean;
   updateThread(
     threadId: string,
-    request: { title?: string; mergeBaseBranch?: string | null },
+    request: {
+      title?: string;
+      mergeBaseBranch?: string | null;
+      parentThreadId?: string | null;
+    },
   ): Thread;
   markRead(threadId: string): Thread;
   markUnread(threadId: string): Thread;

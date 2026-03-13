@@ -2,6 +2,7 @@ export type {
   Project,
   Thread,
   ThreadStatus,
+  ThreadType,
   ThreadWorkState,
   ThreadWorkStatus,
   ThreadPrimaryCheckoutState,

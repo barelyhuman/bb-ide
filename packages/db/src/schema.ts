@@ -13,10 +13,12 @@ export const projects = sqliteTable("projects", {
   rootPath: text("root_path").notNull(),
   projectInstructions: text("project_instructions"),
   primaryCheckoutThreadId: text("primary_checkout_thread_id"),
+  primaryManagerThreadId: text("primary_manager_thread_id"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (table) => [
   index("projects_primary_checkout_thread_idx").on(table.primaryCheckoutThreadId),
+  index("projects_primary_manager_thread_idx").on(table.primaryManagerThreadId),
 ]);
 
 export const threads = sqliteTable(
@@ -27,6 +29,7 @@ export const threads = sqliteTable(
       .notNull()
       .references(() => projects.id),
     providerId: text("provider_id").notNull().default("codex"),
+    type: text("type").notNull().default("standard"),
     title: text("title"),
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id"),

@@ -60,6 +60,7 @@ import {
   type ThreadOperationType,
   type ThreadPendingOperation,
   type ThreadTimelineResponse,
+  type ThreadType,
   type ThreadGitDiffResponse,
   type ThreadGitDiffSelection,
   type ThreadQueuedMessage,
@@ -843,6 +844,30 @@ export class Orchestrator implements ThreadOrchestrator {
     return DEFAULT_THREAD_PROVIDER_ID;
   }
 
+  private _resolveRequestedThreadType(req: SpawnThreadRequest): ThreadType {
+    return req.type ?? "standard";
+  }
+
+  private _validateManagerParentThread(args: {
+    projectId: string;
+    parentThreadId: string;
+    childThreadId?: string;
+  }): void {
+    const parentThread = this.threadRepo.getById(args.parentThreadId);
+    if (!parentThread) {
+      throw invalidRequestError(`Parent thread not found: ${args.parentThreadId}`);
+    }
+    if (args.childThreadId && args.parentThreadId === args.childThreadId) {
+      throw invalidRequestError("Thread cannot manage itself");
+    }
+    if (parentThread.projectId !== args.projectId) {
+      throw invalidRequestError("Parent thread must belong to the same project");
+    }
+    if (parentThread.type !== "manager") {
+      throw invalidRequestError("Parent thread must be a manager thread");
+    }
+  }
+
   private _stopAllPrimaryPromotionWatches(): void {
     this.environmentService.stopPrimaryPromotionWatches();
   }
@@ -869,6 +894,17 @@ export class Orchestrator implements ThreadOrchestrator {
       throw projectNotFoundError(req.projectId);
     }
 
+    const threadType = this._resolveRequestedThreadType(req);
+    if (threadType === "manager" && req.parentThreadId) {
+      throw invalidRequestError("Manager threads cannot be managed by a parent thread");
+    }
+    if (req.parentThreadId) {
+      this._validateManagerParentThread({
+        projectId: req.projectId,
+        parentThreadId: req.parentThreadId,
+      });
+    }
+
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
@@ -876,6 +912,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       providerId,
+      type: threadType,
       ...(explicitTitle ? { title: explicitTitle } : {}),
       environmentId,
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
@@ -1957,7 +1994,11 @@ export class Orchestrator implements ThreadOrchestrator {
 
   updateThread(
     threadId: string,
-    request: { title?: string; mergeBaseBranch?: string | null },
+    request: {
+      title?: string;
+      mergeBaseBranch?: string | null;
+      parentThreadId?: string | null;
+    },
   ): Thread {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
@@ -1967,6 +2008,7 @@ export class Orchestrator implements ThreadOrchestrator {
     let didChange = false;
     let didChangeTitle = false;
     let didChangeMergeBaseBranch = false;
+    let didChangeParentThread = false;
     const nextTitle = this._normalizeThreadTitle(request.title);
     if (nextTitle && nextTitle !== thread.title) {
       this.threadRepo.update(threadId, { title: nextTitle });
@@ -2010,6 +2052,27 @@ export class Orchestrator implements ThreadOrchestrator {
       didChangeMergeBaseBranch = true;
     }
 
+    if (request.parentThreadId !== undefined) {
+      if (thread.type === "manager" && request.parentThreadId !== null) {
+        throw invalidRequestError("Manager threads cannot be managed by a parent thread");
+      }
+      const nextParentThreadId = request.parentThreadId ?? undefined;
+      if (nextParentThreadId) {
+        this._validateManagerParentThread({
+          projectId: thread.projectId,
+          parentThreadId: nextParentThreadId,
+          childThreadId: threadId,
+        });
+      }
+      if (nextParentThreadId !== thread.parentThreadId) {
+        this.threadRepo.update(threadId, {
+          parentThreadId: nextParentThreadId ?? null,
+        });
+        didChange = true;
+        didChangeParentThread = true;
+      }
+    }
+
     const updated = this.threadRepo.getById(threadId);
     if (!updated) {
       throw threadNotFoundError(threadId);
@@ -2021,6 +2084,9 @@ export class Orchestrator implements ThreadOrchestrator {
       }
       if (didChangeMergeBaseBranch) {
         changes.push("work-status-changed");
+      }
+      if (didChangeParentThread) {
+        changes.push("thread-created");
       }
       this._broadcastThreadChanged(threadId, changes);
     }

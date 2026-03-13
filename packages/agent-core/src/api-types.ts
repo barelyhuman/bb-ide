@@ -12,6 +12,7 @@ import type {
   ThreadBuiltInActionId,
   ThreadQueuedMessage,
   ThreadStatus,
+  ThreadType,
   ThreadWorkStatus,
 } from "./types.js";
 export type {
@@ -44,6 +45,7 @@ export interface AvailableModel {
 // Thread endpoints
 export interface SpawnThreadRequest {
   projectId: string;
+  type?: ThreadType;
   title?: string;
   input?: PromptInput[];
   model?: string;
@@ -87,6 +89,7 @@ export interface SendQueuedThreadMessageResponse {
 export interface UpdateThreadRequest {
   title?: string;
   mergeBaseBranch?: string | null;
+  parentThreadId?: string | null;
 }
 
 export interface ThreadExecutionOptions {

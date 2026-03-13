@@ -41,6 +41,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
+        threadManager: deps.threadManager,
         runtimeEnv: deps.runtimeEnv,
         deleteThreadAsync: (threadId) =>
           workspaceStatusAccessor.deleteThread

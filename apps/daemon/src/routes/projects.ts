@@ -14,12 +14,14 @@ import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
+import { MANAGER_THREAD_TITLE, DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS, MANAGER_WELCOME_MESSAGE, ensureManagerWorkspace } from "../manager-thread.js";
 import {
   invalidRequestError,
   projectNotFoundError,
   unsupportedOperationError,
 } from "../domain-errors.js";
 import { sendApiError, sendRouteError } from "./error-response.js";
+import type { ThreadOrchestrator } from "@beanbag/agent-core";
 
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
@@ -185,6 +187,9 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
+    threadManager?: ThreadOrchestrator & {
+      deleteThread?: (threadId: string) => Promise<void>;
+    };
     runtimeEnv?: NodeJS.ProcessEnv;
     deleteThreadAsync?: (threadId: string) => Promise<void>;
     getProjectWorkspaceStatusAsync?: (
@@ -225,6 +230,55 @@ export function createProjectRoutes(
           return sendRouteError(c, projectNotFoundError(projectId));
         }
         return c.json(withProjectPathStatus(updated));
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .post("/:id/manager", async (c) => {
+      try {
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
+        if (!project) {
+          return sendRouteError(c, projectNotFoundError(projectId));
+        }
+        if (!deps?.threadManager) {
+          throw unsupportedOperationError("Manager creation is unavailable");
+        }
+
+        const existingManagerId = project.primaryManagerThreadId;
+        if (existingManagerId) {
+          const existingManager = deps.threadManager.getRawById(existingManagerId);
+          if (existingManager) {
+            return c.json(existingManager);
+          }
+          projectRepo.update(projectId, { primaryManagerThreadId: null });
+        }
+
+        const managerThread = await deps.threadManager.spawn({
+          projectId,
+          type: "manager",
+          title: MANAGER_THREAD_TITLE,
+          environmentId: "local",
+          developerInstructions: DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS,
+        });
+
+        try {
+          ensureManagerWorkspace(runtimeEnv, managerThread.id);
+          projectRepo.update(projectId, { primaryManagerThreadId: managerThread.id });
+          await deps.threadManager.systemTell(managerThread.id, {
+            input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
+          });
+        } catch (error) {
+          if (deps.deleteThreadAsync) {
+            await deps.deleteThreadAsync(managerThread.id);
+          } else if (deps.threadManager.deleteThread) {
+            await deps.threadManager.deleteThread(managerThread.id);
+          }
+          throw error;
+        }
+
+        const hydrated = deps.threadManager.getRawById(managerThread.id);
+        return c.json(hydrated ?? managerThread, 201);
       } catch (err) {
         return sendRouteError(c, err);
       }

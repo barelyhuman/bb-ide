@@ -32,6 +32,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     id: "thread-1",
     projectId: "proj-1",
     providerId: "codex",
+    type: "standard",
     status: "active",
     queuedMessages: [],
     archivedAt: undefined,
@@ -400,6 +401,25 @@ describe("Thread routes", () => {
       expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
         title: undefined,
         mergeBaseBranch: null,
+      });
+    });
+
+    it("passes parentThreadId updates through to the orchestrator", async () => {
+      const updatedThread = makeThread({ parentThreadId: "thread-manager-1" });
+      threadManager.getById.mockReturnValue(makeThread());
+      threadManager.updateThread.mockReturnValue(updatedThread);
+
+      const res = await app.request("/threads/thread-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentThreadId: "thread-manager-1" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
+        title: undefined,
+        mergeBaseBranch: undefined,
+        parentThreadId: "thread-manager-1",
       });
     });
   });

@@ -22,6 +22,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     id: "thread-1",
     projectId: "proj-1",
     providerId: "codex",
+    type: "standard",
     status: "active",
     createdAt: 1_000,
     updatedAt: 1_000,

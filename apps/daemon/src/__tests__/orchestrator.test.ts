@@ -450,6 +450,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     id: "thread-1",
     projectId: "proj-1",
     providerId: "codex",
+    type: "standard",
     status: "active",
     createdAt: 1000,
     updatedAt: 1000,
@@ -1731,6 +1732,43 @@ describe("Orchestrator", () => {
       expect(systemTellSpy).not.toHaveBeenCalled();
     });
 
+    it("rejects non-manager parent threads on spawn", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
+        id === "parent-1" ? makeThread({ id: "parent-1", type: "standard" }) : undefined,
+      );
+
+      await expect(
+        manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" }),
+      ).rejects.toThrow("Parent thread must be a manager thread");
+    });
+
+    it("rejects manager threads with a parent thread", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      await expect(
+        manager.spawn({
+          projectId: "proj-1",
+          type: "manager",
+          parentThreadId: "parent-1",
+        }),
+      ).rejects.toThrow("Manager threads cannot be managed by a parent thread");
+    });
+
 
 
     it("does not overwrite explicit spawn title from thread/name/updated", async () => {
@@ -1888,6 +1926,57 @@ describe("Orchestrator", () => {
         mergeBaseBranch: null,
       });
       expect(result.mergeBaseBranch).toBeUndefined();
+    });
+
+    it("updates parentThreadId when assigning a managed parent", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        type: "standard",
+      });
+      const parentThread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        parentThreadId: "thread-manager-1",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      const result = manager.updateThread("thread-1", {
+        parentThreadId: "thread-manager-1",
+      });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        parentThreadId: "thread-manager-1",
+      });
+      expect(result.parentThreadId).toBe("thread-manager-1");
+    });
+
+    it("rejects assigning a non-manager parent on update", () => {
+      const thread = makeThread({ id: "thread-1", type: "standard" });
+      const parentThread = makeThread({ id: "thread-parent-1", type: "standard" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread);
+
+      expect(() =>
+        manager.updateThread("thread-1", { parentThreadId: "thread-parent-1" }),
+      ).toThrow("Parent thread must be a manager thread");
+    });
+
+    it("rejects assigning a parent to a manager thread", () => {
+      const thread = makeThread({ id: "thread-manager-1", type: "manager" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      expect(() =>
+        manager.updateThread("thread-manager-1", { parentThreadId: "thread-parent-1" }),
+      ).toThrow("Manager threads cannot be managed by a parent thread");
     });
   });
 

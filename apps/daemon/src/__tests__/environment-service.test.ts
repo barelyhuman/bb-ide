@@ -181,6 +181,7 @@ function createService(args: {
     id: "thread-1",
     projectId: "proj-1",
     providerId: "codex",
+    type: "standard",
     status: "idle",
     environmentId: "worktree",
     environmentRecord: {
