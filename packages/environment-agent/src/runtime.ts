@@ -55,7 +55,6 @@ export interface EnvironmentAgentRuntimeQuiescenceSnapshot {
 }
 
 export class EnvironmentAgentRuntime {
-  private readonly events: EnvironmentAgentEventEnvelope[] = [];
   private readonly threadIdByProviderThreadId = new Map<string, string>();
   private sequence = 0;
   private providerRequestId = 0;
@@ -120,7 +119,6 @@ export class EnvironmentAgentRuntime {
       threadId: event.threadId,
       event,
     };
-    this.events.push(envelope);
     this.emitEvent(envelope);
     return envelope;
   }
