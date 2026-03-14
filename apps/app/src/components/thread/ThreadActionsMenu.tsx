@@ -4,6 +4,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
@@ -106,18 +107,21 @@ export function ThreadActionsMenu({
           </DropdownMenuItem>
         ) : null}
         {debugToggleLabel && onDebugToggleCheckedChange ? (
-          <DropdownMenuCheckboxItem
-            disabled={disabled}
-            checked={debugToggleChecked}
-            onCheckedChange={(checked) => {
-              onDebugToggleCheckedChange(checked === true)
-            }}
-            onSelect={(event) => {
-              event.preventDefault()
-            }}
-          >
-            {debugToggleLabel}
-          </DropdownMenuCheckboxItem>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem
+              disabled={disabled}
+              checked={debugToggleChecked}
+              onCheckedChange={(checked) => {
+                onDebugToggleCheckedChange(checked === true)
+              }}
+              onSelect={(event) => {
+                event.preventDefault()
+              }}
+            >
+              {debugToggleLabel}
+            </DropdownMenuCheckboxItem>
+          </>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
