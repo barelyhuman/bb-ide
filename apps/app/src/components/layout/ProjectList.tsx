@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import type { Thread } from "@beanbag/agent-core"
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronRight,
   CircleDashed,
   Folder,
@@ -86,20 +87,10 @@ const COLLAPSED_MANAGERS_STORAGE_KEY = "beanbag.sidebar.collapsedManagers"
 
 function ManagedThreadBranchGlyph() {
   return (
-    <svg
+    <ChevronDown
       aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="size-3 shrink-0 text-sidebar-foreground/45"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <g transform="rotate(45 12 12)">
-        <path d="m6 9 6 6 6-6" />
-      </g>
-    </svg>
+      className="size-3 shrink-0 rotate-45 text-sidebar-foreground/45"
+    />
   )
 }
 
