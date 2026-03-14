@@ -35,6 +35,17 @@ export function migrate(db: DbConnection): void {
   } finally {
     sqlite?.pragma?.("foreign_keys = ON");
   }
+
+  // Detect broken references introduced during migration while FKs were off.
+  if (sqlite) {
+    const violations = sqlite.pragma("foreign_key_check");
+    if (Array.isArray(violations) && violations.length > 0) {
+      console.error(
+        `foreign_key_check found ${violations.length} violation(s) after migration`,
+        violations.slice(0, 10),
+      );
+    }
+  }
 }
 
 function repairCriticalSchema(sqlite: SqliteClient | null): void {
@@ -50,11 +61,15 @@ function repairCriticalSchema(sqlite: SqliteClient | null): void {
     "ALTER TABLE `projects` ADD COLUMN `primary_manager_thread_id` text",
     "CREATE INDEX IF NOT EXISTS `projects_primary_manager_thread_idx` ON `projects` (`primary_manager_thread_id`)",
   ]);
+  ensureColumn(sqlite, "environment_agent_sessions", "environment_id", [
+    "ALTER TABLE `environment_agent_sessions` ADD COLUMN `environment_id` text REFERENCES `environments`(`id`) ON DELETE cascade",
+    "CREATE INDEX IF NOT EXISTS `environment_agent_sessions_environment_status_idx` ON `environment_agent_sessions` (`environment_id`,`status`)",
+  ]);
 }
 
 function ensureColumn(
   sqlite: SqliteClient,
-  tableName: "threads" | "projects",
+  tableName: "threads" | "projects" | "environment_agent_sessions",
   columnName: string,
   repairSql: string[],
 ): void {
