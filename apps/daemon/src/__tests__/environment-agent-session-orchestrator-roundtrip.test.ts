@@ -267,7 +267,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
         (orchestrator as unknown as { provisioningTasks: Map<string, Promise<void>> }).provisioningTasks.size,
       ).toBe(0);
     });
-    orchestrator.stopAll({ preserveEnvironments: true });
+    orchestrator.detachAll();
     await new Promise((resolve) => setImmediate(resolve));
     sqlite.close();
   });

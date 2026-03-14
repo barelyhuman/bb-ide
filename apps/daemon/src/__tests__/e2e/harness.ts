@@ -188,29 +188,18 @@ function listPendingProvisioningTasks(
   return Array.from(rawThreadManager.provisioningTasks?.values() ?? []);
 }
 
-function stopThreadManagerAndWait(
-  threadManager: unknown,
-  opts?: { preserveEnvironments?: boolean },
-): Promise<void> {
+function teardownThreadManager(threadManager: unknown): Promise<void> {
   const rawThreadManager = threadManager as {
-    stopAllAndWait?: (options?: { preserveEnvironments?: boolean }) => Promise<void>;
-    stopAll?: (options?: { preserveEnvironments?: boolean }) => void;
+    teardownAllForTestsOnly?: () => Promise<void>;
   };
-  if (typeof rawThreadManager.stopAllAndWait === "function") {
-    return rawThreadManager.stopAllAndWait(opts);
-  }
-  rawThreadManager.stopAll?.(opts);
-  return Promise.resolve();
+  return rawThreadManager.teardownAllForTestsOnly?.() ?? Promise.resolve();
 }
 
-function stopThreadManager(
-  threadManager: unknown,
-  opts?: { preserveEnvironments?: boolean },
-): void {
+function detachThreadManager(threadManager: unknown): void {
   const rawThreadManager = threadManager as {
-    stopAll?: (options?: { preserveEnvironments?: boolean }) => void;
+    detachAll?: () => void;
   };
-  rawThreadManager.stopAll?.(opts);
+  rawThreadManager.detachAll?.();
 }
 
 export async function startDaemonE2eHarness(
@@ -346,7 +335,7 @@ export async function startDaemonE2eHarness(
       if (!stopped) {
         stopped = true;
         const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
-        stopThreadManagerAndWait(threadManager);
+        teardownThreadManager(threadManager);
         await Promise.race([
           Promise.allSettled(pendingProvisioningTasks),
           sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
@@ -367,11 +356,8 @@ export async function startDaemonE2eHarness(
       const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
       rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
       // Restart recovery expects managed environments to remain resumable after
-      // daemon shutdown, so use the non-awaiting shutdown path here rather than
-      // the full teardown wait used by ordinary cleanup.
-      stopThreadManager(threadManager, {
-        preserveEnvironments: true,
-      });
+      // daemon shutdown, so detach without destroying — mirrors production shutdown.
+      detachThreadManager(threadManager);
       await Promise.race([
         Promise.allSettled(pendingProvisioningTasks),
         sleep(PROVISIONING_SETTLE_TIMEOUT_MS),

@@ -1026,45 +1026,9 @@ export class EnvironmentService {
     };
   }
 
-  stopAll(opts?: { preserveEnvironments?: boolean }): void {
-    const preserveEnvironments = opts?.preserveEnvironments ?? false;
-    const runtimeThreadIds = new Set(
-      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
-    );
+  detachAll(): void {
     for (const runtime of Array.from(this.environmentRuntimes.values())) {
-      const threadId = runtime.ownerThreadId;
-      if (preserveEnvironments) {
-        this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
-      } else {
-        void this.destroyDetachedRuntime(threadId, runtime).catch(() => {
-          // Errors are already reported via onCleanupFailure on individual cleanup paths.
-        });
-      }
-    }
-    if (!preserveEnvironments) {
-      const projects = this.projectRepo.list();
-      if (!Array.isArray(projects) || projects.length === 0) {
-        this.environmentRuntimes.clear();
-        this.stopAllPrimaryPromotionWatches();
-        this.primaryPromotionByProjectId.clear();
-        this.primaryPromotionValidatedAtByProjectId.clear();
-        this.workspaceCleanupInFlightThreadIds.clear();
-        this.restoreFailuresByThreadId.clear();
-        return;
-      }
-      for (const project of projects) {
-        const threadIds =
-          typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
-            ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
-            : [];
-        for (const threadId of threadIds) {
-          if (runtimeThreadIds.has(threadId)) continue;
-          void this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
-            const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
-            this.callbacks.onCleanupFailure(threadId, environmentId, error);
-          });
-        }
-      }
+      this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
     }
     this.environmentRuntimes.clear();
     this.stopAllPrimaryPromotionWatches();
@@ -1074,47 +1038,38 @@ export class EnvironmentService {
     this.restoreFailuresByThreadId.clear();
   }
 
-  async stopAllAndWait(opts?: { preserveEnvironments?: boolean }): Promise<void> {
-    const preserveEnvironments = opts?.preserveEnvironments ?? false;
+  async teardownAllForTestsOnly(): Promise<void> {
     const runtimeThreadIds = new Set(
       Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
     );
     const teardownTasks: Promise<void>[] = [];
     for (const runtime of Array.from(this.environmentRuntimes.values())) {
-      const threadId = runtime.ownerThreadId;
-      if (preserveEnvironments) {
-        teardownTasks.push(this.suspendDetachedRuntime(threadId, runtime));
-        this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
-      } else {
-        teardownTasks.push(this.destroyDetachedRuntime(threadId, runtime));
-      }
+      teardownTasks.push(this.destroyDetachedRuntime(runtime.ownerThreadId, runtime));
     }
-    if (!preserveEnvironments) {
-      const projects = this.projectRepo.list();
-      if (!Array.isArray(projects) || projects.length === 0) {
-        await Promise.allSettled(teardownTasks);
-        this.environmentRuntimes.clear();
-        this.stopAllPrimaryPromotionWatches();
-        this.primaryPromotionByProjectId.clear();
-        this.primaryPromotionValidatedAtByProjectId.clear();
-        this.workspaceCleanupInFlightThreadIds.clear();
-        this.restoreFailuresByThreadId.clear();
-        return;
-      }
-      for (const project of projects) {
-        const threadIds =
-          typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
-            ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
-            : [];
-        for (const threadId of threadIds) {
-          if (runtimeThreadIds.has(threadId)) continue;
-          teardownTasks.push(
-            this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
-              const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
-              this.callbacks.onCleanupFailure(threadId, environmentId, error);
-            }),
-          );
-        }
+    const projects = this.projectRepo.list();
+    if (!Array.isArray(projects) || projects.length === 0) {
+      await Promise.allSettled(teardownTasks);
+      this.environmentRuntimes.clear();
+      this.stopAllPrimaryPromotionWatches();
+      this.primaryPromotionByProjectId.clear();
+      this.primaryPromotionValidatedAtByProjectId.clear();
+      this.workspaceCleanupInFlightThreadIds.clear();
+      this.restoreFailuresByThreadId.clear();
+      return;
+    }
+    for (const project of projects) {
+      const threadIds =
+        typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
+          ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
+          : [];
+      for (const threadId of threadIds) {
+        if (runtimeThreadIds.has(threadId)) continue;
+        teardownTasks.push(
+          this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
+            const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
+            this.callbacks.onCleanupFailure(threadId, environmentId, error);
+          }),
+        );
       }
     }
     await Promise.allSettled(teardownTasks);

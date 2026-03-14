@@ -124,7 +124,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     getOutput: vi.fn(),
     isActive: vi.fn(),
     getActiveCount: vi.fn(),
-    stopAll: vi.fn(),
+    detachAll: vi.fn(),
   } as unknown as LegacyThreadRouteMock;
   orchestrator.getRawById.mockImplementation(
     (threadId: string) => (orchestrator.getById as unknown as (threadId: string) => Thread | undefined)(threadId),

@@ -3478,36 +3478,17 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Stop all active processes. Called during graceful shutdown.
    */
-  stopAll(opts?: { preserveEnvironments?: boolean }): void {
-    this.environmentService.stopAll({
-      preserveEnvironments: opts?.preserveEnvironments,
-    });
-    this.autoTitleAttemptedThreadIds.clear();
-    this.titleFallbackByThreadId.clear();
-    this.provisioningTasks.clear();
-    this.eventSeqCounters.clear();
-    this.lastNotifiedCompletionTurnIds.clear();
-    this.turnLifecycleEpochs.clear();
-    this.activeTurnIdByThreadId.clear();
-    this.providerThreadIdByThreadId.clear();
-    this.lastNotifiedCompletionEpochs.clear();
-    this.queueDispatchInFlight.clear();
-    this.queuedOperationsByThreadId.clear();
-    this.operationDispatchInFlight.clear();
-    this.runningOperationByThreadId.clear();
-    this.projectOperationTransitionsInFlight.clear();
-    for (const queued of this.queuedProviderBroadcastsByThread.values()) {
-      if (queued.timer !== null) {
-        clearTimeout(queued.timer);
-      }
-    }
-    this.queuedProviderBroadcastsByThread.clear();
+  detachAll(): void {
+    this.environmentService.detachAll();
+    this._clearInMemoryState();
   }
 
-  async stopAllAndWait(opts?: { preserveEnvironments?: boolean }): Promise<void> {
-    await this.environmentService.stopAllAndWait({
-      preserveEnvironments: opts?.preserveEnvironments,
-    });
+  async teardownAllForTestsOnly(): Promise<void> {
+    await this.environmentService.teardownAllForTestsOnly();
+    this._clearInMemoryState();
+  }
+
+  private _clearInMemoryState(): void {
     this.autoTitleAttemptedThreadIds.clear();
     this.titleFallbackByThreadId.clear();
     this.provisioningTasks.clear();

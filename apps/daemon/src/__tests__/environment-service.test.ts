@@ -717,14 +717,14 @@ describe("EnvironmentService", () => {
     });
   });
 
-  it("stopAll cleans up persisted environments even when no runtime is restored", async () => {
+  it("teardownAllForTestsOnly cleans up persisted environments even when no runtime is restored", async () => {
     const destroySpy = vi.fn();
     const { service, threadEnvironmentAttachmentRepo, threadState } = createService({
       existsInitially: true,
       destroySpy,
     });
 
-    service.stopAll();
+    await service.teardownAllForTestsOnly();
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
@@ -777,12 +777,12 @@ describe("EnvironmentService", () => {
 
     threadEnvironmentAttachmentRepo.deleteByThreadId("thread-1", { nextThreadEnvironmentId: null });
 
-    await service.stopAllAndWait();
+    await service.teardownAllForTestsOnly();
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
-  it("clears persisted shared-environment attachments for all scoped threads during stopAllAndWait", async () => {
+  it("clears persisted shared-environment attachments for all scoped threads during teardownAllForTestsOnly", async () => {
     const runtimeDestroySpy = vi.fn();
     const persistedDestroySpy = vi.fn();
     const runtimeEnvironment = createTestEnvironment({
@@ -931,7 +931,7 @@ describe("EnvironmentService", () => {
     );
 
     service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
-    await service.stopAllAndWait();
+    await service.teardownAllForTestsOnly();
 
     expect(runtimeDestroySpy).toHaveBeenCalledTimes(1);
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(

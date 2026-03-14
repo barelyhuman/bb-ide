@@ -165,7 +165,7 @@ async function main(): Promise<void> {
       `\nReceived ${signal}. ${restartRequested ? "Restarting" : "Shutting down"} gracefully...`,
     );
 
-    threadManagerRef?.stopAll({ preserveEnvironments: true });
+    threadManagerRef?.detachAll();
     serverCloseRef?.();
     wsManagerRef?.close();
     await closeHttpServer(httpServer);

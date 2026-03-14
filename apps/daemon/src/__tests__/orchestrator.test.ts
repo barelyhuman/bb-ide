@@ -5516,15 +5516,15 @@ describe("Orchestrator", () => {
 
   });
 
-  describe("stopAll()", () => {
+  describe("detachAll()", () => {
     it("clears all processes and is safe to call when empty", () => {
       // Should not throw when no processes
-      manager.stopAll();
+      manager.detachAll();
       expect(manager.getActiveCount()).toBe(0);
     });
 
 
-    it("preserves managed environments during daemon shutdown mode", () => {
+    it("preserves managed environments during daemon shutdown", () => {
       const dispose = vi.fn();
       const stopWatchingWorkspaceStatus = vi.fn();
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
@@ -5539,13 +5539,13 @@ describe("Orchestrator", () => {
         stopWatchingWorkspaceStatus,
       });
 
-      manager.stopAll({ preserveEnvironments: true });
+      manager.detachAll();
 
       expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
       expect(dispose).not.toHaveBeenCalled();
     });
 
-    it("does not mark active managed sessions idle during daemon shutdown mode", async () => {
+    it("does not mark active managed sessions idle during daemon shutdown", async () => {
       const project = {
         id: "proj-1",
         name: "Test",
@@ -5581,7 +5581,7 @@ describe("Orchestrator", () => {
 
       (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
 
-      manager.stopAll({ preserveEnvironments: true });
+      manager.detachAll();
 
       expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", { status: "idle" });
     });
