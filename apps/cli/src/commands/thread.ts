@@ -376,13 +376,18 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("list")
     .description("List threads")
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
-    .action(async (opts: { project?: string }) => {
+    .option("--parent-thread <id>", "Filter by managing parent thread ID")
+    .action(async (opts: { project?: string; parentThread?: string }) => {
       const client = createClient(getUrl());
       try {
         const projectId = resolveProjectId(opts.project);
+        const parentThreadId = resolveThreadId(opts.parentThread);
         const threads = await unwrap<Thread[]>(
           client.api.v1.threads.$get({
-            query: { projectId },
+            query: {
+              ...(projectId ? { projectId } : {}),
+              ...(parentThreadId ? { parentThreadId } : {}),
+            },
           }),
         );
         if (threads.length === 0) {
@@ -500,6 +505,62 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         process.exit(1);
       }
     });
+
+  thread
+    .command("update [id]")
+    .description("Update a thread (defaults to BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .option("--parent-thread <id>", "Set the managing parent thread id")
+    .option("--clear-parent-thread", "Clear the managing parent thread id")
+    .action(
+      async (
+        id: string | undefined,
+        opts: {
+          json?: boolean;
+          parentThread?: string;
+          clearParentThread?: boolean;
+        },
+      ) => {
+        const client = createClient(getUrl());
+        try {
+          if (opts.parentThread && opts.clearParentThread) {
+            throw new Error(
+              "Cannot combine --parent-thread with --clear-parent-thread.",
+            );
+          }
+          if (!opts.parentThread && !opts.clearParentThread) {
+            throw new Error(
+              "No changes requested. Provide --parent-thread or --clear-parent-thread.",
+            );
+          }
+
+          const threadId = requireThreadId(id);
+          const thread = await unwrap<Thread>(
+            client.api.v1.threads[":id"].$patch({
+              param: { id: threadId },
+              json: {
+                ...(opts.parentThread
+                  ? { parentThreadId: opts.parentThread }
+                  : { parentThreadId: null }),
+              },
+            }),
+          );
+          if (opts.json) {
+            console.log(JSON.stringify(thread, null, 2));
+            return;
+          }
+          console.log(`Thread ${thread.id} updated`);
+          console.log(
+            thread.parentThreadId
+              ? `Managed by ${thread.parentThreadId}`
+              : "No managing parent thread",
+          );
+        } catch (err: unknown) {
+          console.error(`Error: ${(err as Error).message}`);
+          process.exit(1);
+        }
+      },
+    );
 
   thread
     .command("archive [id]")

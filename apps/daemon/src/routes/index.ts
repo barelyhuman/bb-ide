@@ -46,6 +46,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
+        threadManager: deps.threadManager,
         runtimeEnv: deps.runtimeEnv,
         deleteThreadAsync: (threadId) =>
           workspaceStatusAccessor.deleteThread
@@ -65,6 +66,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
         environmentRepo: deps.environmentRepo,
         threadEnvironmentAttachmentRepo: deps.threadEnvironmentAttachmentRepo,
         environmentAgentSessionService: deps.environmentAgentSessionService,
+        runtimeEnv: deps.runtimeEnv,
       }),
     )
     .route("/environments", createEnvironmentRoutes(deps.environmentRepo))

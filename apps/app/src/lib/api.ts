@@ -288,6 +288,10 @@ export async function createProject(req: CreateProjectRequest): Promise<Project>
   return request<Project>("POST", "/projects", req);
 }
 
+export async function hireProjectManager(projectId: string): Promise<Thread> {
+  return request<Thread>("POST", `/projects/${projectId}/manager`);
+}
+
 export async function updateProject(
   id: string,
   req: UpdateProjectRequest,
@@ -404,6 +408,31 @@ export async function listThreads(filters?: {
 
 export async function getThread(id: string): Promise<Thread> {
   return request<Thread>("GET", `/threads/${id}`);
+}
+
+export interface ManagerWorkspaceFileEntry {
+  path: string;
+  size: number;
+}
+
+export async function listThreadManagerWorkspaceFiles(
+  id: string,
+): Promise<{ files: ManagerWorkspaceFileEntry[] }> {
+  return request<{ files: ManagerWorkspaceFileEntry[] }>(
+    "GET",
+    `/threads/${id}/manager-workspace/files`,
+  );
+}
+
+export async function getThreadManagerWorkspaceFile(
+  id: string,
+  path: string,
+): Promise<{ path: string; content: string }> {
+  const params = new URLSearchParams({ path });
+  return request<{ path: string; content: string }>(
+    "GET",
+    `/threads/${id}/manager-workspace/file?${params.toString()}`,
+  );
 }
 
 export async function updateThread(
@@ -527,10 +556,12 @@ export async function getThreadTimeline(
   id: string,
   limit?: number,
   includeToolGroupMessages: boolean = false,
+  includeManagerDebugView: boolean = false,
 ): Promise<ThreadTimelineResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set("limit", String(limit));
   if (includeToolGroupMessages) params.set("includeToolGroupMessages", "true");
+  if (includeManagerDebugView) params.set("includeManagerDebugView", "true");
   const qs = params.toString();
   return request<ThreadTimelineResponse>(
     "GET",
@@ -543,11 +574,13 @@ export async function getThreadToolGroupMessages(
   turnId: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
+  includeManagerDebugView: boolean = false,
 ): Promise<ThreadToolGroupMessagesResponse> {
   const params = new URLSearchParams();
   params.set("turnId", turnId);
   params.set("sourceSeqStart", String(sourceSeqStart));
   params.set("sourceSeqEnd", String(sourceSeqEnd));
+  if (includeManagerDebugView) params.set("includeManagerDebugView", "true");
   return request<ThreadToolGroupMessagesResponse>(
     "GET",
     `/threads/${id}/tool-group-messages?${params.toString()}`,

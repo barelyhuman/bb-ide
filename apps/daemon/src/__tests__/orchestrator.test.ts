@@ -473,6 +473,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     id: "thread-1",
     projectId: "proj-1",
     providerId: "codex",
+    type: "standard",
     status: "active",
     createdAt: 1000,
     updatedAt: 1000,
@@ -525,7 +526,7 @@ function createMocks() {
   const projectRepo = {
     create: vi.fn(),
     getById: vi.fn(),
-    list: vi.fn(),
+    list: vi.fn(() => []),
     update: vi.fn(
       (projectId: string, data: Parameters<ProjectRepository["update"]>[1]) => {
         const existing = projectRepo.getById(projectId);
@@ -1182,6 +1183,7 @@ describe("Orchestrator", () => {
         projectId: "proj-1",
         providerId: "codex",
         environmentId: "local",
+        type: "standard",
       });
     });
 
@@ -1669,6 +1671,43 @@ describe("Orchestrator", () => {
         projectId: "proj-1",
         providerId: "codex",
         environmentId: "local",
+        type: "standard",
+      });
+    });
+
+    it("defaults manager-managed spawned threads to the worktree environment", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      const managerThread = makeThread({
+        id: "manager-1",
+        projectId: "proj-1",
+        type: "manager",
+        environmentId: "local",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
+        id === "manager-1" ? managerThread : makeThread({ id, projectId: "proj-1", status: "active" }),
+      );
+
+      const createdThread = makeThread({ id: "t-new", status: "idle", parentThreadId: "manager-1" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+      await manager.spawn({
+        projectId: "proj-1",
+        parentThreadId: "manager-1",
+      });
+
+      expect(threadRepo.create).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        providerId: "codex",
+        environmentId: "worktree",
+        parentThreadId: "manager-1",
+        type: "standard",
       });
     });
 
@@ -1807,7 +1846,7 @@ describe("Orchestrator", () => {
       expect(persistedEventTypes[0]).toBe("client/thread/start");
     });
 
-    it("does not notify parent thread when parent project differs from child project", async () => {
+    it("rejects parent thread from a different project on spawn", async () => {
       const project = {
         id: "proj-1",
         name: "Test",
@@ -1825,6 +1864,7 @@ describe("Orchestrator", () => {
         id: "parent-1",
         status: "idle",
         projectId: "proj-2",
+        type: "manager",
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
@@ -1836,19 +1876,9 @@ describe("Orchestrator", () => {
         },
       );
 
-      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
-
-      await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
-
-      fakeChild._pushStdout(
-        JSON.stringify({
-          method: "turn/completed",
-          params: { turnId: "turn-child-1" },
-        }),
-      );
-      await new Promise((r) => setTimeout(r, 50));
-
-      expect(systemTellSpy).not.toHaveBeenCalled();
+      await expect(
+        manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" }),
+      ).rejects.toThrow("Parent thread must belong to the same project");
     });
 
     it("does not notify parent thread for non-completion lifecycle events", async () => {
@@ -1861,6 +1891,7 @@ describe("Orchestrator", () => {
       const parentThread = makeThread({
         id: "parent-1",
         status: "idle",
+        type: "manager",
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
@@ -1885,6 +1916,43 @@ describe("Orchestrator", () => {
       await new Promise((r) => setTimeout(r, 50));
 
       expect(systemTellSpy).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-manager parent threads on spawn", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
+        id === "parent-1" ? makeThread({ id: "parent-1", type: "standard" }) : undefined,
+      );
+
+      await expect(
+        manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" }),
+      ).rejects.toThrow("Parent thread must be a manager thread");
+    });
+
+    it("rejects manager threads with a parent thread", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      await expect(
+        manager.spawn({
+          projectId: "proj-1",
+          type: "manager",
+          parentThreadId: "parent-1",
+        }),
+      ).rejects.toThrow("Manager threads cannot be managed by a parent thread");
     });
 
 
@@ -2044,6 +2112,182 @@ describe("Orchestrator", () => {
         mergeBaseBranch: null,
       });
       expect(result.mergeBaseBranch).toBeUndefined();
+    });
+
+    it("updates parentThreadId when assigning a managed parent", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        type: "standard",
+      });
+      const parentThread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        parentThreadId: "thread-manager-1",
+      });
+      vi.spyOn(manager, "systemTell").mockResolvedValue();
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      const result = manager.updateThread("thread-1", {
+        parentThreadId: "thread-manager-1",
+      });
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        parentThreadId: "thread-manager-1",
+      });
+      expect(result.parentThreadId).toBe("thread-manager-1");
+    });
+
+    it("notifies the new manager when a thread is assigned", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+      });
+      const parentThread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+        parentThreadId: "thread-manager-1",
+      });
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      manager.updateThread("thread-1", {
+        parentThreadId: "thread-manager-1",
+      });
+
+      expect(systemTellSpy).toHaveBeenCalledWith("thread-manager-1", {
+        input: [
+          {
+            type: "text",
+            text:
+              "[bb system]: The following thread is now assigned to you for management:\nthread-1: Implement feature",
+          },
+        ],
+      });
+    });
+
+    it("notifies the prior manager when a thread is taken back", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+        parentThreadId: "thread-manager-1",
+      });
+      const updatedThread = makeThread({
+        id: "thread-1",
+        type: "standard",
+        title: "Implement feature",
+      });
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(updatedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      manager.updateThread("thread-1", {
+        parentThreadId: null,
+      });
+
+      expect(systemTellSpy).toHaveBeenCalledWith("thread-manager-1", {
+        input: [
+          {
+            type: "text",
+            text:
+              "[bb system]: The following thread is no longer assigned to you:\nthread-1: Implement feature",
+          },
+        ],
+      });
+    });
+
+    it("rejects assigning a non-manager parent on update", () => {
+      const thread = makeThread({ id: "thread-1", type: "standard" });
+      const parentThread = makeThread({ id: "thread-parent-1", type: "standard" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread);
+
+      expect(() =>
+        manager.updateThread("thread-1", { parentThreadId: "thread-parent-1" }),
+      ).toThrow("Parent thread must be a manager thread");
+    });
+
+    it("rejects assigning an archived manager parent on update", () => {
+      const thread = makeThread({ id: "thread-1", type: "standard" });
+      const parentThread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+        archivedAt: 123,
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread);
+
+      expect(() =>
+        manager.updateThread("thread-1", { parentThreadId: "thread-manager-1" }),
+      ).toThrow("Parent thread cannot be archived");
+    });
+
+    it("rejects assigning a parent to a manager thread", () => {
+      const thread = makeThread({ id: "thread-manager-1", type: "manager" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      expect(() =>
+        manager.updateThread("thread-manager-1", { parentThreadId: "thread-parent-1" }),
+      ).toThrow("Manager threads cannot be managed by a parent thread");
+    });
+  });
+
+  describe("messageUser()", () => {
+    it("appends a manager user message event", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-manager-1", type: "manager" }),
+      );
+
+      await manager.messageUser("thread-manager-1", {
+        text: "  Hello from the manager.  ",
+        toolCallId: "call-1",
+        turnId: "turn-1",
+      });
+
+      expect(eventRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+        threadId: "thread-manager-1",
+        type: "system/manager/user_message",
+        data: {
+          text: "Hello from the manager.",
+          toolCallId: "call-1",
+          turnId: "turn-1",
+        },
+      }));
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-manager-1", [
+        "events-appended",
+      ]);
+    });
+
+    it("rejects non-manager threads", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", type: "standard" }),
+      );
+
+      await expect(
+        manager.messageUser("thread-1", { text: "Hello" }),
+      ).rejects.toThrow("Only manager threads can publish user messages");
     });
   });
 
@@ -3259,7 +3503,42 @@ describe("Orchestrator", () => {
       ]);
     });
 
-    it("reports cleanup failures without rejecting delete", async () => {
+    it("clears any project primary manager pointer when deleting that manager thread", async () => {
+      const thread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+        status: "idle",
+        projectId: "proj-1",
+        environmentId: "local",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        {
+          id: "proj-1",
+          name: "Project 1",
+          rootPath: "/tmp/proj-1",
+          primaryManagerThreadId: "thread-manager-1",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "proj-2",
+          name: "Project 2",
+          rootPath: "/tmp/proj-2",
+          primaryManagerThreadId: "other-thread",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]);
+
+      await manager.deleteThread("thread-manager-1");
+
+      expect(projectRepo.update).toHaveBeenCalledWith("proj-1", {
+        primaryManagerThreadId: null,
+      });
+    });
+
+    it("preserves thread state when managed cleanup fails before deletion", async () => {
       const cleanup = vi.fn(() => {
         throw new Error("cleanup failed");
       });
@@ -5455,6 +5734,128 @@ describe("Orchestrator", () => {
       if (rows[0]?.message.kind !== "operation") return;
       expect(rows[0].message.opType).toBe("compaction");
       expect(rows[0].message.title).toBe("Context compacted");
+    });
+
+    it("shows only published manager messages for manager threads", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", type: "manager", status: "idle" }),
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(3);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          seq: 1,
+          type: "client/turn/start",
+          data: {
+            direction: "outbound",
+            source: "tell",
+            initiator: "system",
+            input: [{ type: "text", text: "[bb system] Welcome!" }],
+            request: {
+              method: "turn/start",
+              params: {},
+            },
+            execution: {},
+          },
+        }),
+        makeEvent({
+          seq: 2,
+          type: "item/completed",
+          data: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "internal manager chatter",
+            },
+          },
+        }),
+        makeEvent({
+          seq: 3,
+          type: "system/manager/user_message",
+          data: {
+            text: "Visible manager update",
+            turnId: "turn-1",
+          },
+        }),
+      ]);
+
+      const timeline = manager.getTimeline("thread-1");
+      const messageRows = timeline.rows.filter(
+        (row): row is Extract<(typeof timeline.rows)[number], { kind: "message" }> =>
+          row.kind === "message",
+      );
+
+      expect(messageRows).toHaveLength(1);
+      expect(messageRows[0]?.message.kind).toBe("assistant-text");
+      if (messageRows[0]?.message.kind === "assistant-text") {
+        expect(messageRows[0].message.text).toBe("Visible manager update");
+      }
+    });
+
+    it("shows the regular projected timeline for manager threads in debug view", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", type: "manager", status: "idle" }),
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(3);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          seq: 1,
+          type: "client/turn/start",
+          data: {
+            direction: "outbound",
+            source: "tell",
+            initiator: "system",
+            input: [{ type: "text", text: "[bb system] Welcome!" }],
+            request: {
+              method: "turn/start",
+              params: {},
+            },
+            execution: {},
+          },
+        }),
+        makeEvent({
+          seq: 2,
+          type: "item/completed",
+          data: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "internal manager chatter",
+            },
+          },
+        }),
+        makeEvent({
+          seq: 3,
+          type: "system/manager/user_message",
+          data: {
+            text: "Visible manager update",
+            turnId: "turn-1",
+          },
+        }),
+      ]);
+
+      const timeline = manager.getTimeline("thread-1", undefined, false, true);
+      const messageRows = timeline.rows.filter(
+        (row): row is Extract<(typeof timeline.rows)[number], { kind: "message" }> =>
+          row.kind === "message",
+      );
+
+      expect(messageRows).toHaveLength(3);
+      expect(messageRows[0]?.message.kind).toBe("user");
+      if (messageRows[0]?.message.kind === "user") {
+        expect(messageRows[0].message.text).toBe("[bb system] Welcome!");
+      }
+      expect(messageRows[1]?.message.kind).toBe("assistant-text");
+      if (messageRows[1]?.message.kind === "assistant-text") {
+        expect(messageRows[1].message.text).toBe("internal manager chatter");
+      }
+      expect(messageRows[2]?.message.kind).toBe("assistant-text");
+      if (messageRows[2]?.message.kind === "assistant-text") {
+        expect(messageRows[2].message.text).toBe("Visible manager update");
+      }
     });
   });
 });

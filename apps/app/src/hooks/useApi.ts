@@ -392,6 +392,40 @@ export function useCreateProject() {
   });
 }
 
+export function useHireProjectManager() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ projectId }: { projectId: string }) => api.hireProjectManager(projectId),
+    onSuccess: (thread) => {
+      queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+
+      const existingThreadLists = queryClient.getQueriesData<Thread[]>({
+        queryKey: ["threads"],
+      });
+      for (const [queryKey, list] of existingThreadLists) {
+        if (!list) {
+          continue;
+        }
+        const filters = readThreadListFiltersFromQueryKey(queryKey);
+        if (filters === null) {
+          continue;
+        }
+        if (!threadMatchesListFilters(thread, filters)) {
+          continue;
+        }
+        const nextList = appendThreadIfMissing(list, thread);
+        if (nextList !== list) {
+          queryClient.setQueryData<Thread[]>(queryKey, nextList);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
 export function useUpdateProject() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -501,6 +535,31 @@ export function useThreadDefaultExecutionOptions(
   });
 }
 
+export function useThreadManagerWorkspaceFiles(
+  id: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<{ files: api.ManagerWorkspaceFileEntry[] }>({
+    queryKey: ["threadManagerWorkspaceFiles", id],
+    queryFn: () => api.listThreadManagerWorkspaceFiles(id),
+    enabled: (options?.enabled ?? true) && !!id,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadManagerWorkspaceFile(
+  id: string,
+  path: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<{ path: string; content: string }>({
+    queryKey: ["threadManagerWorkspaceFile", id, path],
+    queryFn: () => api.getThreadManagerWorkspaceFile(id, path ?? ""),
+    enabled: (options?.enabled ?? true) && !!id && !!path,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useThreadWorkStatus(
   id: string,
   mergeBaseBranch?: string,
@@ -530,11 +589,27 @@ export function useThreadMergeBaseBranches(
 
 export function useThreadTimeline(
   id: string,
-  options?: { enabled?: boolean; limit?: number; refetchOnMount?: boolean | "always" },
+  options?: {
+    enabled?: boolean;
+    limit?: number;
+    refetchOnMount?: boolean | "always";
+    includeManagerDebugView?: boolean;
+  },
 ) {
   return useQuery<ThreadTimelineResponse>({
-    queryKey: ["threadTimeline", id, options?.limit ?? null],
-    queryFn: () => api.getThreadTimeline(id, options?.limit, false),
+    queryKey: [
+      "threadTimeline",
+      id,
+      options?.limit ?? null,
+      options?.includeManagerDebugView ?? false,
+    ],
+    queryFn: () =>
+      api.getThreadTimeline(
+        id,
+        options?.limit,
+        false,
+        options?.includeManagerDebugView ?? false,
+      ),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
     placeholderData: (previousData, previousQuery) =>
@@ -549,13 +624,21 @@ export function useThreadToolGroupMessages() {
       turnId,
       sourceSeqStart,
       sourceSeqEnd,
+      includeManagerDebugView,
     }: {
       id: string;
       turnId: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
+      includeManagerDebugView?: boolean;
     }): Promise<ThreadToolGroupMessagesResponse> =>
-      api.getThreadToolGroupMessages(id, turnId, sourceSeqStart, sourceSeqEnd),
+      api.getThreadToolGroupMessages(
+        id,
+        turnId,
+        sourceSeqStart,
+        sourceSeqEnd,
+        includeManagerDebugView ?? false,
+      ),
   });
 }
 
@@ -822,7 +905,15 @@ export function useUpdateThread() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (
-      { id, ...req }: { id: string } & { title?: string; mergeBaseBranch?: string | null },
+      {
+        id,
+        ...req
+      }: {
+        id: string;
+        title?: string;
+        mergeBaseBranch?: string | null;
+        parentThreadId?: string | null;
+      },
     ) =>
       api.updateThread(id, req),
     onSuccess: (thread) => {
@@ -940,11 +1031,13 @@ export function useDeleteThread() {
     onMutate: async (args) => {
       await queryClient.cancelQueries({ queryKey: ["thread", args.id] });
       await queryClient.cancelQueries({ queryKey: ["threads"] });
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
 
       const previousThread = queryClient.getQueryData<Thread>(["thread", args.id]);
       const previousThreadLists = queryClient.getQueriesData<Thread[]>({
         queryKey: ["threads"],
       });
+      const previousProjects = queryClient.getQueryData<Project[]>(["projects"]);
 
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
@@ -960,7 +1053,7 @@ export function useDeleteThread() {
         );
       }
 
-      return { previousThread, previousThreadLists };
+      return { previousThread, previousThreadLists, previousProjects };
     },
     onError: (_error, args, context) => {
       if (!context) return;
@@ -969,6 +1062,7 @@ export function useDeleteThread() {
       for (const [queryKey, data] of context.previousThreadLists) {
         queryClient.setQueryData(queryKey, data);
       }
+      queryClient.setQueryData(["projects"], context.previousProjects);
     },
     onSettled: (_data, _error, args) => {
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
@@ -976,6 +1070,7 @@ export function useDeleteThread() {
       queryClient.removeQueries({ queryKey: ["threadWorkStatus", args.id] });
       queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
       queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },

@@ -90,7 +90,7 @@ export function UserMessageRow({
 
   return (
     <>
-      <div className="group w-full py-2" style={{ overflowAnchor: "none" }}>
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="ml-auto w-fit max-w-[80%]">
           <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
             {messageText ? (

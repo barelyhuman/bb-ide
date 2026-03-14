@@ -71,6 +71,19 @@ describe("repository strict normalization", () => {
     });
   });
 
+  it("persists and loads manager thread type metadata", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({
+      projectId,
+      type: "manager",
+    });
+
+    expect(threads.getById(thread.id)).toMatchObject({
+      id: thread.id,
+      type: "manager",
+    });
+  });
+
   it("persists and loads project primary checkout pointers without touching updatedAt", () => {
     const project = projects.create({
       name: "test-project",
@@ -88,6 +101,27 @@ describe("repository strict normalization", () => {
     expect(updated).toMatchObject({
       id: project.id,
       primaryCheckoutThreadId: "thread-1",
+      updatedAt: project.updatedAt + 5000,
+    });
+  });
+
+  it("persists and loads project primary manager pointers without touching updatedAt", () => {
+    const project = projects.create({
+      name: "test-project",
+      rootPath: "/tmp/test-project",
+    });
+
+    sqlite.exec(`UPDATE projects SET updated_at=${project.updatedAt + 5000} WHERE id='${project.id}'`);
+
+    const updated = projects.update(
+      project.id,
+      { primaryManagerThreadId: "thread-manager-1" },
+      { touchUpdatedAt: false },
+    );
+
+    expect(updated).toMatchObject({
+      id: project.id,
+      primaryManagerThreadId: "thread-manager-1",
       updatedAt: project.updatedAt + 5000,
     });
   });

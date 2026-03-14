@@ -37,6 +37,7 @@ Under the hood, the manager is a special long-running thread with:
 - manager-specific instructions
 - its own workspace under `~/.beanbag/workspace/<threadId>/`
 - a dedicated tool for replying to the user
+- an initial `[bb system] Welcome!` event that kicks off hatching
 - the ability to spawn and manage child threads
 
 Manager-managed child threads remain normal `standard` threads technically, but they are presented differently in the product:
@@ -53,6 +54,7 @@ Thread ownership is transferable in both directions in v1:
 - a manager can start a thread and the user can later take it over
 
 In v1 there is exactly one primary manager per project. If the user tries to hire a manager again, `bb` reopens the existing manager.
+Archived or deleted manager pointers should be treated as stale and should not block rehiring.
 
 ## Product Changes
 
@@ -67,6 +69,7 @@ In v1 there is exactly one primary manager per project. If the user tries to hir
 
 - The user chats with the manager in a normal IM-like thread.
 - The manager does not expose tool calls, internal reasoning, or raw orchestration chatter unless it explicitly chooses to send a user-facing update.
+- User-facing manager updates should flow through `message_user`, not plain assistant text.
 
 3. The sidebar shows managed work as a hierarchy.
 
@@ -84,11 +87,12 @@ In v1 there is exactly one primary manager per project. If the user tries to hir
   - shown as a regular thread
   - treated as the user’s thread
   - unread state behaves like a normal thread for the user
+- Ownership changes must also notify the relevant manager via explicit system messages, so handoff is not just a sidebar/state change.
 
 5. Longer-form outputs are presented as files linked from manager chat.
 
 - In v1, plans, reports, and similar outputs are markdown files in the manager’s workspace.
-- The manager presents them by sending a chat message with a link to the file.
+- The manager presents them by sending a `message_user` reply with a link to the file.
 - The secondary panel can surface these deliverables through a readonly view of the manager workspace.
 
 ### Key technical details
@@ -101,14 +105,16 @@ In v1 there is exactly one primary manager per project. If the user tries to hir
 2. The manager is implemented as a special long-running thread.
 
 - Manager-specific instructions define its role as delegation-first and user-facing.
-- The manager replies through a dedicated custom tool call.
+- The manager replies through a dedicated `message_user` custom tool call.
+- `main` already has the underlying Codex/provider dynamic-tool plumbing; this feature needs manager-specific use of that existing path rather than brand new provider infrastructure.
+- Manager-only tooling should compose with existing provider tools rather than replacing dynamic-tool support for normal threads.
 - The manager delegates work by spawning child threads.
 
 3. Manager state lives outside the repo.
 
 - Each manager gets a workspace under `~/.beanbag/workspace/<threadId>/`.
 - This workspace can hold files such as:
-  - `INSTRUCTIONS.md`
+  - `PREFERENCES.md` created by the manager during hatching if needed
   - memory/notes created over time
   - manager-created markdown deliverables
 
@@ -127,84 +133,52 @@ In v1 there is exactly one primary manager per project. If the user tries to hir
 - Or hiring fails, the user stays in their current UI state, and `bb` shows a retryable error
 - There is no special half-configured manager state in v1
 
-## Draft `Manager INSTRUCTIONS.md`
+6. The CLI is part of the MVP surface, not just an implementation detail.
 
-The MVP should include a concrete manager instructions file so the manager behavior is explicit and testable.
+- The user should be able to hire, inspect, message, and delete a manager from `bb manager ...`.
+- The manager should be able to delegate effectively using `bb thread ...`.
+- Listing managed threads and inspecting their status should be easy from the CLI.
+
+## Manager Prompt Direction
+
+The MVP should include a concrete manager prompt so the manager behavior is explicit and testable.
 
 ```md
-# Manager Instructions
+You are the manager for a project.
 
-You are the manager agent for this project.
+Mission:
+- Orchestrate work across agent threads.
+- Keep the user informed and unblocked.
+- Maximize delegation and minimize direct implementation by the manager.
 
-Your job is to help the user by managing threads on their behalf.
-You should behave like a strong delegating coworker, not like a normal coding thread.
+Hard rules:
+- You are the only user-facing agent for managed work.
+- User-facing output must go through `message_user`.
+- Managed threads are not part of the visible user conversation.
+- Internal messages may be prefixed with `[bb system]`; treat them as internal context.
 
-## Core role
+Hatching:
+- Begin after an initial `[bb system] Welcome!` event.
+- Start with a lightweight meet-and-greet.
+- Learn the user's preferences through conversation, not a rigid wizard.
+- Create `PREFERENCES.md` only when there is useful durable preference information to store.
 
-- You are the primary user-facing agent for this project.
-- The user talks to you directly in chat.
-- Your main job is to delegate work to other threads.
-- You should generally not do the substantive implementation work yourself.
+Workspace:
+- Use `~/.beanbag/workspace/<threadId>/` as a durable store for preferences, plans, notes, and deliverables.
+- Do not rely on seeded workspace files other than the directory itself.
 
-## User communication
+Delegation:
+- Treat delegation as the default for substantive work.
+- Prefer one clear thread owner per task.
+- Use `bb` tooling to inspect, message, and coordinate managed threads.
+- When a thread is assigned to you or completed, treat the corresponding `[bb system]` message as a cue to inspect, decide next steps, and update the user when appropriate.
 
-- Reply to the user using the dedicated user-reply tool.
-- Do not expose raw tool calls, hidden reasoning, or internal orchestration chatter.
-- Give concise updates when there is something meaningful to report.
-- If work completes, is blocked, or needs input from the user, tell them.
-- Do not be noisy.
-
-## Delegation
-
-- Delegate essentially all implementation work.
-- Spawn child threads when work needs to be done.
-- Use separate child threads for separate workstreams when helpful.
-- Keep track of which child thread owns which task.
-- When a child thread finishes, decide whether the user needs an update.
-
-## Ownership model
-
-- Some threads are manager-managed and some are unmanaged.
-- A manager-managed standard thread is part of your managed workload.
-- An unmanaged standard thread is not your responsibility unless the user explicitly asks you to manage it.
-- The user may hand a thread to you.
-- The user may take a thread back from you.
-- When a thread is handed to you, you will receive a system message describing the ownership change, for example:
-  - `[bb system]: User assigned you the following thread to manage:`
-  - `<threadId>: <thread title>`
-- You can then decide what to do.
-- When a thread is taken back by the user, stop treating it as part of your managed workload.
-
-## Hatching / onboarding
-
-- When you first start, run a lightweight meet-and-greet with the user.
-- Ask how they like to work and how they want to be addressed.
-- Learn their preferences through conversation rather than a rigid setup wizard.
-- Save durable preferences in your workspace so you can improve over time.
-
-## Memory and files
-
-- Your workspace lives outside the repo under `~/.beanbag/workspace/<threadId>/`.
-- Use it for durable files such as:
-  - `INSTRUCTIONS.md`
-  - notes/memory files
-  - plans, reports, and other markdown deliverables
-- Do not store secrets in memory files.
-
-## Deliverables
-
-- If you produce a longer-form output, write it as a file in your workspace.
-- Present that file to the user by sending a chat message with a link to it.
-- Do not dump very long docs inline into chat if a file is more appropriate.
-
-## Interaction style
-
-- Be proactive when it matters, quiet when it does not.
-- Keep updates useful and concrete.
-- Optimize for reducing the user’s coordination burden.
+Deliverables:
+- Write longer-form outputs as markdown files in the workspace.
+- Share them with the user via `message_user`.
 ```
 
-This file does not need to be final yet, but it gives the MVP a concrete behavioral contract for:
+This prompt direction does not need to be final yet, but it gives the MVP a concrete behavioral contract for:
 
 - delegation-first behavior
 - user-facing communication
@@ -239,6 +213,10 @@ This file does not need to be final yet, but it gives the MVP a concrete behavio
 
 - As a user, I want the manager to hand me plans, reports, and other longer-form outputs as actual files I can open, not only as long chat messages.
 
+7. Operate the manager from the CLI when needed
+
+- As a user, I want to be able to hire, inspect, message, and delete the manager from the CLI so the manager workflow is usable outside the UI too.
+
 ## Happy-Path Flows
 
 ### Flow 1: Hire a manager for a project
@@ -248,9 +226,10 @@ This file does not need to be final yet, but it gives the MVP a concrete behavio
    - In v1 this is a `user-round-plus` action beside the archive and settings icons in the project main view.
 3. `bb` creates the project’s primary manager thread.
 4. `bb` initializes the manager workspace under `~/.beanbag/workspace/<threadId>/`.
-5. The manager starts its first turn and runs its hatching/onboarding behavior.
-6. The user lands in the manager chat.
-7. The manager begins a lightweight interactive onboarding in chat and starts learning the user’s preferences.
+5. `bb` posts an initial `[bb system] Welcome!` event to the manager thread.
+6. The manager starts its first turn and runs its hatching/onboarding behavior.
+7. The user lands in the manager chat.
+8. The manager begins a lightweight interactive onboarding in chat and starts learning the user’s preferences.
 
 Outcome:
 
@@ -288,6 +267,7 @@ Outcome:
 2. The manager delegates work as needed.
 3. The manager writes a markdown file in its workspace.
 4. The manager sends a chat message linking to that file.
+4. The manager sends a `message_user` reply linking to that file.
 5. The user opens the file from the message.
 6. The secondary panel can surface that deliverable later.
 
@@ -322,7 +302,8 @@ Outcome:
   - uses a `take over` action on the managed thread
 4. The thread becomes unmanaged by clearing its parent manager link.
 5. The thread moves out of the manager hierarchy and into the regular thread list.
-6. The manager stops receiving completion updates for that thread.
+6. The previous manager receives a system message that the thread is no longer assigned to it.
+7. The manager stops receiving completion updates for that thread.
 
 Outcome:
 
@@ -351,12 +332,20 @@ Outcome:
 
 - The feature should be coherent enough to use for real work, but flexible enough to evolve quickly as usage teaches us where the real value is.
 
+5. Treat prompts, system messages, and CLI ergonomics as core product surfaces.
+
+- Manager behavior depends heavily on prompt quality, system-message clarity, and practical `bb` command flows.
+- These should be designed as first-class parts of the feature, not left as incidental implementation details.
+
 # Validation
 
 - The feature can be explained simply: hire a manager for a project and chat with it to delegate work.
 - There is one primary manager per project in v1.
+- Archived or deleted manager pointers do not block rehiring.
 - Regular threads and manager-managed threads coexist.
 - Ownership can move in both directions between user and manager.
+- Ownership changes notify the relevant manager explicitly; they are not just metadata changes.
+- User-facing manager communication goes through `message_user`, not plain assistant text.
 - The sidebar hierarchy is straightforward:
   - manager row
   - indented manager-managed threads
@@ -367,10 +356,13 @@ Outcome:
 - Longer-form outputs have a pragmatic v1 path:
   - markdown files linked from manager chat
   - readonly manager-workspace view in the secondary panel
+- The manager workflow is usable from the CLI as well as the UI:
+  - hire, inspect, message, and delete a manager
+  - inspect managed threads and their status
 
 # Open Questions/Risks
 
 - V1 intentionally relies on unread manager messages as the main status/check-in surface.
 - V1 intentionally keeps manager customization chat-only, with readonly secondary-panel inspection.
-- V1 intentionally keeps the manager workspace lightweight: seeded `INSTRUCTIONS.md` plus manager-created files.
+- V1 intentionally keeps the manager workspace lightweight: an optional manager-created `PREFERENCES.md` plus other manager-created files.
 - Worker-specific durable memory may add complexity depending on how often threads are handed off or reused.

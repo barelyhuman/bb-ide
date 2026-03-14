@@ -1,12 +1,14 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive,
   ChevronRight,
   MoreHorizontal,
   PencilLine,
   Settings,
+  UserRound,
+  UserRoundPlus,
   X,
 } from "lucide-react"
 import {
@@ -25,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
 import {
+  useHireProjectManager,
   useProjects,
   useThread,
   useThreads,
@@ -53,6 +56,10 @@ interface AppHeaderProps {
   isProjectMainView: boolean
   projectMatch: RegExpMatchArray | null
   projectName?: string
+  projectId?: string
+  projectHasManager?: boolean
+  isManagerActionPending?: boolean
+  onOpenManager?: () => void
   meta: {
     title: string
     subtitle?: string
@@ -64,6 +71,10 @@ function AppHeader({
   isProjectMainView,
   projectMatch,
   projectName,
+  projectId,
+  projectHasManager,
+  isManagerActionPending = false,
+  onOpenManager,
   meta,
 }: AppHeaderProps) {
   const { isMobile, open, openMobile } = useSidebar()
@@ -133,6 +144,20 @@ function AppHeader({
         </div>
         {isProjectMainView && projectMatch ? (
           <div className="mr-2 flex items-center gap-1">
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={projectHasManager ? "Open manager" : "Hire manager"}
+              title={projectHasManager ? "Open manager" : "Hire manager"}
+              disabled={!projectId || isManagerActionPending}
+              onClick={() => onOpenManager?.()}
+            >
+              {projectHasManager ? (
+                <UserRound className="size-4" />
+              ) : (
+                <UserRoundPlus className="size-4" />
+              )}
+            </button>
             <Link
               to={`/projects/${projectMatch[1]}/archived`}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -185,8 +210,10 @@ function AppHeader({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads } = useThreads()
+  const hireProjectManager = useHireProjectManager()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH
@@ -217,8 +244,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const threadId = projectThreadMatch?.[2] ?? ""
 
   const projectId = projectMatch?.[1]
+  const project = projectId
+    ? projects?.find((candidate) => candidate.id === projectId)
+    : undefined
   const projectName = projectId
-    ? projects?.find((project) => project.id === projectId)?.name
+    ? project?.name
     : undefined
   const projectLabel =
     projectName ??
@@ -413,6 +443,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
               isProjectMainView={isProjectMainView}
               projectMatch={projectMatch}
               projectName={projectLabel}
+              projectId={projectId}
+              projectHasManager={Boolean(project?.primaryManagerThreadId)}
+              isManagerActionPending={hireProjectManager.isPending}
+              onOpenManager={() => {
+                if (!projectId || hireProjectManager.isPending) return
+                void hireProjectManager.mutateAsync({ projectId }).then((thread) => {
+                  navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
+                })
+              }}
               meta={meta}
             />
           ) : null}

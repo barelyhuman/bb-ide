@@ -1303,53 +1303,72 @@ export function buildThreadDetailRows(
     lastAssistantIndexByTurn.set(message.turnId, index);
   }
 
-  const collapsedByTurn = new Map<
-    string,
+  const collapsedByFirstIndex = new Map<
+    number,
     {
-      firstIndex: number;
       indices: Set<number>;
       messages: CollapsibleTurnMessage[];
+      turnId: string;
     }
   >();
+  const collapsedMessageIndices = new Set<number>();
 
-  for (const [index, message] of mergedMessages.entries()) {
-    const turnId = message.turnId;
+  for (let index = 0; index < mergedMessages.length; index += 1) {
+    const message = mergedMessages[index];
+    const turnId = message?.turnId;
     if (!turnId) continue;
 
     const lastAssistantIndex = lastAssistantIndexByTurn.get(turnId);
     if (lastAssistantIndex === undefined || index >= lastAssistantIndex) continue;
     if (!isCollapsibleTurnMessage(message)) continue;
 
-    const existing = collapsedByTurn.get(turnId);
-    if (!existing) {
-      collapsedByTurn.set(turnId, {
-        firstIndex: index,
-        indices: new Set([index]),
-        messages: [message],
-      });
+    const previousMessage = index > 0 ? mergedMessages[index - 1] : undefined;
+    const continuesPriorGroup =
+      previousMessage?.turnId === turnId && isCollapsibleTurnMessage(previousMessage);
+    if (continuesPriorGroup) {
       continue;
     }
 
-    existing.firstIndex = Math.min(existing.firstIndex, index);
-    existing.indices.add(index);
-    existing.messages.push(message);
+    const indices = new Set<number>();
+    const messages: CollapsibleTurnMessage[] = [];
+    let scanIndex = index;
+    while (scanIndex < mergedMessages.length) {
+      const candidate = mergedMessages[scanIndex];
+      if (
+        !candidate ||
+        candidate.turnId !== turnId ||
+        !isCollapsibleTurnMessage(candidate) ||
+        scanIndex >= lastAssistantIndex
+      ) {
+        break;
+      }
+      indices.add(scanIndex);
+      collapsedMessageIndices.add(scanIndex);
+      messages.push(candidate);
+      scanIndex += 1;
+    }
+
+    collapsedByFirstIndex.set(index, {
+      indices,
+      messages,
+      turnId,
+    });
   }
 
   const rows: ThreadDetailRow[] = [];
 
   for (const [index, message] of mergedMessages.entries()) {
-    const turnId = message.turnId;
-    const collapseGroup = turnId ? collapsedByTurn.get(turnId) : undefined;
+    const collapseGroup = collapsedByFirstIndex.get(index);
 
-    if (turnId && collapseGroup && index === collapseGroup.firstIndex) {
+    if (collapseGroup) {
       const mergedGroupMessages = includeToolGroupMessages
         ? mergeConsecutiveToolActivityMessages(collapseGroup.messages)
         : [];
       const { sourceSeqStart, sourceSeqEnd } = getSourceSeqRange(collapseGroup.messages);
       rows.push({
         kind: "tool-group",
-        id: `${turnId}:tool-group:${collapseGroup.firstIndex}`,
-        turnId,
+        id: `${collapseGroup.turnId}:tool-group:${index}`,
+        turnId: collapseGroup.turnId,
         summaryCount: getToolGroupSummaryCount(collapseGroup.messages),
         sourceSeqStart,
         sourceSeqEnd,
@@ -1361,7 +1380,7 @@ export function buildThreadDetailRows(
       });
     }
 
-    if (turnId && collapseGroup?.indices.has(index)) {
+    if (collapsedMessageIndices.has(index)) {
       continue;
     }
 

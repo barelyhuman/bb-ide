@@ -12,6 +12,8 @@ import type {
   ThreadBuiltInActionId,
   ThreadQueuedMessage,
   ThreadStatus,
+  ThreadTurnInitiator,
+  ThreadType,
   ThreadWorkStatus,
 } from "./types.js";
 export type {
@@ -44,6 +46,7 @@ export interface AvailableModel {
 // Thread endpoints
 export interface SpawnThreadRequest {
   projectId: string;
+  type?: ThreadType;
   title?: string;
   input?: PromptInput[];
   model?: string;
@@ -53,6 +56,10 @@ export interface SpawnThreadRequest {
   environmentId?: string;
   developerInstructions?: string;
   parentThreadId?: string;
+  /**
+   * Internal-only override for daemon-authored bootstrap/system turns.
+   */
+  spawnInitiator?: ThreadTurnInitiator;
 }
 
 export type TellThreadMode = "auto" | "start" | "steer";
@@ -87,6 +94,7 @@ export interface SendQueuedThreadMessageResponse {
 export interface UpdateThreadRequest {
   title?: string;
   mergeBaseBranch?: string | null;
+  parentThreadId?: string | null;
 }
 
 export interface ThreadExecutionOptions {
@@ -103,6 +111,7 @@ export interface ThreadToolGroupMessagesRequest {
   turnId: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
+  includeManagerDebugView?: boolean;
 }
 
 export interface ThreadToolGroupMessagesResponse {
@@ -217,6 +226,21 @@ export interface DemotePrimaryResponse {
 export interface ProjectFileSuggestion {
   path: string;
 }
+
+export type PromptMentionSuggestion =
+  | {
+      kind: "file";
+      path: string;
+      replacement: string;
+    }
+  | {
+      kind: "thread";
+      path: string;
+      replacement: string;
+      threadId: string;
+      title?: string;
+      threadType: ThreadType;
+    };
 
 export interface UploadedPromptAttachment {
   type: "localImage" | "localFile";

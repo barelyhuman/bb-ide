@@ -7,7 +7,10 @@ export interface ThreadActivitySummary {
 }
 
 type ThreadVisibilityShape = Pick<Thread, "archivedAt" | "parentThreadId">
-type ThreadStatusShape = Pick<Thread, "status" | "lastReadAt" | "updatedAt" | "pendingOperation">
+type ThreadStatusShape = Pick<
+  Thread,
+  "status" | "lastReadAt" | "updatedAt" | "pendingOperation" | "parentThreadId"
+>
 type ThreadActivityShape = ThreadVisibilityShape & ThreadStatusShape
 
 export function isVisibleProjectThread(
@@ -41,6 +44,10 @@ export function isBusyThread(thread: Pick<Thread, "status" | "pendingOperation">
 }
 
 export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {
+  if (thread.parentThreadId !== undefined) {
+    return false
+  }
+
   switch (thread.status) {
     case "idle":
       return (thread.lastReadAt ?? 0) < thread.updatedAt

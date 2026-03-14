@@ -28,6 +28,10 @@ export interface TemplateVariables {
     cleanedPrompt: string;
   };
   dockerAgentNote: Record<string, never>;
+  managerAgentInstructions: {
+    managerPreferencesContent: string;
+    managerWorkspacePath: string;
+  };
   openaiResponsesDefaultInstructions: Record<string, never>;
   threadOperationCommit: {
     commitMessageInstruction: string;

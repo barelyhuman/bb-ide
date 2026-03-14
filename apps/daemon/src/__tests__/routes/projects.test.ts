@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type {
   Project,
   ProjectFileSuggestion,
+  Thread,
   UploadedPromptAttachment,
 } from "@beanbag/agent-core";
 import { createProjectRoutes } from "../../routes/projects.js";
@@ -19,6 +20,20 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     rootPath: "/test/project",
     createdAt: 1000,
     updatedAt: 1000,
+    ...overrides,
+  };
+}
+
+function makeThread(overrides: Partial<Thread> = {}): Thread {
+  return {
+    id: "thread-1",
+    projectId: "proj-1",
+    providerId: "codex",
+    type: "standard",
+    status: "idle",
+    createdAt: 1000,
+    updatedAt: 1000,
+    lastReadAt: 1000,
     ...overrides,
   };
 }
@@ -66,6 +81,11 @@ describe("Project routes", () => {
   let deleteThreadAsync: ReturnType<typeof vi.fn<DeleteThreadFn>>;
   let app: Hono;
   let beanbagRoot: string;
+  let threadManager: {
+    spawn: ReturnType<typeof vi.fn>;
+    systemTell: ReturnType<typeof vi.fn>;
+    getRawById: ReturnType<typeof vi.fn>;
+  };
   const originalBeanbagRoot = process.env.BEANBAG_ROOT;
 
   beforeEach(() => {
@@ -75,6 +95,11 @@ describe("Project routes", () => {
     threadRepo = mockThreadRepo();
     eventRepo = mockEventRepo();
     deleteThreadAsync = vi.fn<DeleteThreadFn>().mockResolvedValue(undefined);
+    threadManager = {
+      spawn: vi.fn(),
+      systemTell: vi.fn().mockResolvedValue(undefined),
+      getRawById: vi.fn(),
+    };
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
       type: "localImage",
@@ -90,6 +115,7 @@ describe("Project routes", () => {
       {
         threadRepo: threadRepo,
         eventRepo: eventRepo,
+        threadManager: threadManager as never,
         runtimeEnv: process.env,
         deleteThreadAsync,
       },
@@ -262,6 +288,108 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(400);
       expect(projectRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /projects/:id/manager", () => {
+    it("returns an existing primary manager when present", async () => {
+      const managerThread = makeThread({ id: "thread-manager-1", type: "manager" });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ primaryManagerThreadId: managerThread.id }),
+      );
+      threadManager.getRawById.mockReturnValue(managerThread);
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ id: managerThread.id, type: "manager" });
+      expect(threadManager.spawn).not.toHaveBeenCalled();
+    });
+
+    it("recreates the primary manager when the stored manager is archived", async () => {
+      const archivedManager = makeThread({
+        id: "thread-manager-archived",
+        projectId: "proj-1",
+        type: "manager",
+        archivedAt: 123,
+      });
+      const replacementManager = makeThread({
+        id: "thread-manager-2",
+        projectId: "proj-1",
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-1", primaryManagerThreadId: archivedManager.id }),
+      );
+      threadManager.getRawById
+        .mockReturnValueOnce(archivedManager)
+        .mockReturnValueOnce(replacementManager);
+      threadManager.spawn.mockResolvedValue(replacementManager);
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(201);
+      expect(projectRepo.update).toHaveBeenCalledWith("proj-1", {
+        primaryManagerThreadId: null,
+      });
+      expect(threadManager.spawn).toHaveBeenCalled();
+      expect(await res.json()).toMatchObject({ id: replacementManager.id, type: "manager" });
+    });
+
+    it("creates a primary manager, bootstraps workspace, and stores the pointer", async () => {
+      const project = makeProject({ id: "proj-1" });
+      const managerThread = makeThread({
+        id: "thread-manager-1",
+        projectId: project.id,
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      threadManager.spawn.mockResolvedValue(managerThread);
+      threadManager.getRawById.mockReturnValue(managerThread);
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "proj-1",
+          type: "manager",
+          title: "Manager",
+          environmentId: "local",
+          developerInstructions: expect.stringContaining(
+            "{{MANAGER_WORKSPACE_PATH}}",
+          ),
+          input: [{ type: "text", text: "[bb system] Welcome!" }],
+        }),
+      );
+      expect(projectRepo.update).toHaveBeenCalledWith("proj-1", {
+        primaryManagerThreadId: "thread-manager-1",
+      });
+      expect(threadManager.systemTell).not.toHaveBeenCalled();
+      expect(existsSync(join(beanbagRoot, "workspace", "thread-manager-1"))).toBe(true);
+    });
+
+    it("rolls back the pointer and workspace when workspace bootstrap fails", async () => {
+      const project = makeProject({ id: "proj-1" });
+      const managerThread = makeThread({
+        id: "thread-manager-rollback",
+        projectId: project.id,
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      threadManager.spawn.mockResolvedValue(managerThread);
+      writeFileSync(join(beanbagRoot, "workspace"), "occupied");
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(500);
+      expect(projectRepo.update).toHaveBeenNthCalledWith(1, "proj-1", {
+        primaryManagerThreadId: null,
+      });
+      expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
+      expect(
+        existsSync(join(beanbagRoot, "workspace", "thread-manager-rollback")),
+      ).toBe(false);
     });
   });
 

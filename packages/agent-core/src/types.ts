@@ -18,6 +18,7 @@ export interface Project {
   rootPath: string;
   projectInstructions?: string;
   primaryCheckoutThreadId?: string;
+  primaryManagerThreadId?: string;
   rootPathExists?: boolean;
   createdAt: number;
   updatedAt: number;
@@ -84,6 +85,8 @@ export type ThreadStatus =
   | "idle"
   | "active";
 
+export type ThreadType = "standard" | "manager";
+
 export interface ThreadQueuedMessage {
   id: string;
   input: PromptInput[];
@@ -98,6 +101,7 @@ export interface Thread {
   id: string;
   projectId: string;
   providerId: ThreadProviderId;
+  type: ThreadType;
   title?: string;
   mergeBaseBranch?: string;
   titleFallback?: string;
@@ -174,6 +178,7 @@ export type AppThreadEventType =
   | "client/turn/requested"
   | "client/turn/start"
   | "system/error"
+  | "system/manager/user_message"
   | "system/thread/interrupted"
   | "system/thread-title/updated"
   | "system/thread_operation"
@@ -348,6 +353,12 @@ export interface SystemWorktreeSquashMergeEventData {
   conflictFiles?: string[];
 }
 
+export interface SystemManagerUserMessageEventData {
+  text: string;
+  toolCallId?: string;
+  turnId?: string;
+}
+
 export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
 
 export interface TurnLifecycleEventData {
@@ -360,6 +371,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/turn/requested": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
+  "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
   "system/thread_operation": SystemThreadOperationEventData;

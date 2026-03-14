@@ -68,9 +68,13 @@ export const updateThreadSchema = z
   .object({
     title: z.string().min(1).optional(),
     mergeBaseBranch: z.string().min(1).nullable().optional(),
+    parentThreadId: z.string().nullable().optional(),
   })
   .refine(
-    (value) => value.title !== undefined || value.mergeBaseBranch !== undefined,
+    (value) =>
+      value.title !== undefined ||
+      value.mergeBaseBranch !== undefined ||
+      value.parentThreadId !== undefined,
     "At least one field must be provided",
   );
 

@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type {
@@ -15,6 +16,7 @@ import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
 } from "@beanbag/db";
+import { resolveManagerWorkspacePath } from "../../manager-thread.js";
 
 type LegacyThreadRouteMock = ThreadOrchestrator & {
   updateThread: ReturnType<typeof vi.fn>;
@@ -37,6 +39,7 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
     id: "thread-1",
     projectId: "proj-1",
     providerId: "codex",
+    type: "standard",
     status: "active",
     queuedMessages: [],
     archivedAt: undefined,
@@ -454,6 +457,25 @@ describe("Thread routes", () => {
       expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
         title: undefined,
         mergeBaseBranch: null,
+      });
+    });
+
+    it("passes parentThreadId updates through to the orchestrator", async () => {
+      const updatedThread = makeThread({ parentThreadId: "thread-manager-1" });
+      threadManager.getById.mockReturnValue(makeThread());
+      threadManager.updateThread.mockReturnValue(updatedThread);
+
+      const res = await app.request("/threads/thread-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parentThreadId: "thread-manager-1" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
+        title: undefined,
+        mergeBaseBranch: undefined,
+        parentThreadId: "thread-manager-1",
       });
     });
   });
@@ -1319,6 +1341,35 @@ describe("Thread routes", () => {
       const res = await app.request("/threads/thread-1/default-execution-options");
       expect(res.status).toBe(200);
       expect(await res.json()).toBeNull();
+    });
+  });
+
+  describe("GET /threads/:id/manager-workspace/files", () => {
+    it("lists manager workspace files for manager threads", async () => {
+      const runtimeEnv = {
+        ...process.env,
+        HOME: "/tmp/test-manager-home",
+      };
+      const app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, { runtimeEnv }),
+      );
+      const workspacePath = resolveManagerWorkspacePath(runtimeEnv, "thread-1");
+      mkdirSync(workspacePath, { recursive: true });
+      writeFileSync(`${workspacePath}/plan.md`, "# Plan");
+      threadManager.getRawById.mockReturnValue(
+        makeThread({ id: "thread-1", type: "manager" }),
+      );
+
+      try {
+        const res = await app.request("/threads/thread-1/manager-workspace/files");
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({
+          files: [{ path: "plan.md", size: 6 }],
+        });
+      } finally {
+        rmSync(workspacePath, { recursive: true, force: true });
+      }
     });
   });
 
@@ -2255,6 +2306,7 @@ describe("Thread routes", () => {
         "thread-1",
         120,
         false,
+        false,
       );
     });
   });
@@ -2276,6 +2328,27 @@ describe("Thread routes", () => {
         turnId: "turn-1",
         sourceSeqStart: 3,
         sourceSeqEnd: 8,
+        includeManagerDebugView: false,
+      });
+    });
+
+    it("passes manager debug view through for deferred tool-group messages", async () => {
+      const thread = makeThread({ type: "manager" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getToolGroupMessages as ReturnType<typeof vi.fn>).mockReturnValue({
+        messages: [],
+      });
+
+      const res = await app.request(
+        "/threads/thread-1/tool-group-messages?turnId=turn-1&sourceSeqStart=3&sourceSeqEnd=8&includeManagerDebugView=true",
+      );
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getToolGroupMessages).toHaveBeenCalledWith("thread-1", {
+        turnId: "turn-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 8,
+        includeManagerDebugView: true,
       });
     });
   });

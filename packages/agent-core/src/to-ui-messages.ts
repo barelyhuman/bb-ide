@@ -627,6 +627,12 @@ function parseUserFromClientStart(
   }
 
   const payload = toEventRecord(event.data);
+  if (
+    getStringField(payload, "initiator") === "system" &&
+    !options?.includeInternalSystemMessages
+  ) {
+    return null;
+  }
   const parsedInput = parsePromptInput(payload?.input);
   if (!parsedInput) return null;
   if (!shouldRenderThreadStartInput(options?.threadStatus)) {
@@ -655,6 +661,34 @@ function parseUserFromClientStart(
         ? { localFilePaths: parsedInput.localFilePaths }
         : {}),
     },
+  };
+}
+
+function parseManagerUserMessage(
+  event: ThreadEvent,
+  eventType: string,
+): UIAssistantTextMessage | null {
+  if (!eventTypeMatches(eventType, "system/manager/user_message")) {
+    return null;
+  }
+
+  const payload = toEventRecord(event.data);
+  const text = getStringField(payload, "text");
+  if (!text) {
+    return null;
+  }
+  const turnId = getStringField(payload, "turnId");
+
+  return {
+    kind: "assistant-text",
+    id: messageId(event.threadId, "assistant", `manager:${event.seq}`),
+    threadId: event.threadId,
+    sourceSeqStart: event.seq,
+    sourceSeqEnd: event.seq,
+    createdAt: event.createdAt,
+    ...(turnId ? { turnId } : {}),
+    text,
+    status: "completed",
   };
 }
 
@@ -3101,6 +3135,8 @@ export function toUIMessages(
 
   const state = createProjectionState();
   const includeDebugRawEvents = options?.includeDebugRawEvents ?? false;
+  const includeInternalSystemMessages =
+    options?.includeInternalSystemMessages ?? false;
 
   let areEventsOrdered = true;
   for (let index = 1; index < events.length; index += 1) {
@@ -3130,6 +3166,74 @@ export function toUIMessages(
 
     if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
       flushBufferedAssistantMessages(state);
+    }
+
+    if (
+      eventTypeMatchesAny(eventType, [
+        "client/thread/start",
+        "client/turn/requested",
+        "client/turn/start",
+      ])
+    ) {
+      const startPayload = toEventRecord(event.data);
+      if (
+        getStringField(startPayload, "initiator") === "system" &&
+        !includeInternalSystemMessages
+      ) {
+        const parsedInput = parsePromptInput(startPayload?.input);
+        if (parsedInput && shouldRenderThreadStartInput(options?.threadStatus)) {
+          const signature = userMessageSignature({
+            text: parsedInput.text,
+            webImages: parsedInput.webImages,
+            localImages: parsedInput.localImages,
+            localFiles: parsedInput.localFiles,
+          });
+          const startSource = getStringField(startPayload, "source");
+          const isClientThreadStart = eventTypeMatches(eventType, "client/thread/start");
+          const isClientTurnRequested = eventTypeMatches(eventType, "client/turn/requested");
+          const isClientTurnStart = eventTypeMatches(eventType, "client/turn/start");
+          const pendingThreadStartCount =
+            pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
+          const pendingRequestedCount =
+            pendingClientRequestedUserSignatureCounts.get(signature) ?? 0;
+          const pendingProviderCount =
+            pendingProviderUserSignatureCounts.get(signature) ?? 0;
+          if (isClientTurnStart && startSource === "spawn" && pendingThreadStartCount > 0) {
+            continue;
+          }
+          if (isClientTurnStart && pendingRequestedCount > 0) {
+            continue;
+          }
+          if (isClientTurnStart && pendingProviderCount > 0) {
+            if (pendingProviderCount === 1) {
+              pendingProviderUserSignatureCounts.delete(signature);
+            } else {
+              pendingProviderUserSignatureCounts.set(
+                signature,
+                pendingProviderCount - 1,
+              );
+            }
+            continue;
+          }
+          pendingClientStartUserSignatureCounts.set(
+            signature,
+            (pendingClientStartUserSignatureCounts.get(signature) ?? 0) + 1,
+          );
+          if (isClientThreadStart) {
+            pendingClientThreadStartUserSignatureCounts.set(
+              signature,
+              pendingThreadStartCount + 1,
+            );
+          }
+          if (isClientTurnRequested) {
+            pendingClientRequestedUserSignatureCounts.set(
+              signature,
+              pendingRequestedCount + 1,
+            );
+          }
+        }
+        continue;
+      }
     }
 
     const userFromClientThreadStart = parseUserFromClientStart(
@@ -3197,6 +3301,13 @@ export function toUIMessages(
       continue;
     }
 
+    const managerUserMessage = parseManagerUserMessage(event, eventType);
+    if (managerUserMessage) {
+      flushToolActivityBeforeNonToolMessage(state);
+      state.messages.push(managerUserMessage);
+      continue;
+    }
+
     const userMessage = parseUserFromItemEvent(event, eventType);
     if (userMessage) {
       const signature = userMessageSignature({
@@ -3243,7 +3354,9 @@ export function toUIMessages(
       continue;
     }
 
-    const assistantDelta = parseAssistantDeltaText(event, eventType);
+    const assistantDelta = options?.threadType === "manager"
+      ? null
+      : parseAssistantDeltaText(event, eventType);
     if (assistantDelta) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
@@ -3276,7 +3389,9 @@ export function toUIMessages(
       continue;
     }
 
-    const assistantFinal = parseAssistantFinalText(event, eventType);
+    const assistantFinal = options?.threadType === "manager"
+      ? null
+      : parseAssistantFinalText(event, eventType);
     if (assistantFinal) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
@@ -3312,7 +3427,9 @@ export function toUIMessages(
       continue;
     }
 
-    const reasoningDelta = parseReasoningDeltaText(event, eventType);
+    const reasoningDelta = options?.threadType === "manager"
+      ? null
+      : parseReasoningDeltaText(event, eventType);
     if (reasoningDelta) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
@@ -3344,7 +3461,9 @@ export function toUIMessages(
       continue;
     }
 
-    const reasoningFinal = parseReasoningFinalText(event, eventType);
+    const reasoningFinal = options?.threadType === "manager"
+      ? null
+      : parseReasoningFinalText(event, eventType);
     if (reasoningFinal) {
       const itemId = getItemId(event.data);
       const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;

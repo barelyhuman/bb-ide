@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import type { Thread } from "@beanbag/agent-core"
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronRight,
   CircleDashed,
   Folder,
@@ -10,6 +11,7 @@ import {
   PencilLine,
   SquarePen,
   Trash2,
+  UserRound,
   Wrench,
 } from "lucide-react"
 import {
@@ -32,7 +34,6 @@ import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
   isBusyThread,
   isUnreadDoneThread,
-  isVisibleProjectThread,
 } from "@/lib/thread-activity"
 import {
   deriveProjectNameFromPath,
@@ -82,6 +83,16 @@ interface ProjectListProps {
 }
 
 const COLLAPSED_PROJECTS_STORAGE_KEY = "beanbag.sidebar.collapsedProjects"
+const COLLAPSED_MANAGERS_STORAGE_KEY = "beanbag.sidebar.collapsedManagers"
+
+function ManagedThreadBranchGlyph() {
+  return (
+    <ChevronDown
+      aria-hidden="true"
+      className="size-4 shrink-0 rotate-45 text-sidebar-foreground/60"
+    />
+  )
+}
 
 export function ProjectList({
   onNewProject,
@@ -121,6 +132,19 @@ export function ProjectList({
       }
     }
   )
+  const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set()
+
+    try {
+      const raw = window.localStorage.getItem(COLLAPSED_MANAGERS_STORAGE_KEY)
+      if (!raw) return new Set()
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return new Set()
+      return new Set(parsed.filter((value): value is string => typeof value === "string"))
+    } catch {
+      return new Set()
+    }
+  })
   const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
   const [openThreadActionsThreadId, setOpenThreadActionsThreadId] = useState<string | null>(null)
   const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
@@ -136,7 +160,7 @@ export function ProjectList({
     const grouped = new Map<string, Thread[]>()
 
     for (const thread of threads ?? []) {
-      if (!isVisibleProjectThread(thread)) continue
+      if (thread.archivedAt !== undefined) continue
       const existing = grouped.get(thread.projectId)
       if (existing) {
         existing.push(thread)
@@ -161,6 +185,14 @@ export function ProjectList({
   }, [collapsedProjectIds])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    window.localStorage.setItem(
+      COLLAPSED_MANAGERS_STORAGE_KEY,
+      JSON.stringify(Array.from(collapsedManagerIds))
+    )
+  }, [collapsedManagerIds])
+
+  useEffect(() => {
     if (!archiveConfirmationThread || !threads) return
 
     const nextThread = threads.find((thread) => thread.id === archiveConfirmationThread.id)
@@ -176,6 +208,18 @@ export function ProjectList({
         next.delete(projectId)
       } else {
         next.add(projectId)
+      }
+      return next
+    })
+  }
+
+  const toggleManagerCollapsed = (threadId: string) => {
+    setCollapsedManagerIds((current) => {
+      const next = new Set(current)
+      if (next.has(threadId)) {
+        next.delete(threadId)
+      } else {
+        next.add(threadId)
       }
       return next
     })
@@ -249,9 +293,11 @@ export function ProjectList({
   const requestArchiveThread = (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    const environmentInfo = thread.environmentId
-      ? environmentById.get(thread.environmentId)
-      : undefined
+    const environmentInfo = thread.attachedEnvironment ?? (
+      thread.environmentId
+        ? environmentById.get(thread.environmentId)
+        : undefined
+    )
     if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
       setArchiveConfirmationThread(thread)
       return
@@ -334,6 +380,157 @@ export function ProjectList({
     )
   }
 
+  const renderThreadRow = (
+    projectId: string,
+    thread: Thread,
+    options?: {
+      isManagedChild?: boolean
+      isManager?: boolean
+      hasManagedChildren?: boolean
+      isManagerCollapsed?: boolean
+    }
+  ) => {
+    const threadIsBusy = isBusyThread(thread)
+    const showUnreadBadge = isUnreadDoneThread(thread)
+    const isThreadActionsOpen = openThreadActionsThreadId === thread.id
+    const isThreadActive = selectedThreadId === thread.id
+    const threadTitle = getThreadDisplayTitle(thread)
+    const environmentInfo = thread.environmentId
+      ? environmentById.get(thread.environmentId)
+      : undefined
+    const environmentIconInfo = getEnvironmentIconInfo(environmentInfo)
+    const ThreadEnvironmentIcon = environmentIconInfo?.icon
+    const isManager = options?.isManager === true
+    const isManagedChild = options?.isManagedChild === true
+    const hasManagedChildren = options?.hasManagedChildren === true
+    const isManagerCollapsed = options?.isManagerCollapsed === true
+
+    return (
+      <div
+        key={thread.id}
+        className={cn(
+          "group/thread-row relative flex h-8 w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
+          isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
+          isThreadActive
+            ? "bg-sidebar-border/80 text-sidebar-foreground"
+            : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        )}
+      >
+        <NavLink
+          to={`/projects/${projectId}/threads/${thread.id}`}
+          onClick={onProjectSelect}
+          aria-label={`Open ${threadTitle}`}
+          title={`Open ${threadTitle}`}
+          className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
+        />
+        {isManager && hasManagedChildren ? (
+          <button
+            type="button"
+            aria-expanded={!isManagerCollapsed}
+            aria-label={
+              isManagerCollapsed
+                ? `Expand ${threadTitle} threads`
+                : `Collapse ${threadTitle} threads`
+            }
+            title={isManagerCollapsed ? "Expand managed threads" : "Collapse managed threads"}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              toggleManagerCollapsed(thread.id)
+            }}
+            className="relative z-10 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+          >
+            <ChevronRight
+              className={cn("size-4 transition-transform", !isManagerCollapsed && "rotate-90")}
+            />
+          </button>
+        ) : (
+          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+            {isManagedChild ? (
+              <ManagedThreadBranchGlyph />
+            ) : threadIsBusy ? (
+              <CircleDashed className="size-3.5 animate-spin" />
+            ) : showUnreadBadge ? (
+              <span
+                className="size-1.5 rounded-full bg-primary"
+                aria-label="Unread completed thread"
+                title="Unread completion"
+              />
+            ) : null}
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
+        <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
+          {thread.primaryCheckout?.isActive ? (
+            <StatusPill variant="emphasis">active</StatusPill>
+          ) : null}
+          <span className="relative h-7 w-7 shrink-0">
+            <span
+              className={cn(
+                "absolute inset-0 flex items-center justify-center transition-opacity",
+                isThreadActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0",
+              )}
+            >
+              {isManager ? (
+                <UserRound className="size-4 text-sidebar-foreground/70" aria-label="Manager" />
+              ) : ThreadEnvironmentIcon ? (
+                <ThreadEnvironmentIcon
+                  className="size-4 text-sidebar-foreground/70"
+                  aria-label={environmentIconInfo.ariaLabel}
+                />
+              ) : null}
+            </span>
+            <div
+              className={cn(
+                "absolute inset-0 z-10 flex items-center justify-end transition-opacity",
+                isThreadActionsOpen
+                  ? "pointer-events-auto opacity-100"
+                  : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100",
+              )}
+            >
+              <ThreadActionsMenu
+                triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                onOpenChange={(open) => {
+                  setOpenThreadActionsThreadId(open ? thread.id : null)
+                }}
+                disabled={
+                  archiveThread.isPending ||
+                  unarchiveThread.isPending ||
+                  deleteThread.isPending ||
+                  updateThread.isPending ||
+                  markThreadRead.isPending ||
+                  markThreadUnread.isPending
+                }
+                isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
+                onToggleRead={() => {
+                  if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+                    markThreadUnread.mutate(thread.id)
+                    return
+                  }
+                  markThreadRead.mutate(thread.id)
+                }}
+                onRename={() => {
+                  requestRenameThread(thread)
+                }}
+                onToggleArchive={() => {
+                  if (thread.archivedAt !== undefined) {
+                    unarchiveThread.mutate({ id: thread.id })
+                    return
+                  }
+                  void requestArchiveThread(thread)
+                }}
+                onDelete={() => {
+                  requestDeleteThread(thread)
+                }}
+                isArchived={thread.archivedAt !== undefined}
+              />
+            </div>
+          </span>
+        </span>
+      </div>
+    )
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Projects</SidebarGroupLabel>
@@ -347,6 +544,31 @@ export function ProjectList({
           ) : projects && projects.length > 0 ? (
             projects.map((project) => {
               const projectThreads = threadsByProject.get(project.id) ?? []
+              const managerThreads = projectThreads
+                .filter((thread) => thread.type === "manager")
+                .sort((a, b) => b.createdAt - a.createdAt)
+              const managerThreadIds = new Set(managerThreads.map((thread) => thread.id))
+              const managedThreadsByManagerId = new Map<string, Thread[]>()
+              for (const thread of projectThreads) {
+                if (thread.type !== "standard" || !thread.parentThreadId) continue
+                if (!managerThreadIds.has(thread.parentThreadId)) continue
+                const existing = managedThreadsByManagerId.get(thread.parentThreadId)
+                if (existing) {
+                  existing.push(thread)
+                } else {
+                  managedThreadsByManagerId.set(thread.parentThreadId, [thread])
+                }
+              }
+              for (const managedThreads of managedThreadsByManagerId.values()) {
+                managedThreads.sort((a, b) => b.createdAt - a.createdAt)
+              }
+              const otherThreads = projectThreads
+                .filter((thread) => {
+                  if (thread.type === "manager") return false
+                  if (!thread.parentThreadId) return true
+                  return !managerThreadIds.has(thread.parentThreadId)
+                })
+                .sort((a, b) => b.createdAt - a.createdAt)
               const isProjectCollapsed = collapsedProjectIds.has(project.id)
               const isProjectActive =
                 selectedProjectId === project.id && !selectedThreadId
@@ -498,117 +720,30 @@ export function ProjectList({
                       </div>
                     ) : projectThreads.length > 0 ? (
                       <div className="space-y-1 group-data-[collapsible=icon]:hidden">
-                        {projectThreads.map((thread) => {
-                          const threadIsBusy = isBusyThread(thread)
-                          const showUnreadBadge = isUnreadDoneThread(thread)
-                          const isThreadActionsOpen = openThreadActionsThreadId === thread.id
-                          const isThreadActive = selectedThreadId === thread.id
-                          const threadTitle = getThreadDisplayTitle(thread)
-                          const environmentInfo = thread.attachedEnvironment ?? (
-                            thread.environmentId
-                              ? environmentById.get(thread.environmentId)
-                              : undefined
-                          )
-                          const environmentIconInfo = getEnvironmentIconInfo(environmentInfo)
-                          const ThreadEnvironmentIcon = environmentIconInfo?.icon
-
-                          return (
-                            <div
-                              key={thread.id}
-                              className={cn(
-                                "group/thread-row relative flex h-8 w-full items-center gap-2 rounded-md pl-2 pr-0 text-sm transition-colors",
-                                isThreadActive
-                                  ? "bg-sidebar-border/80 text-sidebar-foreground"
-                                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                              )}
-                            >
-                              <NavLink
-                                to={`/projects/${project.id}/threads/${thread.id}`}
-                                onClick={onProjectSelect}
-                                aria-label={`Open ${threadTitle}`}
-                                title={`Open ${threadTitle}`}
-                                className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
-                              />
-                              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                                {threadIsBusy ? (
-                                  <CircleDashed className="size-3.5 animate-spin" />
-                                ) : showUnreadBadge ? (
-                                  <span
-                                    className="size-1.5 rounded-full bg-primary"
-                                    aria-label="Unread completed thread"
-                                    title="Unread completion"
-                                  />
-                                ) : null}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
-                              <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
-                                {thread.primaryCheckout?.isActive ? (
-                                  <StatusPill variant="emphasis">active</StatusPill>
-                                ) : null}
-                                <span className="relative h-7 w-7 shrink-0">
-                                  {ThreadEnvironmentIcon ? (
-                                    <span
-                                      className={cn(
-                                        "absolute inset-0 flex items-center justify-center transition-opacity",
-                                        isThreadActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0"
-                                      )}
-                                    >
-                                      <ThreadEnvironmentIcon
-                                        className="size-4 text-sidebar-foreground/70"
-                                        aria-label={environmentIconInfo.ariaLabel}
-                                      />
-                                    </span>
-                                  ) : null}
-                                  <div
-                                    className={cn(
-                                      "absolute inset-0 z-10 flex items-center justify-end transition-opacity",
-                                      isThreadActionsOpen
-                                        ? "pointer-events-auto opacity-100"
-                                        : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
-                                    )}
-                                  >
-                                    <ThreadActionsMenu
-                                      triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                                      onOpenChange={(open) => {
-                                        setOpenThreadActionsThreadId(open ? thread.id : null)
-                                      }}
-                                      disabled={
-                                        archiveThread.isPending ||
-                                        unarchiveThread.isPending ||
-                                        deleteThread.isPending ||
-                                        updateThread.isPending ||
-                                        markThreadRead.isPending ||
-                                        markThreadUnread.isPending
-                                      }
-                                      isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
-                                      onToggleRead={() => {
-                                        if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
-                                          markThreadUnread.mutate(thread.id)
-                                          return
-                                        }
-                                        markThreadRead.mutate(thread.id)
-                                      }}
-                                      onRename={() => {
-                                        requestRenameThread(thread)
-                                      }}
-                                      onToggleArchive={() => {
-                                        if (thread.archivedAt !== undefined) {
-                                          unarchiveThread.mutate({ id: thread.id })
-                                          return
-                                        }
-                                        void requestArchiveThread(thread)
-                                      }}
-                                      onDelete={() => {
-                                        requestDeleteThread(thread)
-                                      }}
-                                      isArchived={thread.archivedAt !== undefined}
-                                    />
-                                  </div>
-                                </span>
-                              </span>
-                            </div>
-                          )
-                        })}
+                        {managerThreads.map((thread) => (
+                          <div
+                            key={thread.id}
+                            className="space-y-1"
+                          >
+                            {renderThreadRow(project.id, thread, {
+                              isManager: true,
+                              hasManagedChildren:
+                                (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0,
+                              isManagerCollapsed: collapsedManagerIds.has(thread.id),
+                            })}
+                            {!collapsedManagerIds.has(thread.id) &&
+                            (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0 ? (
+                              <div className="space-y-1">
+                                {(managedThreadsByManagerId.get(thread.id) ?? []).map((childThread) =>
+                                  renderThreadRow(project.id, childThread, {
+                                    isManagedChild: true,
+                                  })
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                        {otherThreads.map((thread) => renderThreadRow(project.id, thread))}
                       </div>
                     ) : (
                       <div className="group-data-[collapsible=icon]:hidden">

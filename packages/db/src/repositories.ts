@@ -25,6 +25,7 @@ import type {
   Thread,
   ThreadQueuedMessage,
   ThreadStatus,
+  ThreadType,
   ThreadEvent,
   ThreadEventData,
   ThreadEventType,
@@ -202,6 +203,16 @@ function normalizeThreadStatus(status: string): ThreadStatus {
   throw new Error(`Invalid persisted thread status: ${status}`);
 }
 
+function normalizeThreadType(type: string): ThreadType {
+  switch (type) {
+    case "standard":
+    case "manager":
+      return type;
+    default:
+      throw new Error(`Invalid persisted thread type: ${type}`);
+  }
+}
+
 function toThreadExecutionServiceTier(
   value: string | undefined,
 ): ThreadExecutionOptions["serviceTier"] | undefined {
@@ -337,6 +348,7 @@ export class ProjectRepository {
       rootPath: row.rootPath,
       projectInstructions: row.projectInstructions ?? undefined,
       primaryCheckoutThreadId: row.primaryCheckoutThreadId ?? undefined,
+      primaryManagerThreadId: row.primaryManagerThreadId ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -350,6 +362,7 @@ export class ProjectRepository {
       rootPath: data.rootPath,
       projectInstructions: data.projectInstructions ?? null,
       primaryCheckoutThreadId: null,
+      primaryManagerThreadId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -375,6 +388,7 @@ export class ProjectRepository {
       rootPath?: string;
       projectInstructions?: string;
       primaryCheckoutThreadId?: string | null;
+      primaryManagerThreadId?: string | null;
     },
     opts?: { touchUpdatedAt?: boolean },
   ): Project | undefined {
@@ -392,6 +406,9 @@ export class ProjectRepository {
     }
     if (data.primaryCheckoutThreadId !== undefined) {
       updates.primaryCheckoutThreadId = data.primaryCheckoutThreadId;
+    }
+    if (data.primaryManagerThreadId !== undefined) {
+      updates.primaryManagerThreadId = data.primaryManagerThreadId;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -703,6 +720,7 @@ export class ThreadRepository {
   create(data: {
     projectId: string;
     providerId?: ThreadProviderId;
+    type?: ThreadType;
     title?: string;
     mergeBaseBranch?: string;
     environmentId?: string;
@@ -713,6 +731,7 @@ export class ThreadRepository {
       id: nanoid(),
       projectId: data.projectId,
       providerId: data.providerId ?? DEFAULT_THREAD_PROVIDER_ID,
+      type: data.type ?? "standard",
       title: data.title ?? null,
       status: "created" as const,
       environmentId: data.environmentId ?? null,
@@ -863,9 +882,12 @@ export class ThreadRepository {
     id: string,
     data: {
       status?: ThreadStatus;
+      type?: ThreadType;
       title?: string;
       mergeBaseBranch?: string | null;
       environmentId?: string | null;
+      environmentRecord?: PersistedEnvironmentRecord | null;
+      parentThreadId?: string | null;
       archivedAt?: number | null;
       lastReadAt?: number;
     },
@@ -887,11 +909,18 @@ export class ThreadRepository {
       updates.updatedAt = Date.now();
     }
     if (data.status !== undefined) updates.status = data.status;
+    if (data.type !== undefined) updates.type = data.type;
     if (data.title !== undefined) updates.title = data.title;
     if (data.mergeBaseBranch !== undefined) {
       updates.mergeBaseBranch = data.mergeBaseBranch;
     }
     if (data.environmentId !== undefined) updates.environmentId = data.environmentId;
+    if (data.environmentRecord !== undefined) {
+      updates.environmentRecord = data.environmentRecord
+        ? JSON.stringify(data.environmentRecord)
+        : null;
+    }
+    if (data.parentThreadId !== undefined) updates.parentThreadId = data.parentThreadId;
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
     if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
 
@@ -1019,6 +1048,7 @@ export class ThreadRepository {
       id: row.id,
       projectId: row.projectId,
       providerId: row.providerId,
+      type: normalizeThreadType(row.type),
       title: row.title ?? undefined,
       mergeBaseBranch: row.mergeBaseBranch ?? undefined,
       status: normalizeThreadStatus(row.status),

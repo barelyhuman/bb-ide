@@ -45,6 +45,7 @@ export interface ProviderExecutionOptions {
 export interface ProviderThreadContext {
   projectId: string;
   threadId: string;
+  daemonUrl?: string;
   path?: string;
 }
 
@@ -228,7 +229,11 @@ export interface ThreadOrchestrator {
   requiresForceArchive(threadId: string): boolean;
   updateThread(
     threadId: string,
-    request: { title?: string; mergeBaseBranch?: string | null },
+    request: {
+      title?: string;
+      mergeBaseBranch?: string | null;
+      parentThreadId?: string | null;
+    },
   ): Thread;
   markRead(threadId: string): Thread;
   markUnread(threadId: string): Thread;
@@ -252,6 +257,7 @@ export interface ThreadOrchestrator {
     threadId: string,
     limit?: number,
     includeToolGroupMessages?: boolean,
+    includeManagerDebugView?: boolean,
   ): ThreadTimelineResponse;
   getToolGroupMessages(
     threadId: string,

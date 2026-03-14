@@ -16,10 +16,20 @@ const apiState = vi.hoisted(() => {
 
   return {
     pendingMutation,
+    projects: [
+      {
+        id: "project-1",
+        name: "Project One",
+        rootPath: "/tmp/project-one",
+        rootPathExists: true,
+        primaryManagerThreadId: "thread-parent",
+      },
+    ],
     thread: {
       id: "thread-1",
       projectId: "project-1",
       createdAt: 20,
+      type: "standard",
       status: "idle",
       updatedAt: 20,
       lastReadAt: 20,
@@ -39,6 +49,7 @@ const apiState = vi.hoisted(() => {
       id: "thread-parent",
       projectId: "project-1",
       createdAt: 10,
+      type: "manager",
       status: "idle",
       updatedAt: 10,
       lastReadAt: 10,
@@ -84,6 +95,15 @@ const apiState = vi.hoisted(() => {
       hasCommittedUnmergedChanges: false,
     } as ThreadWorkStatus,
     mergeBaseBranchOptions: ["main"],
+    managerWorkspaceFiles: {
+      files: [
+        { path: "plan.md", size: 24 },
+      ],
+    },
+    managerWorkspaceFile: {
+      path: "plan.md",
+      content: "# Plan\nManager deliverable",
+    },
     gitDiff: {
       mode: "worktree_commits",
       selection: { type: "combined" },
@@ -120,6 +140,10 @@ vi.mock("../hooks/useApi", () => ({
     data: id === "thread-parent" ? apiState.parentThread : apiState.thread,
     isLoading: false,
     error: null,
+  }),
+  useProjects: () => ({
+    data: apiState.projects,
+    isLoading: false,
   }),
   useThreads: () => ({
     data: [apiState.thread, apiState.parentThread],
@@ -160,6 +184,14 @@ vi.mock("../hooks/useApi", () => ({
   useUnarchiveThread: () => apiState.pendingMutation,
   useThreadDefaultExecutionOptions: () => ({
     data: {},
+  }),
+  useThreadManagerWorkspaceFiles: () => ({
+    data: apiState.managerWorkspaceFiles,
+  }),
+  useThreadManagerWorkspaceFile: () => ({
+    data: apiState.managerWorkspaceFile,
+    isLoading: false,
+    error: null,
   }),
   useUpdateThread: () => apiState.pendingMutation,
   useUploadPromptAttachment: () => apiState.pendingMutation,
@@ -309,7 +341,11 @@ vi.mock("./ThreadFollowUpComposer", () => ({
 }));
 
 vi.mock("@/components/thread/ThreadActionsMenu", () => ({
-  ThreadActionsMenu: () => <div>thread-actions</div>,
+  ThreadActionsMenu: ({
+    debugToggleLabel,
+  }: {
+    debugToggleLabel?: string;
+  }) => <div>{debugToggleLabel ?? "thread-actions"}</div>,
 }));
 
 vi.mock("@/components/thread/ThreadRenameDialog", () => ({
@@ -329,14 +365,20 @@ vi.mock("./ThreadSecondaryPanel", () => ({
     activePanel,
     gitDiffStatsLabel,
     metadataContent,
+    managerWorkspaceContent,
+    showGitDiffTab,
   }: {
-    activePanel: "git-diff" | "thread-info" | null;
+    activePanel: "git-diff" | "thread-info" | "manager-workspace" | null;
     gitDiffStatsLabel: string;
     metadataContent: ReactNode;
+    managerWorkspaceContent?: ReactNode;
+    showGitDiffTab?: boolean;
   }) => (
     <div>
+      <div>{showGitDiffTab === false ? "git-tab-hidden" : "git-tab-visible"}</div>
       {activePanel === "git-diff" ? gitDiffStatsLabel : null}
       {activePanel === "thread-info" ? metadataContent : null}
+      {activePanel === "manager-workspace" ? managerWorkspaceContent : null}
     </div>
   ),
 }));
@@ -410,8 +452,12 @@ describe("ThreadDetailView", () => {
       "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
     );
 
-    expect(html).toContain("Parent thread");
+    expect(html).toContain("Type");
+    expect(html).toContain("Managed thread");
+    expect(html).toContain("Manager");
+    expect(html).toContain(">Parent thread<");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
+    expect(html).toContain("Unassign manager");
     expect(html).toContain("Environment");
     expect(html).toContain("Local Env");
     expect(html).toContain("Branch");
@@ -446,6 +492,120 @@ describe("ThreadDetailView", () => {
 
     apiState.thread.primaryCheckout = { isActive: false };
     apiState.environments[0].capabilities = {};
+  });
+
+  it("renders the manager workspace tab for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=manager-workspace"
+    );
+
+    expect(html).toContain("plan.md");
+    expect(html).toContain("Manager deliverable");
+    expect(html).toContain("manager");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+  });
+
+  it("hides git-specific UI for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=git-diff"
+    );
+
+    expect(html).not.toContain("Commit");
+    expect(html).not.toContain("Squash merge");
+    expect(html).toContain("git-tab-hidden");
+    expect(html).not.toContain("2 files changed");
+    expect(html).toContain("Kind");
+    expect(html).toContain("Manager");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+  });
+
+  it("falls back to thread info when manager workspace is requested for a standard thread", () => {
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=manager-workspace"
+    );
+
+    expect(html).not.toContain("No manager workspace available.");
+    expect(html).toContain("Type");
+    expect(html).toContain("Managed thread");
+  });
+
+  it("hides environment metadata in the info panel for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
+    );
+
+    expect(html).toContain("Kind");
+    expect(html).toContain("Manager");
+    expect(html).not.toContain("Environment");
+    expect(html).not.toContain("Branch");
+    expect(html).not.toContain("Merge base");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+  });
+
+  it("shows the debug timeline toggle label for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("Show all events");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+  });
+
+  it("does not show the debug timeline toggle label for standard threads", () => {
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView();
+
+    expect(html).not.toContain("Show all events");
+  });
+
+  it("shows a managed badge for manager-owned standard threads", () => {
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("managed");
   });
 
   it("disables promote while the thread is active", () => {

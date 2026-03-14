@@ -3,6 +3,7 @@ import {
   constants,
   existsSync,
   mkdirSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -60,6 +61,7 @@ import {
   type ThreadOperationType,
   type ThreadPendingOperation,
   type ThreadTimelineResponse,
+  type ThreadType,
   type ThreadGitDiffResponse,
   type ThreadGitDiffSelection,
   type ThreadQueuedMessage,
@@ -71,6 +73,7 @@ import {
   type ThreadEnvironmentStartReason,
   type ThreadProviderId,
 } from "@beanbag/agent-core";
+import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import {
   EnvironmentRegistry,
   EnvironmentSquashMergeCommitFailureError,
@@ -110,6 +113,7 @@ import {
   AgentServerSessionError,
   type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
+  type ProviderToolHost,
   createProviderAdapter,
 } from "@beanbag/agent-server";
 import { WSManager } from "./ws.js";
@@ -152,6 +156,11 @@ import {
   type ActiveEnvironmentRuntime,
   type PrimaryPromotionState,
 } from "./environment-service.js";
+import {
+  MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
+  MANAGER_WORKSPACE_PATH_PLACEHOLDER,
+  resolveManagerWorkspacePath,
+} from "./manager-thread.js";
 import { measureAsync, measureSync } from "./perf.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
@@ -277,6 +286,12 @@ function resolveBbBinDir(pathValue: string | undefined): string | undefined {
     }
   }
   return undefined;
+}
+
+function resolveCliDaemonUrl(rawUrl: string | undefined): string | undefined {
+  const trimmed = rawUrl?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/\/api\/v1\/?$/u, "");
 }
 
 function isExecutable(path: string): boolean {
@@ -568,6 +583,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private readonly agentServerByProviderId = new Map<ThreadProviderId, AgentServer>();
   private readonly defaultProviderId: ThreadProviderId;
   private readonly providerCatalog: SystemProviderInfo[];
+  private readonly providerToolHost?: ProviderToolHost;
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
@@ -598,6 +614,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private environmentAgentSessionRepo?: EnvironmentAgentSessionRepository,
     private environmentRepo?: EnvironmentRepository,
     private threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository,
+    providerToolHost?: ProviderToolHost,
   ) {
     this.envFactory = new EnvironmentFactory(
       this.environmentRepo,
@@ -672,6 +689,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.workspaceCleanupInFlightThreadIds =
       this.environmentService.workspaceCleanupInFlightThreadIds;
     this.providerCatalog = providerCatalog ?? [];
+    this.providerToolHost = providerToolHost;
     const provider =
       agentServerOrProvider instanceof AgentServer
         ? undefined
@@ -689,6 +707,12 @@ export class Orchestrator implements ThreadOrchestrator {
       this.agentServerByProviderId.set(this.defaultProviderId, new AgentServer({
         provider: providerAdapter,
         ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
+        ...(this.providerToolHost
+          ? {
+              resolveDynamicTools: () => this.providerToolHost?.listTools(),
+              toolHost: this.providerToolHost,
+            }
+          : {}),
         onNotification: (threadId, event) => {
           this._handleAgentServerNotification(threadId, event);
         },
@@ -836,6 +860,12 @@ export class Orchestrator implements ThreadOrchestrator {
     const server = new AgentServer({
       provider: createProviderAdapter({ providerId }),
       ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
+      ...(this.providerToolHost
+        ? {
+            resolveDynamicTools: () => this.providerToolHost?.listTools(),
+            toolHost: this.providerToolHost,
+          }
+        : {}),
       onNotification: (threadId, event) => {
         this._handleAgentServerNotification(threadId, event);
       },
@@ -970,6 +1000,17 @@ export class Orchestrator implements ThreadOrchestrator {
       throw projectNotFoundError(req.projectId);
     }
 
+    const threadType = this._resolveRequestedThreadType(req);
+    if (threadType === "manager" && req.parentThreadId) {
+      throw invalidRequestError("Manager threads cannot be managed by a parent thread");
+    }
+    if (req.parentThreadId) {
+      this._validateManagerParentThread({
+        projectId: req.projectId,
+        parentThreadId: req.parentThreadId,
+      });
+    }
+
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const { attachedEnvironmentId, runtimeEnvironmentId } = this._resolveEnvironmentSelection({
@@ -980,6 +1021,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       providerId,
+      type: threadType,
       ...(explicitTitle ? { title: explicitTitle } : {}),
       environmentId: runtimeEnvironmentId,
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
@@ -995,10 +1037,33 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     const persistedThread = this.threadRepo.getById(thread.id) ?? thread;
 
+    const provisioningRequest =
+      threadType === "manager" &&
+      req.developerInstructions &&
+      (req.developerInstructions.includes(MANAGER_WORKSPACE_PATH_PLACEHOLDER) ||
+        req.developerInstructions.includes(MANAGER_PREFERENCES_CONTENT_PLACEHOLDER))
+        ? {
+            ...req,
+            developerInstructions: (() => {
+              const workspacePath = resolveManagerWorkspacePath(this.runtimeEnv, thread.id);
+              const preferencesPath = join(workspacePath, "PREFERENCES.md");
+              const preferencesContent = existsSync(preferencesPath)
+                ? readFileSync(preferencesPath, "utf8")
+                : "(does not exist)";
+              return req.developerInstructions
+                .replaceAll(MANAGER_WORKSPACE_PATH_PLACEHOLDER, workspacePath)
+                .replaceAll(
+                  MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
+                  preferencesContent,
+                );
+            })(),
+          }
+        : req;
+
     this._broadcastThreadChanged(persistedThread.id, ["thread-created"]);
     this._scheduleProvisioning(
       persistedThread.id,
-      { ...req, environmentId: runtimeEnvironmentId },
+      { ...provisioningRequest, environmentId: runtimeEnvironmentId },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",
@@ -1149,6 +1214,84 @@ export class Orchestrator implements ThreadOrchestrator {
       initiator: "system",
       awaitProviderStart: true,
     });
+  }
+
+  async messageUser(
+    threadId: string,
+    request: {
+      text: string;
+      toolCallId?: string;
+      turnId?: string;
+    },
+  ): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+    if (thread.type !== "manager") {
+      throw invalidRequestError("Only manager threads can publish user messages");
+    }
+
+    const text = request.text.trim();
+    if (text.length === 0) {
+      throw invalidRequestError("Manager user messages must not be empty");
+    }
+
+    this._appendEvent(
+      threadId,
+      "system/manager/user_message",
+      {
+        text,
+        ...(request.toolCallId ? { toolCallId: request.toolCallId } : {}),
+        ...(request.turnId ? { turnId: request.turnId } : {}),
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
+  }
+
+  private _notifyManagersOfOwnershipChange(args: {
+    threadId: string;
+    threadTitle?: string;
+    previousParentThreadId?: string;
+    nextParentThreadId?: string;
+  }): void {
+    const threadLabel = `${args.threadId}: ${args.threadTitle ?? "Untitled"}`;
+
+    if (args.previousParentThreadId && args.previousParentThreadId !== args.nextParentThreadId) {
+      void this.systemTell(args.previousParentThreadId, {
+        input: [
+          {
+            type: "text",
+            text: `[bb system]: The following thread is no longer assigned to you:\n${threadLabel}`,
+          },
+        ],
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[thread ${args.threadId}] failed to notify prior manager ${args.previousParentThreadId}: ${message}`,
+        );
+      });
+    }
+
+    if (args.nextParentThreadId && args.nextParentThreadId !== args.previousParentThreadId) {
+      void this.systemTell(args.nextParentThreadId, {
+        input: [
+          {
+            type: "text",
+            text:
+              `[bb system]: The following thread is now assigned to you for management:\n${threadLabel}`,
+          },
+        ],
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(
+          `[thread ${args.threadId}] failed to notify new manager ${args.nextParentThreadId}: ${message}`,
+        );
+      });
+    }
   }
 
   private async _tell(
@@ -1998,6 +2141,12 @@ export class Orchestrator implements ThreadOrchestrator {
     if (activePromotion?.threadId === threadId) {
       this._clearPrimaryPromotionState(projectId);
     }
+
+    for (const project of this.projectRepo.list()) {
+      if (project.primaryManagerThreadId === threadId) {
+        this.projectRepo.update(project.id, { primaryManagerThreadId: null });
+      }
+    }
   }
 
   private _forgetDeletedThreadState(threadId: string): void {
@@ -2102,7 +2251,11 @@ export class Orchestrator implements ThreadOrchestrator {
 
   updateThread(
     threadId: string,
-    request: { title?: string; mergeBaseBranch?: string | null },
+    request: {
+      title?: string;
+      mergeBaseBranch?: string | null;
+      parentThreadId?: string | null;
+    },
   ): Thread {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
@@ -2112,6 +2265,7 @@ export class Orchestrator implements ThreadOrchestrator {
     let didChange = false;
     let didChangeTitle = false;
     let didChangeMergeBaseBranch = false;
+    let didChangeParentThread = false;
     const nextTitle = this._normalizeThreadTitle(request.title);
     if (nextTitle && nextTitle !== thread.title) {
       this.threadRepo.update(threadId, { title: nextTitle });
@@ -2155,6 +2309,34 @@ export class Orchestrator implements ThreadOrchestrator {
       didChangeMergeBaseBranch = true;
     }
 
+    if (request.parentThreadId !== undefined) {
+      if (thread.type === "manager" && request.parentThreadId !== null) {
+        throw invalidRequestError("Manager threads cannot be managed by a parent thread");
+      }
+      const previousParentThreadId = thread.parentThreadId;
+      const nextParentThreadId = request.parentThreadId ?? undefined;
+      if (nextParentThreadId) {
+        this._validateManagerParentThread({
+          projectId: thread.projectId,
+          parentThreadId: nextParentThreadId,
+          childThreadId: threadId,
+        });
+      }
+      if (nextParentThreadId !== thread.parentThreadId) {
+        this.threadRepo.update(threadId, {
+          parentThreadId: nextParentThreadId ?? null,
+        });
+        didChange = true;
+        didChangeParentThread = true;
+        this._notifyManagersOfOwnershipChange({
+          threadId,
+          threadTitle: thread.title,
+          previousParentThreadId,
+          nextParentThreadId,
+        });
+      }
+    }
+
     const updated = this.threadRepo.getById(threadId);
     if (!updated) {
       throw threadNotFoundError(threadId);
@@ -2166,6 +2348,9 @@ export class Orchestrator implements ThreadOrchestrator {
       }
       if (didChangeMergeBaseBranch) {
         changes.push("work-status-changed");
+      }
+      if (didChangeParentThread) {
+        changes.push("thread-created");
       }
       this._broadcastThreadChanged(threadId, changes);
     }
@@ -2223,11 +2408,12 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     limit?: number,
     includeToolGroupMessages: boolean = false,
+    includeManagerDebugView: boolean = false,
   ): ThreadTimelineResponse {
     return measureSync("orchestrator.getTimeline", () => {
       const thread = this.threadRepo.getById(threadId);
       const latestSeq = this.eventRepo.getLatestSeq(threadId);
-      const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}`;
+      const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}:${includeManagerDebugView ? "manager-debug" : "manager-default"}`;
       const existingCache = this.timelineByThread.get(threadId);
       if (
         existingCache &&
@@ -2247,11 +2433,23 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const uiMessages = toUIMessages(events, {
         includeDebugRawEvents: false,
+        includeInternalSystemMessages: includeManagerDebugView,
         includeOptionalOperations: false,
         threadStatus: thread?.status,
+        threadType:
+          includeManagerDebugView && thread?.type === "manager" ? "standard" : thread?.type,
       });
       const visibleMessages = uiMessages.filter(
-        (entry) => entry.kind !== "assistant-reasoning",
+        (entry) => {
+          if (entry.kind === "assistant-reasoning") return false;
+          if (includeManagerDebugView) return true;
+          if (thread?.type !== "manager") return true;
+          return (
+            entry.kind === "user" ||
+            entry.kind === "assistant-text" ||
+            entry.kind === "error"
+          );
+        },
       );
       const rows = buildThreadDetailRows(visibleMessages, {
         includeToolGroupMessages,
@@ -2286,6 +2484,7 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       ...(limit !== undefined ? { limit } : {}),
       includeToolGroupMessages,
+      includeManagerDebugView,
     });
   }
 
@@ -2302,11 +2501,31 @@ export class Orchestrator implements ThreadOrchestrator {
       .filter((event) => event.seq >= sourceSeqStart && event.seq <= sourceSeqEnd);
     const uiMessages = toUIMessages(eventsInRange, {
       includeDebugRawEvents: false,
+      includeInternalSystemMessages: request.includeManagerDebugView ?? false,
       includeOptionalOperations: false,
       threadStatus: thread?.status,
+      threadType:
+        request.includeManagerDebugView && thread?.type === "manager"
+          ? "standard"
+          : thread?.type,
     });
     const rowMessages = uiMessages.filter((entry) => {
       if (entry.kind === "assistant-reasoning") return false;
+      if (request.includeManagerDebugView) {
+        if ((entry.turnId ?? null) !== request.turnId) return false;
+        return (
+          entry.sourceSeqStart >= sourceSeqStart &&
+          entry.sourceSeqEnd <= sourceSeqEnd
+        );
+      }
+      if (
+        thread?.type === "manager" &&
+        entry.kind !== "user" &&
+        entry.kind !== "assistant-text" &&
+        entry.kind !== "error"
+      ) {
+        return false;
+      }
       if ((entry.turnId ?? null) !== request.turnId) return false;
       return (
         entry.sourceSeqStart >= sourceSeqStart &&
@@ -2530,9 +2749,16 @@ export class Orchestrator implements ThreadOrchestrator {
    * completion event recognized by the active provider adapter.
    */
   getOutput(threadId: string): string | undefined {
+    const thread = this.threadRepo.getById(threadId);
     const allEvents = this.eventRepo.listByThread(threadId);
     // Walk backwards to find the last output event.
     for (let i = allEvents.length - 1; i >= 0; i--) {
+      if (thread?.type === "manager" && allEvents[i].type === "system/manager/user_message") {
+        const text = getStringField(toRecord(allEvents[i].data), "text");
+        if (typeof text === "string" && text.length > 0) {
+          return text;
+        }
+      }
       const hydratedEvent: ThreadEvent = {
         ...allEvents[i],
         data: unwrapProviderEventPayload(allEvents[i].data) as ThreadEvent["data"],
@@ -3356,6 +3582,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     const provisioningReason = opts?.reason ?? "thread-created";
     const startSource = provisioningReason === "tell-after-provisioning-failure" ? "tell" : "spawn";
+    const spawnInitiator = req.spawnInitiator ?? "agent";
     const persistedThreadStartEvent = this._persistOutboundStartEvent(
       threadId,
       "client/thread/start",
@@ -3363,7 +3590,7 @@ export class Orchestrator implements ThreadOrchestrator {
       requestedInput,
       {
         source: startSource,
-        initiator: "agent",
+        initiator: spawnInitiator,
       },
     );
 
@@ -3485,7 +3712,7 @@ export class Orchestrator implements ThreadOrchestrator {
       requestedInput,
       {
         source: startSource,
-        initiator: "agent",
+        initiator: spawnInitiator,
       },
     );
     this._appendProvisioningProgressEvent(threadId, "start_provider_session", "started");
@@ -3567,7 +3794,7 @@ export class Orchestrator implements ThreadOrchestrator {
         input: requestedInput,
         meta: {
           source: "spawn",
-          initiator: "agent",
+          initiator: spawnInitiator,
         },
       });
       this._broadcastThreadChanged(
@@ -4400,6 +4627,9 @@ export class Orchestrator implements ThreadOrchestrator {
     return {
       projectId: args.projectId,
       threadId: args.threadId,
+      ...(resolveCliDaemonUrl(this.runtimeEnv.BEANBAG_DAEMON_URL)
+        ? { daemonUrl: resolveCliDaemonUrl(this.runtimeEnv.BEANBAG_DAEMON_URL) }
+        : {}),
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
     };
   }
@@ -4432,6 +4662,9 @@ export class Orchestrator implements ThreadOrchestrator {
                 : {}),
               "shell_environment_policy.set.BB_PROJECT_ID": context.projectId,
               "shell_environment_policy.set.BB_THREAD_ID": context.threadId,
+              ...(context.daemonUrl
+                ? { "shell_environment_policy.set.BB_DAEMON_URL": context.daemonUrl }
+                : {}),
               "shell_environment_policy.set.PATH": context.path,
             },
           }
@@ -5538,7 +5771,13 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _buildParentThreadCompletionNotification(childThread: Thread): string {
-    return `[bb system] Thread ${childThread.id} is done.`;
+    const title = childThread.title?.trim();
+    const titleSuffix = title ? ` (${title})` : "";
+    return [
+      `[bb system] Managed thread complete: ${childThread.id}${titleSuffix}`,
+      "Review that thread's result and decide whether to update the user or delegate a follow-up.",
+      "Managed-thread work usually lives in that thread's worktree; do not reapply its edits into the manager checkout unless the user explicitly asked for that.",
+    ].join("\n");
   }
 
   private _extractExecutionOptionsFromParams(

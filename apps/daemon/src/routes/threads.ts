@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import {
   assertNever,
   type EnvironmentRecord,
@@ -16,7 +17,7 @@ import {
   type Thread,
 } from "@beanbag/agent-core";
 import { z } from "zod";
-import { isAbsolute } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentSessionClientMessage,
@@ -40,6 +41,7 @@ import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
 } from "@beanbag/db";
+import { resolveManagerWorkspacePath } from "../manager-thread.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
@@ -226,6 +228,10 @@ const timelineQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => value === "true"),
+  includeManagerDebugView: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 const toolGroupMessagesQuerySchema = z.object({
@@ -238,7 +244,48 @@ const toolGroupMessagesQuerySchema = z.object({
     .string()
     .transform((value) => Number.parseInt(value, 10))
     .pipe(z.number().int().positive()),
+  includeManagerDebugView: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
+
+const managerWorkspaceFileQuerySchema = z.object({
+  path: z.string().min(1),
+});
+
+function isPathWithinDirectory(path: string, directory: string): boolean {
+  const normalizedDirectory = directory.endsWith(sep) ? directory : `${directory}${sep}`;
+  return path === directory || path.startsWith(normalizedDirectory);
+}
+
+function listManagerWorkspaceFiles(rootPath: string, currentPath = ""): Array<{
+  path: string;
+  size: number;
+}> {
+  const directoryPath = currentPath ? resolve(rootPath, currentPath) : rootPath;
+  const entries = readdirSync(directoryPath, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const files: Array<{ path: string; size: number }> = [];
+
+  for (const entry of entries) {
+    const entryPath = resolve(directoryPath, entry.name);
+    const relativePath = relative(rootPath, entryPath).split(sep).join("/");
+    if (entry.isDirectory()) {
+      files.push(...listManagerWorkspaceFiles(rootPath, relativePath));
+      continue;
+    }
+    if (!entry.isFile()) {
+      continue;
+    }
+    files.push({
+      path: relativePath,
+      size: statSync(entryPath).size,
+    });
+  }
+
+  return files;
+}
 
 const gitDiffQuerySchema = z.object({
   selection: z.enum(["combined", "commit"]).optional(),
@@ -327,12 +374,14 @@ export function createThreadRoutes(
     threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository;
     openPath?: OpenPathFn;
     environmentAgentSessionService?: EnvironmentAgentSessionService;
+    runtimeEnv?: NodeJS.ProcessEnv;
   },
 ) {
   const openPath = opts?.openPath ?? openPathInEditor;
   const environmentAgentSessionService = opts?.environmentAgentSessionService;
   const environmentRepo = opts?.environmentRepo;
   const threadEnvironmentAttachmentRepo = opts?.threadEnvironmentAttachmentRepo;
+  const runtimeEnv = opts?.runtimeEnv ?? process.env;
   const environmentAgentAccessor =
     threadManager as RouteEnvironmentAgentCapableOrchestrator;
   const hydrateThread = <TThread extends Thread>(thread: TThread): TThread => {
@@ -495,7 +544,129 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .get("/:id/manager-workspace/files", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        if (thread.type !== "manager") {
+          throw invalidRequestError("Manager workspace is only available for manager threads");
+        }
+
+        const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
+        const files = existsSync(workspacePath)
+          ? listManagerWorkspaceFiles(workspacePath)
+          : [];
+        return c.json({ files });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get(
+      "/:id/manager-workspace/file",
+      zValidator("query", managerWorkspaceFileQuerySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = await getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (thread.type !== "manager") {
+            throw invalidRequestError("Manager workspace is only available for manager threads");
+          }
+
+          const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
+          const { path } = c.req.valid("query");
+          const requestedPath = resolve(workspacePath, path);
+          if (!isPathWithinDirectory(requestedPath, workspacePath)) {
+            throw invalidRequestError("Manager workspace path is outside thread scope");
+          }
+          if (!existsSync(requestedPath)) {
+            throw invalidRequestError("Manager workspace file not found");
+          }
+          return c.json({
+            path,
+            content: readFileSync(requestedPath, "utf8"),
+          });
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
     .get("/:id/env-daemon/status", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        if (!environmentAgentAccessor.getEnvironmentAgentStatus) {
+          throw invalidRequestError("Env-daemon status is unavailable");
+        }
+        const status = await environmentAgentAccessor.getEnvironmentAgentStatus(
+          threadId,
+        );
+        return c.json(status);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get("/:id/manager-workspace/files", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        if (thread.type !== "manager") {
+          throw invalidRequestError("Manager workspace is only available for manager threads");
+        }
+
+        const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
+        const files = existsSync(workspacePath)
+          ? listManagerWorkspaceFiles(workspacePath)
+          : [];
+        return c.json({ files });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get(
+      "/:id/manager-workspace/file",
+      zValidator("query", managerWorkspaceFileQuerySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = await getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (thread.type !== "manager") {
+            throw invalidRequestError("Manager workspace is only available for manager threads");
+          }
+
+          const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
+          const { path } = c.req.valid("query");
+          const requestedPath = resolve(workspacePath, path);
+          if (!isPathWithinDirectory(requestedPath, workspacePath)) {
+            throw invalidRequestError("Manager workspace path is outside thread scope");
+          }
+          if (!existsSync(requestedPath)) {
+            throw invalidRequestError("Manager workspace file not found");
+          }
+          return c.json({
+            path,
+            content: readFileSync(requestedPath, "utf8"),
+          });
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .get("/:id/environment-agent/status", async (c) => {
       try {
         const threadId = c.req.param("id");
         const thread = await getThreadForRouteLookup(threadManager, threadId);
@@ -670,10 +841,11 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
-          const { title, mergeBaseBranch } = c.req.valid("json");
+          const { title, mergeBaseBranch, parentThreadId } = c.req.valid("json");
           const updated = threadManager.updateThread(c.req.param("id"), {
             title,
             mergeBaseBranch,
+            parentThreadId,
           });
           return c.json(updated);
         } catch (err) {
@@ -949,11 +1121,12 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
-          const { limit, includeToolGroupMessages } = c.req.valid("query");
+          const { limit, includeToolGroupMessages, includeManagerDebugView } = c.req.valid("query");
           const timeline = threadManager.getTimeline(
             c.req.param("id"),
             limit,
             includeToolGroupMessages,
+            includeManagerDebugView,
           );
           return c.json(timeline);
         } catch (err) {
@@ -970,13 +1143,19 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
-          const { turnId, sourceSeqStart, sourceSeqEnd } = c.req.valid("query");
+          const {
+            turnId,
+            sourceSeqStart,
+            sourceSeqEnd,
+            includeManagerDebugView,
+          } = c.req.valid("query");
           const messages = threadManager.getToolGroupMessages(
             c.req.param("id"),
             {
               turnId,
               sourceSeqStart,
               sourceSeqEnd,
+              includeManagerDebugView,
             },
           );
           return c.json(messages);

@@ -24,6 +24,7 @@ vi.mock("node:readline/promises", () => ({
 }));
 
 import { createClient, unwrap } from "../client.js";
+import { registerManagerCommands } from "../commands/manager.js";
 import { registerDaemonCommands } from "../commands/daemon.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerStatusCommand } from "../commands/status.js";
@@ -149,6 +150,252 @@ describe("CLI command output contracts", () => {
       created,
     );
   });
+
+  it("bb manager hire posts to the project manager route", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-manager-1",
+      projectId: "project-123",
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              manager: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "hire", "project-123"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "project-123" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager ready: thread-manager-1");
+  });
+
+  it("bb manager show reports when no manager is hired", async () => {
+    const get = vi.fn(async () => [
+      {
+        id: "project-123",
+        name: "Repo",
+        rootPath: "/tmp/repo",
+        createdAt: 1,
+        updatedAt: 2,
+        primaryManagerThreadId: null,
+      },
+    ]);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          projects: {
+            $get: get,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "show", "project-123"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain("No manager hired");
+  });
+
+  it("bb manager status includes managed child threads", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Manager",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const managedThread: Thread = {
+      id: "thread-worker-1",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Worker",
+      type: "standard",
+      status: "active",
+      parentThreadId: "thread-manager-1",
+      createdAt: 3,
+      updatedAt: 4,
+    };
+    const get = vi.fn(async ({ param }: { param: { id: string } }) => {
+      expect(param.id).toBe("thread-manager-1");
+      return managerThread;
+    });
+    const list = vi.fn(async ({ query }: { query: { parentThreadId?: string } }) => {
+      expect(query.parentThreadId).toBe("thread-manager-1");
+      return [managedThread];
+    });
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $get: list,
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "status", "thread-manager-1"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("Managed threads:");
+    expect(lines.some((line) => line.includes("thread-worker-1"))).toBe(true);
+  });
+
+  it("bb manager send posts a tell message", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => managerThread);
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              tell: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["manager", "send", "thread-manager-1", "hello manager"],
+      (program) => registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-manager-1" },
+      json: {
+        input: [{ type: "text", text: "hello manager" }],
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager thread-manager-1 updated",
+    );
+  });
+
+  it("bb manager delete deletes the manager thread", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Manager",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => managerThread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["manager", "delete", "thread-manager-1", "--yes"],
+      (program) => registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      new URL("/api/v1/threads/thread-manager-1", "http://daemon"),
+      { method: "DELETE" },
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager thread-manager-1 deleted",
+    );
+  });
+
+  it("bb manager log prints events", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => managerThread);
+    const eventsGet = vi.fn(async () => [
+      {
+        seq: 1,
+        threadId: "thread-manager-1",
+        type: "system/manager/user_message",
+        data: { text: "hello" },
+        createdAt: 3,
+      },
+    ]);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              events: {
+                $get: eventsGet,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "log", "thread-manager-1"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(eventsGet).toHaveBeenCalledWith({
+      param: { id: "thread-manager-1" },
+      query: {},
+    });
+    expect(
+      collectLogLines(vi.mocked(console.log)).some((line) =>
+        line.includes("system/manager/user_message"),
+      ),
+    ).toBe(true);
+  });
+
   it("bb status prints project/thread context", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     process.env.BB_THREAD_ID = "thread-1";
@@ -168,6 +415,7 @@ describe("CLI command output contracts", () => {
       id: "thread-1",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -195,12 +443,38 @@ describe("CLI command output contracts", () => {
     });
   });
 
+  it("bb thread list supports parent-thread filtering", async () => {
+    const list = vi.fn(async () => []);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $get: list,
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "list", "--project", "proj-1", "--parent-thread", "thread-manager-1"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(list).toHaveBeenCalledWith({
+      query: {
+        projectId: "proj-1",
+        parentThreadId: "thread-manager-1",
+      },
+    });
+  });
+
   it("bb thread spawn --json prints the raw thread", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const thread: Thread = {
       id: "thread-json-spawn",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "created",
       createdAt: 1,
       updatedAt: 1,
@@ -231,6 +505,7 @@ describe("CLI command output contracts", () => {
       id: "thread-2",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "created",
       parentThreadId: "thread-parent",
       createdAt: 1,
@@ -267,6 +542,7 @@ describe("CLI command output contracts", () => {
       id: "thread-env-1",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "created",
       environmentId: "worktree",
       createdAt: 1,
@@ -304,6 +580,7 @@ describe("CLI command output contracts", () => {
       id: "thread-env-2",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "created",
       environmentId: "local",
       createdAt: 1,
@@ -398,6 +675,7 @@ describe("CLI command output contracts", () => {
       id: "thread-delete-1",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "idle",
       title: "Delete me",
       createdAt: 1,
@@ -439,6 +717,7 @@ describe("CLI command output contracts", () => {
       id: "thread-delete-2",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -476,6 +755,7 @@ describe("CLI command output contracts", () => {
       id: "thread-delete-3",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 1,
@@ -620,6 +900,7 @@ describe("CLI command output contracts", () => {
       id: "thread-archived-1",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "idle",
       archivedAt: 1_700_000_000_000,
       createdAt: 1,
@@ -768,6 +1049,7 @@ describe("CLI JSON output contracts", () => {
       id: "thread-json-show",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -791,6 +1073,81 @@ describe("CLI JSON output contracts", () => {
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
       thread,
+    );
+  });
+
+  it("bb thread update sets the parent thread id", async () => {
+    const thread: Thread = {
+      id: "thread-update-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      parentThreadId: "thread-manager-1",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const patch = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "update", "thread-update-1", "--parent-thread", "thread-manager-1"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "thread-update-1" },
+      json: { parentThreadId: "thread-manager-1" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Managed by thread-manager-1",
+    );
+  });
+
+  it("bb thread update clears the parent thread id", async () => {
+    process.env.BB_THREAD_ID = "thread-update-2";
+    const thread: Thread = {
+      id: "thread-update-2",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const patch = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "update", "--clear-parent-thread"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "thread-update-2" },
+      json: { parentThreadId: null },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "No managing parent thread",
     );
   });
 
@@ -865,6 +1222,7 @@ describe("CLI JSON output contracts", () => {
       id: "thread-wait",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "idle",
       createdAt: 1,
       updatedAt: 2,
@@ -895,6 +1253,7 @@ describe("CLI JSON output contracts", () => {
       id: "thread-wait-timeout",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "active",
       createdAt: 1,
       updatedAt: 2,
@@ -924,6 +1283,7 @@ describe("CLI JSON output contracts", () => {
       id: "thread-json-status",
       projectId: "proj-1",
       providerId: "codex",
+      type: "standard",
       status: "active",
       createdAt: 1,
       updatedAt: 2,

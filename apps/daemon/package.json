@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
+    "@beanbag/templates": "workspace:*",
     "@beanbag/environment": "workspace:*",
     "@beanbag/environment-agent": "workspace:*",
     "@beanbag/agent-server": "workspace:*",
