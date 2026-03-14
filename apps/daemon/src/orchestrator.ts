@@ -974,6 +974,33 @@ export class Orchestrator implements ThreadOrchestrator {
     );
   }
 
+  private _resolveRequestedThreadType(req: SpawnThreadRequest): ThreadType {
+    return req.type ?? "standard";
+  }
+
+  private _validateManagerParentThread(args: {
+    projectId: string;
+    parentThreadId: string;
+    childThreadId?: string;
+  }): void {
+    const parentThread = this.threadRepo.getById(args.parentThreadId);
+    if (!parentThread) {
+      throw invalidRequestError(`Parent thread not found: ${args.parentThreadId}`);
+    }
+    if (args.childThreadId && args.parentThreadId === args.childThreadId) {
+      throw invalidRequestError("Thread cannot manage itself");
+    }
+    if (parentThread.projectId !== args.projectId) {
+      throw invalidRequestError("Parent thread must belong to the same project");
+    }
+    if (parentThread.type !== "manager") {
+      throw invalidRequestError("Parent thread must be a manager thread");
+    }
+    if (parentThread.archivedAt !== undefined) {
+      throw invalidRequestError("Parent thread cannot be archived");
+    }
+  }
+
   private _stopAllPrimaryPromotionWatches(): void {
     this.environmentService.stopPrimaryPromotionWatches();
   }
@@ -1015,7 +1042,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const { attachedEnvironmentId, runtimeEnvironmentId } = this._resolveEnvironmentSelection({
       projectId: req.projectId,
-      environmentId: req.environmentId,
+      environmentId: req.environmentId ?? (req.parentThreadId ? "worktree" : undefined),
     });
     const providerId = this._resolveSpawnProviderId(req);
     const thread = this.threadRepo.create({
