@@ -782,6 +782,170 @@ describe("EnvironmentService", () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
+  it("clears persisted shared-environment attachments for all scoped threads during stopAllAndWait", async () => {
+    const runtimeDestroySpy = vi.fn();
+    const persistedDestroySpy = vi.fn();
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy: runtimeDestroySpy,
+    });
+    const persistedEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy: persistedDestroySpy,
+    });
+    const environmentRegistry = new EnvironmentRegistry().register({
+      kind: "worktree",
+      info: WORKTREE_INFO,
+      create(_context: CreateEnvironmentContext): IEnvironment {
+        return runtimeEnvironment;
+      },
+      restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+        return persistedEnvironment;
+      },
+      isState(_value: unknown): _value is unknown {
+        return true;
+      },
+    });
+    const threadState = new Map<string, Thread>([
+      [
+        "thread-1",
+        {
+          id: "thread-1",
+          projectId: "proj-1",
+          providerId: "codex",
+          type: "standard",
+          status: "idle",
+          environmentId: "env-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ],
+      [
+        "thread-2",
+        {
+          id: "thread-2",
+          projectId: "proj-1",
+          providerId: "codex",
+          type: "standard",
+          status: "idle",
+          environmentId: "env-1",
+          createdAt: 1001,
+          updatedAt: 1001,
+        },
+      ],
+    ]);
+    let attachmentState: Array<{
+      threadId: string;
+      environmentId: string;
+      createdAt: number;
+      updatedAt: number;
+    }> = [
+      { threadId: "thread-1", environmentId: "env-1", createdAt: 1000, updatedAt: 1000 },
+      { threadId: "thread-2", environmentId: "env-1", createdAt: 1000, updatedAt: 1000 },
+    ];
+    const environmentState = new Map<string, EnvironmentRecord>([
+      [
+        "env-1",
+        {
+          id: "env-1",
+          projectId: "proj-1",
+          descriptor: {
+            type: "path",
+            path: "/project/root/.worktrees/thread-1",
+          },
+          managed: true,
+          runtimeState: {
+            kind: "worktree",
+            state: {},
+          },
+          createdAt: 1000,
+          updatedAt: 1000,
+        },
+      ],
+    ]);
+
+    const threadRepo = {
+      getById: vi.fn((threadId: string) => threadState.get(threadId)),
+      listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => ["thread-1", "thread-2"]),
+    } as unknown as ThreadRepository;
+    const projectRepo = {
+      getById: vi.fn(() => ({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/project/root",
+        createdAt: 1000,
+        updatedAt: 1000,
+      })),
+      list: vi.fn(() => ([{
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/project/root",
+        createdAt: 1000,
+        updatedAt: 1000,
+      }])),
+      update: vi.fn(),
+    } as unknown as ProjectRepository;
+    const environmentRepo = {
+      getById: vi.fn((environmentId: string) => environmentState.get(environmentId)),
+      delete: vi.fn((environmentId: string) => {
+        environmentState.delete(environmentId);
+      }),
+    } as unknown as EnvironmentRepository;
+    const threadEnvironmentAttachmentRepo = {
+      getByThreadId: vi.fn((threadId: string) =>
+        attachmentState.find((attachment) => attachment.threadId === threadId)
+      ),
+      listByEnvironmentId: vi.fn((environmentId: string) =>
+        attachmentState.filter((attachment) => attachment.environmentId === environmentId)
+      ),
+      deleteByThreadId: vi.fn((threadId: string, opts?: { nextThreadEnvironmentId?: string | null }) => {
+        attachmentState = attachmentState.filter((attachment) => attachment.threadId !== threadId);
+        if (Object.hasOwn(opts ?? {}, "nextThreadEnvironmentId")) {
+          const thread = threadState.get(threadId);
+          if (thread) {
+            thread.environmentId = opts?.nextThreadEnvironmentId ?? undefined;
+          }
+        }
+      }),
+    } as unknown as ThreadEnvironmentAttachmentRepository;
+
+    const service = new EnvironmentService(
+      threadRepo,
+      projectRepo,
+      environmentRegistry,
+      {
+        createContext: (threadId, projectRootPath) => ({
+          projectId: "proj-1",
+          threadId,
+          projectRootPath,
+          runtimeEnv: {},
+        }),
+        onProvisioningEvent: vi.fn(),
+        onThreadChanged: vi.fn(),
+        onCleanupFailure: vi.fn(),
+        onPrimaryCheckoutDemoted: vi.fn(),
+        runOptionalSetup: vi.fn().mockResolvedValue(undefined),
+      },
+      environmentRepo,
+      threadEnvironmentAttachmentRepo,
+    );
+
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    await service.stopAllAndWait();
+
+    expect(runtimeDestroySpy).toHaveBeenCalledTimes(1);
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
+      "thread-1",
+      { nextThreadEnvironmentId: "worktree" },
+    );
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
+      "thread-2",
+      { nextThreadEnvironmentId: "worktree" },
+    );
+    expect(attachmentState).toHaveLength(0);
+    expect(environmentRepo.getById("env-1")).toBeUndefined();
+  });
+
   it("keeps shared workspace watcher fanout after the original owner detaches", async () => {
     let emitWorkspaceStatusChange: (() => void) | undefined;
     const { service, threadEnvironmentAttachmentRepo, onThreadChanged } = createService({

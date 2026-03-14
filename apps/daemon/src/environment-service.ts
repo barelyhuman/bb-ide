@@ -539,10 +539,19 @@ export class EnvironmentService {
     threadId: string,
     runtime: ActiveEnvironmentRuntime,
   ): Promise<void> {
-    const environmentId = runtime.environment.kind;
     await Promise.resolve(runtime.environment.destroy());
     this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
-    this.clearPersistedEnvironmentState(threadId);
+    this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey, threadId);
+  }
+
+  private clearPersistedEnvironmentStateForRuntimeScope(
+    scopeKey: string,
+    fallbackThreadId: string,
+  ): void {
+    const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(scopeKey, fallbackThreadId);
+    for (const scopedThreadId of scopedThreadIds) {
+      this.clearPersistedEnvironmentState(scopedThreadId);
+    }
   }
 
   private trackEnvironmentRuntimeSuspension(
