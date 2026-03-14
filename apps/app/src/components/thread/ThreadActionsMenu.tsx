@@ -102,7 +102,7 @@ export function ThreadActionsMenu({
               }, 0)
             }}
           >
-            Delete thread
+            Delete
           </DropdownMenuItem>
         ) : null}
         {debugToggleLabel && onDebugToggleCheckedChange ? (
