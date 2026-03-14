@@ -1003,7 +1003,7 @@ export function ThreadDetailView() {
                 }}
                 aria-label="Unassign manager"
               >
-                <X className="size-3" />
+                <X className="size-2.5" />
               </Button>
             </div>
           ) : (
