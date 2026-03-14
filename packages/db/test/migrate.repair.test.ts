@@ -28,15 +28,13 @@ describe("migrate schema repair", () => {
     openSqliteClients.push(sqlite);
     migrate(db);
 
-    sqlite.exec("ALTER TABLE threads RENAME TO threads_original");
     sqlite.exec(`
-      CREATE TABLE threads (
+      CREATE TABLE threads_legacy (
         id text PRIMARY KEY NOT NULL,
         project_id text NOT NULL,
         title text,
         status text DEFAULT 'created' NOT NULL,
         environment_id text,
-        environment_record text,
         merge_base_branch text,
         parent_thread_id text,
         archived_at integer,
@@ -46,39 +44,25 @@ describe("migrate schema repair", () => {
       )
     `);
     sqlite.exec(`
-      INSERT INTO threads (
-        id,
-        project_id,
-        title,
-        status,
-        environment_id,
-        environment_record,
-        merge_base_branch,
-        parent_thread_id,
-        archived_at,
-        last_read_at,
-        created_at,
-        updated_at
-      )
+      INSERT INTO threads_legacy
       SELECT
         id,
         project_id,
         title,
         status,
         environment_id,
-        environment_record,
         merge_base_branch,
         parent_thread_id,
         archived_at,
         last_read_at,
         created_at,
         updated_at
-      FROM threads_original
+      FROM threads
     `);
-    sqlite.exec("DROP TABLE threads_original");
-    sqlite.exec("ALTER TABLE projects RENAME TO projects_original");
+    sqlite.exec("DROP TABLE threads");
+    sqlite.exec("ALTER TABLE threads_legacy RENAME TO threads");
     sqlite.exec(`
-      CREATE TABLE projects (
+      CREATE TABLE projects_legacy (
         id text PRIMARY KEY NOT NULL,
         name text NOT NULL,
         root_path text NOT NULL,
@@ -89,15 +73,7 @@ describe("migrate schema repair", () => {
       )
     `);
     sqlite.exec(`
-      INSERT INTO projects (
-        id,
-        name,
-        root_path,
-        project_instructions,
-        primary_checkout_thread_id,
-        created_at,
-        updated_at
-      )
+      INSERT INTO projects_legacy
       SELECT
         id,
         name,
@@ -106,9 +82,10 @@ describe("migrate schema repair", () => {
         primary_checkout_thread_id,
         created_at,
         updated_at
-      FROM projects_original
+      FROM projects
     `);
-    sqlite.exec("DROP TABLE projects_original");
+    sqlite.exec("DROP TABLE projects");
+    sqlite.exec("ALTER TABLE projects_legacy RENAME TO projects");
 
     migrate(db);
 

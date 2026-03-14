@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
+const daemonRoot = resolve(workspaceRoot, "apps", "daemon");
 const cleanupScript = resolve(__dirname, "cleanup-beanbag-test-processes.mjs");
 
 async function runCleanup({ quiet = false, tmpRoot = null } = {}) {
@@ -55,7 +56,7 @@ async function main() {
   ];
 
   const child = spawn("pnpm", vitestArgs, {
-    cwd: workspaceRoot,
+    cwd: daemonRoot,
     env: {
       ...process.env,
       BEANBAG_E2E_PROVIDER_MODE: "fake",
