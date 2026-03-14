@@ -88,16 +88,17 @@ function ManagedThreadBranchGlyph() {
   return (
     <svg
       aria-hidden="true"
-      viewBox="0 0 12 12"
+      viewBox="0 0 24 24"
       className="size-3 shrink-0 text-sidebar-foreground/45"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <path d="M2.5 2.5v4c0 .9.7 1.6 1.6 1.6h4.4" />
-      <path d="m6.8 5.9 1.9 2.2-1.9 2.2" />
+      <g transform="rotate(45 12 12)">
+        <path d="m9 18 6-6-6-6" />
+      </g>
     </svg>
   )
 }
