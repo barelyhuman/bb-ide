@@ -982,7 +982,7 @@ export function ThreadDetailView() {
           valueClassName="min-w-0"
         >
           {parentThreadId ? (
-            <div className="inline-flex h-7 max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
+            <div className="inline-flex h-7 max-w-full min-w-0 items-center gap-0.5 text-xs text-foreground">
               <Link
                 to={`/projects/${projectId}/threads/${parentThreadId}`}
                 className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
@@ -993,7 +993,7 @@ export function ThreadDetailView() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-4 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground"
+                className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground"
                 disabled={updateThread.isPending}
                 onClick={() => {
                   updateThread.mutate({
