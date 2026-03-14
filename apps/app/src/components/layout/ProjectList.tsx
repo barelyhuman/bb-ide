@@ -97,7 +97,7 @@ function ManagedThreadBranchGlyph() {
       strokeLinejoin="round"
     >
       <g transform="rotate(45 12 12)">
-        <path d="m9 18 6-6-6-6" />
+        <path d="m6 9 6 6 6-6" />
       </g>
     </svg>
   )
