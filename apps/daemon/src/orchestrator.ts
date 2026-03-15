@@ -81,7 +81,6 @@ import {
   listGitWorkspaceMergeBaseBranchesAsync,
   type CreateEnvironmentContext,
   type EnvironmentCommitSummary,
-  type EnvironmentCheckoutSnapshot,
   type EnvironmentSquashMergeCommitFailureStage,
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
@@ -258,21 +257,6 @@ const PRUNABLE_NOISE_EVENT_TYPES: readonly string[] = [
   "item/reasoning/summarypartadded",
   "turn/diff/updated",
 ];
-function checkoutSnapshotsMatch(
-  left: EnvironmentCheckoutSnapshot,
-  right: EnvironmentCheckoutSnapshot,
-): boolean {
-  const branchMatches =
-    Boolean(left.branch) &&
-    Boolean(right.branch) &&
-    left.branch === right.branch;
-  const detachedHeadMatches =
-    left.detached &&
-    right.detached &&
-    left.head === right.head;
-  return branchMatches || detachedHeadMatches;
-}
-
 function resolveBbBinDir(pathValue: string | undefined): string | undefined {
   if (!pathValue) return undefined;
   for (const pathEntry of pathValue.split(delimiter)) {

@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import { createInterface } from "node:readline/promises";
 import {
   type Thread,
   type ThreadEvent,
@@ -8,6 +7,7 @@ import {
 } from "@beanbag/agent-core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
+import { confirmDestructiveAction, buildThreadUrl } from "./helpers.js";
 import {
   resolveEnvironmentId,
   requireProjectId,
@@ -157,36 +157,11 @@ function printThreadOperationResult(result: ThreadOperationResponse): void {
   console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
-async function confirmDestructiveAction(message: string): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error(
-      "Refusing destructive action without an interactive terminal. Re-run with --yes to confirm.",
-    );
-  }
-
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  try {
-    const answer = await readline.question(`${message} [y/N] `);
-    const normalized = answer.trim().toLowerCase();
-    return normalized === "y" || normalized === "yes";
-  } finally {
-    readline.close();
-  }
-}
-
 function buildThreadRouteUrl(baseUrl: string, threadId: string, suffix: string): URL {
   return new URL(
     `/api/v1/threads/${encodeURIComponent(threadId)}/${suffix}`,
     baseUrl,
   );
-}
-
-function buildThreadUrl(baseUrl: string, threadId: string): URL {
-  return new URL(`/api/v1/threads/${encodeURIComponent(threadId)}`, baseUrl);
 }
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {

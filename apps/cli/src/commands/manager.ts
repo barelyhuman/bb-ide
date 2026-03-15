@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import { type Project, type Thread } from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
-import { createInterface } from "node:readline/promises";
 import { requireProjectId, requireThreadId } from "../context-env.js";
+import { confirmDestructiveAction, buildThreadUrl } from "./helpers.js";
 
 export function registerManagerCommands(program: Command, getUrl: () => string): void {
   const manager = program.command("manager").description("Manage project managers");
@@ -193,25 +193,6 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     });
 }
 
-async function confirmDestructiveAction(message: string): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error(
-      "Refusing destructive action without an interactive terminal. Re-run with --yes to confirm.",
-    );
-  }
-  const readline = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  try {
-    const answer = await readline.question(`${message} [y/N] `);
-    const normalized = answer.trim().toLowerCase();
-    return normalized === "y" || normalized === "yes";
-  } finally {
-    readline.close();
-  }
-}
-
 async function getProjectById(
   client: ReturnType<typeof createClient>,
   projectId: string,
@@ -257,10 +238,6 @@ async function listManagedThreads(
       query: { parentThreadId: managerThreadId },
     }),
   );
-}
-
-function buildThreadUrl(baseUrl: string, threadId: string): URL {
-  return new URL(`/api/v1/threads/${encodeURIComponent(threadId)}`, baseUrl);
 }
 
 function printManagerThread(thread: Thread): void {
