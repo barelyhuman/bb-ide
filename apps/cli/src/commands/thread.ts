@@ -239,6 +239,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           const pollIntervalMs = parseThreadWaitPollIntervalMs(opts.pollInterval);
           const deadline = Date.now() + timeoutSeconds * 1000;
 
+          let afterSeq: number | undefined;
           while (true) {
             if (target.kind === "status") {
               const thread = await unwrap<Thread>(
@@ -254,9 +255,12 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               const events = await unwrap<ThreadEvent[]>(
                 client.api.v1.threads[":id"].events.$get({
                   param: { id: threadId },
-                  query: {},
+                  query: afterSeq !== undefined ? { afterSeq: String(afterSeq) } : {},
                 }),
               );
+              if (events.length > 0) {
+                afterSeq = events[events.length - 1].seq;
+              }
               const matched = events.find(
                 (event) =>
                   normalizeThreadEventType(event.type) === target.eventType,
