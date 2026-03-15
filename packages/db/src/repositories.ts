@@ -395,7 +395,7 @@ export class ProjectRepository {
     const existing = this.db.select().from(projects).where(eq(projects.id, id)).get();
     if (!existing) return undefined;
 
-    const updates: Record<string, unknown> = {};
+    const updates: Partial<typeof projects.$inferInsert> = {};
     if (opts?.touchUpdatedAt !== false) {
       updates.updatedAt = Date.now();
     }
@@ -520,7 +520,7 @@ export class EnvironmentRepository {
       .get();
     if (!existing) return undefined;
 
-    const updates: Record<string, unknown> = {};
+    const updates: Partial<typeof environments.$inferInsert> = {};
     if (opts?.touchUpdatedAt !== false) {
       updates.updatedAt = Date.now();
     }
@@ -903,7 +903,7 @@ export class ThreadRepository {
       .get();
     if (!existing) return undefined;
 
-    const updates: Record<string, unknown> = {};
+    const updates: Partial<typeof threads.$inferInsert> = {};
     if (opts?.touchUpdatedAt !== false) {
       updates.updatedAt = Date.now();
     }
