@@ -24,3 +24,8 @@ export async function confirmDestructiveAction(message: string): Promise<boolean
 export function buildThreadUrl(baseUrl: string, threadId: string): URL {
   return new URL(`/api/v1/threads/${encodeURIComponent(threadId)}`, baseUrl);
 }
+
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}

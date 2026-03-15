@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import type { SystemHealthReport, Thread } from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
+import { getErrorMessage } from "./helpers.js";
 
 interface ShutdownAcceptedResponse {
   ok: boolean;
@@ -97,7 +98,7 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
         }
         printHealthReport(report);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -142,7 +143,7 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
           "Restart daemon now (for example: `pnpm daemon` or your configured dev watcher).",
         );
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

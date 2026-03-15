@@ -7,7 +7,7 @@ import {
 } from "@beanbag/agent-core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
-import { confirmDestructiveAction, buildThreadUrl } from "./helpers.js";
+import { confirmDestructiveAction, buildThreadUrl, getErrorMessage } from "./helpers.js";
 import {
   resolveEnvironmentId,
   requireProjectId,
@@ -274,7 +274,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             process.exit(THREAD_WAIT_EXIT_CODE_INVALID_REQUEST);
             return;
           }
-          console.error(`Error: ${(err as Error).message}`);
+          console.error(`Error: ${getErrorMessage(err)}`);
           process.exit(1);
         }
       },
@@ -346,7 +346,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         printThread(thread);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -375,7 +375,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         printThreadTable(threads);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -396,7 +396,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         printThreadSessions(response);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -457,7 +457,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           }
           printThreadStatus(statusPayload);
         } catch (err: unknown) {
-          console.error(`Error: ${(err as Error).message}`);
+          console.error(`Error: ${getErrorMessage(err)}`);
           process.exit(1);
         }
       },
@@ -480,7 +480,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         printThread(thread);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -535,7 +535,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               : "No managing parent thread",
           );
         } catch (err: unknown) {
-          console.error(`Error: ${(err as Error).message}`);
+          console.error(`Error: ${getErrorMessage(err)}`);
           process.exit(1);
         }
       },
@@ -563,7 +563,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         console.log(`Thread ${threadId} archived`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -582,7 +582,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         console.log(`Thread ${threadId} unarchived`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -614,7 +614,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         console.log(`Thread ${threadId} deleted`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -632,7 +632,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         console.log(`Thread ${id} updated`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -645,7 +645,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         await postThreadMessage(id, message, "steer");
         console.log(`Thread ${id} steered`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -678,7 +678,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         printThreadOperationResult(result);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -720,7 +720,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         printThreadOperationResult(result);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -736,7 +736,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         console.log(`Thread ${id} stopped`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -754,7 +754,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         console.log(result.message);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -793,7 +793,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         console.log(result.message);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -821,7 +821,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           console.log(`Title: ${active.title}`);
         }
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -848,7 +848,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           printEvent(event);
         }
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -870,7 +870,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         console.log(result.output);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

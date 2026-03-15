@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { type Project, type Thread } from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
-import { confirmDestructiveAction, buildThreadUrl } from "./helpers.js";
+import { confirmDestructiveAction, buildThreadUrl, getErrorMessage } from "./helpers.js";
 
 export function registerManagerCommands(program: Command, getUrl: () => string): void {
   const manager = program.command("manager").description("Manage project managers");
@@ -31,7 +31,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         console.log(`Manager ready: ${thread.id}`);
         printManagerThread(thread);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -60,7 +60,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         }
         printManagerThread(thread);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -82,7 +82,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         printManagerThread(managerThread);
         printManagedThreadTable(managedThreads);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -103,7 +103,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         }
         printManagedThreadTable(managedThreads);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -131,7 +131,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         }
         console.log(`Manager ${managerThreadId} updated`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -159,7 +159,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
           printEvent(event);
         }
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -187,7 +187,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         );
         console.log(`Manager ${managerThreadId} deleted`);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });

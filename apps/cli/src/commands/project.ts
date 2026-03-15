@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { type Project } from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
+import { getErrorMessage } from "./helpers.js";
 import { requireProjectId } from "../context-env.js";
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
@@ -26,7 +27,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         }
         printProjectTable(projects);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -55,7 +56,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         console.log(`Project created: ${created.id}`);
         printProject(created);
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
@@ -91,7 +92,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
           console.log(file.path);
         }
       } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
+        console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
       }
     });
