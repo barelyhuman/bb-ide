@@ -830,14 +830,6 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentService.clearPrimaryPromotionState(projectId);
   }
 
-  private _startPrimaryPromotionWatch(projectId: string): void {
-    void projectId;
-  }
-
-  private _stopPrimaryPromotionWatch(projectId: string): void {
-    void projectId;
-  }
-
   private _getDefaultAgentServer(): AgentServer {
     return this._getAgentServerForProviderId(this.defaultProviderId);
   }
