@@ -280,9 +280,7 @@ export class EnvironmentService {
       this.callbacks.createContext(`project-status:${projectId}`, rootPath),
     );
     try {
-      return environment.getWorkspaceStatusAsync
-        ? await environment.getWorkspaceStatusAsync()
-        : environment.getWorkspaceStatus();
+      return await environment.getWorkspaceStatus();
     } finally {
       void environment.destroy();
     }
@@ -870,9 +868,7 @@ export class EnvironmentService {
     }
     let workspaceCheckout: EnvironmentCheckoutSnapshot;
     try {
-      workspaceCheckout = environment.getCheckoutSnapshotAsync
-        ? await environment.getCheckoutSnapshotAsync()
-        : environment.getCheckoutSnapshot();
+      workspaceCheckout = await environment.getCheckoutSnapshot();
     } catch {
       this.clearPrimaryPromotionState(projectId);
       this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
@@ -945,13 +941,9 @@ export class EnvironmentService {
     if (!environment.isIsolatedWorkspace() || !environment.exists()) {
       throw new Error("Thread worktree is unavailable; reprovision the thread first");
     }
-    const promoted = environment.promoteToActiveWorkspaceAsync
-      ? await environment.promoteToActiveWorkspaceAsync({
-          activeWorkspaceRoot: project.rootPath,
-        })
-      : environment.promoteToActiveWorkspace({
-          activeWorkspaceRoot: project.rootPath,
-        });
+    const promoted = await environment.promoteToActiveWorkspace({
+      activeWorkspaceRoot: project.rootPath,
+    });
     const state: PrimaryPromotionState = {
       projectId: project.id,
       threadId: args.thread.id,
@@ -1006,17 +998,10 @@ export class EnvironmentService {
     if (!snapshot) {
       throw new Error("Could not determine a branch/commit to restore. Checkout manually and retry.");
     }
-    if (environment.demoteFromActiveWorkspaceAsync) {
-      await environment.demoteFromActiveWorkspaceAsync({
-        activeWorkspaceRoot: project.rootPath,
-        snapshot,
-      });
-    } else {
-      environment.demoteFromActiveWorkspace({
-        activeWorkspaceRoot: project.rootPath,
-        snapshot,
-      });
-    }
+    await environment.demoteFromActiveWorkspace({
+      activeWorkspaceRoot: project.rootPath,
+      snapshot,
+    });
     this.clearPrimaryPromotionState(project.id);
     return {
       demoted: true,

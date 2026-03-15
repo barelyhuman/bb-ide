@@ -92,14 +92,14 @@ describe.skipIf(!hasDocker())("DockerEnvironment integration", () => {
       });
       expect(statusResponse.status).toBe(200);
 
-      const gitTopLevel = environment.run("git", ["rev-parse", "--show-toplevel"], {
+      const gitTopLevel = await environment.run("git", ["rev-parse", "--show-toplevel"], {
         rawOutput: true,
         timeoutMs: 20_000,
       });
       expect(gitTopLevel.exitCode).toBe(0);
       expect(gitTopLevel.stdout.trim()).toBe("/workspace");
 
-      const gitDir = environment.run("git", ["rev-parse", "--git-dir"], {
+      const gitDir = await environment.run("git", ["rev-parse", "--git-dir"], {
         rawOutput: true,
         timeoutMs: 20_000,
       });
@@ -116,7 +116,7 @@ describe.skipIf(!hasDocker())("DockerEnvironment integration", () => {
       ] as const;
 
       for (const [command, arg] of commands) {
-        const result = environment.run(command, [arg], {
+        const result = await environment.run(command, [arg], {
           rawOutput: true,
           timeoutMs: 20_000,
         });

@@ -88,11 +88,11 @@ describe("WorktreeEnvironment", () => {
 
     writeFileSync(join(repoRoot, "README.md"), "initial\nmain dirty change\n", "utf8");
 
-    expect(() =>
+    await expect(
       environment.promoteToActiveWorkspace({
         activeWorkspaceRoot: repoRoot,
       })
-    ).toThrow(
+    ).rejects.toThrow(
       "Primary checkout has local changes. Commit, stash, or discard changes before promoting a thread.",
     );
   });
@@ -106,11 +106,11 @@ describe("WorktreeEnvironment", () => {
       "utf8",
     );
 
-    expect(() =>
+    await expect(
       environment.promoteToActiveWorkspace({
         activeWorkspaceRoot: repoRoot,
       })
-    ).toThrow(
+    ).rejects.toThrow(
       "Thread worktree has local changes. Commit, stash, or discard changes before promoting a thread.",
     );
   });
@@ -320,7 +320,7 @@ describe("WorktreeEnvironment", () => {
   it("reports committed branch work before the thread is merged", async () => {
     const { environment } = await createRepoWithThreadAheadOfMain();
 
-    const status = environment.getWorkspaceStatus({ defaultBranch: "main" });
+    const status = await environment.getWorkspaceStatus({ defaultBranch: "main" });
 
     expect(status.aheadCount).toBe(1);
     expect(status.behindCount).toBe(0);
@@ -336,7 +336,7 @@ describe("WorktreeEnvironment", () => {
       defaultBranch: "main",
     });
 
-    const status = environment.getWorkspaceStatus({ defaultBranch: "main" });
+    const status = await environment.getWorkspaceStatus({ defaultBranch: "main" });
 
     expect(status.aheadCount).toBeGreaterThan(0);
     expect(status.hasCommittedUnmergedChanges).toBe(false);
@@ -356,7 +356,7 @@ describe("WorktreeEnvironment", () => {
     });
     commitReadme(repoRoot, "initial\nthread change\nmain follow-up\n", "main follow-up");
 
-    const status = environment.getWorkspaceStatus({ defaultBranch: "main" });
+    const status = await environment.getWorkspaceStatus({ defaultBranch: "main" });
 
     expect(status.aheadCount).toBe(0);
     expect(status.behindCount).toBe(2);

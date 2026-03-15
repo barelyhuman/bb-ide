@@ -417,11 +417,7 @@ class WorktreeEnvironment implements IEnvironment {
     });
   }
 
-  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
-    throw new Error("Synchronous checkout snapshot is unsupported; use getCheckoutSnapshotAsync");
-  }
-
-  getCheckoutSnapshotAsync(): Promise<EnvironmentCheckoutSnapshot> {
+  getCheckoutSnapshot(): Promise<EnvironmentCheckoutSnapshot> {
     return resolveCheckoutSnapshotAsync(this.rootPath, this.env);
   }
 
@@ -441,11 +437,7 @@ class WorktreeEnvironment implements IEnvironment {
     return WORKTREE_AGENT_INSTRUCTIONS;
   }
 
-  getWorkspaceStatus(_args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus {
-    throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
-  }
-
-  getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
     return getGitWorkspaceStatusAsync(this, args);
   }
 
@@ -461,21 +453,11 @@ class WorktreeEnvironment implements IEnvironment {
     );
   }
 
-  listWorkspaceCommitsSinceRef(_args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[] {
-    throw new Error(
-      "Synchronous workspace commit listing is unsupported; use listWorkspaceCommitsSinceRefAsync",
-    );
-  }
-
-  listWorkspaceCommitsSinceRefAsync(args: EnvironmentWorkspaceCommitsOptions) {
+  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions) {
     return listGitWorkspaceCommitsSinceRefAsync(this, args);
   }
 
-  getWorkspaceDiff(_args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
-    throw new Error("Synchronous workspace diff is unsupported; use getWorkspaceDiffAsync");
-  }
-
-  getWorkspaceDiffAsync(args: EnvironmentWorkspaceDiffOptions) {
+  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions) {
     return getGitWorkspaceDiffAsync(this, args);
   }
 
@@ -514,11 +496,7 @@ class WorktreeEnvironment implements IEnvironment {
     return true;
   }
 
-  promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
-    throw new Error("Synchronous promotion is unsupported; use promoteToActiveWorkspaceAsync");
-  }
-
-  async promoteToActiveWorkspaceAsync(
+  async promoteToActiveWorkspace(
     args: PromoteEnvironmentOptions,
   ): Promise<PromoteEnvironmentResult> {
     if (await hasLocalWorkingChangesAsync(args.activeWorkspaceRoot, this.env)) {
@@ -559,11 +537,7 @@ class WorktreeEnvironment implements IEnvironment {
     }
   }
 
-  demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
-    throw new Error("Synchronous demotion is unsupported; use demoteFromActiveWorkspaceAsync");
-  }
-
-  async demoteFromActiveWorkspaceAsync(
+  async demoteFromActiveWorkspace(
     args: DemoteEnvironmentOptions,
   ): Promise<DemoteEnvironmentResult> {
     const reset = await runGitAtPathAsync(args.activeWorkspaceRoot, ["reset", "--hard"], this.env);
@@ -588,7 +562,7 @@ class WorktreeEnvironment implements IEnvironment {
     if (!mergeBaseBranch) {
       throw new Error("Could not determine merge base branch");
     }
-    const statusResult = await this.runAsync("git", ["status", "--porcelain"]);
+    const statusResult = await this.run("git", ["status", "--porcelain"]);
     if (statusResult.exitCode !== 0) {
       throw new Error(statusResult.stderr || "Failed to inspect worktree status");
     }
@@ -636,7 +610,7 @@ class WorktreeEnvironment implements IEnvironment {
       );
     }
 
-    const workspaceHead = await this.runAsync("git", ["rev-parse", "HEAD"]);
+    const workspaceHead = await this.run("git", ["rev-parse", "HEAD"]);
     if (workspaceHead.exitCode !== 0 || !workspaceHead.stdout) {
       throw new Error("Failed to resolve worktree HEAD");
     }
@@ -655,7 +629,7 @@ class WorktreeEnvironment implements IEnvironment {
       throw new Error(`Failed to resolve ${mergeBaseBranch}`);
     }
 
-    const aheadResult = await this.runAsync("git", [
+    const aheadResult = await this.run("git", [
       "rev-list",
       "--left-right",
       "--count",
@@ -831,14 +805,6 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   run(
-    _command: string,
-    _args: string[],
-    _options?: EnvironmentCommandOptions,
-  ): EnvironmentCommandResult {
-    throw new Error("Synchronous process execution is unsupported; use runAsync");
-  }
-
-  runAsync(
     command: string,
     args: string[],
     options?: EnvironmentCommandOptions,

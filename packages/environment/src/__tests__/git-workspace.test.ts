@@ -79,39 +79,36 @@ function createEnvironment(getStatusOutput: () => string): IEnvironment {
       transport: "http",
       baseUrl: "http://127.0.0.1:4312",
     }),
-    getCheckoutSnapshot: () => ({
+    getCheckoutSnapshot: async () => ({
       head: "head",
       detached: false,
     }),
     getWorkspaceRootUnsafe: () => "/repo",
-    getWorkspaceStatus: () => {
+    getWorkspaceStatus: async () => {
       throw new Error("not used in this test");
     },
     watchWorkspaceStatus: () => () => {},
     commitWorkspace: async () => {
       throw new Error("not implemented");
     },
-    listWorkspaceCommitsSinceRef: () => [],
-    getWorkspaceDiff: () => ({ diff: "", truncated: false }),
+    listWorkspaceCommitsSinceRef: async () => [],
+    getWorkspaceDiff: async () => ({ diff: "", truncated: false }),
     spawn: () => {
       throw new Error("not implemented");
     },
     supportsPromoteToActiveWorkspace: () => false,
     supportsDemoteFromActiveWorkspace: () => false,
     supportsSquashMergeIntoDefaultBranch: () => false,
-    promoteToActiveWorkspace: () => {
+    promoteToActiveWorkspace: async () => {
       throw new Error("not implemented");
     },
-    demoteFromActiveWorkspace: () => {
+    demoteFromActiveWorkspace: async () => {
       throw new Error("not implemented");
     },
     squashMergeIntoDefaultBranch: async () => {
       throw new Error("not implemented");
     },
-    run: () => {
-      throw new Error("not used in this test");
-    },
-    runAsync: async (_command, args) => {
+    run: async (_command: string, args: string[]) => {
       if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
         return ok("true");
       }
@@ -243,7 +240,7 @@ describe("getGitWorkspaceStatusAsync", () => {
 
     const overflowEnvironment: IEnvironment = {
       ...environment,
-      runAsync: run,
+      run,
     };
 
     const status = await getGitWorkspaceStatusAsync(overflowEnvironment, {
@@ -317,7 +314,7 @@ describe("commitGitWorkspace", () => {
     });
     const environment = {
       ...createEnvironment(() => "UU README.md"),
-      runAsync,
+      run: runAsync,
     } satisfies IEnvironment;
     const generateCommitMessage = vi.fn().mockResolvedValue("feat: generated");
 
@@ -386,7 +383,7 @@ describe("commitGitWorkspace", () => {
     });
     const environment = {
       ...createEnvironment(() => "M README.md"),
-      runAsync,
+      run: runAsync,
     } satisfies IEnvironment;
     const generateCommitMessage = vi.fn().mockResolvedValue("feat: generated");
 
@@ -440,7 +437,7 @@ describe("getGitWorkspaceDiffAsync", () => {
     });
     const environment: IEnvironment = {
       ...createEnvironment(() => "?? notes.txt"),
-      runAsync: run,
+      run,
     };
     mockedLstatSync.mockImplementation(() => ({
       isDirectory: () => false,
@@ -496,7 +493,7 @@ describe("getGitWorkspaceDiffAsync", () => {
     });
     const environment: IEnvironment = {
       ...createEnvironment(() => "?? scratch.txt"),
-      runAsync: run,
+      run,
     };
     mockedLstatSync.mockImplementation(() => ({
       isDirectory: () => false,
@@ -556,7 +553,7 @@ describe("getGitWorkspaceDiffAsync", () => {
     });
     const environment: IEnvironment = {
       ...createEnvironment(() => "?? plans/"),
-      runAsync: run,
+      run,
     };
 
     mockedLstatSync.mockImplementation((path) => {
@@ -608,7 +605,7 @@ describe("getGitWorkspaceDiffAsync", () => {
     });
     const environment: IEnvironment = {
       ...createEnvironment(() => "?? node_modules/"),
-      runAsync: run,
+      run,
     };
 
     mockedLstatSync.mockImplementation((path) => {
@@ -669,7 +666,7 @@ describe("getGitWorkspaceDiffAsync", () => {
     });
     const environment: IEnvironment = {
       ...createEnvironment(() => ""),
-      runAsync: run,
+      run,
     };
 
     mockedLstatSync.mockImplementation(() => ({

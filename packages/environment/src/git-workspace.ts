@@ -64,10 +64,7 @@ async function runGitAsync(
   args: string[],
   options?: { rawOutput?: boolean; okExitCodes?: readonly number[] },
 ): Promise<GitRunResult> {
-  if (!environment.runAsync) {
-    throw new Error("Async git execution requires environment.runAsync");
-  }
-  const result = await environment.runAsync("git", args, {
+  const result = await environment.run("git", args, {
     ...(options?.rawOutput ? { rawOutput: true } : {}),
   });
   const okExitCodes = options?.okExitCodes ?? [0];

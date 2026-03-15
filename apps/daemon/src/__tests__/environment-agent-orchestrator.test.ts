@@ -128,7 +128,7 @@ function makeRuntimeEnvironment(args: {
           : {}),
       };
     },
-    getCheckoutSnapshot() {
+    async getCheckoutSnapshot() {
       return {
         branch: "bb/thread-1",
         head: "abc123",
@@ -138,7 +138,7 @@ function makeRuntimeEnvironment(args: {
     getWorkspaceRootUnsafe() {
       return args.rootPath;
     },
-    getWorkspaceStatus() {
+    async getWorkspaceStatus() {
       return {
         state: "clean" as const,
         changedFiles: 0,
@@ -162,13 +162,13 @@ function makeRuntimeEnvironment(args: {
         ok: true,
         commitCreated: false,
         message: "Working directory is clean",
-        workStatus: this.getWorkspaceStatus(),
+        workStatus: await this.getWorkspaceStatus(),
       };
     },
-    listWorkspaceCommitsSinceRef() {
+    async listWorkspaceCommitsSinceRef() {
       return [];
     },
-    getWorkspaceDiff() {
+    async getWorkspaceDiff() {
       return { diff: "", truncated: false };
     },
     spawn: vi.fn(),

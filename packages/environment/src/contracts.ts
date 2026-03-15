@@ -73,24 +73,20 @@ export interface IEnvironment {
   supportsHostFilesystemAccess(): boolean;
   isIsolatedWorkspace(): boolean;
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget;
-  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
-  getCheckoutSnapshotAsync?(): Promise<EnvironmentCheckoutSnapshot>;
+  getCheckoutSnapshot(): Promise<EnvironmentCheckoutSnapshot>;
   getWorkspaceRootUnsafe(): string;
   isPrimaryWorkspace?(projectRootPath: string): boolean;
   isContainerBacked?(): boolean;
   buildAgentInstructions?(): string | undefined;
-  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus;
-  getWorkspaceStatusAsync?(
+  getWorkspaceStatus(
     args?: EnvironmentWorkspaceStatusOptions,
   ): Promise<EnvironmentWorkStatus>;
   watchWorkspaceStatus(onChange: () => void): () => void;
   commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult>;
-  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[];
-  listWorkspaceCommitsSinceRefAsync?(
+  listWorkspaceCommitsSinceRef(
     args: EnvironmentWorkspaceCommitsOptions,
   ): Promise<EnvironmentCommitSummary[]>;
-  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult;
-  getWorkspaceDiffAsync?(
+  getWorkspaceDiff(
     args: EnvironmentWorkspaceDiffOptions,
   ): Promise<EnvironmentWorkspaceDiffResult>;
   spawn(
@@ -101,23 +97,16 @@ export interface IEnvironment {
   supportsPromoteToActiveWorkspace(): boolean;
   supportsDemoteFromActiveWorkspace(): boolean;
   supportsSquashMergeIntoDefaultBranch(): boolean;
-  promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult;
-  promoteToActiveWorkspaceAsync?(
+  promoteToActiveWorkspace(
     args: PromoteEnvironmentOptions,
   ): Promise<PromoteEnvironmentResult>;
-  demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult;
-  demoteFromActiveWorkspaceAsync?(
+  demoteFromActiveWorkspace(
     args: DemoteEnvironmentOptions,
   ): Promise<DemoteEnvironmentResult>;
   squashMergeIntoDefaultBranch(
     args: EnvironmentSquashMergeOptions,
   ): Promise<EnvironmentSquashMergeResult>;
   run(
-    command: string,
-    args: string[],
-    options?: EnvironmentCommandOptions,
-  ): EnvironmentCommandResult;
-  runAsync?(
     command: string,
     args: string[],
     options?: EnvironmentCommandOptions,

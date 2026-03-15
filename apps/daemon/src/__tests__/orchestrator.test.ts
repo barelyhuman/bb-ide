@@ -197,7 +197,7 @@ function makeRuntimeEnvironment(args: {
         baseUrl: "http://127.0.0.1:4312",
       };
     },
-    getCheckoutSnapshot() {
+    async getCheckoutSnapshot() {
       return {
         branch: "bb/thread-1",
         head: "abc123",
@@ -207,7 +207,7 @@ function makeRuntimeEnvironment(args: {
     getWorkspaceRootUnsafe() {
       return args.rootPath;
     },
-    getWorkspaceStatus() {
+    async getWorkspaceStatus() {
       return makeWorkspaceStatus();
     },
     watchWorkspaceStatus() {
@@ -221,10 +221,10 @@ function makeRuntimeEnvironment(args: {
         workStatus: makeWorkspaceStatus(),
       };
     },
-    listWorkspaceCommitsSinceRef() {
+    async listWorkspaceCommitsSinceRef() {
       return [];
     },
-    getWorkspaceDiff() {
+    async getWorkspaceDiff() {
       return { diff: "", truncated: false };
     },
     spawn(command: string, commandArgs: string[], options?: { stdio?: unknown; env?: Record<string, string | undefined>; cwd?: string }) {
@@ -243,10 +243,10 @@ function makeRuntimeEnvironment(args: {
     supportsSquashMergeIntoDefaultBranch() {
       return kind === "worktree";
     },
-    promoteToActiveWorkspace() {
+    async promoteToActiveWorkspace() {
       throw new Error("not implemented");
     },
-    demoteFromActiveWorkspace() {
+    async demoteFromActiveWorkspace() {
       throw new Error("not implemented");
     },
     async squashMergeIntoDefaultBranch() {
@@ -1278,12 +1278,7 @@ describe("Orchestrator", () => {
               exists() {
                 return workspaceExists;
               },
-              runAsync: vi.fn().mockImplementation(async () => setupResult),
-              run: vi.fn().mockReturnValue({
-                exitCode: 0,
-                stdout: "",
-                stderr: "",
-              }),
+              run: vi.fn().mockImplementation(async () => setupResult),
             },
           });
         },
@@ -1446,7 +1441,7 @@ describe("Orchestrator", () => {
               exists() {
                 return workspaceExists;
               },
-              runAsync: vi.fn().mockImplementation(
+              run: vi.fn().mockImplementation(
                 async (
                   _command: string,
                   _args: string[],
@@ -1460,11 +1455,6 @@ describe("Orchestrator", () => {
                   return setupResult;
                 },
               ),
-              run: vi.fn().mockReturnValue({
-                exitCode: 0,
-                stdout: "",
-                stderr: "",
-              }),
             },
           });
         },
@@ -3217,12 +3207,7 @@ describe("Orchestrator", () => {
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
           overrides: {
-            getWorkspaceStatus() {
-              throw new Error(
-                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
-              );
-            },
-            async getWorkspaceStatusAsync() {
+            async getWorkspaceStatus() {
               return makeWorkspaceStatus({
                 state: "committed_unmerged",
                 hasCommittedUnmergedChanges: true,
@@ -3298,7 +3283,7 @@ describe("Orchestrator", () => {
           kind: "worktree",
           rootPath: envSetupWorkspaceRoot,
           overrides: {
-            getWorkspaceStatus() {
+            async getWorkspaceStatus() {
               return mockedStatus;
             },
           },
@@ -3432,7 +3417,7 @@ describe("Orchestrator", () => {
     });
 
     it("uses the stored thread merge-base branch when no request override is provided", async () => {
-      const getWorkspaceStatusAsync = vi.fn(async (args?: { mergeBaseBranch?: string }) =>
+      const getWorkspaceStatus = vi.fn(async (args?: { mergeBaseBranch?: string }) =>
         makeWorkspaceStatus({
           mergeBaseBranch: args?.mergeBaseBranch,
         })
@@ -3457,19 +3442,14 @@ describe("Orchestrator", () => {
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
           overrides: {
-            getWorkspaceStatus() {
-              throw new Error(
-                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
-              );
-            },
-            getWorkspaceStatusAsync,
+            getWorkspaceStatus,
           },
         }),
       });
 
       const result = await manager.getWorkStatusAsync("thread-1");
 
-      expect(getWorkspaceStatusAsync).toHaveBeenCalledWith(
+      expect(getWorkspaceStatus).toHaveBeenCalledWith(
         expect.objectContaining({
           mergeBaseBranch: "release/1.0",
         }),
@@ -3594,12 +3574,7 @@ describe("Orchestrator", () => {
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
           overrides: {
-            getWorkspaceStatus() {
-              throw new Error(
-                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
-              );
-            },
-            async getWorkspaceStatusAsync() {
+            async getWorkspaceStatus() {
               return makeWorkspaceStatus({
                 hasCommittedUnmergedChanges: false,
                 hasUncommittedChanges: false,
@@ -3607,7 +3582,7 @@ describe("Orchestrator", () => {
                 baseRef: "main",
               });
             },
-            async listWorkspaceCommitsSinceRefAsync() {
+            async listWorkspaceCommitsSinceRef() {
               return [
                 {
                   sha: "abc123",
@@ -3616,7 +3591,7 @@ describe("Orchestrator", () => {
                 },
               ];
             },
-            async getWorkspaceDiffAsync() {
+            async getWorkspaceDiff() {
               return { diff: "", truncated: false };
             },
           },
@@ -3636,7 +3611,7 @@ describe("Orchestrator", () => {
         status: "idle",
         environmentId: "local",
       });
-      const getWorkspaceDiffAsync = vi.fn().mockResolvedValue({
+      const getWorkspaceDiff = vi.fn().mockResolvedValue({
         diff: "diff --git a/file b/file",
         truncated: false,
       });
@@ -3653,12 +3628,7 @@ describe("Orchestrator", () => {
           kind: "local",
           rootPath: "/tmp/proj-1",
           overrides: {
-            getWorkspaceStatus() {
-              throw new Error(
-                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
-              );
-            },
-            async getWorkspaceStatusAsync() {
+            async getWorkspaceStatus() {
               return makeWorkspaceStatus({
                 state: "committed_unmerged",
                 hasCommittedUnmergedChanges: true,
@@ -3668,7 +3638,7 @@ describe("Orchestrator", () => {
                 mergeBaseBranch: "main",
               });
             },
-            async listWorkspaceCommitsSinceRefAsync() {
+            async listWorkspaceCommitsSinceRef() {
               return [
                 {
                   sha: "abc123",
@@ -3677,7 +3647,7 @@ describe("Orchestrator", () => {
                 },
               ];
             },
-            getWorkspaceDiffAsync,
+            getWorkspaceDiff,
           },
         }),
       });
@@ -3697,7 +3667,7 @@ describe("Orchestrator", () => {
         mergeBaseBranch: "main",
         mergeBaseRef: "origin/main",
       });
-      expect(getWorkspaceDiffAsync).toHaveBeenCalledWith({
+      expect(getWorkspaceDiff).toHaveBeenCalledWith({
         type: "combined",
         baseRef: "origin/main",
       });
@@ -3710,14 +3680,14 @@ describe("Orchestrator", () => {
         status: "idle",
         environmentId: "worktree",
       });
-      const getWorkspaceDiff = vi.fn().mockReturnValue({
+      const getWorkspaceDiff = vi.fn().mockResolvedValue({
         diff: "diff --git a/file b/file",
         truncated: false,
       });
       const environment = makeRuntimeEnvironment({
         rootPath: "/tmp/worktrees/proj-1/thread-1",
         overrides: {
-          getWorkspaceStatus() {
+          async getWorkspaceStatus() {
             return makeWorkspaceStatus({
               state: "clean",
               changedFiles: 2,
@@ -3730,7 +3700,7 @@ describe("Orchestrator", () => {
               mergeBaseBranch: "main",
             });
           },
-          listWorkspaceCommitsSinceRef() {
+          async listWorkspaceCommitsSinceRef() {
             return [
               {
                 sha: "abc123",
@@ -3773,14 +3743,14 @@ describe("Orchestrator", () => {
         status: "idle",
         environmentId: "worktree",
       });
-      const getWorkspaceDiff = vi.fn().mockReturnValue({
+      const getWorkspaceDiff = vi.fn().mockResolvedValue({
         diff: "diff --git a/file b/file",
         truncated: false,
       });
       const environment = makeRuntimeEnvironment({
         rootPath: "/tmp/worktrees/proj-1/thread-1",
         overrides: {
-          getWorkspaceStatus() {
+          async getWorkspaceStatus() {
             return makeWorkspaceStatus({
               hasCommittedUnmergedChanges: false,
               hasUncommittedChanges: false,
@@ -3788,7 +3758,7 @@ describe("Orchestrator", () => {
               baseRef: "main",
             });
           },
-          listWorkspaceCommitsSinceRef() {
+          async listWorkspaceCommitsSinceRef() {
             return [
               {
                 sha: "abc123",
@@ -3826,7 +3796,7 @@ describe("Orchestrator", () => {
     });
 
     it("prefers an explicit merge-base branch over the stored thread override", async () => {
-      const getWorkspaceStatusAsync = vi.fn(async (args?: { mergeBaseBranch?: string }) =>
+      const getWorkspaceStatus = vi.fn(async (args?: { mergeBaseBranch?: string }) =>
         makeWorkspaceStatus({
           hasCommittedUnmergedChanges: true,
           hasUncommittedChanges: false,
@@ -3854,16 +3824,11 @@ describe("Orchestrator", () => {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktrees/proj-1/thread-1",
           overrides: {
-            getWorkspaceStatus() {
-              throw new Error(
-                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
-              );
-            },
-            getWorkspaceStatusAsync,
-            async listWorkspaceCommitsSinceRefAsync() {
+            getWorkspaceStatus,
+            async listWorkspaceCommitsSinceRef() {
               return [];
             },
-            async getWorkspaceDiffAsync() {
+            async getWorkspaceDiff() {
               return { diff: "", truncated: false };
             },
           },
@@ -3872,7 +3837,7 @@ describe("Orchestrator", () => {
 
       await manager.getGitDiffAsync("thread-1", { type: "combined" }, "release/2.0");
 
-      expect(getWorkspaceStatusAsync).toHaveBeenCalledWith(
+      expect(getWorkspaceStatus).toHaveBeenCalledWith(
         expect.objectContaining({
           mergeBaseBranch: "release/2.0",
         }),
@@ -4838,10 +4803,7 @@ describe("Orchestrator", () => {
             kind: "worktree",
             rootPath: "/tmp/worktrees/proj-1/thread-1",
             overrides: {
-              getWorkspaceStatus() {
-                throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
-              },
-              async getWorkspaceStatusAsync() {
+              async getWorkspaceStatus() {
                 return makeWorkspaceStatus({
                   state: "committed_unmerged",
                   hasCommittedUnmergedChanges: true,

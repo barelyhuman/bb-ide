@@ -271,14 +271,8 @@ class DockerEnvironment implements IEnvironment {
     });
   }
 
-  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
-    throw new Error("Synchronous checkout snapshot is unsupported; use getCheckoutSnapshotAsync");
-  }
-
-  getCheckoutSnapshotAsync(): Promise<EnvironmentCheckoutSnapshot> {
-    return this.inner.getCheckoutSnapshotAsync
-      ? this.inner.getCheckoutSnapshotAsync()
-      : Promise.resolve(this.inner.getCheckoutSnapshot());
+  getCheckoutSnapshot(): Promise<EnvironmentCheckoutSnapshot> {
+    return this.inner.getCheckoutSnapshot();
   }
 
   getWorkspaceRootUnsafe(): string {
@@ -301,14 +295,8 @@ class DockerEnvironment implements IEnvironment {
     return base ? `${base}\n${dockerNote}` : dockerNote;
   }
 
-  getWorkspaceStatus(_args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus {
-    throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
-  }
-
-  getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
-    return this.inner.getWorkspaceStatusAsync
-      ? this.inner.getWorkspaceStatusAsync(args)
-      : Promise.resolve(this.inner.getWorkspaceStatus(args));
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
+    return this.inner.getWorkspaceStatus(args);
   }
 
   watchWorkspaceStatus(onChange: () => void): () => void {
@@ -322,33 +310,15 @@ class DockerEnvironment implements IEnvironment {
   }
 
   listWorkspaceCommitsSinceRef(
-    _args: EnvironmentWorkspaceCommitsOptions,
-  ): EnvironmentCommitSummary[] {
-    throw new Error(
-      "Synchronous workspace commit listing is unsupported; use listWorkspaceCommitsSinceRefAsync",
-    );
-  }
-
-  listWorkspaceCommitsSinceRefAsync(
     args: EnvironmentWorkspaceCommitsOptions,
   ): Promise<EnvironmentCommitSummary[]> {
-    return this.inner.listWorkspaceCommitsSinceRefAsync
-      ? this.inner.listWorkspaceCommitsSinceRefAsync(args)
-      : Promise.resolve(this.inner.listWorkspaceCommitsSinceRef(args));
+    return this.inner.listWorkspaceCommitsSinceRef(args);
   }
 
   getWorkspaceDiff(
-    _args: EnvironmentWorkspaceDiffOptions,
-  ): EnvironmentWorkspaceDiffResult {
-    throw new Error("Synchronous workspace diff is unsupported; use getWorkspaceDiffAsync");
-  }
-
-  getWorkspaceDiffAsync(
     args: EnvironmentWorkspaceDiffOptions,
   ): Promise<EnvironmentWorkspaceDiffResult> {
-    return this.inner.getWorkspaceDiffAsync
-      ? this.inner.getWorkspaceDiffAsync(args)
-      : Promise.resolve(this.inner.getWorkspaceDiff(args));
+    return this.inner.getWorkspaceDiff(args);
   }
 
   spawn(
@@ -387,28 +357,16 @@ class DockerEnvironment implements IEnvironment {
     return this.inner.supportsSquashMergeIntoDefaultBranch();
   }
 
-  promoteToActiveWorkspace(_args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
-    throw new Error("Synchronous promotion is unsupported; use promoteToActiveWorkspaceAsync");
-  }
-
-  promoteToActiveWorkspaceAsync(
+  promoteToActiveWorkspace(
     args: PromoteEnvironmentOptions,
   ): Promise<PromoteEnvironmentResult> {
-    return this.inner.promoteToActiveWorkspaceAsync
-      ? this.inner.promoteToActiveWorkspaceAsync(args)
-      : Promise.resolve(this.inner.promoteToActiveWorkspace(args));
+    return this.inner.promoteToActiveWorkspace(args);
   }
 
-  demoteFromActiveWorkspace(_args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
-    throw new Error("Synchronous demotion is unsupported; use demoteFromActiveWorkspaceAsync");
-  }
-
-  demoteFromActiveWorkspaceAsync(
+  demoteFromActiveWorkspace(
     args: DemoteEnvironmentOptions,
   ): Promise<DemoteEnvironmentResult> {
-    return this.inner.demoteFromActiveWorkspaceAsync
-      ? this.inner.demoteFromActiveWorkspaceAsync(args)
-      : Promise.resolve(this.inner.demoteFromActiveWorkspace(args));
+    return this.inner.demoteFromActiveWorkspace(args);
   }
 
   squashMergeIntoDefaultBranch(
@@ -418,14 +376,6 @@ class DockerEnvironment implements IEnvironment {
   }
 
   run(
-    _command: string,
-    _args: string[],
-    _options?: EnvironmentCommandOptions,
-  ): EnvironmentCommandResult {
-    throw new Error("Synchronous process execution is unsupported; use runAsync");
-  }
-
-  runAsync(
     command: string,
     args: string[],
     options?: EnvironmentCommandOptions,

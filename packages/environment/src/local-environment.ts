@@ -137,17 +137,13 @@ class LocalEnvironment implements IEnvironment {
     });
   }
 
-  getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
-    throw new Error("Synchronous checkout snapshot is unsupported; use getCheckoutSnapshotAsync");
-  }
-
-  async getCheckoutSnapshotAsync(): Promise<EnvironmentCheckoutSnapshot> {
-    const headResult = await this.runAsync("git", ["rev-parse", "HEAD"]);
+  async getCheckoutSnapshot(): Promise<EnvironmentCheckoutSnapshot> {
+    const headResult = await this.run("git", ["rev-parse", "HEAD"]);
     if (headResult.exitCode !== 0 || !headResult.stdout) {
       throw new Error("Failed to resolve HEAD");
     }
 
-    const branchResult = await this.runAsync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const branchResult = await this.run("git", ["symbolic-ref", "--quiet", "--short", "HEAD"]);
     if (branchResult.exitCode === 0 && branchResult.stdout) {
       return {
         branch: branchResult.stdout,
@@ -178,11 +174,7 @@ class LocalEnvironment implements IEnvironment {
     return undefined;
   }
 
-  getWorkspaceStatus(_args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus {
-    throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
-  }
-
-  getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
     return getGitWorkspaceStatusAsync(this, args);
   }
 
@@ -198,21 +190,11 @@ class LocalEnvironment implements IEnvironment {
     );
   }
 
-  listWorkspaceCommitsSinceRef(_args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[] {
-    throw new Error(
-      "Synchronous workspace commit listing is unsupported; use listWorkspaceCommitsSinceRefAsync",
-    );
-  }
-
-  listWorkspaceCommitsSinceRefAsync(args: EnvironmentWorkspaceCommitsOptions) {
+  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions) {
     return listGitWorkspaceCommitsSinceRefAsync(this, args);
   }
 
-  getWorkspaceDiff(_args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
-    throw new Error("Synchronous workspace diff is unsupported; use getWorkspaceDiffAsync");
-  }
-
-  getWorkspaceDiffAsync(args: EnvironmentWorkspaceDiffOptions) {
+  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions) {
     return getGitWorkspaceDiffAsync(this, args);
   }
 
@@ -251,11 +233,11 @@ class LocalEnvironment implements IEnvironment {
     return false;
   }
 
-  promoteToActiveWorkspace(_args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
+  async promoteToActiveWorkspace(_args: PromoteEnvironmentOptions): Promise<PromoteEnvironmentResult> {
     throw new Error("Promotion is not supported for local environments");
   }
 
-  demoteFromActiveWorkspace(_args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
+  async demoteFromActiveWorkspace(_args: DemoteEnvironmentOptions): Promise<DemoteEnvironmentResult> {
     throw new Error("Demotion is not supported for local environments");
   }
 
@@ -266,14 +248,6 @@ class LocalEnvironment implements IEnvironment {
   }
 
   run(
-    _command: string,
-    _args: string[],
-    _options?: EnvironmentCommandOptions,
-  ): EnvironmentCommandResult {
-    throw new Error("Synchronous process execution is unsupported; use runAsync");
-  }
-
-  runAsync(
     command: string,
     args: string[],
     options?: EnvironmentCommandOptions,

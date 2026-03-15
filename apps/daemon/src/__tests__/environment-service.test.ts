@@ -104,7 +104,7 @@ function createTestEnvironment(args: {
         baseUrl: "http://127.0.0.1:4312",
       };
     },
-    getCheckoutSnapshot() {
+    async getCheckoutSnapshot() {
       return {
         branch: "bb/thread-thread-1",
         head: "abc123",
@@ -114,7 +114,7 @@ function createTestEnvironment(args: {
     getWorkspaceRootUnsafe() {
       return "/tmp/thread-1";
     },
-    getWorkspaceStatus() {
+    async getWorkspaceStatus() {
       return makeWorkspaceStatus();
     },
     watchWorkspaceStatus(callback) {
@@ -128,10 +128,10 @@ function createTestEnvironment(args: {
         workStatus: makeWorkspaceStatus(),
       };
     },
-    listWorkspaceCommitsSinceRef() {
+    async listWorkspaceCommitsSinceRef() {
       return [];
     },
-    getWorkspaceDiff() {
+    async getWorkspaceDiff() {
       return { diff: "", truncated: false };
     },
     spawn() {
@@ -146,16 +146,16 @@ function createTestEnvironment(args: {
     supportsSquashMergeIntoDefaultBranch() {
       return true;
     },
-    promoteToActiveWorkspace() {
+    async promoteToActiveWorkspace() {
       throw new Error("not implemented");
     },
-    demoteFromActiveWorkspace() {
+    async demoteFromActiveWorkspace() {
       throw new Error("not implemented");
     },
     async squashMergeIntoDefaultBranch() {
       throw new Error("not implemented");
     },
-    run() {
+    async run() {
       return { exitCode: 0, stdout: "", stderr: "" };
     },
   };
