@@ -1079,10 +1079,6 @@ export class EnvironmentService {
     this.restoreFailuresByThreadId.clear();
   }
 
-  stopPrimaryPromotionWatches(): void {
-    this.stopAllPrimaryPromotionWatches();
-  }
-
   private startPrimaryPromotionWatch(projectId: string): void {
     if (this.primaryPromotionWatchersByProjectId.has(projectId)) return;
     const project = this.projectRepo.getById(projectId);
@@ -1104,7 +1100,7 @@ export class EnvironmentService {
     this.primaryPromotionWatchersByProjectId.delete(projectId);
   }
 
-  private stopAllPrimaryPromotionWatches(): void {
+  stopAllPrimaryPromotionWatches(): void {
     for (const watcher of this.primaryPromotionWatchersByProjectId.values()) {
       watcher();
     }

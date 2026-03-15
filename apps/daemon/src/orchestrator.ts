@@ -1000,7 +1000,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _stopAllPrimaryPromotionWatches(): void {
-    this.environmentService.stopPrimaryPromotionWatches();
+    this.environmentService.stopAllPrimaryPromotionWatches();
   }
 
   private _ensurePrimaryPromotionStateIsCurrent(
