@@ -510,6 +510,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private lastNotifiedCompletionTurnIds = new Map<string, string>();
   /** Lifecycle epoch counter, incremented on each turn/start or turn/started event. */
   private turnLifecycleEpochs = new Map<string, number>();
+  /** Per-thread mutex for serializing _tell calls. */
+  private tellInFlightByThreadId = new Map<string, Promise<void>>();
   /** Last known active turn id derived from delivered provider lifecycle events. */
   private activeTurnIdByThreadId = new Map<string, string>();
   /** Provider thread ids attached in the current daemon process. */
@@ -1288,7 +1290,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _tell(
+  private _tell(
     threadId: string,
     request: TellThreadRequest,
     options: PromptExecutionOptions | undefined,
@@ -1298,6 +1300,23 @@ export class Orchestrator implements ThreadOrchestrator {
     if (requestedInput.length === 0) {
       throw invalidRequestError("Tell payload input must be non-empty");
     }
+    // Serialize concurrent _tell calls for the same thread to prevent
+    // duplicate activation races (audit item 1).
+    const previous = this.tellInFlightByThreadId.get(threadId) ?? Promise.resolve();
+    const current = previous.then(() =>
+      this._tellSerialized(threadId, request, requestedInput, options, context),
+    );
+    this.tellInFlightByThreadId.set(threadId, current.catch(() => {}));
+    return current;
+  }
+
+  private async _tellSerialized(
+    threadId: string,
+    request: TellThreadRequest,
+    requestedInput: PromptInput[],
+    options: PromptExecutionOptions | undefined,
+    context: TellContext,
+  ): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -3337,6 +3356,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.eventSeqCounters.clear();
     this.lastNotifiedCompletionTurnIds.clear();
     this.turnLifecycleEpochs.clear();
+    this.tellInFlightByThreadId.clear();
     this.activeTurnIdByThreadId.clear();
     this.providerThreadIdByThreadId.clear();
     this.lastNotifiedCompletionEpochs.clear();

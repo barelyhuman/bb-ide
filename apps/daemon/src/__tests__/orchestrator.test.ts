@@ -2463,6 +2463,74 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("serializes concurrent tell calls for the same thread", async () => {
+      const thread = makeThread({ id: "thread-1", status: "idle" });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread>) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation(
+        (event: Omit<ThreadEvent, "id" | "createdAt">) => ({
+          ...event,
+          id: `evt-${Date.now()}`,
+          createdAt: Date.now(),
+        }),
+      );
+
+      const callOrder: string[] = [];
+      let resolveFirst: (() => void) | undefined;
+      const firstBlocked = new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      });
+
+      vi.spyOn(
+        manager as unknown as {
+          _ensureProviderSession: (threadId: string) => Promise<string>;
+        },
+        "_ensureProviderSession",
+      ).mockImplementation(async () => {
+        callOrder.push("ensureSession");
+        if (callOrder.filter((c) => c === "ensureSession").length === 1) {
+          await firstBlocked;
+        }
+        return "provider-thread-1";
+      });
+      vi.spyOn(
+        manager as unknown as {
+          _sendTurnCommandWithStaleProviderRetry: (args: unknown) => Promise<string>;
+        },
+        "_sendTurnCommandWithStaleProviderRetry",
+      ).mockResolvedValue("provider-thread-1");
+
+      const tell1 = manager.tell("thread-1", {
+        input: [{ type: "text", text: "first" }],
+      });
+      const tell2 = manager.tell("thread-1", {
+        input: [{ type: "text", text: "second" }],
+      });
+
+      // Give microtasks a chance to settle
+      await new Promise((r) => setImmediate(r));
+
+      // If calls are serialized, only the first should have reached
+      // _ensureProviderSession so far
+      expect(callOrder.filter((c) => c === "ensureSession").length).toBe(1);
+
+      // Unblock the first call
+      resolveFirst!();
+      await tell1;
+      await tell2;
+
+      // Both should have completed, but sequentially
+      expect(callOrder.filter((c) => c === "ensureSession").length).toBe(2);
+    });
+
 
 
 
