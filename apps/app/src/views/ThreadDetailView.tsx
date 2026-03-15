@@ -156,6 +156,8 @@ export function ThreadDetailView() {
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
+  const markThreadReadRef = useRef(markThreadRead);
+  markThreadReadRef.current = markThreadRead;
   const markThreadUnread = useMarkThreadUnread();
   const deleteThread = useDeleteThread();
   const updateThread = useUpdateThread();
@@ -424,12 +426,11 @@ export function ThreadDetailView() {
     if (markedReadKeysRef.current.has(marker)) return;
 
     markedReadKeysRef.current.add(marker);
-    markThreadRead.mutate(thread.id, {
+    markThreadReadRef.current.mutate(thread.id, {
       onError: () => {
         markedReadKeysRef.current.delete(marker);
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- markThreadRead is referentially unstable but functionally stable; markedReadKeysRef guards against duplicates.
   }, [thread]);
 
   const renameThread = useCallback(() => {
