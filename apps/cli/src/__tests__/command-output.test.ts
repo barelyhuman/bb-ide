@@ -186,21 +186,21 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb manager show reports when no manager is hired", async () => {
-    const get = vi.fn(async () => [
-      {
-        id: "project-123",
-        name: "Repo",
-        rootPath: "/tmp/repo",
-        createdAt: 1,
-        updatedAt: 2,
-        primaryManagerThreadId: null,
-      },
-    ]);
+    const get = vi.fn(async () => ({
+      id: "project-123",
+      name: "Repo",
+      rootPath: "/tmp/repo",
+      createdAt: 1,
+      updatedAt: 2,
+      primaryManagerThreadId: null,
+    }));
     createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           projects: {
-            $get: get,
+            ":id": {
+              $get: get,
+            },
           },
         },
       },
@@ -210,6 +210,9 @@ describe("CLI command output contracts", () => {
       registerManagerCommands(program, () => "http://daemon"),
     );
 
+    expect(get).toHaveBeenCalledWith({
+      param: { id: "project-123" },
+    });
     expect(collectLogLines(vi.mocked(console.log))).toContain("No manager hired");
   });
 
@@ -320,12 +323,14 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     };
     const get = vi.fn(async () => managerThread);
+    const deleteFn = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           threads: {
             ":id": {
               $get: get,
+              $delete: deleteFn,
             },
           },
         },
@@ -337,10 +342,9 @@ describe("CLI command output contracts", () => {
       (program) => registerManagerCommands(program, () => "http://daemon"),
     );
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("/api/v1/threads/thread-manager-1", "http://daemon"),
-      { method: "DELETE" },
-    );
+    expect(deleteFn).toHaveBeenCalledWith({
+      param: { id: "thread-manager-1" },
+    });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Manager thread-manager-1 deleted",
     );
@@ -611,14 +615,29 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb thread archive sends the thread id from args", async () => {
+    const archivePost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              archive: {
+                $post: archivePost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
     await runCommand(["thread", "archive", "thread-archive-1"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("http://daemon/api/v1/threads/thread-archive-1/archive"),
-      { method: "POST" },
-    );
+    expect(archivePost).toHaveBeenCalledWith({
+      param: { id: "thread-archive-1" },
+      json: {},
+    });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived",
     );
@@ -626,19 +645,29 @@ describe("CLI command output contracts", () => {
 
   it("bb thread archive falls back to BB_THREAD_ID and forwards --force", async () => {
     process.env.BB_THREAD_ID = "thread-archive-2";
+    const archivePost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              archive: {
+                $post: archivePost,
+              },
+            },
+          },
+        },
+      },
+    }));
 
     await runCommand(["thread", "archive", "--force"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("http://daemon/api/v1/threads/thread-archive-2/archive"),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true }),
-      },
-    );
+    expect(archivePost).toHaveBeenCalledWith({
+      param: { id: "thread-archive-2" },
+      json: { force: true },
+    });
   });
 
   it("bb thread unarchive falls back to BB_THREAD_ID", async () => {
@@ -682,12 +711,14 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const get = vi.fn(async () => thread);
+    const deleteFn = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           threads: {
             ":id": {
               $get: get,
+              $delete: deleteFn,
             },
           },
         },
@@ -702,10 +733,9 @@ describe("CLI command output contracts", () => {
     expect(get).toHaveBeenCalledWith({
       param: { id: "thread-delete-1" },
     });
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("http://daemon/api/v1/threads/thread-delete-1"),
-      { method: "DELETE" },
-    );
+    expect(deleteFn).toHaveBeenCalledWith({
+      param: { id: "thread-delete-1" },
+    });
     expect(readlineState.question).toHaveBeenCalled();
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-delete-1 deleted",
@@ -723,12 +753,14 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const get = vi.fn(async () => thread);
+    const deleteFn = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           threads: {
             ":id": {
               $get: get,
+              $delete: deleteFn,
             },
           },
         },
@@ -740,10 +772,7 @@ describe("CLI command output contracts", () => {
       registerThreadCommands(program, () => "http://daemon"),
     );
 
-    expect(globalThis.fetch).not.toHaveBeenCalledWith(
-      new URL("http://daemon/api/v1/threads/thread-delete-2"),
-      { method: "DELETE" },
-    );
+    expect(deleteFn).not.toHaveBeenCalled();
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-delete-2 deletion cancelled",
     );
@@ -761,12 +790,14 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const get = vi.fn(async () => thread);
+    const deleteFn = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           threads: {
             ":id": {
               $get: get,
+              $delete: deleteFn,
             },
           },
         },
@@ -778,10 +809,9 @@ describe("CLI command output contracts", () => {
     );
 
     expect(readlineState.question).not.toHaveBeenCalled();
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      new URL("http://daemon/api/v1/threads/thread-delete-3"),
-      { method: "DELETE" },
-    );
+    expect(deleteFn).toHaveBeenCalledWith({
+      param: { id: "thread-delete-3" },
+    });
   });
 
   it("bb daemon restart requests daemon shutdown", async () => {
@@ -1170,21 +1200,30 @@ describe("CLI JSON output contracts", () => {
         },
       ],
     };
-    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
-      const response = await responsePromise as Response;
-      return response.json();
-    });
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const sessionsGet = vi.fn(async () => payload);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              "env-daemon": {
+                sessions: {
+                  $get: sessionsGet,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
 
     await runCommand(["thread", "sessions", "thread-sessions", "--json"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 
+    expect(sessionsGet).toHaveBeenCalledWith({
+      param: { id: "thread-sessions" },
+    });
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
       payload,
     );

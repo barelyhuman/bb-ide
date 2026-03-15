@@ -63,14 +63,15 @@ describe("repository strict normalization", () => {
 
   it("persists and loads parent thread metadata", () => {
     const projectId = createProjectId();
+    const parentThread = threads.create({ projectId });
     const thread = threads.create({
       projectId,
-      parentThreadId: "parent-1",
+      parentThreadId: parentThread.id,
     });
 
     expect(threads.getById(thread.id)).toMatchObject({
       id: thread.id,
-      parentThreadId: "parent-1",
+      parentThreadId: parentThread.id,
     });
   });
 
@@ -92,18 +93,19 @@ describe("repository strict normalization", () => {
       name: "test-project",
       rootPath: "/tmp/test-project",
     });
+    const checkoutThread = threads.create({ projectId: project.id });
 
     sqlite.exec(`UPDATE projects SET updated_at=${project.updatedAt + 5000} WHERE id='${project.id}'`);
 
     const updated = projects.update(
       project.id,
-      { primaryCheckoutThreadId: "thread-1" },
+      { primaryCheckoutThreadId: checkoutThread.id },
       { touchUpdatedAt: false },
     );
 
     expect(updated).toMatchObject({
       id: project.id,
-      primaryCheckoutThreadId: "thread-1",
+      primaryCheckoutThreadId: checkoutThread.id,
       updatedAt: project.updatedAt + 5000,
     });
   });
@@ -113,32 +115,38 @@ describe("repository strict normalization", () => {
       name: "test-project",
       rootPath: "/tmp/test-project",
     });
+    const managerThread = threads.create({ projectId: project.id });
 
     sqlite.exec(`UPDATE projects SET updated_at=${project.updatedAt + 5000} WHERE id='${project.id}'`);
 
     const updated = projects.update(
       project.id,
-      { primaryManagerThreadId: "thread-manager-1" },
+      { primaryManagerThreadId: managerThread.id },
       { touchUpdatedAt: false },
     );
 
     expect(updated).toMatchObject({
       id: project.id,
-      primaryManagerThreadId: "thread-manager-1",
+      primaryManagerThreadId: managerThread.id,
       updatedAt: project.updatedAt + 5000,
     });
   });
 
   it("persists and loads thread environment ownership", () => {
     const projectId = createProjectId();
+    const env = environments.create({
+      projectId,
+      descriptor: { type: "path", path: "/tmp/test-project" },
+      managed: true,
+    });
     const thread = threads.create({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
     });
 
     expect(threads.getById(thread.id)).toMatchObject({
       id: thread.id,
-      environmentId: "worktree",
+      environmentId: env.id,
     });
   });
 
@@ -343,6 +351,11 @@ describe("repository strict normalization", () => {
       },
       managed: true,
     });
+    const fallbackEnv = environments.create({
+      projectId,
+      descriptor: { type: "path", path: "/tmp/test-project/fallback" },
+      managed: true,
+    });
     const thread = threads.create({ projectId });
 
     attachments.attachThread({
@@ -351,18 +364,23 @@ describe("repository strict normalization", () => {
     });
 
     attachments.deleteByThreadId(thread.id, {
-      nextThreadEnvironmentId: "worktree",
+      nextThreadEnvironmentId: fallbackEnv.id,
     });
 
     expect(attachments.getByThreadId(thread.id)).toBeUndefined();
-    expect(threads.getById(thread.id)?.environmentId).toBe("worktree");
+    expect(threads.getById(thread.id)?.environmentId).toBe(fallbackEnv.id);
   });
 
   it("lists only non-archived active threads with persisted environments", () => {
     const projectId = createProjectId();
+    const env = environments.create({
+      projectId,
+      descriptor: { type: "path", path: "/tmp/test-project" },
+      managed: true,
+    });
     const active = threads.create({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
       environmentRecord: {
         kind: "worktree",
         state: {},
@@ -372,7 +390,7 @@ describe("repository strict normalization", () => {
 
     const idle = threads.create({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
       environmentRecord: {
         kind: "worktree",
         state: {},
@@ -382,7 +400,7 @@ describe("repository strict normalization", () => {
 
     const archived = threads.create({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
       environmentRecord: {
         kind: "worktree",
         state: {},
@@ -417,9 +435,14 @@ describe("repository strict normalization", () => {
 
   it("lists archived thread ids using indexed environment ownership", () => {
     const projectId = createProjectId();
+    const env = environments.create({
+      projectId,
+      descriptor: { type: "path", path: "/tmp/test-project" },
+      managed: true,
+    });
     const archivedWithEnvironment = threads.create({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
       environmentRecord: {
         kind: "worktree",
         state: {},
@@ -447,17 +470,19 @@ describe("repository strict normalization", () => {
 
   it("filters thread listings by parent thread id", () => {
     const projectId = createProjectId();
+    const parent1 = threads.create({ projectId });
+    const parent2 = threads.create({ projectId });
     const childThread = threads.create({
       projectId,
-      parentThreadId: "parent-1",
+      parentThreadId: parent1.id,
     });
     threads.create({
       projectId,
-      parentThreadId: "parent-2",
+      parentThreadId: parent2.id,
     });
 
-    expect(threads.list({ projectId, parentThreadId: "parent-1" })).toEqual([
-      expect.objectContaining({ id: childThread.id, parentThreadId: "parent-1" }),
+    expect(threads.list({ projectId, parentThreadId: parent1.id })).toEqual([
+      expect.objectContaining({ id: childThread.id, parentThreadId: parent1.id }),
     ]);
   });
 

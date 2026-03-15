@@ -12,6 +12,8 @@ export const projects = sqliteTable("projects", {
   name: text("name").notNull(),
   rootPath: text("root_path").notNull(),
   projectInstructions: text("project_instructions"),
+  // FK to threads.id declared in migration 0046; not inline here to avoid
+  // circular type inference between projects and threads tables.
   primaryCheckoutThreadId: text("primary_checkout_thread_id"),
   primaryManagerThreadId: text("primary_manager_thread_id"),
   createdAt: integer("created_at").notNull(),
@@ -37,6 +39,7 @@ export const environments = sqliteTable(
   },
   (table) => [
     index("environments_project_updated_idx").on(table.projectId, table.updatedAt),
+    uniqueIndex("environments_project_descriptor_idx").on(table.projectId, table.descriptor),
   ],
 );
 
@@ -51,8 +54,12 @@ export const threads = sqliteTable(
     type: text("type").notNull().default("standard"),
     title: text("title"),
     status: text("status").notNull().default("created"),
+    // No FK constraint — this field stores both first-class environment UUIDs
+    // and legacy kind strings ("worktree", "local").
     environmentId: text("environment_id"),
     mergeBaseBranch: text("merge_base_branch"),
+    // FK to threads.id (self-reference) declared in migration 0046; not
+    // inline here to avoid circular type inference.
     parentThreadId: text("parent_thread_id"),
     archivedAt: integer("archived_at"),
     lastReadAt: integer("last_read_at").notNull().default(0),
@@ -170,6 +177,10 @@ export const environmentAgentSessions = sqliteTable(
       table.status,
     ),
     index("environment_agent_sessions_lease_expires_idx").on(
+      table.leaseExpiresAt,
+    ),
+    index("environment_agent_sessions_status_lease_idx").on(
+      table.status,
       table.leaseExpiresAt,
     ),
   ],
