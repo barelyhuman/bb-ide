@@ -115,13 +115,13 @@ These patterns were discovered while fixing audit items 17 and Q8 (`stopAll`/`st
 ## Recommended Priority
 
 ### Quick wins
-1. **T1** (typeof guards) — Remove 6 guards, add methods to repo interface, fix test mocks. ~30 lines.
-2. **N2/T3** (_cleanupEnvironmentRuntime) — Split into two methods. ~10 lines.
-3. **N6** (stopPrimaryPromotionWatches) — Remove trivial wrapper. ~5 lines.
+1. ~~**T1** (typeof guards)~~ — **DONE**. Removed 6 guards, added methods to test mocks.
+2. ~~**N2/T3** (_cleanupEnvironmentRuntime)~~ — **DONE**. Split into `_detachEnvironmentRuntime` / `_destroyEnvironmentRuntime`.
+3. ~~**N6** (stopPrimaryPromotionWatches)~~ — **DONE**. Removed wrapper, made `stopAllPrimaryPromotionWatches` public.
 
-### Small
+### Small — low ROI, skip unless part of adjacent work
 4. **N1** (suspendEnvironmentRuntime) — Rename or unify with async variant. ~15 lines.
-5. **N3** (getProjectWorkspaceStatusAsync) — Rename. ~5 lines + test updates.
+5. **N3** (getProjectWorkspaceStatusAsync) — Rename. Touches many files for marginal clarity.
 6. **N8** (mark* methods) — Rename to transition*. ~20 lines.
 7. **T2** (nextThreadEnvironmentId) — Separate concerns. ~30 lines.
 
