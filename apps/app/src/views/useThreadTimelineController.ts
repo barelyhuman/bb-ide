@@ -315,7 +315,6 @@ export function useThreadTimelineController({
       subtree: true,
       childList: true,
       characterData: true,
-      attributes: true,
     });
 
     return () => {
