@@ -5841,26 +5841,18 @@ export class Orchestrator implements ThreadOrchestrator {
     shouldBroadcast = true,
     opts?: { force?: boolean; touchUpdatedAt?: boolean; connection?: DbExecutor },
   ): boolean {
+    const updateOpts: { touchUpdatedAt?: boolean; connection?: DbExecutor } = {};
+    if (opts?.touchUpdatedAt !== undefined) updateOpts.touchUpdatedAt = opts.touchUpdatedAt;
+    if (opts?.connection) updateOpts.connection = opts.connection;
+    const hasUpdateOpts = Object.keys(updateOpts).length > 0;
+
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       if (!opts?.force) return false;
-      if (opts?.touchUpdatedAt !== undefined) {
-        if (opts.connection) {
-          this.threadRepo.update(threadId, { status: nextStatus }, {
-            touchUpdatedAt: opts.touchUpdatedAt,
-            connection: opts.connection,
-          });
-        } else {
-          this.threadRepo.update(threadId, { status: nextStatus }, {
-            touchUpdatedAt: opts.touchUpdatedAt,
-          });
-        }
+      if (hasUpdateOpts) {
+        this.threadRepo.update(threadId, { status: nextStatus }, updateOpts);
       } else {
-        if (opts?.connection) {
-          this.threadRepo.update(threadId, { status: nextStatus }, { connection: opts.connection });
-        } else {
-          this.threadRepo.update(threadId, { status: nextStatus });
-        }
+        this.threadRepo.update(threadId, { status: nextStatus });
       }
       if (shouldBroadcast) {
         this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
@@ -5880,23 +5872,10 @@ export class Orchestrator implements ThreadOrchestrator {
       }
     }
 
-    if (opts?.touchUpdatedAt !== undefined) {
-      if (opts.connection) {
-        this.threadRepo.update(threadId, { status: nextStatus }, {
-          touchUpdatedAt: opts.touchUpdatedAt,
-          connection: opts.connection,
-        });
-      } else {
-        this.threadRepo.update(threadId, { status: nextStatus }, {
-          touchUpdatedAt: opts.touchUpdatedAt,
-        });
-      }
+    if (hasUpdateOpts) {
+      this.threadRepo.update(threadId, { status: nextStatus }, updateOpts);
     } else {
-      if (opts?.connection) {
-        this.threadRepo.update(threadId, { status: nextStatus }, { connection: opts.connection });
-      } else {
-        this.threadRepo.update(threadId, { status: nextStatus });
-      }
+      this.threadRepo.update(threadId, { status: nextStatus });
     }
     if (shouldBroadcast) {
       this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
