@@ -429,7 +429,8 @@ export function ThreadDetailView() {
         markedReadKeysRef.current.delete(marker);
       },
     });
-  }, [markThreadRead, thread]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markThreadRead is referentially unstable but functionally stable; markedReadKeysRef guards against duplicates.
+  }, [thread]);
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return;
