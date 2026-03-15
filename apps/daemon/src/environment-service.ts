@@ -655,29 +655,7 @@ export class EnvironmentService {
     const attachedEnvironmentRecord = attachment
       ? this.environmentRepo?.getById(attachment.environmentId)
       : undefined;
-    const fallbackEnvironmentId = (() => {
-      if (!attachment || !attachedEnvironmentRecord?.managed) {
-        return null;
-      }
-      const runtimeKind = attachedEnvironmentRecord.runtimeState?.kind?.trim();
-      if (runtimeKind && this.environmentRegistry.has(runtimeKind)) {
-        return runtimeKind;
-      }
-      if (!projectRootPath) {
-        return null;
-      }
-      const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
-        descriptor: attachedEnvironmentRecord.descriptor,
-        projectRootPath,
-      });
-      if (derivedRecord?.kind && this.environmentRegistry.has(derivedRecord.kind)) {
-        return derivedRecord.kind;
-      }
-      return null;
-    })();
-    this.threadEnvironmentAttachmentRepo?.deleteByThreadId(threadId, {
-      nextThreadEnvironmentId: fallbackEnvironmentId,
-    });
+    this.threadEnvironmentAttachmentRepo?.deleteByThreadId(threadId);
     if (attachment) {
       const remainingAttachments = this.threadEnvironmentAttachmentRepo?.listByEnvironmentId(
         attachment.environmentId,

@@ -1,7 +1,3 @@
--- Q19: Unique index on environments(project_id, descriptor)
-CREATE UNIQUE INDEX `environments_project_descriptor_idx` ON `environments` (`project_id`, `descriptor`);
-
---> statement-breakpoint
 -- Q21: Composite index on environment_agent_sessions(status, lease_expires_at)
 CREATE INDEX `environment_agent_sessions_status_lease_idx` ON `environment_agent_sessions` (`status`, `lease_expires_at`);
 

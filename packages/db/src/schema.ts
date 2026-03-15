@@ -39,7 +39,6 @@ export const environments = sqliteTable(
   },
   (table) => [
     index("environments_project_updated_idx").on(table.projectId, table.updatedAt),
-    uniqueIndex("environments_project_descriptor_idx").on(table.projectId, table.descriptor),
   ],
 );
 

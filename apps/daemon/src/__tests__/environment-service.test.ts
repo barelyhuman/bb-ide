@@ -407,10 +407,9 @@ describe("EnvironmentService", () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      { nextThreadEnvironmentId: "worktree" },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentId).toBe("worktree");
+    expect(threadState.environmentId).toBe("env-1");
     expect(environmentRepo.getById("env-1")).toBeUndefined();
   });
 
@@ -457,10 +456,9 @@ describe("EnvironmentService", () => {
 
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      { nextThreadEnvironmentId: "worktree" },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentId).toBe("worktree");
+    expect(threadState.environmentId).toBe("env-1");
   });
 
   it("clears persisted environment state after destroying an active runtime", async () => {
@@ -482,10 +480,9 @@ describe("EnvironmentService", () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      { nextThreadEnvironmentId: "worktree" },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentId).toBe("worktree");
+    expect(threadState.environmentId).toBe("env-1");
   });
 
   it("suspends an active runtime without clearing persisted environment state", async () => {
@@ -731,9 +728,8 @@ describe("EnvironmentService", () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      { nextThreadEnvironmentId: "worktree" },
     );
-    expect(threadState.environmentId).toBe("worktree");
+    expect(threadState.environmentId).toBe("env-1");
   });
 
   it("destroys the last unmanaged attached runtime while preserving the environment record", async () => {
@@ -756,9 +752,8 @@ describe("EnvironmentService", () => {
     expect(service.getEnvironmentRuntime("thread-1")).toBeUndefined();
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      { nextThreadEnvironmentId: null },
     );
-    expect(threadState.environmentId).toBeUndefined();
+    expect(threadState.environmentId).toBe("env-1");
     expect(environmentRepo.getById("env-1")).toBeDefined();
   });
 
@@ -937,11 +932,9 @@ describe("EnvironmentService", () => {
     expect(runtimeDestroySpy).toHaveBeenCalledTimes(1);
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      { nextThreadEnvironmentId: "worktree" },
     );
     expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-2",
-      { nextThreadEnvironmentId: "worktree" },
     );
     expect(attachmentState).toHaveLength(0);
     expect(environmentRepo.getById("env-1")).toBeUndefined();
