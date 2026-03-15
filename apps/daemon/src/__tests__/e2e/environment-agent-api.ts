@@ -67,14 +67,14 @@ export async function createThread(
   baseUrl: string,
   projectId: string,
   inputText: string = "Prepare a thread for environment-agent e2e.",
-  environmentId?: Thread["environmentId"],
+  environmentKind?: string,
 ): Promise<Thread> {
   return readJson<Thread>(`${baseUrl}/api/v1/threads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
-      ...(environmentId ? { environmentId } : {}),
+      ...(environmentKind ? { environmentKind } : {}),
       input: [{ type: "text", text: inputText }],
     }),
   });

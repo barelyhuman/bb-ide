@@ -28,7 +28,7 @@ import {
 import { startDaemonE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
-type EnvironmentId = "local" | "worktree";
+type EnvironmentKind = "local" | "worktree";
 
 function debugLog(message: string): void {
   if (process.env.BEANBAG_E2E_DEBUG !== "1") {
@@ -194,9 +194,9 @@ async function driveFakeCodexTurnToCompletion(args: {
 }
 
 export async function runQueuedFollowUpWorkerLossScenario(
-  environmentId: EnvironmentId,
+  environmentKind: EnvironmentKind,
 ): Promise<void> {
-  debugLog(`queued-followup/${environmentId}: start`);
+  debugLog(`queued-followup/${environmentKind}: start`);
   const port = await allocateLocalPort();
   let harness = await startDaemonE2eHarness({
     port,
@@ -212,13 +212,13 @@ export async function runQueuedFollowUpWorkerLossScenario(
     const project = await createProject(
       harness.baseUrl,
       harness.projectRoot,
-      `queued-followup-recovery-${environmentId}`,
+      `queued-followup-recovery-${environmentKind}`,
     );
     const thread = await createThread(
       harness.baseUrl,
       project.id,
-      `Reply with exactly QUEUE-BASE-${environmentId.toUpperCase()} and finish.`,
-      environmentId,
+      `Reply with exactly QUEUE-BASE-${environmentKind.toUpperCase()} and finish.`,
+      environmentKind,
     );
 
     await waitForThreadStatus(
@@ -228,12 +228,12 @@ export async function runQueuedFollowUpWorkerLossScenario(
       e2eTimeoutMs(8_000, 30_000),
       harness.wsUrl,
     );
-    debugLog(`queued-followup/${environmentId}: active`);
+    debugLog(`queued-followup/${environmentKind}: active`);
 
     const queued = await enqueueThreadFollowUp(
       harness.baseUrl,
       thread.id,
-      `Reply with exactly QUEUED-RECOVERY-${environmentId.toUpperCase()} and finish.`,
+      `Reply with exactly QUEUED-RECOVERY-${environmentKind.toUpperCase()} and finish.`,
     );
     const threadAfterQueue = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`);
     expect(threadAfterQueue.queuedMessages?.map((message) => message.id)).toContain(queued.id);
@@ -271,7 +271,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       describeLast: (sessions) =>
         `Thread ${thread.id} still has an active env-daemon session (${sessions?.sessions.map((session) => `${session.id}:${session.status}`).join(",") ?? "none"})`,
     });
-    debugLog(`queued-followup/${environmentId}: old session retired after missing worker`);
+    debugLog(`queued-followup/${environmentKind}: old session retired after missing worker`);
 
     const threadAfterWorkerLoss = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`);
     expect(threadAfterWorkerLoss.queuedMessages?.map((message) => message.id)).toContain(queued.id);
@@ -305,7 +305,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       previousCompletedTurns: completedBeforeRestart,
     });
     expect(recoveredThread.status).toBe("idle");
-    debugLog(`queued-followup/${environmentId}: recovered`);
+    debugLog(`queued-followup/${environmentKind}: recovered`);
 
     const finalThread = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`);
     expect(finalThread.queuedMessages?.map((message) => message.id) ?? []).not.toContain(queued.id);
@@ -614,8 +614,8 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
 }
 
 export async function runThreadRecoveryHeavyRunbookScenario(): Promise<void> {
-  for (const environmentId of ["local", "worktree"] as const) {
-    await runQueuedFollowUpWorkerLossScenario(environmentId);
+  for (const environmentKind of ["local", "worktree"] as const) {
+    await runQueuedFollowUpWorkerLossScenario(environmentKind);
   }
   await runArchiveAfterWorkerLossRecoveryScenario();
   await runStaleOldSessionNoiseScenario();

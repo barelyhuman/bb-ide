@@ -75,7 +75,7 @@ describe("system health report", () => {
 
     const project = makeProject({ rootPath: projectRoot });
     const threads = [
-      makeThread({ id: "thread-1", status: "active", environmentId: "worktree" }),
+      makeThread({ id: "thread-1", status: "active", environmentId: "env-worktree-1" }),
       makeThread({ id: "thread-2", status: "idle", archivedAt: 2_000 }),
       makeThread({ id: "thread-3", status: "provisioning" }),
     ];

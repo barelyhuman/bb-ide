@@ -65,41 +65,41 @@ describe("managed artifact reconciler", () => {
 
     const liveThread = makeThread({
       id: "live-thread",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     const recentArchivedThread = makeThread({
       id: "recent-archived",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       archivedAt: now - (retentionMs / 2),
     });
     const expiredArchivedThread = makeThread({
       id: "expired-archived",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       archivedAt: now - retentionMs - 1,
     });
 
     const liveLogPath = resolveDefaultEnvironmentAgentLogFilePath({
       projectId: "proj-1",
       threadId: liveThread.id,
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
     const recentLogPath = resolveDefaultEnvironmentAgentLogFilePath({
       projectId: "proj-1",
       threadId: recentArchivedThread.id,
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
     const expiredLogPath = resolveDefaultEnvironmentAgentLogFilePath({
       projectId: "proj-1",
       threadId: expiredArchivedThread.id,
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
     const orphanLogPath = resolveDefaultEnvironmentAgentLogFilePath({
       projectId: "proj-1",
       threadId: "orphan-thread",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
 
@@ -147,11 +147,11 @@ describe("managed artifact reconciler", () => {
     });
     const liveThread = makeThread({
       id: "live-thread",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     const archivedThread = makeThread({
       id: "archived-thread",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
       archivedAt: Date.now() - 1_000,
     });
     const worktreeRoot = resolve(beanbagRoot, "worktrees", "proj-1");

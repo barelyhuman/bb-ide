@@ -548,7 +548,7 @@ describe("CLI command output contracts", () => {
       providerId: "codex",
       type: "standard",
       status: "created",
-      environmentId: "worktree",
+      environmentId: "env-worktree-001",
       createdAt: 1,
       updatedAt: 1,
     };
@@ -572,7 +572,7 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: undefined,
-        environmentId: "worktree",
+        environmentKind: "worktree",
       },
     });
   });
@@ -586,7 +586,7 @@ describe("CLI command output contracts", () => {
       providerId: "codex",
       type: "standard",
       status: "created",
-      environmentId: "local",
+      environmentId: "env-local-001",
       createdAt: 1,
       updatedAt: 1,
     };
@@ -609,7 +609,7 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: undefined,
-        environmentId: "local",
+        environmentKind: "local",
       },
     });
   });

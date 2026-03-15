@@ -52,7 +52,7 @@ interface StandaloneDaemonHandle {
   stop: () => Promise<void>;
 }
 
-type EnvironmentId = "local" | "worktree";
+type EnvironmentKind = "local" | "worktree";
 
 function prependPathEntry(pathValue: string | undefined, entryToPrepend: string): string {
   const entries = (pathValue ?? "")
@@ -287,7 +287,7 @@ async function emitFakeCodexUntilIdleWithAnotherTurn(args: {
 async function spawnThread(args: {
   baseUrl: string;
   projectId: string;
-  environmentId: EnvironmentId;
+  environmentKind: EnvironmentKind;
   prompt: string;
 }): Promise<string> {
   const cli = await runCliCommand({
@@ -299,9 +299,9 @@ async function spawnThread(args: {
       args.projectId,
       "--prompt",
       args.prompt,
-      ...(args.environmentId === "local"
+      ...(args.environmentKind === "local"
         ? []
-        : ["--environment", args.environmentId]),
+        : ["--environment", args.environmentKind]),
     ],
   });
   expect(cli.exitCode).toBe(0);
@@ -317,16 +317,16 @@ async function expectCliSuccess(resultPromise: Promise<CliRunResult>): Promise<C
 }
 
 async function runEnvironmentBattery(
-  environmentId: EnvironmentId,
+  environmentKind: EnvironmentKind,
 ): Promise<void> {
   const tempDir = mkdtempSync(
-    beanbagTestTmpPrefix(`beanbag-standalone-daemon-${environmentId}-`),
+    beanbagTestTmpPrefix(`beanbag-standalone-daemon-${environmentKind}-`),
   );
   const beanbagRoot = join(tempDir, "beanbag-root");
   const projectRoot = join(tempDir, "project");
   mkdirSync(beanbagRoot, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
-  if (environmentId === "worktree") {
+  if (environmentKind === "worktree") {
     execFileSync("git", ["init", "-b", "main"], {
       cwd: projectRoot,
       env: TEST_GIT_ENV,
@@ -365,15 +365,15 @@ async function runEnvironmentBattery(
     const project = await createProject(
       baseUrl,
       projectRoot,
-      `standalone-daemon-${environmentId}`,
+      `standalone-daemon-${environmentKind}`,
     );
 
     const initialThreadId = await spawnThread({
       baseUrl,
       projectId: project.id,
-      environmentId,
+      environmentKind,
       prompt:
-        `Reply with exactly BATTERY-START-${environmentId.toUpperCase()} and finish. ` +
+        `Reply with exactly BATTERY-START-${environmentKind.toUpperCase()} and finish. ` +
         "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, initialThreadId, 0);
@@ -388,7 +388,7 @@ async function runEnvironmentBattery(
           "thread",
           "tell",
           initialThreadId,
-          `Reply with exactly BATTERY-FOLLOWUP-${environmentId.toUpperCase()} and finish. Do not run commands or add extra text.`,
+          `Reply with exactly BATTERY-FOLLOWUP-${environmentKind.toUpperCase()} and finish. Do not run commands or add extra text.`,
         ],
       }),
     );
@@ -409,9 +409,9 @@ async function runEnvironmentBattery(
     const restartThreadId = await spawnThread({
       baseUrl,
       projectId: project.id,
-      environmentId,
+      environmentKind,
       prompt:
-        `Reply with exactly BATTERY-RESTART-${environmentId.toUpperCase()} and finish. ` +
+        `Reply with exactly BATTERY-RESTART-${environmentKind.toUpperCase()} and finish. ` +
         "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, restartThreadId, 0);
@@ -445,9 +445,9 @@ async function runEnvironmentBattery(
     const steerThreadId = await spawnThread({
       baseUrl,
       projectId: project.id,
-      environmentId,
+      environmentKind,
       prompt:
-        `Reply with exactly BATTERY-STEER-START-${environmentId.toUpperCase()} and finish. ` +
+        `Reply with exactly BATTERY-STEER-START-${environmentKind.toUpperCase()} and finish. ` +
         "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, steerThreadId, 0);
@@ -458,7 +458,7 @@ async function runEnvironmentBattery(
           "thread",
           "steer",
           steerThreadId,
-          `Reply with exactly BATTERY-STEERED-${environmentId.toUpperCase()} and finish. Do not run commands or add extra text.`,
+          `Reply with exactly BATTERY-STEERED-${environmentKind.toUpperCase()} and finish. Do not run commands or add extra text.`,
         ],
       }),
     );
@@ -466,15 +466,15 @@ async function runEnvironmentBattery(
     await waitForThreadStatus(baseUrl, steerThreadId, "idle", 20_000, wsUrl);
     const steerEvents = await listThreadEvents(baseUrl, steerThreadId);
     expect(JSON.stringify(steerEvents)).toContain(
-      `BATTERY-STEERED-${environmentId.toUpperCase()}`,
+      `BATTERY-STEERED-${environmentKind.toUpperCase()}`,
     );
 
     const stopThreadId = await spawnThread({
       baseUrl,
       projectId: project.id,
-      environmentId,
+      environmentKind,
       prompt:
-        `Reply with exactly BATTERY-STOP-${environmentId.toUpperCase()} and finish. ` +
+        `Reply with exactly BATTERY-STOP-${environmentKind.toUpperCase()} and finish. ` +
         "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, stopThreadId, 0);
@@ -493,7 +493,7 @@ async function runEnvironmentBattery(
           "thread",
           "tell",
           stopThreadId,
-          `Reply with exactly BATTERY-POST-STOP-${environmentId.toUpperCase()} and finish. Do not run commands or add extra text.`,
+          `Reply with exactly BATTERY-POST-STOP-${environmentKind.toUpperCase()} and finish. Do not run commands or add extra text.`,
         ],
       }),
     );
@@ -517,8 +517,8 @@ async function runEnvironmentBattery(
 }
 
 export async function runStandaloneDaemonCliRoundtripScenario(): Promise<void> {
-  const environments: readonly EnvironmentId[] = ["local", "worktree"];
-  for (const environmentId of environments) {
-    await runEnvironmentBattery(environmentId);
+  const environments: readonly EnvironmentKind[] = ["local", "worktree"];
+  for (const environmentKind of environments) {
+    await runEnvironmentBattery(environmentKind);
   }
 }

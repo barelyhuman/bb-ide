@@ -17,7 +17,7 @@ import {
 import { startDaemonE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
-type EnvironmentId = "local" | "worktree";
+type EnvironmentKind = "local" | "worktree";
 
 function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -180,7 +180,7 @@ async function tellThreadWithRetry(args: {
 }
 
 async function runMissingWorkerRestartRecoveryScenario(args: {
-  environmentId: EnvironmentId;
+  environmentKind: EnvironmentKind;
 }): Promise<void> {
   const port = await allocateLocalPort();
   let harness = await startDaemonE2eHarness({
@@ -197,13 +197,13 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
     const project = await createProject(
       harness.baseUrl,
       harness.projectRoot,
-      `restart-missing-worker-${args.environmentId}`,
+      `restart-missing-worker-${args.environmentKind}`,
     );
     const thread = await createThread(
       harness.baseUrl,
       project.id,
-      `Reply with exactly RESTART-${args.environmentId.toUpperCase()} and finish.`,
-      args.environmentId,
+      `Reply with exactly RESTART-${args.environmentKind.toUpperCase()} and finish.`,
+      args.environmentKind,
     );
 
     await waitForThreadStatus(
@@ -261,7 +261,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       baseUrl: harness.baseUrl,
       threadId: thread.id,
       inputText:
-        `Reply with exactly AFTER-ERROR-${args.environmentId.toUpperCase()} and finish. ` +
+        `Reply with exactly AFTER-ERROR-${args.environmentKind.toUpperCase()} and finish. ` +
         "Do not run commands or add extra text.",
     });
 
@@ -296,7 +296,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
 }
 
 async function runIdleRestartFreshSessionScenario(args: {
-  environmentId: EnvironmentId;
+  environmentKind: EnvironmentKind;
 }): Promise<void> {
   const port = await allocateLocalPort();
   let harness = await startDaemonE2eHarness({
@@ -313,13 +313,13 @@ async function runIdleRestartFreshSessionScenario(args: {
     const project = await createProject(
       harness.baseUrl,
       harness.projectRoot,
-      `restart-idle-session-${args.environmentId}`,
+      `restart-idle-session-${args.environmentKind}`,
     );
     const thread = await createThread(
       harness.baseUrl,
       project.id,
-      `Reply with exactly IDLE-${args.environmentId.toUpperCase()} and finish.`,
-      args.environmentId,
+      `Reply with exactly IDLE-${args.environmentKind.toUpperCase()} and finish.`,
+      args.environmentKind,
     );
 
     await waitForThreadStatus(
@@ -357,7 +357,7 @@ async function runIdleRestartFreshSessionScenario(args: {
       baseUrl: harness.baseUrl,
       threadId: thread.id,
       inputText:
-        `Reply with exactly IDLE-FOLLOWUP-${args.environmentId.toUpperCase()} and finish. ` +
+        `Reply with exactly IDLE-FOLLOWUP-${args.environmentKind.toUpperCase()} and finish. ` +
         "Do not run commands or add extra text.",
     });
 
@@ -396,10 +396,10 @@ async function runIdleRestartFreshSessionScenario(args: {
 }
 
 export async function runThreadRestartRecoveryMatrixScenario(): Promise<void> {
-  const environments: readonly EnvironmentId[] = ["local", "worktree"];
+  const environments: readonly EnvironmentKind[] = ["local", "worktree"];
 
-  for (const environmentId of environments) {
-    await runMissingWorkerRestartRecoveryScenario({ environmentId });
-    await runIdleRestartFreshSessionScenario({ environmentId });
+  for (const environmentKind of environments) {
+    await runMissingWorkerRestartRecoveryScenario({ environmentKind });
+    await runIdleRestartFreshSessionScenario({ environmentKind });
   }
 }

@@ -9,7 +9,7 @@ import { createFakeCodexBinDir } from "./fake-codex.js";
 import { beanbagTestTmpPrefix } from "./temp-root.js";
 import { runCliCommand, withFakeE2eEnvironmentAgentTimingEnv } from "./harness.js";
 
-type EnvironmentId = "local" | "worktree";
+type EnvironmentKind = "local" | "worktree";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -189,15 +189,15 @@ async function waitForTurnStarted(baseUrl: string, threadId: string): Promise<vo
   });
 }
 
-async function runBlockedRestartScenario(environmentId: EnvironmentId): Promise<void> {
+async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Promise<void> {
   const tempDir = mkdtempSync(
-    beanbagTestTmpPrefix(`beanbag-standalone-blocked-${environmentId}-`),
+    beanbagTestTmpPrefix(`beanbag-standalone-blocked-${environmentKind}-`),
   );
   const beanbagRoot = join(tempDir, "beanbag-root");
   const projectRoot = join(tempDir, "project");
   mkdirSync(beanbagRoot, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
-  if (environmentId === "worktree") {
+  if (environmentKind === "worktree") {
     execFileSync("git", ["init", "-b", "main"], {
       cwd: projectRoot,
       env: TEST_GIT_ENV,
@@ -232,7 +232,7 @@ async function runBlockedRestartScenario(environmentId: EnvironmentId): Promise<
 
   try {
     await waitForHealth(baseUrl);
-    const project = await createProject(baseUrl, projectRoot, `blocked-restart-${environmentId}`);
+    const project = await createProject(baseUrl, projectRoot, `blocked-restart-${environmentKind}`);
     const spawnResult = await runCliCommand({
       baseUrl,
       args: [
@@ -241,8 +241,8 @@ async function runBlockedRestartScenario(environmentId: EnvironmentId): Promise<
         "--project",
         project.id,
         "--prompt",
-        `Reply with exactly BLOCKED-RESTART-${environmentId.toUpperCase()} and finish.`,
-        ...(environmentId === "local" ? [] : ["--environment", "worktree"]),
+        `Reply with exactly BLOCKED-RESTART-${environmentKind.toUpperCase()} and finish.`,
+        ...(environmentKind === "local" ? [] : ["--environment", "worktree"]),
       ],
     });
     expect(spawnResult.exitCode).toBe(0);
@@ -266,7 +266,7 @@ async function runBlockedRestartScenario(environmentId: EnvironmentId): Promise<
 }
 
 export async function runStandaloneDaemonBlockedRestartScenario(): Promise<void> {
-  for (const environmentId of ["local", "worktree"] as const) {
-    await runBlockedRestartScenario(environmentId);
+  for (const environmentKind of ["local", "worktree"] as const) {
+    await runBlockedRestartScenario(environmentKind);
   }
 }

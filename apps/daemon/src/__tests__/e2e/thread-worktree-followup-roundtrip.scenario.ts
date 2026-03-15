@@ -50,7 +50,7 @@ async function createWorktreeThread(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
-      environmentId: "worktree",
+      environmentKind: "worktree",
       input: [{ type: "text", text: inputText }],
     }),
   });
@@ -125,7 +125,7 @@ export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void
       "Reply with exactly WORKTREE-INITIAL and finish. Do not run commands or add extra text.",
     );
 
-    expect(thread.environmentId).toBe("worktree");
+    expect(thread.environmentId).toBeTruthy();
 
     const initialRoundTrip = await waitForIdleAfterTurnProgress(
       harness.baseUrl,

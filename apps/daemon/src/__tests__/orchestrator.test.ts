@@ -974,7 +974,7 @@ describe("Orchestrator", () => {
           id: "boot-archived-with-environment",
           status: "idle",
           archivedAt: 123,
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         }),
         makeThread({
           id: "boot-archived-no-environment",
@@ -1005,7 +1005,7 @@ describe("Orchestrator", () => {
           id: "boot-active-with-environment",
           projectId: "proj-1",
           status: "active",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         }),
         makeThread({
           id: "boot-idle-without-environment",
@@ -1104,7 +1104,7 @@ describe("Orchestrator", () => {
           makeThread({
             id: "boot-provisioned",
             status: "provisioned",
-            environmentId: "local",
+            environmentId: "env-local-1",
           }),
         ],
         {
@@ -1139,7 +1139,7 @@ describe("Orchestrator", () => {
         {
           id: "boot-active-worktree",
           projectId: "proj-1",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         },
       ]);
       const homeDir = mkdtempSync(join(tmpdir(), "beanbag-managed-artifacts-home-"));
@@ -1184,7 +1184,6 @@ describe("Orchestrator", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         providerId: "codex",
-        environmentId: "local",
         type: "standard",
       });
     });
@@ -1213,16 +1212,15 @@ describe("Orchestrator", () => {
       const createdThread = makeThread({
         id: "t-new",
         status: "idle",
-        environmentId: "worktree",
       });
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
+        makeThread({ id: "t-new", status: "active" }),
       );
 
       const result = await managerWithCustomEnvironment.spawn({
         projectId: "proj-1",
-        environmentId: "worktree",
+        environmentKind: "worktree",
       });
 
       expect(result.id).toBe("t-new");
@@ -1317,7 +1315,6 @@ describe("Orchestrator", () => {
         makeThread({
           id: "t-new",
           status: "created",
-          environmentId: "worktree",
         }),
       );
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
@@ -1326,7 +1323,6 @@ describe("Orchestrator", () => {
               id: "t-new",
               projectId: "proj-1",
               status: "provisioning",
-              environmentId: "worktree",
             })
           : undefined,
       );
@@ -1342,7 +1338,7 @@ describe("Orchestrator", () => {
       try {
         await managerWithCustomEnvironment.spawn({
           projectId: "proj-1",
-          environmentId: "worktree",
+          environmentKind: "worktree",
         });
 
         await vi.waitFor(() => {
@@ -1493,7 +1489,6 @@ describe("Orchestrator", () => {
         makeThread({
           id: "t-new",
           status: "created",
-          environmentId: "worktree",
         }),
       );
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
@@ -1502,7 +1497,6 @@ describe("Orchestrator", () => {
               id: "t-new",
               projectId: "proj-1",
               status: "provisioning",
-              environmentId: "worktree",
             })
           : undefined,
       );
@@ -1518,7 +1512,7 @@ describe("Orchestrator", () => {
       try {
         await managerWithCustomEnvironment.spawn({
           projectId: "proj-1",
-          environmentId: "worktree",
+          environmentKind: "worktree",
         });
 
         await vi.waitFor(() => {
@@ -1662,7 +1656,6 @@ describe("Orchestrator", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         providerId: "codex",
-        environmentId: "local",
         type: "standard",
       });
     });
@@ -1679,7 +1672,7 @@ describe("Orchestrator", () => {
         id: "manager-1",
         projectId: "proj-1",
         type: "manager",
-        environmentId: "local",
+        environmentId: "env-local-1",
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
@@ -1697,7 +1690,6 @@ describe("Orchestrator", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         providerId: "codex",
-        environmentId: "worktree",
         parentThreadId: "manager-1",
         type: "standard",
       });
@@ -2628,7 +2620,7 @@ describe("Orchestrator", () => {
       const thread = makeThread({
         id: "thread-1",
         status: "active",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
         (threadId: string) => (threadId === "thread-1" ? thread : undefined),
@@ -2679,7 +2671,7 @@ describe("Orchestrator", () => {
       const thread = makeThread({
         id: "thread-1",
         status: "active",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
         queuedMessages: [{
           id: "msg-1",
           input: [{ type: "text", text: "keep going" }],
@@ -2737,7 +2729,7 @@ describe("Orchestrator", () => {
       const thread = makeThread({
         id: "thread-1",
         status: "active",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
         (threadId: string) => (threadId === "thread-1" ? thread : undefined),
@@ -2842,7 +2834,7 @@ describe("Orchestrator", () => {
         makeThread({
           id: "thread-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         }),
       );
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -2881,7 +2873,7 @@ describe("Orchestrator", () => {
           }),
       );
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "thread-1", status: "idle", environmentId: "worktree" }),
+        makeThread({ id: "thread-1", status: "idle", environmentId: "env-worktree-1" }),
       );
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
@@ -2923,7 +2915,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         status: "active",
         projectId: "proj-1",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
@@ -3260,7 +3252,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -3328,7 +3320,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "provisioning_failed",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
         title: "Provisioning failure repro",
       });
       const mockedStatus = makeWorkspaceStatus();
@@ -3370,7 +3362,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -3494,7 +3486,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
         mergeBaseBranch: "release/1.0",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
@@ -3533,7 +3525,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         status: "idle",
         projectId: "proj-1",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
@@ -3559,7 +3551,7 @@ describe("Orchestrator", () => {
         type: "manager",
         status: "idle",
         projectId: "proj-1",
-        environmentId: "local",
+        environmentId: "env-local-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
@@ -3596,7 +3588,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         status: "active",
         projectId: "proj-1",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
@@ -3627,7 +3619,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -3677,7 +3669,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "local",
+        environmentId: "env-local-1",
       });
       const getWorkspaceDiff = vi.fn().mockResolvedValue({
         diff: "diff --git a/file b/file",
@@ -3746,7 +3738,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       const getWorkspaceDiff = vi.fn().mockResolvedValue({
         diff: "diff --git a/file b/file",
@@ -3809,7 +3801,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       const getWorkspaceDiff = vi.fn().mockResolvedValue({
         diff: "diff --git a/file b/file",
@@ -3877,7 +3869,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
         mergeBaseBranch: "release/1.0",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
@@ -3990,14 +3982,14 @@ describe("Orchestrator", () => {
           projectId: "proj-1",
           status: "idle",
           title: "Promoted",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         }),
         makeThread({
           id: "thread-2",
           projectId: "proj-1",
           status: "idle",
           title: "Other",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         }),
       ]);
       const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-"));
@@ -4043,7 +4035,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -4165,7 +4157,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -4203,13 +4195,13 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       const targetThread = makeThread({
         id: "thread-2",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) => {
         if (id === "thread-1") return activeThread;
@@ -4364,7 +4356,7 @@ describe("Orchestrator", () => {
         id: "thread-2",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(targetThread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -4406,7 +4398,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -4501,7 +4493,7 @@ describe("Orchestrator", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -4676,7 +4668,7 @@ describe("Orchestrator", () => {
         const thread = makeThread({
           id: "thread-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
@@ -4726,7 +4718,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "active",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
           queuedMessages: [],
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
@@ -4855,7 +4847,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
           queuedMessages: [],
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
@@ -4916,7 +4908,7 @@ describe("Orchestrator", () => {
         const thread = makeThread({
           id: "thread-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
@@ -4968,7 +4960,7 @@ describe("Orchestrator", () => {
         const thread = makeThread({
           id: "thread-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
@@ -5016,7 +5008,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -5115,7 +5107,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -5194,7 +5186,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -5349,7 +5341,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -5468,7 +5460,7 @@ describe("Orchestrator", () => {
           id: "thread-1",
           projectId: "proj-1",
           status: "idle",
-          environmentId: "worktree",
+          environmentId: "env-worktree-1",
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
         (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({

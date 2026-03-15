@@ -293,7 +293,7 @@ describe("Thread routes", () => {
         body: JSON.stringify({
           projectId: "proj-1",
           input: [{ type: "text", text: "Do work" }],
-          environmentId: "worktree",
+          environmentKind: "worktree",
         }),
       });
 
@@ -301,7 +301,7 @@ describe("Thread routes", () => {
       expect(threadManager.spawn).toHaveBeenCalledWith({
         projectId: "proj-1",
         input: [{ type: "text", text: "Do work" }],
-        environmentId: "worktree",
+        environmentKind: "worktree",
       });
     });
 
@@ -1855,7 +1855,7 @@ describe("Thread routes", () => {
 
   describe("POST /threads/:id/promote", () => {
     it("promotes a thread into primary checkout", async () => {
-      const thread = makeThread({ environmentId: "worktree" });
+      const thread = makeThread({ environmentId: "env-worktree-1" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (threadManager.promoteThread as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
@@ -1882,7 +1882,7 @@ describe("Thread routes", () => {
 
   describe("POST /threads/:id/demote-primary", () => {
     it("demotes an active primary checkout thread", async () => {
-      const thread = makeThread({ environmentId: "worktree" });
+      const thread = makeThread({ environmentId: "env-worktree-1" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
@@ -1982,7 +1982,7 @@ describe("Thread routes", () => {
     });
 
     it("returns 409 when worktree has uncommitted work and force is not set", async () => {
-      const thread = makeThread({ environmentId: "worktree" });
+      const thread = makeThread({ environmentId: "env-worktree-1" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         thread,
       );
@@ -2006,7 +2006,7 @@ describe("Thread routes", () => {
     });
 
     it("uses async work status when available", async () => {
-      const thread = makeThread({ environmentId: "worktree" });
+      const thread = makeThread({ environmentId: "env-worktree-1" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (threadManager.requiresForceArchive as ReturnType<typeof vi.fn>).mockReturnValue(true);
       const getWorkStatusAsync = vi.fn().mockResolvedValue({
@@ -2035,7 +2035,7 @@ describe("Thread routes", () => {
     });
 
     it("archives a dirty worktree thread when force=true", async () => {
-      const thread = makeThread({ environmentId: "worktree" });
+      const thread = makeThread({ environmentId: "env-worktree-1" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         thread,
       );
@@ -2191,7 +2191,7 @@ describe("Thread routes", () => {
 
   describe("route lookup guardrails", () => {
     it("avoids hydrated lookup when archiving with async work-status checks", async () => {
-      const thread = makeThread({ environmentId: "worktree" });
+      const thread = makeThread({ environmentId: "env-worktree-1" });
       threadManager.getRawById.mockReturnValue(thread);
       threadManager.getHydratedByIdAsync.mockResolvedValue(thread);
       (threadManager.requiresForceArchive as ReturnType<typeof vi.fn>).mockReturnValue(true);

@@ -8,7 +8,7 @@ import {
 import { startDaemonE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
-type EnvironmentId = "local" | "worktree";
+type EnvironmentKind = "local" | "worktree";
 
 interface TurnProgressCounts {
   clientTurnStarts: number;
@@ -43,7 +43,7 @@ function measureTurnProgress(events: ThreadEvent[]): TurnProgressCounts {
 async function createThread(args: {
   baseUrl: string;
   projectId: string;
-  environmentId: EnvironmentId;
+  environmentKind: EnvironmentKind;
   inputText: string;
 }): Promise<Thread> {
   return readJson<Thread>(`${args.baseUrl}/api/v1/threads`, {
@@ -51,8 +51,8 @@ async function createThread(args: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId: args.projectId,
-      ...(args.environmentId === "worktree"
-        ? { environmentId: args.environmentId }
+      ...(args.environmentKind === "worktree"
+        ? { environmentKind: args.environmentKind }
         : {}),
       input: [{ type: "text", text: args.inputText }],
     }),
@@ -113,19 +113,19 @@ async function runImmediateFollowupScenario(args: {
   baseUrl: string;
   wsUrl: string;
   projectId: string;
-  environmentId: EnvironmentId;
+  environmentKind: EnvironmentKind;
 }): Promise<void> {
-  const environmentToken = args.environmentId.toUpperCase();
+  const environmentToken = args.environmentKind.toUpperCase();
   const thread = await createThread({
     baseUrl: args.baseUrl,
     projectId: args.projectId,
-    environmentId: args.environmentId,
+    environmentKind: args.environmentKind,
     inputText:
       `Reply with exactly ${environmentToken}-INITIAL and finish. ` +
       "Do not run commands or add extra text.",
   });
 
-  expect(thread.environmentId).toBe(args.environmentId);
+  expect(thread.environmentId).toBeTruthy();
 
   const initialRoundTrip = await waitForIdleAfterTurnProgress(
     args.baseUrl,
@@ -183,14 +183,14 @@ export async function runThreadImmediateFollowupsRoundtripScenario(): Promise<vo
       baseUrl: harness.baseUrl,
       wsUrl: harness.wsUrl,
       projectId: project.id,
-      environmentId: "local",
+      environmentKind: "local",
     });
 
     await runImmediateFollowupScenario({
       baseUrl: harness.baseUrl,
       wsUrl: harness.wsUrl,
       projectId: project.id,
-      environmentId: "worktree",
+      environmentKind: "worktree",
     });
   } finally {
     await harness.cleanup();

@@ -324,7 +324,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   it("re-ensures environment-agent access before resuming a persisted provider thread", async () => {
     const thread = makeThread({
       status: "idle",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (
@@ -468,7 +468,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   it("retries a provider resume after session loss through the daemon ensure path", async () => {
     const thread = makeThread({
       status: "idle",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (
@@ -596,7 +596,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   it("recycles the runtime when env-daemon access cannot find a fresh session", async () => {
     const thread = makeThread({
       status: "idle",
-      environmentId: "local",
+      environmentId: "env-local-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -680,7 +680,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   it("revalidates persisted provider thread ids when hot daemon state disagrees", async () => {
     const thread = makeThread({
       status: "idle",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (
@@ -814,7 +814,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   it("retries one timed out provider resume before succeeding", async () => {
     const thread = makeThread({
       status: "idle",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (
@@ -900,7 +900,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   it("reprovisions after a second timed out provider resume", async () => {
     const thread = makeThread({
       status: "idle",
-      environmentId: "worktree",
+      environmentId: "env-worktree-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (
@@ -996,7 +996,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       "thread-1",
       expect.objectContaining({
         projectId: "proj-1",
-        environmentId: "worktree",
+        environmentId: "env-worktree-1",
       }),
       expect.objectContaining({
         rootPathHint: "/test",
@@ -1030,7 +1030,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     const thread = makeThread({
       id: "thread-1",
       status: "idle",
-      environmentId: "local",
+      environmentId: "env-local-1",
     });
     (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
     (
@@ -1050,7 +1050,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         seq: 1,
         type: "system/provisioning/completed",
         data: {
-          environmentId: "local",
+          environmentId: "env-local-1",
           environmentDisplayName: "Direct Workspace",
           providerThreadId: "provider-thread-1",
         },

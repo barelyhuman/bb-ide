@@ -108,7 +108,7 @@ done
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         projectId: project.id,
-        environmentId: "worktree",
+        environmentKind: "worktree",
         input: [{
           type: "text",
           text: "Reply with exactly PROVISIONING-READY and finish. Do not run commands or add extra text.",
