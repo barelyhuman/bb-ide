@@ -37,6 +37,33 @@
 
 ## Testing / QA
 
+### Mocking Principles
+
+Mock at boundaries, not inside the system.
+
+**Run the real thing when it's cheap:**
+- SQLite/DB operations — use in-memory DB via `createConnection(":memory:")` + `migrate(db)`. This catches real FK violations, constraint issues, and schema mismatches that mock repos silently pass.
+- Pure functions, helpers, type transformations, validators, serializers.
+
+**Mock when the real thing is expensive, slow, or has side effects:**
+- External providers (Codex, OpenAI) — network calls, cost, flakiness.
+- File system operations that create/delete real files.
+- Process spawning (`child_process.spawn`).
+- Network listeners (HTTP servers, WebSocket).
+- Timers and delays (use `vi.useFakeTimers`).
+
+**Never mock:**
+- The module under test.
+- Private methods of the class being tested — test through the public API.
+- Database repositories — use real in-memory SQLite instead.
+
+**Assert outcomes, not call sequences:**
+- Good: check resulting state, return values, persisted data, HTTP response bodies.
+- Bad: check that internal method A called internal method B with args C.
+- Prefer `expect(repo.getById(id)?.status).toBe("idle")` over `expect(repo.update).toHaveBeenCalledWith(id, { status: "idle" })`.
+
+### QA Passes
+
 - For daemon or environment-agent changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader daemon QA tiers when touching critical daemon/environment-agent code so regressions are caught early.
 - Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/daemon/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for daemon/env-agent behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
 - Use the fast e2e suite in `apps/daemon/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
