@@ -306,10 +306,8 @@ interface OrchestratorTestHarness {
     opts?: { rootPathHint?: string; reason?: string },
   ) => void;
   _cleanupThreadRuntime: (threadId: string) => void;
-  _cleanupEnvironmentRuntime: (
-    threadId: string,
-    opts?: { destroyWorkspace?: boolean },
-  ) => void;
+  _detachEnvironmentRuntime: (threadId: string) => void;
+  _destroyEnvironmentRuntime: (threadId: string) => void;
   _ensurePrimaryPromotionStateIsCurrent: (
     projectId: string,
     opts?: { force?: boolean },
@@ -984,17 +982,16 @@ describe("Orchestrator", () => {
           archivedAt: 123,
         }),
       ]);
-      const cleanupEnvironmentRuntimeSpy = vi
-        .spyOn(asOrchestratorHarness(bootManager), "_cleanupEnvironmentRuntime")
+      const destroyEnvironmentRuntimeSpy = vi
+        .spyOn(asOrchestratorHarness(bootManager), "_destroyEnvironmentRuntime")
         .mockImplementation(() => undefined);
 
       await bootManager.cleanupArchivedEnvironmentsOnBoot();
 
       expect(bootThreadRepo.listArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
-      expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
-      expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
+      expect(destroyEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
+      expect(destroyEnvironmentRuntimeSpy).toHaveBeenCalledWith(
         "boot-archived-with-environment",
-        { destroyWorkspace: true },
       );
     });
 

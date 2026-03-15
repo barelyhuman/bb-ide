@@ -730,7 +730,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const archivedThreadIds =
       this.threadRepo.listArchivedIdsWithEnvironmentRecord();
     for (const threadId of archivedThreadIds) {
-      this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
+      this._destroyEnvironmentRuntime(threadId);
     }
   }
 
@@ -2141,7 +2141,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _clearEnvironmentAgentRuntimeState(threadId: string): void {
     this.providerThreadIdByThreadId.delete(threadId);
     this._clearAgentServerSessionState(threadId);
-    this._cleanupEnvironmentRuntime(threadId);
+    this._detachEnvironmentRuntime(threadId);
   }
 
   /**
@@ -4021,15 +4021,12 @@ export class Orchestrator implements ThreadOrchestrator {
     this.environmentService.setEnvironmentRuntime(threadId, environment);
   }
 
-  private _cleanupEnvironmentRuntime(
-    threadId: string,
-    opts?: { destroyWorkspace?: boolean },
-  ): void {
-    if (opts?.destroyWorkspace) {
-      this.environmentService.destroyEnvironmentRuntime(threadId);
-      return;
-    }
+  private _detachEnvironmentRuntime(threadId: string): void {
     this.environmentService.detachEnvironmentRuntime(threadId);
+  }
+
+  private _destroyEnvironmentRuntime(threadId: string): void {
+    this.environmentService.destroyEnvironmentRuntime(threadId);
   }
 
   private _cleanupPersistedEnvironment(threadId: string): void {
@@ -5825,7 +5822,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
-    this._cleanupEnvironmentRuntime(threadId);
+    this._detachEnvironmentRuntime(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
