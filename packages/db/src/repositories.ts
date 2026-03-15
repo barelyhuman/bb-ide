@@ -1038,7 +1038,7 @@ export class ThreadRepository {
     if (!isThreadProviderId(row.providerId)) {
       throw new Error(`Invalid persisted thread provider: ${row.providerId}`);
     }
-    const thread = {
+    const thread: Thread = {
       id: row.id,
       projectId: row.projectId,
       providerId: row.providerId,
@@ -1054,7 +1054,7 @@ export class ThreadRepository {
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
-    return thread as Thread;
+    return thread;
   }
 
   private listQueuedMessagesByThreadIds(

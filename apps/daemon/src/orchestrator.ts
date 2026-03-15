@@ -5813,31 +5813,14 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     keepRecent: number = IDLE_NOISE_EVENT_KEEP_RECENT,
   ): void {
-    const repoMaintenance = (this.eventRepo as {
-      pruneHistoricalNoiseByThread?: (threadId: string, keepRecent?: number) => number;
-      reclaimStorageIfNeeded?: (opts?: {
-        minFreelistPages?: number;
-      }) => {
-        ran: boolean;
-      };
-    }).pruneHistoricalNoiseByThread;
-    if (!repoMaintenance) return;
     try {
-      const removed = repoMaintenance.call(
-        this.eventRepo,
+      const removed = this.eventRepo.pruneHistoricalNoiseByThread(
         threadId,
         keepRecent,
       );
       if (removed > 0) {
         this.timelineByThread.delete(threadId);
-        const reclaim = (this.eventRepo as {
-          reclaimStorageIfNeeded?: (opts?: {
-            minFreelistPages?: number;
-          }) => {
-            ran: boolean;
-          };
-        }).reclaimStorageIfNeeded;
-        reclaim?.call(this.eventRepo, { minFreelistPages: 2_048 });
+        this.eventRepo.reclaimStorageIfNeeded({ minFreelistPages: 2_048 });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
