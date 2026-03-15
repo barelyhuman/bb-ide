@@ -8,7 +8,7 @@ import {
 } from "@beanbag/agent-core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
-import { confirmDestructiveAction, buildThreadUrl, getErrorMessage } from "./helpers.js";
+import { confirmDestructiveAction, getErrorMessage } from "./helpers.js";
 import {
   resolveEnvironmentId,
   requireProjectId,
@@ -152,13 +152,6 @@ function printThreadOperationResult(result: ThreadOperationResponse): void {
     ...(result.demotedPrimaryCheckout ? ["demoted-primary-checkout"] : []),
   ];
   console.log(`${result.message} [${flags.join(", ")}]`);
-}
-
-function buildThreadRouteUrl(baseUrl: string, threadId: string, suffix: string): URL {
-  return new URL(
-    `/api/v1/threads/${encodeURIComponent(threadId)}/${suffix}`,
-    baseUrl,
-  );
 }
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
@@ -384,8 +377,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (id: string | undefined, opts: { json?: boolean }) => {
       try {
         const threadId = requireThreadId(id);
+        const client = createClient(getUrl());
         const response = await unwrap<ThreadSessionsPayload>(
-          fetch(buildThreadRouteUrl(getUrl(), threadId, "env-daemon/sessions")),
+          client.api.v1.threads[":id"]["env-daemon"].sessions.$get({
+            param: { id: threadId },
+          }),
         );
         if (opts.json) {
           console.log(JSON.stringify(response, null, 2));
@@ -548,15 +544,15 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (id: string | undefined, opts: { force?: boolean }) => {
       try {
         const threadId = requireThreadId(id);
-        const requestInit: RequestInit = opts.force
-          ? {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ force: true }),
-            }
-          : { method: "POST" };
         await unwrap<{ ok: boolean }>(
-          fetch(buildThreadRouteUrl(getUrl(), threadId, "archive"), requestInit),
+          fetch(`${getUrl()}/api/v1/threads/${encodeURIComponent(threadId)}/archive`, opts.force
+            ? {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ force: true }),
+              }
+            : { method: "POST" },
+          ),
         );
         console.log(`Thread ${threadId} archived`);
       } catch (err: unknown) {
@@ -607,7 +603,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
 
         await unwrap<{ ok: boolean }>(
-          fetch(buildThreadUrl(getUrl(), threadId), { method: "DELETE" }),
+          client.api.v1.threads[":id"].$delete({
+            param: { id: threadId },
+          }),
         );
         console.log(`Thread ${threadId} deleted`);
       } catch (err: unknown) {

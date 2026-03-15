@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { type Project, type Thread } from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
-import { confirmDestructiveAction, buildThreadUrl, getErrorMessage } from "./helpers.js";
+import { confirmDestructiveAction, getErrorMessage } from "./helpers.js";
 
 export function registerManagerCommands(program: Command, getUrl: () => string): void {
   const manager = program.command("manager").description("Manage project managers");
@@ -183,7 +183,9 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
           }
         }
         await unwrap<{ ok: boolean }>(
-          fetch(buildThreadUrl(getUrl(), managerThreadId), { method: "DELETE" }),
+          client.api.v1.threads[":id"].$delete({
+            param: { id: managerThreadId },
+          }),
         );
         console.log(`Manager ${managerThreadId} deleted`);
       } catch (err: unknown) {
