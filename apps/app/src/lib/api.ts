@@ -1,5 +1,6 @@
 import {
   decodeSystemShutdownBlockedResponse,
+  extractErrorMessage,
   toRecord,
 } from "@beanbag/agent-core";
 import type {
@@ -45,16 +46,10 @@ import type {
 const BASE = "/api/v1";
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
-const LEGACY_ERROR_KEYS = ["error", "detail"] as const;
+const ERROR_EXTRACT_OPTS = { maxLength: MAX_ERROR_MESSAGE_LENGTH, legacyKeys: ["detail"] as const };
 
 function normalizeErrorText(raw: string): string {
   return raw.replace(/\s+/g, " ").trim();
-}
-
-function truncateErrorText(raw: string): string {
-  return raw.length > MAX_ERROR_MESSAGE_LENGTH
-    ? `${raw.slice(0, MAX_ERROR_MESSAGE_LENGTH - 1)}...`
-    : raw;
 }
 
 export class SystemShutdownBlockedError extends Error {
@@ -91,39 +86,6 @@ export class HttpError extends Error {
   }
 }
 
-function extractErrorMessage(value: unknown): string | null {
-  if (typeof value === "string") {
-    const normalized = normalizeErrorText(value);
-    return normalized.length > 0 ? truncateErrorText(normalized) : null;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const message = extractErrorMessage(item);
-      if (message) {
-        return message;
-      }
-    }
-    return null;
-  }
-  const record = toRecord(value);
-  if (!record) {
-    return null;
-  }
-  if (typeof record.message === "string") {
-    const message = extractErrorMessage(record.message);
-    if (message) {
-      return message;
-    }
-  }
-  for (const key of LEGACY_ERROR_KEYS) {
-    const message = extractErrorMessage(record[key]);
-    if (message) {
-      return message;
-    }
-  }
-  return null;
-}
-
 function deriveHttpErrorMessage(
   status: number,
   statusText: string,
@@ -142,7 +104,7 @@ function deriveHttpErrorMessage(
   if (shouldParseAsJson) {
     try {
       const parsed = JSON.parse(normalized) as unknown;
-      const message = extractErrorMessage(parsed);
+      const message = extractErrorMessage(parsed, ERROR_EXTRACT_OPTS);
       if (message) {
         return message;
       }
@@ -158,7 +120,7 @@ function deriveHttpErrorMessage(
     return statusText || "Request failed";
   }
 
-  return (extractErrorMessage(normalized) ?? statusText) || "Request failed";
+  return (extractErrorMessage(normalized, ERROR_EXTRACT_OPTS) ?? statusText) || "Request failed";
 }
 
 function parseHttpErrorBody(

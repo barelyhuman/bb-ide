@@ -3,6 +3,7 @@ import {
   resolveApiKeyFromCodexAuthFile,
   type CodexAuthFile,
 } from "./codex-auth.js";
+import { extractErrorMessage } from "@beanbag/agent-core";
 import { renderTemplate } from "@beanbag/templates";
 
 const DEFAULT_API_KEY_BASE_URL = "https://api.openai.com/v1";
@@ -14,6 +15,7 @@ const DEFAULT_RESPONSES_INSTRUCTIONS = renderTemplate(
 );
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_UPSTREAM_ERROR_LENGTH = 220;
+const ERROR_EXTRACT_OPTS = { maxLength: MAX_UPSTREAM_ERROR_LENGTH, legacyKeys: ["error", "detail"] as const };
 
 type ResponsesAuthMode = "apiKey" | "chatgpt";
 
@@ -101,60 +103,24 @@ function resolveModel(model?: string): string {
   return DEFAULT_TITLE_MODEL;
 }
 
-function normalizeErrorText(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim();
-}
-
-function truncateErrorText(raw: string): string {
-  return raw.length > MAX_UPSTREAM_ERROR_LENGTH
-    ? `${raw.slice(0, MAX_UPSTREAM_ERROR_LENGTH - 1)}...`
-    : raw;
-}
-
-function extractErrorMessage(value: unknown): string | null {
-  if (typeof value === "string") {
-    const normalized = normalizeErrorText(value);
-    return normalized.length > 0 ? truncateErrorText(normalized) : null;
-  }
-
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      const message = extractErrorMessage(entry);
-      if (message) return message;
-    }
-    return null;
-  }
-
-  const record = asRecord(value);
-  if (!record) return null;
-
-  const candidates = [record.message, record.error, record.detail];
-  for (const candidate of candidates) {
-    const message = extractErrorMessage(candidate);
-    if (message) return message;
-  }
-
-  return null;
-}
-
 function parseUpstreamErrorMessage(rawBody: string): string | null {
-  const normalized = normalizeErrorText(rawBody);
+  const normalized = rawBody.replace(/\s+/g, " ").trim();
   if (!normalized) return null;
 
   if (normalized.startsWith("{") || normalized.startsWith("[")) {
     try {
       const parsed = JSON.parse(normalized) as OpenAIResponsesErrorPayload;
       return (
-        extractErrorMessage(parsed.error?.message) ??
-        extractErrorMessage(parsed.message) ??
-        extractErrorMessage(parsed)
+        extractErrorMessage(parsed.error?.message, ERROR_EXTRACT_OPTS) ??
+        extractErrorMessage(parsed.message, ERROR_EXTRACT_OPTS) ??
+        extractErrorMessage(parsed, ERROR_EXTRACT_OPTS)
       );
     } catch {
-      return truncateErrorText(normalized);
+      return extractErrorMessage(normalized, ERROR_EXTRACT_OPTS);
     }
   }
 
-  return truncateErrorText(normalized);
+  return extractErrorMessage(normalized, ERROR_EXTRACT_OPTS);
 }
 
 function decodeOpenAIResponse(value: unknown): DecodedOpenAIResponse | null {

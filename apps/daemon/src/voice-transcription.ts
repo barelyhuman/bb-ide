@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { extractErrorMessage } from "@beanbag/agent-core";
 import { invalidRequestError, providerUnavailableError } from "./domain-errors.js";
 
 interface VoiceTranscriptionAuth {
@@ -28,55 +29,15 @@ export interface TranscribeVoiceInputResult {
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const OPENAI_TRANSCRIPTION_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
 const MAX_UPSTREAM_ERROR_LENGTH = 180;
+const ERROR_EXTRACT_OPTS = { maxLength: MAX_UPSTREAM_ERROR_LENGTH, legacyKeys: ["error", "detail"] as const };
 
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
-const ERROR_KEYS = ["message", "error", "detail"] as const;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeErrorText(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim();
-}
-
-function truncateErrorText(raw: string): string {
-  return raw.length > MAX_UPSTREAM_ERROR_LENGTH
-    ? `${raw.slice(0, MAX_UPSTREAM_ERROR_LENGTH - 1)}...`
-    : raw;
-}
-
-function extractErrorMessage(value: unknown): string | null {
-  if (typeof value === "string") {
-    const normalized = normalizeErrorText(value);
-    return normalized.length > 0 ? truncateErrorText(normalized) : null;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const message = extractErrorMessage(item);
-      if (message) {
-        return message;
-      }
-    }
-    return null;
-  }
-  if (!isRecord(value)) {
-    return null;
-  }
-  for (const key of ERROR_KEYS) {
-    const message = extractErrorMessage(value[key]);
-    if (message) {
-      return message;
-    }
-  }
-  return null;
-}
 
 function parseUpstreamErrorMessage(
   rawBody: string,
   contentType: string | null,
 ): string | null {
-  const normalized = normalizeErrorText(rawBody);
+  const normalized = rawBody.replace(/\s+/g, " ").trim();
   if (normalized.length === 0) {
     return null;
   }
@@ -91,13 +52,13 @@ function parseUpstreamErrorMessage(
     normalized.startsWith("[");
   if (shouldParseAsJson) {
     try {
-      return extractErrorMessage(JSON.parse(normalized) as unknown);
+      return extractErrorMessage(JSON.parse(normalized) as unknown, ERROR_EXTRACT_OPTS);
     } catch {
       return null;
     }
   }
 
-  return truncateErrorText(normalized);
+  return extractErrorMessage(normalized, ERROR_EXTRACT_OPTS);
 }
 
 function createTranscriptionFailureError(
