@@ -931,10 +931,7 @@ export class ThreadRepository {
   }
 
   delete(id: string): void {
-    this.db
-      .delete(queuedThreadMessages)
-      .where(eq(queuedThreadMessages.threadId, id))
-      .run();
+    // Events and queued messages are cascade-deleted by FK constraints.
     this.db.delete(threads).where(eq(threads.id, id)).run();
   }
 

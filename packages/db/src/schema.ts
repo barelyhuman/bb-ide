@@ -46,7 +46,7 @@ export const threads = sqliteTable(
     id: text("id").primaryKey(),
     projectId: text("project_id")
       .notNull()
-      .references(() => projects.id),
+      .references(() => projects.id, { onDelete: "cascade" }),
     providerId: text("provider_id").notNull().default("codex"),
     type: text("type").notNull().default("standard"),
     title: text("title"),
@@ -115,7 +115,7 @@ export const events = sqliteTable(
     id: text("id").primaryKey(),
     threadId: text("thread_id")
       .notNull()
-      .references(() => threads.id),
+      .references(() => threads.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
     type: text("type").$type<ThreadEventType>().notNull(),
     normType: text("norm_type").notNull().default(""),

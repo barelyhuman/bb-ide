@@ -4,6 +4,7 @@ import { createConnection } from "../src/connection.js";
 import { migrate } from "../src/migrate.js";
 import {
   EnvironmentRepository,
+  EventRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
@@ -24,6 +25,7 @@ describe("repository strict normalization", () => {
   let environments: EnvironmentRepository;
   let attachments: ThreadEnvironmentAttachmentRepository;
   let threads: ThreadRepository;
+  let events: EventRepository;
   let sqlite: SqliteClient;
 
   beforeEach(() => {
@@ -34,6 +36,7 @@ describe("repository strict normalization", () => {
     environments = new EnvironmentRepository(db);
     attachments = new ThreadEnvironmentAttachmentRepository(db);
     threads = new ThreadRepository(db);
+    events = new EventRepository(db);
   });
 
   afterEach(() => {
@@ -521,5 +524,50 @@ describe("repository strict normalization", () => {
     expect(threads.deleteQueuedMessage(thread.id, queued.id)).toBe(true);
     expect(threads.deleteQueuedMessage(thread.id, queued.id)).toBe(false);
     expect(threads.listQueuedMessages(thread.id)).toHaveLength(0);
+  });
+
+  it("cascade-deletes events when a thread is deleted", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({ projectId });
+    events.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/info",
+      data: { message: "hello" },
+    });
+    events.create({
+      threadId: thread.id,
+      seq: 2,
+      type: "system/info",
+      data: { message: "world" },
+    });
+
+    expect(events.listByThread(thread.id)).toHaveLength(2);
+    threads.delete(thread.id);
+    expect(events.listByThread(thread.id)).toHaveLength(0);
+  });
+
+  it("cascade-deletes threads and events when a project is deleted", () => {
+    const projectId = createProjectId();
+    const thread1 = threads.create({ projectId });
+    const thread2 = threads.create({ projectId });
+    events.create({
+      threadId: thread1.id,
+      seq: 1,
+      type: "system/info",
+      data: { message: "t1" },
+    });
+    events.create({
+      threadId: thread2.id,
+      seq: 1,
+      type: "system/info",
+      data: { message: "t2" },
+    });
+
+    expect(threads.list({ projectId })).toHaveLength(2);
+    projects.delete(projectId);
+    expect(threads.list({ projectId })).toHaveLength(0);
+    expect(events.listByThread(thread1.id)).toHaveLength(0);
+    expect(events.listByThread(thread2.id)).toHaveLength(0);
   });
 });
