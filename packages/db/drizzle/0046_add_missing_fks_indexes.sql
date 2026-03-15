@@ -6,6 +6,11 @@ CREATE UNIQUE INDEX `environments_project_descriptor_idx` ON `environments` (`pr
 CREATE INDEX `environment_agent_sessions_status_lease_idx` ON `environment_agent_sessions` (`status`, `lease_expires_at`);
 
 --> statement-breakpoint
+-- Clean up legacy kind strings before adding FK constraint
+UPDATE `threads` SET `environment_id` = NULL
+  WHERE `environment_id` IN ('worktree', 'local', 'docker');
+
+--> statement-breakpoint
 -- Q20: Rebuild threads table to add FK constraints on environmentId and parentThreadId
 CREATE TABLE `__new_threads` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -14,7 +19,7 @@ CREATE TABLE `__new_threads` (
 	`type` text NOT NULL DEFAULT 'standard',
 	`title` text,
 	`status` text NOT NULL DEFAULT 'created',
-	`environment_id` text,
+	`environment_id` text REFERENCES `environments`(`id`) ON DELETE SET NULL,
 	`merge_base_branch` text,
 	`parent_thread_id` text REFERENCES `threads`(`id`) ON DELETE SET NULL,
 	`archived_at` integer,

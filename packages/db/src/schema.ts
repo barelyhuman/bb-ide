@@ -54,9 +54,7 @@ export const threads = sqliteTable(
     type: text("type").notNull().default("standard"),
     title: text("title"),
     status: text("status").notNull().default("created"),
-    // No FK constraint — this field stores both first-class environment UUIDs
-    // and legacy kind strings ("worktree", "local").
-    environmentId: text("environment_id"),
+    environmentId: text("environment_id").references(() => environments.id, { onDelete: "set null" }),
     mergeBaseBranch: text("merge_base_branch"),
     // FK to threads.id (self-reference) declared in migration 0046; not
     // inline here to avoid circular type inference.
