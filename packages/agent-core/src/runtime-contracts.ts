@@ -178,19 +178,18 @@ export interface ProviderAdapter {
   ): Record<string, unknown>;
 }
 
-export type EnvironmentProvisioningEvent =
-  | {
-      type: "env-setup";
-      status: "started" | "running" | "completed" | "failed";
-      scriptPath: string;
-      workspaceRoot?: string;
-      branchName?: string;
-      headSha?: string;
-      timeoutMs?: number;
-      durationMs?: number;
-      detail?: string;
-      reason?: ThreadEnvironmentStartReason;
-    };
+export interface EnvironmentProvisioningEvent {
+  type: "env-setup";
+  status: "started" | "running" | "completed" | "failed";
+  scriptPath: string;
+  workspaceRoot?: string;
+  branchName?: string;
+  headSha?: string;
+  timeoutMs?: number;
+  durationMs?: number;
+  detail?: string;
+  reason?: ThreadEnvironmentStartReason;
+}
 
 export interface ThreadListFilters {
   projectId?: string;
