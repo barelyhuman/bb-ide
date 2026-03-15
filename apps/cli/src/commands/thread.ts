@@ -544,15 +544,12 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (id: string | undefined, opts: { force?: boolean }) => {
       try {
         const threadId = requireThreadId(id);
+        const client = createClient(getUrl());
         await unwrap<{ ok: boolean }>(
-          fetch(`${getUrl()}/api/v1/threads/${encodeURIComponent(threadId)}/archive`, opts.force
-            ? {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ force: true }),
-              }
-            : { method: "POST" },
-          ),
+          client.api.v1.threads[":id"].archive.$post({
+            param: { id: threadId },
+            json: opts.force ? { force: true } : {},
+          }),
         );
         console.log(`Thread ${threadId} archived`);
       } catch (err: unknown) {

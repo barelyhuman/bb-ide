@@ -992,19 +992,14 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
-    .post("/:id/archive", async (c) => {
+    .post("/:id/archive", zValidator("json", archiveThreadBodySchema), async (c) => {
       try {
         const threadId = c.req.param("id");
         const thread = await getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(threadId));
         }
-        const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
-        const parsedBody = archiveThreadBodySchema.safeParse(bodyRaw);
-        if (!parsedBody.success) {
-          throw invalidRequestError("Invalid archive request body");
-        }
-        const force = parsedBody.data.force === true;
+        const { force } = c.req.valid("json");
         if (!force && threadManager.requiresForceArchive(thread.id)) {
           const workStatus = await threadManager.getWorkStatusAsync(thread.id);
           if (
