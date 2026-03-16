@@ -14,6 +14,7 @@ const workspaceRoot = resolve(__dirname, "..", "..");
 function parseArgs(argv) {
   const options = {
     projectName: "qa-standalone",
+    provider: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -21,6 +22,10 @@ function parseArgs(argv) {
     switch (arg) {
       case "--project-name":
         options.projectName = argv[index + 1] ?? options.projectName;
+        index += 1;
+        break;
+      case "--provider":
+        options.provider = argv[index + 1];
         index += 1;
         break;
       default:
@@ -82,7 +87,7 @@ async function createProject(baseUrl, projectName, projectRoot) {
 }
 
 async function main() {
-  const { projectName } = parseArgs(process.argv.slice(2));
+  const { projectName, provider } = parseArgs(process.argv.slice(2));
   const tmpRoot = await import("node:fs/promises").then(({ mkdtemp }) =>
     mkdtemp(join(tmpdir(), "beanbag-qa-")),
   );
@@ -110,8 +115,17 @@ async function main() {
   const port = await allocatePort();
   const daemonUrl = `http://127.0.0.1:${port}`;
   const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
-  const relaunchCommand = [
+  const daemonEnv = {
+    ...process.env,
+    BEANBAG_ROOT: beanbagRoot,
+    ...(provider ? { BEANBAG_PROVIDER: provider } : {}),
+  };
+  const relaunchEnvPrefix = [
     `BEANBAG_ROOT="${beanbagRoot}"`,
+    ...(provider ? [`BEANBAG_PROVIDER="${provider}"`] : []),
+  ].join(" ");
+  const relaunchCommand = [
+    relaunchEnvPrefix,
     `"${process.execPath}"`,
     `"${daemonEntry}"`,
     "--port",
@@ -122,10 +136,7 @@ async function main() {
     [daemonEntry, "--port", String(port)],
     {
       cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BEANBAG_ROOT: beanbagRoot,
-      },
+      env: daemonEnv,
       detached: true,
       stdio: "ignore",
     },
@@ -151,6 +162,7 @@ async function main() {
     beanbagRoot,
     port,
     daemonUrl,
+    provider: provider ?? "codex",
     nodePath: process.execPath,
     nodeVersion: process.version,
     nodeAbi: process.versions.modules,

@@ -77,13 +77,15 @@ For checked-in daemon/env-agent automation tiers:
 
 - `pnpm qa:daemon:manual-smoke`
 - `pnpm qa:daemon:smoke`
+- `pnpm qa:daemon:smoke:claude-code`
 - `pnpm qa:daemon:stress`
 - `pnpm qa:daemon:regression`
 - `pnpm qa:daemon:recovery:fake`
 
 Provider coverage split:
 
-- `qa:daemon:manual-smoke`, `qa:daemon:smoke`, `qa:daemon:stress`, and `qa:daemon:regression` use the real provider.
+- `qa:daemon:manual-smoke`, `qa:daemon:smoke`, `qa:daemon:stress`, and `qa:daemon:regression` use the real Codex provider.
+- `qa:daemon:smoke:claude-code` runs the same scripted smoke suite against the Claude Code provider (requires `ANTHROPIC_API_KEY`).
 - `qa:daemon:recovery:fake` is the deterministic fake-provider recovery suite for worker-loss and forced-recovery paths that real-provider automation cannot reliably drive.
 
 Use the standalone daemon guide when you need the full direct-binary workflow and exhaustive scenario checklist.

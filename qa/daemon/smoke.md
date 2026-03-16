@@ -30,11 +30,12 @@ For the checked-in automation tiers:
 ```bash
 pnpm qa:daemon:manual-smoke
 pnpm qa:daemon:smoke
+pnpm qa:daemon:smoke:claude-code
 ```
 
 `qa:daemon:manual-smoke` provisions a disposable standalone daemon and runs a representative CLI-first pass against the real provider.
 
-`qa:daemon:smoke` runs the real-provider scripted smoke suite. Some recovery scenarios still require fake Codex control and are covered separately by `pnpm qa:daemon:recovery:fake`.
+`qa:daemon:smoke` runs the real-provider scripted smoke suite against Codex. `qa:daemon:smoke:claude-code` runs the same suite against Claude Code (requires `ANTHROPIC_API_KEY`). Some recovery scenarios still require fake Codex control and are covered separately by `pnpm qa:daemon:recovery:fake`.
 
 ## Required scenarios
 

@@ -4,6 +4,7 @@ import {
   type SystemProviderInfo,
   type ThreadProviderId,
 } from "@beanbag/agent-core";
+import { createClaudeCodeProviderAdapter } from "./claude-code-provider-adapter.js";
 import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 
@@ -17,6 +18,8 @@ function createProviderForId(
   switch (providerId) {
     case "codex":
       return createCodexProviderAdapter();
+    case "claude-code":
+      return createClaudeCodeProviderAdapter();
     default:
       throw new Error(`Unsupported provider "${providerId}"`);
   }

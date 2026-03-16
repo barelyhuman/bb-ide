@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
+import dotenv from "dotenv";
 
 function latestModifiedAtMs(rootPath: string): number {
   const stat = statSync(rootPath);
@@ -16,6 +17,10 @@ function latestModifiedAtMs(rootPath: string): number {
 }
 
 export default function globalSetup(): void {
+  // Load .env from the workspace root so auth tokens are available for real-provider E2E runs.
+  const workspaceRoot = resolve(process.cwd(), "../..");
+  dotenv.config({ path: resolve(workspaceRoot, ".env") });
+
   const environmentAgentRoot = resolve(process.cwd(), "../../packages/environment-agent");
   const bundlePath = resolve(environmentAgentRoot, "dist/environment-agent.bundle.mjs");
   const sourceLatestMs = Math.max(

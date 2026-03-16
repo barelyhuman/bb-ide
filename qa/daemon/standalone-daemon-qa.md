@@ -1,6 +1,6 @@
 # Standalone Daemon CLI QA
 
-This document describes how to QA Beanbag daemon and CLI flows against the real Codex provider.
+This document describes how to QA Beanbag daemon and CLI flows against a real provider.
 
 Use this guide when you want to validate user-visible behavior end-to-end, especially after changes to:
 
@@ -16,6 +16,26 @@ pnpm qa:daemon:manual-smoke
 ```
 
 That script runs a disposable standalone daemon against the real provider and exercises a smaller CLI-first matrix. Use this full guide when you need exhaustive coverage or failure triage.
+
+## Provider selection
+
+By default, the QA pass uses the Codex provider. To run against **Claude Code** instead, set `BEANBAG_PROVIDER=claude-code` and ensure `ANTHROPIC_API_KEY` is available:
+
+```bash
+BEANBAG_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-daemon-qa.mjs
+```
+
+For scripted smoke tests with Claude Code:
+
+```bash
+ANTHROPIC_API_KEY=... pnpm qa:daemon:smoke:claude-code
+```
+
+All the test scenarios in this document apply to both providers. The only difference is the environment setup. Claude Code does not support rename, so `thread/name/set` tests should be skipped for that provider.
+
+### Multi-provider coverage strategy
+
+It is fine to run the full exhaustive QA pass against only one provider and then run a lighter smoke pass (`pnpm qa:daemon:smoke` or `pnpm qa:daemon:smoke:claude-code`) against the other supported providers. The daemon lifecycle, restart, and recovery behaviors are provider-agnostic — a full pass on one provider gives high confidence that the core paths work, while a smoke pass on the others confirms that the provider-specific bridge and adapter wiring is healthy.
 
 ## Rules
 
@@ -40,7 +60,9 @@ pnpm exec turbo run build \
   --filter=@beanbag/cli
 ```
 
-Confirm Codex is available in `PATH` and can be used by the daemon.
+For Codex: confirm `codex` is available in `PATH` and can be used by the daemon.
+
+For Claude Code: confirm `ANTHROPIC_API_KEY` is set and the `@beanbag/claude-code-bridge` package is built (`pnpm --filter @beanbag/claude-code-bridge build`).
 
 Recommended during restart/liveness QA:
 
@@ -96,6 +118,15 @@ git -C "$project_root" commit -m init
 
 ```bash
 BEANBAG_ROOT="$beanbag_root" \
+node apps/daemon/dist/index.js --port 4311
+```
+
+For Claude Code, also set the provider:
+
+```bash
+BEANBAG_ROOT="$beanbag_root" \
+BEANBAG_PROVIDER=claude-code \
+ANTHROPIC_API_KEY=... \
 node apps/daemon/dist/index.js --port 4311
 ```
 

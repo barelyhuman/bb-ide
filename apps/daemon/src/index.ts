@@ -1,8 +1,16 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { serve } from "@hono/node-server";
 import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+
+// Load .env from the workspace root. Never overwrites existing env vars.
+// Works for `pnpm dev`, standalone QA, and production runs from the repo.
+const __daemon_dirname = dirname(fileURLToPath(import.meta.url));
+const workspaceEnvPath = resolve(__daemon_dirname, "..", "..", "..", ".env");
+dotenv.config({ path: workspaceEnvPath });
 import {
   createConnection,
   migrate,

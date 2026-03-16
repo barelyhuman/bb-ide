@@ -33,14 +33,15 @@
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
-    "@beanbag/templates": "workspace:*",
-    "@beanbag/environment": "workspace:*",
-    "@beanbag/environment-agent": "workspace:*",
     "@beanbag/agent-server": "workspace:*",
     "@beanbag/db": "workspace:*",
+    "@beanbag/environment": "workspace:*",
+    "@beanbag/environment-agent": "workspace:*",
+    "@beanbag/templates": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/node-ws": "^1.1.0",
     "@hono/zod-validator": "^0.4.0",
+    "dotenv": "^17.3.1",
     "hono": "^4.7.0",
     "xstate": "^5.20.2",
     "zod": "^3.24.0"

@@ -1,6 +1,6 @@
 import { assertNever } from "@beanbag/agent-core";
 
-export type E2eProviderMode = "fake" | "real";
+export type E2eProviderMode = "fake" | "real" | "real-claude-code";
 
 export function resolveE2eProviderMode(): E2eProviderMode {
   const rawMode = (process.env.BEANBAG_E2E_PROVIDER_MODE ?? "fake")
@@ -12,9 +12,11 @@ export function resolveE2eProviderMode(): E2eProviderMode {
       return "fake";
     case "real":
       return "real";
+    case "real-claude-code":
+      return "real-claude-code";
     default:
       throw new Error(
-        `Unsupported BEANBAG_E2E_PROVIDER_MODE "${rawMode}". Expected one of: fake, real.`,
+        `Unsupported BEANBAG_E2E_PROVIDER_MODE "${rawMode}". Expected one of: fake, real, real-claude-code.`,
       );
   }
 }
@@ -25,6 +27,7 @@ export function e2eTimeoutMs(fakeMs: number, realMs: number): number {
     case "fake":
       return fakeMs;
     case "real":
+    case "real-claude-code":
       return realMs;
     default:
       return assertNever(providerMode);
@@ -33,4 +36,8 @@ export function e2eTimeoutMs(fakeMs: number, realMs: number): number {
 
 export function supportsFakeCodexControl(): boolean {
   return resolveE2eProviderMode() === "fake";
+}
+
+export function supportsClaudeCodeProvider(): boolean {
+  return resolveE2eProviderMode() === "real-claude-code";
 }

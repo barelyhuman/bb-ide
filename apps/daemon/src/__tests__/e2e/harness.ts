@@ -25,6 +25,7 @@ import {
   migrate,
 } from "@beanbag/db";
 import {
+  createClaudeCodeProviderAdapter,
   createCodexProviderAdapter,
   type ProviderToolHost,
 } from "@beanbag/agent-server";
@@ -301,7 +302,9 @@ export async function startDaemonE2eHarness(
                   BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
                 },
               })
-            : createCodexProviderAdapter(),
+            : providerMode === "real-claude-code"
+              ? createClaudeCodeProviderAdapter()
+              : createCodexProviderAdapter(),
       });
 
     await threadManager.cleanupArchivedEnvironmentsOnBoot();
