@@ -24,7 +24,7 @@ CREATE TABLE `__new_threads` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO `__new_threads` SELECT * FROM `threads`;
+INSERT INTO `__new_threads` (`id`, `project_id`, `provider_id`, `type`, `title`, `status`, `environment_id`, `merge_base_branch`, `parent_thread_id`, `archived_at`, `last_read_at`, `created_at`, `updated_at`) SELECT `id`, `project_id`, `provider_id`, `type`, `title`, `status`, `environment_id`, `merge_base_branch`, `parent_thread_id`, `archived_at`, `last_read_at`, `created_at`, `updated_at` FROM `threads`;
 --> statement-breakpoint
 DROP TABLE `threads`;
 --> statement-breakpoint
@@ -53,7 +53,7 @@ CREATE TABLE `__new_projects` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO `__new_projects` SELECT * FROM `projects`;
+INSERT INTO `__new_projects` (`id`, `name`, `root_path`, `project_instructions`, `primary_checkout_thread_id`, `primary_manager_thread_id`, `created_at`, `updated_at`) SELECT `id`, `name`, `root_path`, `project_instructions`, `primary_checkout_thread_id`, `primary_manager_thread_id`, `created_at`, `updated_at` FROM `projects`;
 --> statement-breakpoint
 DROP TABLE `projects`;
 --> statement-breakpoint
@@ -85,7 +85,7 @@ CREATE TABLE `__new_environment_agent_sessions` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO `__new_environment_agent_sessions` SELECT * FROM `environment_agent_sessions`;
+INSERT INTO `__new_environment_agent_sessions` (`id`, `thread_id`, `environment_id`, `agent_id`, `agent_instance_id`, `protocol_version`, `control_base_url`, `control_auth_token`, `status`, `lease_expires_at`, `last_heartbeat_at`, `closed_at`, `close_reason`, `created_at`, `updated_at`) SELECT `id`, `thread_id`, NULL, `agent_id`, `agent_instance_id`, `protocol_version`, `control_base_url`, `control_auth_token`, `status`, `lease_expires_at`, `last_heartbeat_at`, `closed_at`, `close_reason`, `created_at`, `updated_at` FROM `environment_agent_sessions`;
 --> statement-breakpoint
 DROP TABLE `environment_agent_sessions`;
 --> statement-breakpoint

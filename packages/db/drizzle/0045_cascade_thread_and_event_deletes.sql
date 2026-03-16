@@ -18,8 +18,7 @@ CREATE TABLE `__new_threads` (
 	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO `__new_threads`
-SELECT * FROM `threads`;
+INSERT INTO `__new_threads` (`id`, `project_id`, `provider_id`, `type`, `title`, `status`, `environment_id`, `merge_base_branch`, `parent_thread_id`, `archived_at`, `last_read_at`, `created_at`, `updated_at`) SELECT `id`, `project_id`, `provider_id`, `type`, `title`, `status`, `environment_id`, `merge_base_branch`, `parent_thread_id`, `archived_at`, `last_read_at`, `created_at`, `updated_at` FROM `threads`;
 --> statement-breakpoint
 DROP TABLE `threads`;
 --> statement-breakpoint
@@ -51,8 +50,7 @@ CREATE TABLE `__new_events` (
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-INSERT INTO `__new_events`
-SELECT * FROM `events`;
+INSERT INTO `__new_events` (`id`, `thread_id`, `seq`, `type`, `norm_type`, `turn_id`, `provider_thread_id`, `is_turn_lifecycle`, `is_thread_identity`, `data`, `created_at`) SELECT `id`, `thread_id`, `seq`, `type`, `norm_type`, `turn_id`, `provider_thread_id`, `is_turn_lifecycle`, `is_thread_identity`, `data`, `created_at` FROM `events`;
 --> statement-breakpoint
 DROP TABLE `events`;
 --> statement-breakpoint
