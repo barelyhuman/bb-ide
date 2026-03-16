@@ -133,10 +133,10 @@ The descriptor concept exists on `EnvironmentRecord` but callers can't pass one 
 
 **Files:** `apps/app/src/views/ProjectMainView.tsx`
 
-1. Replace the environment selector to map options to the new API fields:
-   - "Project root" → `environmentDescriptor: { type: "path", path: projectRootPath }` (or omit, since it's the default)
-   - "New worktree" → `environmentCreationArgs: { runtimeKind: "worktree" }`
-   - "New Docker container" → `environmentCreationArgs: { runtimeKind: "docker" }`
+1. Replace the environment selector to map options to the new API fields. Labels should be:
+   - "Direct" → `environmentDescriptor: { type: "path", path: projectRootPath }` (or omit, since it's the default)
+   - "New Worktree" → `environmentCreationArgs: { runtimeKind: "worktree" }`
+   - "New Docker Sandbox" → `environmentCreationArgs: { runtimeKind: "docker" }`
 
 2. Fix the `environmentId` variable naming confusion — rename to match what it actually represents.
 
@@ -163,7 +163,11 @@ The descriptor concept exists on `EnvironmentRecord` but callers can't pass one 
 
 2. `getEnvironmentIconInfo`: Already partially capability-based. Remove the `id === "docker"` special case — this should be based on `requestedRuntimeKind` or a capability flag.
 
-3. `ThreadDetailView.tsx` label logic: Simplify. With every thread having an `attachedEnvironment`, the label can always come from the descriptor path (last segment for managed, "Primary workspace" for unmanaged when path === project root).
+3. `ThreadDetailView.tsx` label logic (below the promptbox, bottom-right of thread timeline): Derive from the environment record:
+   - If descriptor path === project root → "Primary"
+   - If environment is a worktree (managed or unmanaged) → "Worktree"
+   - If environment is docker → "Docker"
+   - For managed environments, can additionally show the last path segment or branch name for disambiguation.
 
 ### Phase 7: Clean up legacy kind-string references
 
