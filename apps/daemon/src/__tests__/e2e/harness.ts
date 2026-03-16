@@ -25,9 +25,8 @@ import {
   migrate,
 } from "@beanbag/db";
 import {
-  createClaudeCodeProviderAdapter,
   createCodexProviderAdapter,
-  createPiProviderAdapter,
+  createProviderAdapter,
   type ProviderToolHost,
 } from "@beanbag/agent-server";
 import { createServer } from "../../server.js";
@@ -303,11 +302,7 @@ export async function startDaemonE2eHarness(
                   BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
                 },
               })
-            : providerMode === "real-claude-code"
-              ? createClaudeCodeProviderAdapter()
-              : providerMode === "real-pi"
-                ? createPiProviderAdapter()
-                : createCodexProviderAdapter(),
+            : createProviderAdapter(),
       });
 
     await threadManager.cleanupArchivedEnvironmentsOnBoot();

@@ -188,6 +188,24 @@ sqlite3 "$beanbag_root/beanbag.db" \
 
 Use SQLite only when the CLI/API surfaces are insufficient and you need to confirm the daemon’s persisted view directly.
 
+### 3b. Provider verification
+
+After spawning a thread and letting it reach `idle`, verify that the thread record and its events carry the correct `providerId` matching the configured provider:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-id>
+```
+
+Expected: the `providerId` field matches the configured `BEANBAG_PROVIDER` (e.g. `codex`, `claude-code`, or `pi`).
+
+Inspect raw events to confirm provider event envelopes carry the correct provider:
+
+```bash
+node apps/cli/dist/index.js thread status <thread-id> --recent-events 10 --event-mode raw
+```
+
+Expected: any provider event envelope in the event data should contain `"providerId":"<expected-provider>"`.
+
 ### 4. Validate direct/local flows
 
 Required matrix:

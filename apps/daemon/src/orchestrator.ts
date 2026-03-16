@@ -868,7 +868,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _resolveSpawnProviderId(_req: SpawnThreadRequest): ThreadProviderId {
-    return DEFAULT_THREAD_PROVIDER_ID;
+    return this.defaultProviderId;
   }
 
   private _resolveEnvironmentSelection(args: {

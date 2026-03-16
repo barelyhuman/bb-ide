@@ -20,7 +20,9 @@
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
+    "@beanbag/claude-code-bridge": "workspace:*",
     "@beanbag/environment-agent": "workspace:*",
+    "@beanbag/pi-bridge": "workspace:*",
     "@beanbag/templates": "workspace:*",
     "tsx": "^4.20.0"
   },

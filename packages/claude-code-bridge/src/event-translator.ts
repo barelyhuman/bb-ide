@@ -6,21 +6,24 @@ export interface JsonRpcNotification {
   params: Record<string, unknown>;
 }
 
-let turnCounter = 0;
-
-function nextTurnId(): string {
-  turnCounter += 1;
-  return `turn-${turnCounter}`;
+export interface TurnCounterState {
+  turnCounter: number;
 }
 
-export function resetTurnCounter(): void {
-  turnCounter = 0;
+export function createTurnCounterState(): TurnCounterState {
+  return { turnCounter: 0 };
+}
+
+function nextTurnId(state: TurnCounterState): string {
+  state.turnCounter += 1;
+  return `turn-${state.turnCounter}`;
 }
 
 export function translateSdkMessage(
   message: SDKMessage,
   threadId: string,
   currentTurnId: string | undefined,
+  counterState: TurnCounterState,
 ): { notifications: JsonRpcNotification[]; turnId: string | undefined } {
   const notifications: JsonRpcNotification[] = [];
   let turnId = currentTurnId;
@@ -32,7 +35,7 @@ export function translateSdkMessage(
 
     case "assistant": {
       if (!turnId) {
-        turnId = nextTurnId();
+        turnId = nextTurnId(counterState);
         notifications.push({
           jsonrpc: "2.0",
           method: "turn/started",
@@ -48,7 +51,7 @@ export function translateSdkMessage(
           params: {
             threadId,
             turnId,
-            item: { normalizedType: "agentmessage", text: { text } },
+            item: { type: "agentMessage", text },
           },
         });
       }

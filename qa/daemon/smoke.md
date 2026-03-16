@@ -40,6 +40,10 @@ pnpm qa:daemon:smoke:pi
 
 ## Required scenarios
 
+### Provider verification
+- after spawning a thread and waiting for idle, confirm `thread show` reports the correct `providerId` matching the configured provider
+- inspect raw events (`thread status --event-mode raw`) and confirm provider event envelopes carry the expected `providerId`
+
 ### Local flow
 - start thread
 - follow-up

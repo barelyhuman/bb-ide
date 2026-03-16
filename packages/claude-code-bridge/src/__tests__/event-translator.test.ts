@@ -1,14 +1,16 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   translateSdkMessage,
-  resetTurnCounter,
-  type JsonRpcNotification,
+  createTurnCounterState,
+  type TurnCounterState,
 } from "../event-translator.js";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 describe("event-translator", () => {
+  let counterState: TurnCounterState;
+
   beforeEach(() => {
-    resetTurnCounter();
+    counterState = createTurnCounterState();
   });
 
   it("captures system init without emitting notifications", () => {
@@ -22,6 +24,7 @@ describe("event-translator", () => {
       message,
       "thread-1",
       undefined,
+      counterState,
     );
 
     expect(notifications).toHaveLength(0);
@@ -41,6 +44,7 @@ describe("event-translator", () => {
       message,
       "thread-1",
       undefined,
+      counterState,
     );
 
     expect(turnId).toBe("turn-1");
@@ -54,7 +58,7 @@ describe("event-translator", () => {
       params: {
         threadId: "thread-1",
         turnId: "turn-1",
-        item: { normalizedType: "agentmessage", text: { text: "Hello world" } },
+        item: { type: "agentMessage", text: "Hello world" },
       },
     });
   });
@@ -79,6 +83,7 @@ describe("event-translator", () => {
       message,
       "thread-1",
       undefined,
+      counterState,
     );
 
     // turn/started + item/started (no text so no item/completed for text)
@@ -108,6 +113,7 @@ describe("event-translator", () => {
       message,
       "thread-1",
       "turn-1",
+      counterState,
     );
 
     expect(notifications).toHaveLength(1);
@@ -127,6 +133,7 @@ describe("event-translator", () => {
       message,
       "thread-1",
       "turn-1",
+      counterState,
     );
 
     expect(turnId).toBeUndefined();
@@ -150,7 +157,7 @@ describe("event-translator", () => {
       },
     } as unknown as SDKMessage;
 
-    const result1 = translateSdkMessage(msg1, "thread-1", undefined);
+    const result1 = translateSdkMessage(msg1, "thread-1", undefined, counterState);
     expect(result1.turnId).toBe("turn-1");
 
     const msg2 = {
@@ -161,7 +168,7 @@ describe("event-translator", () => {
       },
     } as unknown as SDKMessage;
 
-    const result2 = translateSdkMessage(msg2, "thread-1", result1.turnId);
+    const result2 = translateSdkMessage(msg2, "thread-1", result1.turnId, counterState);
     const turnStartedCount = result2.notifications.filter(
       (n) => n.method === "turn/started",
     ).length;
@@ -187,6 +194,7 @@ describe("event-translator", () => {
       message,
       "thread-1",
       "turn-1",
+      counterState,
     );
 
     expect(notifications).toHaveLength(1);
@@ -199,5 +207,24 @@ describe("event-translator", () => {
         },
       },
     });
+  });
+
+  it("maintains separate turn counters per state object", () => {
+    const counterA = createTurnCounterState();
+    const counterB = createTurnCounterState();
+
+    const msg = {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "Hello" }],
+      },
+    } as unknown as SDKMessage;
+
+    const resultA = translateSdkMessage(msg, "thread-A", undefined, counterA);
+    const resultB = translateSdkMessage(msg, "thread-B", undefined, counterB);
+
+    expect(resultA.turnId).toBe("turn-1");
+    expect(resultB.turnId).toBe("turn-1");
   });
 });

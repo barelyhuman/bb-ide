@@ -49,6 +49,7 @@ import type { DbConnection } from "@beanbag/db";
 import * as gitProject from "../git-project.js";
 import {
   createCodexProviderAdapter,
+  createPiProviderAdapter,
   type LlmCompletionService,
 } from "@beanbag/agent-server";
 import { Orchestrator } from "../orchestrator.js";
@@ -1047,6 +1048,24 @@ describe("Orchestrator", () => {
       expect(thread?.type).toBe("standard");
     });
 
+    it("assigns the configured provider id to spawned threads", async () => {
+      const piManager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        createPiProviderAdapter(),
+        createTestRuntimeEnv(),
+      );
+      const project = createTestProject(projectRepo, { rootPath: "/test" });
+
+      const result = await piManager.spawn({ projectId: project.id });
+
+      const thread = threadRepo.getById(result.id);
+      expect(thread).toBeDefined();
+      expect(thread?.providerId).toBe("pi");
+    });
 
     it("returns before provisioning work starts", async () => {
       const onCreate = vi.fn();

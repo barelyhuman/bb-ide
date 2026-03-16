@@ -1,12 +1,15 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
   translatePiEvent,
-  resetTurnCounter,
+  createTurnCounterState,
+  type TurnCounterState,
 } from "../event-translator.js";
 
 describe("event-translator", () => {
+  let counterState: TurnCounterState;
+
   beforeEach(() => {
-    resetTurnCounter();
+    counterState = createTurnCounterState();
   });
 
   it("emits turn/started on agent_start", () => {
@@ -14,6 +17,7 @@ describe("event-translator", () => {
       { type: "agent_start" },
       "thread-1",
       undefined,
+      counterState,
     );
     expect(turnId).toBe("turn-1");
     expect(notifications).toHaveLength(1);
@@ -36,13 +40,14 @@ describe("event-translator", () => {
       },
       "thread-1",
       "turn-1",
+      counterState,
     );
     expect(turnId).toBeUndefined();
     expect(notifications).toHaveLength(2);
     expect(notifications[0]).toMatchObject({
       method: "item/completed",
       params: {
-        item: { normalizedType: "agentmessage", text: { text: "Hello world" } },
+        item: { type: "agentMessage", text: "Hello world" },
       },
     });
     expect(notifications[1]).toMatchObject({
@@ -62,6 +67,7 @@ describe("event-translator", () => {
       },
       "thread-1",
       "turn-1",
+      counterState,
     );
     expect(notifications).toHaveLength(1);
     expect(notifications[0]).toMatchObject({
@@ -80,6 +86,7 @@ describe("event-translator", () => {
       },
       "thread-1",
       "turn-1",
+      counterState,
     );
     expect(notifications).toHaveLength(1);
     expect(notifications[0]).toMatchObject({
@@ -105,6 +112,7 @@ describe("event-translator", () => {
       },
       "thread-1",
       "turn-1",
+      counterState,
     );
     expect(notifications).toHaveLength(1);
     expect(notifications[0]).toMatchObject({
@@ -124,7 +132,29 @@ describe("event-translator", () => {
       { type: "auto_compaction_start" },
       "thread-1",
       "turn-1",
+      counterState,
     );
     expect(notifications).toHaveLength(0);
+  });
+
+  it("maintains separate turn counters per state object", () => {
+    const counterA = createTurnCounterState();
+    const counterB = createTurnCounterState();
+
+    const resultA = translatePiEvent(
+      { type: "agent_start" },
+      "thread-A",
+      undefined,
+      counterA,
+    );
+    const resultB = translatePiEvent(
+      { type: "agent_start" },
+      "thread-B",
+      undefined,
+      counterB,
+    );
+
+    expect(resultA.turnId).toBe("turn-1");
+    expect(resultB.turnId).toBe("turn-1");
   });
 });

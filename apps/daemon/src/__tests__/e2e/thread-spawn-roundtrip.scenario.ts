@@ -1,5 +1,6 @@
 import { expect } from "vitest";
 import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
+import { isProviderEventEnvelope, DEFAULT_THREAD_PROVIDER_ID } from "@beanbag/agent-core";
 import {
   runCliCommand,
   startDaemonE2eHarness,
@@ -71,6 +72,10 @@ async function waitForThreadRoundTrip(
   }));
 }
 
+function resolveExpectedProviderId(): string {
+  return (process.env.BEANBAG_PROVIDER ?? DEFAULT_THREAD_PROVIDER_ID).trim().toLowerCase();
+}
+
 export async function runThreadSpawnRoundtripScenario(): Promise<void> {
   const harness = await startDaemonE2eHarness({
     fakeCodex: {
@@ -117,6 +122,19 @@ export async function runThreadSpawnRoundtripScenario(): Promise<void> {
     expect(eventTypes.indexOf("turn/started")).toBeLessThan(
       eventTypes.indexOf("turn/completed"),
     );
+
+    // Verify that provider events carry the expected providerId
+    const expectedProviderId = resolveExpectedProviderId();
+    const providerEventEnvelopes = events
+      .filter((event) => isProviderEventEnvelope(event.data))
+      .map((event) => (event.data as { __bb_provider_event: { providerId: string } }).__bb_provider_event);
+    expect(providerEventEnvelopes.length).toBeGreaterThan(0);
+    for (const envelope of providerEventEnvelopes) {
+      expect(envelope.providerId).toBe(expectedProviderId);
+    }
+
+    // Thread record itself should have the correct providerId
+    expect(thread.providerId).toBe(expectedProviderId);
   } finally {
     await harness.cleanup();
   }

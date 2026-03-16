@@ -246,9 +246,15 @@ importers:
       '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      '@beanbag/claude-code-bridge':
+        specifier: workspace:*
+        version: link:../claude-code-bridge
       '@beanbag/environment-agent':
         specifier: workspace:*
         version: link:../environment-agent
+      '@beanbag/pi-bridge':
+        specifier: workspace:*
+        version: link:../pi-bridge
       '@beanbag/templates':
         specifier: workspace:*
         version: link:../templates

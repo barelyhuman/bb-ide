@@ -5,22 +5,27 @@ import {
 } from "../provider-registry.js";
 
 describe("provider registry", () => {
-  it("creates codex provider by default", () => {
+  it("creates codex provider with expected process command and args", () => {
     const provider = createProviderAdapter({ providerId: "codex" });
     expect(provider.id).toBe("codex");
-    expect(provider.processCommand).toBeTruthy();
+    expect(provider.processCommand).toBe("codex");
+    expect(provider.processArgs).toEqual(["app-server"]);
   });
 
-  it("creates claude-code provider", () => {
+  it("creates claude-code provider with expected process command and args", () => {
     const provider = createProviderAdapter({ providerId: "claude-code" });
     expect(provider.id).toBe("claude-code");
-    expect(provider.processCommand).toBeTruthy();
+    expect(provider.processCommand).toBe("node");
+    expect(provider.processArgs).toHaveLength(1);
+    expect(provider.processArgs[0]).toMatch(/claude-code-bridge\/dist\/bridge\.js$/);
   });
 
-  it("creates pi provider", () => {
+  it("creates pi provider with expected process command and args", () => {
     const provider = createProviderAdapter({ providerId: "pi" });
     expect(provider.id).toBe("pi");
-    expect(provider.processCommand).toBeTruthy();
+    expect(provider.processCommand).toBe("node");
+    expect(provider.processArgs).toHaveLength(1);
+    expect(provider.processArgs[0]).toMatch(/pi-bridge\/dist\/bridge\.js$/);
   });
 
   it("rejects unsupported adapters", () => {
