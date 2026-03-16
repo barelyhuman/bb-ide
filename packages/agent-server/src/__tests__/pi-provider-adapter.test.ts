@@ -3,7 +3,10 @@ import {
   createProviderEventEnvelope,
   type ThreadEvent,
 } from "@beanbag/agent-core";
-import { createPiProviderAdapter } from "../pi-provider-adapter.js";
+import {
+  buildPiAvailableModels,
+  createPiProviderAdapter,
+} from "../pi-provider-adapter.js";
 
 type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
   type?: string;
@@ -62,16 +65,93 @@ describe("pi provider adapter", () => {
     expect(adapter.createThreadNameSetParams).toBeUndefined();
   });
 
-  it("lists hardcoded pi models", async () => {
-    const adapter = createPiProviderAdapter();
-    const models = await adapter.listModels();
+  it("builds a dynamic model list from the Pi catalog", () => {
+    const models = buildPiAvailableModels({
+      providers: ["anthropic", "openai", "google"],
+      getModels: (provider) => {
+        switch (provider) {
+          case "anthropic":
+            return [
+              {
+                id: "claude-sonnet-4-20250514",
+                name: "Claude Sonnet 4",
+                provider: "anthropic",
+                reasoning: true,
+                input: ["text", "image"],
+              },
+              {
+                id: "claude-opus-4-20250514",
+                name: "Claude Opus 4",
+                provider: "anthropic",
+                reasoning: true,
+                input: ["text"],
+              },
+            ];
+          case "openai":
+            return [
+              {
+                id: "codex-mini",
+                name: "Codex Mini",
+                provider: "openai",
+                reasoning: true,
+                input: ["text"],
+              },
+            ];
+          default:
+            return [
+              {
+                id: "gemini-2.5-pro",
+                name: "Gemini 2.5 Pro",
+                provider: "google",
+                reasoning: true,
+                input: ["text"],
+              },
+            ];
+        }
+      },
+      hasAuth: (provider) => provider !== "google",
+    });
+
     const ids = models.map((m) => m.id);
     expect(ids).toContain("anthropic/claude-sonnet-4-20250514");
     expect(ids).toContain("anthropic/claude-opus-4-20250514");
     expect(ids).toContain("openai/codex-mini");
+    expect(ids).not.toContain("google/gemini-2.5-pro");
     expect(models.find((m) => m.isDefault)?.id).toBe(
       "anthropic/claude-sonnet-4-20250514",
     );
+    expect(
+      models.find((m) => m.id === "anthropic/claude-sonnet-4-20250514"),
+    ).toMatchObject({
+      displayName: "Claude Sonnet 4",
+      defaultReasoningEffort: "medium",
+    });
+  });
+
+  it("uses the supplied listModels implementation", async () => {
+    const adapter = createPiProviderAdapter({
+      listModels: async () => [
+        {
+          id: "provider/model-a",
+          model: "provider/model-a",
+          displayName: "Model A",
+          description: "A test model",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low reasoning effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ],
+    });
+
+    const models = await adapter.listModels();
+    expect(models).toEqual([
+      expect.objectContaining({
+        id: "provider/model-a",
+        isDefault: true,
+      }),
+    ]);
   });
 
   it("passes environment policy via config", () => {
@@ -85,6 +165,7 @@ describe("pi provider adapter", () => {
       },
     );
     expect(params).toMatchObject({
+      threadId: "thread-1",
       config: {
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
@@ -102,6 +183,21 @@ describe("pi provider adapter", () => {
     );
     expect(params).toMatchObject({
       model: "anthropic/claude-opus-4-20250514",
+    });
+  });
+
+  it("passes the daemon resume path through thread/resume params", () => {
+    const adapter = createPiProviderAdapter();
+    const params = adapter.createThreadResumeParams(
+      "provider-thread-1",
+      { projectId: "proj-1", threadId: "thread-1" },
+      undefined,
+      "/tmp/pi-sessions/provider-thread-1.jsonl",
+    );
+
+    expect(params).toMatchObject({
+      threadId: "provider-thread-1",
+      sessionPath: "/tmp/pi-sessions/provider-thread-1.jsonl",
     });
   });
 

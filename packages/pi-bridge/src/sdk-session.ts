@@ -1,10 +1,13 @@
+import { dirname } from "node:path";
 import {
   createAgentSession,
   SessionManager,
   SettingsManager,
   type AgentSession,
   type AgentSessionEvent,
+  type ContextUsage,
   type CreateAgentSessionOptions,
+  type SessionStats,
   type ToolDefinition,
 } from "@mariozechner/pi-coding-agent";
 import { getModel } from "@mariozechner/pi-ai";
@@ -15,6 +18,7 @@ export interface PiSdkSessionOptions {
   model?: string;
   env?: NodeJS.ProcessEnv;
   customTools?: ToolDefinition[];
+  sessionFilePath?: string;
 }
 
 export type PiSessionEventHandler = (event: AgentSessionEvent) => void;
@@ -40,10 +44,23 @@ export class PiSdkSession {
     return this.isProcessing;
   }
 
+  getSessionStats(): SessionStats | undefined {
+    return this.session?.getSessionStats();
+  }
+
+  getContextUsage(): ContextUsage | undefined {
+    return this.session?.getContextUsage();
+  }
+
   async start(): Promise<void> {
     const sessionOptions: CreateAgentSessionOptions = {
       cwd: this.options.cwd,
-      sessionManager: SessionManager.inMemory(),
+      sessionManager: this.options.sessionFilePath
+        ? SessionManager.open(
+            this.options.sessionFilePath,
+            dirname(this.options.sessionFilePath),
+          )
+        : SessionManager.inMemory(this.options.cwd),
       settingsManager: SettingsManager.inMemory({
         compaction: { enabled: true },
         retry: { enabled: true, maxRetries: 2 },

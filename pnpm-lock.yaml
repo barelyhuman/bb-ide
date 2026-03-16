@@ -243,6 +243,9 @@ importers:
 
   packages/agent-server:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.73.0
+        version: 0.73.0(zod@4.3.6)
       '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../agent-core
@@ -258,6 +261,12 @@ importers:
       '@beanbag/templates':
         specifier: workspace:*
         version: link:../templates
+      '@mariozechner/pi-ai':
+        specifier: ^0.58.3
+        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-coding-agent':
+        specifier: ^0.58.3
+        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
       tsx:
         specifier: ^4.20.0
         version: 4.21.0

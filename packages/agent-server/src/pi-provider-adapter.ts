@@ -1,7 +1,10 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { supportsXhigh, type Model } from "@mariozechner/pi-ai";
+import { AuthStorage } from "@mariozechner/pi-coding-agent";
 import type {
   AvailableModel,
+  ModelReasoningEffort,
   ProviderDynamicTool,
   ProviderLaunchConfiguration,
   ProviderCapabilities,
@@ -31,47 +34,120 @@ const __dirname = dirname(__filename);
 
 const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
 
-const PI_MODELS: AvailableModel[] = [
-  {
-    id: "anthropic/claude-sonnet-4-20250514",
-    model: "anthropic/claude-sonnet-4-20250514",
-    displayName: "Claude Sonnet 4 (via pi)",
-    description: "Fast, intelligent model via pi agent",
-    supportedReasoningEfforts: [
-      { reasoningEffort: "low", description: "Low reasoning effort" },
-      { reasoningEffort: "medium", description: "Medium reasoning effort" },
-      { reasoningEffort: "high", description: "High reasoning effort" },
-    ],
-    defaultReasoningEffort: "medium",
-    isDefault: true,
-  },
-  {
-    id: "anthropic/claude-opus-4-20250514",
-    model: "anthropic/claude-opus-4-20250514",
-    displayName: "Claude Opus 4 (via pi)",
-    description: "Most capable model via pi agent",
-    supportedReasoningEfforts: [
-      { reasoningEffort: "low", description: "Low reasoning effort" },
-      { reasoningEffort: "medium", description: "Medium reasoning effort" },
-      { reasoningEffort: "high", description: "High reasoning effort" },
-    ],
-    defaultReasoningEffort: "medium",
-    isDefault: false,
-  },
-  {
-    id: "openai/codex-mini",
-    model: "openai/codex-mini",
-    displayName: "Codex Mini (via pi)",
-    description: "OpenAI coding model via pi agent",
-    supportedReasoningEfforts: [
-      { reasoningEffort: "low", description: "Low reasoning effort" },
-      { reasoningEffort: "medium", description: "Medium reasoning effort" },
-      { reasoningEffort: "high", description: "High reasoning effort" },
-    ],
-    defaultReasoningEffort: "medium",
-    isDefault: false,
-  },
-];
+const LOW_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "low",
+  description: "Low reasoning effort",
+};
+const MEDIUM_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "medium",
+  description: "Medium reasoning effort",
+};
+const HIGH_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "high",
+  description: "High reasoning effort",
+};
+const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "xhigh",
+  description: "Extra high reasoning effort",
+};
+
+const PI_DEFAULT_MODEL_PREFERENCES = [
+  "anthropic/claude-sonnet-4-20250514",
+  "anthropic/claude-sonnet-4-6",
+  "anthropic/claude-opus-4-20250514",
+  "openai/codex-mini",
+] as const;
+
+type PiCatalogModel = Pick<
+  Model<any>,
+  "id" | "name" | "provider" | "reasoning" | "input"
+>;
+
+export function buildPiAvailableModels(args: {
+  providers: string[];
+  getModels: (provider: string) => PiCatalogModel[];
+  hasAuth: (provider: string) => boolean;
+}): AvailableModel[] {
+  const models: AvailableModel[] = [];
+
+  for (const provider of args.providers) {
+    if (!args.hasAuth(provider)) continue;
+
+    for (const model of args.getModels(provider)) {
+      const canonicalId = toCanonicalPiModelId(provider, model.id);
+      const supportedReasoningEfforts = getPiReasoningEfforts(model);
+      models.push({
+        id: canonicalId,
+        model: canonicalId,
+        displayName: model.name,
+        description: describePiModel(model),
+        supportedReasoningEfforts,
+        defaultReasoningEffort: model.reasoning ? "medium" : "low",
+        isDefault: false,
+      });
+    }
+  }
+
+  const defaultModelId = resolveDefaultPiModelId(models);
+  return models.map((model) =>
+    model.id === defaultModelId ? { ...model, isDefault: true } : model,
+  );
+}
+
+async function listPiModels(): Promise<AvailableModel[]> {
+  const [{ getModels, getProviders }, authStorageModule] = await Promise.all([
+    import("@mariozechner/pi-ai"),
+    Promise.resolve(AuthStorage.create()),
+  ]);
+
+  return buildPiAvailableModels({
+    providers: getProviders(),
+    getModels: (provider) => getModels(provider as never) as PiCatalogModel[],
+    hasAuth: (provider) => authStorageModule.hasAuth(provider),
+  });
+}
+
+function toCanonicalPiModelId(provider: string, modelId: string): string {
+  return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
+}
+
+function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
+  if (!model.reasoning) {
+    return [LOW_REASONING_EFFORT];
+  }
+
+  const efforts = [
+    LOW_REASONING_EFFORT,
+    MEDIUM_REASONING_EFFORT,
+    HIGH_REASONING_EFFORT,
+  ];
+  if (supportsXhigh(model as Model<any>)) {
+    efforts.push(XHIGH_REASONING_EFFORT);
+  }
+  return efforts;
+}
+
+function describePiModel(model: PiCatalogModel): string {
+  const capabilities: string[] = [];
+  capabilities.push(model.reasoning ? "reasoning" : "non-reasoning");
+  if (model.input.includes("image")) {
+    capabilities.push("multimodal");
+  }
+  return `${capitalize(model.provider)} ${capabilities.join(", ")} model via Pi`;
+}
+
+function capitalize(value: string): string {
+  return value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
+function resolveDefaultPiModelId(models: AvailableModel[]): string | undefined {
+  for (const preferred of PI_DEFAULT_MODEL_PREFERENCES) {
+    if (models.some((model) => model.id === preferred)) {
+      return preferred;
+    }
+  }
+  return models[0]?.id;
+}
 
 function normalizeProviderEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -189,7 +265,7 @@ export function createPiProviderAdapter(
   };
 
   const listModels =
-    opts?.listModels ?? (async () => [...PI_MODELS]);
+    opts?.listModels ?? listPiModels;
 
   return {
     id: opts?.id ?? ("pi" as ThreadProviderId),
@@ -231,7 +307,13 @@ export function createPiProviderAdapter(
     ): Record<string, unknown> {
       const baseInstructions = resolveBaseInstructions(req.developerInstructions);
       const params = withExecutionOptions(
-        withThreadEnvironmentPolicy({ baseInstructions }, context),
+        withThreadEnvironmentPolicy(
+          {
+            baseInstructions,
+            ...(context.threadId ? { threadId: context.threadId } : {}),
+          },
+          context,
+        ),
         req,
       );
       if (dynamicTools && dynamicTools.length > 0) {
@@ -247,10 +329,16 @@ export function createPiProviderAdapter(
       providerThreadId: string,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
-      _resumePath?: string,
+      resumePath?: string,
     ): Record<string, unknown> {
       return withExecutionOptions(
-        withThreadEnvironmentPolicy({ threadId: providerThreadId }, context),
+        withThreadEnvironmentPolicy(
+          {
+            threadId: providerThreadId,
+            ...(resumePath ? { sessionPath: resumePath } : {}),
+          },
+          context,
+        ),
         options,
       );
     },
