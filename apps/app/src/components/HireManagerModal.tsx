@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAvailableModels, useSystemProviders } from "@/hooks/useApi";
+import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
 
 interface HireManagerModalProps {
   projectId: string;
@@ -85,13 +85,15 @@ export function HireManagerModal({
     setError(null);
   }, []);
 
+  const hireManager = useHireProjectManager();
+
   const handleHire = useCallback(async () => {
     if (!projectId || isPending) return;
     setIsPending(true);
     setError(null);
     try {
-      const { hireProjectManager } = await import("@/lib/api");
-      const thread = await hireProjectManager(projectId, {
+      const thread = await hireManager.mutateAsync({
+        projectId,
         ...(hasMultipleProviders && selectedProviderId
           ? { providerId: selectedProviderId }
           : {}),
@@ -106,6 +108,7 @@ export function HireManagerModal({
     }
   }, [
     hasMultipleProviders,
+    hireManager,
     isPending,
     onClose,
     onHired,

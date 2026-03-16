@@ -831,7 +831,12 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
       ...(this.providerToolHost
         ? {
-            resolveDynamicTools: () => this.providerToolHost?.listTools(),
+            // Gate manager-only tools: only expose message_user for manager threads.
+            // Standard threads only get user-registered dynamic tools (if any).
+            resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
+              request.type === "manager"
+                ? this.providerToolHost?.listTools()
+                : undefined,
             toolHost: this.providerToolHost,
           }
         : {}),
