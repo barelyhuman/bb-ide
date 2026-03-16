@@ -38,7 +38,7 @@ Both bridges discard token/context usage data that their SDKs already provide. T
 ---
 
 ### 2. Dynamic model list for Pi provider
-**Status:** Not started
+**Status:** Implemented in code; manual QA pending
 
 The Pi adapter (`packages/agent-server/src/pi-provider-adapter.ts`) returns a hardcoded 3-model list. The `@mariozechner/pi-ai` SDK (already installed at v0.58.3) exports `getProviders()` and `getModels(provider)` — a typed catalog of all models Pi supports.
 
@@ -50,6 +50,7 @@ The Pi adapter (`packages/agent-server/src/pi-provider-adapter.ts`) returns a ha
 
 **Validation:**
 - Update `pi-provider-adapter.test.ts` to verify dynamic listing
+  - Completed
 - Manual QA: switch to Pi provider in UI and confirm model selector populates dynamically
 
 **Open Questions/Risks:**

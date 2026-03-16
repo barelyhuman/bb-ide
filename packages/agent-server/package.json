@@ -24,6 +24,8 @@
     "@beanbag/environment-agent": "workspace:*",
     "@beanbag/pi-bridge": "workspace:*",
     "@beanbag/templates": "workspace:*",
+    "@mariozechner/pi-ai": "^0.58.3",
+    "@mariozechner/pi-coding-agent": "^0.58.3",
     "tsx": "^4.20.0"
   },
   "devDependencies": {
