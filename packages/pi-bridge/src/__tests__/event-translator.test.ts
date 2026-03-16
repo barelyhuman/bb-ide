@@ -76,7 +76,7 @@ describe("event-translator", () => {
     });
   });
 
-  it("emits item/started for tool_execution_start", () => {
+  it("maps bash tool_execution_start to commandExecution", () => {
     const { notifications } = translatePiEvent(
       {
         type: "tool_execution_start",
@@ -93,15 +93,16 @@ describe("event-translator", () => {
       method: "item/started",
       params: {
         item: {
-          normalizedType: "toolcall",
-          callId: "call-1",
-          tool: "bash",
+          type: "commandExecution",
+          id: "call-1",
+          command: "ls",
+          status: "running",
         },
       },
     });
   });
 
-  it("emits item/completed for tool_execution_end", () => {
+  it("maps bash tool_execution_end to commandExecution completed", () => {
     const { notifications } = translatePiEvent(
       {
         type: "tool_execution_end",
@@ -119,9 +120,87 @@ describe("event-translator", () => {
       method: "item/completed",
       params: {
         item: {
-          normalizedType: "toolresult",
-          callId: "call-1",
-          isError: false,
+          type: "commandExecution",
+          id: "call-1",
+          aggregatedOutput: "output",
+          exitCode: 0,
+          status: "completed",
+        },
+      },
+    });
+  });
+
+  it("maps edit tool to filechange item type", () => {
+    const { notifications } = translatePiEvent(
+      {
+        type: "tool_execution_start",
+        toolCallId: "call-2",
+        toolName: "edit",
+        args: { file_path: "/src/app.ts" },
+      },
+      "thread-1",
+      "turn-1",
+      counterState,
+    );
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      method: "item/started",
+      params: {
+        item: {
+          type: "filechange",
+          id: "call-2",
+          changes: [{ path: "/src/app.ts", kind: { type: "update" } }],
+        },
+      },
+    });
+  });
+
+  it("maps unknown tool to custom_tool_call", () => {
+    const { notifications } = translatePiEvent(
+      {
+        type: "tool_execution_start",
+        toolCallId: "call-3",
+        toolName: "my_custom_tool",
+        args: { message: "hello" },
+      },
+      "thread-1",
+      "turn-1",
+      counterState,
+    );
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      method: "item/started",
+      params: {
+        item: {
+          type: "custom_tool_call",
+          call_id: "call-3",
+          name: "my_custom_tool",
+        },
+      },
+    });
+  });
+
+  it("maps unknown tool_execution_end to custom_tool_call_output", () => {
+    const { notifications } = translatePiEvent(
+      {
+        type: "tool_execution_end",
+        toolCallId: "call-3",
+        toolName: "my_custom_tool",
+        result: "done",
+        isError: false,
+      },
+      "thread-1",
+      "turn-1",
+      counterState,
+    );
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      method: "item/completed",
+      params: {
+        item: {
+          type: "custom_tool_call_output",
+          call_id: "call-3",
+          output: "done",
         },
       },
     });

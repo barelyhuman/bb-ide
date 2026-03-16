@@ -433,6 +433,8 @@ describe("System routes", () => {
           supportsReasoningLevels: true,
           supportsServiceTier: true,
           supportsMultimodalInput: true,
+          supportsDynamicTools: true,
+          supportsToolCallRequests: true,
         },
       };
       getProviderInfo.mockReturnValue(providerInfo);
@@ -462,6 +464,8 @@ describe("System routes", () => {
           supportsReasoningLevels: true,
           supportsServiceTier: true,
           supportsMultimodalInput: true,
+          supportsDynamicTools: true,
+          supportsToolCallRequests: true,
         },
       };
       (
@@ -489,6 +493,8 @@ describe("System routes", () => {
             supportsReasoningLevels: true,
             supportsServiceTier: true,
             supportsMultimodalInput: true,
+            supportsDynamicTools: true,
+            supportsToolCallRequests: true,
           },
         },
         {
@@ -501,6 +507,8 @@ describe("System routes", () => {
             supportsReasoningLevels: false,
             supportsServiceTier: false,
             supportsMultimodalInput: true,
+            supportsDynamicTools: true,
+            supportsToolCallRequests: true,
           },
         },
       ];

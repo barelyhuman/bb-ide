@@ -1090,6 +1090,7 @@ function durationToString(durationMs: number | undefined): string | undefined {
 
 interface ExecCallPartial extends Partial<UIToolCallSummary> {
   callId: string;
+  toolName?: string;
   parsedCmd: UIToolParsedIntent[];
 }
 
@@ -1224,6 +1225,170 @@ function parseExecLifecycleEvent(
         status,
       },
     };
+  }
+
+  return null;
+}
+
+// --- Generic tool call projection (bridge + Codex custom/function calls) ---
+
+// Maps well-known tool names to exploring intents for grouping
+function toolNameToParsedIntents(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): UIToolParsedIntent[] {
+  const name = toolName;
+  switch (name) {
+    case "Read":
+    case "read": {
+      const path = getFirstStringField(args, ["file_path", "file", "path"]) ?? "";
+      return [{ type: "read", cmd: `${name} ${path}`.trim(), name, path: path || null }];
+    }
+    case "Glob":
+    case "glob":
+    case "ls":
+    case "find": {
+      const path = getFirstStringField(args, ["pattern", "path"]) ?? "";
+      return [{ type: "list_files", cmd: `${name} ${path}`.trim(), path: path || null }];
+    }
+    case "Grep":
+    case "grep": {
+      const query = getFirstStringField(args, ["pattern", "query"]) ?? "";
+      const path = getFirstStringField(args, ["path"]) ?? "";
+      return [{ type: "search", cmd: `${name} '${query}'${path ? ` in ${path}` : ""}`.trim(), query: query || null, path: path || null }];
+    }
+    default:
+      return [];
+  }
+}
+
+function formatToolCallCommand(toolName: string, args: Record<string, unknown> | null): string {
+  if (!args) return toolName;
+  switch (toolName) {
+    case "Read":
+    case "read":
+      return `${toolName} ${getFirstStringField(args, ["file_path", "file", "path"]) ?? ""}`.trim();
+    case "Glob":
+    case "glob":
+      return `${toolName} ${getFirstStringField(args, ["pattern"]) ?? ""}`.trim();
+    case "Grep":
+    case "grep": {
+      const pattern = getFirstStringField(args, ["pattern", "query"]) ?? "";
+      const path = getFirstStringField(args, ["path"]);
+      return `${toolName} '${pattern}'${path ? ` in ${path}` : ""}`;
+    }
+    case "Bash":
+    case "bash":
+      return getFirstStringField(args, ["command"]) ?? toolName;
+    case "Edit":
+    case "Write":
+    case "edit":
+    case "write":
+      return `${toolName} ${getFirstStringField(args, ["file_path", "path"]) ?? ""}`.trim();
+    default: {
+      // Compact display for custom tools
+      const entries = Object.entries(args).filter(([, v]) => v !== undefined);
+      if (entries.length === 0) return toolName;
+      const compact = entries.map(([k, v]) => {
+        const vs = typeof v === "string" ? v : JSON.stringify(v);
+        const display = vs.length > 40 ? `${vs.slice(0, 37)}...` : vs;
+        return `${k}: ${display}`;
+      }).join(", ");
+      return `${toolName} { ${compact} }`;
+    }
+  }
+}
+
+function parseToolCallLifecycleEvent(
+  event: ThreadEvent,
+  eventType: string,
+): ExecLifecycleEvent | null {
+  // Handle custom_tool_call / custom_tool_call_output item types
+  if (
+    eventTypeMatchesAny(eventType, ["item/started", "item/completed"])
+  ) {
+    const itemToken = getItemTypeToken(event.data);
+    const item = getItemRecord(event.data);
+
+    // custom_tool_call (Codex or bridge-emitted)
+    if (itemToken === "customtoolcall") {
+      const callId = getFirstStringField(item, ["call_id", "id"]);
+      if (!callId) return null;
+      const toolName = getFirstStringField(item, ["name"]) ?? "tool";
+      let parsedArgs: Record<string, unknown> | null = null;
+      const inputStr = getFirstStringField(item, ["input"]);
+      if (inputStr) {
+        try { parsedArgs = JSON.parse(inputStr) as Record<string, unknown>; } catch { /* ignore */ }
+      }
+      if (!parsedArgs) {
+        parsedArgs = toRecord(item?.input) ?? toRecord(item?.arguments);
+      }
+
+      return {
+        kind: "begin",
+        call: {
+          callId,
+          toolName,
+          command: formatToolCallCommand(toolName, parsedArgs),
+          parsedCmd: toolNameToParsedIntents(toolName, parsedArgs),
+          status: "pending",
+        },
+      };
+    }
+
+    // custom_tool_call_output
+    if (itemToken === "customtoolcalloutput") {
+      const callId = getFirstStringField(item, ["call_id", "id"]);
+      if (!callId) return null;
+      const output = getFirstStringField(item, ["output"]);
+      return {
+        kind: "end",
+        call: {
+          callId,
+          parsedCmd: [],
+          output,
+          status: "completed",
+        },
+      };
+    }
+
+    // function_call (Codex responses API)
+    if (itemToken === "functioncall") {
+      const callId = getFirstStringField(item, ["call_id", "id"]);
+      if (!callId) return null;
+      const toolName = getFirstStringField(item, ["name"]) ?? "tool";
+      let parsedArgs: Record<string, unknown> | null = null;
+      const argsStr = getFirstStringField(item, ["arguments"]);
+      if (argsStr) {
+        try { parsedArgs = JSON.parse(argsStr) as Record<string, unknown>; } catch { /* ignore */ }
+      }
+      return {
+        kind: "begin",
+        call: {
+          callId,
+          toolName,
+          command: formatToolCallCommand(toolName, parsedArgs),
+          parsedCmd: toolNameToParsedIntents(toolName, parsedArgs),
+          status: "pending",
+        },
+      };
+    }
+
+    // function_call_output
+    if (itemToken === "functioncalloutput") {
+      const callId = getFirstStringField(item, ["call_id", "id"]);
+      if (!callId) return null;
+      const output = getFirstStringField(item, ["output"]);
+      return {
+        kind: "end",
+        call: {
+          callId,
+          parsedCmd: [],
+          output,
+          status: "completed",
+        },
+      };
+    }
   }
 
   return null;
@@ -2210,6 +2375,7 @@ function createProjectionState(): ProjectionState {
 
 interface RunningExecCall extends UIToolCallSummary {
   threadId: string;
+  toolName?: string;
   turnId?: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
@@ -2273,6 +2439,7 @@ function upsertRunningExecCall(
     return {
       callId: incoming.callId,
       threadId: event.threadId,
+      toolName: incoming.toolName,
       command: incoming.command,
       cwd: incoming.cwd,
       parsedCmd: incoming.parsedCmd,
@@ -2290,6 +2457,7 @@ function upsertRunningExecCall(
     };
   }
 
+  if (incoming.toolName && !existing.toolName) existing.toolName = incoming.toolName;
   existing.command =
     incoming.command &&
     (!existing.command || incoming.command.length > existing.command.length)
@@ -2460,7 +2628,7 @@ function createToolCallMessage(
     createdAt: call.createdAt,
     startedAt: call.startedAt,
     ...(call.turnId ? { turnId: call.turnId } : {}),
-    toolName: "exec_command",
+    toolName: call.toolName ?? "exec_command",
     callId: call.callId,
     command: call.command,
     cwd: call.cwd,
@@ -3499,6 +3667,16 @@ export function toUIMessages(
         onExecOutput(state, event, execEvent.call, execEvent.appendOutput);
       } else {
         onExecEnd(state, event, execEvent.call);
+      }
+      continue;
+    }
+
+    const toolCallEvent = parseToolCallLifecycleEvent(event, eventType);
+    if (toolCallEvent) {
+      if (toolCallEvent.kind === "begin") {
+        onExecBegin(state, event, toolCallEvent.call);
+      } else {
+        onExecEnd(state, event, toolCallEvent.call);
       }
       continue;
     }

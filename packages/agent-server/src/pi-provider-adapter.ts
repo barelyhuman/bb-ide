@@ -180,7 +180,7 @@ export function createPiProviderAdapter(
     supportsModelList: true,
     supportsReasoningLevels: true,
     supportsServiceTier: false,
-    supportsMultimodalInput: false,
+    supportsMultimodalInput: true,
     supportsDynamicTools: false,
     supportsToolCallRequests: false,
     ...(opts?.capabilities ?? {}),

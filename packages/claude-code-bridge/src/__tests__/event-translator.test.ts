@@ -88,13 +88,193 @@ describe("event-translator", () => {
 
     // turn/started + item/started (no text so no item/completed for text)
     expect(notifications).toHaveLength(2);
+    // Unknown tools emit as custom_tool_call
     expect(notifications[1]).toMatchObject({
       method: "item/started",
       params: {
         item: {
-          normalizedType: "toolcall",
-          callId: "call-1",
-          tool: "read_file",
+          type: "custom_tool_call",
+          call_id: "call-1",
+          name: "read_file",
+        },
+      },
+    });
+  });
+
+  it("maps Bash tool_use to commandExecution item type", () => {
+    const message = {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "call-bash",
+            name: "Bash",
+            input: { command: "ls -la", cwd: "/tmp" },
+          },
+        ],
+      },
+    } as unknown as SDKMessage;
+
+    const { notifications } = translateSdkMessage(
+      message,
+      "thread-1",
+      undefined,
+      counterState,
+    );
+
+    expect(notifications[1]).toMatchObject({
+      method: "item/started",
+      params: {
+        item: {
+          type: "commandExecution",
+          id: "call-bash",
+          command: "ls -la",
+          cwd: "/tmp",
+          status: "running",
+        },
+      },
+    });
+  });
+
+  it("maps Edit tool_use to filechange item type", () => {
+    const message = {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "call-edit",
+            name: "Edit",
+            input: { file_path: "/src/main.ts", old_string: "a", new_string: "b" },
+          },
+        ],
+      },
+    } as unknown as SDKMessage;
+
+    const { notifications } = translateSdkMessage(
+      message,
+      "thread-1",
+      undefined,
+      counterState,
+    );
+
+    expect(notifications[1]).toMatchObject({
+      method: "item/started",
+      params: {
+        item: {
+          type: "filechange",
+          id: "call-edit",
+          changes: [{ path: "/src/main.ts", kind: { type: "update" } }],
+        },
+      },
+    });
+  });
+
+  it("maps WebSearch tool_use to webSearch item type", () => {
+    const message = {
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "call-ws",
+            name: "WebSearch",
+            input: { query: "vitest docs" },
+          },
+        ],
+      },
+    } as unknown as SDKMessage;
+
+    const { notifications } = translateSdkMessage(
+      message,
+      "thread-1",
+      undefined,
+      counterState,
+    );
+
+    expect(notifications[1]).toMatchObject({
+      method: "item/started",
+      params: {
+        item: {
+          type: "webSearch",
+          id: "call-ws",
+          query: "vitest docs",
+        },
+      },
+    });
+  });
+
+  it("maps tool result for Bash to commandExecution completed", () => {
+    const message = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "call-bash",
+            tool_name: "Bash",
+            content: "file listing output",
+          },
+        ],
+      },
+    } as unknown as SDKMessage;
+
+    const { notifications } = translateSdkMessage(
+      message,
+      "thread-1",
+      "turn-1",
+      counterState,
+    );
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      method: "item/completed",
+      params: {
+        item: {
+          type: "commandExecution",
+          id: "call-bash",
+          aggregatedOutput: "file listing output",
+          exitCode: 0,
+          status: "completed",
+        },
+      },
+    });
+  });
+
+  it("maps tool result without known tool name to custom_tool_call_output", () => {
+    const message = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "call-1",
+            content: "file contents here",
+          },
+        ],
+      },
+    } as unknown as SDKMessage;
+
+    const { notifications } = translateSdkMessage(
+      message,
+      "thread-1",
+      "turn-1",
+      counterState,
+    );
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      method: "item/completed",
+      params: {
+        item: {
+          type: "custom_tool_call_output",
+          call_id: "call-1",
         },
       },
     });
@@ -175,7 +355,7 @@ describe("event-translator", () => {
     expect(turnStartedCount).toBe(0);
   });
 
-  it("emits tool result items from user messages", () => {
+  it("emits tool result items from user messages (generic tool)", () => {
     const message = {
       type: "user",
       message: {
@@ -202,8 +382,9 @@ describe("event-translator", () => {
       method: "item/completed",
       params: {
         item: {
-          normalizedType: "toolresult",
-          callId: "call-1",
+          type: "custom_tool_call_output",
+          call_id: "call-1",
+          output: "file contents here",
         },
       },
     });

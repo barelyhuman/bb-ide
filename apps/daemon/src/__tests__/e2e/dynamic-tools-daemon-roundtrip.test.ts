@@ -3,9 +3,9 @@ import { runDynamicToolsDaemonRoundtripScenario } from "./dynamic-tools-daemon-r
 
 const shouldRun = process.env.BEANBAG_E2E_PROVIDER_MODE === "real";
 
-describe.runIf(shouldRun).sequential("e2e: daemon dynamic tools with real Codex", () => {
+describe.runIf(shouldRun).sequential("e2e: daemon dynamic tools roundtrip", () => {
   it(
-    "round-trips a Codex tool call through environment-agent and Beanbag",
+    "round-trips a dynamic tool call through environment-agent and Beanbag",
     runDynamicToolsDaemonRoundtripScenario,
     180_000,
   );

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { extname } from "node:path";
 import { createInterface } from "node:readline";
 import {
   translatePiEvent,
@@ -218,9 +220,13 @@ function handleThreadStart(
   sessions.set(threadId, threadSession);
 
   // Send the initial prompt
-  const input = extractInputText(params.input);
-  if (input) {
-    sendToPi(threadSession, { type: "prompt", message: input });
+  const { text: inputText, images: inputImages } = extractInput(params.input);
+  if (inputText) {
+    const prompt: Record<string, unknown> = { type: "prompt", message: inputText };
+    if (inputImages.length > 0) {
+      prompt.images = inputImages;
+    }
+    sendToPi(threadSession, prompt);
   }
 
   sendResult(id, { threadId });
@@ -279,13 +285,17 @@ function handleTurnStart(
     return;
   }
 
-  const input = extractInputText(params.input);
-  if (!input) {
+  const { text: turnText, images: turnImages } = extractInput(params.input);
+  if (!turnText) {
     sendError(id, -32602, "Missing input text");
     return;
   }
 
-  sendToPi(threadSession, { type: "prompt", message: input });
+  const turnPrompt: Record<string, unknown> = { type: "prompt", message: turnText };
+  if (turnImages.length > 0) {
+    turnPrompt.images = turnImages;
+  }
+  sendToPi(threadSession, turnPrompt);
   sendResult(id, { threadId });
 }
 
@@ -300,13 +310,17 @@ function handleTurnSteer(
     return;
   }
 
-  const input = extractInputText(params.input);
-  if (!input) {
+  const { text: steerText, images: steerImages } = extractInput(params.input);
+  if (!steerText) {
     sendError(id, -32602, "Missing input text");
     return;
   }
 
-  sendToPi(threadSession, { type: "steer", message: input });
+  const steerCmd: Record<string, unknown> = { type: "steer", message: steerText };
+  if (steerImages.length > 0) {
+    steerCmd.images = steerImages;
+  }
+  sendToPi(threadSession, steerCmd);
   sendResult(id, { threadId });
 }
 
@@ -326,20 +340,67 @@ function handleThreadStop(
   sendResult(id, { ok: true });
 }
 
-function extractInputText(input: unknown): string | undefined {
-  if (typeof input === "string") return input;
-  if (!Array.isArray(input)) return undefined;
+interface PiImage {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
+interface ExtractedInput {
+  text?: string;
+  images: PiImage[];
+}
+
+function mimeTypeFromExtension(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".png": return "image/png";
+    case ".jpg":
+    case ".jpeg": return "image/jpeg";
+    case ".gif": return "image/gif";
+    case ".webp": return "image/webp";
+    case ".svg": return "image/svg+xml";
+    default: return "image/png";
+  }
+}
+
+function extractInput(input: unknown): ExtractedInput {
+  if (typeof input === "string") return { text: input, images: [] };
+  if (!Array.isArray(input)) return { images: [] };
 
   const chunks: string[] = [];
+  const images: PiImage[] = [];
+
   for (const item of input) {
     if (!item || typeof item !== "object") continue;
-    const typed = item as { type?: string; text?: string };
+    const typed = item as {
+      type?: string;
+      text?: string;
+      path?: string;
+      url?: string;
+      mimeType?: string;
+    };
+
     if (typed.type === "text" && typeof typed.text === "string") {
       chunks.push(typed.text);
+    } else if (typed.type === "localImage" && typeof typed.path === "string") {
+      try {
+        const data = readFileSync(typed.path).toString("base64");
+        const mimeType = typed.mimeType ?? mimeTypeFromExtension(typed.path);
+        images.push({ type: "image", data, mimeType });
+      } catch {
+        // Skip unreadable images silently
+      }
+    } else if (typed.type === "image" && typeof typed.url === "string") {
+      // For remote images, we'd need to fetch — skip for now as Pi RPC
+      // protocol expects base64 data, not URLs.
     }
   }
 
-  return chunks.length > 0 ? chunks.join("\n") : undefined;
+  return {
+    text: chunks.length > 0 ? chunks.join("\n") : undefined,
+    images,
+  };
 }
 
 function handleLine(line: string): void {

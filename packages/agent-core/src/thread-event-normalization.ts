@@ -174,7 +174,7 @@ function decodeItem(root: Record<string, unknown>): DecodedThreadEventItem | nul
     candidates.map((candidate) => toRecord(candidate.item)).find(Boolean) ?? null;
   if (!rawItem) return null;
 
-  const type = getStringField(rawItem, "type");
+  const type = getStringField(rawItem, "type") ?? getStringField(rawItem, "normalizedType");
   return {
     id: getStringField(rawItem, "id"),
     type,

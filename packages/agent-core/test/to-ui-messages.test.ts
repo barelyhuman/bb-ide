@@ -3319,3 +3319,301 @@ describe("toUIMessages replay coverage", () => {
     }
   });
 });
+
+describe("toolCall projection for bridge and Codex custom/function calls", () => {
+  it("projects custom_tool_call start + custom_tool_call_output end into tool-call message", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call",
+            call_id: "call-1",
+            name: "my_tool",
+            input: JSON.stringify({ message: "hello" }),
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call_output",
+            call_id: "call-1",
+            output: "world",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const toolCalls = projected.filter((m) => m.kind === "tool-call");
+    expect(toolCalls).toHaveLength(1);
+    const tc = toolCalls[0];
+    if (tc?.kind === "tool-call") {
+      expect(tc.toolName).toBe("my_tool");
+      expect(tc.output).toBe("world");
+      expect(tc.status).toBe("completed");
+    }
+  });
+
+  it("projects bridge Read tool as exploring message", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call",
+            call_id: "call-read-1",
+            name: "Read",
+            input: JSON.stringify({ file_path: "/src/main.ts" }),
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call_output",
+            call_id: "call-read-1",
+            output: "file contents",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call",
+            call_id: "call-grep-1",
+            name: "Grep",
+            input: JSON.stringify({ pattern: "TODO", path: "/src" }),
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call_output",
+            call_id: "call-grep-1",
+            output: "found matches",
+          },
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    // Read and Grep should be grouped into a single exploring message
+    const exploring = projected.filter((m) => m.kind === "tool-exploring");
+    expect(exploring.length).toBeGreaterThanOrEqual(1);
+    if (exploring[0]?.kind === "tool-exploring") {
+      expect(exploring[0].calls.length).toBe(2);
+    }
+  });
+
+  it("projects bridge Bash tool via commandExecution (not custom_tool_call)", () => {
+    // When bridges emit Bash as commandExecution, it should go through
+    // the exec lifecycle path directly
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-bash-1",
+            command: "ls -la",
+            cwd: "/tmp",
+            status: "running",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-bash-1",
+            aggregatedOutput: "total 8\ndrwxr-xr-x",
+            exitCode: 0,
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const toolCalls = projected.filter((m) => m.kind === "tool-call");
+    expect(toolCalls).toHaveLength(1);
+    if (toolCalls[0]?.kind === "tool-call") {
+      expect(toolCalls[0].command).toBe("ls -la");
+      expect(toolCalls[0].output).toBe("total 8\ndrwxr-xr-x");
+      expect(toolCalls[0].exitCode).toBe(0);
+    }
+  });
+
+  it("projects function_call and function_call_output into tool-call message", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "function_call",
+            call_id: "fc-1",
+            name: "get_weather",
+            arguments: JSON.stringify({ city: "London" }),
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "function_call_output",
+            call_id: "fc-1",
+            output: "Sunny, 22C",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const toolCalls = projected.filter((m) => m.kind === "tool-call");
+    expect(toolCalls).toHaveLength(1);
+    if (toolCalls[0]?.kind === "tool-call") {
+      expect(toolCalls[0].toolName).toBe("get_weather");
+      expect(toolCalls[0].output).toBe("Sunny, 22C");
+      expect(toolCalls[0].status).toBe("completed");
+    }
+  });
+
+  it("interleaves commandExecution and custom_tool_call correctly", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "exec-1",
+            command: "npm test",
+            status: "running",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "exec-1",
+            aggregatedOutput: "All tests passed",
+            exitCode: 0,
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call",
+            call_id: "ct-1",
+            name: "deploy",
+            input: JSON.stringify({ env: "staging" }),
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "custom_tool_call_output",
+            call_id: "ct-1",
+            output: "deployed",
+          },
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const toolMessages = projected.filter(
+      (m) => m.kind === "tool-call" || m.kind === "tool-exploring",
+    );
+    expect(toolMessages).toHaveLength(2);
+    expect(toolMessages[0]?.kind).toBe("tool-call");
+    expect(toolMessages[1]?.kind).toBe("tool-call");
+    if (toolMessages[1]?.kind === "tool-call") {
+      expect(toolMessages[1].toolName).toBe("deploy");
+    }
+  });
+});

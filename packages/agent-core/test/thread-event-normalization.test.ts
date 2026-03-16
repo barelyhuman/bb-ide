@@ -110,4 +110,37 @@ describe("thread event normalization", () => {
     );
     expect(normalizeThreadEventType("turn.completed")).toBe("turn/completed");
   });
+
+  it("falls back to normalizedType when type is missing on item", () => {
+    const decoded = decodeThreadEventData({
+      payload: {
+        turnId: "turn-1",
+        item: {
+          normalizedType: "toolcall",
+          callId: "call-1",
+          tool: "read_file",
+        },
+      },
+    });
+
+    expect(decoded.item).toBeTruthy();
+    expect(decoded.item?.type).toBe("toolcall");
+    expect(decoded.item?.normalizedType).toBe("toolcall");
+  });
+
+  it("prefers type over normalizedType on item", () => {
+    const decoded = decodeThreadEventData({
+      payload: {
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          normalizedType: "toolcall",
+          id: "call-1",
+        },
+      },
+    });
+
+    expect(decoded.item?.type).toBe("commandExecution");
+    expect(decoded.item?.normalizedType).toBe("commandexecution");
+  });
 });
