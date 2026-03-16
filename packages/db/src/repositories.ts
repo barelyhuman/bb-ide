@@ -347,6 +347,7 @@ export class ProjectRepository {
       name: row.name,
       rootPath: row.rootPath,
       projectInstructions: row.projectInstructions ?? undefined,
+      defaultProviderId: row.defaultProviderId ?? undefined,
       primaryCheckoutThreadId: row.primaryCheckoutThreadId ?? undefined,
       primaryManagerThreadId: row.primaryManagerThreadId ?? undefined,
       createdAt: row.createdAt,
@@ -354,13 +355,14 @@ export class ProjectRepository {
     };
   }
 
-  create(data: { name: string; rootPath: string; projectInstructions?: string }): Project {
+  create(data: { name: string; rootPath: string; projectInstructions?: string; defaultProviderId?: string }): Project {
     const now = Date.now();
     const row = {
       id: nanoid(),
       name: data.name,
       rootPath: data.rootPath,
       projectInstructions: data.projectInstructions ?? null,
+      defaultProviderId: data.defaultProviderId ?? null,
       primaryCheckoutThreadId: null,
       primaryManagerThreadId: null,
       createdAt: now,
@@ -387,6 +389,7 @@ export class ProjectRepository {
       name?: string;
       rootPath?: string;
       projectInstructions?: string;
+      defaultProviderId?: string | null;
       primaryCheckoutThreadId?: string | null;
       primaryManagerThreadId?: string | null;
     },
@@ -403,6 +406,9 @@ export class ProjectRepository {
     if (data.rootPath !== undefined) updates.rootPath = data.rootPath;
     if (data.projectInstructions !== undefined) {
       updates.projectInstructions = data.projectInstructions;
+    }
+    if (data.defaultProviderId !== undefined) {
+      updates.defaultProviderId = data.defaultProviderId;
     }
     if (data.primaryCheckoutThreadId !== undefined) {
       updates.primaryCheckoutThreadId = data.primaryCheckoutThreadId;

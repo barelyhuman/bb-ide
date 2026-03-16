@@ -14,6 +14,7 @@ export const projects = sqliteTable("projects", {
   projectInstructions: text("project_instructions"),
   // FK to threads.id declared in migration 0046; not inline here to avoid
   // circular type inference between projects and threads tables.
+  defaultProviderId: text("default_provider_id"),
   primaryCheckoutThreadId: text("primary_checkout_thread_id"),
   primaryManagerThreadId: text("primary_manager_thread_id"),
   createdAt: integer("created_at").notNull(),

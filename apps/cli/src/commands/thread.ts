@@ -288,6 +288,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "Parent thread ID for worker thread links (defaults to BB_THREAD_ID)",
     )
     .option(
+      "--provider <id>",
+      "Provider ID for the thread (e.g. codex, claude-code, pi)",
+    )
+    .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
@@ -297,6 +301,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       project?: string;
       environment?: string;
       parentThread?: string;
+      provider?: string;
       contextParentThread?: boolean;
     }) => {
       const client = createClient(getUrl());
@@ -325,6 +330,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
+              ...(opts.provider ? { providerId: opts.provider } : {}),
               ...(environmentId ? { environmentId } : {}),
               ...(environmentKind ? { environmentKind } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),

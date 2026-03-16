@@ -1,4 +1,5 @@
 import {
+  DEFAULT_THREAD_PROVIDER_ID,
   isThreadProviderId,
   THREAD_PROVIDER_IDS,
   type SystemProviderInfo,
@@ -13,7 +14,7 @@ export interface CreateProviderAdapterOptions {
   providerId?: string;
 }
 
-function createProviderForId(
+export function createProviderForId(
   providerId: ThreadProviderId,
 ): ProviderAdapter {
   switch (providerId) {
@@ -39,14 +40,26 @@ export function listAvailableProviderInfos(): SystemProviderInfo[] {
   });
 }
 
+/**
+ * Resolve the default provider ID.
+ *
+ * Checks test/env-var overrides first (`BB_E2E_PROVIDER`, `BEANBAG_PROVIDER`),
+ * then falls back to the compile-time default (codex).
+ */
+export function resolveDefaultProviderId(): ThreadProviderId {
+  const testOverride = process.env.BB_E2E_PROVIDER ?? process.env.BEANBAG_PROVIDER;
+  if (testOverride && isThreadProviderId(testOverride.trim().toLowerCase())) {
+    return testOverride.trim().toLowerCase() as ThreadProviderId;
+  }
+  return DEFAULT_THREAD_PROVIDER_ID; // "codex"
+}
+
 export function createProviderAdapter(
   opts?: CreateProviderAdapterOptions,
 ): ProviderAdapter {
   const providerId = (
     opts?.providerId ??
-    process.env.BB_E2E_PROVIDER ??
-    process.env.BEANBAG_PROVIDER ??
-    "codex"
+    resolveDefaultProviderId()
   )
     .trim()
     .toLowerCase();

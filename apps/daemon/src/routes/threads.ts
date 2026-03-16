@@ -443,6 +443,7 @@ export function createThreadRoutes(
         }
         const thread = await threadManager.spawn({
           projectId: body.projectId,
+          ...(body.providerId ? { providerId: body.providerId } : {}),
           ...(body.title ? { title: body.title } : {}),
           ...(body.input ? { input: body.input } : {}),
           ...(body.model ? { model: body.model } : {}),

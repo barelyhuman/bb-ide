@@ -25,6 +25,7 @@ export const promptInputSchema = z.discriminatedUnion("type", [
 // Thread schemas
 export const spawnThreadSchema = z.object({
   projectId: z.string(),
+  providerId: z.string().min(1).optional(),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1).optional(),
   model: z.string().optional(),
@@ -90,12 +91,14 @@ export const updateProjectSchema = z
     name: z.string().optional(),
     rootPath: z.string().optional(),
     projectInstructions: z.string().optional(),
+    defaultProviderId: z.string().min(1).nullable().optional(),
   })
   .refine(
     (value) =>
       value.name !== undefined ||
       value.rootPath !== undefined ||
-      value.projectInstructions !== undefined,
+      value.projectInstructions !== undefined ||
+      value.defaultProviderId !== undefined,
     "At least one field must be provided",
   );
 

@@ -330,6 +330,13 @@
       "when": 1773792000002,
       "tag": "0046_add_missing_fks_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1773878400000,
+      "tag": "0047_project_default_provider_id",
+      "breakpoints": true
     }
   ]
 }

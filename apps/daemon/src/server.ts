@@ -22,6 +22,7 @@ import {
   createCodexLlmCompletionService,
   createProviderAdapter,
   listAvailableProviderInfos,
+  resolveDefaultProviderId,
   type ProviderAdapter,
   type ProviderToolHost,
 } from "@beanbag/agent-server";
@@ -96,7 +97,8 @@ export function createServer(deps: ServerDeps) {
 
   // Create managers
   const wsManager = new WSManager();
-  const provider = deps.provider ?? createProviderAdapter();
+  const defaultProviderId = resolveDefaultProviderId();
+  const provider = deps.provider ?? createProviderAdapter({ providerId: defaultProviderId });
   let threadManager: Orchestrator;
   const managerToolHost = createManagerProviderToolHost({
     getThreadManager: () => threadManager,

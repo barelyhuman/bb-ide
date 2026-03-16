@@ -867,7 +867,17 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _resolveSpawnProviderId(_req: SpawnThreadRequest): ThreadProviderId {
+  private _resolveSpawnProviderId(req: SpawnThreadRequest): ThreadProviderId {
+    // 1. Explicit providerId in request
+    if (req.providerId && isThreadProviderId(req.providerId)) {
+      return req.providerId;
+    }
+    // 2. Project default
+    const project = this.projectRepo.getById(req.projectId);
+    if (project?.defaultProviderId && isThreadProviderId(project.defaultProviderId)) {
+      return project.defaultProviderId;
+    }
+    // 3. System default (first available in order: codex -> claude-code -> pi)
     return this.defaultProviderId;
   }
 

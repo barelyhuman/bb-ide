@@ -37,7 +37,9 @@ export type {
 } from "./provider-registry.js";
 export {
   createProviderAdapter,
+  createProviderForId,
   listAvailableProviderInfos,
+  resolveDefaultProviderId,
 } from "./provider-registry.js";
 export type {
   AgentServerOptions,

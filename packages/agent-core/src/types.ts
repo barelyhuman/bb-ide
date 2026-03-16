@@ -17,6 +17,7 @@ export interface Project {
   name: string;
   rootPath: string;
   projectInstructions?: string;
+  defaultProviderId?: string;
   primaryCheckoutThreadId?: string;
   primaryManagerThreadId?: string;
   rootPathExists?: boolean;

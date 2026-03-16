@@ -46,6 +46,7 @@ export interface AvailableModel {
 // Thread endpoints
 export interface SpawnThreadRequest {
   projectId: string;
+  providerId?: string;
   type?: ThreadType;
   title?: string;
   input?: PromptInput[];
@@ -164,6 +165,7 @@ export interface UpdateProjectRequest {
   name?: string;
   rootPath?: string;
   projectInstructions?: string;
+  defaultProviderId?: string | null;
 }
 
 export type ThreadOperationType = "commit" | "squash_merge";
