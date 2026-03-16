@@ -7,6 +7,7 @@ import {
 import {
   buildClaudeCodeAvailableModels,
   createClaudeCodeProviderAdapter,
+  shouldFetchClaudeCodeModelsFromAnthropic,
 } from "../claude-code-provider-adapter.js";
 
 const DEFAULT_BASE_INSTRUCTIONS =
@@ -149,6 +150,25 @@ describe("claude-code provider adapter", () => {
         isDefault: true,
       }),
     ]);
+  });
+
+  it("uses Anthropic model listing only when an API key is available", () => {
+    expect(
+      shouldFetchClaudeCodeModelsFromAnthropic({
+        ANTHROPIC_API_KEY: "sk-ant-api03-test",
+      }),
+    ).toBe(true);
+    expect(
+      shouldFetchClaudeCodeModelsFromAnthropic({
+        CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat01-test",
+      }),
+    ).toBe(false);
+    expect(
+      shouldFetchClaudeCodeModelsFromAnthropic({
+        ANTHROPIC_API_KEY: "sk-ant-api03-test",
+        CLAUDE_CODE_USE_BEDROCK: "1",
+      }),
+    ).toBe(false);
   });
 
   it("maps developerInstructions to baseInstructions for thread/start", () => {

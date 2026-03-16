@@ -292,19 +292,13 @@ export function buildClaudeCodeAvailableModels(
 }
 
 async function listClaudeCodeModels(): Promise<AvailableModel[]> {
-  if (shouldUseStaticClaudeModelList(process.env)) {
+  if (!shouldFetchClaudeCodeModelsFromAnthropic(process.env)) {
     return [...STATIC_CLAUDE_CODE_MODELS];
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const authToken = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
-  if (!apiKey && !authToken) {
-    return [...STATIC_CLAUDE_CODE_MODELS];
-  }
-
   const client = new Anthropic({
     ...(apiKey ? { apiKey } : {}),
-    ...(authToken ? { authToken } : {}),
   });
 
   const page = await client.models.list();
@@ -318,6 +312,23 @@ function shouldUseStaticClaudeModelList(env: NodeJS.ProcessEnv): boolean {
     env.CLAUDE_CODE_USE_VERTEX === "1" ||
     env.CLAUDE_CODE_USE_FOUNDRY === "1"
   );
+}
+
+export function shouldFetchClaudeCodeModelsFromAnthropic(
+  env: NodeJS.ProcessEnv,
+): boolean {
+  if (shouldUseStaticClaudeModelList(env)) {
+    return false;
+  }
+
+  const apiKey = env.ANTHROPIC_API_KEY?.trim();
+  if (apiKey) {
+    return true;
+  }
+
+  // Anthropic's public models API rejects Claude Code OAuth tokens, so
+  // OAuth-only environments intentionally fall back to the static catalog.
+  return false;
 }
 
 function getClaudeReasoningEfforts(modelId: string): ModelReasoningEffort[] {
