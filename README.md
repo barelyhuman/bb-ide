@@ -1,8 +1,11 @@
-# Beanbag
+# bb
 
-Beanbag is a local-first coding-agent workspace. A local daemon runs
-provider adapters, persists threads/events in SQLite, and serves both a web UI
-and a CLI.
+A programmable workspace for coding agents.
+
+bb is a tool that your agents can use too. Delegate your entire workflow
+or hand off only specific parts of it. Babysit an agent while it works,
+or have another agent do it. Micromanage an agent or let it run. Teach
+an agent to work like you would, then watch it use bb like you would.
 
 ## Monorepo Layout
 
@@ -61,7 +64,7 @@ pnpm bb --help
 
 Notes:
 
-- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/agent-server`, `@beanbag/environment`, `@beanbag/ui-core`, `@beanbag/db`, `@beanbag/daemon`, `@beanbag/app`, and `@beanbag/cli`.
+- `dist/` output is generated for `@bb/core`, `@bb/agent-server`, `@bb/environment`, `@bb/ui-core`, `@bb/db`, `@bb/server`, `@bb/app`, and `@bb/cli`.
 - `pnpm dev` starts the daemon on `:3333`.
 - CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
 
@@ -86,10 +89,10 @@ UI consistency checklist for frontend changes:
 
 When working with string domains:
 
-- `closed_internal`: Beanbag-owned values. Use exhaustive `switch` handling and `assertNever`.
+- `closed_internal`: BB-owned values. Use exhaustive `switch` handling and `assertNever`.
 - `open_external`: provider/runtime-owned values. Keep tolerant fallback branches with a comment that unknown values are intentional.
 
-`assertNever` is exported from `@beanbag/agent-core`.
+`assertNever` is exported from `@bb/core`.
 
 ## Thread Lifecycle
 
@@ -98,7 +101,7 @@ Persisted status model:
 `created -> provisioning -> idle|active|provisioning_failed`
 
 Transition rules are centralized in
-`apps/daemon/src/thread-status-machine.ts`.
+`apps/server/src/thread-status-machine.ts`.
 
 - `spawn`: creates a DB thread, then provisions async.
 - `tell`: sends `turn/start` or `turn/steer` (`mode=auto|start|steer`).
@@ -143,34 +146,34 @@ Agent-driven git operation commands:
 
 Provider and environment selection:
 
-- `BB_E2E_PROVIDER` selects the active provider adapter in test suites (`codex`, `claude-code`, `pi`). Deprecated alias: `BEANBAG_PROVIDER`.
-- `BEANBAG_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
-- `BEANBAG_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.beanbag/worktrees`; absolute roots are scoped by project id).
+- `BB_E2E_PROVIDER` selects the active provider adapter in test suites (`codex`, `claude-code`, `pi`). Deprecated alias: `BB_PROVIDER`.
+- `BB_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
+- `BB_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.bb/worktrees`; absolute roots are scoped by project id).
 - `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
 Daemon e2e provider mode:
 
-- `BB_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider. Deprecated alias: `BEANBAG_E2E_PROVIDER_MODE`.
+- `BB_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider. Deprecated alias: `BB_E2E_PROVIDER_MODE`.
 - The low-level e2e default is still `fake` when the variable is unset.
 - The checked-in daemon QA entrypoints (`pnpm qa:daemon:smoke`, `pnpm qa:daemon:stress`, `pnpm qa:daemon:regression`) override this to `real`.
-- `pnpm --filter @beanbag/daemon test:e2e` runs the default smoke daemon e2e suite.
-- `pnpm --filter @beanbag/daemon test:e2e:stress` runs the slower recovery/stress daemon e2e suite.
-- `pnpm --filter @beanbag/daemon test:e2e:real` runs the smoke daemon e2e suite in `real` mode.
-- `pnpm --filter @beanbag/daemon test:e2e:stress:real` runs the slower recovery/stress daemon e2e suite in `real` mode.
+- `pnpm --filter @bb/server test:e2e` runs the default smoke daemon e2e suite.
+- `pnpm --filter @bb/server test:e2e:stress` runs the slower recovery/stress daemon e2e suite.
+- `pnpm --filter @bb/server test:e2e:real` runs the smoke daemon e2e suite in `real` mode.
+- `pnpm --filter @bb/server test:e2e:stress:real` runs the slower recovery/stress daemon e2e suite in `real` mode.
 - Fake-only tests that depend on manual fake-codex event control are skipped automatically in `real` mode.
 
 ## Typed Codex Event Schema
 
-`packages/agent-core` derives thread event types from generated Codex app-server
+`packages/core` derives thread event types from generated Codex app-server
 TypeScript schemas in:
 
-- `packages/agent-core/src/generated/codex-app-server/schema/`
-- `packages/agent-core/src/generated/codex-app-server/index.ts`
+- `packages/core/src/generated/codex-app-server/schema/`
+- `packages/core/src/generated/codex-app-server/index.ts`
 
 Regenerate:
 
 ```bash
-pnpm --filter @beanbag/agent-core gen:codex-event-types
+pnpm --filter @bb/core gen:codex-event-types
 ```
 
 ## Database and Local State
@@ -178,13 +181,13 @@ pnpm --filter @beanbag/agent-core gen:codex-event-types
 Default daemon DB:
 
 ```text
-~/.beanbag/beanbag.db
+~/.bb/bb.db
 ```
 
 CLI daemon PID file:
 
 ```text
-~/.beanbag/agent-server.pid
+~/.bb/agent-server.pid
 ```
 
 Drizzle Studio:
@@ -193,5 +196,5 @@ Drizzle Studio:
 pnpm drizzle-studio
 ```
 
-`packages/db/drizzle.config.ts` uses `BEANBAG_DB_PATH` when set; otherwise
-`~/.beanbag/beanbag.db`.
+`packages/db/drizzle.config.ts` uses `BB_DB_PATH` when set; otherwise
+`~/.bb/bb.db`.
