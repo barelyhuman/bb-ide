@@ -9,7 +9,7 @@ function expandHomeDirectory(path: string): string {
 }
 
 function resolveBeanbagRoot(): string {
-  const configuredRoot = process.env.BEANBAG_ROOT?.trim();
+  const configuredRoot = (process.env.BB_ROOT ?? process.env.BEANBAG_ROOT)?.trim();
   if (!configuredRoot) {
     return resolve(homedir(), ".beanbag");
   }

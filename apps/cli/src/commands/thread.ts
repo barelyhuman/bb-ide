@@ -4,7 +4,10 @@ import {
   type ThreadEvent,
   type ThreadOperationResponse,
   type ThreadStatus,
+  type TimelineFormat,
   normalizeThreadEventType,
+  toUIMessages,
+  formatTimelineAsText,
 } from "@beanbag/agent-core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
@@ -826,29 +829,51 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("log [id]")
     .description("Show thread event log (defaults to BB_THREAD_ID)")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = requireThreadId(id);
-        const events = await unwrap<ThreadEvent[]>(
-          client.api.v1.threads[":id"].events.$get({
-            param: { id: threadId },
-            query: {},
-          }),
-        );
-        if (opts.json) {
-          console.log(JSON.stringify(events, null, 2));
-          return;
+    .option("--json", "Print machine-readable JSON output (alias for --format json)")
+    .option(
+      "--format <format>",
+      "Output format: json (raw events), minimal (compact timeline), verbose (full timeline)",
+      "minimal",
+    )
+    .action(
+      async (
+        id: string | undefined,
+        opts: { json?: boolean; format?: string },
+      ) => {
+        const client = createClient(getUrl());
+        try {
+          const threadId = requireThreadId(id);
+          const format: TimelineFormat = opts.json
+            ? "json"
+            : ((opts.format ?? "minimal") as TimelineFormat);
+
+          const events = await unwrap<ThreadEvent[]>(
+            client.api.v1.threads[":id"].events.$get({
+              param: { id: threadId },
+              query: {},
+            }),
+          );
+
+          if (format === "json") {
+            console.log(JSON.stringify(events, null, 2));
+            return;
+          }
+
+          const messages = toUIMessages(events, { threadStatus: "idle" });
+          const color =
+            process.stdout.isTTY === true &&
+            !process.env.NO_COLOR;
+          const text = formatTimelineAsText(messages, {
+            verbose: format === "verbose",
+            color,
+          });
+          console.log(text);
+        } catch (err: unknown) {
+          console.error(`Error: ${getErrorMessage(err)}`);
+          process.exit(1);
         }
-        for (const event of events) {
-          printEvent(event);
-        }
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   thread
     .command("output [id]")

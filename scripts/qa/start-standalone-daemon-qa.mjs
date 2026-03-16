@@ -117,11 +117,11 @@ async function main() {
   const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
   const daemonEnv = {
     ...process.env,
-    BEANBAG_ROOT: beanbagRoot,
+    BB_ROOT: beanbagRoot,
     ...(provider ? { BEANBAG_PROVIDER: provider } : {}),
   };
   const relaunchEnvPrefix = [
-    `BEANBAG_ROOT="${beanbagRoot}"`,
+    `BB_ROOT="${beanbagRoot}"`,
     ...(provider ? [`BEANBAG_PROVIDER="${provider}"`] : []),
   ].join(" ");
   const relaunchCommand = [

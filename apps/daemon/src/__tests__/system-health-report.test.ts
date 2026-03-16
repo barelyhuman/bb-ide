@@ -7,7 +7,7 @@ import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { createSystemHealthReporter } from "../system-health-report.js";
 
 const originalHome = process.env.HOME;
-const originalBeanbagRoot = process.env.BEANBAG_ROOT;
+const originalBbRoot = process.env.BB_ROOT;
 const cleanupPaths: string[] = [];
 
 function makeProject(overrides: Partial<Project> = {}): Project {
@@ -42,7 +42,7 @@ function writeBytes(path: string, content: string): void {
 
 afterEach(() => {
   process.env.HOME = originalHome;
-  process.env.BEANBAG_ROOT = originalBeanbagRoot;
+  process.env.BB_ROOT = originalBbRoot;
   vi.restoreAllMocks();
   for (const path of cleanupPaths.splice(0)) {
     rmSync(path, { recursive: true, force: true });
@@ -56,7 +56,7 @@ describe("system health report", () => {
     process.env.HOME = homeDir;
     const beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-health-root-"));
     cleanupPaths.push(beanbagRoot);
-    process.env.BEANBAG_ROOT = beanbagRoot;
+    process.env.BB_ROOT = beanbagRoot;
 
     const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-health-project-"));
     cleanupPaths.push(projectRoot);

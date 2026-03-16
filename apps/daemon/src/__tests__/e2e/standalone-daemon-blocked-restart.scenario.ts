@@ -220,7 +220,7 @@ async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Prom
   const daemonEnv = withFakeE2eEnvironmentAgentTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
-    BEANBAG_ROOT: beanbagRoot,
+    BB_ROOT: beanbagRoot,
     BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
     BEANBAG_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
   });

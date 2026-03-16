@@ -89,7 +89,7 @@ Start the standalone daemon:
 
 ```bash
 HOME="$tmp_home" \
-BEANBAG_ROOT="$beanbag_root" \
+BB_ROOT="$beanbag_root" \
 node apps/daemon/dist/index.js --port 4311
 ```
 

@@ -23,7 +23,7 @@ describe("environment-agent service config", () => {
         BB_THREAD_ID: "thread-1",
         BB_PROJECT_ID: "project-1",
         BB_ENVIRONMENT_ID: "docker",
-        BEANBAG_ROOT: "/tmp/beanbag-root",
+        BB_ROOT: "/tmp/beanbag-root",
         BEANBAG_DAEMON_URL: "http://127.0.0.1:9000",
         BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
       },

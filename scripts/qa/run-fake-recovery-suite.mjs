@@ -59,7 +59,7 @@ async function main() {
     cwd: daemonRoot,
     env: {
       ...process.env,
-      BEANBAG_E2E_PROVIDER_MODE: "fake",
+      BB_E2E_PROVIDER_MODE: "fake",
       BEANBAG_TEST_TMP_ROOT: tmpRoot,
     },
     stdio: "inherit",

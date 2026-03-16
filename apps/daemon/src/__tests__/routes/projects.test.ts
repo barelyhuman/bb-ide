@@ -86,11 +86,11 @@ describe("Project routes", () => {
     systemTell: ReturnType<typeof vi.fn>;
     getRawById: ReturnType<typeof vi.fn>;
   };
-  const originalBeanbagRoot = process.env.BEANBAG_ROOT;
+  const originalBbRoot = process.env.BB_ROOT;
 
   beforeEach(() => {
     beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-project-routes-root-"));
-    process.env.BEANBAG_ROOT = beanbagRoot;
+    process.env.BB_ROOT = beanbagRoot;
     projectRepo = mockProjectRepo();
     threadRepo = mockThreadRepo();
     eventRepo = mockEventRepo();
@@ -124,7 +124,7 @@ describe("Project routes", () => {
   });
 
   afterEach(() => {
-    process.env.BEANBAG_ROOT = originalBeanbagRoot;
+    process.env.BB_ROOT = originalBbRoot;
     rmSync(beanbagRoot, { recursive: true, force: true });
   });
 

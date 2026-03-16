@@ -342,8 +342,8 @@ export async function ensureManagedDockerEnvironmentAgent(
         `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
         "-e",
         `BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL=http://${HOST}:${args.hostPort}`,
-        ...(args.runtimeEnv.BEANBAG_ROOT?.trim()
-          ? ["-e", `BEANBAG_ROOT=${args.runtimeEnv.BEANBAG_ROOT}`]
+        ...((args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BEANBAG_ROOT?.trim())
+          ? ["-e", `BB_ROOT=${args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BEANBAG_ROOT}`]
           : []),
         ...(dockerDaemonUrl
           ? ["-e", `BEANBAG_DAEMON_URL=${dockerDaemonUrl}`]

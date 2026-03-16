@@ -44,6 +44,7 @@ export function createProviderAdapter(
 ): ProviderAdapter {
   const providerId = (
     opts?.providerId ??
+    process.env.BB_E2E_PROVIDER ??
     process.env.BEANBAG_PROVIDER ??
     "codex"
   )

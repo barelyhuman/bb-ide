@@ -22,7 +22,7 @@ import {
 } from "../docker-environment-agent.js";
 
 const tempDirs: string[] = [];
-const originalBeanbagRoot = process.env.BEANBAG_ROOT;
+const originalBbRoot = process.env.BB_ROOT;
 
 function makeTempDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -44,7 +44,7 @@ function createDeferred() {
 }
 
 afterEach(() => {
-  process.env.BEANBAG_ROOT = originalBeanbagRoot;
+  process.env.BB_ROOT = originalBbRoot;
   vi.restoreAllMocks();
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -190,7 +190,7 @@ describe("docker environment-agent helper", () => {
   it("installs and starts the environment-agent in the container", async () => {
     const commands: Array<{ command: string; args: string[] }> = [];
     const beanbagRoot = makeTempDir("bb-docker-agent-root-");
-    process.env.BEANBAG_ROOT = beanbagRoot;
+    process.env.BB_ROOT = beanbagRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-workspace-");
     const artifactRoot = makeTempDir("bb-docker-agent-artifact-");
     const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
@@ -204,7 +204,7 @@ describe("docker environment-agent helper", () => {
         projectId: "project-1",
         environmentId: "docker",
         runtimeEnv: {
-          BEANBAG_ROOT: beanbagRoot,
+          BB_ROOT: beanbagRoot,
           BEANBAG_DAEMON_URL: "http://127.0.0.1:9000",
         },
         dockerBin: "docker",
@@ -261,7 +261,7 @@ describe("docker environment-agent helper", () => {
           "-e",
           "BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL=http://127.0.0.1:4311",
           "-e",
-          `BEANBAG_ROOT=${beanbagRoot}`,
+          `BB_ROOT=${beanbagRoot}`,
           "-e",
           "BEANBAG_DAEMON_URL=http://host.docker.internal:9000",
           "beanbag-thread-thread-1",
@@ -279,7 +279,7 @@ describe("docker environment-agent helper", () => {
   it("serializes concurrent docker managed agent startup for the same thread", async () => {
     const commands: Array<{ command: string; args: string[] }> = [];
     const beanbagRoot = makeTempDir("bb-docker-agent-lock-root-");
-    process.env.BEANBAG_ROOT = beanbagRoot;
+    process.env.BB_ROOT = beanbagRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-lock-workspace-");
     const artifactRoot = makeTempDir("bb-docker-agent-lock-artifact-");
     const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
@@ -293,7 +293,7 @@ describe("docker environment-agent helper", () => {
       projectId: "project-lock",
       environmentId: "docker",
       runtimeEnv: {
-        BEANBAG_ROOT: beanbagRoot,
+        BB_ROOT: beanbagRoot,
         BEANBAG_DAEMON_URL: "http://127.0.0.1:9000",
       },
       dockerBin: "docker",
@@ -349,7 +349,7 @@ describe("docker environment-agent helper", () => {
 
   it("replaces an existing managed environment-agent for the same docker container", async () => {
     const beanbagRoot = makeTempDir("bb-docker-agent-existing-root-");
-    process.env.BEANBAG_ROOT = beanbagRoot;
+    process.env.BB_ROOT = beanbagRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-existing-workspace-");
 
     const artifactRoot = makeTempDir("bb-docker-agent-existing-artifact-");
@@ -368,7 +368,7 @@ describe("docker environment-agent helper", () => {
       threadId: "thread-existing",
       projectId: "project-existing",
       environmentId: "docker",
-      runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      runtimeEnv: { BB_ROOT: beanbagRoot },
       dockerBin: "docker",
       containerName: "beanbag-thread-thread-existing",
       hostPort: 4311,
@@ -384,7 +384,7 @@ describe("docker environment-agent helper", () => {
       threadId: "thread-existing",
       projectId: "project-existing",
       environmentId: "docker",
-      runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      runtimeEnv: { BB_ROOT: beanbagRoot },
       dockerBin: "docker",
       containerName: "beanbag-thread-thread-existing",
       hostPort: 4311,

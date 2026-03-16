@@ -63,14 +63,14 @@ async function main() {
   console.error(
     `Relaunching standalone daemon with ${nodePath} (node ${version}, abi ${abi})`,
   );
-  console.error(`BEANBAG_ROOT=${beanbagRoot}`);
+  console.error(`BB_ROOT=${beanbagRoot}`);
   console.error(`Daemon entry=${daemonEntry}`);
 
   const daemonChild = spawn(nodePath, [daemonEntry, "--port", String(port)], {
     cwd: workspaceRoot,
     env: {
       ...process.env,
-      BEANBAG_ROOT: beanbagRoot,
+      BB_ROOT: beanbagRoot,
     },
     stdio: "inherit",
   });

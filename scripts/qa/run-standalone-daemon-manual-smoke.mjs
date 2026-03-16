@@ -90,7 +90,7 @@ async function relaunchDaemon(metadata) {
       cwd: workspaceRoot,
       env: {
         ...process.env,
-        BEANBAG_ROOT: metadata.beanbagRoot,
+        BB_ROOT: metadata.beanbagRoot,
       },
       detached: true,
       stdio: "ignore",

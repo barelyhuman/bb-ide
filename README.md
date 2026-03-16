@@ -143,14 +143,14 @@ Agent-driven git operation commands:
 
 Provider and environment selection:
 
-- `BEANBAG_PROVIDER` selects the active provider adapter (`codex`).
+- `BB_E2E_PROVIDER` selects the active provider adapter in test suites (`codex`, `claude-code`, `pi`). Deprecated alias: `BEANBAG_PROVIDER`.
 - `BEANBAG_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
 - `BEANBAG_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.beanbag/worktrees`; absolute roots are scoped by project id).
 - `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
 Daemon e2e provider mode:
 
-- `BEANBAG_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider.
+- `BB_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider. Deprecated alias: `BEANBAG_E2E_PROVIDER_MODE`.
 - The low-level e2e default is still `fake` when the variable is unset.
 - The checked-in daemon QA entrypoints (`pnpm qa:daemon:smoke`, `pnpm qa:daemon:stress`, `pnpm qa:daemon:regression`) override this to `real`.
 - `pnpm --filter @beanbag/daemon test:e2e` runs the default smoke daemon e2e suite.

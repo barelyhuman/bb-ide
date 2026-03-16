@@ -3,9 +3,9 @@
 
 export const templateDefinitions = [
   {
-    "id": "codexBaseInstructions",
+    "id": "agentBaseInstructions",
     "body": "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.",
-    "fileName": "codex-base-instructions.md",
+    "fileName": "agent-base-instructions.md",
     "kind": "instruction",
     "title": "Codex Base Instructions",
     "summary": "Baseline system prompt for provider-backed coding threads.",

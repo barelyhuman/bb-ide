@@ -18,7 +18,7 @@ That writes a timestamped folder under `qa/artifacts/` containing:
 - thread output
 - thread session inspection output
 - daemon health snapshot
-- daemon log copy when `BEANBAG_ROOT` is available
+- daemon log copy when `BB_ROOT` is available
 
 For a quick thread summary without a full bundle:
 

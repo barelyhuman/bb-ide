@@ -54,7 +54,7 @@ async function writeJson(path, value) {
 
 const { threadId, scenario, outDir } = parseArgs(process.argv.slice(2));
 const baseUrl = process.env.BB_DAEMON_URL ?? "http://127.0.0.1:4310";
-const beanbagRoot = process.env.BEANBAG_ROOT;
+const beanbagRoot = process.env.BB_ROOT ?? process.env.BEANBAG_ROOT;
 const artifactRoot = resolve(
   outDir ?? join(process.cwd(), "qa", "artifacts", `${scenario}-${threadId}-${Date.now()}`),
 );

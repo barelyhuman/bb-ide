@@ -123,14 +123,14 @@ git -C "$project_root" commit -m init
 ### 2. Start the standalone daemon
 
 ```bash
-BEANBAG_ROOT="$beanbag_root" \
+BB_ROOT="$beanbag_root" \
 node apps/daemon/dist/index.js --port 4311
 ```
 
 For Claude Code, also set the provider:
 
 ```bash
-BEANBAG_ROOT="$beanbag_root" \
+BB_ROOT="$beanbag_root" \
 BEANBAG_PROVIDER=claude-code \
 ANTHROPIC_API_KEY=... \
 node apps/daemon/dist/index.js --port 4311
@@ -513,7 +513,7 @@ Expected:
 node apps/cli/dist/index.js daemon restart --force
 ```
 
-Relaunch the standalone daemon using the same Node binary and `BEANBAG_ROOT`, wait for health,
+Relaunch the standalone daemon using the same Node binary and `BB_ROOT`, wait for health,
 then run:
 
 ```bash
@@ -534,11 +534,11 @@ Expected:
 
 - CLI reports shutdown requested
 - daemon exits cleanly
-- after relaunching the daemon on the same `BEANBAG_ROOT`, the daemon nudges the previously active env-agent
+- after relaunching the daemon on the same `BB_ROOT`, the daemon nudges the previously active env-agent
 - if the same env-agent checks back in and flushes its buffered state, the thread continues normally
 - if the env-agent does not check back in before the liveness deadline, the daemon marks the thread `error`
 - `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after the thread reaches either a healthy resumed state or `error`
-- after relaunching the daemon on the same `BEANBAG_ROOT`, the interrupted thread eventually returns to `idle`
+- after relaunching the daemon on the same `BB_ROOT`, the interrupted thread eventually returns to `idle`
 - the interrupted turn may resume or complete before the thread returns to `idle`; that is acceptable as long as recovery finishes cleanly
 - `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after relaunch
 
@@ -600,7 +600,7 @@ sqlite3 "$beanbag_root/beanbag.db" \
   "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
-6. Force-restart the daemon and relaunch it on the same `BEANBAG_ROOT`.
+6. Force-restart the daemon and relaunch it on the same `BB_ROOT`.
 7. Send a follow-up to the now-idle thread.
 8. Verify that the daemon starts a fresh env-agent session cleanly:
 
@@ -704,7 +704,7 @@ Missing-worker restart check:
 1. Start a long-running turn, wait for a real `turn/started`, then record its `control_base_url`.
 2. Force-restart the daemon.
 3. Kill the env-agent process or otherwise make that `control_base_url` unreachable before relaunching the daemon.
-4. Relaunch the daemon on the same `BEANBAG_ROOT`.
+4. Relaunch the daemon on the same `BB_ROOT`.
 5. Wait through the liveness deadline, then verify:
 
 ```bash

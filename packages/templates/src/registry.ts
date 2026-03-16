@@ -17,7 +17,7 @@ export interface TemplateDefinition {
 export interface TemplateMetadata extends Omit<TemplateDefinition, "body"> {}
 
 export interface TemplateVariables {
-  codexBaseInstructions: Record<string, never>;
+  agentBaseInstructions: Record<string, never>;
   codexCommitMessage: {
     diffDescription: string;
     files: string;

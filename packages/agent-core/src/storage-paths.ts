@@ -1,7 +1,12 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
+export const BB_ROOT_ENV = "BB_ROOT";
+
+/** @deprecated Use BB_ROOT_ENV instead. */
 export const BEANBAG_ROOT_ENV = "BEANBAG_ROOT";
+
+let _deprecationWarned = false;
 
 export function expandHomeDirectory(path: string): string {
   if (path === "~") return homedir();
@@ -10,11 +15,24 @@ export function expandHomeDirectory(path: string): string {
 }
 
 export function resolveBeanbagRoot(env: NodeJS.ProcessEnv = process.env): string {
-  const configuredRoot = env[BEANBAG_ROOT_ENV]?.trim();
-  if (!configuredRoot) {
-    return resolve(homedir(), ".beanbag");
+  const preferred = env[BB_ROOT_ENV]?.trim();
+  if (preferred) {
+    return resolve(expandHomeDirectory(preferred));
   }
-  return resolve(expandHomeDirectory(configuredRoot));
+  const legacy = env[BEANBAG_ROOT_ENV]?.trim();
+  if (legacy) {
+    if (!_deprecationWarned) {
+      _deprecationWarned = true;
+      process.stderr.write("Warning: BEANBAG_ROOT is deprecated, use BB_ROOT\n");
+    }
+    return resolve(expandHomeDirectory(legacy));
+  }
+  return resolve(homedir(), ".beanbag");
+}
+
+/** @internal Reset deprecation warning state (for tests). */
+export function __testOnly__resetDeprecationWarning(): void {
+  _deprecationWarned = false;
 }
 
 export function resolveBeanbagPath(

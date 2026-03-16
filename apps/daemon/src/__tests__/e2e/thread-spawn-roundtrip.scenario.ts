@@ -73,7 +73,7 @@ async function waitForThreadRoundTrip(
 }
 
 function resolveExpectedProviderId(): string {
-  return (process.env.BEANBAG_PROVIDER ?? DEFAULT_THREAD_PROVIDER_ID).trim().toLowerCase();
+  return (process.env.BB_E2E_PROVIDER ?? DEFAULT_THREAD_PROVIDER_ID).trim().toLowerCase();
 }
 
 export async function runThreadSpawnRoundtripScenario(): Promise<void> {

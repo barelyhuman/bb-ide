@@ -27,7 +27,7 @@ import type {
   ProviderThreadContext,
 } from "./provider-adapter.js";
 
-const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("codexBaseInstructions", {});
+const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
 const DEFAULT_APPROVAL_POLICY = "never";
 const DEFAULT_SANDBOX_MODE = "danger-full-access";
 // Ask Codex to suppress noisy legacy notifications at source.

@@ -197,6 +197,11 @@ export type {
 } from "./runtime-contracts.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
+export {
+  formatTimelineAsText,
+  type TimelineFormat,
+  type FormatTimelineOptions,
+} from "./format-timeline-text.js";
 export { buildThreadDetailRows } from "./thread-detail-rows.js";
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 export {

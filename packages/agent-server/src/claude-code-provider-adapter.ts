@@ -30,7 +30,7 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("codexBaseInstructions", {});
+const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
 
 const CLAUDE_CODE_MODELS: AvailableModel[] = [
   {
