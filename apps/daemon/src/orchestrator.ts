@@ -3254,9 +3254,13 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   /**
-   * List available models from the active provider.
+   * List available models from a provider. When no providerId is given, uses
+   * the default provider.
    */
-  async listModels(): Promise<AvailableModel[]> {
+  async listModels(providerId?: string): Promise<AvailableModel[]> {
+    if (providerId && isThreadProviderId(providerId)) {
+      return this._getAgentServerForProviderId(providerId).listModels();
+    }
     return this._getDefaultAgentServer().listModels();
   }
 

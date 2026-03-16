@@ -12,6 +12,7 @@ import {
   useAvailableModels,
   useSystemEnvironments,
   useSystemProvider,
+  useSystemProviders,
 } from "./useApi";
 
 const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
@@ -19,6 +20,7 @@ const SERVICE_TIER_STORAGE_KEY = "beanbag.promptbox.service-tier";
 const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
 const SANDBOX_STORAGE_KEY = "beanbag.promptbox.sandbox";
 const ENVIRONMENT_STORAGE_KEY = "beanbag.promptbox.environment";
+const PROVIDER_STORAGE_KEY = "beanbag.promptbox.provider";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
@@ -44,6 +46,7 @@ interface PromptOption<T extends string> {
 }
 
 interface PromptModelReasoningStorageKeys {
+  provider: string;
   model: string;
   serviceTier: string;
   reasoning: string;
@@ -55,6 +58,7 @@ interface UsePromptModelReasoningOptions {
   scope?: "new-thread" | "thread";
   projectId?: string | null;
   resetKey?: string | number | null;
+  initialProviderId?: string;
   initialModel?: string;
   initialServiceTier?: ServiceTier;
   initialReasoningLevel?: ReasoningLevel;
@@ -115,6 +119,7 @@ function getPromptModelReasoningStorageKeys(
   projectId?: string | null,
 ): PromptModelReasoningStorageKeys {
   return {
+    provider: getProjectScopedStorageKey(PROVIDER_STORAGE_KEY, projectId),
     model: getProjectScopedStorageKey(MODEL_STORAGE_KEY, projectId),
     serviceTier: getProjectScopedStorageKey(SERVICE_TIER_STORAGE_KEY, projectId),
     reasoning: getProjectScopedStorageKey(REASONING_STORAGE_KEY, projectId),
@@ -288,14 +293,57 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     [options?.projectId],
   );
 
-  const availableModelsQuery = useAvailableModels();
+  // --- Provider selection ---
+  const providersQuery = useSystemProviders();
+  const providers = providersQuery.data ?? [];
+  const hasMultipleProviders = providers.length >= 2;
+
+  const [selectedProviderId, setSelectedProviderIdRaw] = useState<string>(() => {
+    if (scope === "thread") {
+      return options?.initialProviderId ?? "";
+    }
+    return readStoredString(storageKeys.provider) ?? "";
+  });
+
+  // Resolve the effective provider: use selectedProviderId if it matches a known
+  // provider, otherwise fall back to the first provider in the list.
+  const effectiveProviderId = useMemo(() => {
+    if (selectedProviderId && providers.some((p) => p.id === selectedProviderId)) {
+      return selectedProviderId;
+    }
+    return providers[0]?.id ?? "";
+  }, [providers, selectedProviderId]);
+
+  const selectedProviderInfo = useMemo(
+    () => providers.find((p) => p.id === effectiveProviderId),
+    [effectiveProviderId, providers],
+  );
+
+  const providerOptions = useMemo(
+    (): PromptOption<string>[] =>
+      providers.map((p) => ({
+        value: p.id,
+        label: p.displayName,
+      })),
+    [providers],
+  );
+
+  const availableModelsQuery = useAvailableModels(
+    hasMultipleProviders ? effectiveProviderId || undefined : undefined,
+  );
   const environmentsQuery = useSystemEnvironments();
   const providerInfoQuery = useSystemProvider();
-  const supportsModelList = providerInfoQuery.data?.capabilities.supportsModelList ?? false;
+
+  // Use per-provider capabilities when multiple providers are available.
+  const activeProviderCapabilities = hasMultipleProviders
+    ? selectedProviderInfo?.capabilities
+    : providerInfoQuery.data?.capabilities;
+
+  const supportsModelList = activeProviderCapabilities?.supportsModelList ?? false;
   const supportsReasoningLevels =
-    providerInfoQuery.data?.capabilities.supportsReasoningLevels ?? false;
+    activeProviderCapabilities?.supportsReasoningLevels ?? false;
   const supportsServiceTier =
-    providerInfoQuery.data?.capabilities.supportsServiceTier ?? false;
+    activeProviderCapabilities?.supportsServiceTier ?? false;
 
   const [state, dispatch] = useReducer(promptModelReasoningReducer, undefined, () =>
     scope === "new-thread"
@@ -370,6 +418,32 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     () => toEnvironmentOptions(environmentsQuery.data),
     [environmentsQuery.data],
   );
+
+  // Sync provider from localStorage when storageKeys change (project switch).
+  useEffect(() => {
+    if (scope !== "new-thread") return;
+    const stored = readStoredString(storageKeys.provider) ?? "";
+    setSelectedProviderIdRaw(stored);
+  }, [scope, storageKeys.provider]);
+
+  // For thread scope, sync from initialProviderId.
+  useEffect(() => {
+    if (scope !== "thread") return;
+    setSelectedProviderIdRaw(options?.initialProviderId ?? "");
+  }, [options?.initialProviderId, scope]);
+
+  // Persist provider selection for new-thread scope.
+  useEffect(() => {
+    if (scope !== "new-thread") return;
+    if (hydratedStorageKey !== storageKeys.model) return;
+    if (typeof window === "undefined") return;
+    if (effectiveProviderId) {
+      window.localStorage.setItem(storageKeys.provider, effectiveProviderId);
+    } else {
+      window.localStorage.removeItem(storageKeys.provider);
+    }
+  }, [effectiveProviderId, hydratedStorageKey, scope, storageKeys.model, storageKeys.provider]);
+
   useEffect(() => {
     if (availableModels.length === 0) return;
     if (availableModels.some((model) => model.model === selectedModel)) return;
@@ -511,6 +585,21 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     storageKeys.serviceTier,
   ]);
 
+  const setSelectedProviderId = useCallback(
+    (value: string) => {
+      setSelectedProviderIdRaw(value);
+      // Reset model selection when provider changes, since different providers
+      // have different model lists.
+      dispatch({
+        type: "set-field",
+        field: "selectedModel",
+        value: "",
+        touched: false,
+      });
+    },
+    [],
+  );
+
   const setSelectedModel = useCallback((value: string) => {
     dispatch({
       type: "set-field",
@@ -548,6 +637,11 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   }, []);
 
   return {
+    selectedProviderId: effectiveProviderId,
+    setSelectedProviderId,
+    providerOptions,
+    hasMultipleProviders,
+    selectedProviderDisplayName: selectedProviderInfo?.displayName ?? effectiveProviderId,
     selectedModel,
     setSelectedModel,
     serviceTier,

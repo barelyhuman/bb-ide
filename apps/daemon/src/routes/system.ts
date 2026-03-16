@@ -26,7 +26,7 @@ import {
 } from "../voice-transcription.js";
 
 type PickFolderFn = () => Promise<string | null>;
-type ListModelsFn = () => Promise<AvailableModel[]>;
+type ListModelsFn = (providerId?: string) => Promise<AvailableModel[]>;
 type ProviderInfoFn = () => SystemProviderInfo;
 type ProviderCatalogFn = () => SystemProviderInfo[];
 type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
@@ -176,7 +176,7 @@ export function createSystemRoutes(
   opts: CreateSystemRoutesOptions = {},
 ) {
   const pickFolder = opts.pickFolder ?? pickFolderPath;
-  const listModels = opts.listModels ?? (() => threadManager.listModels());
+  const listModels = opts.listModels ?? ((providerId?: string) => threadManager.listModels(providerId));
   const getProviderInfo = opts.getProviderInfo ?? (() => threadManager.getProviderInfo());
   const listProviders = opts.listProviders ?? (() => threadManager.listProviders());
   const listEnvironments = opts.listEnvironments ?? (() => threadManager.listEnvironments());
@@ -285,7 +285,8 @@ export function createSystemRoutes(
     })
     .get("/models", async (c) => {
       try {
-        const models = await listModels();
+        const providerId = c.req.query("providerId") || undefined;
+        const models = await listModels(providerId);
         return c.json(models);
       } catch (err) {
         return sendRouteError(c, err);

@@ -32,10 +32,17 @@ vi.mock("@/hooks/useApi", () => ({
     data: undefined,
   }),
   useHireProjectManager: () => apiState.pendingMutation,
+  useSystemProviders: () => ({
+    data: [],
+  }),
 }));
 
 vi.mock("./AppSidebar", () => ({
   AppSidebar: () => <div>sidebar</div>,
+}));
+
+vi.mock("@/components/HireManagerModal", () => ({
+  HireManagerModal: () => null,
 }));
 
 vi.mock("@/components/ui/sidebar", () => ({

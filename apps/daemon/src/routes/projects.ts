@@ -267,6 +267,13 @@ export function createProjectRoutes(
           projectRepo.update(projectId, { primaryManagerThreadId: null });
         }
 
+        let body: { providerId?: string; model?: string } | undefined;
+        try {
+          body = await c.req.json();
+        } catch {
+          // Body is optional.
+        }
+
         const managerThread = await deps.threadManager.spawn({
           projectId,
           type: "manager",
@@ -275,6 +282,8 @@ export function createProjectRoutes(
           developerInstructions: buildManagerDeveloperInstructions(),
           input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
           spawnInitiator: "system",
+          ...(body?.providerId ? { providerId: body.providerId } : {}),
+          ...(body?.model ? { model: body.model } : {}),
         });
 
         try {

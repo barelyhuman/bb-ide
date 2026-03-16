@@ -1,9 +1,15 @@
 import type { ComponentProps } from "react";
 import type { ReasoningLevel, SandboxMode, ServiceTier } from "@beanbag/agent-core";
 import { PromptModelPicker } from "./PromptModelPicker";
-import { PromptOptionPicker, type PromptOption } from "./PromptOptionPicker";
+import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
 
 interface PromptExecutionControlsProps {
+  providerOptions?: readonly PromptOption<string>[];
+  selectedProviderId?: string;
+  onSelectedProviderChange?: (value: string) => void;
+  hasMultipleProviders?: boolean;
+  providerDisplayName?: string;
+  providerReadOnly?: boolean;
   supportsModelList: boolean;
   activeModel?: { model: string } | null;
   selectedModel: string;
@@ -22,6 +28,12 @@ interface PromptExecutionControlsProps {
 }
 
 export function PromptExecutionControls({
+  providerOptions,
+  selectedProviderId,
+  onSelectedProviderChange,
+  hasMultipleProviders,
+  providerDisplayName,
+  providerReadOnly,
   supportsModelList,
   activeModel,
   selectedModel,
@@ -42,6 +54,25 @@ export function PromptExecutionControls({
 
   return (
     <>
+      {hasMultipleProviders && providerReadOnly && providerDisplayName ? (
+        <PromptOptionDisplay
+          label="Provider"
+          value={providerDisplayName}
+        />
+      ) : null}
+      {hasMultipleProviders &&
+      !providerReadOnly &&
+      providerOptions &&
+      providerOptions.length > 0 &&
+      selectedProviderId &&
+      onSelectedProviderChange ? (
+        <PromptOptionPicker
+          label="Provider"
+          value={selectedProviderId}
+          options={providerOptions}
+          onChange={onSelectedProviderChange}
+        />
+      ) : null}
       {supportsModelList && modelOptions.length > 0 ? (
         <PromptModelPicker
           value={activeModel?.model ?? selectedModel}

@@ -395,7 +395,8 @@ export function useCreateProject() {
 export function useHireProjectManager() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId }: { projectId: string }) => api.hireProjectManager(projectId),
+    mutationFn: ({ projectId, providerId, model }: { projectId: string; providerId?: string; model?: string }) =>
+      api.hireProjectManager(projectId, { providerId, model }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
 
@@ -686,10 +687,10 @@ export function useSystemRestartPolicy() {
   });
 }
 
-export function useAvailableModels() {
+export function useAvailableModels(providerId?: string) {
   return useQuery<AvailableModel[]>({
-    queryKey: ["availableModels"],
-    queryFn: () => api.getAvailableModels(),
+    queryKey: ["availableModels", providerId ?? null],
+    queryFn: () => api.getAvailableModels(providerId),
     staleTime: 60_000,
   });
 }

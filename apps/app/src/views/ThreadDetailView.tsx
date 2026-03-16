@@ -238,6 +238,9 @@ export function ThreadDetailView() {
     enabled: thread?.type === "manager" && effectiveManagerWorkspacePath !== null,
   });
   const {
+    selectedProviderId,
+    hasMultipleProviders,
+    selectedProviderDisplayName,
     selectedModel,
     setSelectedModel,
     serviceTier,
@@ -256,6 +259,7 @@ export function ThreadDetailView() {
   } = usePromptModelReasoning({
     scope: "thread",
     resetKey: threadId,
+    initialProviderId: thread?.providerId,
     initialModel: defaultExecutionOptions?.model,
     initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
@@ -1508,6 +1512,8 @@ export function ThreadDetailView() {
       onRemoveAttachment={promptDraft.removeAttachment}
       isAttaching={uploadPromptAttachment.isPending}
       attachmentError={attachmentError}
+      hasMultipleProviders={hasMultipleProviders}
+      providerDisplayName={selectedProviderDisplayName}
       supportsModelList={supportsModelList}
       activeModel={activeModel}
       selectedModel={selectedModel}

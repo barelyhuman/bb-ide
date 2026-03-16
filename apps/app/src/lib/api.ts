@@ -250,8 +250,11 @@ export async function createProject(req: CreateProjectRequest): Promise<Project>
   return request<Project>("POST", "/projects", req);
 }
 
-export async function hireProjectManager(projectId: string): Promise<Thread> {
-  return request<Thread>("POST", `/projects/${projectId}/manager`);
+export async function hireProjectManager(
+  projectId: string,
+  options?: { providerId?: string; model?: string },
+): Promise<Thread> {
+  return request<Thread>("POST", `/projects/${projectId}/manager`, options);
 }
 
 export async function updateProject(
@@ -581,8 +584,13 @@ export async function getSystemStatus(): Promise<SystemStatus> {
   return request<SystemStatus>("GET", "/system/status");
 }
 
-export async function getAvailableModels(): Promise<AvailableModel[]> {
-  return request<AvailableModel[]>("GET", "/system/models");
+export async function getAvailableModels(providerId?: string): Promise<AvailableModel[]> {
+  const params = new URLSearchParams();
+  if (providerId) {
+    params.set("providerId", providerId);
+  }
+  const qs = params.toString();
+  return request<AvailableModel[]>("GET", `/system/models${qs ? `?${qs}` : ""}`);
 }
 
 export async function getSystemProvider(): Promise<SystemProviderInfo> {

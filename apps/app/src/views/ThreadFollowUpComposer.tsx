@@ -180,6 +180,8 @@ export function ThreadFollowUpComposer({
   onRemoveAttachment,
   isAttaching,
   attachmentError,
+  hasMultipleProviders,
+  providerDisplayName,
   supportsModelList,
   activeModel,
   selectedModel,
@@ -245,6 +247,8 @@ export function ThreadFollowUpComposer({
   onRemoveAttachment: (path: string) => void;
   isAttaching: boolean;
   attachmentError: string | null;
+  hasMultipleProviders?: boolean;
+  providerDisplayName?: string;
   supportsModelList: boolean;
   activeModel?: { model: string } | null;
   selectedModel: string;
@@ -413,6 +417,9 @@ export function ThreadFollowUpComposer({
           attachmentError={attachmentError}
           footerStart={
             <PromptExecutionControls
+              hasMultipleProviders={hasMultipleProviders}
+              providerDisplayName={providerDisplayName}
+              providerReadOnly
               supportsModelList={supportsModelList}
               activeModel={activeModel}
               selectedModel={selectedModel}

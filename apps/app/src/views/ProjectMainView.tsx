@@ -49,6 +49,10 @@ export function ProjectMainView() {
     [projectId],
   );
   const {
+    selectedProviderId,
+    setSelectedProviderId,
+    providerOptions,
+    hasMultipleProviders,
     selectedModel,
     setSelectedModel,
     serviceTier,
@@ -235,6 +239,7 @@ export function ProjectMainView() {
       await spawnThread.mutateAsync({
         input: submittedInput,
         projectId,
+        ...(hasMultipleProviders && selectedProviderId ? { providerId: selectedProviderId } : {}),
         model: activeModel?.model,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         ...(supportsReasoningLevels ? { reasoningLevel } : {}),
@@ -287,6 +292,10 @@ export function ProjectMainView() {
           attachmentError={attachmentError}
           footerStart={
             <PromptExecutionControls
+              providerOptions={providerOptions}
+              selectedProviderId={selectedProviderId}
+              onSelectedProviderChange={setSelectedProviderId}
+              hasMultipleProviders={hasMultipleProviders}
               supportsModelList={supportsModelList}
               activeModel={activeModel}
               selectedModel={selectedModel}

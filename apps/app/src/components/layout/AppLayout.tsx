@@ -11,6 +11,7 @@ import {
   UserRoundPlus,
   X,
 } from "lucide-react"
+import type { Thread } from "@beanbag/agent-core"
 import {
   SidebarProvider,
   SidebarInset,
@@ -29,6 +30,7 @@ import { AppSidebar } from "./AppSidebar"
 import {
   useHireProjectManager,
   useProjects,
+  useSystemProviders,
   useThread,
   useThreads,
 } from "@/hooks/useApi"
@@ -37,6 +39,7 @@ import {
   formatThreadActivitySummaryForTitle,
   summarizeThreadActivity,
 } from "@/lib/thread-activity"
+import { HireManagerModal } from "@/components/HireManagerModal"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -214,6 +217,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads } = useThreads()
   const hireProjectManager = useHireProjectManager()
+  const providersQuery = useSystemProviders()
+  const hasMultipleProviders = (providersQuery.data?.length ?? 0) >= 2
+  const [hireManagerModalProjectId, setHireManagerModalProjectId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH
@@ -421,6 +427,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [documentTitle])
 
   return (
+    <>
     <SidebarProvider
       ref={providerRef}
       className="[--sidebar-width:20rem]"
@@ -448,6 +455,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
               isManagerActionPending={hireProjectManager.isPending}
               onOpenManager={() => {
                 if (!projectId || hireProjectManager.isPending) return
+                if (project?.primaryManagerThreadId) {
+                  // Open existing manager.
+                  navigate(`/projects/${projectId}/threads/${project.primaryManagerThreadId}`)
+                  return
+                }
+                if (hasMultipleProviders) {
+                  setHireManagerModalProjectId(projectId)
+                  return
+                }
                 void hireProjectManager.mutateAsync({ projectId }).then((thread) => {
                   navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
                 })
@@ -461,5 +477,16 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
     </SidebarProvider>
+    {hireManagerModalProjectId ? (
+      <HireManagerModal
+        projectId={hireManagerModalProjectId}
+        open
+        onClose={() => setHireManagerModalProjectId(null)}
+        onHired={(thread: Thread) => {
+          navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
+        }}
+      />
+    ) : null}
+    </>
   )
 }
