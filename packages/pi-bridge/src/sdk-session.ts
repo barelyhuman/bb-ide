@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import {
   createAgentSession,
   SessionManager,
@@ -17,6 +18,7 @@ export interface PiSdkSessionOptions {
   model?: string;
   env?: NodeJS.ProcessEnv;
   customTools?: ToolDefinition[];
+  sessionFilePath?: string;
 }
 
 export type PiSessionEventHandler = (event: AgentSessionEvent) => void;
@@ -53,7 +55,12 @@ export class PiSdkSession {
   async start(): Promise<void> {
     const sessionOptions: CreateAgentSessionOptions = {
       cwd: this.options.cwd,
-      sessionManager: SessionManager.inMemory(),
+      sessionManager: this.options.sessionFilePath
+        ? SessionManager.open(
+            this.options.sessionFilePath,
+            dirname(this.options.sessionFilePath),
+          )
+        : SessionManager.inMemory(this.options.cwd),
       settingsManager: SettingsManager.inMemory({
         compaction: { enabled: true },
         retry: { enabled: true, maxRetries: 2 },

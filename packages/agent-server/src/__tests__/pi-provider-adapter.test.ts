@@ -165,6 +165,7 @@ describe("pi provider adapter", () => {
       },
     );
     expect(params).toMatchObject({
+      threadId: "thread-1",
       config: {
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
@@ -182,6 +183,21 @@ describe("pi provider adapter", () => {
     );
     expect(params).toMatchObject({
       model: "anthropic/claude-opus-4-20250514",
+    });
+  });
+
+  it("passes the daemon resume path through thread/resume params", () => {
+    const adapter = createPiProviderAdapter();
+    const params = adapter.createThreadResumeParams(
+      "provider-thread-1",
+      { projectId: "proj-1", threadId: "thread-1" },
+      undefined,
+      "/tmp/pi-sessions/provider-thread-1.jsonl",
+    );
+
+    expect(params).toMatchObject({
+      threadId: "provider-thread-1",
+      sessionPath: "/tmp/pi-sessions/provider-thread-1.jsonl",
     });
   });
 

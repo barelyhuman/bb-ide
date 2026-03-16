@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { extname } from "node:path";
+import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { ImageContent } from "@mariozechner/pi-ai";
@@ -164,13 +166,15 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 function buildSessionOptions(
   params: Record<string, unknown>,
   env: NodeJS.ProcessEnv,
+  threadId: string,
 ): PiSdkSessionOptions {
   const model =
     typeof params.model === "string" ? params.model : undefined;
   const cwd =
     typeof params.cwd === "string" ? params.cwd : process.cwd();
+  const sessionFilePath = resolvePiSessionFilePath(threadId, params);
 
-  return { cwd, model, env };
+  return { cwd, model, env, sessionFilePath };
 }
 
 function applyDynamicTools(
@@ -187,6 +191,30 @@ function applyDynamicTools(
       createForwardToolCall(threadId),
     );
   }
+}
+
+function resolvePiSessionFilePath(
+  threadId: string,
+  params: Record<string, unknown>,
+): string {
+  const explicitPath =
+    typeof params.sessionPath === "string" && params.sessionPath.trim().length > 0
+      ? params.sessionPath
+      : undefined;
+  if (explicitPath) {
+    return resolve(explicitPath);
+  }
+
+  return join(
+    homedir(),
+    ".beanbag",
+    "pi-bridge-sessions",
+    `${sanitizeSessionKey(threadId)}.jsonl`,
+  );
+}
+
+function sanitizeSessionKey(threadId: string): string {
+  return threadId.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
 function handleRequest(request: JsonRpcRequest): void {
@@ -240,7 +268,7 @@ async function handleThreadStart(
 
   const envOverrides = extractEnvOverrides(params);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
   applyDynamicTools(sessionOptions, params, threadId);
 
   const turnCounter = createTurnCounterState();
@@ -283,7 +311,7 @@ async function handleThreadResume(
 
   const envOverrides = extractEnvOverrides(params);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
   applyDynamicTools(sessionOptions, params, threadId);
 
   const turnCounter = createTurnCounterState();
@@ -297,7 +325,6 @@ async function handleThreadResume(
   };
   sessions.set(threadId, threadSession);
 
-  // Pi in-memory sessions don't support resume, so just start fresh
   await session.start();
 
   sendResult(id, { threadId });

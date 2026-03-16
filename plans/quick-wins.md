@@ -98,7 +98,7 @@ Pi's `tool-proxy.ts` only handles flat schemas (`string`, `number`, `boolean`). 
 ---
 
 ### 5. Pi thread resume (not actually broken — just not wired up)
-**Status:** Not started
+**Status:** Implemented; Pi smoke/manual QA passed
 
 The pi-bridge currently uses `SessionManager.inMemory()` and comments say "Pi in-memory sessions don't support resume, so just start fresh." But the Pi SDK **does** support file-backed persistent sessions — the sibling `swarm` project (`../swarm`) uses `SessionManager.open(filePath)` to persist and resume sessions via JSONL session files.
 
@@ -112,7 +112,9 @@ The pi-bridge currently uses `SessionManager.inMemory()` and comments say "Pi in
 
 **Validation:**
 - Unit test: start a session, send turns, stop, resume — verify conversation history is present
+- Unit coverage added for persistent session-file wiring and resume params
 - Manual QA: start a Pi thread, have a conversation, resume the thread and confirm the agent remembers context
+  - Completed with a real Pi standalone-daemon check (`PERSIST-ALPHA` recall after idle follow-up)
 
 **Open Questions/Risks:**
 - Need to decide where session files live (temp dir? project-scoped dir?)

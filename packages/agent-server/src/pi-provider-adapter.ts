@@ -307,7 +307,13 @@ export function createPiProviderAdapter(
     ): Record<string, unknown> {
       const baseInstructions = resolveBaseInstructions(req.developerInstructions);
       const params = withExecutionOptions(
-        withThreadEnvironmentPolicy({ baseInstructions }, context),
+        withThreadEnvironmentPolicy(
+          {
+            baseInstructions,
+            ...(context.threadId ? { threadId: context.threadId } : {}),
+          },
+          context,
+        ),
         req,
       );
       if (dynamicTools && dynamicTools.length > 0) {
@@ -323,10 +329,16 @@ export function createPiProviderAdapter(
       providerThreadId: string,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
-      _resumePath?: string,
+      resumePath?: string,
     ): Record<string, unknown> {
       return withExecutionOptions(
-        withThreadEnvironmentPolicy({ threadId: providerThreadId }, context),
+        withThreadEnvironmentPolicy(
+          {
+            threadId: providerThreadId,
+            ...(resumePath ? { sessionPath: resumePath } : {}),
+          },
+          context,
+        ),
         options,
       );
     },
