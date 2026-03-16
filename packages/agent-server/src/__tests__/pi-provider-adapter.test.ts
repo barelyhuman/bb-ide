@@ -51,8 +51,8 @@ describe("pi provider adapter", () => {
       supportsReasoningLevels: true,
       supportsServiceTier: false,
       supportsMultimodalInput: true,
-      supportsDynamicTools: false,
-      supportsToolCallRequests: false,
+      supportsDynamicTools: true,
+      supportsToolCallRequests: true,
     });
   });
 
@@ -143,11 +143,9 @@ describe("pi provider adapter", () => {
     ).toBe("Hello world");
   });
 
-  it("does not support dynamic tools or tool call requests", () => {
+  it("supports dynamic tools and tool call requests", () => {
     const adapter = createPiProviderAdapter();
-    expect(adapter.capabilities.supportsDynamicTools).toBe(false);
-    expect(adapter.capabilities.supportsToolCallRequests).toBe(false);
-    expect(adapter.decodeToolCallRequest).toBeUndefined();
-    expect(adapter.encodeToolCallResponse).toBeUndefined();
+    expect(adapter.capabilities.supportsDynamicTools).toBe(true);
+    expect(adapter.capabilities.supportsToolCallRequests).toBe(true);
   });
 });

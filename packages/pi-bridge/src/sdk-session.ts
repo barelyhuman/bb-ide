@@ -1,0 +1,173 @@
+import {
+  createAgentSession,
+  SessionManager,
+  SettingsManager,
+  type AgentSession,
+  type AgentSessionEvent,
+  type CreateAgentSessionOptions,
+  type ToolDefinition,
+} from "@mariozechner/pi-coding-agent";
+import { getModel } from "@mariozechner/pi-ai";
+import type { ImageContent } from "@mariozechner/pi-ai";
+
+export interface PiSdkSessionOptions {
+  cwd: string;
+  model?: string;
+  env?: NodeJS.ProcessEnv;
+  customTools?: ToolDefinition[];
+}
+
+export type PiSessionEventHandler = (event: AgentSessionEvent) => void;
+export type PiSessionDoneHandler = (error?: unknown) => void;
+
+/**
+ * Wraps the Pi programmatic SDK (`@mariozechner/pi-coding-agent`) in a
+ * session object that bridges between the Beanbag JSON-RPC protocol and
+ * the Pi agent's event-driven API.
+ */
+export class PiSdkSession {
+  private session: AgentSession | undefined;
+  private unsubscribe: (() => void) | undefined;
+  private isProcessing = false;
+
+  constructor(
+    private readonly options: PiSdkSessionOptions,
+    private readonly onEvent: PiSessionEventHandler,
+    private readonly onDone: PiSessionDoneHandler,
+  ) {}
+
+  getIsProcessing(): boolean {
+    return this.isProcessing;
+  }
+
+  async start(): Promise<void> {
+    const sessionOptions: CreateAgentSessionOptions = {
+      cwd: this.options.cwd,
+      sessionManager: SessionManager.inMemory(),
+      settingsManager: SettingsManager.inMemory({
+        compaction: { enabled: true },
+        retry: { enabled: true, maxRetries: 2 },
+      }),
+    };
+
+    // Resolve model if specified
+    if (this.options.model) {
+      const model = resolveModel(this.options.model);
+      if (model) {
+        sessionOptions.model = model;
+      }
+    }
+
+    // Register custom tools
+    if (this.options.customTools && this.options.customTools.length > 0) {
+      sessionOptions.customTools = this.options.customTools;
+    }
+
+    // Set environment variables if provided
+    if (this.options.env) {
+      Object.assign(process.env, this.options.env);
+    }
+
+    try {
+      const { session } = await createAgentSession(sessionOptions);
+      this.session = session;
+
+      // Subscribe to session events
+      this.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+        this.trackProcessingState(event);
+        this.onEvent(event);
+      });
+    } catch (error) {
+      this.onDone(error);
+    }
+  }
+
+  async prompt(text: string, images?: ImageContent[]): Promise<void> {
+    if (!this.session) return;
+    this.isProcessing = true;
+    try {
+      if (this.session.isStreaming) {
+        await this.session.prompt(text, {
+          streamingBehavior: "steer",
+          ...(images && images.length > 0 ? { images } : {}),
+        });
+      } else {
+        await this.session.prompt(text, {
+          ...(images && images.length > 0 ? { images } : {}),
+        });
+      }
+    } catch (error) {
+      this.isProcessing = false;
+      this.onDone(error);
+    }
+  }
+
+  async steer(text: string, images?: ImageContent[]): Promise<void> {
+    if (!this.session) return;
+    try {
+      if (this.session.isStreaming) {
+        await this.session.prompt(text, {
+          streamingBehavior: "steer",
+          ...(images && images.length > 0 ? { images } : {}),
+        });
+      } else {
+        await this.session.prompt(text, {
+          ...(images && images.length > 0 ? { images } : {}),
+        });
+      }
+    } catch (error) {
+      this.onDone(error);
+    }
+  }
+
+  stop(): void {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = undefined;
+    }
+    if (this.session) {
+      this.session.dispose();
+      this.session = undefined;
+    }
+    this.isProcessing = false;
+  }
+
+  private trackProcessingState(event: AgentSessionEvent): void {
+    if (event.type === "agent_start") {
+      this.isProcessing = true;
+    }
+    if (event.type === "agent_end") {
+      this.isProcessing = false;
+      this.onDone();
+    }
+  }
+}
+
+/**
+ * Resolve a model string like "anthropic/claude-sonnet-4-20250514" to a
+ * Pi Model object. Returns undefined if the model can't be resolved.
+ */
+function resolveModel(modelStr: string): ReturnType<typeof getModel> | undefined {
+  // Parse "provider/model-id" format
+  const slashIdx = modelStr.indexOf("/");
+  if (slashIdx === -1) return undefined;
+
+  const provider = modelStr.slice(0, slashIdx);
+  const modelId = modelStr.slice(slashIdx + 1);
+
+  try {
+    // getModel is generic over known providers; we try the common ones
+    switch (provider) {
+      case "anthropic":
+        return getModel("anthropic", modelId as never);
+      case "openai":
+        return getModel("openai", modelId as never);
+      case "google":
+        return getModel("google", modelId as never);
+      default:
+        return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+}

@@ -181,8 +181,8 @@ export function createPiProviderAdapter(
     supportsReasoningLevels: true,
     supportsServiceTier: false,
     supportsMultimodalInput: true,
-    supportsDynamicTools: false,
-    supportsToolCallRequests: false,
+    supportsDynamicTools: true,
+    supportsToolCallRequests: true,
     ...(opts?.capabilities ?? {}),
   };
 
@@ -225,13 +225,21 @@ export function createPiProviderAdapter(
     createThreadStartParams(
       req: SpawnThreadRequest,
       context: ProviderThreadContext,
-      _dynamicTools?: ProviderDynamicTool[],
+      dynamicTools?: ProviderDynamicTool[],
     ): Record<string, unknown> {
       const baseInstructions = resolveBaseInstructions(req.developerInstructions);
-      return withExecutionOptions(
+      const params = withExecutionOptions(
         withThreadEnvironmentPolicy({ baseInstructions }, context),
         req,
       );
+      if (dynamicTools && dynamicTools.length > 0) {
+        params.dynamicTools = dynamicTools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        }));
+      }
+      return params;
     },
     createThreadResumeParams(
       providerThreadId: string,

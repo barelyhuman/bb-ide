@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 
-import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { createInterface } from "node:readline";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type { ImageContent } from "@mariozechner/pi-ai";
+import { PiSdkSession, type PiSdkSessionOptions } from "./sdk-session.js";
 import {
   translatePiEvent,
   createTurnCounterState,
   type JsonRpcNotification,
   type TurnCounterState,
 } from "./event-translator.js";
+import {
+  buildDynamicTools,
+  type DynamicToolDefinition,
+  type ToolCallForwarder,
+} from "./tool-proxy.js";
 
 export const BRIDGE_METHODS = [
   "initialize",
@@ -34,14 +41,19 @@ interface JsonRpcResponse {
   error?: { code: number; message: string };
 }
 
-interface PiThreadSession {
-  piProcess: ChildProcess;
-  stdoutBuffer: string;
-  turnId: string | undefined;
-  turnCounter: TurnCounterState;
+interface PendingToolCall {
+  resolve: (value: { content: string; isError?: boolean }) => void;
 }
 
-const sessions = new Map<string, PiThreadSession>();
+interface ThreadSession {
+  session: PiSdkSession;
+  turnId: string | undefined;
+  turnCounter: TurnCounterState;
+  pendingToolCalls: Map<string | number, PendingToolCall>;
+}
+
+const sessions = new Map<string, ThreadSession>();
+let toolCallRequestIdCounter = 0;
 
 function send(msg: JsonRpcResponse | JsonRpcNotification): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -55,81 +67,65 @@ function sendError(id: string | number, code: number, message: string): void {
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
-function sendToPi(threadSession: PiThreadSession, command: Record<string, unknown>): void {
-  if (!threadSession.piProcess.stdin?.writable) return;
-  threadSession.piProcess.stdin.write(JSON.stringify(command) + "\n");
+function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
+  return (event: AgentSessionEvent) => {
+    const threadSession = sessions.get(threadId);
+    if (!threadSession) return;
+
+    // Convert AgentSessionEvent to the Record<string, unknown> shape
+    // that translatePiEvent expects
+    const eventRecord = event as unknown as Record<string, unknown>;
+
+    const { notifications, turnId } = translatePiEvent(
+      eventRecord,
+      threadId,
+      threadSession.turnId,
+      threadSession.turnCounter,
+    );
+    threadSession.turnId = turnId;
+
+    for (const notification of notifications) {
+      send(notification);
+    }
+  };
 }
 
-function onPiOutput(threadId: string, line: string): void {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(trimmed) as Record<string, unknown>;
-  } catch {
-    return;
-  }
-
-  // Skip pi's command responses — we already sent our JSON-RPC response
-  if (parsed.type === "response") return;
-
-  const threadSession = sessions.get(threadId);
-  if (!threadSession) return;
-
-  const { notifications, turnId } = translatePiEvent(
-    parsed,
-    threadId,
-    threadSession.turnId,
-    threadSession.turnCounter,
-  );
-  threadSession.turnId = turnId;
-
-  for (const notification of notifications) {
-    send(notification);
-  }
+function onSessionDone(_error?: unknown): void {
+  // Stream ended; session remains available for resume.
 }
 
-function startPiProcess(
-  threadId: string,
-  cwd: string,
-  model?: string,
-  env?: NodeJS.ProcessEnv,
-): ChildProcess {
-  const args = ["--mode", "rpc", "--no-session"];
-  if (model) {
-    args.push("--model", model);
+function createForwardToolCall(threadId: string): ToolCallForwarder {
+  return (toolName, args) => {
+    return new Promise<{ content: string; isError?: boolean }>((resolve) => {
+      const threadSession = sessions.get(threadId);
+      if (!threadSession) {
+        resolve({ content: "Thread session not found", isError: true });
+        return;
+      }
+      toolCallRequestIdCounter += 1;
+      const requestId = toolCallRequestIdCounter;
+      threadSession.pendingToolCalls.set(requestId, { resolve });
+      send({
+        jsonrpc: "2.0",
+        id: requestId,
+        method: "item/tool/call",
+        params: {
+          threadId,
+          turnId: threadSession.turnId ?? "",
+          callId: `call-${requestId}`,
+          tool: toolName,
+          arguments: args,
+        },
+      } as unknown as JsonRpcResponse);
+    });
+  };
+}
+
+function findSessionByPendingToolCall(id: string | number): ThreadSession | undefined {
+  for (const session of sessions.values()) {
+    if (session.pendingToolCalls.has(id)) return session;
   }
-
-  const piProcess = spawn("pi", args, {
-    cwd,
-    env: env ?? process.env,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-
-  // Read pi's stdout line by line using raw buffer splitting (not readline,
-  // which splits on U+2028/U+2029 — pi's docs warn against this).
-  let stdoutBuffer = "";
-  piProcess.stdout?.on("data", (chunk: Buffer) => {
-    stdoutBuffer += chunk.toString("utf8");
-    while (true) {
-      const idx = stdoutBuffer.indexOf("\n");
-      if (idx === -1) break;
-      let line = stdoutBuffer.slice(0, idx);
-      stdoutBuffer = stdoutBuffer.slice(idx + 1);
-      if (line.endsWith("\r")) line = line.slice(0, -1);
-      onPiOutput(threadId, line);
-    }
-  });
-
-  piProcess.on("exit", () => {
-    const session = sessions.get(threadId);
-    if (session && session.piProcess === piProcess) {
-      sessions.delete(threadId);
-    }
-  });
-
-  return piProcess;
+  return undefined;
 }
 
 function extractEnvOverrides(params: Record<string, unknown>): Record<string, string> {
@@ -149,8 +145,70 @@ function extractEnvOverrides(params: Record<string, unknown>): Record<string, st
   return envOverrides;
 }
 
+function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ...envOverrides,
+  };
+}
+
+function buildSessionOptions(
+  params: Record<string, unknown>,
+  env: NodeJS.ProcessEnv,
+): PiSdkSessionOptions {
+  const model =
+    typeof params.model === "string" ? params.model : undefined;
+  const cwd =
+    typeof params.cwd === "string" ? params.cwd : process.cwd();
+
+  return { cwd, model, env };
+}
+
+function applyDynamicTools(
+  sessionOptions: PiSdkSessionOptions,
+  params: Record<string, unknown>,
+  threadId: string,
+): void {
+  const dynamicTools = params.dynamicTools as
+    | DynamicToolDefinition[]
+    | undefined;
+  if (dynamicTools && dynamicTools.length > 0) {
+    sessionOptions.customTools = buildDynamicTools(
+      dynamicTools,
+      createForwardToolCall(threadId),
+    );
+  }
+}
+
 function handleRequest(request: JsonRpcRequest): void {
   const { id, method, params } = request;
+
+  // Check if this is a response to a pending tool call request
+  if (
+    id !== undefined &&
+    "result" in request
+  ) {
+    const threadSession = findSessionByPendingToolCall(id);
+    if (threadSession) {
+      const pending = threadSession.pendingToolCalls.get(id)!;
+      threadSession.pendingToolCalls.delete(id);
+      const result = (request as unknown as { result: unknown }).result;
+      const record = result as Record<string, unknown> | undefined;
+      const contentItems = record?.contentItems as
+        | Array<{ type: string; text?: string }>
+        | undefined;
+      const text =
+        contentItems
+          ?.filter((item) => item.type === "inputText" && typeof item.text === "string")
+          .map((item) => item.text)
+          .join("\n") ?? "OK";
+      pending.resolve({
+        content: text,
+        isError: (record?.success as boolean | undefined) === false,
+      });
+      return;
+    }
+  }
 
   switch (method) {
     case "initialize":
@@ -158,19 +216,19 @@ function handleRequest(request: JsonRpcRequest): void {
       break;
 
     case "thread/start":
-      handleThreadStart(id, params ?? {});
+      void handleThreadStart(id, params ?? {});
       break;
 
     case "thread/resume":
-      handleThreadResume(id, params ?? {});
+      void handleThreadResume(id, params ?? {});
       break;
 
     case "turn/start":
-      handleTurnStart(id, params ?? {});
+      void handleTurnStart(id, params ?? {});
       break;
 
     case "turn/steer":
-      handleTurnSteer(id, params ?? {});
+      void handleTurnSteer(id, params ?? {});
       break;
 
     case "thread/stop":
@@ -182,10 +240,10 @@ function handleRequest(request: JsonRpcRequest): void {
   }
 }
 
-function handleThreadStart(
+async function handleThreadStart(
   id: string | number,
   params: Record<string, unknown>,
-): void {
+): Promise<void> {
   const threadId =
     typeof params.threadId === "string"
       ? params.threadId
@@ -194,48 +252,41 @@ function handleThreadStart(
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
   if (existing) {
-    existing.piProcess.kill();
+    existing.session.stop();
     sessions.delete(threadId);
   }
 
-  const cwd =
-    typeof params.cwd === "string" ? params.cwd : process.cwd();
-  const model =
-    typeof params.model === "string" ? params.model : undefined;
-
   const envOverrides = extractEnvOverrides(params);
-  const piEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...envOverrides,
-  };
+  const sessionEnv = buildSessionEnv(envOverrides);
+  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  applyDynamicTools(sessionOptions, params, threadId);
 
-  const piProcess = startPiProcess(threadId, cwd, model, piEnv);
+  const turnCounter = createTurnCounterState();
+  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), onSessionDone);
 
-  const threadSession: PiThreadSession = {
-    piProcess,
-    stdoutBuffer: "",
+  const threadSession: ThreadSession = {
+    session,
     turnId: undefined,
-    turnCounter: createTurnCounterState(),
+    turnCounter,
+    pendingToolCalls: new Map(),
   };
   sessions.set(threadId, threadSession);
+
+  await session.start();
 
   // Send the initial prompt
   const { text: inputText, images: inputImages } = extractInput(params.input);
   if (inputText) {
-    const prompt: Record<string, unknown> = { type: "prompt", message: inputText };
-    if (inputImages.length > 0) {
-      prompt.images = inputImages;
-    }
-    sendToPi(threadSession, prompt);
+    void session.prompt(inputText, inputImages.length > 0 ? inputImages : undefined);
   }
 
   sendResult(id, { threadId });
 }
 
-function handleThreadResume(
+async function handleThreadResume(
   id: string | number,
   params: Record<string, unknown>,
-): void {
+): Promise<void> {
   const threadId =
     typeof params.threadId === "string"
       ? params.threadId
@@ -244,83 +295,71 @@ function handleThreadResume(
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
   if (existing) {
-    existing.piProcess.kill();
+    existing.session.stop();
     sessions.delete(threadId);
   }
 
-  const cwd =
-    typeof params.cwd === "string" ? params.cwd : process.cwd();
-  const model =
-    typeof params.model === "string" ? params.model : undefined;
-
   const envOverrides = extractEnvOverrides(params);
-  const piEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    ...envOverrides,
-  };
+  const sessionEnv = buildSessionEnv(envOverrides);
+  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  applyDynamicTools(sessionOptions, params, threadId);
 
-  // Pi doesn't have a built-in resume mechanism via RPC, so we start a fresh
-  // session. The Beanbag daemon tracks conversation state externally.
-  const piProcess = startPiProcess(threadId, cwd, model, piEnv);
+  const turnCounter = createTurnCounterState();
+  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), onSessionDone);
 
-  const threadSession: PiThreadSession = {
-    piProcess,
-    stdoutBuffer: "",
+  const threadSession: ThreadSession = {
+    session,
     turnId: undefined,
-    turnCounter: createTurnCounterState(),
+    turnCounter,
+    pendingToolCalls: new Map(),
   };
   sessions.set(threadId, threadSession);
 
+  // Pi in-memory sessions don't support resume, so just start fresh
+  await session.start();
+
   sendResult(id, { threadId });
 }
 
-function handleTurnStart(
+async function handleTurnStart(
   id: string | number,
   params: Record<string, unknown>,
-): void {
+): Promise<void> {
   const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
   const threadSession = threadId ? sessions.get(threadId) : undefined;
   if (!threadSession) {
-    sendError(id, -32000, "No active pi process");
+    sendError(id, -32000, "No active pi session");
     return;
   }
 
-  const { text: turnText, images: turnImages } = extractInput(params.input);
-  if (!turnText) {
+  const { text, images } = extractInput(params.input);
+  if (!text) {
     sendError(id, -32602, "Missing input text");
     return;
   }
 
-  const turnPrompt: Record<string, unknown> = { type: "prompt", message: turnText };
-  if (turnImages.length > 0) {
-    turnPrompt.images = turnImages;
-  }
-  sendToPi(threadSession, turnPrompt);
+  void threadSession.session.prompt(text, images.length > 0 ? images : undefined);
   sendResult(id, { threadId });
 }
 
-function handleTurnSteer(
+async function handleTurnSteer(
   id: string | number,
   params: Record<string, unknown>,
-): void {
+): Promise<void> {
   const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
   const threadSession = threadId ? sessions.get(threadId) : undefined;
   if (!threadSession) {
-    sendError(id, -32000, "No active pi process");
+    sendError(id, -32000, "No active pi session");
     return;
   }
 
-  const { text: steerText, images: steerImages } = extractInput(params.input);
-  if (!steerText) {
+  const { text, images } = extractInput(params.input);
+  if (!text) {
     sendError(id, -32602, "Missing input text");
     return;
   }
 
-  const steerCmd: Record<string, unknown> = { type: "steer", message: steerText };
-  if (steerImages.length > 0) {
-    steerCmd.images = steerImages;
-  }
-  sendToPi(threadSession, steerCmd);
+  void threadSession.session.steer(text, images.length > 0 ? images : undefined);
   sendResult(id, { threadId });
 }
 
@@ -332,23 +371,16 @@ function handleThreadStop(
   if (threadId) {
     const threadSession = sessions.get(threadId);
     if (threadSession) {
-      sendToPi(threadSession, { type: "abort" });
-      threadSession.piProcess.kill();
+      threadSession.session.stop();
       sessions.delete(threadId);
     }
   }
   sendResult(id, { ok: true });
 }
 
-interface PiImage {
-  type: "image";
-  data: string;
-  mimeType: string;
-}
-
 interface ExtractedInput {
   text?: string;
-  images: PiImage[];
+  images: ImageContent[];
 }
 
 function mimeTypeFromExtension(filePath: string): string {
@@ -369,7 +401,7 @@ function extractInput(input: unknown): ExtractedInput {
   if (!Array.isArray(input)) return { images: [] };
 
   const chunks: string[] = [];
-  const images: PiImage[] = [];
+  const images: ImageContent[] = [];
 
   for (const item of input) {
     if (!item || typeof item !== "object") continue;
@@ -391,9 +423,6 @@ function extractInput(input: unknown): ExtractedInput {
       } catch {
         // Skip unreadable images silently
       }
-    } else if (typed.type === "image" && typeof typed.url === "string") {
-      // For remote images, we'd need to fetch — skip for now as Pi RPC
-      // protocol expects base64 data, not URLs.
     }
   }
 
@@ -415,15 +444,17 @@ function handleLine(line: string): void {
   }
 
   const request = parsed as JsonRpcRequest;
-  if (
-    !request ||
-    typeof request !== "object" ||
-    request.jsonrpc !== "2.0" ||
-    typeof request.method !== "string"
-  ) {
+  if (!request || typeof request !== "object" || request.jsonrpc !== "2.0") {
     return;
   }
 
+  // Handle tool call responses (they come back as JSON-RPC responses)
+  if ("result" in request && findSessionByPendingToolCall(request.id)) {
+    handleRequest(request);
+    return;
+  }
+
+  if (typeof request.method !== "string") return;
   handleRequest(request);
 }
 
@@ -432,7 +463,7 @@ const rl = createInterface({ input: process.stdin, terminal: false });
 rl.on("line", handleLine);
 rl.on("close", () => {
   for (const threadSession of sessions.values()) {
-    threadSession.piProcess.kill();
+    threadSession.session.stop();
   }
   sessions.clear();
   process.exit(0);

@@ -23,6 +23,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.58.3",
+    "@mariozechner/pi-coding-agent": "^0.58.3",
+    "@sinclair/typebox": "^0.34.0"
+  },
   "devDependencies": {
     "@beanbag/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
