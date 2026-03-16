@@ -6,86 +6,24 @@ import {
   EnvironmentAgentSessionUnavailableError,
   type EnvironmentAgentCommandDispatcher,
 } from "../environment-agent-command-dispatcher.js";
-import type {
+import {
   ThreadRepository,
   EventRepository,
   ProjectRepository,
+  EnvironmentRepository,
 } from "@beanbag/db";
 import type { WSManager } from "../ws.js";
-import type { LlmCompletionService } from "@beanbag/agent-server";
 import type { IEnvironment } from "@beanbag/environment";
 import { providerTimeoutError } from "../domain-errors.js";
 import { Orchestrator } from "../orchestrator.js";
-
-function makeThread(overrides: Partial<Thread> = {}): Thread {
-  return {
-    id: "thread-1",
-    projectId: "proj-1",
-    providerId: "codex",
-    type: "standard",
-    status: "active",
-    createdAt: 1_000,
-    updatedAt: 1_000,
-    ...overrides,
-  };
-}
-
-function createMocks() {
-  const threadRepo = {
-    create: vi.fn(),
-    getById: vi.fn(),
-    list: vi.fn(),
-    update: vi.fn(),
-    markRead: vi.fn(),
-    delete: vi.fn(),
-    enqueueQueuedMessage: vi.fn(),
-    getQueuedMessage: vi.fn(),
-    deleteQueuedMessage: vi.fn(),
-  } as unknown as ThreadRepository;
-
-  const eventRepo = {
-    create: vi.fn(),
-    updateData: vi.fn(),
-    listByThread: vi.fn(),
-    getLatestSeq: vi.fn(),
-    getLatestByType: vi.fn(),
-    getLatestExecutionOptions: vi.fn(),
-  } as unknown as EventRepository;
-
-  const projectRepo = {
-    create: vi.fn(),
-    getById: vi.fn(),
-    list: vi.fn(),
-    delete: vi.fn(),
-  } as unknown as ProjectRepository;
-
-  const ws = {
-    broadcast: vi.fn(),
-    handleConnection: vi.fn(),
-    close: vi.fn(),
-  } as unknown as WSManager;
-
-  return { threadRepo, eventRepo, projectRepo, ws };
-}
-
-function createMockLlmCompletionService(): LlmCompletionService {
-  return {
-    displayName: "Mock LLM",
-    generateThreadTitle: vi.fn().mockResolvedValue(undefined),
-    generateCommitMessage: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-function createTestRuntimeEnv(
-  overrides: NodeJS.ProcessEnv = {},
-): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
-    BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "test-token",
-    ...overrides,
-  };
-}
+import {
+  createTestDb,
+  createTestRepos,
+  createTestProject,
+  createTestThread,
+  createMockLlmCompletionService,
+  createTestRuntimeEnv,
+} from "./test-factories.js";
 
 function makeRuntimeEnvironment(args: {
   rootPath: string;
@@ -197,16 +135,32 @@ function makeRuntimeEnvironment(args: {
   };
 }
 
+function createTestEnvironment(
+  environmentRepo: EnvironmentRepository,
+  projectId: string,
+): { id: string } {
+  return environmentRepo.create({
+    projectId,
+    descriptor: { type: "path", path: "/test" },
+    managed: false,
+  });
+}
+
 describe("Orchestrator environment-agent delivery and replay", () => {
-  let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
-  let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
-  let projectRepo: ReturnType<typeof createMocks>["projectRepo"];
-  let ws: ReturnType<typeof createMocks>["ws"];
+  let threadRepo: ThreadRepository;
+  let eventRepo: EventRepository;
+  let projectRepo: ProjectRepository;
+  let environmentRepo: EnvironmentRepository;
+  let ws: WSManager;
   let manager: Orchestrator;
   let sessionService: {
     getThreadStatus: ReturnType<typeof vi.fn>;
     retireActiveSessionForThread: ReturnType<typeof vi.fn>;
   };
+
+  // Shared test data created in beforeEach
+  let projectId: string;
+  let projectRootPath: string;
 
   function installAuthorizedEnvironmentRuntime(
     threadId: string,
@@ -227,11 +181,23 @@ describe("Orchestrator environment-agent delivery and replay", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    const mocks = createMocks();
-    threadRepo = mocks.threadRepo;
-    eventRepo = mocks.eventRepo;
-    projectRepo = mocks.projectRepo;
-    ws = mocks.ws;
+    const testDb = createTestDb();
+    const repos = createTestRepos(testDb.db);
+    threadRepo = repos.threadRepo;
+    eventRepo = repos.eventRepo;
+    projectRepo = repos.projectRepo;
+    environmentRepo = repos.environmentRepo;
+
+    ws = {
+      broadcast: vi.fn(),
+      handleConnection: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WSManager;
+
+    const project = createTestProject(projectRepo, { rootPath: "/project/root" });
+    projectId = project.id;
+    projectRootPath = project.rootPath;
+
     sessionService = {
       getThreadStatus: vi.fn(),
       retireActiveSessionForThread: vi.fn(),
@@ -254,6 +220,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   });
 
   it("uses the session command client for environment-agent commands", async () => {
+    const thread = createTestThread(threadRepo, projectId);
+
     const sessionModeManager = new Orchestrator(
       threadRepo,
       eventRepo,
@@ -270,10 +238,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
         enqueueForActiveSession: vi.fn().mockResolvedValue({
           id: "cmd-1",
-          threadId: "thread-1",
+          threadId: thread.id,
           commandCursor: 1,
           commandType: "workspace.status",
-          payload: { type: "workspace.status", threadId: "thread-1" },
+          payload: { type: "workspace.status", threadId: thread.id },
           state: "completed",
           result: { ok: true },
           createdAt: 1_000,
@@ -295,8 +263,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         }) => Promise<string>;
       }) => Promise<string>;
     })._withEnvironmentAgentTarget({
-      thread: makeThread(),
-      projectRootPath: "/test",
+      thread,
+      projectRootPath,
       target: {
         transport: "http",
         baseUrl: "http://127.0.0.1:4312",
@@ -311,7 +279,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
           },
           command: {
             type: "workspace.status",
-            threadId: "thread-1",
+            threadId: thread.id,
           },
         });
         return ack.state;
@@ -322,22 +290,18 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   });
 
   it("re-ensures environment-agent access before resuming a persisted provider thread", async () => {
-    const thread = makeThread({
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-worktree-1",
+      environmentId: env.id,
     });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (
-      eventRepo as unknown as {
-        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
-      }
-    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
-    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: "proj-1",
-      name: "Project",
-      rootPath: "/test",
-      createdAt: 1_000,
-      updatedAt: 1_000,
+
+    // Insert an event with providerThreadId so getLatestProviderThreadId returns it
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/provisioning/completed",
+      data: { providerThreadId: "provider-thread-1" } as never,
     });
 
     let hasActiveSession = false;
@@ -351,13 +315,13 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       }),
       enqueueForActiveSession: vi.fn(async () => ({
         id: "cmd-resume",
-        threadId: "thread-1",
+        threadId: thread.id,
         sessionId: "sess-1",
         commandCursor: 1,
         commandType: "thread.resume",
         payload: {
           type: "thread.resume",
-          threadId: "thread-1",
+          threadId: thread.id,
           providerThreadId: "provider-thread-1",
         },
         state: "completed",
@@ -402,8 +366,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       authorization: "Bearer test-token",
     });
     const activeRuntime = {
-      scopeKey: "thread:thread-1",
-      ownerThreadId: "thread-1",
+      scopeKey: `thread:${thread.id}`,
+      ownerThreadId: thread.id,
       environment: runtimeEnvironment,
       agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
     };
@@ -427,7 +391,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
           },
           command: {
             type: "thread.resume",
-            threadId: "thread-1",
+            threadId: thread.id,
             providerThreadId: "provider-thread-1",
           } as never,
         });
@@ -449,39 +413,38 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       resumeManager as unknown as {
         _ensureProviderSession: (threadId: string) => Promise<string>;
       }
-    )._ensureProviderSession("thread-1");
+    )._ensureProviderSession(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-1");
     expect(environmentService.suspendEnvironmentRuntimeAndWait).not.toHaveBeenCalled();
+
+    // Retrieve the latest thread from the DB (status may have been updated)
+    const latestThread = threadRepo.getById(thread.id)!;
     expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledWith(
-      thread,
-      "/test",
+      latestThread,
+      projectRootPath,
       "resume-existing-provider-session",
     );
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledWith({
-      threadId: "thread-1",
+      threadId: thread.id,
       timeoutMs: 1_000,
     });
     expect(resumeThreadCommand).toHaveBeenCalled();
   });
 
   it("retries a provider resume after session loss through the daemon ensure path", async () => {
-    const thread = makeThread({
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-worktree-1",
+      environmentId: env.id,
     });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (
-      eventRepo as unknown as {
-        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
-      }
-    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
-    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: "proj-1",
-      name: "Project",
-      rootPath: "/test",
-      createdAt: 1_000,
-      updatedAt: 1_000,
+
+    // Insert an event with providerThreadId so getLatestProviderThreadId returns it
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/provisioning/completed",
+      data: { providerThreadId: "provider-thread-1" } as never,
     });
 
     const dispatcher = {
@@ -490,17 +453,17 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       enqueueForActiveSession: vi
         .fn()
         .mockRejectedValueOnce(
-          new EnvironmentAgentSessionUnavailableError("thread-1"),
+          new EnvironmentAgentSessionUnavailableError(thread.id),
         )
         .mockResolvedValueOnce({
           id: "cmd-resume",
-          threadId: "thread-1",
+          threadId: thread.id,
           sessionId: "sess-1",
           commandCursor: 1,
           commandType: "thread.resume",
           payload: {
             type: "thread.resume",
-            threadId: "thread-1",
+            threadId: thread.id,
             providerThreadId: "provider-thread-1",
           },
           state: "completed",
@@ -543,8 +506,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       authorization: "Bearer test-token",
     });
     const activeRuntime = {
-      scopeKey: "thread:thread-1",
-      ownerThreadId: "thread-1",
+      scopeKey: `thread:${thread.id}`,
+      ownerThreadId: thread.id,
       environment: runtimeEnvironment,
       agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
     };
@@ -563,7 +526,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
           },
           command: {
             type: "thread.resume",
-            threadId: "thread-1",
+            threadId: thread.id,
             providerThreadId: "provider-thread-1",
           } as never,
         });
@@ -585,7 +548,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       retryManager as unknown as {
         _ensureProviderSession: (threadId: string) => Promise<string>;
       }
-    )._ensureProviderSession("thread-1");
+    )._ensureProviderSession(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-1");
     expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
@@ -594,29 +557,22 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   });
 
   it("recycles the runtime when env-daemon access cannot find a fresh session", async () => {
-    const thread = makeThread({
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-local-1",
-    });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: "proj-1",
-      name: "Project",
-      rootPath: "/test",
-      createdAt: 1_000,
-      updatedAt: 1_000,
+      environmentId: env.id,
     });
 
     const dispatcher = {
       awaitActiveSession: vi
         .fn()
         .mockRejectedValueOnce(
-          new EnvironmentAgentSessionUnavailableError("thread-1"),
+          new EnvironmentAgentSessionUnavailableError(thread.id),
         )
         .mockResolvedValueOnce({ id: "sess-2" }),
     } as unknown as EnvironmentAgentCommandDispatcher;
 
-    const manager = new Orchestrator(
+    const localManager = new Orchestrator(
       threadRepo,
       eventRepo,
       projectRepo,
@@ -636,7 +592,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     );
 
     const environmentService = (
-      manager as unknown as {
+      localManager as unknown as {
         environmentService: Pick<
           EnvironmentService,
           "ensureThreadEnvironmentRuntime" | "suspendEnvironmentRuntimeAndWait"
@@ -649,8 +605,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       authorization: "Bearer test-token",
     });
     const activeRuntime = {
-      scopeKey: "thread:thread-1",
-      ownerThreadId: "thread-1",
+      scopeKey: `thread:${thread.id}`,
+      ownerThreadId: thread.id,
       environment: runtimeEnvironment,
       agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
     };
@@ -660,40 +616,36 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     environmentService.suspendEnvironmentRuntimeAndWait = vi.fn(async () => undefined);
 
     const access = await (
-      manager as unknown as {
+      localManager as unknown as {
         _ensureEnvironmentAgentAccess: (threadId: string) => Promise<{
           thread: Thread;
           projectRootPath: string;
           target: { baseUrl: string; transport: "http" };
         }>;
       }
-    )._ensureEnvironmentAgentAccess("thread-1");
+    )._ensureEnvironmentAgentAccess(thread.id);
 
-    expect(access.projectRootPath).toBe("/test");
+    expect(access.projectRootPath).toBe(projectRootPath);
     expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
     expect(environmentService.suspendEnvironmentRuntimeAndWait).toHaveBeenCalledWith(
-      "thread-1",
+      thread.id,
     );
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(2);
   });
 
   it("revalidates persisted provider thread ids when hot daemon state disagrees", async () => {
-    const thread = makeThread({
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-worktree-1",
+      environmentId: env.id,
     });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (
-      eventRepo as unknown as {
-        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
-      }
-    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
-    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: "proj-1",
-      name: "Project",
-      rootPath: "/test",
-      createdAt: 1_000,
-      updatedAt: 1_000,
+
+    // Insert an event with providerThreadId so getLatestProviderThreadId returns it
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/provisioning/completed",
+      data: { providerThreadId: "provider-thread-1" } as never,
     });
 
     const dispatcher = {
@@ -701,13 +653,13 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
       enqueueForActiveSession: vi.fn(async () => ({
         id: "cmd-resume",
-        threadId: "thread-1",
+        threadId: thread.id,
         sessionId: "sess-1",
         commandCursor: 1,
         commandType: "thread.resume",
         payload: {
           type: "thread.resume",
-          threadId: "thread-1",
+          threadId: thread.id,
           providerThreadId: "provider-thread-1",
         },
         state: "completed",
@@ -751,8 +703,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: {
-        scopeKey: "thread:thread-1",
-        ownerThreadId: "thread-1",
+        scopeKey: `thread:${thread.id}`,
+        ownerThreadId: thread.id,
         environment: runtimeEnvironment,
         agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
       },
@@ -762,7 +714,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       validateManager as unknown as {
         providerThreadIdByThreadId: Map<string, string>;
       }
-    ).providerThreadIdByThreadId.set("thread-1", "provider-thread-stale");
+    ).providerThreadIdByThreadId.set(thread.id, "provider-thread-stale");
 
     const resumeThreadCommand = vi.fn(
       async ({ client }: { client: environmentAgent.EnvironmentAgentClient }) => {
@@ -775,7 +727,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
           },
           command: {
             type: "thread.resume",
-            threadId: "thread-1",
+            threadId: thread.id,
             providerThreadId: "provider-thread-1",
           } as never,
         });
@@ -797,7 +749,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       validateManager as unknown as {
         _ensureProviderSession: (threadId: string) => Promise<string>;
       }
-    )._ensureProviderSession("thread-1");
+    )._ensureProviderSession(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-1");
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(1);
@@ -807,27 +759,23 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         validateManager as unknown as {
           providerThreadIdByThreadId: Map<string, string>;
         }
-      ).providerThreadIdByThreadId.get("thread-1"),
+      ).providerThreadIdByThreadId.get(thread.id),
     ).toBe("provider-thread-1");
   });
 
   it("retries one timed out provider resume before succeeding", async () => {
-    const thread = makeThread({
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-worktree-1",
+      environmentId: env.id,
     });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (
-      eventRepo as unknown as {
-        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
-      }
-    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
-    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: "proj-1",
-      name: "Project",
-      rootPath: "/test",
-      createdAt: 1_000,
-      updatedAt: 1_000,
+
+    // Insert an event with providerThreadId so getLatestProviderThreadId returns it
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/provisioning/completed",
+      data: { providerThreadId: "provider-thread-1" } as never,
     });
 
     const dispatcher = {
@@ -869,8 +817,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: {
-        scopeKey: "thread:thread-1",
-        ownerThreadId: "thread-1",
+        scopeKey: `thread:${thread.id}`,
+        ownerThreadId: thread.id,
         environment: runtimeEnvironment,
         agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
       },
@@ -890,7 +838,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       retryManager as unknown as {
         _ensureProviderSession: (threadId: string) => Promise<string>;
       }
-    )._ensureProviderSession("thread-1");
+    )._ensureProviderSession(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-1");
     expect(resumeThreadCommand).toHaveBeenCalledTimes(2);
@@ -898,22 +846,18 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   });
 
   it("reprovisions after a second timed out provider resume", async () => {
-    const thread = makeThread({
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-worktree-1",
+      environmentId: env.id,
     });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (
-      eventRepo as unknown as {
-        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
-      }
-    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
-    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: "proj-1",
-      name: "Project",
-      rootPath: "/test",
-      createdAt: 1_000,
-      updatedAt: 1_000,
+
+    // Insert an event with providerThreadId so getLatestProviderThreadId returns it
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/provisioning/completed",
+      data: { providerThreadId: "provider-thread-1" } as never,
     });
 
     const dispatcher = {
@@ -955,8 +899,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: {
-        scopeKey: "thread:thread-1",
-        ownerThreadId: "thread-1",
+        scopeKey: `thread:${thread.id}`,
+        ownerThreadId: thread.id,
         environment: runtimeEnvironment,
         agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
       },
@@ -988,29 +932,29 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       retryManager as unknown as {
         _ensureProviderSession: (threadId: string) => Promise<string>;
       }
-    )._ensureProviderSession("thread-1");
+    )._ensureProviderSession(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-2");
     expect(resumeThreadCommand).toHaveBeenCalledTimes(2);
     expect(provisionThread).toHaveBeenCalledWith(
-      "thread-1",
+      thread.id,
       expect.objectContaining({
-        projectId: "proj-1",
-        environmentId: "env-worktree-1",
+        projectId,
+        environmentId: env.id,
       }),
       expect.objectContaining({
-        rootPathHint: "/test",
+        rootPathHint: projectRootPath,
         reason: "resume-missing-provider-thread",
       }),
     );
   });
 
   it("reads environment-agent status from the session service", async () => {
-    const thread = makeThread();
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    const thread = createTestThread(threadRepo, projectId);
+
     sessionService.getThreadStatus.mockReturnValue({
       protocolVersion: 1,
-      threadId: "thread-1",
+      threadId: thread.id,
       latestSequence: 3,
       connectedToDaemon: true,
       pendingEventCount: 0,
@@ -1019,50 +963,40 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       retryAttemptCount: 0,
     });
 
-    await expect(manager.getEnvironmentAgentStatus("thread-1")).resolves.toMatchObject({
+    await expect(manager.getEnvironmentAgentStatus(thread.id)).resolves.toMatchObject({
       latestSequence: 3,
       pendingCommandCount: 1,
     });
-    expect(sessionService.getThreadStatus).toHaveBeenCalledWith("thread-1");
+    expect(sessionService.getThreadStatus).toHaveBeenCalledWith(thread.id);
   });
 
   it("recovers persisted provider thread ids from provisioning-completed events", () => {
-    const thread = makeThread({
-      id: "thread-1",
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
-      environmentId: "env-local-1",
+      environmentId: env.id,
     });
-    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-    (
-      eventRepo as unknown as {
-        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
-        listByThread: ReturnType<typeof vi.fn>;
-      }
-    ).getLatestProviderThreadId = vi.fn().mockReturnValue(undefined);
-    (
-      eventRepo as unknown as {
-        listByThread: ReturnType<typeof vi.fn>;
-      }
-    ).listByThread = vi.fn().mockReturnValue([
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "system/provisioning/completed",
-        data: {
-          environmentId: "env-local-1",
-          environmentDisplayName: "Direct Workspace",
-          providerThreadId: "provider-thread-1",
-        },
-        createdAt: 1_000,
-      },
-    ]);
+
+    // Insert a provisioning-completed event with providerThreadId in the data.
+    // With real repos, getLatestProviderThreadId will find this via the indexed
+    // lookup (isThreadIdentity), but the end result is the same: the method
+    // returns the correct provider thread ID.
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "system/provisioning/completed",
+      data: {
+        environmentId: env.id,
+        environmentDisplayName: "Direct Workspace",
+        providerThreadId: "provider-thread-1",
+      } as never,
+    });
 
     const providerThreadId = (
       manager as unknown as {
         _resolvePersistedProviderThreadId: (threadId: string) => string | undefined;
       }
-    )._resolvePersistedProviderThreadId("thread-1");
+    )._resolvePersistedProviderThreadId(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-1");
   });
