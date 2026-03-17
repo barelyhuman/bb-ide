@@ -16,6 +16,7 @@ At a high level:
 5. The environment-agent opens a daemon-hosted session, long-polls for commands, and posts heartbeats, event batches, and command results.
 6. The daemon applies those events to thread state, stores the durable history, and emits targeted WebSocket invalidations.
 7. The app refreshes affected React Query queries; the CLI reads and mutates the same daemon-backed state.
+8. Provider adapters currently support `codex`, `claude-code`, and `pi`, with bridge packages where needed to translate between BB's runtime contract and provider-specific CLIs/SDKs.
 
 ## Monorepo Components
 
@@ -59,6 +60,7 @@ Responsibilities:
 
 - owns the HTTP API and WebSocket server
 - persists projects, threads, events, queued follow-ups, environment metadata, environment-agent sessions, command queues, and command results
+- owns project-level manager-thread lifecycle, including the primary manager thread pointer on projects
 - provisions, restores, suspends, archives, unarchives, and deletes thread environments
 - manages provider sessions through per-thread environment-agents
 - normalizes provider/runtime notifications into BB thread events
@@ -73,7 +75,7 @@ Important daemon subsystems include:
 - `EnvironmentAgentSessionService`
 - `EnvironmentAgentCommandDispatcher`
 - `EnvironmentAgentEventApplier`
-- `SchedulerService`
+- `InMemorySchedulerService`
 - startup reconciliation, restart recommendation, and system health reporting
 - managed artifact reconciliation for logs, worktrees, and attachments
 
@@ -90,7 +92,7 @@ Includes:
 - timeline/detail-row/UI message projection helpers
 - shared guards, decoders, and utilities such as `assertNever`
 
-This is the main contract boundary between the app, daemon, CLI, environment implementations, and environment-agent runtime.
+This is the main contract boundary between the app, daemon, CLI, environment implementations, environment-agent runtime, and provider adapters.
 
 ### `packages/db`
 
@@ -164,18 +166,30 @@ Responsibilities:
 Current built-in provider registry:
 
 - `codex`
+- `claude-code`
+- `pi`
 
 ### `packages/ui-core`
 
 Shared React UI primitives used by the app for page shells, cards/detail rows,
 collapsible sections, prompt affordances, and other reusable UI building blocks.
 
+### Supporting packages
+
+Additional packages round out the architecture:
+
+- `packages/templates`: checked-in prompt and instruction templates, including manager-thread instructions
+- `packages/claude-code-bridge`: bridge binary/library used by the Claude Code provider adapter
+- `packages/pi-bridge`: bridge binary/library used by the PI provider adapter
+- `packages/tsconfig`: shared TypeScript config base for workspace packages
+
 ## Daemon API Shape
 
 Broadly, the daemon exposes:
 
 - project APIs: CRUD, project file search, workspace status, and prompt attachment upload/content
-- thread APIs: spawn, tell, queued follow-up management, stop, archive/unarchive, promote/demote primary checkout, git operations, read-state updates, open-path, timeline, work status, git diff, and environment-agent session endpoints
+- project manager APIs: create/read/delete the primary manager thread for a project
+- thread APIs: spawn, tell, queued follow-up management, stop, archive/unarchive, promote/demote primary checkout, git operations, read-state updates, open-path, timeline, work status, git diff, manager workspace inspection, and environment-agent session endpoints
 - system APIs: status, health, available models, provider/environment catalogs, open-path, restart/shutdown controls, and voice transcription
 - realtime invalidations over `/ws`
 
@@ -194,6 +208,13 @@ Persisted thread statuses are:
 - `error`
 
 Transition rules are centralized in `apps/server/src/thread-status-machine.ts`.
+
+Thread types are:
+
+- `standard`
+- `manager`
+
+Manager threads are project-scoped coordinator threads. They keep a separate BB-managed workspace for plans, notes, and user-facing deliverables, can own child worker threads, and intentionally hide git/environment-specific UI that only applies to standard coding threads.
 
 ### New thread
 
@@ -216,6 +237,8 @@ Transition rules are centralized in `apps/server/src/thread-status-machine.ts`.
 4. Otherwise it sends `turn.start`.
 5. If no live provider session is available, the daemon restores the environment and resumes or recreates provider state first.
 6. If the thread cannot accept the follow-up immediately, the daemon can queue it for later dispatch.
+
+Manager threads use the same durable lifecycle machinery, but their prompt/tool surface is specialized for orchestration. The daemon gates manager-only capabilities, such as publishing user messages and exposing the manager workspace APIs, by thread type.
 
 ### Queued follow-ups and thread operations
 
@@ -242,6 +265,8 @@ BB treats the daemon and SQLite as the durable source of truth.
 On startup the daemon reconciles threads that were previously active or provisioning, restores enough environment metadata to continue, and pokes surviving env-agents. Session heartbeats and command cursors determine whether workers are still alive.
 
 A special reprovision fallback exists when a persisted provider thread id exists but `thread.resume` fails because the upstream provider no longer recognizes the thread. In that case the daemon reprovisions the environment, starts a fresh provider thread session, and continues the pending follow-up from the new session.
+
+Provider-facing recovery is covered by checked-in daemon e2e/QA suites in `apps/server/src/__tests__/e2e/` and the root `qa:daemon:*` scripts. Real-provider smoke/stress runs are the default regression path for daemon and environment-agent behavior.
 
 ## Environment-Agent Session Protocol
 
@@ -338,6 +363,7 @@ Non-durable state includes:
 - in-memory provider child processes
 - environment-agent outbox buffers and active long polls
 - daemon-side timers and transient caches such as projected timeline data
+- manager-thread workspace materialized files outside SQLite
 - browser-local UI preferences and prompt drafts
 
 ## Summary
