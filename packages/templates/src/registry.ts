@@ -19,6 +19,7 @@ export interface TemplateMetadata extends Omit<TemplateDefinition, "body"> {}
 export interface TemplateVariables {
   agentBaseInstructions: Record<string, never>;
   bbCliGuide: Record<string, never>;
+  bbManagerWorkflows: Record<string, never>;
   bbSystemOverview: Record<string, never>;
   codexCommitMessage: {
     diffDescription: string;
@@ -32,6 +33,7 @@ export interface TemplateVariables {
   dockerAgentNote: Record<string, never>;
   managerAgentInstructions: {
     bbCliGuide: string;
+    bbManagerWorkflows: string;
     bbSystemOverview: string;
     managerPreferencesContent: string;
     managerThreadId: string;

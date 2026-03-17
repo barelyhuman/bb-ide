@@ -74,12 +74,17 @@ bb thread demote                                      # Demote the currently pro
 
 ```
 bb manager hire [projectId]            # Hire a new manager for a project
-bb manager show [projectId]            # Show the primary manager for a project
-bb manager status <manager-id>         # Show manager status and managed threads
-bb manager threads <manager-id>        # List threads managed by this manager
-bb manager send <manager-id> "message" # Send a message to another manager
-bb manager log <manager-id>            # Show manager event log
+bb manager list [projectId]            # List managers for a project
 bb manager delete <manager-id>         # Delete a manager permanently
+```
+
+Note: Most manager operations use the standard thread commands. `bb manager threads`, `bb manager status`, `bb manager send`, and `bb manager log` are shorthands for the equivalent `bb thread` commands. Prefer `bb thread` for consistency:
+
+```
+bb thread list --parent-thread <manager-id>  # List managed threads (= bb manager threads)
+bb thread show <manager-id>                  # Show manager details (= bb manager status)
+bb thread tell <manager-id> "message"        # Message a manager (= bb manager send)
+bb thread log <manager-id>                   # Show manager log (= bb manager log)
 ```
 
 ## Projects
