@@ -75,6 +75,7 @@ describe("environment-agent service config", () => {
             "turn.steer",
             "thread.rename",
             "provider.list_models",
+            "provider.list_catalog",
             "workspace.status",
             "workspace.diff",
           ],
