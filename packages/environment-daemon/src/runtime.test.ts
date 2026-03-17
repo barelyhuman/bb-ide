@@ -192,6 +192,30 @@ describe("EnvironmentAgentRuntime", () => {
     );
   });
 
+  it("lists provider models through a BB-native env-daemon command", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-models-1",
+        idempotencyKey: "cmd-models-1",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.list_models",
+        providerId: "codex",
+      },
+    });
+
+    expect(ack.state).toBe("accepted");
+    expect(Array.isArray(ack.result)).toBe(true);
+    expect((ack.result as Array<{ model?: string }>).length).toBeGreaterThan(0);
+  });
+
   it("accepts explicit commands and forwards them to the provider transport", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",

@@ -12,7 +12,7 @@ Treat future cross-machine deployment as a hard design constraint now: the serve
 
 - Re-draw the control-plane boundary between:
   - `apps/server` orchestrator and session services
-  - `packages/agent-server`
+  - `packages/provider-adapters`
   - `packages/environment-daemon`
 - Define a BB-native env-daemon command/event protocol with explicit capability and version negotiation.
 - Treat the server <-> env-daemon seam as a real network boundary rather than a same-machine implementation detail.
@@ -51,7 +51,7 @@ Treat future cross-machine deployment as a hard design constraint now: the serve
 
 2. Define the new package roles:
    - `packages/environment-daemon`: smart per-thread worker runtime and BB protocol endpoint.
-   - `packages/agent-server`: either deleted after migration or reduced to shared provider helper modules consumed by env-daemon only.
+   - `packages/provider-adapters`: shared built-in provider adapters and helper modules consumed by env-daemon and other provider-aware code.
 
 3. Update `ARCHITECTURE.md` after the design is settled so the docs reflect the new boundary rather than the current mixed model.
 
@@ -152,9 +152,9 @@ Treat future cross-machine deployment as a hard design constraint now: the serve
    - if a provider runtime is newer but still within adapter tolerance, env-daemon adapts without server changes
    - if a provider runtime is unsupported, env-daemon returns a BB-native compatibility error and the server decides how to present or recover
 
-### Phase 5: Migrate provider semantics out of server `AgentServer`
+### Phase 5: Migrate provider semantics out of server-owned helper layers
 
-1. Move these responsibilities from `packages/agent-server` into env-daemon-owned provider adapters:
+1. Move these responsibilities from the old server-side provider layer into env-daemon-owned provider adapters:
    - provider command creation
    - provider initialize params
    - thread start/resume payload construction
@@ -287,7 +287,7 @@ Treat future cross-machine deployment as a hard design constraint now: the serve
 
 ## Open Questions / Risks
 
-1. **Whether to keep or retire `packages/agent-server`**: It may end up as shared provider helper code, or it may disappear entirely. Keeping a thin shared package is reasonable if it does not recreate split ownership.
+1. **How far to reduce server-side provider helpers after package retirement**: The main `packages/agent-server` split is gone, but there is still a question of how much provider-aware convenience logic should remain in `apps/server` versus moving entirely behind env-daemon or `@bb/provider-adapters`.
 
 2. **How much provider state env-daemon should durably persist locally**: The current env-daemon delivery state is in-memory. If env-daemon becomes the stronger provider owner, purely in-memory provider/session metadata may become too fragile.
 

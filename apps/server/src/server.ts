@@ -18,14 +18,13 @@ import type {
 } from "@bb/db";
 import type { ProviderToolCallResponse, SpawnThreadRequest } from "@bb/core";
 import {
-  AgentServer,
   createCodexLlmCompletionService,
   createProviderAdapter,
   listAvailableProviderInfos,
   resolveDefaultProviderId,
   type ProviderAdapter,
   type ProviderToolHost,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import {
   createDefaultEnvironmentRegistry,
   listAvailableEnvironmentInfos,
@@ -47,6 +46,7 @@ import {
   type EnvironmentAgentSessionTimingOptions,
 } from "./environment-agent-timing.js";
 import { composeProviderToolHosts, createManagerProviderToolHost } from "./manager-tools.js";
+import { ProviderSessionController } from "./provider-session-controller.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -118,9 +118,8 @@ export function createServer(deps: ServerDeps) {
     deps.providerToolHost,
     managerToolHost,
   ]);
-  const configuredAgentServer = new AgentServer({
+  const configuredProviderController = new ProviderSessionController({
     provider,
-    providerCatalog: listAvailableProviderInfos(),
     resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
       request.type === "manager"
         ? providerToolHost?.listTools()
@@ -220,7 +219,7 @@ export function createServer(deps: ServerDeps) {
     deps.projectRepo,
     wsManager,
     llmCompletionService,
-    configuredAgentServer,
+    configuredProviderController,
     daemonRuntimeEnv,
     environmentRegistry,
     providerCatalog,

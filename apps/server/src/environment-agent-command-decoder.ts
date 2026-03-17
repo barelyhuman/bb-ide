@@ -22,6 +22,7 @@ const ENVIRONMENT_AGENT_COMMAND_TYPES = [
   "turn.start",
   "turn.steer",
   "thread.rename",
+  "provider.list_models",
   "workspace.status",
   "workspace.diff",
 ] as const satisfies readonly EnvironmentAgentCommand["type"][];
@@ -364,6 +365,13 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         title: requireStringField(record, "title", commandType),
         ...("params" in record ? { params: record.params } : {}),
         ...(initialize ? { initialize } : {}),
+      };
+    case "provider.list_models":
+      return {
+        type: commandType,
+        ...(decodeThreadProviderId(record.providerId)
+          ? { providerId: decodeThreadProviderId(record.providerId)! }
+          : {}),
       };
     case "workspace.status":
     case "workspace.diff":

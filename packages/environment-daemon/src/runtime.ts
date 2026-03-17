@@ -26,9 +26,13 @@ type EnvironmentAgentProviderEnsureCommand = Extract<
   EnvironmentAgentCommand,
   { type: "provider.ensure" }
 >;
+type EnvironmentAgentProviderModelListCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_models" }
+>;
 type EnvironmentAgentRpcCommand = Exclude<
   EnvironmentAgentCommand,
-  EnvironmentAgentProviderEnsureCommand
+  EnvironmentAgentProviderEnsureCommand | EnvironmentAgentProviderModelListCommand
 >;
 
 export interface EnvironmentAgentRuntimeOptions {
@@ -294,6 +298,8 @@ export class EnvironmentAgentRuntime {
               await this.toProviderEnsureSpec(envelope.command),
               envelope.command.forThreadId,
             )
+          : envelope.command.type === "provider.list_models"
+            ? await this.listProviderModels(envelope.command.providerId)
           : await this.executeRpcCommand(envelope.command);
       this.learnProviderThreadMapping(envelope.command, result);
       this.trackAcceptedCommand(envelope.command);
@@ -357,6 +363,7 @@ export class EnvironmentAgentRuntime {
         this.turnState = "idle";
         return;
       case "provider.ensure":
+      case "provider.list_models":
       case "thread.rename":
       case "workspace.status":
       case "workspace.diff":
@@ -748,6 +755,7 @@ export class EnvironmentAgentRuntime {
       case "workspace.status":
       case "workspace.diff":
       case "provider.ensure":
+      case "provider.list_models":
         return;
       default:
         return command satisfies never;
@@ -889,6 +897,8 @@ export class EnvironmentAgentRuntime {
         }
         return;
       }
+      default:
+        return command satisfies never;
     }
   }
 
@@ -917,6 +927,18 @@ export class EnvironmentAgentRuntime {
       method: this.toProviderMethod(command),
       params: this.toProviderParams(command),
     });
+  }
+
+  private async listProviderModels(
+    providerId?: string,
+  ): Promise<import("@bb/core").AvailableModel[]> {
+    const provider = this.getProviderAdapterForId(
+      providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+    );
+    if (!provider) {
+      throw new Error("Provider runtime is unavailable");
+    }
+    return provider.listModels();
   }
 
   private resolveTurnRunRequest(command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>): {

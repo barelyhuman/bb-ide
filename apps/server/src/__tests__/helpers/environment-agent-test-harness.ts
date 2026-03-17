@@ -37,9 +37,13 @@ type EnvironmentAgentProviderEnsureCommand = Extract<
   EnvironmentAgentCommand,
   { type: "provider.ensure" }
 >;
+type EnvironmentAgentProviderListModelsCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_models" }
+>;
 type EnvironmentAgentRpcCommand = Exclude<
   EnvironmentAgentCommand,
-  EnvironmentAgentProviderEnsureCommand
+  EnvironmentAgentProviderEnsureCommand | EnvironmentAgentProviderListModelsCommand
 >;
 
 function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
@@ -108,10 +112,11 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
       );
     case "turn.start":
     case "turn.steer":
+      return command.params;
     case "thread.rename":
       return command.params ?? provider.createThreadNameSetParams!(
         command.providerThreadId,
-        command.type === "thread.rename" ? command.title : "",
+        command.title,
       );
     case "thread.stop":
       return command.params ?? {};
@@ -455,7 +460,10 @@ export function createFakeEnvironmentAgentClient(
       if (command.type === "provider.ensure") {
         throw new Error("provider.ensure should be sent via ensureProviderRunning");
       }
-      replayThreadId = command.threadId;
+      replayThreadId =
+        "threadId" in command && typeof command.threadId === "string"
+          ? command.threadId
+          : replayThreadId;
       const initialize =
         "initialize" in command ? command.initialize : undefined;
       if (initialize && !initialized) {
@@ -464,10 +472,16 @@ export function createFakeEnvironmentAgentClient(
       }
       let result: unknown;
       try {
+        if (command.type === "provider.list_models") {
+          result = await createProviderAdapter({
+            providerId: command.providerId ?? "codex",
+          }).listModels();
+        } else {
         result = await sendRpcRequest(
           toProviderMethod(command),
           toProviderParams(command),
         );
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const normalizedMessage = message.includes("no rollout found") || message.includes("missing thread")

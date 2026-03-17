@@ -149,6 +149,10 @@ export type EnvironmentAgentCommand =
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
+      type: "provider.list_models";
+      providerId?: ThreadProviderId;
+    }
+  | {
       type: "workspace.status";
       threadId: string;
     }

@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "@bb/core": "workspace:*",
-    "@bb/agent-server": "workspace:*",
     "@bb/db": "workspace:*",
     "@bb/environment": "workspace:*",
     "@bb/environment-daemon": "workspace:*",

@@ -16,7 +16,7 @@ import {
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionOpenPayload,
 } from "@bb/environment-daemon";
-import { createCodexProviderAdapter, type LlmCompletionService } from "@bb/agent-server";
+import { createCodexProviderAdapter, type LlmCompletionService } from "@bb/provider-adapters";
 import type { IEnvironment } from "@bb/environment";
 import type { WSManager } from "../ws.js";
 import { Orchestrator } from "../orchestrator.js";

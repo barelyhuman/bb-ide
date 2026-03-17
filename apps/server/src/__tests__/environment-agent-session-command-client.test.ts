@@ -8,10 +8,11 @@ import {
   ProjectRepository,
   ThreadRepository,
 } from "@bb/db";
-import { AgentServer, createCodexProviderAdapter } from "@bb/agent-server";
+import { createCodexProviderAdapter } from "@bb/provider-adapters";
 import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentSessionCommandClient } from "../environment-agent-session-command-client.js";
+import { ProviderSessionController } from "../provider-session-controller.js";
 
 interface SqliteClient { close(): void; }
 function sqliteClient(db: DbConnection): SqliteClient {
@@ -331,7 +332,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       threadId: first.threadId,
       sessionId: "sess-3",
     });
-    const firstServer = new AgentServer({
+    const firstServer = new ProviderSessionController({
       provider: createCodexProviderAdapter(),
     });
     const firstEnsureCompletion = completeNextQueuedCommand({
@@ -371,7 +372,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       threadId: second.threadId,
       sessionId: "sess-4",
     });
-    const secondServer = new AgentServer({
+    const secondServer = new ProviderSessionController({
       provider: createCodexProviderAdapter(),
     });
     const secondEnsureCompletion = completeNextQueuedCommand({

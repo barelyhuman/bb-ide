@@ -51,7 +51,7 @@ import {
   createCodexProviderAdapter,
   createPiProviderAdapter,
   type LlmCompletionService,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
 import type { EnvironmentService } from "../environment-service.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
@@ -346,6 +346,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
         };
       };
     }>;
+    providerAdapterByProviderId: Map<string, {
+      listModels: (...args: unknown[]) => unknown;
+    }>;
     environmentService: {
       environmentRuntimes: Map<string, unknown>;
     };
@@ -475,7 +478,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     providerThreadIds,
     activeTurnIds,
     environmentRuntimes,
-    provider: Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
+    provider:
+      Array.from(rawManager.providerAdapterByProviderId.values())[0] ??
+      Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
   });
   return rawManager as OrchestratorTestHarness;
 }

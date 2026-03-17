@@ -110,15 +110,17 @@ import type {
 
 type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
 import {
-  AgentServer,
-  type AgentServerNotification,
-  AgentServerSessionError,
   type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
   type ProviderToolHost,
   createProviderAdapter,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import { WSManager } from "./ws.js";
+import {
+  ProviderSessionController,
+  type ProviderSessionNotification,
+  ProviderSessionError,
+} from "./provider-session-controller.js";
 import {
   isDomainError,
   inactiveSessionError,
@@ -169,6 +171,7 @@ export type PromptExecutionOptions = ProviderExecutionOptions;
 
 const BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS =
   "BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS";
+const MODEL_LIST_CACHE_TTL_MS = 60_000;
 const ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS = 1_000;
 const ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS = 5_000;
 
@@ -562,16 +565,31 @@ export class Orchestrator implements ThreadOrchestrator {
   private projectOperationTransitionsInFlight = new Set<string>();
   /** Tracks threads whose workspace deletion is in progress. */
   private workspaceCleanupInFlightThreadIds: Set<string>;
-  private readonly agentServerByProviderId = new Map<ThreadProviderId, AgentServer>();
+  private readonly agentServerByProviderId = new Map<
+    ThreadProviderId,
+    ProviderSessionController
+  >();
+  private readonly providerAdapterByProviderId = new Map<
+    ThreadProviderId,
+    ProviderAdapter
+  >();
   private readonly defaultProviderId: ThreadProviderId;
   private readonly providerCatalog: SystemProviderInfo[];
   private readonly providerToolHost?: ProviderToolHost;
+  private readonly cachedModelsByProviderId = new Map<
+    ThreadProviderId,
+    { expiresAt: number; value: AvailableModel[] }
+  >();
+  private readonly pendingModelsRequestByProviderId = new Map<
+    ThreadProviderId,
+    Promise<AvailableModel[]>
+  >();
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
   private environmentAgentCommandPollIntervalMs: number | undefined;
 
-  private get agentServer(): AgentServer {
+  private get agentServer(): ProviderSessionController {
     const server = this.agentServerByProviderId.get(this.defaultProviderId);
     if (!server) {
       throw new Error(`Missing agent server for provider "${this.defaultProviderId}"`);
@@ -585,7 +603,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private projectRepo: ProjectRepository,
     private ws: WSManager,
     private llmCompletionService: LlmCompletionService,
-    agentServerOrProvider?: AgentServer | ProviderAdapter,
+    agentServerOrProvider?: ProviderSessionController | ProviderAdapter,
     private runtimeEnv: NodeJS.ProcessEnv = process.env,
     private environmentRegistry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
     providerCatalog?: SystemProviderInfo[],
@@ -673,22 +691,19 @@ export class Orchestrator implements ThreadOrchestrator {
     this.providerCatalog = providerCatalog ?? [];
     this.providerToolHost = providerToolHost;
     const provider =
-      agentServerOrProvider instanceof AgentServer
+      agentServerOrProvider instanceof ProviderSessionController
         ? undefined
         : agentServerOrProvider;
-    if (agentServerOrProvider instanceof AgentServer) {
-      const providerId = agentServerOrProvider.getProviderInfo().id;
-      if (!isThreadProviderId(providerId)) {
-        throw new Error(`Unsupported provider "${providerId}"`);
-      }
+    if (agentServerOrProvider instanceof ProviderSessionController) {
+      const providerId = provider?.id ?? DEFAULT_THREAD_PROVIDER_ID;
       this.defaultProviderId = providerId;
       this.agentServerByProviderId.set(providerId, agentServerOrProvider);
     } else {
       const providerAdapter = provider ?? createProviderAdapter();
       this.defaultProviderId = providerAdapter.id;
-      this.agentServerByProviderId.set(this.defaultProviderId, new AgentServer({
+      this.providerAdapterByProviderId.set(this.defaultProviderId, providerAdapter);
+      this.agentServerByProviderId.set(this.defaultProviderId, new ProviderSessionController({
         provider: providerAdapter,
-        ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
         ...(this.providerToolHost
           ? {
               resolveDynamicTools: () => this.providerToolHost?.listTools(),
@@ -819,19 +834,21 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentService.clearPrimaryPromotionState(projectId);
   }
 
-  private _getDefaultAgentServer(): AgentServer {
+  private _getDefaultAgentServer(): ProviderSessionController {
     return this._getAgentServerForProviderId(this.defaultProviderId);
   }
 
-  private _getAgentServerForProviderId(providerId: ThreadProviderId): AgentServer {
+  private _getAgentServerForProviderId(
+    providerId: ThreadProviderId,
+  ): ProviderSessionController {
     const existing = this.agentServerByProviderId.get(providerId);
     if (existing) {
       return existing;
     }
 
-    const server = new AgentServer({
-      provider: createProviderAdapter({ providerId }),
-      ...(this.providerCatalog.length > 0 ? { providerCatalog: this.providerCatalog } : {}),
+    const provider = this._getProviderAdapterForProviderId(providerId);
+    const server = new ProviderSessionController({
+      provider,
       ...(this.providerToolHost
         ? {
             // Gate manager-only tools: only expose message_user for manager threads.
@@ -852,11 +869,21 @@ export class Orchestrator implements ThreadOrchestrator {
     return server;
   }
 
-  private _getAgentServerForThread(thread: Thread): AgentServer {
+  private _getProviderAdapterForProviderId(providerId: ThreadProviderId): ProviderAdapter {
+    const existing = this.providerAdapterByProviderId.get(providerId);
+    if (existing) {
+      return existing;
+    }
+    const provider = createProviderAdapter({ providerId });
+    this.providerAdapterByProviderId.set(providerId, provider);
+    return provider;
+  }
+
+  private _getAgentServerForThread(thread: Thread): ProviderSessionController {
     return this._getAgentServerForProviderId(thread.providerId);
   }
 
-  private _getAgentServerForThreadId(threadId: string): AgentServer {
+  private _getAgentServerForThreadId(threadId: string): ProviderSessionController {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -864,7 +891,9 @@ export class Orchestrator implements ThreadOrchestrator {
     return this._getAgentServerForThread(thread);
   }
 
-  private _getAgentServerForThreadIdOrDefault(threadId: string): AgentServer {
+  private _getAgentServerForThreadIdOrDefault(
+    threadId: string,
+  ): ProviderSessionController {
     const thread = this.threadRepo.getById(threadId);
     return thread ? this._getAgentServerForThread(thread) : this._getDefaultAgentServer();
   }
@@ -3266,18 +3295,63 @@ export class Orchestrator implements ThreadOrchestrator {
    * the default provider.
    */
   async listModels(providerId?: string): Promise<AvailableModel[]> {
-    if (providerId && isThreadProviderId(providerId)) {
-      return this._getAgentServerForProviderId(providerId).listModels();
+    const resolvedProviderId = providerId && isThreadProviderId(providerId)
+      ? providerId
+      : this.defaultProviderId;
+    const now = Date.now();
+    const cached = this.cachedModelsByProviderId.get(resolvedProviderId);
+    if (cached && cached.expiresAt > now) {
+      return cached.value;
     }
-    return this._getDefaultAgentServer().listModels();
+    const pending = this.pendingModelsRequestByProviderId.get(resolvedProviderId);
+    if (pending) {
+      return pending;
+    }
+
+    const request = (async () => {
+      const envDaemonModels =
+        await this._listProviderModelsFromEnvironmentAgent(resolvedProviderId);
+      const models =
+        envDaemonModels ??
+        await this._getProviderAdapterForProviderId(resolvedProviderId).listModels();
+      this.cachedModelsByProviderId.set(resolvedProviderId, {
+        value: models,
+        expiresAt: Date.now() + MODEL_LIST_CACHE_TTL_MS,
+      });
+      return models;
+    })().finally(() => {
+      this.pendingModelsRequestByProviderId.delete(resolvedProviderId);
+    });
+
+    this.pendingModelsRequestByProviderId.set(resolvedProviderId, request);
+    return request;
   }
 
   getProviderInfo(): SystemProviderInfo {
-    return this._getDefaultAgentServer().getProviderInfo();
+    const provider =
+      this.providerCatalog.find((entry) => entry.id === this.defaultProviderId) ??
+      (() => {
+        const adapter = createProviderAdapter({ providerId: this.defaultProviderId });
+        return {
+          id: adapter.id,
+          displayName: adapter.displayName,
+          capabilities: { ...adapter.capabilities },
+        };
+      })();
+    return {
+      ...provider,
+      capabilities: { ...provider.capabilities },
+    };
   }
 
   listProviders(): SystemProviderInfo[] {
-    return this._getDefaultAgentServer().listProviders();
+    if (this.providerCatalog.length > 0) {
+      return this.providerCatalog.map((provider) => ({
+        ...provider,
+        capabilities: { ...provider.capabilities },
+      }));
+    }
+    return [this.getProviderInfo()];
   }
 
   listEnvironments(): SystemEnvironmentInfo[] {
@@ -3392,7 +3466,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   handleAgentServerNotification(
     threadId: string,
-    event: AgentServerNotification,
+    event: ProviderSessionNotification,
   ): void {
     this._handleAgentServerNotification(threadId, event);
   }
@@ -3837,6 +3911,58 @@ export class Orchestrator implements ThreadOrchestrator {
         projectRootPath: args.projectRootPath,
         providerLaunch: args.target.providerLaunch,
       });
+    } finally {
+      client.close();
+    }
+  }
+
+  private async _listProviderModelsFromEnvironmentAgent(
+    providerId: ThreadProviderId,
+  ): Promise<AvailableModel[] | undefined> {
+    if (!this.environmentAgentCommandDispatcher || !this.environmentAgentSessionRepo) {
+      return undefined;
+    }
+    const matchingSession = this.environmentAgentSessionRepo.listActive().find((session) => {
+      if (Array.isArray(session.providerMetadata)) {
+        return session.providerMetadata.some((entry) => {
+          const record = toRecord(entry);
+          return getStringField(record, "providerId") === providerId;
+        });
+      }
+      const sessionThread = this.threadRepo.getById(session.threadId);
+      return sessionThread?.providerId === providerId;
+    });
+    if (!matchingSession) {
+      return undefined;
+    }
+
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId: matchingSession.threadId,
+      commandDispatcher: this.environmentAgentCommandDispatcher,
+      ...(this.environmentAgentCommandPollIntervalMs !== undefined
+        ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
+        : {}),
+      ensureSessionAccess: async () => {
+        await this._recoverEnvironmentAgentAccess(matchingSession.threadId);
+      },
+    });
+    try {
+      const commandId = `provider-models-${providerId}-${Date.now()}`;
+      const ack = await client.sendCommand({
+        meta: {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          commandId,
+          idempotencyKey: commandId,
+          sentAt: Date.now(),
+        },
+        command: {
+          type: "provider.list_models",
+          providerId,
+        },
+      });
+      return Array.isArray(ack.result)
+        ? ack.result as AvailableModel[]
+        : undefined;
     } finally {
       client.close();
     }
@@ -4354,7 +4480,7 @@ export class Orchestrator implements ThreadOrchestrator {
       } catch (err) {
         lastResumeError = err;
         const lostSession =
-          err instanceof AgentServerSessionError &&
+          err instanceof ProviderSessionError &&
           (err.code === "inactive_session" || err.code === "provider_unavailable");
         if (lostSession) {
           await this._cleanupThreadRuntimeAndWait(threadId, {
@@ -4365,7 +4491,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }
         const resumeTimedOut =
           (isDomainError(err) && err.code === "provider_timeout") ||
-          (err instanceof AgentServerSessionError && err.code === "provider_timeout");
+          (err instanceof ProviderSessionError && err.code === "provider_timeout");
         if (
           !lostSession &&
           !this._getAgentServerForThread(thread).isMissingProviderThreadError(err) &&
@@ -4517,7 +4643,7 @@ export class Orchestrator implements ThreadOrchestrator {
       return args.providerThreadId;
     } catch (error) {
       if (
-        error instanceof AgentServerSessionError &&
+        error instanceof ProviderSessionError &&
         (error.code === "inactive_session" || error.code === "provider_unavailable") &&
         !args.activeTurnId
       ) {
@@ -4687,7 +4813,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _createTellFailureEventData(
     err: unknown,
   ): ThreadEventDataForType<"system/error"> {
-    if (err instanceof AgentServerSessionError) {
+    if (err instanceof ProviderSessionError) {
       switch (err.code) {
         case "inactive_session":
         case "no_active_turn":
@@ -4768,7 +4894,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _handleAgentServerNotification(
     threadId: string,
-    event: AgentServerNotification,
+    event: ProviderSessionNotification,
   ): void {
     const resolvedThreadId = this._resolveNotificationThreadId(threadId, event);
     const changes: ThreadChangeKind[] = [];
@@ -4809,7 +4935,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _resolveNotificationThreadId(
     threadId: string,
-    event: AgentServerNotification,
+    event: ProviderSessionNotification,
   ): string {
     const providerThreadId = extractProviderThreadIdFromPersistedEventData(
       event.eventData,
@@ -5749,7 +5875,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _syncStatusFromEvent(
     threadId: string,
-    event: AgentServerNotification,
+    event: ProviderSessionNotification,
   ): boolean {
     const nextStatus = event.nextStatus;
     if (!nextStatus) return false;
@@ -5758,7 +5884,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _syncActiveTurnFromEvent(
     threadId: string,
-    event: AgentServerNotification,
+    event: ProviderSessionNotification,
   ): void {
     const state = event.turnState;
     if (state === "active") {
@@ -5776,7 +5902,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _syncTitleFromEvent(
     threadId: string,
-    event: AgentServerNotification,
+    event: ProviderSessionNotification,
   ): boolean {
     const title = event.title;
     if (!title) return false;
@@ -5802,7 +5928,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _rethrowAgentServerError(threadId: string, error: unknown): never {
-    if (!(error instanceof AgentServerSessionError)) {
+    if (!(error instanceof ProviderSessionError)) {
       throw error;
     }
     switch (error.code) {
