@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ProviderToolCallResponse } from "@bb/core";
+import { isThreadProviderId, type ProviderAdapter, type ProviderToolCallResponse } from "@bb/core";
+import { createProviderAdapter } from "@bb/provider-adapters";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentCommand,
@@ -835,15 +836,16 @@ export class EnvironmentAgentRuntime {
         // pattern looks racy but is safe because the session supervisor
         // executes commands sequentially (one await per command in a for loop).
         this.providerChild = child;
-        if (!command.initialize) {
+        const initialize = command.initialize ?? this.buildInitializeRequest();
+        if (!initialize) {
           return;
         }
         if (child.pid !== undefined && this.providerInitializedPids.has(child.pid)) {
           return;
         }
         await this.requestProvider({
-          method: command.initialize.method,
-          params: command.initialize.params,
+          method: initialize.method,
+          params: initialize.params,
         });
         if (child.pid !== undefined) {
           this.providerInitializedPids.add(child.pid);
@@ -894,52 +896,103 @@ export class EnvironmentAgentRuntime {
     method: string;
     params: unknown;
   } {
+    const provider = this.getProviderAdapter();
     const requestedMode = command.requestedMode ?? "auto";
-    const canSteer =
-      command.activeTurnId !== undefined && command.steerParams !== undefined;
+    const canSteer = Boolean(command.activeTurnId) && Boolean(
+      command.steerParams !== undefined ||
+      (
+        provider?.turnSteerMethod &&
+        provider.createTurnSteerParams &&
+        command.input !== undefined
+      ),
+    );
 
     if (requestedMode === "steer") {
       if (!command.activeTurnId) {
         throw new Error("No active turn");
       }
-      if (command.steerParams === undefined) {
+      const steerParams = this.resolveTurnSteerParams(command);
+      if (steerParams === undefined) {
         throw new Error("turn/steer is unsupported");
       }
       return {
-        method: "turn/steer",
-        params: command.steerParams,
+        method: provider?.turnSteerMethod ?? "turn/steer",
+        params: steerParams,
       };
     }
 
     if (requestedMode !== "start" && canSteer) {
-      return {
-        method: "turn/steer",
-        params: command.steerParams,
-      };
+      const steerParams = this.resolveTurnSteerParams(command);
+      if (steerParams !== undefined) {
+        return {
+          method: provider?.turnSteerMethod ?? "turn/steer",
+          params: steerParams,
+        };
+      }
     }
 
     return {
-      method: "turn/start",
-      params: command.startParams,
+      method: provider?.turnStartMethod ?? "turn/start",
+      params: this.resolveTurnStartParams(command),
     };
   }
 
+  private resolveTurnStartParams(
+    command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
+  ): unknown {
+    if (command.startParams !== undefined) {
+      return command.startParams;
+    }
+    const provider = this.getProviderAdapter();
+    if (!provider || command.input === undefined) {
+      throw new Error("turn/start params are unavailable");
+    }
+    return provider.createTurnStartParams(
+      command.providerThreadId,
+      command.input,
+      command.options,
+    );
+  }
+
+  private resolveTurnSteerParams(
+    command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
+  ): unknown | undefined {
+    if (command.steerParams !== undefined) {
+      return command.steerParams;
+    }
+    const provider = this.getProviderAdapter();
+    if (
+      !provider?.turnSteerMethod ||
+      !provider.createTurnSteerParams ||
+      !command.activeTurnId ||
+      command.input === undefined
+    ) {
+      return undefined;
+    }
+    return provider.createTurnSteerParams(
+      command.providerThreadId,
+      command.activeTurnId,
+      command.input,
+    );
+  }
+
   private toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+    const provider = this.getProviderAdapter();
     switch (command.type) {
       case "thread.start":
-        return "thread/start";
+        return provider?.threadStartMethod ?? "thread/start";
       case "thread.resume":
-        return "thread/resume";
+        return provider?.threadResumeMethod ?? "thread/resume";
       case "thread.stop":
         return "thread/stop";
       case "turn.run":
-        return "turn/start";
+        return provider?.turnStartMethod ?? "turn/start";
       case "turn.start":
-        return "turn/start";
+        return provider?.turnStartMethod ?? "turn/start";
       case "turn.steer":
-        return "turn/steer";
+        return provider?.turnSteerMethod ?? "turn/steer";
       case "thread.rename":
-        return "thread/name/set";
+        return provider?.threadNameSetMethod ?? "thread/name/set";
       case "workspace.status":
         return "workspace/status";
       case "workspace.diff":
@@ -948,15 +1001,49 @@ export class EnvironmentAgentRuntime {
   }
 
   private toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+    const provider = this.getProviderAdapter();
     switch (command.type) {
       case "thread.start":
+        if (command.params !== undefined) {
+          return command.params;
+        }
+        if (!provider || !command.request || !command.context) {
+          throw new Error("thread/start params are unavailable");
+        }
+        return provider.createThreadStartParams(
+          command.request,
+          command.context,
+          command.dynamicTools,
+        );
       case "thread.resume":
+        if (command.params !== undefined) {
+          return command.params;
+        }
+        if (!provider || !command.context) {
+          throw new Error("thread/resume params are unavailable");
+        }
+        return provider.createThreadResumeParams(
+          command.providerThreadId,
+          command.context,
+          command.options,
+          command.resumePath,
+        );
       case "turn.start":
       case "turn.steer":
-      case "thread.rename":
         return command.params;
+      case "thread.rename":
+        if (command.params !== undefined) {
+          return command.params;
+        }
+        if (!provider?.createThreadNameSetParams) {
+          throw new Error("thread/name/set params are unavailable");
+        }
+        return provider.createThreadNameSetParams(
+          command.providerThreadId,
+          command.title,
+        );
       case "turn.run":
-        return command.startParams;
+        return this.resolveTurnStartParams(command);
       case "thread.stop":
         return command.params ?? {};
       case "workspace.status":
@@ -1204,6 +1291,28 @@ export class EnvironmentAgentRuntime {
     return getEnvironmentAgentProviderSemantics(
       this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
     );
+  }
+
+  private getProviderAdapter(): ProviderAdapter | undefined {
+    const providerId = this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+    if (!providerId || !isThreadProviderId(providerId)) {
+      return undefined;
+    }
+    return createProviderAdapter({ providerId });
+  }
+
+  private buildInitializeRequest() {
+    const provider = this.getProviderAdapter();
+    if (!provider) {
+      return undefined;
+    }
+    return {
+      method: provider.initializeMethod,
+      params:
+        provider.createInitializeParams?.(provider.clientInfo) ?? {
+          clientInfo: provider.clientInfo,
+        },
+    };
   }
 }
 

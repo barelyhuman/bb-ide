@@ -1,3 +1,12 @@
+import type {
+  PromptInput,
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  SpawnThreadRequest,
+  Thread,
+} from "@bb/core";
+
 export type EnvironmentAgentTransportKind = "http";
 export const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
@@ -71,7 +80,10 @@ export type EnvironmentAgentCommand =
       type: "thread.start";
       threadId: string;
       projectId: string;
-      params: unknown;
+      params?: unknown;
+      request?: SpawnThreadRequest;
+      context?: ProviderThreadContext;
+      dynamicTools?: ProviderDynamicTool[];
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -79,7 +91,10 @@ export type EnvironmentAgentCommand =
       threadId: string;
       projectId: string;
       providerThreadId: string;
-      params: unknown;
+      params?: unknown;
+      context?: ProviderThreadContext;
+      options?: ProviderExecutionOptions;
+      resumePath?: string;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -101,8 +116,10 @@ export type EnvironmentAgentCommand =
       providerThreadId: string;
       requestedMode?: "auto" | "steer" | "start";
       activeTurnId?: string;
-      startParams: unknown;
+      startParams?: unknown;
       steerParams?: unknown;
+      input?: PromptInput[];
+      options?: ProviderExecutionOptions;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -118,7 +135,7 @@ export type EnvironmentAgentCommand =
       threadId: string;
       providerThreadId: string;
       title: string;
-      params: unknown;
+      params?: unknown;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -320,4 +337,3 @@ export function isEnvironmentAgentControlResponse(
     type === "status.response"
   );
 }
-import type { Thread } from "@bb/core";

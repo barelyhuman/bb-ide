@@ -226,15 +226,13 @@ export class AgentServer {
       type: "thread.start",
       threadId: args.threadId,
       projectId: args.projectId,
-      params: this.opts.provider.createThreadStartParams(
-        args.request,
-        args.context,
+      request: args.request,
+      context: args.context,
+      dynamicTools:
         this.opts.resolveDynamicTools?.({
           request: args.request,
           context: args.context,
         }) ?? this.opts.dynamicTools,
-      ),
-      initialize: this.buildInitializeRequest(),
     });
     const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
     if (!providerThreadId) {
@@ -266,13 +264,9 @@ export class AgentServer {
       threadId: args.threadId,
       projectId: args.projectId,
       providerThreadId: args.providerThreadId,
-      params: this.opts.provider.createThreadResumeParams(
-        args.providerThreadId,
-        args.context,
-        args.options,
-        args.resumePath,
-      ),
-      initialize: this.buildInitializeRequest(),
+      context: args.context,
+      ...(args.options ? { options: args.options } : {}),
+      ...(args.resumePath ? { resumePath: args.resumePath } : {}),
     });
     const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
     if (!providerThreadId) {
@@ -341,21 +335,9 @@ export class AgentServer {
       providerThreadId: args.providerThreadId,
       requestedMode,
       ...(activeTurnId ? { activeTurnId } : {}),
-      startParams: this.opts.provider.createTurnStartParams(
-        args.providerThreadId,
-        args.input,
-        args.options,
-      ),
-      ...(canAutoSteer && activeTurnId
-        ? {
-            steerParams: this.opts.provider.createTurnSteerParams!(
-              args.providerThreadId,
-              activeTurnId,
-              args.input,
-            ),
-          }
-        : {}),
-      initialize: this.buildInitializeRequest(),
+      input: args.input,
+      ...(args.options ? { options: args.options } : {}),
+      ...(canAutoSteer && activeTurnId ? { activeTurnId } : {}),
     });
     return {
       mode:
@@ -386,11 +368,6 @@ export class AgentServer {
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
       title: args.title,
-      params: this.opts.provider.createThreadNameSetParams(
-        args.providerThreadId,
-        args.title,
-      ),
-      initialize: this.buildInitializeRequest(),
     });
   }
 
@@ -549,16 +526,6 @@ export class AgentServer {
 
     this.opts.onProviderStderrLine?.(threadId, line);
     this.opts.logger?.error(`[thread ${threadId}] stderr: ${line}`);
-  }
-
-  private buildInitializeRequest() {
-    return {
-      method: this.opts.provider.initializeMethod,
-      params:
-        this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
-          clientInfo: this.opts.provider.clientInfo,
-        },
-    };
   }
 
   private async ensureProviderRunningForCommand(

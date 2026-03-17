@@ -6,6 +6,7 @@ import {
   type EnvironmentAgentClient,
 } from "@bb/environment-daemon";
 import { assertNever, toRecord } from "@bb/core";
+import { createProviderAdapter } from "@bb/provider-adapters";
 import { vi } from "vitest";
 
 export const CODEX_THREAD_ID = "codex-thread-abc-123";
@@ -42,23 +43,24 @@ type EnvironmentAgentRpcCommand = Exclude<
 >;
 
 function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+  const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
-      return "thread/start";
+      return provider.threadStartMethod;
     case "thread.resume":
-      return "thread/resume";
+      return provider.threadResumeMethod;
     case "thread.stop":
       return "thread/stop";
     case "turn.run":
-      return command.requestedMode === "steer" && command.steerParams !== undefined
-        ? "turn/steer"
-        : "turn/start";
+      return command.requestedMode === "steer"
+        ? provider.turnSteerMethod ?? provider.turnStartMethod
+        : provider.turnStartMethod;
     case "turn.start":
-      return "turn/start";
+      return provider.turnStartMethod;
     case "turn.steer":
-      return "turn/steer";
+      return provider.turnSteerMethod ?? "turn/steer";
     case "thread.rename":
-      return "thread/name/set";
+      return provider.threadNameSetMethod ?? "thread/name/set";
     case "workspace.status":
       return "workspace/status";
     case "workspace.diff":
@@ -69,18 +71,48 @@ function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
 }
 
 function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+  const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
+      return command.params ?? provider.createThreadStartParams(
+        command.request!,
+        command.context!,
+        command.dynamicTools,
+      );
     case "thread.resume":
-      return command.params;
+      return command.params ?? provider.createThreadResumeParams(
+        command.providerThreadId,
+        command.context!,
+        command.options,
+        command.resumePath,
+      );
     case "turn.run":
-      return command.requestedMode === "steer" && command.steerParams !== undefined
-        ? command.steerParams
-        : command.startParams;
+      if (command.requestedMode === "steer") {
+        return command.steerParams ?? provider.createTurnSteerParams!(
+          command.providerThreadId,
+          command.activeTurnId!,
+          command.input!,
+        );
+      }
+      if (command.requestedMode !== "start" && command.activeTurnId && command.input) {
+        return command.steerParams ?? provider.createTurnSteerParams!(
+          command.providerThreadId,
+          command.activeTurnId,
+          command.input,
+        );
+      }
+      return command.startParams ?? provider.createTurnStartParams(
+        command.providerThreadId,
+        command.input!,
+        command.options,
+      );
     case "turn.start":
     case "turn.steer":
     case "thread.rename":
-      return command.params;
+      return command.params ?? provider.createThreadNameSetParams!(
+        command.providerThreadId,
+        command.type === "thread.rename" ? command.title : "",
+      );
     case "thread.stop":
       return command.params ?? {};
     case "workspace.status":

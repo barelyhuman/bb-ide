@@ -89,7 +89,6 @@ describe("AgentServer environment-agent control plane", () => {
     );
     expect(simulator.providerRequests).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "initialize" }),
         expect.objectContaining({ method: "thread/start" }),
       ]),
     );
@@ -116,7 +115,6 @@ describe("AgentServer environment-agent control plane", () => {
     expect(resumed).toEqual({ providerThreadId: "provider-thread-1" });
     expect(simulator.providerRequests).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "initialize" }),
         expect.objectContaining({ method: "thread/resume" }),
       ]),
     );
@@ -149,7 +147,6 @@ describe("AgentServer environment-agent control plane", () => {
     });
     expect(simulator.providerRequests).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "initialize" }),
         expect.objectContaining({ method: "turn/steer" }),
       ]),
     );
@@ -178,7 +175,6 @@ describe("AgentServer environment-agent control plane", () => {
 
     expect(simulator.providerRequests).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ method: "initialize" }),
         expect.objectContaining({ method: "thread/name/set" }),
       ]),
     );

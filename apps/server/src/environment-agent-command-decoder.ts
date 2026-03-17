@@ -1,5 +1,12 @@
 import { assertNever, getStringField, toRecord } from "@bb/core";
 import type {
+  PromptInput,
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  SpawnThreadRequest,
+} from "@bb/core";
+import type {
   EnvironmentAgentCommand,
   EnvironmentAgentInitializeRequest,
   EnvironmentAgentProviderFile,
@@ -131,6 +138,26 @@ function requireParamsField(
   return record.params;
 }
 
+function decodeThreadContext(value: unknown): ProviderThreadContext | undefined {
+  return toRecord(value) as unknown as ProviderThreadContext | undefined;
+}
+
+function decodeSpawnThreadRequest(value: unknown): SpawnThreadRequest | undefined {
+  return toRecord(value) as unknown as SpawnThreadRequest | undefined;
+}
+
+function decodeDynamicTools(value: unknown): ProviderDynamicTool[] | undefined {
+  return Array.isArray(value) ? value as ProviderDynamicTool[] : undefined;
+}
+
+function decodeExecutionOptions(value: unknown): ProviderExecutionOptions | undefined {
+  return toRecord(value) as ProviderExecutionOptions | undefined;
+}
+
+function decodePromptInputArray(value: unknown): PromptInput[] | undefined {
+  return Array.isArray(value) ? value as PromptInput[] : undefined;
+}
+
 export function decodePersistedEnvironmentAgentCommand(args: {
   commandType: string;
   payload: unknown;
@@ -189,7 +216,16 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
         projectId: requireStringField(record, "projectId", commandType),
-        params: requireParamsField(record, commandType),
+        ...("params" in record ? { params: record.params } : {}),
+        ...(decodeSpawnThreadRequest(record.request)
+          ? { request: decodeSpawnThreadRequest(record.request)! }
+          : {}),
+        ...(decodeThreadContext(record.context)
+          ? { context: decodeThreadContext(record.context)! }
+          : {}),
+        ...(decodeDynamicTools(record.dynamicTools)
+          ? { dynamicTools: decodeDynamicTools(record.dynamicTools)! }
+          : {}),
         ...(initialize ? { initialize } : {}),
       };
     case "thread.resume":
@@ -202,7 +238,16 @@ export function decodePersistedEnvironmentAgentCommand(args: {
           "providerThreadId",
           commandType,
         ),
-        params: requireParamsField(record, commandType),
+        ...("params" in record ? { params: record.params } : {}),
+        ...(decodeThreadContext(record.context)
+          ? { context: decodeThreadContext(record.context)! }
+          : {}),
+        ...(decodeExecutionOptions(record.options)
+          ? { options: decodeExecutionOptions(record.options)! }
+          : {}),
+        ...(getStringField(record, "resumePath")
+          ? { resumePath: getStringField(record, "resumePath")! }
+          : {}),
         ...(initialize ? { initialize } : {}),
       };
     case "thread.stop":
@@ -225,7 +270,7 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         );
       }
       const activeTurnId = getStringField(record, "activeTurnId");
-      if (!("startParams" in record)) {
+      if (!("startParams" in record) && !Array.isArray(record.input)) {
         throw new Error(
           `Invalid persisted environment-agent command payload for ${commandType}`,
         );
@@ -240,8 +285,14 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         ),
         ...(requestedMode ? { requestedMode } : {}),
         ...(activeTurnId ? { activeTurnId } : {}),
-        startParams: record.startParams,
+        ...("startParams" in record ? { startParams: record.startParams } : {}),
         ...(record.steerParams !== undefined ? { steerParams: record.steerParams } : {}),
+        ...(decodePromptInputArray(record.input)
+          ? { input: decodePromptInputArray(record.input)! }
+          : {}),
+        ...(decodeExecutionOptions(record.options)
+          ? { options: decodeExecutionOptions(record.options)! }
+          : {}),
         ...(initialize ? { initialize } : {}),
       };
     }
@@ -280,7 +331,7 @@ export function decodePersistedEnvironmentAgentCommand(args: {
           commandType,
         ),
         title: requireStringField(record, "title", commandType),
-        params: requireParamsField(record, commandType),
+        ...("params" in record ? { params: record.params } : {}),
         ...(initialize ? { initialize } : {}),
       };
     case "workspace.status":
