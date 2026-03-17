@@ -1,4 +1,4 @@
-import { type ComponentProps, type ComponentType, type RefObject } from "react";
+import { type ComponentProps, type ComponentType, type ReactNode, type RefObject } from "react";
 import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
 import {
   type ReasoningLevel,
@@ -263,7 +263,7 @@ export function ThreadFollowUpComposer({
   sandboxMode?: SandboxMode;
   sandboxOptions: readonly PromptOption<SandboxMode>[];
   onSandboxModeChange: (value: SandboxMode) => void;
-  environmentLabel?: string;
+  environmentLabel?: ReactNode;
   environmentIcon?: ComponentType<{ className?: string }>;
   contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
 }) {

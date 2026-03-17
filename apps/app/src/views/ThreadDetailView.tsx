@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronRight, Copy, PanelRight, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
@@ -65,8 +65,10 @@ import {
 } from "@bb/core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
+import { openThreadPathInEditor } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { getEnvironmentIconInfo } from "@/lib/environment-icon";
+import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,
@@ -144,6 +146,47 @@ function formatThreadEnvironmentLabel(args: {
     return "Unknown";
   }
   return undefined;
+}
+
+interface ThreadEnvironmentDisplay {
+  label: string;
+  suffix?: string;
+  worktreeOpenPath?: {
+    relativePath: string;
+    title: string;
+  };
+}
+
+function getThreadEnvironmentDisplay(args: {
+  projectRootPath?: string;
+  attachedEnvironment?: Thread["attachedEnvironment"];
+}): ThreadEnvironmentDisplay | undefined {
+  const attachedEnvironment = args.attachedEnvironment;
+  const label = formatThreadEnvironmentLabel(args);
+  if (!label || !attachedEnvironment) {
+    return label ? { label } : undefined;
+  }
+
+  if (attachedEnvironment.properties?.workspaceKind !== "worktree") {
+    return { label };
+  }
+
+  const suffix = formatAttachedEnvironmentSuffix(
+    attachedEnvironment.descriptor?.path ?? "",
+    args.projectRootPath,
+  );
+  if (!suffix) {
+    return { label };
+  }
+
+  return {
+    label: "Worktree",
+    suffix,
+    worktreeOpenPath: {
+      relativePath: ".",
+      title: attachedEnvironment.descriptor?.path ?? suffix,
+    },
+  };
 }
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -848,10 +891,11 @@ export function ThreadDetailView() {
     requestThreadCommitOperation.isPending || requestThreadSquashOperation.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
   const projectRootPath = project?.rootPath;
-  const threadEnvironmentLabel = formatThreadEnvironmentLabel({
+  const threadEnvironmentDisplay = getThreadEnvironmentDisplay({
     projectRootPath,
     attachedEnvironment: thread.attachedEnvironment,
   });
+  const threadEnvironmentLabel = threadEnvironmentDisplay?.label;
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -891,6 +935,33 @@ export function ThreadDetailView() {
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     (thread.attachedEnvironment?.descriptor ? thread.attachedEnvironment.descriptor.type : undefined);
+  const worktreeOpenPath = threadEnvironmentDisplay?.worktreeOpenPath;
+  const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentDisplay
+    ? threadEnvironmentDisplay.suffix && worktreeOpenPath
+      ? (
+        <>
+          {threadEnvironmentDisplay.label}
+          {" ("}
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:text-foreground"
+            title={worktreeOpenPath.title}
+            onClick={() => {
+              if (!threadId) return;
+              void openThreadPathInEditor(threadId, {
+                relativePath: worktreeOpenPath.relativePath,
+                target: "directory",
+                command: getPathCommandForTarget("directory"),
+              });
+            }}
+          >
+            path
+          </button>
+          {")"}
+        </>
+      )
+      : threadEnvironmentDisplay.label
+    : undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =
@@ -1107,7 +1178,7 @@ export function ThreadDetailView() {
           label="Environment"
           valueClassName="min-w-0 truncate"
         >
-          {threadEnvironmentType}
+          {threadEnvironmentValue ?? threadEnvironmentType}
         </DetailRow>
       ) : null}
       {!isManagerThread && threadBranchName ? (
@@ -1566,7 +1637,7 @@ export function ThreadDetailView() {
       sandboxMode={sandboxMode}
       sandboxOptions={sandboxOptions}
       onSandboxModeChange={setSandboxMode}
-      environmentLabel={threadEnvironmentLabel}
+      environmentLabel={threadEnvironmentValue}
       environmentIcon={environmentIconInfo?.icon}
       contextWindowUsage={contextWindowUsage}
     />

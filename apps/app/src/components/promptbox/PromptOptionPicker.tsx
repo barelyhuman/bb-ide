@@ -1,4 +1,4 @@
-import type { ComponentType } from "react"
+import type { ComponentType, ReactNode } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,7 +30,7 @@ export interface PromptOption<T extends string> {
 
 interface PromptOptionDisplayProps {
   label: string
-  value: string
+  value: ReactNode
   tone?: "default" | "warning"
   icon?: ComponentType<{ className?: string }>
   className?: string
@@ -53,9 +53,11 @@ export function PromptOptionDisplay({
   className,
   title,
 }: PromptOptionDisplayProps) {
+  const defaultTitle = typeof value === "string" ? `${label}: ${value}` : undefined
+
   return (
     <div
-      title={title ?? `${label}: ${value}`}
+      title={title ?? defaultTitle}
       className={cn(
         "inline-flex",
         PROMPT_OPTION_BASE_CLASS_NAME,

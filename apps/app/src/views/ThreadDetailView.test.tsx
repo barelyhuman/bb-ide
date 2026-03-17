@@ -339,8 +339,16 @@ vi.mock("./ThreadFollowUpComposer", () => ({
   }: {
     promptPlaceholder: string;
     queuedMessages: { id: string }[];
-    environmentLabel?: string;
-  }) => <div>{`${promptPlaceholder}|${queuedMessages.length}|${environmentLabel ?? ""}`}</div>,
+    environmentLabel?: ReactNode;
+  }) => (
+    <div>
+      {promptPlaceholder}
+      {"|"}
+      {queuedMessages.length}
+      {"|"}
+      {environmentLabel ?? ""}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/thread/ThreadActionsMenu", () => ({
@@ -474,7 +482,9 @@ describe("ThreadDetailView", () => {
 
     const html = renderThreadDetailView();
 
-    expect(html).toContain("Ask for follow-up changes|1|Worktree (worktrees/feature-branch)");
+    expect(html).toContain("Ask for follow-up changes|1|Worktree");
+    expect(html).toContain(">path<");
+    expect(html).toContain('type="button"');
   });
 
   it("shows Docker for docker-backed environments", () => {
@@ -545,6 +555,36 @@ describe("ThreadDetailView", () => {
     expect(html).not.toContain("Workspace status");
     expect(html).not.toContain("Merge base status");
     expect(html).not.toContain(">Changes<");
+  });
+
+  it("renders the same worktree path link in the info secondary panel tab", () => {
+    apiState.thread.status = "idle";
+    apiState.timelineLoading = false;
+    apiState.thread.attachedEnvironment = {
+      id: "env-1",
+      projectId: "project-1",
+      descriptor: {
+        type: "path",
+        path: "/tmp/project-one/worktrees/feature-branch",
+      },
+      managed: true,
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
+    );
+
+    expect(html).toContain("Environment");
+    expect(html).toContain("Worktree");
+    expect(html).toContain(">path<");
+    expect(html).toContain('type="button"');
   });
 
   it("renders the active badge and header action buttons for actionable threads", () => {

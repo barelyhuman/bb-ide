@@ -922,7 +922,7 @@ export function createThreadRoutes(
             mergeBaseBranch,
             parentThreadId,
           });
-          return c.json(updated);
+          return c.json(hydrateThread(updated));
         } catch (err) {
           return sendRouteError(c, err);
         }
@@ -1121,7 +1121,7 @@ export function createThreadRoutes(
           return sendRouteError(c, threadNotFoundError(threadId));
         }
         const updated = threadManager.markRead(threadId);
-        return c.json(updated);
+        return c.json(hydrateThread(updated));
       } catch (err) {
         return sendRouteError(c, err);
       }
@@ -1134,7 +1134,7 @@ export function createThreadRoutes(
           return sendRouteError(c, threadNotFoundError(threadId));
         }
         const updated = threadManager.markUnread(threadId);
-        return c.json(updated);
+        return c.json(hydrateThread(updated));
       } catch (err) {
         return sendRouteError(c, err);
       }

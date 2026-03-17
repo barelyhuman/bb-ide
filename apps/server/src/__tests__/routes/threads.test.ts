@@ -424,6 +424,42 @@ describe("Thread routes", () => {
       });
     });
 
+    it("hydrates updated threads with attached environments", async () => {
+      const dbThread = createTestThread(repos.threadRepo, project.id);
+      const updatedThread = makeThread({ id: dbThread.id, mergeBaseBranch: "release/1.0" });
+      threadManager.getById.mockReturnValue(makeThread({ id: dbThread.id }));
+      threadManager.updateThread.mockReturnValue(updatedThread);
+
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
+      threadEnvironmentAttachmentRepo.attachThread({
+        threadId: dbThread.id,
+        environmentId: env.id,
+      });
+
+      const res = await app.request(`/threads/${dbThread.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mergeBaseBranch: "release/1.0" }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        id: dbThread.id,
+        attachedEnvironment: {
+          id: env.id,
+        },
+      });
+    });
+
     it("allows clearing the persisted merge-base branch override", async () => {
       const updatedThread = makeThread({ mergeBaseBranch: undefined });
       threadManager.getById.mockReturnValue(makeThread({ mergeBaseBranch: "release/1.0" }));
@@ -2117,6 +2153,41 @@ describe("Thread routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(updatedThread);
       expect(threadManager.markRead).toHaveBeenCalledWith("thread-1");
+    });
+
+    it("hydrates the read response with attached environment", async () => {
+      const dbThread = createTestThread(repos.threadRepo, project.id);
+      const thread = makeThread({ id: dbThread.id, lastReadAt: 1000, updatedAt: 2000 });
+      const updatedThread = makeThread({ id: dbThread.id, lastReadAt: 2000, updatedAt: 2000 });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.markRead as ReturnType<typeof vi.fn>).mockReturnValue(updatedThread);
+
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
+      threadEnvironmentAttachmentRepo.attachThread({
+        threadId: dbThread.id,
+        environmentId: env.id,
+      });
+
+      const res = await app.request(`/threads/${dbThread.id}/read`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        id: dbThread.id,
+        attachedEnvironment: {
+          id: env.id,
+        },
+      });
     });
 
     it("returns 404 when thread not found", async () => {
