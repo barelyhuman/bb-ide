@@ -267,6 +267,7 @@ export function createServer(deps: ServerDeps) {
     getHealthReport: createSystemHealthReporter({
       projectRepo: deps.projectRepo,
       threadRepo: deps.threadRepo,
+      environmentAgentSessionRepo: deps.environmentAgentSessionRepo,
       getRunningCount: () => threadManager.getRunningCount(),
       startTime,
       dbPath: deps.dbPath,

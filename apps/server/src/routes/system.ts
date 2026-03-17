@@ -233,6 +233,10 @@ export function createSystemRoutes(
             active: threads.filter((thread) => thread.status === "active").length,
             idle: threads.filter((thread) => thread.status === "idle").length,
           },
+          environmentAgent: {
+            activeSessionCount: 0,
+            activeSessions: [],
+          },
           storage: {
             totalBytes: 0,
             buckets: [],

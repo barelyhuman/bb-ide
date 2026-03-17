@@ -319,12 +319,49 @@ export interface SystemHealthThreadCounts {
   idle: number;
 }
 
+export interface SystemHealthEnvironmentAgentWorker {
+  name: string;
+  version: string;
+  buildId?: string;
+}
+
+export interface SystemHealthEnvironmentAgentProvider {
+  providerId: string;
+  adapterVersion: string;
+}
+
+export interface SystemHealthEnvironmentAgentSelectedCapabilities {
+  workerMetadata: boolean;
+  providerMetadata: boolean;
+}
+
+export interface SystemHealthEnvironmentAgentSession {
+  sessionId: string;
+  threadId: string;
+  environmentId?: string;
+  agentId: string;
+  agentInstanceId: string;
+  protocolVersion: number;
+  worker?: SystemHealthEnvironmentAgentWorker;
+  providers?: SystemHealthEnvironmentAgentProvider[];
+  selectedCapabilities?: SystemHealthEnvironmentAgentSelectedCapabilities;
+  controlBaseUrl?: string;
+  leaseExpiresAt: number;
+  lastHeartbeatAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface SystemHealthReport {
   generatedAt: number;
   uptime: number;
   projectCount: number;
   runningThreads: number;
   threadCounts: SystemHealthThreadCounts;
+  environmentAgent: {
+    activeSessionCount: number;
+    activeSessions: SystemHealthEnvironmentAgentSession[];
+  };
   storage: {
     totalBytes: number;
     disk?: SystemHealthDiskSummary;

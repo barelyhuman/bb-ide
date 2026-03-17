@@ -172,6 +172,35 @@ describe("System routes", () => {
           active: 1,
           idle: 2,
         },
+        environmentAgent: {
+          activeSessionCount: 1,
+          activeSessions: [
+            {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              agentId: "environment-agent:thread-1",
+              agentInstanceId: "instance-1",
+              protocolVersion: 1,
+              worker: {
+                name: "environment-daemon",
+                version: "0.0.1",
+              },
+              providers: [
+                {
+                  providerId: "codex",
+                  adapterVersion: "0.0.1",
+                },
+              ],
+              selectedCapabilities: {
+                workerMetadata: true,
+                providerMetadata: true,
+              },
+              leaseExpiresAt: 1_700_000_045_000,
+              createdAt: 1_700_000_000_000,
+              updatedAt: 1_700_000_001_000,
+            },
+          ],
+        },
         storage: {
           totalBytes: 4096,
           buckets: [
@@ -203,6 +232,35 @@ describe("System routes", () => {
           error: 0,
           active: 1,
           idle: 2,
+        },
+        environmentAgent: {
+          activeSessionCount: 1,
+          activeSessions: [
+            {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              agentId: "environment-agent:thread-1",
+              agentInstanceId: "instance-1",
+              protocolVersion: 1,
+              worker: {
+                name: "environment-daemon",
+                version: "0.0.1",
+              },
+              providers: [
+                {
+                  providerId: "codex",
+                  adapterVersion: "0.0.1",
+                },
+              ],
+              selectedCapabilities: {
+                workerMetadata: true,
+                providerMetadata: true,
+              },
+              leaseExpiresAt: 1_700_000_045_000,
+              createdAt: 1_700_000_000_000,
+              updatedAt: 1_700_000_001_000,
+            },
+          ],
         },
         storage: {
           totalBytes: 4096,

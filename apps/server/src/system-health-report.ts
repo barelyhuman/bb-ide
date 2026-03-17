@@ -9,13 +9,21 @@ import { basename, dirname, join, resolve } from "node:path";
 import { expandHomeDirectory, resolveBbRoot } from "@bb/core/storage-paths";
 import { type Project, type Thread } from "@bb/core";
 import type {
+  SystemHealthEnvironmentAgentProvider,
+  SystemHealthEnvironmentAgentSelectedCapabilities,
+  SystemHealthEnvironmentAgentSession,
   SystemHealthDiskSummary,
   SystemHealthReport,
   SystemHealthStorageBucket,
   SystemHealthStorageBucketKey,
   SystemHealthThreadCounts,
 } from "@bb/core";
-import type { ProjectRepository, ThreadRepository } from "@bb/db";
+import type {
+  EnvironmentAgentSessionRecord,
+  EnvironmentAgentSessionRepository,
+  ProjectRepository,
+  ThreadRepository,
+} from "@bb/db";
 import {
   resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
@@ -24,6 +32,7 @@ import {
 export interface CreateSystemHealthReporterArgs {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
+  environmentAgentSessionRepo: EnvironmentAgentSessionRepository;
   getRunningCount: () => number;
   startTime: number;
   dbPath: string;
@@ -149,6 +158,69 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
   };
 }
 
+function isProviderMetadataArray(
+  value: unknown,
+): value is SystemHealthEnvironmentAgentProvider[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.providerId === "string" &&
+        typeof item.adapterVersion === "string",
+    )
+  );
+}
+
+function isSelectedCapabilities(
+  value: unknown,
+): value is SystemHealthEnvironmentAgentSelectedCapabilities {
+  const candidate = value as {
+    workerMetadata?: unknown;
+    providerMetadata?: unknown;
+  } | null;
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    typeof candidate.workerMetadata === "boolean" &&
+    typeof candidate.providerMetadata === "boolean"
+  );
+}
+
+function toEnvironmentAgentSessionSummary(
+  session: EnvironmentAgentSessionRecord,
+): SystemHealthEnvironmentAgentSession {
+  return {
+    sessionId: session.id,
+    threadId: session.threadId,
+    ...(session.environmentId ? { environmentId: session.environmentId } : {}),
+    agentId: session.agentId,
+    agentInstanceId: session.agentInstanceId,
+    protocolVersion: session.protocolVersion,
+    ...(session.workerName && session.workerVersion
+      ? {
+          worker: {
+            name: session.workerName,
+            version: session.workerVersion,
+            ...(session.workerBuildId ? { buildId: session.workerBuildId } : {}),
+          },
+        }
+      : {}),
+    ...(isProviderMetadataArray(session.providerMetadata)
+      ? { providers: session.providerMetadata }
+      : {}),
+    ...(isSelectedCapabilities(session.selectedCapabilities)
+      ? { selectedCapabilities: session.selectedCapabilities }
+      : {}),
+    ...(session.controlBaseUrl ? { controlBaseUrl: session.controlBaseUrl } : {}),
+    leaseExpiresAt: session.leaseExpiresAt,
+    ...(session.lastHeartbeatAt ? { lastHeartbeatAt: session.lastHeartbeatAt } : {}),
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
 function resolveWorktreeBucketPaths(
   projects: readonly Pick<Project, "id" | "rootPath">[],
   runtimeEnv: NodeJS.ProcessEnv,
@@ -177,6 +249,7 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
   return (): SystemHealthReport => {
     const projects = args.projectRepo.list();
     const threads = args.threadRepo.list({ includeArchived: true });
+    const activeEnvironmentAgentSessions = args.environmentAgentSessionRepo.listActive();
     const bbRoot = resolveBbRoot(args.runtimeEnv);
     const buckets = [
       buildStorageBucket("database", [args.dbPath]),
@@ -198,6 +271,12 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
       projectCount: projects.length,
       runningThreads: args.getRunningCount(),
       threadCounts: buildThreadCounts(threads),
+      environmentAgent: {
+        activeSessionCount: activeEnvironmentAgentSessions.length,
+        activeSessions: activeEnvironmentAgentSessions.map(
+          toEnvironmentAgentSessionSummary,
+        ),
+      },
       storage: {
         totalBytes,
         disk: resolveDiskSummary(diskPath),
