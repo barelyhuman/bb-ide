@@ -1,14 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createProviderEventEnvelope, type Thread } from "@bb/core";
+import {
+  createProviderEventEnvelope,
+  decodeThreadEventData,
+  type Thread,
+} from "@bb/core";
 import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
+  EnvironmentRepository,
   EnvironmentAgentSessionRepository,
   EventRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import {
@@ -187,6 +193,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
   let projects: ProjectRepository;
   let threads: ThreadRepository;
   let events: EventRepository;
+  let environments: EnvironmentRepository;
+  let attachments: ThreadEnvironmentAttachmentRepository;
   let sessions: EnvironmentAgentSessionRepository;
   let cursors: EnvironmentAgentCursorRepository;
   let commands: EnvironmentAgentCommandRepository;
@@ -201,6 +209,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     projects = new ProjectRepository(db);
     threads = new ThreadRepository(db);
     events = new EventRepository(db);
+    environments = new EnvironmentRepository(db);
+    attachments = new ThreadEnvironmentAttachmentRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     cursors = new EnvironmentAgentCursorRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
@@ -210,9 +220,14 @@ describe("environment-agent session orchestrator roundtrip", () => {
       close: vi.fn(),
     } as unknown as WSManager;
 
+    const resolveEnvironmentId = (threadId: string) =>
+      attachments.getByThreadId(threadId)?.environmentId ??
+      threads.getById(threadId)?.environmentId;
+
     const sessionManager = new EnvironmentAgentSessionManager(sessions);
     const commandDispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId,
     });
     let threadManager!: Orchestrator;
     const eventApplier = new EnvironmentAgentEventApplier(cursors, {
@@ -232,6 +247,11 @@ describe("environment-agent session orchestrator roundtrip", () => {
           session.closeReason,
         );
       },
+      resolveEnvironmentId,
+      listAttachedThreadIds: (environmentId) =>
+        attachments
+          .listByEnvironmentId(environmentId)
+          .map((attachment) => attachment.threadId),
     });
     threadManager = new Orchestrator(
       threads,
@@ -251,6 +271,9 @@ describe("environment-agent session orchestrator roundtrip", () => {
       undefined,
       commandDispatcher,
       sessionService,
+      undefined,
+      environments,
+      attachments,
     );
     orchestrator = threadManager;
     (orchestrator as unknown as {
@@ -281,19 +304,49 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
   }
 
-  function createThread(status: "created" | "idle" | "active" = "idle"): string {
-    const project = createProject();
-    const thread = threads.create({ projectId: project.id });
-    threads.update(thread.id, { status });
+  function createThread(
+    status: "created" | "idle" | "active" = "idle",
+    opts?: {
+      projectId?: string;
+      providerId?: "codex" | "claude-code" | "pi";
+      environmentId?: string;
+    },
+  ): string {
+    const projectId = opts?.projectId ?? createProject().id;
+    const thread = threads.create({
+      projectId,
+      ...(opts?.providerId ? { providerId: opts.providerId } : {}),
+      ...(opts?.environmentId ? { environmentId: opts.environmentId } : {}),
+    });
+    threads.update(thread.id, {
+      status,
+    });
     return thread.id;
   }
 
-  function openSession(threadId: string): string {
+  function openSession(threadId: string, channelIds: string[] = [threadId]): string {
     return sessionService.openSession({
       threadId,
-      payload: makeOpenPayload(threadId),
+      payload: {
+        ...makeOpenPayload(threadId),
+        channels: channelIds.map((channelId) => ({
+          channelId,
+          generation: 1,
+        })),
+      },
       now: 1_000,
     }).session.id;
+  }
+
+  function createSharedEnvironment(projectId: string, pathSuffix: string): string {
+    return environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: `/tmp/${pathSuffix}`,
+      },
+      managed: true,
+    }).id;
   }
 
   function installRuntime(threadId: string, rootPath = "/tmp/session-orchestrator-project"): void {
@@ -407,6 +460,108 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
   }
 
+  async function completeNextCommand(args: {
+    sessionThreadId: string;
+    sessionId: string;
+    afterCursor?: number;
+    channelId?: string;
+    commandType?: string;
+    result?: unknown;
+    state?: "completed" | "failed";
+    errorCode?: string;
+    errorMessage?: string;
+  }): Promise<{
+    channelId: string;
+    commandId: string;
+    commandCursor: number;
+    command: Record<string, unknown>;
+  }> {
+    let commandEnvelope:
+      | (ReturnType<typeof sessionService.listCommands>["payload"]["commands"][number])
+      | undefined;
+
+    await vi.waitFor(() => {
+      const batch = sessionService.listCommands({
+        threadId: args.sessionThreadId,
+        sessionId: args.sessionId,
+        afterCursor: args.afterCursor ?? 0,
+        limit: 20,
+        now: 2_000,
+      });
+      commandEnvelope = batch.payload.commands.find((candidate) => {
+        if (args.channelId && candidate.channelId !== args.channelId) {
+          return false;
+        }
+        if (args.commandType && candidate.command.type !== args.commandType) {
+          return false;
+        }
+        return true;
+      });
+      expect(commandEnvelope).toBeDefined();
+    });
+
+    const envelope = commandEnvelope!;
+    sessionService.recordCommandAck({
+      threadId: args.sessionThreadId,
+      sessionId: args.sessionId,
+      payload: {
+        commands: [
+          {
+            commandId: envelope.commandId,
+            channelId: envelope.channelId,
+            state: "received",
+          },
+        ],
+      },
+      now: 2_100,
+    });
+
+    const state = args.state ?? "completed";
+    sessionService.recordCommandResult({
+      threadId: args.sessionThreadId,
+      sessionId: args.sessionId,
+      payload:
+        state === "completed"
+          ? {
+              channelId: envelope.channelId,
+              commandId: envelope.commandId,
+              state,
+              ...(args.result !== undefined ? { result: args.result } : {}),
+            }
+          : {
+              channelId: envelope.channelId,
+              commandId: envelope.commandId,
+              state,
+              ...(args.errorCode !== undefined ? { errorCode: args.errorCode } : {}),
+              ...(args.errorMessage !== undefined ? { errorMessage: args.errorMessage } : {}),
+            },
+      now: 2_200,
+    });
+
+    return {
+      channelId: envelope.channelId,
+      commandId: envelope.commandId,
+      commandCursor: envelope.commandCursor,
+      command: envelope.command as Record<string, unknown>,
+    };
+  }
+
+  function latestAgentMessageText(threadId: string): string | undefined {
+    for (const event of [...events.listByThread(threadId)].reverse()) {
+      if (event.type !== "item/completed") {
+        continue;
+      }
+      const decoded = decodeThreadEventData(event.data);
+      if (decoded.item?.normalizedType !== "agentmessage") {
+        continue;
+      }
+      if (decoded.item.text.text) {
+        return decoded.item.text.text;
+      }
+    }
+    return undefined;
+  }
+
   it("applies session event batches into orchestrator thread state", async () => {
     const threadId = createThread("idle");
     const sessionId = openSession(threadId);
@@ -458,6 +613,230 @@ describe("environment-agent session orchestrator roundtrip", () => {
       generation: 1,
       sequence: 2,
     });
+  });
+
+  it("drives deterministic shared-session multi-provider interleaving without crossing thread state", async () => {
+    const project = createProject();
+    const environmentId = createSharedEnvironment(project.id, "session-orchestrator-shared-env");
+    const codexThreadId = createThread("idle", {
+      projectId: project.id,
+      providerId: "codex",
+      environmentId,
+    });
+    const claudeThreadId = createThread("idle", {
+      projectId: project.id,
+      providerId: "claude-code",
+      environmentId,
+    });
+    attachments.attachThread({ threadId: codexThreadId, environmentId });
+    attachments.attachThread({ threadId: claudeThreadId, environmentId });
+    installRuntime(codexThreadId, "/tmp/session-orchestrator-shared-env");
+    installRuntime(claudeThreadId, "/tmp/session-orchestrator-shared-env");
+
+    const sessionId = openSession(codexThreadId, [codexThreadId, claudeThreadId]);
+
+    events.create({
+      threadId: codexThreadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "codex",
+        method: "thread/started",
+        payload: {
+          thread: { id: "shared-provider-thread" },
+        },
+      }),
+    });
+    events.create({
+      threadId: claudeThreadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "claude-code",
+        method: "thread/started",
+        payload: {
+          thread: { id: "shared-provider-thread" },
+        },
+      }),
+    });
+
+    const sequenceByThreadId = new Map<string, number>([
+      [codexThreadId, 0],
+      [claudeThreadId, 0],
+    ]);
+
+    async function emitTurnLifecycle(
+      threadId: string,
+      providerText: string,
+      turnId: string,
+    ): Promise<void> {
+      const nextSequence = (sequenceByThreadId.get(threadId) ?? 0) + 1;
+      sequenceByThreadId.set(threadId, nextSequence);
+      await applyProviderEvent({
+        threadId,
+        sessionId,
+        sequence: nextSequence,
+        method: "turn/started",
+        payload: { turnId },
+      });
+
+      const itemSequence = nextSequence + 1;
+      sequenceByThreadId.set(threadId, itemSequence);
+      await applyProviderEvent({
+        threadId,
+        sessionId,
+        sequence: itemSequence,
+        method: "item/completed",
+        payload: {
+          item: {
+            type: "agentMessage",
+            text: providerText,
+          },
+        },
+      });
+
+      const completedSequence = itemSequence + 1;
+      sequenceByThreadId.set(threadId, completedSequence);
+      await applyProviderEvent({
+        threadId,
+        sessionId,
+        sequence: completedSequence,
+        method: "turn/completed",
+        payload: { turnId },
+      });
+    }
+
+    async function driveFollowUp(args: {
+      threadId: string;
+      providerId: "codex" | "claude-code";
+      input: string;
+      output: string;
+      turnId: string;
+    }): Promise<void> {
+      const tellPromise = orchestrator.tell(args.threadId, {
+        input: [{ type: "text", text: args.input }],
+      });
+
+      const ensureForResume = await completeNextCommand({
+        sessionThreadId: codexThreadId,
+        sessionId,
+        channelId: args.threadId,
+        commandType: "provider.ensure",
+        result: { running: true, launched: true, pid: 123 },
+      });
+      expect(ensureForResume.command).toMatchObject({
+        type: "provider.ensure",
+        providerId: args.providerId,
+        context: expect.objectContaining({ threadId: args.threadId }),
+      });
+
+      const resume = await completeNextCommand({
+        sessionThreadId: codexThreadId,
+        sessionId,
+        afterCursor: ensureForResume.commandCursor,
+        channelId: args.threadId,
+        commandType: "thread.resume",
+        result: { threadId: "shared-provider-thread" },
+      });
+      expect(resume.command).toMatchObject({
+        type: "thread.resume",
+        threadId: args.threadId,
+        providerThreadId: "shared-provider-thread",
+      });
+
+      const ensureForTurn = await completeNextCommand({
+        sessionThreadId: codexThreadId,
+        sessionId,
+        afterCursor: resume.commandCursor,
+        channelId: args.threadId,
+        commandType: "provider.ensure",
+        result: { running: true, launched: true, pid: 123 },
+      });
+      expect(ensureForTurn.command).toMatchObject({
+        type: "provider.ensure",
+        providerId: args.providerId,
+        context: expect.objectContaining({ threadId: args.threadId }),
+      });
+
+      const turnRun = await completeNextCommand({
+        sessionThreadId: codexThreadId,
+        sessionId,
+        afterCursor: ensureForTurn.commandCursor,
+        channelId: args.threadId,
+        commandType: "turn.run",
+        result: { ok: true },
+      });
+      expect(turnRun.command).toMatchObject({
+        type: "turn.run",
+        threadId: args.threadId,
+        providerThreadId: "shared-provider-thread",
+      });
+
+      await emitTurnLifecycle(args.threadId, args.output, args.turnId);
+      await tellPromise;
+      expect(threads.getById(args.threadId)?.status).toBe("idle");
+      expect(latestAgentMessageText(args.threadId)).toBe(args.output);
+      expect(events.listByThread(args.threadId).map((event) => event.type)).not.toContain(
+        "system/error",
+      );
+    }
+
+    await driveFollowUp({
+      threadId: codexThreadId,
+      providerId: "codex",
+      input: "A-1",
+      output: "A-FOLLOWUP-1",
+      turnId: "codex-turn-1",
+    });
+    await driveFollowUp({
+      threadId: claudeThreadId,
+      providerId: "claude-code",
+      input: "B-1",
+      output: "B-FOLLOWUP-1",
+      turnId: "claude-turn-1",
+    });
+    await driveFollowUp({
+      threadId: codexThreadId,
+      providerId: "codex",
+      input: "A-2",
+      output: "A-FOLLOWUP-2",
+      turnId: "codex-turn-2",
+    });
+    await driveFollowUp({
+      threadId: claudeThreadId,
+      providerId: "claude-code",
+      input: "B-2",
+      output: "B-FOLLOWUP-2",
+      turnId: "claude-turn-2",
+    });
+
+    orchestrator.stop(codexThreadId);
+    expect(threads.getById(codexThreadId)?.status).toBe("idle");
+    expect(sessions.getActiveByEnvironmentId(environmentId, TEST_LEASE_NOW)?.id).toBe(sessionId);
+
+    await driveFollowUp({
+      threadId: claudeThreadId,
+      providerId: "claude-code",
+      input: "B-3",
+      output: "B-AFTER-STOP",
+      turnId: "claude-turn-3",
+    });
+    await driveFollowUp({
+      threadId: codexThreadId,
+      providerId: "codex",
+      input: "A-3",
+      output: "A-RETURN",
+      turnId: "codex-turn-3",
+    });
+
+    expect(latestAgentMessageText(codexThreadId)).toBe("A-RETURN");
+    expect(latestAgentMessageText(claudeThreadId)).toBe("B-AFTER-STOP");
+    expect(events.listByThread(codexThreadId).some((event) =>
+      JSON.stringify(event.data).includes("B-AFTER-STOP"),
+    )).toBe(false);
+    expect(events.listByThread(claudeThreadId).some((event) =>
+      JSON.stringify(event.data).includes("A-RETURN"),
+    )).toBe(false);
   });
 
   it("reports session-backed status from cursors and queued commands", async () => {
@@ -572,6 +951,9 @@ describe("environment-agent session orchestrator roundtrip", () => {
       input: [{ type: "text", text: "Implement the feature" }],
     });
     const threadId = thread.id;
+    await vi.waitFor(() => {
+      expect(attachments.getByThreadId(threadId)?.environmentId).toBeTruthy();
+    });
     const sessionId = openSession(threadId);
 
     await vi.waitFor(() => {
@@ -1274,6 +1656,9 @@ describe("environment-agent session orchestrator roundtrip", () => {
       input: [{ type: "text", text: "Break immediately" }],
     });
     const threadId = thread.id;
+    await vi.waitFor(() => {
+      expect(attachments.getByThreadId(threadId)?.environmentId).toBeTruthy();
+    });
     const sessionId = openSession(threadId);
 
     await vi.waitFor(() => {
