@@ -9,13 +9,22 @@ import type {
 } from "./session-sync.js";
 import type { EnvironmentAgentSessionControlEndpoint } from "./session-protocol.js";
 import type { EnvironmentAgentSessionProviderResponsePayload } from "./session-protocol.js";
+import type {
+  EnvironmentAgentSessionProviderMetadata,
+  EnvironmentAgentSessionProtocolVersion,
+  EnvironmentAgentSessionWorkerMetadata,
+} from "./session-protocol.js";
+import { ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
 
 export interface EnvironmentAgentSessionSupervisorOptions {
   threadId: string;
   runtime: EnvironmentAgentRuntime;
   sessionRuntime: EnvironmentAgentSessionRuntime;
   sessionSync: EnvironmentAgentSessionSync;
+  supportedProtocolVersions?: readonly EnvironmentAgentSessionProtocolVersion[];
   controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
+  workerMetadata?: EnvironmentAgentSessionWorkerMetadata;
+  providerMetadata?: EnvironmentAgentSessionProviderMetadata[];
   agentId?: string;
   agentInstanceId?: string;
   pollIntervalMs?: number;
@@ -75,6 +84,7 @@ export class EnvironmentAgentSessionSupervisor {
   private readonly pollIntervalMs: number;
   private readonly commandBatchLimit: number;
   private readonly eventFlushDebounceMs: number;
+  private readonly supportedProtocolVersions: readonly EnvironmentAgentSessionProtocolVersion[];
   private readonly onError?: (error: unknown) => void;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
   private eventFlushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -94,6 +104,9 @@ export class EnvironmentAgentSessionSupervisor {
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
     this.eventFlushDebounceMs =
       options.eventFlushDebounceMs ?? DEFAULT_EVENT_FLUSH_DEBOUNCE_MS;
+    this.supportedProtocolVersions =
+      options.supportedProtocolVersions ??
+      ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS;
     this.onError = options.onError;
 
     this.options.sessionRuntime.initializeThread({
@@ -200,7 +213,9 @@ export class EnvironmentAgentSessionSupervisor {
       payload: {
         agentId: this.agentId,
         agentInstanceId: this.agentInstanceId,
-        supportedProtocolVersions: [1],
+        supportedProtocolVersions: [...this.supportedProtocolVersions],
+        ...(this.options.workerMetadata ? { worker: this.options.workerMetadata } : {}),
+        ...(this.options.providerMetadata ? { providers: this.options.providerMetadata } : {}),
         ...(this.options.controlEndpoint
           ? { controlEndpoint: this.options.controlEndpoint }
           : {}),

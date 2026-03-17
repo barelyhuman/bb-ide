@@ -23,6 +23,7 @@ describe("environment-agent service config", () => {
         BB_THREAD_ID: "thread-1",
         BB_PROJECT_ID: "project-1",
         BB_ENVIRONMENT_ID: "docker",
+        BB_THREAD_PROVIDER_ID: "codex",
         BB_ROOT: "/tmp/bb-root",
         BB_DAEMON_URL: "http://127.0.0.1:9000",
         BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
@@ -62,6 +63,16 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 250,
         commandBatchLimit: 50,
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+        },
+        providers: [
+          {
+            providerId: "codex",
+            adapterVersion: "0.0.1",
+          },
+        ],
       },
     });
   });
@@ -178,6 +189,10 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 10_000,
         commandBatchLimit: 10,
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+        },
       },
     });
 

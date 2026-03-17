@@ -78,6 +78,17 @@ const environmentAgentSessionOpenBodySchema = z.object({
   agentId: z.string().min(1),
   agentInstanceId: z.string().min(1),
   supportedProtocolVersions: z.array(z.number().int()).min(1),
+  worker: z.object({
+    name: z.string().min(1),
+    version: z.string().min(1),
+    buildId: z.string().min(1).optional(),
+  }).optional(),
+  providers: z.array(
+    z.object({
+      providerId: z.string().min(1),
+      adapterVersion: z.string().min(1),
+    }),
+  ).optional(),
   controlEndpoint: z.object({
     baseUrl: z.string().url(),
     authToken: z.string().min(1),
@@ -354,6 +365,15 @@ function toEnvironmentAgentSessionDebugView(
     agentId: session.agentId,
     agentInstanceId: session.agentInstanceId,
     protocolVersion: session.protocolVersion,
+    ...(session.workerName ? { workerName: session.workerName } : {}),
+    ...(session.workerVersion ? { workerVersion: session.workerVersion } : {}),
+    ...(session.workerBuildId ? { workerBuildId: session.workerBuildId } : {}),
+    ...(session.providerMetadata !== undefined
+      ? { providerMetadata: session.providerMetadata }
+      : {}),
+    ...(session.selectedCapabilities !== undefined
+      ? { selectedCapabilities: session.selectedCapabilities }
+      : {}),
     status: session.status,
     leaseExpiresAt: session.leaseExpiresAt,
     ...(session.lastHeartbeatAt !== undefined

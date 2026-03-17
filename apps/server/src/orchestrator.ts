@@ -3973,6 +3973,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
       runtimeEnv: {
         ...this.runtimeEnv,
+        ...(thread?.providerId ? { BB_THREAD_PROVIDER_ID: thread.providerId } : {}),
         ...(attachedEnvironmentId
           ? { BB_ENVIRONMENT_ID: attachedEnvironmentId }
           : {}),

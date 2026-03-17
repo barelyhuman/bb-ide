@@ -15,6 +15,10 @@ import { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
 import { createEnvironmentAgentSessionHttpClientFromConnection } from "./session-http-client.js";
 import { EnvironmentAgentSessionSync } from "./session-sync.js";
 import { EnvironmentAgentSessionSupervisor } from "./session-supervisor.js";
+import type {
+  EnvironmentAgentSessionProviderMetadata,
+  EnvironmentAgentSessionWorkerMetadata,
+} from "./session-protocol.js";
 
 export interface EnvironmentAgentServiceCliOptions {
   providerCommand?: string;
@@ -44,6 +48,8 @@ export interface EnvironmentAgentServiceOptions {
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
+    worker: EnvironmentAgentSessionWorkerMetadata;
+    providers?: EnvironmentAgentSessionProviderMetadata[];
   };
 }
 
@@ -53,6 +59,9 @@ const BB_ENV_DAEMON_CONTROL_BASE_URL =
   "BB_ENV_DAEMON_CONTROL_BASE_URL";
 const BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS =
   "BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS";
+const BB_THREAD_PROVIDER_ID = "BB_THREAD_PROVIDER_ID";
+const BB_ENV_DAEMON_BUILD_ID = "BB_ENV_DAEMON_BUILD_ID";
+const ENVIRONMENT_AGENT_VERSION = "0.0.1";
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -124,6 +133,21 @@ export function resolveEnvironmentAgentServiceOptions(args: {
           args.env[BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS],
         ) ?? 250,
       commandBatchLimit: 50,
+      worker: {
+        name: "environment-daemon",
+        version: ENVIRONMENT_AGENT_VERSION,
+        ...(args.env[BB_ENV_DAEMON_BUILD_ID]?.trim()
+          ? { buildId: args.env[BB_ENV_DAEMON_BUILD_ID]!.trim() }
+          : {}),
+      },
+      providers: args.env[BB_THREAD_PROVIDER_ID]?.trim()
+        ? [
+            {
+              providerId: args.env[BB_THREAD_PROVIDER_ID]!.trim(),
+              adapterVersion: ENVIRONMENT_AGENT_VERSION,
+            },
+          ]
+        : undefined,
     },
   };
 }
@@ -220,6 +244,8 @@ export async function startEnvironmentAgentService(
         runtime,
         sessionRuntime,
         sessionSync,
+        workerMetadata: options.session.worker,
+        providerMetadata: options.session.providers,
         controlEndpoint: options.control.endpoint,
         pollIntervalMs: options.session.pollIntervalMs,
         commandBatchLimit: options.session.commandBatchLimit,

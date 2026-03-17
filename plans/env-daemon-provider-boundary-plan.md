@@ -4,6 +4,8 @@
 
 Shift provider-specific runtime ownership out of the server and into `@bb/environment-daemon`, so the server speaks one BB-specific, provider-agnostic protocol to env-daemons. The end state should let old and new managed environments continue to work across provider/runtime upgrades as long as their env-daemon can still negotiate and satisfy the BB protocol.
 
+Treat future cross-machine deployment as a hard design constraint now: the server and env-daemon must be able to run on different machines with independent versioning, restart behavior, and network reachability.
+
 ## Scope
 
 ### What changes
@@ -13,6 +15,7 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
   - `packages/agent-server`
   - `packages/environment-daemon`
 - Define a BB-native env-daemon command/event protocol with explicit capability and version negotiation.
+- Treat the server <-> env-daemon seam as a real network boundary rather than a same-machine implementation detail.
 - Move provider command construction, provider event normalization, and provider compatibility logic into env-daemon.
 - Introduce an env-daemon compatibility strategy for:
   - BB protocol version skew
@@ -33,7 +36,7 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
 
 - Replacing the current environment model (`local`, `worktree`, `docker`).
 - Redesigning manager threads or project/thread UX.
-- Full cross-machine remote execution support.
+- Full cross-machine remote execution productization. The protocol and ownership model should be designed for it now, but this plan does not include building remote scheduling, auth, or fleet management.
 - Making old env-daemons support arbitrary future BB features forever; the plan should define bounded compatibility, not infinite compatibility.
 
 ## Implementation Steps
@@ -44,6 +47,7 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
    - **Server** owns durable orchestration, queueing, lifecycle, recovery decisions, projections, and user-facing APIs.
    - **Env-daemon** owns provider adapter selection, provider process lifecycle, provider thread/session lifecycle, provider event normalization, and provider-version compatibility handling.
    - **Environment implementations** own env-daemon placement, launch, upgrade/replacement, and runtime reachability.
+   - **Server <-> env-daemon** communication must remain valid across machine boundaries with no reliance on shared process state or shared filesystem access.
 
 2. Define the new package roles:
    - `packages/environment-daemon`: smart per-thread worker runtime and BB protocol endpoint.
@@ -84,6 +88,11 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
    - event batch
    - session replaced/closed
 
+6. Design protocol payloads and semantics so they survive remote deployment:
+   - no assumptions that server-visible paths are valid on the env-daemon host
+   - no reliance on local process identity outside the env-daemon machine
+   - explicit reconnect/session replacement behavior after network partitions
+
 ### Phase 3: Add explicit capability and version negotiation
 
 1. Expand session open negotiation beyond a single protocol version integer.
@@ -107,12 +116,14 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
    - env-daemon BB protocol version range
    - provider adapter compatibility range
    - provider runtime/CLI version constraints when detectable
+   - remote deployment assumptions that must hold regardless of whether server and env-daemon share a host
 
 5. Make negotiation failure explicit and recoverable:
    - `bb_protocol_incompatible`
    - `provider_adapter_missing`
    - `provider_adapter_incompatible`
    - `provider_runtime_unsupported`
+   - `env_daemon_unreachable` / `session_replaced` recovery paths that are normal operational cases rather than fatal edge cases
 
 ### Phase 4: Version the provider adapters inside env-daemon
 
@@ -188,6 +199,10 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
 
 6. Add explicit recovery hooks so replacement is not treated as an exceptional path. It should be a normal branch of startup/session recovery.
 
+7. Keep replacement semantics compatible with future remote deployment:
+   - replacement may mean connecting to a newly launched env-daemon on another host, not just restarting a local sidecar
+   - session identity must be decoupled from local PID/process assumptions
+
 ### Phase 7: Define compatibility guarantees for old and new environments
 
 1. Adopt a bounded support window. Suggested initial policy:
@@ -220,6 +235,7 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
    - protocol compatibility
    - adapter/runtime compatibility
    - replacement recommended vs required
+   - env-daemon host/session identity and reachability state when relevant
 
 3. Improve failure reporting in timelines and system health:
    - make version incompatibility distinct from generic provider startup failure
@@ -237,6 +253,7 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
    - new server with previous env-daemon bundle
    - previous server with new env-daemon bundle where supported
    - env-daemon replacement during startup recovery
+   - reconnect/replacement behavior that does not assume same-machine deployment
 
 3. Add provider-version tests per provider:
    - supported runtime version
@@ -283,3 +300,5 @@ Shift provider-specific runtime ownership out of the server and into `@bb/enviro
 6. **Tool-call ownership boundary**: If provider tool-call decoding/encoding moves fully into env-daemon, the interface back to the server for dynamic tools must stay typed and narrow.
 
 7. **Upgrade timing for shared/local environments**: Replacing env-daemons in BB-managed worktrees is straightforward; replacing sidecars attached to shared local environments may be more failure-prone and needs explicit operational rules.
+
+8. **Same-machine assumptions hidden in current payloads**: Some current command/session fields may implicitly assume shared paths, shared host identity, or same-machine restart behavior and need to be identified early.

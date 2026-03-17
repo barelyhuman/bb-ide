@@ -6,8 +6,10 @@ import type {
 } from "@bb/db";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  selectEnvironmentAgentSessionProtocolVersion,
+  type EnvironmentAgentSessionSelectedCapabilities,
   type EnvironmentAgentSessionCommandAckPayload,
   type EnvironmentAgentSessionCommandBatchMessage,
   type EnvironmentAgentSessionCommandResultPayload,
@@ -203,11 +205,11 @@ export class EnvironmentAgentSessionService {
     welcome: EnvironmentAgentSessionWelcomeMessage;
   } {
     const now = args.now ?? this.clock();
-    if (
-      !args.payload.supportedProtocolVersions.includes(
-        ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-      )
-    ) {
+    const selectedProtocolVersion = selectEnvironmentAgentSessionProtocolVersion({
+      supportedByServer: ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+      supportedByAgent: args.payload.supportedProtocolVersions,
+    });
+    if (selectedProtocolVersion === undefined) {
       throw new Error("No compatible environment-agent session protocol version");
     }
 
@@ -220,12 +222,24 @@ export class EnvironmentAgentSessionService {
       );
     }
     const environmentId = this.getResolvedEnvironmentId(args.threadId);
+    const selectedCapabilities: EnvironmentAgentSessionSelectedCapabilities = {
+      workerMetadata: args.payload.worker !== undefined,
+      providerMetadata:
+        args.payload.providers !== undefined && args.payload.providers.length > 0,
+    };
     const opened = this.sessions.openSession({
       threadId: args.threadId,
       ...(environmentId ? { environmentId } : {}),
       agentId: args.payload.agentId,
       agentInstanceId: args.payload.agentInstanceId,
-      protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+      protocolVersion: selectedProtocolVersion,
+      workerName: args.payload.worker?.name,
+      workerVersion: args.payload.worker?.version,
+      workerBuildId: args.payload.worker?.buildId,
+      ...(args.payload.providers !== undefined
+        ? { providerMetadata: args.payload.providers }
+        : {}),
+      selectedCapabilities,
       controlBaseUrl: args.payload.controlEndpoint?.baseUrl,
       controlAuthToken: args.payload.controlEndpoint?.authToken,
       leaseTtlMs: this.leaseTtlMs,
@@ -250,7 +264,8 @@ export class EnvironmentAgentSessionService {
         payload: {
           leaseTtlMs: this.leaseTtlMs,
           heartbeatIntervalMs: this.heartbeatIntervalMs,
-          protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+          protocolVersion: selectedProtocolVersion,
+          selectedCapabilities,
           channels: this.listAllowedChannelIds(args.threadId).map((channelId) => {
             const bootstrap = bootstrapByChannelId.get(channelId);
             let cursor = this.cursors.getByThreadId(channelId);

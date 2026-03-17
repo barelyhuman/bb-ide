@@ -6,6 +6,7 @@ import {
   isEnvironmentAgentSessionCursor,
   isEnvironmentAgentSessionMessage,
   isEnvironmentAgentSessionServerMessage,
+  selectEnvironmentAgentSessionProtocolVersion,
 } from "./session-protocol.js";
 
 describe("session-protocol", () => {
@@ -52,6 +53,10 @@ describe("session-protocol", () => {
         agentId: "agent-1",
         agentInstanceId: "inst-1",
         supportedProtocolVersions: [1],
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+        },
         channels: [],
       },
     };
@@ -86,5 +91,23 @@ describe("session-protocol", () => {
     expect(isEnvironmentAgentSessionMessage(serverMessage)).toBe(true);
     expect(isEnvironmentAgentSessionServerMessage(serverMessage)).toBe(true);
     expect(isEnvironmentAgentSessionClientMessage(serverMessage)).toBe(false);
+  });
+
+  it("selects the highest mutually supported session protocol version", () => {
+    expect(
+      selectEnvironmentAgentSessionProtocolVersion({
+        supportedByServer: [1],
+        supportedByAgent: [3, 2, 1],
+      }),
+    ).toBe(1);
+  });
+
+  it("returns undefined when no mutually supported session protocol version exists", () => {
+    expect(
+      selectEnvironmentAgentSessionProtocolVersion({
+        supportedByServer: [1],
+        supportedByAgent: [3, 2],
+      }),
+    ).toBeUndefined();
   });
 });

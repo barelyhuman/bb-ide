@@ -6,6 +6,11 @@ import type {
 export const ENVIRONMENT_AGENT_SESSION_PROTOCOL =
   "bb.env-daemon.v1" as const;
 export const ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION = 1 as const;
+export const ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS = [
+  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+] as const;
+export type EnvironmentAgentSessionProtocolVersion =
+  (typeof ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number];
 
 export type EnvironmentAgentSessionCloseReason =
   | "agent_shutdown"
@@ -36,10 +41,28 @@ export interface EnvironmentAgentSessionControlEndpoint {
   authToken: string;
 }
 
+export interface EnvironmentAgentSessionWorkerMetadata {
+  name: string;
+  version: string;
+  buildId?: string;
+}
+
+export interface EnvironmentAgentSessionProviderMetadata {
+  providerId: string;
+  adapterVersion: string;
+}
+
+export interface EnvironmentAgentSessionSelectedCapabilities {
+  workerMetadata: boolean;
+  providerMetadata: boolean;
+}
+
 export interface EnvironmentAgentSessionOpenPayload {
   agentId: string;
   agentInstanceId: string;
   supportedProtocolVersions: number[];
+  worker?: EnvironmentAgentSessionWorkerMetadata;
+  providers?: EnvironmentAgentSessionProviderMetadata[];
   controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   channels: EnvironmentAgentSessionChannelBootstrap[];
 }
@@ -52,8 +75,22 @@ export interface EnvironmentAgentSessionWelcomeChannel {
 export interface EnvironmentAgentSessionWelcomePayload {
   leaseTtlMs: number;
   heartbeatIntervalMs: number;
-  protocolVersion: typeof ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION;
+  protocolVersion: EnvironmentAgentSessionProtocolVersion;
+  selectedCapabilities?: EnvironmentAgentSessionSelectedCapabilities;
   channels: EnvironmentAgentSessionWelcomeChannel[];
+}
+
+export function selectEnvironmentAgentSessionProtocolVersion(args: {
+  supportedByServer: readonly EnvironmentAgentSessionProtocolVersion[];
+  supportedByAgent: readonly number[];
+}): EnvironmentAgentSessionProtocolVersion | undefined {
+  const agentSupportedVersions = new Set(args.supportedByAgent);
+  for (const version of [...args.supportedByServer].sort((a, b) => b - a)) {
+    if (agentSupportedVersions.has(version)) {
+      return version;
+    }
+  }
+  return undefined;
 }
 
 export interface EnvironmentAgentSessionHeartbeatChannel {

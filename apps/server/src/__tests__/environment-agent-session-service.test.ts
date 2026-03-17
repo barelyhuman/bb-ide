@@ -92,6 +92,17 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+          buildId: "build-1",
+        },
+        providers: [
+          {
+            providerId: "codex",
+            adapterVersion: "0.0.1",
+          },
+        ],
         channels: [
           {
             channelId: threadId,
@@ -109,6 +120,19 @@ describe("EnvironmentAgentSessionService", () => {
       threadId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
+      workerName: "environment-daemon",
+      workerVersion: "0.0.1",
+      workerBuildId: "build-1",
+      providerMetadata: [
+        {
+          providerId: "codex",
+          adapterVersion: "0.0.1",
+        },
+      ],
+      selectedCapabilities: {
+        workerMetadata: true,
+        providerMetadata: true,
+      },
       leaseExpiresAt: 47_000,
     });
     expect(opened.welcome).toMatchObject({
@@ -120,6 +144,10 @@ describe("EnvironmentAgentSessionService", () => {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
         protocolVersion: 1,
+        selectedCapabilities: {
+          workerMetadata: true,
+          providerMetadata: true,
+        },
         channels: [
           {
             channelId: threadId,
@@ -161,6 +189,51 @@ describe("EnvironmentAgentSessionService", () => {
         },
       },
     ]);
+  });
+
+  it("accepts a session when the agent offers additional newer protocol versions", () => {
+    const threadId = createThreadId();
+
+    const opened = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [3, 2, 1],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 5,
+          },
+        ],
+      },
+    });
+
+    expect(opened.session.protocolVersion).toBe(1);
+    expect(opened.welcome.payload.protocolVersion).toBe(1);
+  });
+
+  it("rejects a session when there is no mutually supported protocol version", () => {
+    const threadId = createThreadId();
+
+    expect(() =>
+      service.openSession({
+        threadId,
+        now: 2_000,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [3, 2],
+          channels: [
+            {
+              channelId: threadId,
+              generation: 5,
+            },
+          ],
+        },
+      }),
+    ).toThrow("No compatible environment-agent session protocol version");
   });
 
   it("lists only thread-owned history plus the active shared environment session", () => {
