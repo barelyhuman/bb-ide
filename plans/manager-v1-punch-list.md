@@ -122,29 +122,38 @@ Users should be able to `@`-mention managers in thread prompts (especially usefu
 - Mentioning a manager should insert a thread reference token (same format as thread mentions)
 - In manager threads, `@`-mentioning another manager should be a natural way to initiate the `message_agent` flow
 
----
-
-## P1 — Behavioral Quality
-
 ### 6. Prompt quality pass
 
-Validate and improve the manager prompt against the hero workflows.
+Validate and improve the manager prompt against the hero workflows defined in `plans/manager-hero-workflows.md`. If the manager doesn't understand bb, the CLI, and the system model, none of the UI work matters.
 
-**Hero workflows to validate:**
-- **Hatching:** Does the meet-and-greet feel natural? Does the manager learn what to call the user and how they like to work?
-- **Delegation:** Does the manager spawn threads correctly, give clear assignments, and avoid polling?
-- **Ownership transfer:** Does the manager understand "take over this thread" / "give this back" as Beanbag ownership concepts?
-- **Completion review:** When a worker finishes, does the manager review, update the user, and decide on archival?
-- **Thread lifecycle:** Does the manager archive stale threads and keep important ones?
-- **Memory:** Does the manager create `PREFERENCES.md` only when it has useful durable info?
+The prompt currently only teaches simple delegation (W1). It needs to cover:
 
-**Prompt improvements (if needed after validation):**
-- Strengthen Beanbag mental model section with concrete examples
-- Add anti-patterns (don't poll, don't micromanage, don't leave stale threads)
-- Add handoff-language examples ("take over", "@thread...", pasted URLs)
-- Expand runtime context to include project name, project id, project root, manager thread id, workspace path
+- **Pipeline workflows (W2):** Chaining threads (code → review → feedback), reusing environments, triage between threads, storing workflow preferences for automatic reuse.
+- **Mid-flight takeover with goals (W3):** Taking over a user's thread, evaluating goal completion (not just idle status), kicking off follow-on workflows.
+- **Status survey (W4):** Efficiently inspecting all managed threads and synthesizing an actionable summary.
+- **Iterative follow-up (W5):** Knowing when to reuse an existing thread vs spawning a new one.
+- **Parallel task management (W6):** Managing multiple independent tasks in flight, reporting on each as they complete.
+- **Error triage (W7):** Diagnosing worker errors, deciding what to handle autonomously vs escalate to the user.
+- **Plan decomposition and fan-out (W8):** Breaking a plan into parallelizable units, avoiding file conflicts across workers, sequencing dependent work.
+- **Retrospective (W9):** Surveying past work, extracting learnings, proposing improvements.
+- **Cross-manager coordination (W10):** Discovering and messaging other managers for context sharing.
 
-### 7. Thread lifecycle / archival guidance
+**Also needed:**
+- Expand runtime context to include project name, project id, project root, manager thread id, workspace path.
+- Add handoff-language examples ("take over", "@thread...", pasted URLs).
+
+### 7. Environment reuse for pipeline workflows
+
+W2 (pipeline workflow) fundamentally needs a review thread to see the coding thread's files. Today `bb thread spawn` always creates a new environment.
+
+**Options to evaluate:**
+- (a) Allow spawning a thread into an existing thread's environment
+- (b) Have the review thread read from the coding thread's worktree path directly
+- (c) Promote the worktree first, then spawn the review thread in local
+
+This is a backend investigation item that blocks the most valuable manager workflow.
+
+### 8. Thread lifecycle / archival guidance
 
 Ensure the manager actively manages thread clutter.
 
@@ -154,9 +163,9 @@ Ensure the manager actively manages thread clutter.
 
 ---
 
-## P2 — UI Polish
+## P1 — UI Polish
 
-### 8. Surface language audit
+### 9. Surface language audit
 
 Some confirmation modals and UI surfaces use "thread" language where "manager" would be more appropriate.
 
@@ -168,7 +177,7 @@ Some confirmation modals and UI surfaces use "thread" language where "manager" w
 
 **Implementation:** Add type-aware copy that checks `thread.type` and uses "manager" vs "thread" accordingly. Low priority but important for product coherence.
 
-### 9. Sidebar collapsed-manager status cues
+### 10. Sidebar collapsed-manager status cues
 
 When a manager is collapsed in the sidebar, surface enough status to be useful without expanding.
 
@@ -176,7 +185,7 @@ When a manager is collapsed in the sidebar, surface enough status to be useful w
 - Show a spinner/activity indicator if any managed child is actively running a turn
 - Keep it minimal — no heavy tree chrome
 
-### 10. UI handoff actions
+### 11. UI handoff actions
 
 Add explicit handoff buttons to the thread info panel.
 
@@ -184,7 +193,7 @@ Add explicit handoff buttons to the thread info panel.
 - For manager-managed threads: "Take Over" action (removes `parentThreadId`, moves to regular thread list)
 - These complement the chat-driven handoff path (asking the manager in conversation)
 
-### 11. `@`-mention interaction polish
+### 12. `@`-mention interaction polish
 
 Clean up the prompt mention interaction for both file and thread mentions.
 
@@ -208,7 +217,7 @@ Clean up the prompt mention interaction for both file and thread mentions.
 - If kept, reduce visual weight — keep them secondary to text
 - If rows read better without, prefer removing
 
-### 12. Dedicated manager routes (evaluation)
+### 13. Dedicated manager routes (evaluation)
 
 Currently manager-specific operations (workspace files, workspace file content, preferences) live under the threads route (`/threads/:id/manager-workspace/*`). Evaluate whether managers should have their own top-level route namespace.
 
@@ -227,41 +236,56 @@ Currently manager-specific operations (workspace files, workspace file content, 
 
 ## P3 — Validation
 
-### 13. Manager QA scenarios
+### 14. Manager QA scenarios
 
-Create a dedicated manager QA doc covering hero workflows.
+Create a dedicated manager QA doc with scenarios derived from `plans/manager-hero-workflows.md`.
 
-**Scenarios to cover:**
-- Fresh hire + hatching quality
-- Delegate a coding task → worker spawns, completes, manager reviews and updates user
-- Hand off an existing thread to the manager
-- Take a thread back from the manager
-- Manager archives a completed worker thread
-- Manager remembers user preferences across sessions
-- Manager-to-manager preference sharing (once inter-agent messaging lands)
-- `@`-mention a manager in a thread prompt
-- Multiple managers in one project operating independently
+**Tier 1 scenarios (must pass):**
+- W1: Simple delegation — spawn worker, wait, review, report
+- W2: Pipeline workflow — code → review → feedback loop with environment reuse
+- W3: Mid-flight takeover — take over user thread, monitor for goal, kick off follow-on
+- W4: Status survey — "what's going on?" across all managed threads
+- W5: Iterative follow-up — send adjustments to existing worker
+- W6: Multiple independent tasks — parallel spawning and independent reporting
+- W7: Worker error — triage and decide to handle or escalate
 
-**Include:**
-- Handoff-language scenarios ("take over this thread", pasted URLs, `@thread:...`)
-- Anti-pattern checks (manager shouldn't poll, shouldn't micromanage, shouldn't leave stale threads)
+**Tier 2 scenarios:**
+- W8: Plan → parallel execution — decompose and fan out
+- W9: Retrospective — survey past work and extract learnings
+- W10: Cross-manager coordination — ask another manager for context
+- W11: Memory across sessions — recall preferences and past work
+
+**Anti-pattern checks:**
+- Manager shouldn't poll workers
+- Manager shouldn't micromanage active threads
+- Manager shouldn't leave stale threads indefinitely
+- Manager shouldn't dump raw status without synthesis
 
 ---
 
 # Recommended Build Order
 
-1. **Multi-manager support** — unblocks the rest; data model change is foundational
-2. **Manager default provider/model** + **Hire modal improvements** — can ship together, quick wins
-3. **Inter-agent messaging tool** — core V1 primitive, enables manager-to-manager workflows
-4. **Manager `@`-mention support** — natural companion to inter-agent messaging
-5. **Prompt quality pass** — validate against hero workflows with the above infrastructure in place
-6. **UI polish** (surface language audit, sidebar cues, handoff actions, mention interaction) — parallel work
-7. **QA scenarios** — write alongside implementation, run as final validation
+1. **CLI audit P0s** — unblock manager quality (`--title`, `--model`, `--json` on list). See `plans/cli-audit.md`.
+2. **Environment reuse investigation** — determine the right model for pipeline workflows (W2). This is a potential blocker.
+3. **Prompt quality pass** — teach the manager the hero workflows (W1–W10), not just simple delegation. See `plans/manager-hero-workflows.md`.
+4. **Multi-manager support** — foundational data model change that unblocks the rest.
+5. **Inter-agent messaging tool** — core V1 primitive, enables manager-to-manager workflows (W10).
+6. **Manager default provider/model** + **Hire modal improvements** — can ship together, quick wins.
+7. **Manager `@`-mention support** — natural companion to inter-agent messaging.
+8. **UI polish** (surface language audit, sidebar cues, handoff actions, mention interaction) — parallel work.
+9. **QA scenarios** — derived from hero workflows, run as final validation.
+
+# Related Plans
+
+- `plans/cli-audit.md` — CLI flag gaps and task list
+- `plans/manager-hero-workflows.md` — definitive workflow definitions driving prompt and CLI work
 
 # Open Questions/Risks
 
-- Multi-manager: should the sidebar have a single "Managers" section or show each manager as a top-level entry? Top-level is simpler and more visible.
-- Inter-agent messaging: should workers message arbitrary threads or only their parent? Starting with parent-only for workers is safer.
-- Manager defaults: if `claude-code` provider isn't configured, should we show a warning or silently fall back?
-- Mention polish: should manager-thread mention search bias managers ahead of regular threads, or keep mixed ordering?
-- Route separation: defer decision until multi-manager work reveals whether the current thread-route approach is becoming awkward.
+- **Environment reuse (blocker):** Pipeline workflows (W2) need a review thread to see a coding thread's worktree. Options: spawn into existing env, read from worktree path, or promote first. Needs investigation.
+- **Notification → turn trigger:** When a managed thread completes, does the system message actually start a new manager turn? If not, W7 (error handling) is reactive only. Needs verification.
+- **Workflow preferences:** Should pipeline workflows be stored as structured config or natural language in `PREFERENCES.md`?
+- **Multi-manager:** Should the sidebar have a single "Managers" section or show each manager as a top-level entry?
+- **Inter-agent messaging:** Should workers message arbitrary threads or only their parent?
+- **Manager defaults:** If `claude-code` provider isn't configured, should we warn or silently fall back?
+- **Route separation:** Defer decision until multi-manager work reveals whether the thread-route approach is becoming awkward.

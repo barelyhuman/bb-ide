@@ -26,7 +26,19 @@ export function ensureManagerWorkspace(
 
 export function buildManagerDeveloperInstructions(
 ): string {
+  const bbSystemOverview = renderTemplate("bbSystemOverview", {} as Record<string, never>);
+  const bbCliGuide = renderTemplate("bbCliGuide", {} as Record<string, never>);
+
+  if (!bbSystemOverview) {
+    throw new Error("bb system overview template rendered as empty");
+  }
+  if (!bbCliGuide) {
+    throw new Error("bb CLI guide template rendered as empty");
+  }
+
   return renderTemplate("managerAgentInstructions", {
+    bbSystemOverview,
+    bbCliGuide,
     managerPreferencesContent: MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
     managerWorkspacePath: MANAGER_WORKSPACE_PATH_PLACEHOLDER,
   });
