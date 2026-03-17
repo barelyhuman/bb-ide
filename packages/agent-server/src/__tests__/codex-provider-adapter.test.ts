@@ -389,11 +389,10 @@ describe("codex provider adapter", () => {
     expect(params).not.toHaveProperty("developerInstructions");
   });
 
-  it("advertises Codex custom tool capabilities", () => {
+  it("advertises service-tier support accurately", () => {
     const adapter = createCodexProviderAdapter();
 
-    expect(adapter.capabilities.supportsDynamicTools).toBe(true);
-    expect(adapter.capabilities.supportsToolCallRequests).toBe(true);
+    expect(adapter.capabilities.supportsServiceTier).toBe(true);
   });
 
   it("adds dynamic tools to thread/start params", () => {

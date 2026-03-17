@@ -384,14 +384,8 @@ export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
   const capabilities: ProviderCapabilities = {
-    supportsSteer: true,
     supportsRename: false,
-    supportsModelList: true,
-    supportsReasoningLevels: true,
     supportsServiceTier: false,
-    supportsMultimodalInput: true,
-    supportsDynamicTools: true,
-    supportsToolCallRequests: true,
     ...(opts?.capabilities ?? {}),
   };
 

@@ -67,14 +67,8 @@ describe("claude-code provider adapter", () => {
   it("advertises correct capabilities", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(adapter.capabilities).toEqual({
-      supportsSteer: true,
       supportsRename: false,
-      supportsModelList: true,
-      supportsReasoningLevels: true,
       supportsServiceTier: false,
-      supportsMultimodalInput: true,
-      supportsDynamicTools: true,
-      supportsToolCallRequests: true,
     });
   });
 

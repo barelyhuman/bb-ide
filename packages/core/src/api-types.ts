@@ -372,14 +372,8 @@ export interface SystemShutdownBlockedResponse {
 }
 
 export interface ProviderCapabilities {
-  supportsSteer: boolean;
   supportsRename: boolean;
-  supportsModelList: boolean;
-  supportsReasoningLevels: boolean;
   supportsServiceTier: boolean;
-  supportsMultimodalInput: boolean;
-  supportsDynamicTools: boolean;
-  supportsToolCallRequests: boolean;
 }
 
 export interface SystemProviderInfo {

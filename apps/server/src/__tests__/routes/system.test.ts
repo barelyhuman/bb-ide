@@ -427,14 +427,8 @@ describe("System routes", () => {
         id: "codex",
         displayName: "Codex",
         capabilities: {
-          supportsSteer: true,
           supportsRename: true,
-          supportsModelList: true,
-          supportsReasoningLevels: true,
           supportsServiceTier: true,
-          supportsMultimodalInput: true,
-          supportsDynamicTools: true,
-          supportsToolCallRequests: true,
         },
       };
       getProviderInfo.mockReturnValue(providerInfo);
@@ -458,14 +452,8 @@ describe("System routes", () => {
         id: "codex",
         displayName: "Codex",
         capabilities: {
-          supportsSteer: true,
           supportsRename: true,
-          supportsModelList: true,
-          supportsReasoningLevels: true,
           supportsServiceTier: true,
-          supportsMultimodalInput: true,
-          supportsDynamicTools: true,
-          supportsToolCallRequests: true,
         },
       };
       (
@@ -487,28 +475,16 @@ describe("System routes", () => {
           id: "codex",
           displayName: "Codex",
           capabilities: {
-            supportsSteer: true,
             supportsRename: true,
-            supportsModelList: true,
-            supportsReasoningLevels: true,
             supportsServiceTier: true,
-            supportsMultimodalInput: true,
-            supportsDynamicTools: true,
-            supportsToolCallRequests: true,
           },
         },
         {
           id: "claude-code",
           displayName: "Claude Code (protocol-compatible)",
           capabilities: {
-            supportsSteer: false,
             supportsRename: true,
-            supportsModelList: false,
-            supportsReasoningLevels: false,
             supportsServiceTier: false,
-            supportsMultimodalInput: true,
-            supportsDynamicTools: true,
-            supportsToolCallRequests: true,
           },
         },
       ];

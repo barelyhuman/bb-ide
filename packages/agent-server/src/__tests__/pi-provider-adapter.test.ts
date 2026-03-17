@@ -48,14 +48,8 @@ describe("pi provider adapter", () => {
   it("advertises correct capabilities", () => {
     const adapter = createPiProviderAdapter();
     expect(adapter.capabilities).toEqual({
-      supportsSteer: true,
       supportsRename: false,
-      supportsModelList: true,
-      supportsReasoningLevels: true,
       supportsServiceTier: false,
-      supportsMultimodalInput: true,
-      supportsDynamicTools: true,
-      supportsToolCallRequests: true,
     });
   });
 
@@ -239,9 +233,8 @@ describe("pi provider adapter", () => {
     ).toBe("Hello world");
   });
 
-  it("supports dynamic tools and tool call requests", () => {
+  it("advertises service-tier support accurately", () => {
     const adapter = createPiProviderAdapter();
-    expect(adapter.capabilities.supportsDynamicTools).toBe(true);
-    expect(adapter.capabilities.supportsToolCallRequests).toBe(true);
+    expect(adapter.capabilities.supportsServiceTier).toBe(false);
   });
 });

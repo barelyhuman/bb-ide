@@ -144,9 +144,6 @@ export class AgentServer {
   }
 
   async listModels(): Promise<AvailableModel[]> {
-    if (!this.opts.provider.capabilities.supportsModelList) {
-      return [];
-    }
     const now = Date.now();
     if (this.cachedModels && this.cachedModels.expiresAt > now) {
       return this.cachedModels.value;
@@ -184,24 +181,10 @@ export class AgentServer {
           });
           break;
         case "image":
-          if (this.opts.provider.capabilities.supportsMultimodalInput) {
-            normalized.push(chunk);
-          } else {
-            normalized.push({
-              type: "text",
-              text: `Attached image URL: ${chunk.url}`,
-            });
-          }
+          normalized.push(chunk);
           break;
         case "localImage":
-          if (this.opts.provider.capabilities.supportsMultimodalInput) {
-            normalized.push(chunk);
-          } else {
-            normalized.push({
-              type: "text",
-              text: `Attached local image: ${chunk.path}`,
-            });
-          }
+          normalized.push(chunk);
           break;
         default:
           assertNever(chunk);
