@@ -780,7 +780,7 @@ Prerequisites: at least two providers must be available (e.g. codex + pi, or
 codex + claude-code). The daemon must be started without `BB_PROVIDER` so it
 uses the default and can accept explicit `providerId` per thread.
 
-**Basic multi-provider flow:**
+**Required multi-provider matrix:**
 
 1. Spawn a thread with provider A (e.g. codex) in the project's local environment:
 
@@ -804,17 +804,83 @@ node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
 node apps/cli/dist/index.js thread output <thread-b>
 ```
 
-3. Send follow-ups to both threads (tests that the correct provider child handles each):
+3. Confirm both threads share the same attached local environment:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-a>
+node apps/cli/dist/index.js thread show <thread-b>
+node apps/cli/dist/index.js thread sessions <thread-a>
+node apps/cli/dist/index.js thread sessions <thread-b>
+```
+
+Expected:
+
+- both `thread show` outputs reference the same `environmentId`
+- both session listings converge on the same active env-daemon session once the second thread is attached
+
+4. Interleave follow-ups in sequence, returning to A after B:
 
 ```bash
 node apps/cli/dist/index.js thread tell <thread-a> \
-  'Reply with exactly CODEX-FOLLOWUP and finish.'
+  'Reply with exactly A-FOLLOWUP-1 and finish.'
+node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-a>
+
 node apps/cli/dist/index.js thread tell <thread-b> \
-  'Reply with exactly PI-FOLLOWUP and finish.'
+  'Reply with exactly B-FOLLOWUP-1 and finish.'
+node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-b>
+
+node apps/cli/dist/index.js thread tell <thread-a> \
+  'Reply with exactly A-FOLLOWUP-2 and finish.'
+node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-a>
+
+node apps/cli/dist/index.js thread tell <thread-b> \
+  'Reply with exactly B-FOLLOWUP-2 and finish.'
+node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-b>
+```
+
+This is not redundant with the simple smoke. It catches bugs where runtime state is
+accidentally held "per environment" or "per active thread" instead of per provider child
+or per provider thread.
+
+5. Run one simultaneous follow-up round (tests that the correct provider child handles each under overlap):
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-a> \
+  'Reply with exactly A-PARALLEL and finish.'
+node apps/cli/dist/index.js thread tell <thread-b> \
+  'Reply with exactly B-PARALLEL and finish.'
 node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
 node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
 node apps/cli/dist/index.js thread output <thread-a>
 node apps/cli/dist/index.js thread output <thread-b>
+```
+
+6. Stop A while B keeps working:
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-a> \
+  'Spend time inspecting the files before answering; do not finish quickly.'
+node apps/cli/dist/index.js thread wait <thread-a> --event turn/started --timeout 60
+node apps/cli/dist/index.js thread stop <thread-a>
+node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
+
+node apps/cli/dist/index.js thread tell <thread-b> \
+  'Reply with exactly B-AFTER-A-STOP and finish.'
+node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-b>
+```
+
+7. Confirm A still works after B has continued:
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-a> \
+  'Reply with exactly A-AFTER-B-CONTINUES and finish.'
+node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-a>
 ```
 
 Expected:
@@ -823,8 +889,11 @@ Expected:
 - `thread show <thread-a>` has `providerId: codex`
 - `thread show <thread-b>` has `providerId: pi`
 - both threads share the same `environmentId` (local environment)
-- follow-up output for thread-a comes from codex, not pi
-- follow-up output for thread-b comes from pi, not codex
+- every `A-*` output stays on thread-a and comes from provider A
+- every `B-*` output stays on thread-b and comes from provider B
+- returning to A after using B still works
+- stopping or finishing A does not terminate B's ability to follow up
+- continuing B does not corrupt A's later follow-up path
 - no "Already initialized" errors in the daemon log
 - no provider rpc errors or timeouts in the event stream
 
@@ -834,6 +903,10 @@ Expected:
 - `provisioning_failed` with "Already initialized" → `providerInitializedPid` not tracked per-child
 - `provisioning_failed` with "Timed out waiting for active environment-agent session" → env-daemon failed to spawn or connect
 - Thread output contains response from the wrong provider → stdin writes going to wrong child
+- A thread starts receiving provider envelopes for the other provider → thread-to-child routing bug
+- B's output contains A's requested token (or vice versa) → cross-thread/provider state contamination
+- Follow-up on A fails only after B has run → env-daemon reused the wrong provider thread/runtime state
+- Stopping A causes B to error, lose its session, or stop accepting follow-ups → runtime teardown is incorrectly global instead of scoped to the A provider child or thread
 
 ## Main Daemon QA
 
