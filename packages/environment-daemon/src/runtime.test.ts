@@ -862,6 +862,75 @@ describe("EnvironmentAgentRuntime", () => {
     expect(ack.result).toEqual({ threadId: "provider-thread-1" });
   });
 
+  it("derives unique managed HOME dirs for specs differing only in files", async () => {
+    // When spec.env does not provide HOME, resolveProviderEnvironment falls
+    // back to process.env.HOME. To exercise the managed-HOME path we must
+    // clear it so that resolveManagedProviderHomeDir is used.
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    // Two specs identical except for file content. Setting HOME="" forces
+    // the runtime to generate a managed HOME via the hash path.
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
+      env: { HOME: "" },
+      files: [{ placement: "home", path: ".auth/token.json", content: '{"key":"aaa"}' }],
+    });
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
+      env: { HOME: "" },
+      files: [{ placement: "home", path: ".auth/token.json", content: '{"key":"bbb"}' }],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(2);
+
+    const homes = lines.filter((l) => l.includes("provider-home-"));
+    expect(homes.length).toBeGreaterThanOrEqual(2);
+    // The two HOME paths must be different since file content differs
+    expect(homes[0]).not.toBe(homes[1]);
+  });
+
+  it("does not leak raw secrets into managed HOME directory names", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const secretKey = "sk-super-secret-api-key-12345";
+
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
+      env: { HOME: "", API_KEY: secretKey },
+      files: [{ placement: "home", path: ".config/auth.json", content: `{"apiKey":"${secretKey}"}` }],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(1);
+
+    const homePath = lines.find((l) => l.includes("provider-home-"));
+    expect(homePath).toBeDefined();
+    // The path must NOT contain any part of the secret key
+    expect(homePath).not.toContain("secret");
+    expect(homePath).not.toContain(secretKey);
+    // It should be a hex hash (32 hex chars)
+    const match = homePath!.match(/provider-home-([0-9a-f]+)/);
+    expect(match).toBeTruthy();
+    expect(match![1]).toHaveLength(32);
+    expect(match![1]).toMatch(/^[0-9a-f]+$/);
+  });
+
   it("resolves provider server requests through the callback", async () => {
     const requests: Array<{ requestId: string | number; method: string; params?: unknown }> = [];
     const stdout: string[] = [];

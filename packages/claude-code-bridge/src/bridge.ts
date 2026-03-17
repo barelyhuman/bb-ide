@@ -97,33 +97,32 @@ function createOnSdkDone(threadId: string): (error?: unknown) => void {
     const threadSession = sessions.get(threadId);
     if (!threadSession) return;
 
-    // If no turn was started yet, synthesize one so the orchestrator
-    // receives a complete turn lifecycle and doesn't hang forever.
-    let turnId = threadSession.turnId;
-    if (!turnId) {
-      turnId = nextTurnId(threadSession.turnCounter);
-      threadSession.turnId = turnId;
-      send({
-        jsonrpc: "2.0",
-        method: "turn/started",
-        params: { threadId, turnId },
-      });
-    }
-
     const message =
       error instanceof Error ? error.message : String(error);
 
-    send({
-      jsonrpc: "2.0",
-      method: "turn/completed",
-      params: {
-        threadId,
-        turnId,
-        error: { message },
-      },
-    });
-
-    threadSession.turnId = undefined;
+    if (threadSession.turnId) {
+      // A turn was already in progress — close it normally so the
+      // orchestrator sees a complete lifecycle.
+      send({
+        jsonrpc: "2.0",
+        method: "turn/completed",
+        params: {
+          threadId,
+          turnId: threadSession.turnId,
+          error: { message },
+        },
+      });
+      threadSession.turnId = undefined;
+    } else {
+      // Fatal startup error before any turn lifecycle events.  Emit an
+      // error notification so the orchestrator can transition the thread
+      // to an error/provisioning_failed state instead of idle.
+      send({
+        jsonrpc: "2.0",
+        method: "error",
+        params: { threadId, message },
+      });
+    }
   };
 }
 

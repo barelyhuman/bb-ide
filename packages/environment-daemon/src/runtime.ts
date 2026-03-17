@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -557,8 +558,9 @@ export class EnvironmentAgentRuntime {
   private resolveManagedProviderHomeDir(spec: EnvironmentAgentProviderSpec): string {
     // Each provider spec gets its own managed HOME so that concurrent
     // children with different auth files don't overwrite each other.
-    const specHash = providerSpecKey(spec)
-      .replace(/[^A-Za-z0-9]/g, "")
+    const specHash = createHash("sha256")
+      .update(providerSpecKey(spec))
+      .digest("hex")
       .slice(0, 32);
     return path.join(
       tmpdir(),
