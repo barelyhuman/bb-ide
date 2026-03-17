@@ -49,6 +49,10 @@ function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
       return "thread/resume";
     case "thread.stop":
       return "thread/stop";
+    case "turn.run":
+      return command.requestedMode === "steer" && command.steerParams !== undefined
+        ? "turn/steer"
+        : "turn/start";
     case "turn.start":
       return "turn/start";
     case "turn.steer":
@@ -68,6 +72,11 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
   switch (command.type) {
     case "thread.start":
     case "thread.resume":
+      return command.params;
+    case "turn.run":
+      return command.requestedMode === "steer" && command.steerParams !== undefined
+        ? command.steerParams
+        : command.startParams;
     case "turn.start":
     case "turn.steer":
     case "thread.rename":

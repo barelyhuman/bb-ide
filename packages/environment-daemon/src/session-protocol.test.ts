@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createEnvironmentAgentSessionCapabilities,
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
   inferEnvironmentAgentSessionCapabilities,
   negotiateEnvironmentAgentSessionCapabilities,
@@ -136,17 +137,40 @@ describe("session-protocol", () => {
     });
   });
 
+  it("creates explicit capabilities for current env-daemon sessions", () => {
+    expect(
+      createEnvironmentAgentSessionCapabilities({
+        worker: { name: "environment-daemon", version: "0.0.1" },
+        providers: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+      }),
+    ).toEqual({
+      commands: [
+        "provider.ensure",
+        "thread.start",
+        "thread.resume",
+        "thread.stop",
+        "turn.run",
+        "turn.start",
+        "turn.steer",
+        "thread.rename",
+        "workspace.status",
+        "workspace.diff",
+      ],
+      features: ["worker_metadata", "provider_metadata"],
+    });
+  });
+
   it("normalizes and negotiates advertised capabilities", () => {
     expect(
       negotiateEnvironmentAgentSessionCapabilities({
         requested: {
-          commands: ["turn.start", "turn.start", "workspace.diff", "unknown"] as never,
+          commands: ["turn.run", "turn.run", "workspace.diff", "unknown"] as never,
           features: ["provider_metadata", "provider_metadata", "bogus"] as never,
         },
         fallback: {},
       }),
     ).toEqual({
-      commands: ["turn.start", "workspace.diff"],
+      commands: ["turn.run", "workspace.diff"],
       features: ["provider_metadata"],
     });
 

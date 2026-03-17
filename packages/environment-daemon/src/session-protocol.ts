@@ -17,6 +17,7 @@ export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
   "thread.start",
   "thread.resume",
   "thread.stop",
+  "turn.run",
   "turn.start",
   "turn.steer",
   "thread.rename",
@@ -80,6 +81,18 @@ export interface EnvironmentAgentSessionCapabilities {
   commands: EnvironmentAgentSessionCapabilityCommand[];
   features: EnvironmentAgentSessionCapabilityFeature[];
 }
+
+const LEGACY_INFERRED_COMMANDS = [
+  "provider.ensure",
+  "thread.start",
+  "thread.resume",
+  "thread.stop",
+  "turn.start",
+  "turn.steer",
+  "thread.rename",
+  "workspace.status",
+  "workspace.diff",
+] as const satisfies readonly EnvironmentAgentSessionCapabilityCommand[];
 
 export interface EnvironmentAgentSessionOpenPayload {
   agentId: string;
@@ -157,8 +170,20 @@ export function inferEnvironmentAgentSessionCapabilities(args: {
     features.push("control_endpoint");
   }
   return {
-    commands: [...ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS],
+    commands: [...LEGACY_INFERRED_COMMANDS],
     features,
+  };
+}
+
+export function createEnvironmentAgentSessionCapabilities(args: {
+  worker?: EnvironmentAgentSessionWorkerMetadata;
+  providers?: EnvironmentAgentSessionProviderMetadata[];
+  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
+}): EnvironmentAgentSessionCapabilities {
+  const inferred = inferEnvironmentAgentSessionCapabilities(args);
+  return {
+    commands: [...ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS],
+    features: inferred.features,
   };
 }
 

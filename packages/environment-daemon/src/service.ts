@@ -22,7 +22,7 @@ import type {
   EnvironmentAgentSessionWorkerMetadata,
 } from "./session-protocol.js";
 import {
-  inferEnvironmentAgentSessionCapabilities,
+  createEnvironmentAgentSessionCapabilities,
 } from "./session-protocol.js";
 
 export interface EnvironmentAgentServiceCliOptions {
@@ -209,7 +209,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       commandBatchLimit: 50,
       worker,
       providers,
-      capabilities: inferEnvironmentAgentSessionCapabilities({
+      capabilities: createEnvironmentAgentSessionCapabilities({
         worker,
         providers,
         controlEndpoint,

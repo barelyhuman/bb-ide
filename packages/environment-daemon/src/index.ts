@@ -82,6 +82,7 @@ export {
   ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
   ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS,
   ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES,
+  createEnvironmentAgentSessionCapabilities,
   inferEnvironmentAgentSessionCapabilities,
   normalizeEnvironmentAgentSessionCapabilities,
   negotiateEnvironmentAgentSessionCapabilities,

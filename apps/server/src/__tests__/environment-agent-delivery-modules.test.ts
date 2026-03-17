@@ -15,6 +15,7 @@ import type {
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentSessionEventBatchChannel,
 } from "@bb/environment-daemon";
+import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
 import {
   EnvironmentAgentCommandDispatcher,
   EnvironmentAgentSessionUnavailableError,
@@ -94,6 +95,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-1",
       agentInstanceId: `${id}-instance`,
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     }).id;
@@ -297,6 +299,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-shared",
       agentInstanceId: "sess-shared-instance",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     }).id;
@@ -332,6 +335,7 @@ describe("environment-agent delivery modules", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-await",
         protocolVersion: 1,
+        selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
         leaseExpiresAt: 30_000,
         now: 1_000,
       });
@@ -387,6 +391,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-expired",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: now - 1_000,
       now: now - 2_000,
     });

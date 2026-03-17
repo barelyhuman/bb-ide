@@ -196,7 +196,7 @@ describe("System routes", () => {
                   "provider.ensure",
                   "thread.start",
                   "thread.resume",
-                  "turn.start",
+                  "turn.run",
                 ],
                 features: ["worker_metadata", "provider_metadata"],
               },
@@ -204,6 +204,7 @@ describe("System routes", () => {
                 disposition: "degrade",
                 missingRequiredCommands: [],
                 missingOptionalCommands: [
+                  "turn.start",
                   "turn.steer",
                   "thread.rename",
                   "workspace.status",
@@ -276,7 +277,7 @@ describe("System routes", () => {
                   "provider.ensure",
                   "thread.start",
                   "thread.resume",
-                  "turn.start",
+                  "turn.run",
                 ],
                 features: ["worker_metadata", "provider_metadata"],
               },
@@ -284,6 +285,7 @@ describe("System routes", () => {
                 disposition: "degrade",
                 missingRequiredCommands: [],
                 missingOptionalCommands: [
+                  "turn.start",
                   "turn.steer",
                   "thread.rename",
                   "workspace.status",

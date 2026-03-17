@@ -14,10 +14,11 @@ const REQUIRED_COMMANDS = [
   "provider.ensure",
   "thread.start",
   "thread.resume",
-  "turn.start",
+  "turn.run",
 ] as const;
 
 const OPTIONAL_COMMANDS = [
+  "turn.start",
   "turn.steer",
   "thread.rename",
   "workspace.status",

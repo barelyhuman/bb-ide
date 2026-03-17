@@ -306,11 +306,10 @@ export class AgentServer {
     const steerSupported = Boolean(
       this.opts.provider.turnSteerMethod && this.opts.provider.createTurnSteerParams,
     );
-    const shouldUseSteer =
-      requestedMode !== "start" &&
+    const canAutoSteer =
       steerSupported &&
       Boolean(activeTurnId) &&
-      (requestedMode === "steer" || !hasExecutionOverrides);
+      !hasExecutionOverrides;
 
     if (requestedMode === "steer") {
       if (!steerSupported) {
@@ -336,34 +335,34 @@ export class AgentServer {
       args.providerLaunch,
     );
 
-    if (shouldUseSteer && activeTurnId) {
-      await this.sendEnvironmentAgentCommand(args.client, {
-        type: "turn.steer",
-        threadId: args.threadId,
-        providerThreadId: args.providerThreadId,
-        turnId: activeTurnId,
-        params: this.opts.provider.createTurnSteerParams!(
-          args.providerThreadId,
-          activeTurnId,
-          args.input,
-        ),
-        initialize: this.buildInitializeRequest(),
-      });
-      return { mode: "steer", providerThreadId: args.providerThreadId };
-    }
-
-    await this.sendEnvironmentAgentCommand(args.client, {
-      type: "turn.start",
+    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+      type: "turn.run",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
-      params: this.opts.provider.createTurnStartParams(
+      requestedMode,
+      ...(activeTurnId ? { activeTurnId } : {}),
+      startParams: this.opts.provider.createTurnStartParams(
         args.providerThreadId,
         args.input,
         args.options,
       ),
+      ...(canAutoSteer && activeTurnId
+        ? {
+            steerParams: this.opts.provider.createTurnSteerParams!(
+              args.providerThreadId,
+              activeTurnId,
+              args.input,
+            ),
+          }
+        : {}),
       initialize: this.buildInitializeRequest(),
     });
-    return { mode: "start", providerThreadId: args.providerThreadId };
+    return {
+      mode:
+        this.extractTurnModeFromResult(ack.result) ??
+        (requestedMode === "steer" ? "steer" : "start"),
+      providerThreadId: args.providerThreadId,
+    };
   }
 
   async renameThreadCommand(args: {
@@ -635,6 +634,23 @@ export class AgentServer {
       default:
         return new AgentServerSessionError("provider_rpc_error", message);
     }
+  }
+
+  private extractTurnModeFromResult(
+    result: unknown,
+  ): "steer" | "start" | undefined {
+    if (
+      result !== null &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      "mode" in result
+    ) {
+      const mode = (result as { mode?: unknown }).mode;
+      if (mode === "steer" || mode === "start") {
+        return mode;
+      }
+    }
+    return undefined;
   }
 
   private consumeSuppressedAuthStderrLine(threadId: string, line: string): boolean {

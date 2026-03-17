@@ -341,6 +341,7 @@ export class EnvironmentAgentRuntime {
     switch (command.type) {
       case "thread.start":
       case "thread.resume":
+      case "turn.run":
       case "turn.start":
       case "turn.steer":
         this.turnState = "active";
@@ -719,6 +720,7 @@ export class EnvironmentAgentRuntime {
         );
         return;
       case "turn.start":
+      case "turn.run":
       case "turn.steer":
       case "thread.rename":
         this.recordProviderThreadMapping(command.threadId, command.providerThreadId);
@@ -794,6 +796,7 @@ export class EnvironmentAgentRuntime {
       case "thread.start":
       case "thread.resume":
       case "thread.stop":
+      case "turn.run":
       case "turn.start":
       case "turn.steer":
       case "thread.rename": {
@@ -856,10 +859,47 @@ export class EnvironmentAgentRuntime {
   private requestProviderCommand(
     command: EnvironmentAgentRpcCommand,
   ): Promise<unknown> {
+    if (command.type === "turn.run") {
+      return this.requestProvider(this.resolveTurnRunRequest(command));
+    }
     return this.requestProvider({
       method: this.toProviderMethod(command),
       params: this.toProviderParams(command),
     });
+  }
+
+  private resolveTurnRunRequest(command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>): {
+    method: string;
+    params: unknown;
+  } {
+    const requestedMode = command.requestedMode ?? "auto";
+    const canSteer =
+      command.activeTurnId !== undefined && command.steerParams !== undefined;
+
+    if (requestedMode === "steer") {
+      if (!command.activeTurnId) {
+        throw new Error("No active turn");
+      }
+      if (command.steerParams === undefined) {
+        throw new Error("turn/steer is unsupported");
+      }
+      return {
+        method: "turn/steer",
+        params: command.steerParams,
+      };
+    }
+
+    if (requestedMode !== "start" && canSteer) {
+      return {
+        method: "turn/steer",
+        params: command.steerParams,
+      };
+    }
+
+    return {
+      method: "turn/start",
+      params: command.startParams,
+    };
   }
 
   private toProviderMethod(command: EnvironmentAgentRpcCommand): string {
@@ -870,6 +910,8 @@ export class EnvironmentAgentRuntime {
         return "thread/resume";
       case "thread.stop":
         return "thread/stop";
+      case "turn.run":
+        return "turn/start";
       case "turn.start":
         return "turn/start";
       case "turn.steer":
@@ -891,6 +933,8 @@ export class EnvironmentAgentRuntime {
       case "turn.steer":
       case "thread.rename":
         return command.params;
+      case "turn.run":
+        return command.startParams;
       case "thread.stop":
         return command.params ?? {};
       case "workspace.status":

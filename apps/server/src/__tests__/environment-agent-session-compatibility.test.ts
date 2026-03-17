@@ -24,7 +24,7 @@ describe("environment-agent session compatibility", () => {
       missingRequiredCommands: [
         "provider.ensure",
         "thread.resume",
-        "turn.start",
+        "turn.run",
       ],
     });
   });
@@ -41,7 +41,7 @@ describe("environment-agent session compatibility", () => {
           "provider.ensure",
           "thread.start",
           "thread.resume",
-          "turn.start",
+          "turn.run",
         ],
         features: ["worker_metadata", "provider_metadata"],
       },
@@ -53,6 +53,7 @@ describe("environment-agent session compatibility", () => {
 
     expect(assessment.compatibility.disposition).toBe("degrade");
     expect(assessment.compatibility.missingRequiredCommands).toEqual([]);
+    expect(assessment.compatibility.missingOptionalCommands).toContain("turn.start");
     expect(assessment.compatibility.missingOptionalCommands).toContain("turn.steer");
   });
 });

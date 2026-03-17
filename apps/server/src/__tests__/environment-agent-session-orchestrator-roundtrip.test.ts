@@ -11,7 +11,8 @@ import {
   ProjectRepository,
   ThreadRepository,
 } from "@bb/db";
-import type {
+import {
+  createEnvironmentAgentSessionCapabilities,
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionOpenPayload,
 } from "@bb/environment-daemon";
@@ -47,6 +48,7 @@ function makeOpenPayload(threadId: string): EnvironmentAgentSessionOpenPayload {
     agentId: `agent:${threadId}`,
     agentInstanceId: `instance:${threadId}`,
     supportedProtocolVersions: [1],
+    capabilities: createEnvironmentAgentSessionCapabilities({}),
     channels: [
       {
         channelId: threadId,
@@ -561,7 +563,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     await new Promise((resolve) => setImmediate(resolve));
   });
 
-  it("drives spawn through session queued provider.ensure, thread.start, provider.ensure, and turn.start commands", async () => {
+  it("drives spawn through session queued provider.ensure, thread.start, provider.ensure, and turn.run commands", async () => {
     installSpawnRuntime();
     const project = createProject();
 
@@ -630,7 +632,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       result: { ok: true },
     });
     expect(turnStartRpc.command).toMatchObject({
-      type: "turn.start",
+      type: "turn.run",
       threadId,
       providerThreadId: "provider-thread-1",
     });
@@ -677,7 +679,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     );
   });
 
-  it("drives tell through session queued provider.ensure, thread.resume, provider.ensure, and turn.start commands", async () => {
+  it("drives tell through session queued provider.ensure, thread.resume, provider.ensure, and turn.run commands", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);
     const sessionId = openSession(threadId);
@@ -756,7 +758,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       result: { ok: true },
     });
     expect(turnStart.command).toMatchObject({
-      type: "turn.start",
+      type: "turn.run",
       threadId,
       providerThreadId: "provider-thread-1",
     });
@@ -877,7 +879,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       result: { ok: true },
     });
     expect(turnStart.command).toMatchObject({
-      type: "turn.start",
+      type: "turn.run",
       threadId,
       providerThreadId: "provider-thread-1",
     });
@@ -1059,7 +1061,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     expect(threads.getById(threadId)?.status).toBe("idle");
   });
 
-  it("recovers a stale turn.start within the same tell and only persists the accepted turn", async () => {
+  it("recovers a stale turn.run within the same tell and only persists the accepted turn", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);
     const sessionId = openSession(threadId);
@@ -1136,7 +1138,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       errorMessage: "thread not found: provider-thread-1",
     });
     expect(failedTurnStart.command).toMatchObject({
-      type: "turn.start",
+      type: "turn.run",
       threadId,
       providerThreadId: "provider-thread-1",
     });
@@ -1191,7 +1193,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       result: { ok: true },
     });
     expect(retriedTurnStart.command).toMatchObject({
-      type: "turn.start",
+      type: "turn.run",
       threadId,
       providerThreadId: "provider-thread-2",
     });

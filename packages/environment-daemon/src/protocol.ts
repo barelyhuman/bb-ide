@@ -96,6 +96,16 @@ export type EnvironmentAgentCommand =
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
+      type: "turn.run";
+      threadId: string;
+      providerThreadId: string;
+      requestedMode?: "auto" | "steer" | "start";
+      activeTurnId?: string;
+      startParams: unknown;
+      steerParams?: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
+    }
+  | {
       type: "turn.steer";
       threadId: string;
       providerThreadId: string;

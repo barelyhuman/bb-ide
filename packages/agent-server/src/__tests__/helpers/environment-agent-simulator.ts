@@ -262,7 +262,7 @@ export class EnvironmentAgentSimulator {
         }
         const providerResponse = this.issueProviderRequest({
           id: request.payload.meta.commandId,
-          method: this.toProviderMethod(request.payload.command.type),
+          method: this.toProviderMethod(request.payload.command),
           params: this.toProviderParams(request.payload.command),
         });
         this.respond(request, {
@@ -334,8 +334,8 @@ export class EnvironmentAgentSimulator {
     }
   }
 
-  private toProviderMethod(type: EnvironmentAgentCommand["type"]): string {
-    switch (type) {
+  private toProviderMethod(command: EnvironmentAgentCommand): string {
+    switch (command.type) {
       case "provider.ensure":
         return "provider/ensure";
       case "thread.start":
@@ -344,6 +344,10 @@ export class EnvironmentAgentSimulator {
         return "thread/resume";
       case "thread.stop":
         return "thread/stop";
+      case "turn.run":
+        return command.requestedMode === "steer" && command.steerParams !== undefined
+          ? "turn/steer"
+          : "turn/start";
       case "turn.start":
         return "turn/start";
       case "turn.steer":
@@ -355,7 +359,7 @@ export class EnvironmentAgentSimulator {
       case "workspace.diff":
         return "workspace/diff";
       default:
-        return type satisfies never;
+        return command satisfies never;
     }
   }
 
@@ -365,6 +369,11 @@ export class EnvironmentAgentSimulator {
         return command;
       case "thread.start":
       case "thread.resume":
+        return command.params;
+      case "turn.run":
+        return command.requestedMode === "steer" && command.steerParams !== undefined
+          ? command.steerParams
+          : command.startParams;
       case "turn.start":
       case "turn.steer":
       case "thread.rename":

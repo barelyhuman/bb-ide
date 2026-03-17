@@ -12,6 +12,7 @@ import {
   ThreadRepository,
 } from "@bb/db";
 import { vi } from "vitest";
+import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
 import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
@@ -92,6 +93,19 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
+        capabilities: createEnvironmentAgentSessionCapabilities({
+          worker: {
+            name: "environment-daemon",
+            version: "0.0.1",
+            buildId: "build-1",
+          },
+          providers: [
+            {
+              providerId: "codex",
+              adapterVersion: "0.0.1",
+            },
+          ],
+        }),
         worker: {
           name: "environment-daemon",
           version: "0.0.1",
@@ -135,6 +149,7 @@ describe("EnvironmentAgentSessionService", () => {
           "thread.start",
           "thread.resume",
           "thread.stop",
+          "turn.run",
           "turn.start",
           "turn.steer",
           "thread.rename",
@@ -160,6 +175,7 @@ describe("EnvironmentAgentSessionService", () => {
             "thread.start",
             "thread.resume",
             "thread.stop",
+            "turn.run",
             "turn.start",
             "turn.steer",
             "thread.rename",
