@@ -259,4 +259,149 @@ describe("environment-agent service config", () => {
 
     await started.close();
   });
+
+  it("returns tool-call responses from session-backed provider requests", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/env-daemon/session/open")) {
+        return new Response(
+          JSON.stringify({
+            protocol: "bb.env-daemon.v1",
+            type: "session_welcome",
+            messageId: "msg-open",
+            sessionId: "sess-1",
+            sentAt: 1_000,
+            payload: {
+              leaseTtlMs: 30_000,
+              heartbeatIntervalMs: 10_000,
+              protocolVersion: 1,
+              channels: [],
+            },
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/env-daemon/session/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as {
+          type?: string;
+        };
+        if (body.type === "provider_request") {
+          return new Response(
+            JSON.stringify({
+              protocol: "bb.env-daemon.v1",
+              type: "provider_response",
+              messageId: "msg-provider-response",
+              sessionId: "sess-1",
+              sentAt: 1_200,
+              payload: {
+                requestId: 62,
+                ok: true,
+                toolCallResponse: {
+                  success: true,
+                  contentItems: [{ type: "inputText", text: "ok" }],
+                },
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(null, { status: 204 });
+      }
+      if (url.includes("/env-daemon/session/commands")) {
+        return new Response(
+          JSON.stringify({
+            protocol: "bb.env-daemon.v1",
+            type: "command_batch",
+            messageId: "msg-cmd",
+            sessionId: "sess-1",
+            sentAt: 1_100,
+            payload: { commands: [] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const started = await startEnvironmentAgentService({
+      runtime: {
+        threadId: "thread-1",
+        projectId: "project-1",
+        environmentId: "local",
+        providerId: "codex",
+        daemonConnection: {
+          daemonUrl: "http://127.0.0.1:9000/api/v1",
+          authToken: "secret-token",
+          threadId: "thread-1",
+          projectId: "project-1",
+          environmentId: "local",
+        },
+      },
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        bearerToken: "secret-token",
+      },
+      logging: {
+        filePath: "/tmp/bb-environment-daemon-service-test.log",
+      },
+      control: {
+        endpoint: undefined,
+      },
+      session: {
+        pollIntervalMs: 10_000,
+        commandBatchLimit: 10,
+        capabilities: {
+          commands: [
+            "provider.ensure",
+            "thread.start",
+            "thread.resume",
+            "thread.stop",
+            "turn.run",
+            "thread.rename",
+            "workspace.status",
+            "workspace.diff",
+          ],
+          features: ["worker_metadata"],
+        },
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+        },
+      },
+    });
+
+    const onProviderRequest = (
+      started.runtime as unknown as {
+        opts: {
+          onProviderRequest?: (request: {
+            requestId: string | number;
+            method: string;
+            params?: unknown;
+            providerId?: string;
+            normalizedMethod?: string;
+          }) => Promise<unknown>;
+        };
+      }
+    ).opts.onProviderRequest;
+
+    await expect(
+      onProviderRequest?.({
+        requestId: 62,
+        method: "item/tool/call",
+        providerId: "codex",
+        normalizedMethod: "item/tool/call",
+      }),
+    ).resolves.toEqual({
+      success: true,
+      contentItems: [{ type: "inputText", text: "ok" }],
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://127.0.0.1:9000/api/v1/threads/thread-1/env-daemon/session/messages",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    await started.close();
+  });
 });

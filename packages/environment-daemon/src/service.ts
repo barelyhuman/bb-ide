@@ -247,7 +247,7 @@ export async function startEnvironmentAgentService(
           response.errorMessage ?? "Environment-agent provider request failed",
         );
       }
-      return response.result;
+      return response.toolCallResponse ?? response.result;
     },
     onStdoutLine: (line) => {
       logger.log("info", "provider stdout", { line });
