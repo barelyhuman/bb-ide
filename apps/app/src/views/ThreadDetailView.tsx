@@ -172,12 +172,11 @@ function ThreadEnvironmentValue({
     return display.label;
   }
   return (
-    <>
-      {display.label}
-      {" ("}
+    <span className="inline-flex items-center gap-1 align-baseline">
+      <span>{display.label}</span>
       <button
         type="button"
-        className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
         title={worktreeOpenPath.title}
         aria-label="Open worktree folder"
         onClick={() => {
@@ -191,8 +190,7 @@ function ThreadEnvironmentValue({
       >
         <ExternalLink className="size-3 shrink-0" />
       </button>
-      {")"}
-    </>
+    </span>
   );
 }
 

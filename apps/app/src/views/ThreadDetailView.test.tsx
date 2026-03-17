@@ -482,10 +482,12 @@ describe("ThreadDetailView", () => {
 
     const html = renderThreadDetailView();
 
-    expect(html).toContain("Ask for follow-up changes|1|Worktree");
+    expect(html).toContain("Ask for follow-up changes|1|<span");
+    expect(html).toContain("<span>Worktree</span>");
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-label="Open worktree folder"');
     expect(html).toContain('title="/tmp/project-one/worktrees/feature-branch"');
+    expect(html).not.toContain("Worktree (");
   });
 
   it("shows Docker for docker-backed environments", () => {
@@ -587,6 +589,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-label="Open worktree folder"');
     expect(html).toContain('title="/tmp/project-one/worktrees/feature-branch"');
+    expect(html).not.toContain("Worktree (");
   });
 
   it("renders the active badge and header action buttons for actionable threads", () => {
