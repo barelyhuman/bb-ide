@@ -875,10 +875,9 @@ export class EnvironmentAgentRuntime {
       case "turn.start":
       case "turn.steer":
       case "thread.rename": {
-        // Look up the child that was registered for this thread via
-        // provider.ensure(forThreadId).  Fall back to the generic
-        // ensureProviderRunning() for backwards-compat (single-provider
-        // environments where no forThreadId mapping exists).
+        // Route per-thread commands to the child registered via
+        // provider.ensure(forThreadId). Single-provider runtimes may not
+        // have a per-thread mapping, so they fall back to the shared child.
         const mapped = this.resolveChildForThread(command.threadId);
         const child = mapped ?? this.ensureProviderRunning();
         if (!child) {
