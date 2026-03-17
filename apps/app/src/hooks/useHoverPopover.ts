@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 interface HoverPopoverHandlers {
   onPointerEnter: () => void;
   onPointerLeave: () => void;
+  onOpenAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 interface UseHoverPopoverOptions {
@@ -80,6 +82,13 @@ export function useHoverPopover({
     },
     onPointerLeave: () => {
       setIsPointerOverContent(false);
+    },
+    // Hover-driven popovers should not steal or restore focus.
+    onOpenAutoFocus: (event: Event) => {
+      event.preventDefault();
+    },
+    onCloseAutoFocus: (event: Event) => {
+      event.preventDefault();
     },
   };
 
