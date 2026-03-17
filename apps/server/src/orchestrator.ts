@@ -14,7 +14,9 @@ import {
   DEFAULT_THREAD_PROVIDER_ID,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
+  formatEnvironmentDisplayName,
   getStringField,
+  isWorktreeEnvironmentReference,
   isThreadProviderId,
   resolveProviderEventMethod,
   buildThreadDetailRows,
@@ -25,6 +27,8 @@ import {
   toUIMessages,
   unwrapProviderEventPayload,
   type AvailableModel,
+  type EnvironmentCreationArgs,
+  type EnvironmentDescriptor,
   type EnvironmentProvisioningEvent,
   type ProviderAdapter,
   type ProviderExecutionOptions,
@@ -49,6 +53,7 @@ import {
   type TellThreadRequest,
   type ThreadProvisioningState,
   type PromoteThreadResponse,
+  type ProvisioningTranscriptEntry,
   type DemotePrimaryResponse,
   type EnqueueThreadMessageRequest,
   type PrimaryCheckoutStatus,
@@ -403,6 +408,157 @@ async function getEnvironmentCheckoutSummary(environment: IEnvironment): Promise
   }
 }
 
+function createProvisioningTranscriptEntry(args: {
+  key: string;
+  text: string;
+  metadata?: Record<string, unknown>;
+  startedAt?: number;
+}): ProvisioningTranscriptEntry {
+  return {
+    key: args.key,
+    text: args.text,
+    ...(args.metadata ? { metadata: args.metadata } : {}),
+    ...(args.startedAt !== undefined ? { startedAt: args.startedAt } : {}),
+  };
+}
+
+function formatDuration(durationMs: number): string {
+  if (durationMs >= 1000) {
+    const seconds = durationMs / 1000;
+    return Number.isInteger(seconds) ? `${seconds}s` : `${seconds.toFixed(1)}s`;
+  }
+  return `${durationMs}ms`;
+}
+
+function createEnvironmentProvisioningTranscript(args: {
+  environmentDisplayName: string;
+  attachedEnvironmentId?: string;
+}): ProvisioningTranscriptEntry[] {
+  const displayName =
+    formatEnvironmentDisplayName({ displayName: args.environmentDisplayName }) ??
+    args.environmentDisplayName;
+  const transcript: ProvisioningTranscriptEntry[] = [
+    createProvisioningTranscriptEntry({
+      key: "environment",
+      text: `environment: ${displayName}`,
+      metadata: {
+        environmentDisplayName: args.environmentDisplayName,
+        ...(args.attachedEnvironmentId
+          ? { attachedEnvironmentId: args.attachedEnvironmentId }
+          : {}),
+      },
+    }),
+  ];
+  if (isWorktreeEnvironmentReference({ displayName: args.environmentDisplayName })) {
+    transcript.push(
+      createProvisioningTranscriptEntry({
+        key: "worktree",
+        text: "creating worktree",
+      }),
+    );
+  }
+  return transcript;
+}
+
+function createProvisioningBranchTranscriptEntry(args: {
+  branchName?: string;
+  headSha?: string;
+  worktree: boolean;
+}): ProvisioningTranscriptEntry | undefined {
+  const branchName = args.branchName?.trim();
+  const shortSha = args.headSha?.trim().slice(0, 7);
+  if (!branchName && !shortSha) return undefined;
+
+  if (branchName && shortSha) {
+    return createProvisioningTranscriptEntry({
+      key: "branch",
+      text: args.worktree
+        ? `checked out branch ${branchName} (${shortSha})`
+        : `on branch ${branchName} (${shortSha})`,
+      metadata: {
+        branchName,
+        headSha: args.headSha,
+      },
+    });
+  }
+  if (branchName) {
+    return createProvisioningTranscriptEntry({
+      key: "branch",
+      text: args.worktree ? `checked out branch ${branchName}` : `on branch ${branchName}`,
+      metadata: { branchName },
+    });
+  }
+  return createProvisioningTranscriptEntry({
+    key: "branch",
+    text: args.worktree ? `checked out commit ${shortSha}` : `on commit ${shortSha}`,
+    metadata: args.headSha ? { headSha: args.headSha } : undefined,
+  });
+}
+
+function createProvisioningProgressTranscriptEntry(args: {
+  phase: ThreadProvisioningProgressPhase;
+  status: "started" | "completed" | "failed";
+  startedAt: number;
+  durationMs?: number;
+}): ProvisioningTranscriptEntry | undefined {
+  switch (args.phase) {
+    case "prepare_environment":
+      return undefined;
+    case "start_provider_session": {
+      const durationText =
+        args.durationMs !== undefined ? ` in ${formatDuration(args.durationMs)}` : "";
+      const text =
+        args.status === "started"
+          ? "starting provider session"
+          : args.status === "completed"
+            ? `started provider session${durationText}`
+            : `provider session start failed${durationText}`;
+      return createProvisioningTranscriptEntry({
+        key: "phase:start_provider_session",
+        text,
+        metadata: {
+          phase: args.phase,
+          status: args.status,
+          ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
+        },
+        ...(args.status === "started" ? { startedAt: args.startedAt } : {}),
+      });
+    }
+    default:
+      return assertNever(args.phase);
+  }
+}
+
+function createProvisioningSetupTranscriptEntry(args: {
+  status: "started" | "running" | "completed" | "failed";
+  scriptPath: string;
+  startedAt: number;
+  durationMs?: number;
+  output?: string;
+}): ProvisioningTranscriptEntry {
+  const durationText =
+    args.durationMs !== undefined ? ` in ${formatDuration(args.durationMs)}` : "";
+  const text =
+    args.status === "started" || args.status === "running"
+      ? `running ${args.scriptPath}`
+      : args.status === "completed"
+        ? `ran ${args.scriptPath}${durationText}`
+        : `setup script failed: ${args.scriptPath}${durationText}`;
+  return createProvisioningTranscriptEntry({
+    key: "setup",
+    text,
+    metadata: {
+      status: args.status,
+      scriptPath: args.scriptPath,
+      ...(args.durationMs !== undefined ? { durationMs: args.durationMs } : {}),
+      ...(args.output ? { output: args.output } : {}),
+    },
+    ...((args.status === "started" || args.status === "running")
+      ? { startedAt: args.startedAt }
+      : {}),
+  });
+}
+
 function toServiceTier(
   value: unknown,
 ): ThreadExecutionOptions["serviceTier"] | undefined {
@@ -617,16 +773,15 @@ export class Orchestrator implements ThreadOrchestrator {
           this._appendEnvironmentProvisioningEvent(threadId, event),
         onThreadChanged: (threadId, changes) =>
           this._broadcastThreadChanged(threadId, changes),
-        onCleanupFailure: (threadId, environmentId, error) => {
+        onCleanupFailure: (threadId, environmentKind, error) => {
           const message = error instanceof Error ? error.message : String(error);
           console.warn(
-            `[thread ${threadId}] environment cleanup failed (${environmentId}): ${message}`,
+            `[thread ${threadId}] environment cleanup failed (${environmentKind}): ${message}`,
           );
           this._appendEvent(
             threadId,
             "system/provisioning/cleanup_failed",
             {
-              environmentId,
               message: "Environment cleanup failed",
               detail: message,
             },
@@ -889,12 +1044,17 @@ export class Orchestrator implements ThreadOrchestrator {
   private _resolveEnvironmentSelection(args: {
     projectId: string;
     environmentId?: string;
-    environmentKind?: string;
+    environmentDescriptor?: EnvironmentDescriptor;
+    environmentCreationArgs?: EnvironmentCreationArgs;
   }): {
     attachedEnvironmentId?: string;
     runtimeEnvironmentId: string;
   } {
-    // environmentId is a first-class environment UUID
+    const project = this.projectRepo.getById(args.projectId);
+    if (!project) {
+      throw projectNotFoundError(args.projectId);
+    }
+
     if (args.environmentId) {
       if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
         throw invalidRequestError("First-class environment attachments are unavailable");
@@ -907,35 +1067,102 @@ export class Orchestrator implements ThreadOrchestrator {
       if (requestedRuntimeKind) {
         return {
           attachedEnvironmentId: args.environmentId,
-          runtimeEnvironmentId: this._resolveRequestedEnvironmentId(requestedRuntimeKind),
+          runtimeEnvironmentId: this._normalizeRuntimeKind(requestedRuntimeKind),
         };
       }
-      const project = this.projectRepo.getById(args.projectId);
-      if (project) {
-        const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
-          descriptor: attachedEnvironment.descriptor,
-          projectRootPath: project.rootPath,
-        });
-        if (derivedRecord?.kind) {
-          return {
-            attachedEnvironmentId: args.environmentId,
-            runtimeEnvironmentId: this._resolveRequestedEnvironmentId(derivedRecord.kind),
-          };
-        }
+      const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+        descriptor: attachedEnvironment.descriptor,
+        projectRootPath: project.rootPath,
+      });
+      if (derivedRecord?.kind) {
+        return {
+          attachedEnvironmentId: args.environmentId,
+          runtimeEnvironmentId: this._normalizeRuntimeKind(derivedRecord.kind),
+        };
       }
       return {
         attachedEnvironmentId: args.environmentId,
         runtimeEnvironmentId:
-          project && attachedEnvironment.descriptor.path === project.rootPath
-            ? "local"
-            : "worktree",
+          attachedEnvironment.descriptor.path === project.rootPath ? "local" : "worktree",
       };
     }
 
-    // environmentKind is a kind string ("worktree", "local", "docker")
+    if (args.environmentDescriptor) {
+      if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
+        const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+          descriptor: args.environmentDescriptor,
+          projectRootPath: project.rootPath,
+        });
+        return {
+          runtimeEnvironmentId:
+            derivedRecord?.kind ??
+            (resolve(args.environmentDescriptor.path) === resolve(project.rootPath)
+              ? "local"
+              : "worktree"),
+        };
+      }
+      const attachedEnvironment =
+        this.environmentRepo.findByProjectDescriptor({
+          projectId: args.projectId,
+          descriptor: args.environmentDescriptor,
+        }) ??
+        this.environmentRepo.create({
+          projectId: args.projectId,
+          descriptor: args.environmentDescriptor,
+          managed: false,
+          runtimeState: derivePersistedEnvironmentRecordFromDescriptor({
+            descriptor: args.environmentDescriptor,
+            projectRootPath: project.rootPath,
+          }),
+        });
+      return {
+        attachedEnvironmentId: attachedEnvironment.id,
+        runtimeEnvironmentId: this._resolveRuntimeKindFromAttachedEnvironment(
+          attachedEnvironment,
+          project.rootPath,
+        ),
+      };
+    }
+
+    if (args.environmentCreationArgs) {
+      return {
+        runtimeEnvironmentId: this._normalizeRuntimeKind(args.environmentCreationArgs.kind),
+      };
+    }
+
     return {
-      runtimeEnvironmentId: this._resolveRequestedEnvironmentId(args.environmentKind),
+      attachedEnvironmentId: this._resolveEnvironmentSelection({
+        projectId: args.projectId,
+        environmentDescriptor: {
+          type: "path",
+          path: project.rootPath,
+        },
+      }).attachedEnvironmentId,
+      runtimeEnvironmentId: "local",
     };
+  }
+
+  private _resolveRuntimeKindFromAttachedEnvironment(
+    environment: {
+      descriptor: EnvironmentDescriptor;
+      requestedRuntimeKind?: string;
+    },
+    projectRootPath: string,
+  ): string {
+    const requestedRuntimeKind = environment.requestedRuntimeKind?.trim();
+    if (requestedRuntimeKind) {
+      return this._normalizeRuntimeKind(requestedRuntimeKind);
+    }
+    const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+      descriptor: environment.descriptor,
+      projectRootPath,
+    });
+    if (derivedRecord?.kind) {
+      return this._normalizeRuntimeKind(derivedRecord.kind);
+    }
+    return resolve(environment.descriptor.path) === resolve(projectRootPath)
+      ? "local"
+      : "worktree";
   }
 
   private _resolveThreadEnvironmentReference(threadId: string): string | undefined {
@@ -1011,10 +1238,26 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
-    const { attachedEnvironmentId, runtimeEnvironmentId } = this._resolveEnvironmentSelection({
+    const effectiveEnvironmentRequest =
+      req.environmentId || req.environmentDescriptor || req.environmentCreationArgs
+        ? req
+        : req.parentThreadId
+          ? {
+              ...req,
+              environmentCreationArgs: { kind: "worktree" },
+            }
+          : {
+              ...req,
+              environmentDescriptor: {
+                type: "path" as const,
+                path: project.rootPath,
+              },
+            };
+    const { attachedEnvironmentId } = this._resolveEnvironmentSelection({
       projectId: req.projectId,
-      environmentId: req.environmentId,
-      environmentKind: req.environmentKind ?? (req.parentThreadId ? "worktree" : undefined),
+      environmentId: effectiveEnvironmentRequest.environmentId,
+      environmentDescriptor: effectiveEnvironmentRequest.environmentDescriptor,
+      environmentCreationArgs: effectiveEnvironmentRequest.environmentCreationArgs,
     });
     const providerId = this._resolveSpawnProviderId(req);
     const thread = this.threadRepo.create({
@@ -1062,7 +1305,12 @@ export class Orchestrator implements ThreadOrchestrator {
     this._broadcastThreadChanged(persistedThread.id, ["thread-created"]);
     this._scheduleProvisioning(
       persistedThread.id,
-      { ...provisioningRequest, environmentKind: runtimeEnvironmentId },
+      effectiveEnvironmentRequest.developerInstructions === provisioningRequest.developerInstructions
+        ? effectiveEnvironmentRequest
+        : {
+            ...effectiveEnvironmentRequest,
+            developerInstructions: provisioningRequest.developerInstructions,
+          },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",
@@ -1337,30 +1585,6 @@ export class Orchestrator implements ThreadOrchestrator {
     const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
       ?.getByThreadId(threadId)
       ?.environmentId;
-    const requestedEnvironmentId = thread.environmentId?.trim();
-    if (
-      !attachedEnvironmentId &&
-      requestedEnvironmentId &&
-      requestedEnvironmentId !== "local" &&
-      this.environmentRegistry.has(requestedEnvironmentId)
-    ) {
-      this._scheduleProvisioning(
-        threadId,
-        {
-          projectId: thread.projectId,
-          input: requestedInput,
-          model: options?.model,
-          serviceTier: options?.serviceTier,
-          reasoningLevel: options?.reasoningLevel,
-          sandboxMode: options?.sandboxMode,
-          environmentKind: requestedEnvironmentId,
-        },
-        {
-          reason: "tell-after-missing-environment-attachment",
-        },
-      );
-      return;
-    }
     if (thread.status === "provisioning_failed") {
       this._scheduleProvisioning(
         threadId,
@@ -3471,18 +3695,36 @@ export class Orchestrator implements ThreadOrchestrator {
       },
     );
 
+    const effectiveEnvironmentRequest =
+      req.environmentId || req.environmentDescriptor || req.environmentCreationArgs
+        ? req
+        : thread?.environmentId
+          ? { ...req, environmentId: thread.environmentId }
+          : req.parentThreadId
+            ? {
+                ...req,
+                environmentCreationArgs: { kind: "worktree" },
+              }
+            : {
+                ...req,
+                environmentDescriptor: {
+                  type: "path" as const,
+                  path: project.rootPath,
+                },
+              };
     let { attachedEnvironmentId, runtimeEnvironmentId: requestedEnvironmentId } =
       this._resolveEnvironmentSelection({
       projectId: req.projectId,
-      environmentId: req.environmentId ?? thread?.environmentId,
-      environmentKind: req.environmentKind,
+      environmentId: effectiveEnvironmentRequest.environmentId,
+      environmentDescriptor: effectiveEnvironmentRequest.environmentDescriptor,
+      environmentCreationArgs: effectiveEnvironmentRequest.environmentCreationArgs,
       });
-    if (!attachedEnvironmentId) {
+    if (!attachedEnvironmentId && effectiveEnvironmentRequest.environmentCreationArgs) {
       attachedEnvironmentId = this.envFactory.reserveThreadEnvironment({
         threadId,
         projectId: req.projectId,
         projectRootPath: project.rootPath,
-        requestedEnvironmentId,
+        environmentCreationArgs: effectiveEnvironmentRequest.environmentCreationArgs,
       });
     }
     if (attachedEnvironmentId && thread && thread.environmentId !== attachedEnvironmentId) {
@@ -3506,9 +3748,12 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       "system/provisioning/started",
       {
-        environmentId: requestedEnvironmentId,
-        environmentDisplayName: requestedEnvironmentInfo.displayName,
+        ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
         reason: provisioningReason,
+        transcript: createEnvironmentProvisioningTranscript({
+          environmentDisplayName: requestedEnvironmentInfo.displayName,
+          ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
+        }),
       },
       { broadcastChanges: false },
     );
@@ -3631,13 +3876,30 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       "system/provisioning/completed",
       {
-        environmentId: environmentRuntime.environment.kind,
-        environmentDisplayName: provisionedEnvironmentInfo.displayName,
+        ...(attachedEnvironmentIdAfterProvision
+          ? { attachedEnvironmentId: attachedEnvironmentIdAfterProvision }
+          : {}),
         providerThreadId,
         workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
-        ...(branchName ? { branchName } : {}),
-        ...(headSha ? { headSha } : {}),
         reason: provisioningReason,
+        transcript: [
+          ...createEnvironmentProvisioningTranscript({
+            environmentDisplayName: provisionedEnvironmentInfo.displayName,
+            ...(attachedEnvironmentIdAfterProvision
+              ? { attachedEnvironmentId: attachedEnvironmentIdAfterProvision }
+              : {}),
+          }),
+          ...(() => {
+            const branchEntry = createProvisioningBranchTranscriptEntry({
+              branchName,
+              headSha,
+              worktree: isWorktreeEnvironmentReference({
+                displayName: provisionedEnvironmentInfo.displayName,
+              }),
+            });
+            return branchEntry ? [branchEntry] : [];
+          })(),
+        ],
       },
       { broadcastChanges: ["events-appended"] },
     );
@@ -3916,23 +4178,45 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     event: EnvironmentProvisioningEvent,
   ): void {
+    const setupOutput = event.detail;
+    const runtimeEnvironment = this.environmentService.getEnvironmentRuntime(threadId)?.environment;
+    const transcript: ProvisioningTranscriptEntry[] = [];
+    const branchEntry = createProvisioningBranchTranscriptEntry({
+      branchName: "branchName" in event ? event.branchName : undefined,
+      headSha: "headSha" in event ? event.headSha : undefined,
+      worktree:
+        runtimeEnvironment !== undefined
+          ? isWorktreeEnvironmentReference({
+              displayName: this.environmentRegistry.get(runtimeEnvironment.kind).info.displayName,
+            })
+          : false,
+    });
+    if (branchEntry) {
+      transcript.push(branchEntry);
+    }
+    transcript.push(
+      createProvisioningSetupTranscriptEntry({
+        status: event.status,
+        scriptPath: event.scriptPath,
+        startedAt: Date.now(),
+        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+        ...(setupOutput ? { output: setupOutput } : {}),
+      }),
+    );
     this._appendEvent(
       threadId,
       "system/provisioning/env_setup",
       {
-        status: event.status,
-        scriptPath: event.scriptPath,
+        setup: {
+          status: event.status,
+          scriptPath: event.scriptPath,
+          ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
+          ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+          ...(setupOutput ? { output: setupOutput } : {}),
+        },
         ...(event.workspaceRoot ? { workspaceRoot: event.workspaceRoot } : {}),
-        ...("branchName" in event && event.branchName
-          ? { branchName: event.branchName }
-          : {}),
-        ...("headSha" in event && event.headSha
-          ? { headSha: event.headSha }
-          : {}),
-        ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
-        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
-        ...(event.detail ? { detail: event.detail } : {}),
         ...(event.reason ? { reason: event.reason } : {}),
+        transcript,
       },
       { broadcastChanges: ["events-appended"] },
     );
@@ -3946,6 +4230,13 @@ export class Orchestrator implements ThreadOrchestrator {
       durationMs?: number;
     },
   ): void {
+    const observedAt = Date.now();
+    const transcriptEntry = createProvisioningProgressTranscriptEntry({
+      phase,
+      status,
+      startedAt: observedAt,
+      ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+    });
     this._appendEvent(
       threadId,
       "system/provisioning/progress",
@@ -3953,6 +4244,7 @@ export class Orchestrator implements ThreadOrchestrator {
         phase,
         status,
         ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+        transcript: transcriptEntry ? [transcriptEntry] : [],
       },
       { broadcastChanges: ["events-appended"] },
     );
@@ -4106,15 +4398,27 @@ export class Orchestrator implements ThreadOrchestrator {
       reason,
     });
     if (this.threadRepo.getById(threadId)?.status !== "provisioning") {
+      const environmentDisplayName = this.environmentRegistry.get(environment.kind).info.displayName;
       this._appendEvent(
         threadId,
         "system/provisioning/completed",
         {
-          environmentId: environment.kind,
-          environmentDisplayName: this.environmentRegistry.get(environment.kind).info.displayName,
           workspaceRoot,
-          ...(branchName ? { branchName } : {}),
-          ...(headSha ? { headSha } : {}),
+          transcript: [
+            ...createEnvironmentProvisioningTranscript({
+              environmentDisplayName,
+            }),
+            ...(() => {
+              const branchEntry = createProvisioningBranchTranscriptEntry({
+                branchName,
+                headSha,
+                worktree: isWorktreeEnvironmentReference({
+                  displayName: environmentDisplayName,
+                }),
+              });
+              return branchEntry ? [branchEntry] : [];
+            })(),
+          ],
         },
         { broadcastChanges: ["events-appended"] },
       );
@@ -4591,7 +4895,7 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  private _resolveRequestedEnvironmentId(value?: string): string {
+  private _normalizeRuntimeKind(value?: string): string {
     try {
       return this.environmentService.resolveRequestedEnvironmentId(value);
     } catch (error) {
@@ -5461,7 +5765,17 @@ export class Orchestrator implements ThreadOrchestrator {
   ): void {
     if (type === "system/provisioning/completed") {
       const eventData = toRecord(data);
-      const fallbackReason = getStringField(eventData, "fallbackReason");
+      const fallbackReason = (() => {
+        const transcript = Array.isArray(eventData?.transcript) ? eventData.transcript : [];
+        for (const entry of transcript) {
+          const record = toRecord(entry);
+          if (getStringField(record, "key") !== "fallback") {
+            continue;
+          }
+          return getStringField(record, "text");
+        }
+        return undefined;
+      })();
       this.provisioningCompletionStateByThreadId.set(
         threadId,
         fallbackReason

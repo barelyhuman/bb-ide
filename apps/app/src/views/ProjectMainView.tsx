@@ -61,8 +61,8 @@ export function ProjectMainView() {
     setReasoningLevel,
     sandboxMode,
     setSandboxMode,
-    environmentId,
-    setEnvironmentId,
+    environmentSelectionValue,
+    setEnvironmentSelectionValue,
     activeModel,
     modelOptions,
     reasoningOptions,
@@ -79,7 +79,14 @@ export function ProjectMainView() {
       );
       return environmentOptions.map((option) => ({
         ...option,
-        icon: getEnvironmentIconInfo(environmentById.get(option.value))?.icon,
+        icon: getEnvironmentIconInfo(
+          environmentById.has(option.value)
+            ? {
+                ...environmentById.get(option.value)!,
+                requestedRuntimeKind: option.value,
+              }
+            : undefined,
+        )?.icon,
       }));
     },
     [environmentOptions, environments],
@@ -168,9 +175,41 @@ export function ProjectMainView() {
     return currentBranch;
   }, [workspaceStatus]);
   const selectedEnvironment = useMemo(
-    () => environments?.find((environment) => environment.id === environmentId),
-    [environmentId, environments],
+    () => environments?.find((environment) => environment.id === environmentSelectionValue),
+    [environmentSelectionValue, environments],
   );
+  const selectedProject = useMemo(
+    () => projects?.find((project) => project.id === projectId),
+    [projectId, projects],
+  );
+  const selectedEnvironmentRequest = useMemo(() => {
+    if (!projectId) {
+      return {};
+    }
+    if (!environmentSelectionValue || environmentSelectionValue === "local") {
+      return selectedProject?.rootPath
+        ? {
+            environmentDescriptor: {
+              type: "path" as const,
+              path: selectedProject.rootPath,
+            },
+          }
+        : {};
+    }
+    if (
+      environmentSelectionValue === "worktree" ||
+      environmentSelectionValue === "docker"
+    ) {
+      return {
+        environmentCreationArgs: {
+          kind: environmentSelectionValue,
+        },
+      };
+    }
+    return {
+      environmentId: environmentSelectionValue,
+    };
+  }, [environmentSelectionValue, projectId, selectedProject?.rootPath]);
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
     navigate(`/projects/${nextProjectId}`);
@@ -244,7 +283,15 @@ export function ProjectMainView() {
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
-        ...(environmentId ? { environmentKind: environmentId } : {}),
+        ...(selectedEnvironmentRequest.environmentId
+          ? { environmentId: selectedEnvironmentRequest.environmentId }
+          : {}),
+        ...(selectedEnvironmentRequest.environmentDescriptor
+          ? { environmentDescriptor: selectedEnvironmentRequest.environmentDescriptor }
+          : {}),
+        ...(selectedEnvironmentRequest.environmentCreationArgs
+          ? { environmentCreationArgs: selectedEnvironmentRequest.environmentCreationArgs }
+          : {}),
       });
     } catch {
       promptDraft.restoreIfEmpty(submittedDraft);
@@ -319,9 +366,9 @@ export function ProjectMainView() {
             {environmentSelectorOptions.length > 0 ? (
               <PromptOptionPicker
                 label="Environment"
-                value={environmentId}
+                value={environmentSelectionValue}
                 options={environmentSelectorOptions}
-                onChange={setEnvironmentId}
+                onChange={setEnvironmentSelectionValue}
               />
             ) : null}
             {!threadsLoading &&

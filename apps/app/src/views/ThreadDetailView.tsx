@@ -60,6 +60,7 @@ import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { DetailCard, DetailRow, StatusPill } from "@bb/ui-core";
 import {
   formatEnvironmentDisplayName,
+  formatRuntimeKind,
   type PromptInput,
   type ServiceTier,
   type Thread,
@@ -98,6 +99,48 @@ import { toast } from "sonner";
 function formatAttachedEnvironmentLabel(path: string): string {
   const segments = path.split("/").filter(Boolean);
   return segments.at(-1) ?? path;
+}
+
+function formatThreadEnvironmentLabel(args: {
+  projectRootPath?: string;
+  attachedEnvironment?: Thread["attachedEnvironment"];
+  legacyEnvironmentId?: string;
+  systemEnvironmentDisplayName?: string;
+}): string | undefined {
+  const attachedEnvironment = args.attachedEnvironment;
+  if (attachedEnvironment) {
+    const environmentKind =
+      attachedEnvironment.requestedRuntimeKind ?? attachedEnvironment.runtimeState?.kind;
+    const runtimeLabel = formatRuntimeKind(environmentKind);
+    const isPrimaryWorkspace =
+      args.projectRootPath !== undefined &&
+      attachedEnvironment.descriptor.path === args.projectRootPath;
+    if (isPrimaryWorkspace) {
+      return "Primary";
+    }
+    if (runtimeLabel === "Docker Sandbox") {
+      return "Docker";
+    }
+    if (runtimeLabel === "Worktree") {
+      return attachedEnvironment.managed
+        ? formatAttachedEnvironmentLabel(attachedEnvironment.descriptor.path)
+        : "Worktree";
+    }
+    return attachedEnvironment.managed
+      ? formatAttachedEnvironmentLabel(attachedEnvironment.descriptor.path)
+      : "Direct";
+  }
+
+  if (!args.legacyEnvironmentId) {
+    return undefined;
+  }
+
+  return (
+    formatEnvironmentDisplayName({
+      id: args.legacyEnvironmentId,
+      displayName: args.systemEnvironmentDisplayName,
+    }) ?? args.legacyEnvironmentId
+  );
 }
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -265,7 +308,7 @@ export function ThreadDetailView() {
     initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
-    initialEnvironmentId: thread?.environmentId,
+    initialEnvironmentSelectionValue: thread?.environmentId,
   });
   const preferredTheme = usePreferredTheme();
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
@@ -803,19 +846,13 @@ export function ThreadDetailView() {
   const isThreadGitActionPending =
     requestThreadCommitOperation.isPending || requestThreadSquashOperation.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
-  const threadEnvironmentLabel =
-    thread.attachedEnvironment
-      ? (thread.attachedEnvironment.managed
-        ? formatAttachedEnvironmentLabel(thread.attachedEnvironment.descriptor.path)
-        : "Primary workspace")
-      : thread.environmentId
-        ? (
-            formatEnvironmentDisplayName({
-              id: thread.environmentId,
-              displayName: environmentInfo?.displayName,
-            }) ?? thread.environmentId
-          )
-        : undefined;
+  const projectRootPath = project?.rootPath;
+  const threadEnvironmentLabel = formatThreadEnvironmentLabel({
+    projectRootPath,
+    attachedEnvironment: thread.attachedEnvironment,
+    legacyEnvironmentId: thread.environmentId,
+    systemEnvironmentDisplayName: environmentInfo?.displayName,
+  });
   const provisioningStatusLabel =
     isCreated
       ? "Created..."

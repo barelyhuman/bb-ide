@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import type { EnvironmentDescriptor, PersistedEnvironmentRecord } from "@bb/core";
+import type {
+  EnvironmentCreationArgs,
+  EnvironmentDescriptor,
+  PersistedEnvironmentRecord,
+} from "@bb/core";
 import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
@@ -43,7 +47,7 @@ export class EnvironmentFactory {
     threadId: string;
     projectId: string;
     projectRootPath: string;
-    requestedEnvironmentId: string;
+    environmentCreationArgs: EnvironmentCreationArgs;
   }): string | undefined {
     if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
       return undefined;
@@ -54,39 +58,15 @@ export class EnvironmentFactory {
       return existingAttachment.environmentId;
     }
 
-    const isPrimaryWorkspace = args.requestedEnvironmentId === "local";
-    const environmentRecord = isPrimaryWorkspace
-      ? (
-        this.environmentRepo.findByProjectDescriptor({
-          projectId: args.projectId,
-          descriptor: {
-            type: "path",
-            path: args.projectRootPath,
-          },
-        }) ??
-        this.environmentRepo.create({
-          projectId: args.projectId,
-          descriptor: {
-            type: "path",
-            path: args.projectRootPath,
-          },
-          managed: false,
-          requestedRuntimeKind: "local",
-          runtimeState: {
-            kind: "local",
-            state: {},
-          },
-        })
-      )
-      : this.environmentRepo.create({
-          projectId: args.projectId,
-          descriptor: {
-            type: "path",
-            path: args.projectRootPath,
-          },
-          managed: true,
-          requestedRuntimeKind: args.requestedEnvironmentId,
-        });
+    const environmentRecord = this.environmentRepo.create({
+      projectId: args.projectId,
+      descriptor: {
+        type: "path",
+        path: args.projectRootPath,
+      },
+      managed: true,
+      requestedRuntimeKind: args.environmentCreationArgs.kind,
+    });
 
     this.threadEnvironmentAttachmentRepo.attachThread({
       threadId: args.threadId,
@@ -126,7 +106,7 @@ export class EnvironmentFactory {
       ? this.environmentRepo.update(existingEnvironment.id, {
           descriptor,
           managed,
-          requestedRuntimeKind: args.environment.kind,
+          requestedRuntimeKind: managed ? args.environment.kind : null,
           runtimeState: {
             kind: args.environment.kind,
             state: args.environment.serialize(),
@@ -136,7 +116,7 @@ export class EnvironmentFactory {
         projectId: args.projectId,
         descriptor,
         managed,
-        requestedRuntimeKind: args.environment.kind,
+        ...(managed ? { requestedRuntimeKind: args.environment.kind } : {}),
         runtimeState: {
           kind: args.environment.kind,
           state: args.environment.serialize(),

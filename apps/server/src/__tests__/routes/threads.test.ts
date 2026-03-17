@@ -276,7 +276,7 @@ describe("Thread routes", () => {
         body: JSON.stringify({
           projectId: "proj-1",
           input: [{ type: "text", text: "Do work" }],
-          environmentKind: "worktree",
+          environmentCreationArgs: { kind: "worktree" },
         }),
       });
 
@@ -284,7 +284,7 @@ describe("Thread routes", () => {
       expect(threadManager.spawn).toHaveBeenCalledWith({
         projectId: "proj-1",
         input: [{ type: "text", text: "Do work" }],
-        environmentKind: "worktree",
+        environmentCreationArgs: { kind: "worktree" },
       });
     });
 

@@ -20,7 +20,7 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the container icon for docker", () => {
     expect(
       getEnvironmentIconInfo({
-        id: "docker",
+        requestedRuntimeKind: "docker",
         capabilities: createCapabilities({
           host_filesystem: true,
           isolated_workspace: true,
@@ -35,7 +35,7 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the worktree icon for isolated workspaces", () => {
     expect(
       getEnvironmentIconInfo({
-        id: "worktree",
+        requestedRuntimeKind: "worktree",
         capabilities: createCapabilities({
           isolated_workspace: true,
         }),
@@ -49,7 +49,9 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the direct icon for host filesystem environments", () => {
     expect(
       getEnvironmentIconInfo({
-        id: "local",
+        runtimeState: {
+          kind: "local",
+        },
         capabilities: createCapabilities({
           host_filesystem: true,
         }),

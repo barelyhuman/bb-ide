@@ -565,7 +565,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--environment", "worktree"],
+      ["thread", "spawn", "--new-environment", "worktree"],
       (program) => registerThreadCommands(program, () => "http://daemon"),
     );
 
@@ -573,14 +573,16 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: undefined,
-        environmentKind: "worktree",
+        environmentCreationArgs: {
+          kind: "worktree",
+        },
       },
     });
   });
 
-  it("bb thread spawn falls back to BB_ENVIRONMENT", async () => {
+  it("bb thread spawn does not read BB_ENVIRONMENT", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BB_ENVIRONMENT = "local";
+    process.env.BB_ENVIRONMENT = "/tmp/project-root";
     const thread: Thread = {
       id: "thread-env-2",
       projectId: "proj-1",
@@ -610,7 +612,6 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: undefined,
-        environmentKind: "local",
       },
     });
   });

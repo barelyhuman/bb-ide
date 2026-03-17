@@ -7,18 +7,20 @@ interface EnvironmentIconInfo {
 }
 
 type EnvironmentIconSource =
-  | Pick<SystemEnvironmentInfo, "id" | "capabilities">
-  | Pick<EnvironmentRecord, "managed">
+  | (Pick<SystemEnvironmentInfo, "capabilities"> & {
+      requestedRuntimeKind?: string
+      runtimeState?: { kind: string }
+    })
+  | Pick<EnvironmentRecord, "managed" | "requestedRuntimeKind" | "runtimeState">
 
 export function getEnvironmentIconInfo(
   environment?: EnvironmentIconSource | null,
 ): EnvironmentIconInfo | undefined {
   if (!environment) return undefined
 
-  // Environment ids are open_external runtime values, so only known special
-  // cases get id-specific icons. Unknown ids intentionally fall back to
-  // capability-based icons when possible.
-  if ("id" in environment && environment.id === "docker") {
+  const effectiveKind = environment.requestedRuntimeKind ?? environment.runtimeState?.kind
+
+  if (effectiveKind === "docker") {
     return {
       icon: Container,
       ariaLabel: "Docker thread",
@@ -32,7 +34,10 @@ export function getEnvironmentIconInfo(
     }
   }
 
-  if ("capabilities" in environment && environment.capabilities.isolated_workspace) {
+  if (
+    ("capabilities" in environment && environment.capabilities.isolated_workspace) ||
+    effectiveKind === "worktree"
+  ) {
     return {
       icon: FolderGit2,
       ariaLabel: "Worktree thread",

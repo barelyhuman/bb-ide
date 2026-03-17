@@ -445,7 +445,7 @@ function isCurrentCliDistAvailable(): boolean {
   }
 
   const cliRoot = resolve(WORKSPACE_ROOT, "apps", "cli");
-  const distModifiedAtMs = statSync(CLI_DIST_PATH).mtimeMs;
+  const distModifiedAtMs = latestModifiedAtMs(resolve(cliRoot, "dist"));
   const sourceLatestMs = Math.max(
     latestModifiedAtMs(resolve(cliRoot, "src")),
     latestModifiedAtMs(resolve(cliRoot, "package.json")),

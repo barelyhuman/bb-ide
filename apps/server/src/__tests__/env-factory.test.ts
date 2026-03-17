@@ -44,7 +44,9 @@ describe("EnvironmentFactory", () => {
       threadId: thread.id,
       projectId: project.id,
       projectRootPath: project.rootPath,
-      requestedEnvironmentId: "docker",
+      environmentCreationArgs: {
+        kind: "docker",
+      },
     });
 
     expect(environmentId).toBeDefined();
@@ -71,7 +73,9 @@ describe("EnvironmentFactory", () => {
       threadId: thread.id,
       projectId: project.id,
       projectRootPath: project.rootPath,
-      requestedEnvironmentId: "local",
+      environmentCreationArgs: {
+        kind: "worktree",
+      },
     });
 
     expect(environmentId).toBeDefined();
@@ -82,7 +86,7 @@ describe("EnvironmentFactory", () => {
     });
   });
 
-  it("reuses existing environment for a second thread and creates its attachment", () => {
+  it("creates a distinct managed environment for each reservation request", () => {
     const project = projects.create({
       name: "factory-shared-project",
       rootPath: "/tmp/factory-shared-project",
@@ -95,20 +99,23 @@ describe("EnvironmentFactory", () => {
       threadId: thread1.id,
       projectId: project.id,
       projectRootPath: project.rootPath,
-      requestedEnvironmentId: "local",
+      environmentCreationArgs: {
+        kind: "worktree",
+      },
     });
 
     const envId2 = factory.reserveThreadEnvironment({
       threadId: thread2.id,
       projectId: project.id,
       projectRootPath: project.rootPath,
-      requestedEnvironmentId: "local",
+      environmentCreationArgs: {
+        kind: "worktree",
+      },
     });
 
-    // Both threads should share the same environment (local/primary workspace)
-    expect(envId1).toBe(envId2);
-
-    // Both threads should have attachment rows
+    expect(envId1).toBeDefined();
+    expect(envId2).toBeDefined();
+    expect(envId1).not.toBe(envId2);
     expect(attachments.getByThreadId(thread1.id)).toMatchObject({
       threadId: thread1.id,
       environmentId: envId1,

@@ -51,7 +51,7 @@ interface EnvironmentServiceCallbacks {
   createContext: (threadId: string, projectRootPath: string) => CreateEnvironmentContext;
   onProvisioningEvent: (threadId: string, event: EnvironmentProvisioningEvent) => void;
   onThreadChanged: (threadId: string, changes: readonly ThreadChangeKind[]) => void;
-  onCleanupFailure: (threadId: string, environmentId: string, error: unknown) => void;
+  onCleanupFailure: (threadId: string, environmentKind: string, error: unknown) => void;
   onPrimaryCheckoutDemoted: (args: {
     projectId: string;
     threadId: string;
@@ -198,7 +198,6 @@ export class EnvironmentService {
     const attachedEnvironmentRecord = this.resolveAttachedPersistedEnvironmentRecord(thread.id);
     const candidateKinds = [
       attachedEnvironmentRecord?.kind,
-      thread.environmentId,
       "local",
     ];
     for (const candidateKind of candidateKinds) {
@@ -233,7 +232,7 @@ export class EnvironmentService {
   }
 
   resolveRequestedEnvironmentId(value?: string): string {
-    const normalized = (value ?? process.env.BB_ENVIRONMENT ?? "local").trim();
+    const normalized = (value ?? "local").trim();
     if (!normalized) return "local";
     if (!this.environmentRegistry.has(normalized)) {
       throw new Error(`Unsupported environment "${normalized}"`);
