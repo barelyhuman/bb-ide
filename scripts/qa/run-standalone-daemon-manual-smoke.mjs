@@ -178,7 +178,7 @@ async function main() {
         "spawn",
         "--project",
         metadata.projectId,
-        "--environment",
+        "--new-environment",
         "worktree",
         "--prompt",
         "Reply with exactly WORKTREE-SMOKE-START and finish.",
