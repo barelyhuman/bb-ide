@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, PanelRight, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, PanelRight, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
@@ -155,6 +155,45 @@ interface ThreadEnvironmentDisplay {
     relativePath: string;
     title: string;
   };
+}
+
+function ThreadEnvironmentValue({
+  threadId,
+  display,
+}: {
+  threadId?: string;
+  display?: ThreadEnvironmentDisplay;
+}) {
+  const worktreeOpenPath = display?.worktreeOpenPath;
+  if (!display) {
+    return null;
+  }
+  if (!(display.suffix && worktreeOpenPath)) {
+    return display.label;
+  }
+  return (
+    <>
+      {display.label}
+      {" ("}
+      <button
+        type="button"
+        className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
+        title={worktreeOpenPath.title}
+        aria-label="Open worktree folder"
+        onClick={() => {
+          if (!threadId) return;
+          void openThreadPathInEditor(threadId, {
+            relativePath: worktreeOpenPath.relativePath,
+            target: "directory",
+            command: getPathCommandForTarget("directory"),
+          });
+        }}
+      >
+        <ExternalLink className="size-3 shrink-0" />
+      </button>
+      {")"}
+    </>
+  );
 }
 
 function getThreadEnvironmentDisplay(args: {
@@ -935,32 +974,8 @@ export function ThreadDetailView() {
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     (thread.attachedEnvironment?.descriptor ? thread.attachedEnvironment.descriptor.type : undefined);
-  const worktreeOpenPath = threadEnvironmentDisplay?.worktreeOpenPath;
   const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentDisplay
-    ? threadEnvironmentDisplay.suffix && worktreeOpenPath
-      ? (
-        <>
-          {threadEnvironmentDisplay.label}
-          {" ("}
-          <button
-            type="button"
-            className="underline underline-offset-2 hover:text-foreground"
-            title={worktreeOpenPath.title}
-            onClick={() => {
-              if (!threadId) return;
-              void openThreadPathInEditor(threadId, {
-                relativePath: worktreeOpenPath.relativePath,
-                target: "directory",
-                command: getPathCommandForTarget("directory"),
-              });
-            }}
-          >
-            path
-          </button>
-          {")"}
-        </>
-      )
-      : threadEnvironmentDisplay.label
+    ? <ThreadEnvironmentValue threadId={threadId} display={threadEnvironmentDisplay} />
     : undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
