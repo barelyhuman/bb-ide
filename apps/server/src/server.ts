@@ -84,6 +84,7 @@ export interface ServerDeps {
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono();
+  const runtimeEnv = deps.runtimeEnv ?? process.env;
 
   // Request logging
   app.use(logger());
@@ -108,7 +109,7 @@ export function createServer(deps: ServerDeps) {
 
   // Create managers
   const wsManager = new WSManager();
-  const defaultProviderId = resolveDefaultProviderId();
+  const defaultProviderId = resolveDefaultProviderId(runtimeEnv);
   const provider = deps.provider ?? createProviderAdapter({ providerId: defaultProviderId });
   let threadManager: Orchestrator;
   const managerToolHost = createManagerProviderToolHost({
@@ -152,7 +153,7 @@ export function createServer(deps: ServerDeps) {
     },
   );
   const daemonRuntimeEnv = {
-    ...(deps.runtimeEnv ?? process.env),
+    ...runtimeEnv,
     ...(deps.daemonBaseUrl
       ? { BB_DAEMON_URL: deps.daemonBaseUrl }
       : {}),
