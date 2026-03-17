@@ -151,7 +151,22 @@ const environmentAgentSessionCommandsQuerySchema = z.object({
 });
 
 function isAbortError(error: unknown): error is Error {
-  return error instanceof Error && error.name === "AbortError";
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "AbortError") {
+    return true;
+  }
+  const errorWithCode = error as Error & { code?: string };
+  if (
+    errorWithCode.code === "ABORT_ERR" ||
+    errorWithCode.code === "ERR_ABORTED" ||
+    errorWithCode.code === "ERR_HTTP_ABORTED"
+  ) {
+    return true;
+  }
+  const message = error.message.toLowerCase();
+  return message.includes("aborted") || message.includes("aborterror");
 }
 
 const environmentAgentSessionMessageBaseSchema = z.object({
@@ -504,7 +519,12 @@ export function createThreadRoutes(
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.environmentId ? { environmentId: body.environmentId } : {}),
-          ...(body.environmentKind ? { environmentKind: body.environmentKind } : {}),
+          ...(body.environmentDescriptor
+            ? { environmentDescriptor: body.environmentDescriptor }
+            : {}),
+          ...(body.environmentCreationArgs
+            ? { environmentCreationArgs: body.environmentCreationArgs }
+            : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.developerInstructions !== undefined
             ? { developerInstructions: body.developerInstructions }

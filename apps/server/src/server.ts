@@ -27,10 +27,10 @@ import {
 } from "@bb/provider-adapters";
 import {
   createDefaultEnvironmentRegistry,
-  listAvailableEnvironmentInfos,
 } from "@bb/environment";
 import { WSManager } from "./ws.js";
 import { Orchestrator } from "./orchestrator.js";
+import { listBuiltInProvisioningSystemInfos } from "./environment-provisioning-systems.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
@@ -133,7 +133,7 @@ export function createServer(deps: ServerDeps) {
   });
   const providerCatalog = listAvailableProviderInfos();
   const environmentRegistry = createDefaultEnvironmentRegistry();
-  const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
+  const environmentCatalog = listBuiltInProvisioningSystemInfos();
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();
   const environmentAgentSessionManager = new EnvironmentAgentSessionManager(

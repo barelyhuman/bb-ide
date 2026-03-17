@@ -7,6 +7,7 @@ import type {
 import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
 import type {
+  EnvironmentDescriptor,
   EnvironmentCapabilities,
   ThreadBuiltInAction,
   ThreadBuiltInActionId,
@@ -43,6 +44,10 @@ export interface AvailableModel {
   isDefault: boolean;
 }
 
+export interface EnvironmentCreationArgs {
+  kind: string;
+}
+
 // Thread endpoints
 export interface SpawnThreadRequest {
   projectId: string;
@@ -55,7 +60,8 @@ export interface SpawnThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   environmentId?: string;
-  environmentKind?: string;
+  environmentDescriptor?: EnvironmentDescriptor;
+  environmentCreationArgs?: EnvironmentCreationArgs;
   developerInstructions?: string;
   parentThreadId?: string;
   /**

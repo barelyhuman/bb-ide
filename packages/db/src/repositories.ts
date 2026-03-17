@@ -14,6 +14,7 @@ import {
 import { nanoid } from "nanoid";
 import type {
   EnvironmentDescriptor,
+  EnvironmentProperties,
   EnvironmentRecord,
   PersistedEnvironmentRecord,
   PromptInput,
@@ -275,9 +276,9 @@ function parseQueuedPromptInput(rawInput: string): PromptInput[] {
 
 function parseEnvironmentDescriptor(
   value: string | null | undefined,
-): EnvironmentDescriptor {
+): EnvironmentDescriptor | undefined {
   if (!value) {
-    throw new Error("Missing persisted environment descriptor");
+    return undefined;
   }
 
   let parsed: unknown;
@@ -438,18 +439,18 @@ export class EnvironmentRepository {
 
   create(data: {
     projectId: string;
-    descriptor: EnvironmentDescriptor;
+    descriptor?: EnvironmentDescriptor;
     managed: boolean;
-    requestedRuntimeKind?: string;
+    properties?: EnvironmentProperties;
     runtimeState?: PersistedEnvironmentRecord;
   }): EnvironmentRecord {
     const now = Date.now();
     const row = {
       id: nanoid(),
       projectId: data.projectId,
-      descriptor: JSON.stringify(data.descriptor),
+      descriptor: data.descriptor ? JSON.stringify(data.descriptor) : null,
       managed: data.managed,
-      requestedRuntimeKind: data.requestedRuntimeKind ?? null,
+      properties: data.properties ? JSON.stringify(data.properties) : null,
       runtimeState: data.runtimeState ? JSON.stringify(data.runtimeState) : null,
       createdAt: now,
       updatedAt: now,
@@ -470,16 +471,19 @@ export class EnvironmentRepository {
   findByProjectDescriptor(args: {
     projectId: string;
     descriptor: EnvironmentDescriptor;
+    managed?: boolean;
   }): EnvironmentRecord | undefined {
+    const conditions = [
+      eq(environments.projectId, args.projectId),
+      eq(environments.descriptor, JSON.stringify(args.descriptor)),
+    ];
+    if (typeof args.managed === "boolean") {
+      conditions.push(eq(environments.managed, args.managed));
+    }
     const row = this.db
       .select()
       .from(environments)
-      .where(
-        and(
-          eq(environments.projectId, args.projectId),
-          eq(environments.descriptor, JSON.stringify(args.descriptor)),
-        ),
-      )
+      .where(and(...conditions))
       .get();
     return row ? this.rowToEnvironment(row) : undefined;
   }
@@ -506,9 +510,9 @@ export class EnvironmentRepository {
   update(
     id: string,
     data: {
-      descriptor?: EnvironmentDescriptor;
+      descriptor?: EnvironmentDescriptor | null;
       managed?: boolean;
-      requestedRuntimeKind?: string | null;
+      properties?: EnvironmentProperties | null;
       runtimeState?: PersistedEnvironmentRecord | null;
     },
     opts?: {
@@ -529,13 +533,13 @@ export class EnvironmentRepository {
       updates.updatedAt = Date.now();
     }
     if (data.descriptor !== undefined) {
-      updates.descriptor = JSON.stringify(data.descriptor);
+      updates.descriptor = data.descriptor ? JSON.stringify(data.descriptor) : null;
     }
     if (data.managed !== undefined) {
       updates.managed = data.managed;
     }
-    if (data.requestedRuntimeKind !== undefined) {
-      updates.requestedRuntimeKind = data.requestedRuntimeKind;
+    if (data.properties !== undefined) {
+      updates.properties = data.properties ? JSON.stringify(data.properties) : null;
     }
     if (data.runtimeState !== undefined) {
       updates.runtimeState = data.runtimeState
@@ -559,12 +563,13 @@ export class EnvironmentRepository {
   private rowToEnvironment(
     row: typeof environments.$inferSelect,
   ): EnvironmentRecord {
+    const descriptor = parseEnvironmentDescriptor(row.descriptor);
     return {
       id: row.id,
       projectId: row.projectId,
-      descriptor: parseEnvironmentDescriptor(row.descriptor),
+      ...(descriptor ? { descriptor } : {}),
       managed: row.managed,
-      ...(row.requestedRuntimeKind ? { requestedRuntimeKind: row.requestedRuntimeKind } : {}),
+      ...(row.properties ? { properties: parseEnvironmentProperties(row.properties) } : {}),
       ...(row.runtimeState ? { runtimeState: parseEnvironmentRecord(row.runtimeState) } : {}),
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -1112,6 +1117,27 @@ function parseEnvironmentRecord(
     }
   } catch {
     // Ignore malformed persisted environment records and treat them as missing.
+  }
+  return undefined;
+}
+
+function parseEnvironmentProperties(
+  value: string | null | undefined,
+): EnvironmentProperties | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as EnvironmentProperties;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.provisioningSystemKind === "string" &&
+      typeof parsed.location === "string" &&
+      typeof parsed.workspaceKind === "string"
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Ignore malformed persisted environment properties and treat them as missing.
   }
   return undefined;
 }

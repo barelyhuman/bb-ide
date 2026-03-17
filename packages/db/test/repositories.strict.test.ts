@@ -223,6 +223,39 @@ describe("repository strict normalization", () => {
     ).toEqual(environment);
   });
 
+  it("can filter first-class environments by managed state when matching descriptors", () => {
+    const projectId = createProjectId();
+    const descriptor = {
+      type: "path" as const,
+      path: "/tmp/test-project",
+    };
+    const managed = environments.create({
+      projectId,
+      descriptor,
+      managed: true,
+    });
+    const unmanaged = environments.create({
+      projectId,
+      descriptor,
+      managed: false,
+    });
+
+    expect(
+      environments.findByProjectDescriptor({
+        projectId,
+        descriptor,
+        managed: true,
+      }),
+    ).toEqual(managed);
+    expect(
+      environments.findByProjectDescriptor({
+        projectId,
+        descriptor,
+        managed: false,
+      }),
+    ).toEqual(unmanaged);
+  });
+
   it("updates first-class environment descriptors and managed state", () => {
     const projectId = createProjectId();
     const environment = environments.create({
@@ -253,7 +286,7 @@ describe("repository strict normalization", () => {
     });
   });
 
-  it("persists requested runtime kind on first-class environments", () => {
+  it("persists environment properties on first-class environments", () => {
     const projectId = createProjectId();
     const environment = environments.create({
       projectId,
@@ -262,16 +295,32 @@ describe("repository strict normalization", () => {
         path: "/tmp/test-project",
       },
       managed: true,
-      requestedRuntimeKind: "docker",
+      properties: {
+        provisioningSystemKind: "docker-worktree",
+        location: "docker",
+        workspaceKind: "arbitrary_path",
+      },
     });
 
-    expect(environment.requestedRuntimeKind).toBe("docker");
+    expect(environment.properties).toEqual({
+      provisioningSystemKind: "docker-worktree",
+      location: "docker",
+      workspaceKind: "arbitrary_path",
+    });
 
     const updated = environments.update(environment.id, {
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
     });
 
-    expect(updated?.requestedRuntimeKind).toBe("worktree");
+    expect(updated?.properties).toEqual({
+      provisioningSystemKind: "worktree",
+      location: "localhost",
+      workspaceKind: "worktree",
+    });
   });
 
   it("throws for invalid persisted environment descriptor values", () => {
