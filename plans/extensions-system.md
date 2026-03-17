@@ -2,20 +2,20 @@
 
 ## Goal
 
-Allow users to extend bb with custom providers, environments, and lifecycle hooks without forking the repo. Extensions are TypeScript modules discovered from `.bb/extensions/` (project-local) and `~/.bb/extensions/` (global), following the same model as Pi's extension system.
+Allow users to extend bb with custom providers, environments, and lifecycle hooks without forking the repo. Extensions are TypeScript modules discovered from `.bb/extensions/` (project-local) and `~/.bb/extensions/` (global), loaded at daemon startup alongside the built-in registrations.
 
 ## Scope
 
 **v1 (MVP):**
 - Extension discovery and loading from `.bb/extensions/` and `~/.bb/extensions/`
-- `registerProvider()` — plug custom provider adapters into the provider registry
-- `registerEnvironment()` — plug custom environment adapters into the environment registry
+- `registerProvider()` — plug custom provider adapters into the provider registry alongside the built-in `codex`, `claude-code`, and `pi` providers
+- `registerEnvironment()` — plug custom environment definitions into the `EnvironmentRegistry` alongside the built-in `local` and `docker` kinds
 - Examples directory in the repo with working provider and environment extensions
 - TypeScript extensions loaded without compilation (via jiti or tsx)
 
 **v1.5 (fast follow):**
-- Lifecycle event hooks (`on("thread:start")`, `on("turn:complete")`, etc.)
-- `registerTool()` — custom tools available to agents
+- Lifecycle event hooks (`on("thread:spawn")`, `on("turn:complete")`, etc.)
+- `registerTool()` — custom tools surfaced through `ProviderToolHost` and available to agents
 - Extension-scoped configuration via `.bb/extensions/<name>/config.json`
 
 **Not v1:**
@@ -28,7 +28,7 @@ Allow users to extend bb with custom providers, environments, and lifecycle hook
 
 ### Extension API
 
-An extension is a TypeScript file that exports a default function:
+An extension is a TypeScript file that exports a default function receiving an `ExtensionAPI` handle:
 
 ```typescript
 import type { ExtensionAPI } from "@bb/core";
@@ -37,13 +37,28 @@ export default function (bb: ExtensionAPI) {
   bb.registerProvider({
     id: "gemini",
     displayName: "Gemini",
-    // ... adapter implementation
+    capabilities: { supportsRename: false, supportsServiceTier: false },
+    processCommand: "npx",
+    processArgs: ["gemini-mcp-bridge"],
+    // ... remaining ProviderAdapter members
   });
 
   bb.registerEnvironment({
     kind: "e2b",
-    displayName: "E2B Sandbox",
-    // ... environment implementation
+    info: {
+      id: "e2b",
+      displayName: "E2B Sandbox",
+      capabilities: {
+        host_filesystem: false,
+        isolated_workspace: true,
+        promote_primary_checkout: false,
+        demote_primary_checkout: false,
+        squash_merge: false,
+      },
+    },
+    create(context) { /* ... */ },
+    restore(state, context) { /* ... */ },
+    isState(value): value is E2BState { /* ... */ },
   });
 }
 ```
@@ -61,52 +76,117 @@ Extensions are auto-discovered from two locations:
 
 **Loading order:** Global extensions first, then project-local. Project-local can override global (e.g., a project-local provider with the same ID wins).
 
-**Runtime:** Extensions are loaded via [jiti](https://github.com/unjs/jiti) (same as Pi uses) — TypeScript works without compilation, and npm dependencies resolve from a `package.json` in the extension directory.
+**Runtime:** Extensions are loaded via [jiti](https://github.com/unjs/jiti) — TypeScript works without compilation, and npm dependencies resolve from a `package.json` in the extension directory.
 
 ### Provider Extensions
 
-A provider extension implements the same adapter interface as the built-in providers (Codex, Claude Code, Pi). The `ExtensionAPI.registerProvider()` call adds it to the provider registry at daemon startup.
+A provider extension implements the full `ProviderAdapter` interface defined in `@bb/core` (`packages/core/src/runtime-contracts.ts`). The interface is process-oriented — each provider tells bb how to spawn its MCP bridge process and how to encode/decode the JSON-RPC messages:
 
 ```typescript
-bb.registerProvider({
-  id: "gemini",                          // unique provider ID
+import type { ProviderAdapter, ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
+
+const geminiAdapter: ProviderAdapter = {
+  id: "gemini" as any, // extension providers use string IDs outside the built-in union
   displayName: "Gemini",
+  capabilities: { supportsRename: false, supportsServiceTier: false },
 
-  // Return available models
-  listModels(): Promise<AvailableModel[]>,
+  // MCP bridge process
+  processCommand: "npx",
+  processArgs: ["@google/gemini-mcp-bridge"],
 
-  // Spawn a provider session for a thread
-  createSession(opts: ProviderSessionOpts): Promise<ProviderSession>,
-});
+  // Client identity sent during initialization
+  clientInfo: { name: "bb", version: "1.0.0" },
+
+  // JSON-RPC method names
+  initializeMethod: "initialize",
+  threadStartMethod: "thread/start",
+  threadResumeMethod: "thread/resume",
+  turnStartMethod: "turn/start",
+
+  // Param builders
+  createInitializeParams(clientInfo) { return { clientInfo }; },
+  createThreadStartParams(req, context, dynamicTools) { /* ... */ },
+  createThreadResumeParams(providerThreadId, context, options, resumePath) { /* ... */ },
+  createTurnStartParams(providerThreadId, input, options) { /* ... */ },
+
+  // Event mapping
+  extractThreadIdFromResult(result) { /* ... */ },
+  extractThreadIdFromEventData(data) { /* ... */ },
+  normalizeEventType(type) { return type; },
+  shouldBroadcastForEvent(method) { return true; },
+  statusForEvent(method) { /* ... */ },
+  titleFromEvent(method, data) { return undefined; },
+  outputFromEvent(event) { return undefined; },
+
+  // Model listing
+  async listModels() { return []; },
+
+  // Utilities
+  deriveThreadTitle(input) { return undefined; },
+  inactiveSessionErrorMessage(threadId) {
+    return `No active Gemini session for thread ${threadId}`;
+  },
+};
 ```
 
-The `ProviderSession` interface matches what the existing adapters implement:
-- Start/resume turns
-- Stream events (mapped to bb's event system)
-- Stop/cancel
-- Report token usage
+The `ProviderAdapter` is consumed by `ProviderSessionController` in `apps/server/src/provider-session-controller.ts`, which manages the child-process lifecycle, JSON-RPC framing, and event routing. Extension providers plug in at the same level as the built-in `createCodexProviderAdapter()`, `createClaudeCodeProviderAdapter()`, and `createPiProviderAdapter()` factory functions in `packages/provider-adapters/src/provider-registry.ts`.
 
-**Key design decision:** Provider extensions implement the same internal adapter interface, not a simplified wrapper. This keeps the extension surface small (one interface to document) and means extensions have full capability parity with built-in providers.
+**Key design decision:** Extension providers implement the same `ProviderAdapter` interface as built-ins. This keeps the extension surface to one interface and gives extensions full capability parity. The `ProviderSessionController` does not need modification — it already accepts any `ProviderAdapter`.
 
 ### Environment Extensions
 
-An environment extension implements the environment contract:
+An environment extension implements the `EnvironmentDefinition<TState>` interface from `packages/environment/src/contracts.ts` and registers it on the `EnvironmentRegistry`:
 
 ```typescript
-bb.registerEnvironment({
-  kind: "e2b",                           // unique environment kind
-  displayName: "E2B Sandbox",
+import type {
+  EnvironmentDefinition,
+  CreateEnvironmentContext,
+  IEnvironment,
+} from "@bb/environment";
 
-  // Provision a new environment instance
-  provision(opts: EnvironmentProvisionOpts): Promise<EnvironmentInstance>,
+interface E2BState {
+  sandboxId: string;
+  workspaceRoot: string;
+}
 
-  // Attach to an existing environment
-  attach(descriptor: EnvironmentDescriptor): Promise<EnvironmentInstance>,
-
-  // Capabilities this environment supports
-  capabilities: ["isolated_workspace", "promote_primary_checkout"],
-});
+const e2bDefinition: EnvironmentDefinition<E2BState> = {
+  kind: "e2b",
+  info: {
+    id: "e2b",
+    displayName: "E2B Sandbox",
+    capabilities: {
+      host_filesystem: false,
+      isolated_workspace: true,
+      promote_primary_checkout: false,
+      demote_primary_checkout: false,
+      squash_merge: false,
+    },
+  },
+  create(context: CreateEnvironmentContext): IEnvironment {
+    // Provision a new E2B sandbox
+    // Must return an object implementing the full IEnvironment interface:
+    //   kind, info, serialize(), suspend(), destroy(), exists(),
+    //   supportsHostFilesystemAccess(), isIsolatedWorkspace(),
+    //   getAgentConnectionTarget(), getCheckoutSnapshot(),
+    //   getWorkspaceRootUnsafe(), run(), spawn(),
+    //   getWorkspaceStatus(), watchWorkspaceStatus(),
+    //   commitWorkspace(), getWorkspaceDiff(), ...
+  },
+  restore(state: E2BState, context: CreateEnvironmentContext): IEnvironment {
+    // Rehydrate from persisted state (returned by serialize())
+  },
+  isState(value: unknown): value is E2BState {
+    return (
+      !!value && typeof value === "object" &&
+      "sandboxId" in value && typeof (value as any).sandboxId === "string"
+    );
+  },
+};
 ```
+
+The `EnvironmentRegistry` class already supports dynamic registration via `registry.register(definition)`. Built-in definitions are `local` (from `createLocalEnvironmentDefinition`) and `docker` (from `createDockerEnvironmentDefinition`), both registered in `createDefaultEnvironmentRegistry()` at `packages/environment/src/default-registry.ts`.
+
+Extension environments also need a corresponding entry in the provisioning system catalog (`SystemEnvironmentInfo[]`) so they appear in `listEnvironments()` on the API. The extension loader will append these entries to the `environmentCatalog` array passed to the `Orchestrator` constructor.
 
 ### Extension Configuration
 
@@ -120,7 +200,7 @@ Extensions that need configuration can read from their own directory:
     package.json      # npm dependencies (optional)
 ```
 
-bb doesn't impose a config schema — each extension reads its own config. This keeps the core simple and lets extensions own their configuration format.
+bb does not impose a config schema — each extension reads its own config. This keeps the core simple and lets extensions own their configuration format.
 
 ### Error Isolation
 
@@ -138,76 +218,153 @@ Ship working examples in the repo:
 examples/extensions/
   providers/
     gemini/
-      index.ts        # Gemini provider via @google/genai SDK
-      config.json      # { "apiKey": "..." } or env var reference
-      package.json     # depends on @google/genai
-      README.md
-    opencode/
-      index.ts        # OpenCode-compatible provider
-      README.md
+      index.ts        # Gemini provider implementing ProviderAdapter
+      config.json     # { "apiKey": "..." } or env var reference
+      package.json    # depends on @google/genai
   environments/
     e2b/
-      index.ts        # E2B sandbox environment
+      index.ts        # E2B sandbox implementing EnvironmentDefinition<E2BState>
       config.json
-      package.json     # depends on @e2b/code-interpreter
-      README.md
-    docker-compose/
-      index.ts        # Docker Compose-based environment
-      README.md
+      package.json    # depends on @e2b/code-interpreter
 ```
 
 ## Implementation Steps
 
-### Step 1: Define the ExtensionAPI type
+### Step 1: Define the `ExtensionAPI` type in `@bb/core`
 
-In `packages/core`:
-1. Define `ExtensionAPI` interface with `registerProvider()` and `registerEnvironment()` methods
-2. Define the provider adapter interface that extensions implement (extract from existing adapter code)
-3. Define the environment adapter interface that extensions implement (extract from existing contract)
-4. Export these types from the package
+In `packages/core/src/`:
+1. Create an `extension-api.ts` file defining the `ExtensionAPI` interface:
+   ```typescript
+   import type { ProviderAdapter } from "./runtime-contracts.js";
+   import type { SystemEnvironmentInfo, ProviderCapabilities } from "./api-types.js";
 
-### Step 2: Extension discovery & loading
+   export interface ExtensionProviderRegistration extends ProviderAdapter {
+     // id is widened to string (not restricted to ThreadProviderId)
+     id: string;
+   }
 
-In `apps/server`:
-1. Add extension discovery logic — scan `.bb/extensions/` and `~/.bb/extensions/` for `.ts` files and `*/index.ts` directories
-2. Add jiti as a dependency for TypeScript loading
-3. Load each extension by calling its default export with an `ExtensionAPI` instance
-4. Wrap loading in try/catch with error logging
-5. Run discovery at daemon startup, after built-in providers/environments are registered
+   export interface ExtensionEnvironmentRegistration {
+     kind: string;
+     info: SystemEnvironmentInfo;
+     // The actual EnvironmentDefinition will be imported from @bb/environment
+     // at the loading layer; this type captures the shape extensions must provide
+   }
 
-### Step 3: Wire into registries
+   export interface ExtensionAPI {
+     registerProvider(adapter: ExtensionProviderRegistration): void;
+     registerEnvironment(definition: ExtensionEnvironmentRegistration): void;
+   }
+   ```
+2. Export `ExtensionAPI` from the package index
 
-1. **Provider registry**: Accept registrations from extensions via `registerProvider()`. Extension providers are added alongside built-in ones. If an extension registers a provider with a built-in ID, log a warning and skip (built-ins win, or decide: project-local wins).
-2. **Environment registry**: Same pattern — `registerEnvironment()` adds to the existing registry.
-3. Ensure the daemon's `listProviders` / `listEnvironments` APIs return extension-registered entries
+### Step 2: Widen `ThreadProviderId` for extension providers
 
-### Step 4: Write examples
+The built-in provider IDs are a closed union (`"codex" | "claude-code" | "pi"`) in `packages/core/src/thread-provider.ts`. Extension provider IDs cannot be part of this compile-time union.
 
-1. Write a working Gemini provider extension using `@google/genai`
-2. Write a working E2B environment extension (or a simpler Docker Compose example)
-3. Each example includes a README explaining setup and configuration
+1. Change the `ProviderAdapter.id` field type to `string` (or `ThreadProviderId | string` — effectively `string`) in `runtime-contracts.ts`. The built-in `ProviderAdapter` factory functions already return specific IDs, so type safety is preserved at construction.
+2. In the `provider_id` column of the threads table (`packages/db/`), the column is already `TEXT` — no schema change needed. The `isThreadProviderId()` guard remains useful for checking whether a provider is built-in.
+3. Update `createProviderForId()` in `packages/provider-adapters/src/provider-registry.ts` to consult an extension registry fallback when the ID is not a built-in.
+
+### Step 3: Extension discovery & loading in `apps/server/`
+
+1. Add `jiti` as a dependency of `@bb/server` for TypeScript loading without compilation
+2. Create `apps/server/src/extension-loader.ts`:
+   - Scan `.bb/extensions/` (relative to each registered project's `rootPath`) and `~/.bb/extensions/` for `.ts` files and `*/index.ts` directories
+   - For each discovered file, load it via jiti and call the default export with an `ExtensionAPI` instance
+   - Collect registered providers and environment definitions
+   - Wrap each load in try/catch with error logging; skip broken extensions
+3. The `ExtensionAPI` implementation accumulates registrations into arrays:
+   ```typescript
+   const extensionProviders: ProviderAdapter[] = [];
+   const extensionEnvironmentDefinitions: EnvironmentDefinition<unknown>[] = [];
+
+   const api: ExtensionAPI = {
+     registerProvider(adapter) {
+       extensionProviders.push(adapter);
+     },
+     registerEnvironment(definition) {
+       extensionEnvironmentDefinitions.push(definition);
+     },
+   };
+   ```
+
+### Step 4: Wire extension registrations into daemon startup
+
+In `apps/server/src/server.ts` (`createServer()`):
+
+1. After creating the default `environmentRegistry` via `createDefaultEnvironmentRegistry()`, register any extension-provided `EnvironmentDefinition` entries on it:
+   ```typescript
+   for (const def of extensionEnvironmentDefinitions) {
+     environmentRegistry.register(def);
+   }
+   ```
+2. After building `providerCatalog` from `listAvailableProviderInfos()`, append `SystemProviderInfo` entries for each extension provider:
+   ```typescript
+   for (const adapter of extensionProviders) {
+     providerCatalog.push({
+       id: adapter.id,
+       displayName: adapter.displayName,
+       capabilities: { ...adapter.capabilities },
+     });
+   }
+   ```
+3. Extend the `ProviderSessionController` setup so that when a thread requests an extension provider ID, the corresponding `ProviderAdapter` is used. This requires the `Orchestrator` (or a new provider-resolution layer) to look up the correct adapter by ID. Currently `createServer()` creates a single `ProviderSessionController` bound to one `ProviderAdapter`. For multi-provider extension support:
+   - Introduce a `ProviderAdapterRegistry` (a `Map<string, ProviderAdapter>`) populated with built-in + extension adapters
+   - The orchestrator resolves the adapter per-thread based on `thread.providerId`, creating a `ProviderSessionController` on demand or selecting from a pool
+4. Similarly, append `SystemEnvironmentInfo` entries for extension environments to `environmentCatalog` so they appear in `listEnvironments()`.
+
+### Step 5: Run extension loading at the right lifecycle point
+
+In `apps/server/src/index.ts` (`main()`):
+
+1. After database migration and repository construction, but before `createServer()`, run extension discovery:
+   ```typescript
+   const { providers, environments } = await loadExtensions({
+     projectRepo,
+     globalExtensionsDir: resolve(homedir(), ".bb", "extensions"),
+     logger: console,
+   });
+   ```
+2. Pass the results into `createServer()` via new fields on `ServerDeps`:
+   ```typescript
+   interface ServerDeps {
+     // ... existing fields ...
+     extensionProviders?: ProviderAdapter[];
+     extensionEnvironmentDefinitions?: EnvironmentDefinition<unknown>[];
+   }
+   ```
+
+### Step 6: Write examples
+
+1. Write a working Gemini provider extension implementing the full `ProviderAdapter` interface from `@bb/core` (the process-based MCP bridge pattern)
+2. Write a working E2B environment extension implementing `EnvironmentDefinition<E2BState>` and returning an `IEnvironment` from `create()`/`restore()`
+3. Each example includes setup instructions for installing dependencies and configuring API keys
 4. Test each example end-to-end: install extension, start daemon, spawn thread with extension provider/environment
 
-### Step 5: Document
+### Step 7: Document
 
 1. Add extension docs (can be a `docs/extensions.md` or section in README)
-2. Document the `ExtensionAPI` interface
+2. Document the `ExtensionAPI` interface and the full `ProviderAdapter` / `EnvironmentDefinition<T>` contracts
 3. Document the discovery paths and loading behavior
 4. Link to examples
 
 ## Validation
 
-1. Write a test extension that registers a mock provider — verify it appears in `listProviders` API
-2. Write a test extension that registers a mock environment — verify it appears in environment registry
-3. Verify a broken extension (throws on load) doesn't crash the daemon
-4. Verify the Gemini example works end-to-end (requires API key)
-5. Verify project-local extensions are scoped to that project's daemon instance
+1. **Unit test — provider registration:** Write a test extension that registers a mock provider adapter. Verify it appears in the `listProviders()` API response alongside the built-in `codex`, `claude-code`, and `pi` entries.
+2. **Unit test — environment registration:** Write a test extension that registers a mock `EnvironmentDefinition`. Verify `EnvironmentRegistry.has(kind)` returns true and `registry.list()` includes its `EnvironmentInfo`.
+3. **Fault tolerance:** Verify a broken extension (throws on load) does not crash the daemon — the daemon starts normally with the broken extension logged and skipped.
+4. **ID conflict:** Verify that registering a provider with a built-in ID (`"codex"`, `"claude-code"`, `"pi"`) logs a warning and is rejected.
+5. **E2E — extension provider:** With the Gemini example installed, spawn a thread with `providerId: "gemini"` and verify the MCP bridge process launches and events flow.
+6. **E2E — extension environment:** With the E2B example installed, spawn a thread with `environmentCreationArgs: { kind: "e2b" }` and verify provisioning completes.
+7. **Scoping:** Verify project-local extensions are only loaded for threads in that project, not for other projects on the same daemon.
 
 ## Open Questions/Risks
 
-- **Provider interface stability**: The internal provider adapter interface wasn't designed for external consumption. Before shipping extensions, audit it for anything that's too internal or likely to change. May want a slightly simplified wrapper interface for v1 extensions, with the full interface available for power users.
-- **Environment interface stability**: Same concern. The environment contract has capabilities, provisioning, and lifecycle — decide what subset extensions need for v1.
-- **TypeScript loading**: jiti is battle-tested (used by Pi, Nuxt, etc.) but adds a dependency. Alternative: require extensions to be pre-compiled JS. Recommendation: use jiti — the DX of writing raw TypeScript is worth it.
-- **Dependency resolution**: Extensions with `package.json` need their `node_modules` installed. The user runs `npm install` in their extension directory. bb doesn't manage this — document it. Future: could auto-install on discovery.
-- **Provider ID conflicts**: If an extension tries to register `"codex"` as a provider ID, what happens? Recommendation: built-in IDs are reserved, extensions must use unique IDs. Log a warning and skip on conflict.
-- **Thread type for extension providers**: Extension providers need to work with the existing `ThreadProviderId` union. Since this is `closed_internal`, extension provider IDs can't be part of it. Need a way to store arbitrary provider IDs in the DB for threads using extension providers — likely change the column to a plain string with the union as a known subset.
+- **Provider interface complexity:** The `ProviderAdapter` interface has ~20 methods covering process spawning, JSON-RPC encoding, event normalization, and model listing. This is a large surface for extension authors. Consider whether a simplified wrapper/builder that fills in sensible defaults (e.g., standard `normalizeEventType`, `shouldBroadcastForEvent`) would reduce the barrier, while still allowing power users to implement the full interface.
+- **`ProviderAdapter.id` type widening:** Today `ProviderAdapter.id` is typed as `ThreadProviderId` (the closed union `"codex" | "claude-code" | "pi"`). Widening to `string` is necessary for extension providers but changes the contract for built-in code. The guard `isThreadProviderId()` should continue to discriminate built-in vs extension providers. Audit all `switch (provider.id)` sites to ensure they handle the `default` case (currently some throw on unknown IDs).
+- **Per-thread provider resolution:** The current `createServer()` creates one `ProviderSessionController` bound to a single `ProviderAdapter` (the default provider). Multi-provider support (extension or otherwise) requires either a controller pool keyed by provider ID, or a factory that creates controllers on demand. This is the largest architectural change for provider extensions.
+- **Environment `IEnvironment` surface:** The `IEnvironment` interface has extensive requirements (git workspace operations, agent connection targets, spawn/run, promote/demote). Extension environments may only need a subset. Consider whether some methods can have no-op defaults or whether a base class / mixin simplifies implementation.
+- **TypeScript loading:** jiti is battle-tested (used by Nuxt, etc.) but adds a dependency. Alternative: require extensions to be pre-compiled JS. Recommendation: use jiti — the DX of writing raw TypeScript is worth it.
+- **Dependency resolution:** Extensions with `package.json` need their `node_modules` installed. The user runs `npm install` in their extension directory. bb does not manage this — document it. Future: could auto-install on discovery.
+- **Provisioning system integration:** Extension environments need to work with the `resolveProvisioningSelection()` machinery in `apps/server/src/environment-provisioning-systems.ts`. The current built-in provisioning systems (`reuse-existing`, `direct-path`, `worktree`, `docker`) are a hardcoded array. Extension environments will either need to register a corresponding `EnvironmentProvisioningSystem`, or the resolution fallback at the bottom of `resolveProvisioningSelection()` needs to be made extension-aware.
+- **Daemon restart on extension change:** v1 requires a daemon restart to pick up new or changed extensions. Document this clearly. Hot reload is deferred.

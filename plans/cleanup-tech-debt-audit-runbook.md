@@ -1,6 +1,6 @@
 # Goal
 
-Provide a reusable runbook for auditing bb for cleanup, legacy code, and mid-migration debt so the same process can be rerun later against a newer `main` branch.
+Provide a reusable runbook for auditing the bb monorepo for cleanup, legacy code, and mid-migration debt so the same process can be rerun later against a newer `main` branch.
 
 This runbook is not a one-time findings doc. It is a repeatable method for:
 
@@ -22,7 +22,7 @@ In scope:
 
 Out of scope:
 
-- Generated code
+- Generated code under `packages/core/src/generated/**`
 - Pure formatting/style cleanup
 - Normal open-ended tolerance for external/upstream/provider-owned payloads unless it leaks into internal contracts
 - One-off micro-optimizations without clear maintenance payoff
@@ -46,7 +46,7 @@ Out of scope:
    - `remove after`
    - `historical`
 
-   Also scan plan docs and architecture docs for cleanup work that was identified but not finished.
+   Also scan plan docs under `plans/` and architecture docs for cleanup work that was identified but not finished.
 
    Purpose:
 
@@ -64,19 +64,24 @@ Out of scope:
 
    Prioritize files that usually accumulate migration debt:
 
-   - orchestrators
-   - route handlers
-   - large client API/cache hooks
-   - event normalization/projection modules
-   - repository/data-access layers
-   - environment/runtime abstractions
-   - large UI components with multiple rendering modes
+   - the orchestrator (`apps/server/src/orchestrator.ts` — the largest production file in the repo)
+   - UI-to-event transformation layers (`packages/core/src/to-ui-messages.ts`, `packages/core/src/thread-detail-rows.ts`)
+   - event normalization (`packages/core/src/thread-event-normalization.ts`)
+   - environment provisioning (`apps/server/src/environment-provisioning-systems.ts`, `apps/server/src/environment-service.ts`)
+   - environment agent session management (`apps/server/src/environment-agent-session-service.ts`, `apps/server/src/environment-agent-session-compatibility.ts`)
+   - provider session control (`apps/server/src/provider-session-controller.ts`)
+   - the provider bridge layers (`packages/claude-code-bridge/src/bridge.ts`, `packages/pi-bridge/src/bridge.ts`)
+   - the environment daemon runtime (`packages/environment-daemon/src/runtime.ts`, `packages/environment-daemon/src/service.ts`)
+   - repository/data-access layers (`packages/db/src/repositories.ts`, `packages/db/src/environment-agent-repositories.ts`)
+   - the frontend thread detail view (`apps/app/src/views/ThreadDetailView.tsx`)
+   - the app API layer (`apps/app/src/lib/api.ts`, `apps/app/src/hooks/useApi.ts`)
+   - git workspace management (`packages/environment/src/git-workspace.ts`, `packages/environment/src/local-git-workspace.ts`)
 
    Purpose:
 
    - find parallel code paths that simple keyword search misses
    - surface ownership and contract duplication
-   - identify “this file still knows about too many historical states” problems
+   - identify "this file still knows about too many historical states" problems
 
 3. Classify each candidate before recommending deletion or consolidation.
 
@@ -89,13 +94,13 @@ Out of scope:
 
    For each candidate, explicitly decide whether the value domain is:
 
-   - `closed_internal`
-   - `open_external`
+   - `closed_internal` — BB-owned types, unions, and protocols (e.g., `ThreadStatus`, `ThreadEventType`, `AppThreadEventType`, `EnvironmentCapability`, `ThreadProviderId`)
+   - `open_external` — provider/runtime-owned values (e.g., Codex server notification methods, OpenAI response payloads, Claude Code SDK events)
 
    Rules:
 
-   - For `closed_internal`, tolerance branches and duplicate representations are usually debt.
-   - For `open_external`, tolerant parsing/fallbacks may be correct and should not automatically be deleted.
+   - For `closed_internal`, tolerance branches and duplicate representations are usually debt. These should use exhaustive `switch` with `assertNever` (from `@bb/core`), not permissive `default` branches.
+   - For `open_external`, tolerant parsing/fallbacks may be correct and should not automatically be deleted. Unknown values should have an explicit comment that they are intentional.
 
 4. Look specifically for the most common debt patterns.
 
@@ -103,9 +108,9 @@ Out of scope:
 
    Examples:
 
-   - same resource returned in multiple internal shapes
-   - dual internal error formats
-   - parallel event families for the same product behavior
+   - same resource returned in multiple internal shapes (e.g., dual Thread representations, parallel UI message types)
+   - dual internal error formats (e.g., `HttpError` in `apps/app/src/lib/api.ts` vs server-side `errorResponse` in `apps/server/src/routes/error-response.ts`)
+   - parallel event families for the same product behavior (e.g., overlapping `AppThreadEventType` entries that cover similar ground)
 
    Questions:
 
@@ -117,9 +122,10 @@ Out of scope:
 
    Examples:
 
-   - old persisted DB rows still handled everywhere
-   - fixtures preserve long-retired formats
-   - projection logic treats historical formats as current inputs
+   - old persisted DB rows still handled everywhere (check `packages/db/src/repositories.ts` for row shape fallbacks)
+   - fixtures preserve long-retired formats (check test helpers under `apps/server/src/__tests__/helpers/`)
+   - projection logic in `to-ui-messages.ts` treats historical formats as current inputs
+   - `legacyKeys` in error extraction (`apps/app/src/lib/api.ts`)
 
    Questions:
 
@@ -131,9 +137,10 @@ Out of scope:
 
    Examples:
 
-   - app-local shim re-exporting a package-owned helper
-   - duplicate helper logic surviving on both sides of a refactor
-   - package exports added, but imports never switched over
+   - app-local helper duplicating a `@bb/core` export (e.g., thread helpers in `apps/app/src/lib/` vs `packages/core/src/`)
+   - `apps/app/src/lib/thread-context-window-usage.ts` alongside `packages/core/src/thread-context-window-usage.ts`
+   - provider adapter logic shared between `packages/provider-adapters/src/` and bridge packages (`packages/claude-code-bridge/`, `packages/pi-bridge/`)
+   - re-exports or shims that could be replaced by direct imports from the owning package
 
    Questions:
 
@@ -141,26 +148,29 @@ Out of scope:
    - Is the shim still serving a real purpose?
    - Can we switch imports and delete the in-between layer?
 
-   Pattern D: Sync/async or old/new API dual surfaces
+   Pattern D: Old/new API dual surfaces
 
    Examples:
 
-   - interfaces require both old and new variants
-   - implementations throw “unsupported; use async”
-   - call sites preserve fallback branches for both worlds
+   - the legacy `api.ts` fetch wrapper (`apps/app/src/lib/api.ts`) alongside the typed Hono RPC client (`apps/app/src/lib/api-client.ts` via `hc<AppType>`)
+   - `useApi` hook patterns using the old client vs direct typed RPC calls
+   - older CLI client patterns (`apps/cli/src/client.ts`) vs current server API shape
 
    Questions:
 
    - Has one side of the migration already won in practice?
    - Can the interface now be narrowed to the canonical surface?
+   - Are there call sites still using the old fetch wrapper that could use the typed RPC client?
 
    Pattern E: Repeated internal parsers, unions, and normalization helpers
 
    Examples:
 
-   - same event normalization implemented in multiple packages
-   - duplicated type unions across packages
-   - repeated internal error decoding helpers
+   - `normalizeThreadEventType` and `decodeThreadEventData` in `packages/core/src/thread-event-normalization.ts` — verify all consumers use the shared version
+   - `extractErrorMessage` and `toRecord` in `packages/core/src/unknown-helpers.ts` — check for local duplicates
+   - `assertNever` exported from both `packages/core/src/assert-never.ts` and `apps/cli/src/assert-never.ts`
+   - type unions like `EnvironmentCapability`, `ThreadWorkState`, `ThreadStatus` — check for unguarded string casts or local re-declarations
+   - wire decoders in `packages/core/src/wire-decoders.ts` — check for inline decoding logic elsewhere that should use these
 
    Questions:
 
@@ -179,7 +189,7 @@ Out of scope:
    Avoid:
 
    - inferring dead code solely from names
-   - treating all “fallback” comments as debt
+   - treating all "fallback" comments as debt
    - confusing external tolerance with internal migration debt
 
 6. Prioritize findings by maintenance payoff and risk.
@@ -192,17 +202,17 @@ Out of scope:
 
    Sort higher when a finding:
 
-   - spans multiple packages
-   - forces repeated cache or parser heuristics
+   - spans multiple packages (e.g., core + server + app)
+   - forces repeated decoder or parser heuristics
    - keeps old and new internal formats alive simultaneously
-   - inflates large central files
+   - inflates large central files (especially `orchestrator.ts` or `to-ui-messages.ts`)
    - causes duplicate tests/fixtures/docs
 
    Sort lower when:
 
    - it is mainly aesthetic
    - it touches only one small local helper
-   - it is likely justified `open_external` tolerance
+   - it is likely justified `open_external` tolerance (e.g., Codex notification fallback handling)
 
 7. Produce three outputs from each audit pass.
 
@@ -268,59 +278,80 @@ Out of scope:
    1. Workspace state
 
       - `git status --short`
-      - `rg --files .`
+      - `pnpm exec turbo run typecheck` (full monorepo typecheck)
 
    2. Coarse signal scan
 
-      - `rg -n --hidden -S "TODO|FIXME|deprecated|legacy|migration|migrate|compat|backcompat|fallback|remove after|transitional|temporary|historical" .`
+      - `rg -n -S "TODO|FIXME|deprecated|legacy|migration|migrate|compat|backcompat|fallback|remove after|transitional|temporary|historical|shim" apps packages --glob '!**/generated/**' --glob '!**/dist/**' --glob '!**/node_modules/**'`
 
    3. Largest files by package
 
-      - `find <pkg> -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' \) -not -path '*/generated/*' -not -path '*/dist/*' -print0 | xargs -0 wc -l | sort -nr | head -n 12`
+      - `find <pkg> -type f \( -name '*.ts' -o -name '*.tsx' \) -not -path '*/generated/*' -not -path '*/dist/*' -not -path '*/node_modules/*' -print0 | xargs -0 wc -l | sort -nr | head -n 12`
 
-      Run this for:
+      Run this for each active package:
 
-      - `apps/app`
-      - `apps/cli`
-      - `apps/server`
-      - `packages/core`
-      - `packages/db`
-      - `packages/environment`
-      - `packages/environment-agent`
-      - `packages/environment-daemon`
-      - `packages/provider-adapters`
-      - `packages/ui-core`
-      - `packages/workflow`
-      - any additional active package introduced later
+      - `apps/app` (frontend — largest files: ThreadDetailView.tsx, useApi.ts, api.ts)
+      - `apps/cli` (CLI — largest files: commands/thread.ts, commands/manager.ts)
+      - `apps/server` (daemon server — largest files: orchestrator.ts, environment-service.ts, environment-agent-session-service.ts, environment-provisioning-systems.ts, provider-session-controller.ts)
+      - `packages/core` (shared types/contracts — largest files: to-ui-messages.ts, thread-detail-rows.ts, thread-event-normalization.ts, api-types.ts, types.ts)
+      - `packages/db` (SQLite persistence — largest files: repositories.ts, environment-agent-repositories.ts, schema.ts)
+      - `packages/environment` (environment abstractions — largest files: git-workspace.ts, docker-environment.ts, local-git-workspace.ts)
+      - `packages/environment-daemon` (env-agent daemon runtime — largest files: runtime.ts, session-protocol.ts, session-supervisor.ts, session-runtime.ts, service.ts)
+      - `packages/provider-adapters` (multi-provider adapters — claude-code-provider-adapter.ts, codex-provider-adapter.ts, pi-provider-adapter.ts, openai-responses-model.ts)
+      - `packages/claude-code-bridge` (Claude Code SDK bridge — bridge.ts, event-translator.ts, sdk-session.ts)
+      - `packages/pi-bridge` (Pi SDK bridge — bridge.ts, event-translator.ts, sdk-session.ts)
+      - `packages/ui-core` (shared UI primitives — detail-card.tsx, disclosure.tsx, prompt-composer.tsx, status-pill.tsx)
+      - `packages/templates` (template registry and rendering)
 
    4. Focused large-file seam scan
 
       For each large file under review:
 
-      - `rg -n "legacy|deprecated|compat|fallback|migrate|migration|TODO|remove after|temporary|transitional|historical|shim|alias" <file>`
-      - `nl -ba <file> | sed -n '<start>,<end>p'`
+      - `rg -n "legacy|deprecated|compat|fallback|migrate|migration|TODO|FIXME|remove after|temporary|transitional|historical|shim|alias" <file>`
 
    5. Contract duplication checks
 
       Look for repeated helpers/types/normalizers:
 
-      - `rg -n "normalizeThreadEventType\\(" apps packages`
-      - `rg -n "extractErrorMessage\\(value: unknown\\)|LEGACY_ERROR_KEYS|ERROR_KEYS" apps packages`
-      - `rg -n "type EnvironmentCapability =|type EnvironmentCapabilities = Record<EnvironmentCapability" apps packages`
+      - `rg -n "normalizeThreadEventType\(" apps packages --glob '!**/generated/**'`
+      - `rg -n "extractErrorMessage\(" apps packages --glob '!**/generated/**'`
+      - `rg -n "assertNever\(" apps packages --glob '!**/generated/**'`
+      - `rg -n "type EnvironmentCapability " apps packages --glob '!**/generated/**'`
+      - `rg -n "decodeThreadEventData\(" apps packages --glob '!**/generated/**'`
+      - `rg -n "isRecord\(|toRecord\(" apps packages --glob '!**/generated/**'`
 
    6. Parallel surface checks
 
-      Look for dual internal shapes and option forks:
+      Look for dual internal shapes and API surface forks:
 
-      - `rg -n "includeWorkStatus|placeholderData|fallbackMatch|canonical|parallel|historical|pruneHistorical" apps packages`
-      - `rg -n "Synchronous .* unsupported; use .*Async|unsupported; use .*Async" apps packages`
+      - `rg -n "hc<AppType>|apiClient|from.*api-client|from.*\/api" apps/app/src --glob '*.{ts,tsx}'` (old vs typed RPC client usage)
+      - `rg -n "legacyKeys|fallbackMatch|placeholderData" apps packages --glob '!**/generated/**'`
+      - `rg -n "ProviderEventEnvelope|unwrapProviderEventPayload|isProviderEventEnvelope" apps packages --glob '!**/generated/**'`
+      - `rg -n "assessEnvironmentAgentSessionCompatibility|ENVIRONMENT_AGENT_PROTOCOL_VERSION" apps packages --glob '!**/generated/**'`
 
    7. Historical compatibility validation
 
       Look for evidence that old paths are still produced versus only historically preserved:
 
-      - `rg -n "shouldPersistEvent|startsWith\\(\"codex/event/\"\\)|pruneHistoricalNoiseByThread|legacy raw provider payload" apps packages`
-      - inspect representative fixtures and tests tied to the finding
+      - `rg -n "PROVIDER_EVENT_ENVELOPE_VERSION|PROVIDER_EVENT_ENVELOPE_SCHEMA" apps packages --glob '!**/generated/**'`
+      - `rg -n "PersistedThreadEventData|PersistedEnvironmentRecord" apps packages --glob '!**/generated/**'`
+      - `rg -n "legacyKeys|as Record<string, unknown>" apps packages --glob '!**/generated/**' --glob '!**/node_modules/**'`
+      - inspect representative fixtures and tests under `apps/server/src/__tests__/` tied to the finding
+
+   8. Package-scoped validation
+
+      After identifying cleanup targets, validate with targeted typechecks:
+
+      - `pnpm exec turbo run typecheck --filter=@bb/core`
+      - `pnpm exec turbo run typecheck --filter=@bb/server`
+      - `pnpm exec turbo run typecheck --filter=@bb/app`
+      - `pnpm exec turbo run typecheck --filter=@bb/db`
+      - `pnpm exec turbo run typecheck --filter=@bb/environment`
+      - `pnpm exec turbo run typecheck --filter=@bb/environment-daemon`
+      - `pnpm exec turbo run typecheck --filter=@bb/provider-adapters`
+      - `pnpm exec turbo run typecheck --filter=@bb/claude-code-bridge`
+      - `pnpm exec turbo run typecheck --filter=@bb/pi-bridge`
+      - `pnpm exec turbo run typecheck --filter=@bb/ui-core`
 
    Output discipline:
 
@@ -334,10 +365,11 @@ Out of scope:
 - Confirm that each finding cites at least one production file and one supporting piece of evidence where applicable.
 - Confirm each finding is classified as `closed_internal` debt, `open_external` tolerance, or an ownership migration.
 - Confirm each proposed deletion/consolidation has a plausible validation path:
-  - package-scoped typecheck
-  - focused tests
-  - daemon QA where relevant
-  - manual UI verification where relevant
+  - package-scoped typecheck via `pnpm exec turbo run typecheck --filter=@bb/<pkg>`
+  - focused tests (unit tests colocated with source, or `apps/server/src/__tests__/`)
+  - e2e daemon scenarios under `apps/server/src/__tests__/e2e/`
+  - daemon QA tiers under `qa/daemon/` (see `qa/daemon/standalone-daemon-qa.md` for the full checklist)
+  - manual UI verification where relevant (the app runs at `http://localhost:5173/`)
 - Before closing an audit pass, ensure it produced:
   - a findings doc
   - at least one plan doc if the findings imply coordinated migration work
@@ -348,5 +380,8 @@ Out of scope:
 
 - Historical local-data compatibility is easy to preserve indefinitely by inertia; each audit pass should ask whether the supported upgrade boundary is still intentional.
 - Mixed-version local development can justify temporary compatibility windows; if so, the removal point should be documented up front.
-- Large-file audits can overcount “duplication” unless external-vs-internal ownership is classified carefully.
+- Large-file audits can overcount "duplication" unless external-vs-internal ownership is classified carefully. In particular, `open_external` tolerance for Codex server notifications, Claude Code SDK events, and Pi SDK events is not debt.
+- The provider bridge symmetry between `packages/claude-code-bridge` and `packages/pi-bridge` is by design; structural similarity is not duplication when the bridges adapt different external SDKs.
+- The Hono RPC migration (`api-client.ts` typed client vs legacy `api.ts` fetch wrapper) may still be in progress; verify before classifying the old client as dead code.
 - Cleanup work can become noisy if plans are not split into contract migration first, consolidation second, and fixture/doc pruning last.
+- Environment agent protocol versioning (`ENVIRONMENT_AGENT_PROTOCOL_VERSION`) and session compatibility checks are intentional forward-compatibility infrastructure; do not treat as debt unless clearly unused.
