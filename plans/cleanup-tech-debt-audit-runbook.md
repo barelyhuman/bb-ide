@@ -1,6 +1,6 @@
 # Goal
 
-Provide a reusable runbook for auditing Beanbag for cleanup, legacy code, and mid-migration debt so the same process can be rerun later against a newer `main` branch.
+Provide a reusable runbook for auditing bb for cleanup, legacy code, and mid-migration debt so the same process can be rerun later against a newer `main` branch.
 
 This runbook is not a one-time findings doc. It is a repeatable method for:
 
@@ -282,13 +282,15 @@ Out of scope:
 
       - `apps/app`
       - `apps/cli`
-      - `apps/daemon`
-      - `packages/agent-core`
-      - `packages/agent-server`
+      - `apps/server`
+      - `packages/core`
       - `packages/db`
       - `packages/environment`
       - `packages/environment-agent`
+      - `packages/environment-daemon`
+      - `packages/provider-adapters`
       - `packages/ui-core`
+      - `packages/workflow`
       - any additional active package introduced later
 
    4. Focused large-file seam scan

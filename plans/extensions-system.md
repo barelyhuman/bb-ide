@@ -31,7 +31,7 @@ Allow users to extend bb with custom providers, environments, and lifecycle hook
 An extension is a TypeScript file that exports a default function:
 
 ```typescript
-import type { ExtensionAPI } from "@bb/agent-core";
+import type { ExtensionAPI } from "@bb/core";
 
 export default function (bb: ExtensionAPI) {
   bb.registerProvider({
@@ -160,7 +160,7 @@ examples/extensions/
 
 ### Step 1: Define the ExtensionAPI type
 
-In `packages/agent-core`:
+In `packages/core`:
 1. Define `ExtensionAPI` interface with `registerProvider()` and `registerEnvironment()` methods
 2. Define the provider adapter interface that extensions implement (extract from existing adapter code)
 3. Define the environment adapter interface that extensions implement (extract from existing contract)
@@ -168,7 +168,7 @@ In `packages/agent-core`:
 
 ### Step 2: Extension discovery & loading
 
-In `apps/daemon`:
+In `apps/server`:
 1. Add extension discovery logic — scan `.bb/extensions/` and `~/.bb/extensions/` for `.ts` files and `*/index.ts` directories
 2. Add jiti as a dependency for TypeScript loading
 3. Load each extension by calling its default export with an `ExtensionAPI` instance

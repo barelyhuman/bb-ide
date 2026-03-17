@@ -581,7 +581,7 @@ describe("ConversationEntry", () => {
       status: "completed",
       changes: [
         {
-          path: "/Users/michael/Projects/bb/apps/web/src/components/messages/ConversationEntry.tsx",
+          path: "/Users/michael/Projects/bb/apps/app/src/components/messages/ConversationEntry.tsx",
           kind: "update",
           diff: "@@ -1 +1 @@",
         },
