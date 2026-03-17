@@ -250,7 +250,10 @@ describe("environment-agent delivery modules", () => {
       threadId,
       sessionId,
       commandType: "thread.start",
-      payload: { params: { prompt: "hello" } },
+      payload: {
+        request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+        context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
+      },
       now: 2_000,
     });
     commands.enqueue({
@@ -456,7 +459,10 @@ describe("environment-agent delivery modules", () => {
       threadId,
       sessionId,
       commandType: "thread.start",
-      payload: { params: { prompt: "hello" } },
+      payload: {
+        request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+        context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
+      },
       now: 2_000,
     });
     commands.enqueue({

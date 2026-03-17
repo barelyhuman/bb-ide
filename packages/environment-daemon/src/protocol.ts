@@ -90,7 +90,6 @@ export type EnvironmentAgentCommand =
       type: "thread.start";
       threadId: string;
       projectId: string;
-      params?: unknown;
       request?: SpawnThreadRequest;
       context?: ProviderThreadContext;
       dynamicTools?: ProviderDynamicTool[];
@@ -101,7 +100,6 @@ export type EnvironmentAgentCommand =
       threadId: string;
       projectId: string;
       providerThreadId: string;
-      params?: unknown;
       context?: ProviderThreadContext;
       options?: ProviderExecutionOptions;
       resumePath?: string;
@@ -110,7 +108,6 @@ export type EnvironmentAgentCommand =
   | {
       type: "thread.stop";
       threadId: string;
-      params?: unknown;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -126,8 +123,6 @@ export type EnvironmentAgentCommand =
       providerThreadId: string;
       requestedMode?: "auto" | "steer" | "start";
       activeTurnId?: string;
-      startParams?: unknown;
-      steerParams?: unknown;
       input?: PromptInput[];
       options?: ProviderExecutionOptions;
       initialize?: EnvironmentAgentInitializeRequest;
@@ -145,7 +140,6 @@ export type EnvironmentAgentCommand =
       threadId: string;
       providerThreadId: string;
       title: string;
-      params?: unknown;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {

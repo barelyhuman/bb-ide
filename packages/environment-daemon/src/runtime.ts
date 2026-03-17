@@ -948,12 +948,9 @@ export class EnvironmentAgentRuntime {
     const provider = this.getProviderAdapter();
     const requestedMode = command.requestedMode ?? "auto";
     const canSteer = Boolean(command.activeTurnId) && Boolean(
-      command.steerParams !== undefined ||
-      (
-        provider?.turnSteerMethod &&
-        provider.createTurnSteerParams &&
-        command.input !== undefined
-      ),
+      provider?.turnSteerMethod &&
+      provider.createTurnSteerParams &&
+      command.input !== undefined,
     );
 
     if (requestedMode === "steer") {
@@ -989,9 +986,6 @@ export class EnvironmentAgentRuntime {
   private resolveTurnStartParams(
     command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
   ): unknown {
-    if (command.startParams !== undefined) {
-      return command.startParams;
-    }
     const provider = this.getProviderAdapter();
     if (!provider || command.input === undefined) {
       throw new Error("turn/start params are unavailable");
@@ -1006,9 +1000,6 @@ export class EnvironmentAgentRuntime {
   private resolveTurnSteerParams(
     command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
   ): unknown | undefined {
-    if (command.steerParams !== undefined) {
-      return command.steerParams;
-    }
     const provider = this.getProviderAdapter();
     if (
       !provider?.turnSteerMethod ||
@@ -1053,9 +1044,6 @@ export class EnvironmentAgentRuntime {
     const provider = this.getProviderAdapter();
     switch (command.type) {
       case "thread.start":
-        if (command.params !== undefined) {
-          return command.params;
-        }
         if (!provider || !command.request || !command.context) {
           throw new Error("thread/start params are unavailable");
         }
@@ -1065,9 +1053,6 @@ export class EnvironmentAgentRuntime {
           command.dynamicTools,
         );
       case "thread.resume":
-        if (command.params !== undefined) {
-          return command.params;
-        }
         if (!provider || !command.context) {
           throw new Error("thread/resume params are unavailable");
         }
@@ -1081,9 +1066,6 @@ export class EnvironmentAgentRuntime {
       case "turn.steer":
         return command.params;
       case "thread.rename":
-        if (command.params !== undefined) {
-          return command.params;
-        }
         if (!provider?.createThreadNameSetParams) {
           throw new Error("thread/name/set params are unavailable");
         }
@@ -1094,7 +1076,7 @@ export class EnvironmentAgentRuntime {
       case "turn.run":
         return this.resolveTurnStartParams(command);
       case "thread.stop":
-        return command.params ?? {};
+        return {};
       case "workspace.status":
       case "workspace.diff":
         return { threadId: command.threadId };

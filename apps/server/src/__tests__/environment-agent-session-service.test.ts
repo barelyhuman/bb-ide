@@ -1461,7 +1461,8 @@ describe("EnvironmentAgentSessionService", () => {
       payload: {
         threadId,
         projectId: "project-1",
-        params: { prompt: "hello" },
+        request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+        context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
       },
       now: 2_000,
     });
@@ -1487,7 +1488,8 @@ describe("EnvironmentAgentSessionService", () => {
               type: "thread.start",
               threadId,
               projectId: "project-1",
-              params: { prompt: "hello" },
+              request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+              context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
             },
           },
         ],
@@ -1531,7 +1533,8 @@ describe("EnvironmentAgentSessionService", () => {
             type: "thread.start",
             threadId,
             projectId: "project-1",
-            params: { prompt: "hello" },
+            request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+            context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
           },
         });
       }, 30);

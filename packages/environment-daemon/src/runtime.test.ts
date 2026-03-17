@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
 import { EnvironmentAgentRuntime } from "./runtime.js";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION, type EnvironmentAgentProviderSpec } from "./protocol.js";
 
@@ -14,9 +15,27 @@ afterEach(async () => {
   }
 });
 
+function createStartRequest(projectId: string): SpawnThreadRequest {
+  return {
+    projectId,
+    input: [{ type: "text", text: "hello" }],
+  };
+}
+
+function createThreadContext(
+  projectId: string,
+  threadId: string,
+): ProviderThreadContext {
+  return {
+    projectId,
+    threadId,
+    path: `/tmp/${threadId}`,
+  };
+}
+
 describe("EnvironmentAgentRuntime", () => {
   it("records sequenced events and reports basic status", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.appendEvent({ type: "workspace.status.changed", threadId: "thread-1" });
@@ -33,7 +52,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("updates daemon delivery status for retry visibility", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.setDaemonDeliveryState({
@@ -60,7 +79,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("publishes appended events to subscribers", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
     const events: Array<{ sequence: number; type: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       events.push({ sequence: event.sequence, type: event.event.type });
@@ -77,7 +96,10 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("tracks quiescence lifecycle state from provider events and command failures", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
 
     expect(runtime.getQuiescenceSnapshot()).toEqual({
       hasObservedWork: false,
@@ -219,6 +241,7 @@ describe("EnvironmentAgentRuntime", () => {
   it("accepts explicit commands and forwards them to the provider transport", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
+      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -254,7 +277,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
-        params: { model: "gpt-5" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-1"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -307,10 +331,12 @@ describe("EnvironmentAgentRuntime", () => {
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "owner-thread",
+      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
         [
+          "let threadCounter = 0;",
           "process.stdin.setEncoding('utf8');",
           "let buffer='';",
           "process.stdin.on('data',chunk=>{",
@@ -323,7 +349,8 @@ describe("EnvironmentAgentRuntime", () => {
           "if (msg.method === 'initialize') {",
           "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
           "} else if (msg.method === 'thread/start') {",
-          "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+          "threadCounter += 1;",
+          "console.log(JSON.stringify({ id: msg.id, result: { threadId: `provider-thread-${threadCounter}` } }));",
           "} else if (msg.method === 'turn/start') {",
           "const threadId = msg.params.threadId;",
           "const turnId = `turn-${threadId}`;",
@@ -358,7 +385,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
-        params: { threadId: "provider-thread-1" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-1"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -376,7 +404,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-2",
         projectId: "proj-1",
-        params: { threadId: "provider-thread-2" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-2"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -495,7 +524,7 @@ describe("EnvironmentAgentRuntime", () => {
       "if (msg.method === 'initialize') {",
       "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, role: process.env.ROLE } }));",
       "} else if (msg.method === 'thread/start') {",
-      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId, role: process.env.ROLE } }));",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: `${process.env.ROLE}-thread`, role: process.env.ROLE } }));",
       "} else if (msg.method === 'turn/start') {",
       "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId, role: process.env.ROLE } }));",
       "}",
@@ -503,7 +532,10 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentAgentProviderSpec = {
@@ -532,7 +564,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-a",
         projectId: "proj-1",
-        params: { threadId: "thread-a" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-a"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -557,7 +590,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-b",
         projectId: "proj-1",
-        params: { threadId: "thread-b" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-b"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -614,7 +648,7 @@ describe("EnvironmentAgentRuntime", () => {
       "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
       "}",
       "} else if (msg.method === 'thread/start') {",
-      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: `provider-${process.env.ROLE ?? 'thread'}` } }));",
       "} else if (msg.method === 'turn/start') {",
       "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
       "}",
@@ -622,7 +656,7 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentAgentProviderSpec = {
@@ -649,7 +683,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-a",
         projectId: "proj-1",
-        params: { threadId: "thread-a" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-a"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -671,7 +706,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-b",
         projectId: "proj-1",
-        params: { threadId: "thread-b" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-b"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -817,7 +853,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("only rejects requests for the exiting child, not siblings", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     // Child A: responds to initialize immediately, but delays thread/start
@@ -839,7 +875,7 @@ describe("EnvironmentAgentRuntime", () => {
           "if (msg.method === 'initialize') {",
           "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
           "} else if (msg.method === 'thread/start') {",
-          "setTimeout(() => console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } })), 500);",
+          "setTimeout(() => console.log(JSON.stringify({ id: msg.id, result: { threadId: 'provider-thread-1' } })), 500);",
           "}",
           "}",
           "});",
@@ -861,7 +897,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
-        params: { threadId: "provider-thread-1" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-1"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },

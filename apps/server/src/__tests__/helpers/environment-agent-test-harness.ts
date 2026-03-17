@@ -78,13 +78,13 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
   const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
-      return command.params ?? provider.createThreadStartParams(
+      return provider.createThreadStartParams(
         command.request!,
         command.context!,
         command.dynamicTools,
       );
     case "thread.resume":
-      return command.params ?? provider.createThreadResumeParams(
+      return provider.createThreadResumeParams(
         command.providerThreadId,
         command.context!,
         command.options,
@@ -92,20 +92,20 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
       );
     case "turn.run":
       if (command.requestedMode === "steer") {
-        return command.steerParams ?? provider.createTurnSteerParams!(
+        return provider.createTurnSteerParams!(
           command.providerThreadId,
           command.activeTurnId!,
           command.input!,
         );
       }
       if (command.requestedMode !== "start" && command.activeTurnId && command.input) {
-        return command.steerParams ?? provider.createTurnSteerParams!(
+        return provider.createTurnSteerParams!(
           command.providerThreadId,
           command.activeTurnId,
           command.input,
         );
       }
-      return command.startParams ?? provider.createTurnStartParams(
+      return provider.createTurnStartParams(
         command.providerThreadId,
         command.input!,
         command.options,
@@ -114,12 +114,12 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
     case "turn.steer":
       return command.params;
     case "thread.rename":
-      return command.params ?? provider.createThreadNameSetParams!(
+      return provider.createThreadNameSetParams!(
         command.providerThreadId,
         command.title,
       );
     case "thread.stop":
-      return command.params ?? {};
+      return {};
     case "workspace.status":
     case "workspace.diff":
       return { threadId: command.threadId };
