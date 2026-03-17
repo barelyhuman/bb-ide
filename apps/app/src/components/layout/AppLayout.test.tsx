@@ -136,7 +136,6 @@ describe("AppLayout", () => {
         name: "Project One",
         rootPath: "/tmp/project-one",
         rootPathExists: true,
-        primaryManagerThreadId: "thread-manager-1",
       },
     ];
 

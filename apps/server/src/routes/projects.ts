@@ -40,6 +40,7 @@ const projectAttachmentQuerySchema = z.object({
 });
 
 const projectManagerRequestSchema = z.object({
+  title: z.string().min(1).optional(),
   providerId: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
 });
@@ -263,21 +264,12 @@ export function createProjectRoutes(
           throw unsupportedOperationError("Manager creation is unavailable");
         }
 
-        const existingManagerId = project.primaryManagerThreadId;
-        if (existingManagerId) {
-          const existingManager = deps.threadManager.getRawById(existingManagerId);
-          if (existingManager && existingManager.archivedAt === undefined) {
-            return c.json(existingManager);
-          }
-          projectRepo.update(projectId, { primaryManagerThreadId: null });
-        }
-
         const body = c.req.valid("json");
 
         const managerThread = await deps.threadManager.spawn({
           projectId,
           type: "manager",
-          title: MANAGER_THREAD_TITLE,
+          title: body?.title ?? MANAGER_THREAD_TITLE,
           environmentDescriptor: {
             type: "path",
             path: project.rootPath,
@@ -291,9 +283,7 @@ export function createProjectRoutes(
 
         try {
           ensureManagerWorkspace(runtimeEnv, managerThread.id);
-          projectRepo.update(projectId, { primaryManagerThreadId: managerThread.id });
         } catch (error) {
-          projectRepo.update(projectId, { primaryManagerThreadId: null });
           rmSync(resolveBbPath(runtimeEnv, "workspace", managerThread.id), {
             recursive: true,
             force: true,

@@ -348,7 +348,6 @@ export class ProjectRepository {
       projectInstructions: row.projectInstructions ?? undefined,
       defaultProviderId: row.defaultProviderId ?? undefined,
       primaryCheckoutThreadId: row.primaryCheckoutThreadId ?? undefined,
-      primaryManagerThreadId: row.primaryManagerThreadId ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -363,7 +362,6 @@ export class ProjectRepository {
       projectInstructions: data.projectInstructions ?? null,
       defaultProviderId: data.defaultProviderId ?? null,
       primaryCheckoutThreadId: null,
-      primaryManagerThreadId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -390,7 +388,6 @@ export class ProjectRepository {
       projectInstructions?: string;
       defaultProviderId?: string | null;
       primaryCheckoutThreadId?: string | null;
-      primaryManagerThreadId?: string | null;
     },
     opts?: { touchUpdatedAt?: boolean },
   ): Project | undefined {
@@ -411,9 +408,6 @@ export class ProjectRepository {
     }
     if (data.primaryCheckoutThreadId !== undefined) {
       updates.primaryCheckoutThreadId = data.primaryCheckoutThreadId;
-    }
-    if (data.primaryManagerThreadId !== undefined) {
-      updates.primaryManagerThreadId = data.primaryManagerThreadId;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -768,6 +762,7 @@ export class ThreadRepository {
   list(filters?: {
     projectId?: string;
     status?: ThreadStatus;
+    type?: ThreadType;
     parentThreadId?: string;
     includeArchived?: boolean;
   }): Thread[] {
@@ -780,6 +775,9 @@ export class ThreadRepository {
     }
     if (filters?.status) {
       conditions.push(eq(threads.status, filters.status));
+    }
+    if (filters?.type) {
+      conditions.push(eq(threads.type, filters.type));
     }
     if (filters?.parentThreadId) {
       conditions.push(eq(threads.parentThreadId, filters.parentThreadId));

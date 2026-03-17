@@ -22,7 +22,6 @@ const apiState = vi.hoisted(() => {
         name: "Project One",
         rootPath: "/tmp/project-one",
         rootPathExists: true,
-        primaryManagerThreadId: "thread-parent",
       },
     ],
     thread: {

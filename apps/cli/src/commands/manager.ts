@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type Project, type Thread } from "@bb/core";
+import { type Thread } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
 import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
@@ -9,14 +9,15 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
 
   manager
     .command("hire [projectId]")
-    .description("Hire or reopen the primary manager for a project")
+    .description("Hire a new manager for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .option("--title <title>", "Manager name")
     .option("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
     .option("--model <model>", "Model ID for the manager")
     .option("--json", "Print machine-readable JSON output")
     .action(async (
       projectIdArg: string | undefined,
-      opts: { json?: boolean; project?: string; provider?: string; model?: string },
+      opts: { json?: boolean; project?: string; title?: string; provider?: string; model?: string },
     ) => {
       const client = createClient(getUrl());
       try {
@@ -25,13 +26,14 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
           client.api.v1.projects[":id"].manager.$post({
             param: { id: projectId },
             json: {
+              ...(opts.title ? { title: opts.title } : {}),
               ...(opts.provider ? { providerId: opts.provider } : {}),
               ...(opts.model ? { model: opts.model } : {}),
             },
           }),
         );
         if (outputJson(opts, thread)) return;
-        console.log(`Manager ready: ${thread.id}`);
+        console.log(`Manager hired: ${thread.id}`);
         printManagerThread(thread);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -40,8 +42,8 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     });
 
   manager
-    .command("show [projectId]")
-    .description("Show the primary manager for a project")
+    .command("list [projectId]")
+    .description("List managers for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(async (
@@ -51,14 +53,17 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       const client = createClient(getUrl());
       try {
         const projectId = requireProjectId(projectIdArg ?? opts.project);
-        const project = await getProjectById(client, projectId);
-        if (!project.primaryManagerThreadId) {
-          console.log("No manager hired");
+        const managers = await unwrap<Thread[]>(
+          client.api.v1.threads.$get({
+            query: { projectId, type: "manager" },
+          }),
+        );
+        if (outputJson(opts, managers)) return;
+        if (managers.length === 0) {
+          console.log("No managers hired");
           return;
         }
-        const thread = await getThreadById(client, project.primaryManagerThreadId);
-        if (outputJson(opts, thread)) return;
-        printManagerThread(thread);
+        printManagerTable(managers);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -183,17 +188,6 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     });
 }
 
-async function getProjectById(
-  client: ReturnType<typeof createClient>,
-  projectId: string,
-): Promise<Project> {
-  return unwrap<Project>(
-    client.api.v1.projects[":id"].$get({
-      param: { id: projectId },
-    }),
-  );
-}
-
 async function getThreadById(
   client: ReturnType<typeof createClient>,
   threadId: string,
@@ -236,6 +230,35 @@ function printManagerThread(thread: Thread): void {
   console.log(`  Project:  ${thread.projectId}`);
   console.log(`  Created:  ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`  Updated:  ${new Date(thread.updatedAt).toLocaleString()}`);
+  console.log("");
+}
+
+function printManagerTable(managers: Thread[]): void {
+  const idWidth = Math.max(4, ...managers.map((m) => m.id.length));
+  const statusWidth = Math.max(6, ...managers.map((m) => m.status.length));
+  const titleWidth = Math.max(
+    5,
+    ...managers.map((m) => (m.title ?? "<untitled>").length),
+  );
+
+  const header = [
+    "ID".padEnd(idWidth),
+    "Status".padEnd(statusWidth),
+    "Title".padEnd(titleWidth),
+  ].join("  ");
+
+  console.log("");
+  console.log(header);
+  console.log("-".repeat(header.length));
+  for (const m of managers) {
+    console.log(
+      [
+        m.id.padEnd(idWidth),
+        m.status.padEnd(statusWidth),
+        (m.title ?? "<untitled>").padEnd(titleWidth),
+      ].join("  "),
+    );
+  }
   console.log("");
 }
 

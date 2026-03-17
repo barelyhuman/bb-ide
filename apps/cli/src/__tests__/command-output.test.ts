@@ -183,38 +183,29 @@ describe("CLI command output contracts", () => {
       param: { id: "project-123" },
       json: {},
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager ready: thread-manager-1");
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-1");
   });
 
-  it("bb manager show reports when no manager is hired", async () => {
-    const get = vi.fn(async () => ({
-      id: "project-123",
-      name: "Repo",
-      rootPath: "/tmp/repo",
-      createdAt: 1,
-      updatedAt: 2,
-      primaryManagerThreadId: null,
-    }));
+  it("bb manager list reports when no managers are hired", async () => {
+    const list = vi.fn(async () => []);
     createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
-          projects: {
-            ":id": {
-              $get: get,
-            },
+          threads: {
+            $get: list,
           },
         },
       },
     }));
 
-    await runCommand(["manager", "show", "project-123"], (program) =>
+    await runCommand(["manager", "list", "project-123"], (program) =>
       registerManagerCommands(program, () => "http://daemon"),
     );
 
-    expect(get).toHaveBeenCalledWith({
-      param: { id: "project-123" },
+    expect(list).toHaveBeenCalledWith({
+      query: { projectId: "project-123", type: "manager" },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("No manager hired");
+    expect(collectLogLines(vi.mocked(console.log))).toContain("No managers hired");
   });
 
   it("bb manager status includes managed child threads", async () => {

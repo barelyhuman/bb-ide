@@ -2414,12 +2414,6 @@ export class Orchestrator implements ThreadOrchestrator {
     if (activePromotion?.threadId === threadId) {
       this._clearPrimaryPromotionState(projectId);
     }
-
-    for (const project of this.projectRepo.list()) {
-      if (project.primaryManagerThreadId === threadId) {
-        this.projectRepo.update(project.id, { primaryManagerThreadId: null });
-      }
-    }
   }
 
   private _forgetDeletedThreadState(threadId: string): void {
@@ -3070,6 +3064,7 @@ export class Orchestrator implements ThreadOrchestrator {
    */
   list(filters?: {
     projectId?: string;
+    type?: ThreadType;
     parentThreadId?: string;
     includeArchived?: boolean;
     includeWorkStatus?: boolean;
@@ -3083,6 +3078,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   async listAsync(filters?: {
     projectId?: string;
+    type?: ThreadType;
     parentThreadId?: string;
     includeArchived?: boolean;
     includeWorkStatus?: boolean;

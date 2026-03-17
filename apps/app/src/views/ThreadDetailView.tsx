@@ -25,6 +25,7 @@ import {
   useThreadManagerWorkspaceFile,
   useThreadManagerWorkspaceFiles,
   useProjects,
+  useThreads,
   useUpdateThread,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
@@ -252,8 +253,14 @@ export function ThreadDetailView() {
   const { data: projects } = useProjects();
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const project = projects?.find((candidate) => candidate.id === projectId);
-  const primaryManagerThreadId = project?.primaryManagerThreadId;
-  const { data: primaryManagerThread } = useThread(primaryManagerThreadId ?? "");
+  const { data: allProjectThreads } = useThreads(
+    projectId ? { projectId } : undefined,
+    { enabled: Boolean(projectId) },
+  );
+  const managerThreads = useMemo(
+    () => (allProjectThreads ?? []).filter((t) => t.type === "manager"),
+    [allProjectThreads],
+  );
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
     {
@@ -757,18 +764,16 @@ export function ThreadDetailView() {
     };
 
     addOption(parentThreadId, parentThreadDisplayName ?? "Manager");
-    addOption(
-      primaryManagerThreadId ?? undefined,
-      primaryManagerThread?.title?.trim() ? primaryManagerThread.title : "Manager",
-    );
+    for (const manager of managerThreads) {
+      addOption(manager.id, manager.title?.trim() ? manager.title : "Manager");
+    }
 
     return options;
   }, [
     isManagerThread,
+    managerThreads,
     parentThreadDisplayName,
     parentThreadId,
-    primaryManagerThread,
-    primaryManagerThreadId,
     thread,
   ]);
   const managerSelectorValue = parentThreadId ?? "none";
@@ -861,8 +866,8 @@ export function ThreadDetailView() {
   const canAssignToManager =
     thread.type === "standard" &&
     !thread.parentThreadId &&
-    Boolean(primaryManagerThreadId) &&
-    primaryManagerThreadId !== thread.id;
+    managerThreads.length > 0 &&
+    !managerThreads.some((m) => m.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;

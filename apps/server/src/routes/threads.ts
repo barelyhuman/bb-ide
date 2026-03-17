@@ -45,6 +45,7 @@ import { resolveManagerWorkspacePath } from "../manager-thread.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
+  type: z.enum(["standard", "manager"]).optional(),
   parentThreadId: z.string().optional(),
   includeArchived: z.enum(["true", "false"]).optional(),
   includeWorkStatus: z.enum(["true", "false"]).optional(),
@@ -574,6 +575,7 @@ export function createThreadRoutes(
               : undefined;
         const threadFilters = {
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
+          ...(filters.type ? { type: filters.type } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),

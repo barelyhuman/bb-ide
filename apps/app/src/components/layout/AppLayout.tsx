@@ -7,7 +7,6 @@ import {
   MoreHorizontal,
   PencilLine,
   Settings,
-  UserRound,
   UserRoundPlus,
   X,
 } from "lucide-react"
@@ -60,7 +59,6 @@ interface AppHeaderProps {
   projectMatch: RegExpMatchArray | null
   projectName?: string
   projectId?: string
-  projectHasManager?: boolean
   isManagerActionPending?: boolean
   onOpenManager?: () => void
   meta: {
@@ -75,7 +73,6 @@ function AppHeader({
   projectMatch,
   projectName,
   projectId,
-  projectHasManager,
   isManagerActionPending = false,
   onOpenManager,
   meta,
@@ -150,16 +147,12 @@ function AppHeader({
             <button
               type="button"
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label={projectHasManager ? "Open manager" : "Hire manager"}
-              title={projectHasManager ? "Open manager" : "Hire manager"}
+              aria-label="Hire manager"
+              title="Hire manager"
               disabled={!projectId || isManagerActionPending}
               onClick={() => onOpenManager?.()}
             >
-              {projectHasManager ? (
-                <UserRound className="size-4" />
-              ) : (
-                <UserRoundPlus className="size-4" />
-              )}
+              <UserRoundPlus className="size-4" />
             </button>
             <Link
               to={`/projects/${projectMatch[1]}/archived`}
@@ -451,15 +444,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               projectId={projectId}
-              projectHasManager={Boolean(project?.primaryManagerThreadId)}
               isManagerActionPending={hireProjectManager.isPending}
               onOpenManager={() => {
                 if (!projectId || hireProjectManager.isPending) return
-                if (project?.primaryManagerThreadId) {
-                  // Open existing manager.
-                  navigate(`/projects/${projectId}/threads/${project.primaryManagerThreadId}`)
-                  return
-                }
                 if (hasMultipleProviders) {
                   setHireManagerModalProjectId(projectId)
                   return

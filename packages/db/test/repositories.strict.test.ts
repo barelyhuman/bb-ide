@@ -123,28 +123,6 @@ describe("repository strict normalization", () => {
     });
   });
 
-  it("persists and loads project primary manager pointers without touching updatedAt", () => {
-    const project = projects.create({
-      name: "test-project",
-      rootPath: "/tmp/test-project",
-    });
-    const managerThread = threads.create({ projectId: project.id });
-
-    sqlite.exec(`UPDATE projects SET updated_at=${project.updatedAt + 5000} WHERE id='${project.id}'`);
-
-    const updated = projects.update(
-      project.id,
-      { primaryManagerThreadId: managerThread.id },
-      { touchUpdatedAt: false },
-    );
-
-    expect(updated).toMatchObject({
-      id: project.id,
-      primaryManagerThreadId: managerThread.id,
-      updatedAt: project.updatedAt + 5000,
-    });
-  });
-
   it("persists and loads thread environment ownership", () => {
     const projectId = createProjectId();
     const env = environments.create({

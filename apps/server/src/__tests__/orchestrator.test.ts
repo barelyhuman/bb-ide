@@ -3365,34 +3365,6 @@ describe("Orchestrator", () => {
       ]);
     });
 
-    it("clears any project primary manager pointer when deleting that manager thread", async () => {
-      const environmentRepo = new EnvironmentRepository(testDb.db);
-      const env = environmentRepo.create({
-        projectId: project.id,
-        descriptor: { type: "path", path: "/tmp/env" },
-        managed: true,
-      });
-      const thread = createTestThread(threadRepo, project.id, {
-        type: "manager",
-        status: "idle",
-        environmentId: env.id,
-      });
-      // Set primary manager pointer to this thread
-      projectRepo.update(project.id, { primaryManagerThreadId: thread.id });
-      // Create a second project with a different primary manager
-      const project2 = createTestProject(projectRepo, { name: "project-2", rootPath: "/tmp/proj-2" });
-      const otherThread = createTestThread(threadRepo, project2.id, { status: "idle" });
-      projectRepo.update(project2.id, { primaryManagerThreadId: otherThread.id });
-
-      await manager.deleteThread(thread.id);
-
-      const updatedProject = projectRepo.getById(project.id);
-      expect(updatedProject?.primaryManagerThreadId).toBeUndefined();
-      // Second project should be untouched
-      const updatedProject2 = projectRepo.getById(project2.id);
-      expect(updatedProject2?.primaryManagerThreadId).toBe(otherThread.id);
-    });
-
     it("preserves thread state when managed cleanup fails before deletion", async () => {
       const cleanup = vi.fn(() => {
         throw new Error("cleanup failed");

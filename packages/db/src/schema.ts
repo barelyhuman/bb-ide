@@ -31,12 +31,10 @@ export const projects = sqliteTable("projects", {
   projectInstructions: text("project_instructions"),
   defaultProviderId: text("default_provider_id"),
   primaryCheckoutThreadId: text("primary_checkout_thread_id").references((): AnySQLiteColumn => threads.id, { onDelete: "set null" }),
-  primaryManagerThreadId: text("primary_manager_thread_id").references((): AnySQLiteColumn => threads.id, { onDelete: "set null" }),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (table) => [
   index("projects_primary_checkout_thread_idx").on(table.primaryCheckoutThreadId),
-  index("projects_primary_manager_thread_idx").on(table.primaryManagerThreadId),
 ]);
 
 export const environments = sqliteTable(
