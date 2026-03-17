@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   EnvironmentAgentRuntime,
   type EnvironmentAgentRuntimeOptions,
@@ -16,8 +17,12 @@ import { createEnvironmentAgentSessionHttpClientFromConnection } from "./session
 import { EnvironmentAgentSessionSync } from "./session-sync.js";
 import { EnvironmentAgentSessionSupervisor } from "./session-supervisor.js";
 import type {
+  EnvironmentAgentSessionCapabilities,
   EnvironmentAgentSessionProviderMetadata,
   EnvironmentAgentSessionWorkerMetadata,
+} from "./session-protocol.js";
+import {
+  inferEnvironmentAgentSessionCapabilities,
 } from "./session-protocol.js";
 
 export interface EnvironmentAgentServiceCliOptions {
@@ -48,6 +53,7 @@ export interface EnvironmentAgentServiceOptions {
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
+    capabilities: EnvironmentAgentSessionCapabilities;
     worker: EnvironmentAgentSessionWorkerMetadata;
     providers?: EnvironmentAgentSessionProviderMetadata[];
   };
@@ -76,6 +82,51 @@ function parsePositiveIntegerEnv(
   return parsed;
 }
 
+function normalizeVersionOutput(rawValue: string | undefined): string | undefined {
+  const firstLine = rawValue
+    ?.split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  return firstLine && firstLine.length > 0 ? firstLine : undefined;
+}
+
+function detectProviderRuntimeVersion(args: {
+  providerCommand?: string;
+  providerLaunchCommand?: string;
+  providerLaunchArgs?: string[];
+}): string | undefined {
+  const providerCommand = args.providerCommand?.trim();
+  if (!providerCommand) {
+    return undefined;
+  }
+
+  try {
+    const invocation = args.providerLaunchCommand?.trim()
+      ? {
+          command: args.providerLaunchCommand.trim(),
+          args: [...(args.providerLaunchArgs ?? []), providerCommand, "--version"],
+        }
+      : {
+          command: providerCommand,
+          args: ["--version"],
+        };
+    const result = spawnSync(invocation.command, invocation.args, {
+      encoding: "utf8",
+      timeout: 2_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (result.status !== 0 || result.error) {
+      return undefined;
+    }
+    return (
+      normalizeVersionOutput(result.stdout) ??
+      normalizeVersionOutput(result.stderr)
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveEnvironmentAgentServiceOptions(args: {
   cli: EnvironmentAgentServiceCliOptions;
   env: NodeJS.ProcessEnv;
@@ -93,6 +144,34 @@ export function resolveEnvironmentAgentServiceOptions(args: {
   if (!Number.isFinite(httpPort) || httpPort < 0) {
     throw new Error("Invalid --http-port");
   }
+
+  const worker: EnvironmentAgentSessionWorkerMetadata = {
+    name: "environment-daemon",
+    version: ENVIRONMENT_AGENT_VERSION,
+    ...(args.env[BB_ENV_DAEMON_BUILD_ID]?.trim()
+      ? { buildId: args.env[BB_ENV_DAEMON_BUILD_ID]!.trim() }
+      : {}),
+  };
+  const controlEndpoint = args.env[BB_ENV_DAEMON_CONTROL_BASE_URL]?.trim()
+    ? {
+        baseUrl: args.env[BB_ENV_DAEMON_CONTROL_BASE_URL]!.trim(),
+        authToken,
+      }
+    : undefined;
+  const providerRuntimeVersion = detectProviderRuntimeVersion({
+    providerCommand: args.cli.providerCommand?.trim(),
+    providerLaunchCommand: args.cli.providerLaunchCommand?.trim(),
+    providerLaunchArgs: args.cli.providerLaunchArgs ?? [],
+  });
+  const providers = args.env[BB_THREAD_PROVIDER_ID]?.trim()
+    ? [
+        {
+          providerId: args.env[BB_THREAD_PROVIDER_ID]!.trim(),
+          adapterVersion: ENVIRONMENT_AGENT_VERSION,
+          ...(providerRuntimeVersion ? { runtimeVersion: providerRuntimeVersion } : {}),
+        },
+      ]
+    : undefined;
 
   return {
     runtime: {
@@ -120,12 +199,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
     control: {
-      endpoint: args.env[BB_ENV_DAEMON_CONTROL_BASE_URL]?.trim()
-        ? {
-            baseUrl: args.env[BB_ENV_DAEMON_CONTROL_BASE_URL]!.trim(),
-            authToken,
-          }
-        : undefined,
+      endpoint: controlEndpoint,
     },
     session: {
       pollIntervalMs:
@@ -133,21 +207,13 @@ export function resolveEnvironmentAgentServiceOptions(args: {
           args.env[BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS],
         ) ?? 250,
       commandBatchLimit: 50,
-      worker: {
-        name: "environment-daemon",
-        version: ENVIRONMENT_AGENT_VERSION,
-        ...(args.env[BB_ENV_DAEMON_BUILD_ID]?.trim()
-          ? { buildId: args.env[BB_ENV_DAEMON_BUILD_ID]!.trim() }
-          : {}),
-      },
-      providers: args.env[BB_THREAD_PROVIDER_ID]?.trim()
-        ? [
-            {
-              providerId: args.env[BB_THREAD_PROVIDER_ID]!.trim(),
-              adapterVersion: ENVIRONMENT_AGENT_VERSION,
-            },
-          ]
-        : undefined,
+      worker,
+      providers,
+      capabilities: inferEnvironmentAgentSessionCapabilities({
+        worker,
+        providers,
+        controlEndpoint,
+      }),
     },
   };
 }
@@ -244,6 +310,7 @@ export async function startEnvironmentAgentService(
         runtime,
         sessionRuntime,
         sessionSync,
+        advertisedCapabilities: options.session.capabilities,
         workerMetadata: options.session.worker,
         providerMetadata: options.session.providers,
         controlEndpoint: options.control.endpoint,

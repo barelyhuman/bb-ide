@@ -63,6 +63,20 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 250,
         commandBatchLimit: 50,
+        capabilities: {
+          commands: [
+            "provider.ensure",
+            "thread.start",
+            "thread.resume",
+            "thread.stop",
+            "turn.start",
+            "turn.steer",
+            "thread.rename",
+            "workspace.status",
+            "workspace.diff",
+          ],
+          features: ["worker_metadata", "provider_metadata"],
+        },
         worker: {
           name: "environment-daemon",
           version: "0.0.1",
@@ -99,6 +113,32 @@ describe("environment-agent service config", () => {
         },
       }),
     ).toThrow(/Invalid --http-port/);
+  });
+
+  it("captures provider runtime version when the provider reports one", () => {
+    const resolved = resolveEnvironmentAgentServiceOptions({
+      cli: {
+        providerCommand: "node",
+        httpPort: "4123",
+      },
+      env: {
+        BB_THREAD_ID: "thread-1",
+        BB_PROJECT_ID: "project-1",
+        BB_THREAD_PROVIDER_ID: "codex",
+        BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
+      },
+    });
+
+    expect(resolved.session.providers).toEqual([
+      {
+        providerId: "codex",
+        adapterVersion: "0.0.1",
+        runtimeVersion: expect.stringMatching(/^v\d+\./),
+      },
+    ]);
+    expect(resolved.session.capabilities.features).toContain(
+      "provider_runtime_version",
+    );
   });
 
   it("starts session supervision when daemon config is present", async () => {
@@ -189,6 +229,20 @@ describe("environment-agent service config", () => {
       session: {
         pollIntervalMs: 10_000,
         commandBatchLimit: 10,
+        capabilities: {
+          commands: [
+            "provider.ensure",
+            "thread.start",
+            "thread.resume",
+            "thread.stop",
+            "turn.start",
+            "turn.steer",
+            "thread.rename",
+            "workspace.status",
+            "workspace.diff",
+          ],
+          features: ["worker_metadata"],
+        },
         worker: {
           name: "environment-daemon",
           version: "0.0.1",

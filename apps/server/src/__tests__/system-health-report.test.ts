@@ -104,8 +104,13 @@ describe("system health report", () => {
           workerBuildId: "build-123",
           providerMetadata: [{ providerId: "codex", adapterVersion: "0.0.1" }],
           selectedCapabilities: {
-            workerMetadata: true,
-            providerMetadata: true,
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.start",
+            ],
+            features: ["worker_metadata", "provider_metadata"],
           },
           controlBaseUrl: "http://127.0.0.1:4321",
           status: "active",
@@ -161,8 +166,27 @@ describe("system health report", () => {
           },
           providers: [{ providerId: "codex", adapterVersion: "0.0.1" }],
           selectedCapabilities: {
-            workerMetadata: true,
-            providerMetadata: true,
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.start",
+            ],
+            features: ["worker_metadata", "provider_metadata"],
+          },
+          compatibility: {
+            disposition: "degrade",
+            missingRequiredCommands: [],
+            missingOptionalCommands: [
+              "turn.steer",
+              "thread.rename",
+              "workspace.status",
+              "workspace.diff",
+            ],
+            missingOptionalFeatures: [
+              "provider_runtime_version",
+              "control_endpoint",
+            ],
           },
           controlBaseUrl: "http://127.0.0.1:4321",
           leaseExpiresAt: now + 45_000,

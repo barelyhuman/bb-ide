@@ -10,7 +10,6 @@ import { expandHomeDirectory, resolveBbRoot } from "@bb/core/storage-paths";
 import { type Project, type Thread } from "@bb/core";
 import type {
   SystemHealthEnvironmentAgentProvider,
-  SystemHealthEnvironmentAgentSelectedCapabilities,
   SystemHealthEnvironmentAgentSession,
   SystemHealthDiskSummary,
   SystemHealthReport,
@@ -28,6 +27,7 @@ import {
   resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
+import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
 
 export interface CreateSystemHealthReporterArgs {
   projectRepo: ProjectRepository;
@@ -168,29 +168,16 @@ function isProviderMetadataArray(
         typeof item === "object" &&
         item !== null &&
         typeof item.providerId === "string" &&
-        typeof item.adapterVersion === "string",
+        typeof item.adapterVersion === "string" &&
+        (item.runtimeVersion === undefined || typeof item.runtimeVersion === "string"),
     )
-  );
-}
-
-function isSelectedCapabilities(
-  value: unknown,
-): value is SystemHealthEnvironmentAgentSelectedCapabilities {
-  const candidate = value as {
-    workerMetadata?: unknown;
-    providerMetadata?: unknown;
-  } | null;
-  return (
-    typeof candidate === "object" &&
-    candidate !== null &&
-    typeof candidate.workerMetadata === "boolean" &&
-    typeof candidate.providerMetadata === "boolean"
   );
 }
 
 function toEnvironmentAgentSessionSummary(
   session: EnvironmentAgentSessionRecord,
 ): SystemHealthEnvironmentAgentSession {
+  const assessment = assessEnvironmentAgentSessionCompatibility(session);
   return {
     sessionId: session.id,
     threadId: session.threadId,
@@ -210,9 +197,8 @@ function toEnvironmentAgentSessionSummary(
     ...(isProviderMetadataArray(session.providerMetadata)
       ? { providers: session.providerMetadata }
       : {}),
-    ...(isSelectedCapabilities(session.selectedCapabilities)
-      ? { selectedCapabilities: session.selectedCapabilities }
-      : {}),
+    selectedCapabilities: assessment.capabilities,
+    compatibility: assessment.compatibility,
     ...(session.controlBaseUrl ? { controlBaseUrl: session.controlBaseUrl } : {}),
     leaseExpiresAt: session.leaseExpiresAt,
     ...(session.lastHeartbeatAt ? { lastHeartbeatAt: session.lastHeartbeatAt } : {}),

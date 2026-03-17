@@ -12,6 +12,29 @@ export const ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS = [
 export type EnvironmentAgentSessionProtocolVersion =
   (typeof ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number];
 
+export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
+  "provider.ensure",
+  "thread.start",
+  "thread.resume",
+  "thread.stop",
+  "turn.start",
+  "turn.steer",
+  "thread.rename",
+  "workspace.status",
+  "workspace.diff",
+] as const satisfies readonly EnvironmentAgentCommand["type"][];
+export type EnvironmentAgentSessionCapabilityCommand =
+  (typeof ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS)[number];
+
+export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES = [
+  "worker_metadata",
+  "provider_metadata",
+  "provider_runtime_version",
+  "control_endpoint",
+] as const;
+export type EnvironmentAgentSessionCapabilityFeature =
+  (typeof ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES)[number];
+
 export type EnvironmentAgentSessionCloseReason =
   | "agent_shutdown"
   | "daemon_shutdown"
@@ -50,17 +73,19 @@ export interface EnvironmentAgentSessionWorkerMetadata {
 export interface EnvironmentAgentSessionProviderMetadata {
   providerId: string;
   adapterVersion: string;
+  runtimeVersion?: string;
 }
 
-export interface EnvironmentAgentSessionSelectedCapabilities {
-  workerMetadata: boolean;
-  providerMetadata: boolean;
+export interface EnvironmentAgentSessionCapabilities {
+  commands: EnvironmentAgentSessionCapabilityCommand[];
+  features: EnvironmentAgentSessionCapabilityFeature[];
 }
 
 export interface EnvironmentAgentSessionOpenPayload {
   agentId: string;
   agentInstanceId: string;
   supportedProtocolVersions: number[];
+  capabilities?: EnvironmentAgentSessionCapabilities;
   worker?: EnvironmentAgentSessionWorkerMetadata;
   providers?: EnvironmentAgentSessionProviderMetadata[];
   controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
@@ -76,7 +101,7 @@ export interface EnvironmentAgentSessionWelcomePayload {
   leaseTtlMs: number;
   heartbeatIntervalMs: number;
   protocolVersion: EnvironmentAgentSessionProtocolVersion;
-  selectedCapabilities?: EnvironmentAgentSessionSelectedCapabilities;
+  selectedCapabilities?: EnvironmentAgentSessionCapabilities;
   channels: EnvironmentAgentSessionWelcomeChannel[];
 }
 
@@ -91,6 +116,88 @@ export function selectEnvironmentAgentSessionProtocolVersion(args: {
     }
   }
   return undefined;
+}
+
+function uniqueInOrder<T>(values: readonly T[]): T[] {
+  return [...new Set(values)];
+}
+
+function isKnownCommand(
+  value: string,
+): value is EnvironmentAgentSessionCapabilityCommand {
+  return ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS.includes(
+    value as EnvironmentAgentSessionCapabilityCommand,
+  );
+}
+
+function isKnownFeature(
+  value: string,
+): value is EnvironmentAgentSessionCapabilityFeature {
+  return ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES.includes(
+    value as EnvironmentAgentSessionCapabilityFeature,
+  );
+}
+
+export function inferEnvironmentAgentSessionCapabilities(args: {
+  worker?: EnvironmentAgentSessionWorkerMetadata;
+  providers?: EnvironmentAgentSessionProviderMetadata[];
+  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
+}): EnvironmentAgentSessionCapabilities {
+  const features: EnvironmentAgentSessionCapabilityFeature[] = [];
+  if (args.worker) {
+    features.push("worker_metadata");
+  }
+  if (args.providers && args.providers.length > 0) {
+    features.push("provider_metadata");
+    if (args.providers.some((provider) => provider.runtimeVersion?.trim())) {
+      features.push("provider_runtime_version");
+    }
+  }
+  if (args.controlEndpoint) {
+    features.push("control_endpoint");
+  }
+  return {
+    commands: [...ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS],
+    features,
+  };
+}
+
+export function normalizeEnvironmentAgentSessionCapabilities(
+  capabilities: Partial<EnvironmentAgentSessionCapabilities> | undefined,
+): EnvironmentAgentSessionCapabilities {
+  return {
+    commands: uniqueInOrder(
+      (capabilities?.commands ?? []).filter((value): value is EnvironmentAgentSessionCapabilityCommand =>
+        typeof value === "string" && isKnownCommand(value)
+      ),
+    ),
+    features: uniqueInOrder(
+      (capabilities?.features ?? []).filter((value): value is EnvironmentAgentSessionCapabilityFeature =>
+        typeof value === "string" && isKnownFeature(value)
+      ),
+    ),
+  };
+}
+
+export function negotiateEnvironmentAgentSessionCapabilities(args: {
+  requested?: Partial<EnvironmentAgentSessionCapabilities>;
+  fallback: {
+    worker?: EnvironmentAgentSessionWorkerMetadata;
+    providers?: EnvironmentAgentSessionProviderMetadata[];
+    controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
+  };
+}): EnvironmentAgentSessionCapabilities {
+  const advertised = args.requested
+    ? normalizeEnvironmentAgentSessionCapabilities(args.requested)
+    : inferEnvironmentAgentSessionCapabilities(args.fallback);
+  return {
+    commands: advertised.commands.filter((command) =>
+      ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS.includes(command),
+    ),
+    features: advertised.features.filter((feature) =>
+      ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES.includes(feature),
+    ),
+  };
 }
 
 export interface EnvironmentAgentSessionHeartbeatChannel {

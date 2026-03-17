@@ -328,11 +328,19 @@ export interface SystemHealthEnvironmentAgentWorker {
 export interface SystemHealthEnvironmentAgentProvider {
   providerId: string;
   adapterVersion: string;
+  runtimeVersion?: string;
 }
 
-export interface SystemHealthEnvironmentAgentSelectedCapabilities {
-  workerMetadata: boolean;
-  providerMetadata: boolean;
+export interface SystemHealthEnvironmentAgentCapabilities {
+  commands: string[];
+  features: string[];
+}
+
+export interface SystemHealthEnvironmentAgentCompatibility {
+  disposition: "reuse" | "degrade" | "replace";
+  missingRequiredCommands: string[];
+  missingOptionalCommands: string[];
+  missingOptionalFeatures: string[];
 }
 
 export interface SystemHealthEnvironmentAgentSession {
@@ -344,7 +352,8 @@ export interface SystemHealthEnvironmentAgentSession {
   protocolVersion: number;
   worker?: SystemHealthEnvironmentAgentWorker;
   providers?: SystemHealthEnvironmentAgentProvider[];
-  selectedCapabilities?: SystemHealthEnvironmentAgentSelectedCapabilities;
+  selectedCapabilities?: SystemHealthEnvironmentAgentCapabilities;
+  compatibility?: SystemHealthEnvironmentAgentCompatibility;
   controlBaseUrl?: string;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;

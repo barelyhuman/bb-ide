@@ -74,10 +74,31 @@ const environmentAgentSessionChannelBootstrapSchema = z.object({
   lastDaemonAcked: environmentAgentSessionCursorSchema.optional(),
 });
 
+const environmentAgentSessionCapabilitiesSchema = z.object({
+  commands: z.array(z.enum([
+    "provider.ensure",
+    "thread.start",
+    "thread.resume",
+    "thread.stop",
+    "turn.start",
+    "turn.steer",
+    "thread.rename",
+    "workspace.status",
+    "workspace.diff",
+  ])).min(1),
+  features: z.array(z.enum([
+    "worker_metadata",
+    "provider_metadata",
+    "provider_runtime_version",
+    "control_endpoint",
+  ])),
+});
+
 const environmentAgentSessionOpenBodySchema = z.object({
   agentId: z.string().min(1),
   agentInstanceId: z.string().min(1),
   supportedProtocolVersions: z.array(z.number().int()).min(1),
+  capabilities: environmentAgentSessionCapabilitiesSchema.optional(),
   worker: z.object({
     name: z.string().min(1),
     version: z.string().min(1),
@@ -87,6 +108,7 @@ const environmentAgentSessionOpenBodySchema = z.object({
     z.object({
       providerId: z.string().min(1),
       adapterVersion: z.string().min(1),
+      runtimeVersion: z.string().min(1).optional(),
     }),
   ).optional(),
   controlEndpoint: z.object({

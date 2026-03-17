@@ -192,8 +192,27 @@ describe("System routes", () => {
                 },
               ],
               selectedCapabilities: {
-                workerMetadata: true,
-                providerMetadata: true,
+                commands: [
+                  "provider.ensure",
+                  "thread.start",
+                  "thread.resume",
+                  "turn.start",
+                ],
+                features: ["worker_metadata", "provider_metadata"],
+              },
+              compatibility: {
+                disposition: "degrade",
+                missingRequiredCommands: [],
+                missingOptionalCommands: [
+                  "turn.steer",
+                  "thread.rename",
+                  "workspace.status",
+                  "workspace.diff",
+                ],
+                missingOptionalFeatures: [
+                  "provider_runtime_version",
+                  "control_endpoint",
+                ],
               },
               leaseExpiresAt: 1_700_000_045_000,
               createdAt: 1_700_000_000_000,
@@ -253,8 +272,27 @@ describe("System routes", () => {
                 },
               ],
               selectedCapabilities: {
-                workerMetadata: true,
-                providerMetadata: true,
+                commands: [
+                  "provider.ensure",
+                  "thread.start",
+                  "thread.resume",
+                  "turn.start",
+                ],
+                features: ["worker_metadata", "provider_metadata"],
+              },
+              compatibility: {
+                disposition: "degrade",
+                missingRequiredCommands: [],
+                missingOptionalCommands: [
+                  "turn.steer",
+                  "thread.rename",
+                  "workspace.status",
+                  "workspace.diff",
+                ],
+                missingOptionalFeatures: [
+                  "provider_runtime_version",
+                  "control_endpoint",
+                ],
               },
               leaseExpiresAt: 1_700_000_045_000,
               createdAt: 1_700_000_000_000,

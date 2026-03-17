@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+  inferEnvironmentAgentSessionCapabilities,
+  negotiateEnvironmentAgentSessionCapabilities,
+  normalizeEnvironmentAgentSessionCapabilities,
   compareEnvironmentAgentSessionCursors,
   isEnvironmentAgentSessionClientMessage,
   isEnvironmentAgentSessionCursor,
@@ -109,5 +112,52 @@ describe("session-protocol", () => {
         supportedByAgent: [3, 2],
       }),
     ).toBeUndefined();
+  });
+
+  it("infers capabilities for older agents that only send metadata", () => {
+    expect(
+      inferEnvironmentAgentSessionCapabilities({
+        worker: { name: "environment-daemon", version: "0.0.1" },
+        providers: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+      }),
+    ).toEqual({
+      commands: [
+        "provider.ensure",
+        "thread.start",
+        "thread.resume",
+        "thread.stop",
+        "turn.start",
+        "turn.steer",
+        "thread.rename",
+        "workspace.status",
+        "workspace.diff",
+      ],
+      features: ["worker_metadata", "provider_metadata"],
+    });
+  });
+
+  it("normalizes and negotiates advertised capabilities", () => {
+    expect(
+      negotiateEnvironmentAgentSessionCapabilities({
+        requested: {
+          commands: ["turn.start", "turn.start", "workspace.diff", "unknown"] as never,
+          features: ["provider_metadata", "provider_metadata", "bogus"] as never,
+        },
+        fallback: {},
+      }),
+    ).toEqual({
+      commands: ["turn.start", "workspace.diff"],
+      features: ["provider_metadata"],
+    });
+
+    expect(
+      normalizeEnvironmentAgentSessionCapabilities({
+        commands: ["thread.start", "unsupported"] as never,
+        features: ["worker_metadata", "nope"] as never,
+      }),
+    ).toEqual({
+      commands: ["thread.start"],
+      features: ["worker_metadata"],
+    });
   });
 });

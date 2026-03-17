@@ -130,8 +130,18 @@ describe("EnvironmentAgentSessionService", () => {
         },
       ],
       selectedCapabilities: {
-        workerMetadata: true,
-        providerMetadata: true,
+        commands: [
+          "provider.ensure",
+          "thread.start",
+          "thread.resume",
+          "thread.stop",
+          "turn.start",
+          "turn.steer",
+          "thread.rename",
+          "workspace.status",
+          "workspace.diff",
+        ],
+        features: ["worker_metadata", "provider_metadata"],
       },
       leaseExpiresAt: 47_000,
     });
@@ -145,8 +155,18 @@ describe("EnvironmentAgentSessionService", () => {
         heartbeatIntervalMs: 15_000,
         protocolVersion: 1,
         selectedCapabilities: {
-          workerMetadata: true,
-          providerMetadata: true,
+          commands: [
+            "provider.ensure",
+            "thread.start",
+            "thread.resume",
+            "thread.stop",
+            "turn.start",
+            "turn.steer",
+            "thread.rename",
+            "workspace.status",
+            "workspace.diff",
+          ],
+          features: ["worker_metadata", "provider_metadata"],
         },
         channels: [
           {

@@ -8,8 +8,9 @@ import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  negotiateEnvironmentAgentSessionCapabilities,
   selectEnvironmentAgentSessionProtocolVersion,
-  type EnvironmentAgentSessionSelectedCapabilities,
+  type EnvironmentAgentSessionCapabilities,
   type EnvironmentAgentSessionCommandAckPayload,
   type EnvironmentAgentSessionCommandBatchMessage,
   type EnvironmentAgentSessionCommandResultPayload,
@@ -222,11 +223,15 @@ export class EnvironmentAgentSessionService {
       );
     }
     const environmentId = this.getResolvedEnvironmentId(args.threadId);
-    const selectedCapabilities: EnvironmentAgentSessionSelectedCapabilities = {
-      workerMetadata: args.payload.worker !== undefined,
-      providerMetadata:
-        args.payload.providers !== undefined && args.payload.providers.length > 0,
-    };
+    const selectedCapabilities: EnvironmentAgentSessionCapabilities =
+      negotiateEnvironmentAgentSessionCapabilities({
+        requested: args.payload.capabilities,
+        fallback: {
+          worker: args.payload.worker,
+          providers: args.payload.providers,
+          controlEndpoint: args.payload.controlEndpoint,
+        },
+      });
     const opened = this.sessions.openSession({
       threadId: args.threadId,
       ...(environmentId ? { environmentId } : {}),

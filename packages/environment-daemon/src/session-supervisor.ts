@@ -10,6 +10,7 @@ import type {
 import type { EnvironmentAgentSessionControlEndpoint } from "./session-protocol.js";
 import type { EnvironmentAgentSessionProviderResponsePayload } from "./session-protocol.js";
 import type {
+  EnvironmentAgentSessionCapabilities,
   EnvironmentAgentSessionProviderMetadata,
   EnvironmentAgentSessionProtocolVersion,
   EnvironmentAgentSessionWorkerMetadata,
@@ -22,6 +23,7 @@ export interface EnvironmentAgentSessionSupervisorOptions {
   sessionRuntime: EnvironmentAgentSessionRuntime;
   sessionSync: EnvironmentAgentSessionSync;
   supportedProtocolVersions?: readonly EnvironmentAgentSessionProtocolVersion[];
+  advertisedCapabilities?: EnvironmentAgentSessionCapabilities;
   controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   workerMetadata?: EnvironmentAgentSessionWorkerMetadata;
   providerMetadata?: EnvironmentAgentSessionProviderMetadata[];
@@ -214,6 +216,9 @@ export class EnvironmentAgentSessionSupervisor {
         agentId: this.agentId,
         agentInstanceId: this.agentInstanceId,
         supportedProtocolVersions: [...this.supportedProtocolVersions],
+        ...(this.options.advertisedCapabilities
+          ? { capabilities: this.options.advertisedCapabilities }
+          : {}),
         ...(this.options.workerMetadata ? { worker: this.options.workerMetadata } : {}),
         ...(this.options.providerMetadata ? { providers: this.options.providerMetadata } : {}),
         ...(this.options.controlEndpoint
