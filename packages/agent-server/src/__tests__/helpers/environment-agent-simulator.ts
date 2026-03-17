@@ -10,7 +10,6 @@ import {
   type EnvironmentAgentControlResponse,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
-  type EnvironmentAgentProviderSpec,
   type EnvironmentAgentProviderStatus,
   type EnvironmentAgentStatusSnapshot,
   isEnvironmentAgentControlRequest,
@@ -89,7 +88,7 @@ class FakeEnvironmentAgentTransport implements JsonLineTransport {
 
 export class EnvironmentAgentSimulator {
   readonly providerRequests: ProviderRequest[] = [];
-  readonly ensureRequests: EnvironmentAgentProviderSpec[] = [];
+  readonly ensureRequests: Array<Extract<EnvironmentAgentCommand, { type: "provider.ensure" }>> = [];
   readonly statusRequests: number[] = [];
 
   private readonly transport = new FakeEnvironmentAgentTransport(this);
@@ -251,6 +250,23 @@ export class EnvironmentAgentSimulator {
   private handleControlRequest(request: EnvironmentAgentControlRequest): void {
     switch (request.type) {
       case "command": {
+        if (request.payload.command.type === "provider.ensure") {
+          this.ensureRequests.push(request.payload.command);
+          this.respond(request, {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            commandId: request.payload.meta.commandId,
+            idempotencyKey: request.payload.meta.idempotencyKey,
+            state: "accepted",
+            acknowledgedAt: Date.now(),
+            latestSequence: this.status.latestSequence,
+            result: {
+              running: true,
+              launched: true,
+              pid: 12345,
+            } satisfies EnvironmentAgentProviderStatus,
+          } satisfies EnvironmentAgentCommandAck);
+          return;
+        }
         const initialize = "initialize" in request.payload.command
           ? request.payload.command.initialize
           : undefined;
@@ -282,7 +298,10 @@ export class EnvironmentAgentSimulator {
         return;
       }
       case "provider.ensure":
-        this.ensureRequests.push(request.payload);
+        this.ensureRequests.push({
+          type: "provider.ensure",
+          ...request.payload,
+        });
         this.respond(request, {
           running: true,
           launched: true,

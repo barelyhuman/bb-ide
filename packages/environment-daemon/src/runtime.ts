@@ -291,7 +291,7 @@ export class EnvironmentAgentRuntime {
       const result =
         envelope.command.type === "provider.ensure"
           ? this.ensureProviderStatus(
-              this.toProviderEnsureSpec(envelope.command),
+              await this.toProviderEnsureSpec(envelope.command),
               envelope.command.forThreadId,
             )
           : await this.executeRpcCommand(envelope.command);
@@ -797,9 +797,36 @@ export class EnvironmentAgentRuntime {
       : undefined;
   }
 
-  private toProviderEnsureSpec(
+  private async toProviderEnsureSpec(
     command: EnvironmentAgentProviderEnsureCommand,
-  ): EnvironmentAgentProviderSpec {
+  ): Promise<EnvironmentAgentProviderSpec> {
+    if (
+      command.command === undefined ||
+      command.args === undefined
+    ) {
+      const provider = this.getProviderAdapterForId(
+        command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+      );
+      if (!provider || !command.context) {
+        throw new Error("provider.ensure spec is unavailable");
+      }
+      const launchConfig = await provider.resolveLaunchConfiguration?.(command.context);
+      return {
+        command: provider.processCommand,
+        args: [...provider.processArgs],
+        ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
+        ...(launchConfig?.files
+          ? { files: launchConfig.files.map((file) => ({ ...file })) }
+          : {}),
+        ...(command.providerLaunch
+          ? {
+              launchCommand: command.providerLaunch.command,
+              launchArgs: [...command.providerLaunch.args],
+            }
+          : {}),
+      };
+    }
+
     return {
       command: command.command,
       args: [...command.args],
@@ -1294,7 +1321,12 @@ export class EnvironmentAgentRuntime {
   }
 
   private getProviderAdapter(): ProviderAdapter | undefined {
-    const providerId = this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+    return this.getProviderAdapterForId(
+      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+    );
+  }
+
+  private getProviderAdapterForId(providerId: string | undefined): ProviderAdapter | undefined {
     if (!providerId || !isThreadProviderId(providerId)) {
       return undefined;
     }

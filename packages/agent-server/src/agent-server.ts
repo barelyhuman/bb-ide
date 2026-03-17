@@ -7,7 +7,6 @@ import {
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderLaunchWrapper,
-  type EnvironmentAgentProviderSpec,
   type EnvironmentAgentStatusSnapshot,
 } from "@bb/environment-daemon";
 import {
@@ -533,31 +532,13 @@ export class AgentServer {
     context: ProviderThreadContext,
     providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
   ): Promise<void> {
-    const spec = await this.buildProviderSpec(context, providerLaunch);
-    await client.ensureProviderRunning(spec, context.threadId);
-  }
-
-  private async buildProviderSpec(
-    context: ProviderThreadContext,
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
-  ): Promise<EnvironmentAgentProviderSpec> {
-    const launchConfig = await this.opts.provider.resolveLaunchConfiguration?.(context);
-    return {
-      command: this.opts.provider.processCommand,
-      args: [...this.opts.provider.processArgs],
-      ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
-      ...(launchConfig?.files
-        ? {
-            files: launchConfig.files.map((file) => ({ ...file })),
-          }
-        : {}),
-      ...(providerLaunch
-        ? {
-            launchCommand: providerLaunch.command,
-            launchArgs: [...providerLaunch.args],
-          }
-        : {}),
-    };
+    await this.sendEnvironmentAgentCommand(client, {
+      type: "provider.ensure",
+      providerId: this.opts.provider.id,
+      context,
+      ...(providerLaunch ? { providerLaunch } : {}),
+      forThreadId: context.threadId,
+    });
   }
 
   private async sendEnvironmentAgentCommand(

@@ -534,8 +534,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsure.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -585,8 +585,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsure.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -617,8 +617,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(turnStart.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -711,8 +711,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsureForResume.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -743,8 +743,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsureForTurn.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -832,8 +832,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsureForResume.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -864,8 +864,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsureForTurn.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {
@@ -1287,8 +1287,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
     });
     expect(providerEnsure.command).toMatchObject({
       type: "provider.ensure",
-      command: "codex",
-      args: ["app-server"],
+      providerId: "codex",
+      context: expect.objectContaining({ threadId }),
     });
 
     await vi.waitFor(() => {

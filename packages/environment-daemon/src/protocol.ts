@@ -5,6 +5,7 @@ import type {
   ProviderThreadContext,
   SpawnThreadRequest,
   Thread,
+  ThreadProviderId,
 } from "@bb/core";
 
 export type EnvironmentAgentTransportKind = "http";
@@ -72,10 +73,19 @@ export interface EnvironmentAgentInitializeRequest {
 }
 
 export type EnvironmentAgentCommand =
-  | ({
+  | {
       type: "provider.ensure";
       forThreadId?: string;
-    } & EnvironmentAgentProviderSpec)
+      providerId?: ThreadProviderId;
+      context?: ProviderThreadContext;
+      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+      command?: string;
+      args?: string[];
+      launchCommand?: string;
+      launchArgs?: string[];
+      env?: Record<string, string>;
+      files?: EnvironmentAgentProviderFile[];
+    }
   | {
       type: "thread.start";
       threadId: string;

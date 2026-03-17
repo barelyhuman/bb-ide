@@ -43,18 +43,12 @@ describe("AgentServer environment-agent control plane", () => {
 
     expect(simulator.ensureRequests).toContainEqual(
       expect.objectContaining({
-        command: "codex",
-        args: ["app-server"],
-        env: {
-          OPENAI_API_KEY: "sk-test-123",
-        },
-        files: [
-          {
-            placement: "home",
-            path: ".codex/auth.json",
-            content: '{"auth_mode":"chatgpt"}',
-          },
-        ],
+        providerId: "codex",
+        forThreadId: "thread-1",
+        context: expect.objectContaining({
+          projectId: "project-1",
+          threadId: "thread-1",
+        }),
       }),
     );
   });
@@ -83,8 +77,8 @@ describe("AgentServer environment-agent control plane", () => {
     expect(started).toEqual({ providerThreadId: "provider-thread-1" });
     expect(simulator.ensureRequests).toContainEqual(
       expect.objectContaining({
-        command: "codex",
-        args: ["app-server"],
+        providerId: "codex",
+        forThreadId: "thread-1",
       }),
     );
     expect(simulator.providerRequests).toEqual(

@@ -5,6 +5,7 @@ import type {
   ProviderExecutionOptions,
   ProviderThreadContext,
   SpawnThreadRequest,
+  ThreadProviderId,
 } from "@bb/core";
 import type {
   EnvironmentAgentCommand,
@@ -158,6 +159,12 @@ function decodePromptInputArray(value: unknown): PromptInput[] | undefined {
   return Array.isArray(value) ? value as PromptInput[] : undefined;
 }
 
+function decodeThreadProviderId(value: unknown): ThreadProviderId | undefined {
+  return value === "codex" || value === "claude-code" || value === "pi"
+    ? value
+    : undefined;
+}
+
 export function decodePersistedEnvironmentAgentCommand(args: {
   commandType: string;
   payload: unknown;
@@ -172,9 +179,10 @@ export function decodePersistedEnvironmentAgentCommand(args: {
 
   switch (commandType) {
     case "provider.ensure": {
-      const command = requireStringField(record, "command", commandType);
-      const providerArgs = decodeStringArray(record.args);
-      if (!providerArgs) {
+      const command = getStringField(record, "command");
+      const providerArgs =
+        record.args === undefined ? undefined : decodeStringArray(record.args);
+      if (record.args !== undefined && !providerArgs) {
         throw new Error(
           `Invalid persisted environment-agent command payload for ${commandType}`,
         );
@@ -200,15 +208,38 @@ export function decodePersistedEnvironmentAgentCommand(args: {
       }
       const launchCommand = getStringField(record, "launchCommand");
       const forThreadId = getStringField(record, "forThreadId");
+      if (!command && !decodeThreadProviderId(record.providerId)) {
+        throw new Error(
+          `Invalid persisted environment-agent command payload for ${commandType}`,
+        );
+      }
       return {
         type: commandType,
-        command,
-        args: providerArgs,
+        ...(command ? { command } : {}),
+        ...(providerArgs ? { args: providerArgs } : {}),
         ...(launchCommand ? { launchCommand } : {}),
         ...(launchArgs ? { launchArgs } : {}),
         ...(env ? { env } : {}),
         ...(files ? { files } : {}),
         ...(forThreadId ? { forThreadId } : {}),
+        ...(decodeThreadProviderId(record.providerId)
+          ? { providerId: decodeThreadProviderId(record.providerId)! }
+          : {}),
+        ...(decodeThreadContext(record.context)
+          ? { context: decodeThreadContext(record.context)! }
+          : {}),
+        ...(toRecord(record.providerLaunch)
+          ? {
+              providerLaunch: {
+                command: requireStringField(
+                  toRecord(record.providerLaunch)!,
+                  "command",
+                  commandType,
+                ),
+                args: decodeStringArray(toRecord(record.providerLaunch)!.args) ?? [],
+              },
+            }
+          : {}),
       };
     }
     case "thread.start":
