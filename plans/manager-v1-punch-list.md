@@ -156,9 +156,29 @@ Ensure the manager actively manages thread clutter.
 
 ---
 
+### 9. Extract workflows into a sub-template
+
+The workflows section of the manager instructions is the longest section and is conceptually independent from the behavioral rules. Extract it into `bb-manager-workflows.md` as a standalone sub-template, following the same pattern as `bb-system-overview.md` and `bb-cli-guide.md`. This keeps the main instructions template focused on behavior and communication boundaries, and makes the workflows reusable in other contexts.
+
+### 10. CLI command deduplication audit
+
+Several `bb manager` commands duplicate `bb thread` commands:
+- `bb manager threads <id>` = `bb thread list --parent-thread <id>`
+- `bb manager status <id>` ≈ `bb thread show <id>` + `bb manager threads <id>`
+- `bb manager send <id> <msg>` = `bb thread tell <id> <msg>`
+- `bb manager log <id>` = `bb thread log <id>`
+
+Options: remove duplicates, keep as shorthands, or consolidate. The CLI guide should teach one canonical way per operation. Track and decide which commands to keep vs remove.
+
+### 11. Manager instructions heading consistency
+
+The manager instructions template mixes `##` headings (for CLI Reference and System Overview sub-template sections) with bare text headings (for Delegation, Communication, Hatching, etc.). Pick one style and apply it consistently. The sub-template sections use `##` because they're injected as standalone documents; the behavioral sections should either all use `##` or all use bare headings.
+
+---
+
 ## P1 — UI Polish
 
-### 9. Surface language audit
+### 12. Surface language audit
 
 Some confirmation modals and UI surfaces use "thread" language where "manager" would be more appropriate.
 
@@ -170,7 +190,7 @@ Some confirmation modals and UI surfaces use "thread" language where "manager" w
 
 **Implementation:** Add type-aware copy that checks `thread.type` and uses "manager" vs "thread" accordingly. Low priority but important for product coherence.
 
-### 10. Sidebar collapsed-manager status cues
+### 13. Sidebar collapsed-manager status cues
 
 When a manager is collapsed in the sidebar, surface enough status to be useful without expanding.
 
@@ -178,7 +198,7 @@ When a manager is collapsed in the sidebar, surface enough status to be useful w
 - Show a spinner/activity indicator if any managed child is actively running a turn
 - Keep it minimal — no heavy tree chrome
 
-### 11. UI handoff actions
+### 14. UI handoff actions
 
 Add explicit handoff buttons to the thread info panel.
 
@@ -186,7 +206,7 @@ Add explicit handoff buttons to the thread info panel.
 - For manager-managed threads: "Take Over" action (removes `parentThreadId`, moves to regular thread list)
 - These complement the chat-driven handoff path (asking the manager in conversation)
 
-### 12. `@`-mention interaction polish
+### 15. `@`-mention interaction polish
 
 Clean up the prompt mention interaction for both file and thread mentions.
 
@@ -210,7 +230,7 @@ Clean up the prompt mention interaction for both file and thread mentions.
 - If kept, reduce visual weight — keep them secondary to text
 - If rows read better without, prefer removing
 
-### 13. Dedicated manager routes (evaluation)
+### 16. Dedicated manager routes (evaluation)
 
 Currently manager-specific operations (workspace files, workspace file content, preferences) live under the threads route (`/threads/:id/manager-workspace/*`). Evaluate whether managers should have their own top-level route namespace.
 
@@ -229,7 +249,7 @@ Currently manager-specific operations (workspace files, workspace file content, 
 
 ## P3 — Validation
 
-### 14. Manager QA scenarios
+### 17. Manager QA scenarios
 
 Create a dedicated manager QA doc with scenarios derived from `plans/manager-hero-workflows.md`.
 
@@ -256,16 +276,134 @@ Create a dedicated manager QA doc with scenarios derived from `plans/manager-her
 
 ---
 
-# Recommended Build Order
+# Completed
 
-1. **CLI audit P0s** — unblock manager quality (`--title`, `--model`, `--json` on list). See `plans/cli-audit.md`.
-2. **Prompt quality pass** — teach the manager the hero workflows (W1–W10), not just simple delegation. See `plans/manager-hero-workflows.md`. Environment reuse (W2 blocker) is now resolved.
-4. **Multi-manager support** — foundational data model change that unblocks the rest.
-5. **Inter-agent messaging tool** — core V1 primitive, enables manager-to-manager workflows (W10).
-6. **Manager default provider/model** + **Hire modal improvements** — can ship together, quick wins.
-7. **Manager `@`-mention support** — natural companion to inter-agent messaging.
-8. **UI polish** (surface language audit, sidebar cues, handoff actions, mention interaction) — parallel work.
-9. **QA scenarios** — derived from hero workflows, run as final validation.
+1. ~~**CLI audit P0s**~~ — `--title`, `--model`, `--json` on list, `bb provider` commands.
+2. ~~**Prompt quality pass**~~ — hero workflows W1–W10, runtime context, sub-templates.
+3. ~~**Multi-manager support**~~ — dropped `primaryManagerThreadId`, hire always creates, multi-manager UI.
+
+# Parallel PRs
+
+The remaining work can be split into 6 independent PRs. PRs 1–5 have no hard dependencies on each other and can run in parallel. PR 6 (QA) should go last.
+
+## PR1: Inter-agent messaging tool
+
+**Punch list items:** #2 (inter-agent messaging tool)
+
+**What to build:**
+- Add a `message_agent` custom tool available to manager threads (and optionally managed worker threads)
+- Parameters: `targetThreadId`, `message`
+- Execution: deliver the message as a system event to the target thread (similar to `tell`)
+- The target thread sees it as a `[bb system]` message with sender context
+- If the target thread is idle, the message queues as a pending turn trigger
+- Start with: workers can message their parent only, managers can message any manager
+- Update the manager prompt to explain when to use `message_agent` vs waiting for completion signals
+- See punch list item #2 for full design details
+
+**Key files:**
+- `apps/server/src/manager-tools.ts` — tool registration
+- `apps/server/src/orchestrator.ts` — execution and event delivery
+- `packages/core/src/types.ts` — new event type
+- `packages/templates/src/templates/manager-agent-instructions.md` — prompt guidance
+
+**Soft dependency:** PR3 (@-mentions) is richer with this, but doesn't block it.
+
+## PR2: Manager defaults + Hire modal
+
+**Punch list items:** #3 (manager default provider/model), #4 (hire modal improvements)
+
+**What to build:**
+- Default manager provider/model to `claude-code` + `claude-opus-4-6` in the hire route (`apps/server/src/routes/projects.ts`). Fall back to normal resolution if claude-code is unavailable.
+- Update the hire modal (`apps/app/src/components/HireManagerModal.tsx`):
+  - Add an optional text input for manager name (placeholder: "Manager")
+  - Pre-select claude-code + opus-4-6 as defaults
+  - Match the visual layout of the commit/squash-merge modals
+- Wire the `title` field through the hire API (backend already accepts it after our changes)
+
+**Key files:**
+- `apps/server/src/routes/projects.ts` — default provider/model logic
+- `apps/app/src/components/HireManagerModal.tsx` — modal UI
+- `apps/app/src/hooks/useApi.ts` — mutation hook if title param needs wiring
+
+**Fully independent.** No dependencies on other PRs.
+
+## PR3: Manager @-mention support
+
+**Punch list items:** #5 (manager @-mention support)
+
+**What to build:**
+- The `@`-mention suggestion source should include manager threads for the current project
+- Manager suggestions should be visually distinct from file and regular thread suggestions (e.g., manager icon or type label)
+- Mentioning a manager inserts a thread reference token (same format as thread mentions)
+- In manager threads, @-mentioning another manager is a natural way to reference them
+
+**Key files:**
+- `apps/app/src/hooks/usePromptFileMentions.ts` (or similar) — suggestion source
+- `apps/app/src/components/PromptMentionMenu.tsx` (or similar) — rendering
+- Check how thread mentions currently work and extend the pattern to filter/include managers
+
+**Soft dependency:** Richer with PR1 (inter-agent messaging) but works standalone.
+
+## PR4: Template cleanup
+
+**Punch list items:** #9 (extract workflows sub-template), #10 (CLI command dedup audit), #11 (heading consistency)
+
+**What to build:**
+- Extract the "Workflows" section (lines 106–163) of `manager-agent-instructions.md` into a new `bb-manager-workflows.md` sub-template. Follow the same pattern as `bb-system-overview.md` and `bb-cli-guide.md`:
+  - New template file with frontmatter
+  - New variable in `registry.ts`
+  - Render in `manager-thread.ts` and pass as variable with empty-string guard
+  - Replace inline content with `{{{bbManagerWorkflows}}}`
+- Audit CLI command duplication between `bb manager` and `bb thread`:
+  - `bb manager threads <id>` = `bb thread list --parent-thread <id>`
+  - `bb manager status <id>` ≈ `bb thread show <id>` + threads list
+  - `bb manager send <id> <msg>` = `bb thread tell <id> <msg>`
+  - `bb manager log <id>` = `bb thread log <id>`
+  - Decide: remove duplicates, keep as shorthands, or document the canonical way. Update CLI guide template accordingly.
+- Fix heading consistency in `manager-agent-instructions.md`: the sub-template sections use `##` headings while behavioral sections use bare text headings. Pick one style.
+
+**Key files:**
+- `packages/templates/src/templates/manager-agent-instructions.md`
+- `packages/templates/src/templates/bb-manager-workflows.md` (new)
+- `packages/templates/src/templates/bb-cli-guide.md`
+- `packages/templates/src/registry.ts`
+- `apps/server/src/manager-thread.ts`
+- `apps/cli/src/commands/manager.ts`
+
+**Fully independent.** No backend or UI dependencies.
+
+## PR5: UI polish
+
+**Punch list items:** #12 (surface language audit), #13 (sidebar cues), #14 (handoff actions), #15 (@-mention interaction polish), #16 (dedicated manager routes evaluation)
+
+**What to build:**
+- **Surface language audit:** Add type-aware copy that uses "manager" vs "thread" in confirmation modals, archive dialogs, thread info panel labels, and toasts. Check `thread.type` and branch.
+- **Sidebar collapsed-manager cues:** Show active managed thread count and a spinner when children are running. Keep minimal.
+- **Handoff action buttons:** "Assign to Manager" (with picker if multiple managers) on unmanaged threads, "Take Over" on managed threads in the info tab.
+- **@-mention interaction polish:** Fix file suggestion duplication, simplify thread suggestion rows, fix menu hint copy, reduce icon visual weight.
+- **Dedicated manager routes:** Evaluate whether manager-specific endpoints should move from `/threads/:id/manager-workspace/*` to `/managers/*`. Decide during implementation.
+
+**Key files:**
+- `apps/app/src/components/layout/ProjectList.tsx` — sidebar
+- `apps/app/src/views/ThreadDetailView.tsx` — info panel, handoff actions
+- `apps/app/src/components/PromptMentionMenu.tsx` — mention UX
+- Various modal/dialog components for language audit
+- `apps/server/src/routes/threads.ts` — route evaluation
+
+**Fully independent.** Can be split further into sub-PRs if needed.
+
+## PR6: QA scenarios
+
+**Punch list items:** #17 (manager QA scenarios)
+
+**What to build:**
+- Create a dedicated manager QA doc under `qa/` covering all hero workflows (W1–W11)
+- Include tier 1 scenarios (simple delegation, pipeline, takeover, status survey, follow-up, parallel tasks, error handling)
+- Include tier 2 scenarios (plan decomposition, retrospective, cross-manager, memory)
+- Include anti-pattern checks
+- Run the scenarios against the current implementation and document results
+
+**Depends on:** PRs 1–5 being stable. Run this last.
 
 # Related Plans
 
