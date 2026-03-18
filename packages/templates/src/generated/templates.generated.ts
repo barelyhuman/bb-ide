@@ -116,6 +116,57 @@ export const templateDefinitions = [
     "variables": {}
   },
   {
+    "id": "systemMessageManagedThreadComplete",
+    "body": "[bb system] Managed thread complete: {{threadId}}{{titleSuffix}}\nReview that thread's result and decide whether to update the user or delegate a follow-up.\nManaged-thread work usually lives in that thread's worktree; do not reapply its edits into the manager checkout unless the user explicitly asked for that.",
+    "fileName": "system-message-managed-thread-complete.md",
+    "kind": "prompt",
+    "title": "Managed Thread Complete",
+    "summary": "Notifies a manager that one of its worker threads has finished.",
+    "intent": "Prompt the manager to review the result and decide on next steps.",
+    "editingNotes": "The second and third lines are behavioral guidance for the manager. Keep worktree caveat to avoid accidental edit duplication.",
+    "variables": {
+      "threadId": "The completed worker thread's ID.",
+      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
+    }
+  },
+  {
+    "id": "systemMessageManagerWelcome",
+    "body": "[bb system] Welcome!",
+    "fileName": "system-message-manager-welcome.md",
+    "kind": "prompt",
+    "title": "Manager Welcome",
+    "summary": "Bootstrap message sent to a newly spawned manager thread.",
+    "intent": "Kick off the manager's first turn with a minimal message.",
+    "editingNotes": "Keep this minimal. The manager's developer instructions carry the real context.",
+    "variables": {}
+  },
+  {
+    "id": "systemMessageThreadOwnershipAssigned",
+    "body": "[bb system]: The following thread is now assigned to you for management:\n{{threadLabel}}",
+    "fileName": "system-message-thread-ownership-assigned.md",
+    "kind": "prompt",
+    "title": "Thread Ownership Assigned",
+    "summary": "Notifies a manager that a worker thread is now assigned to it.",
+    "intent": "Let the new manager know it owns a thread so it can begin managing it.",
+    "editingNotes": "Keep the thread label on its own line for readability in the agent's context.",
+    "variables": {
+      "threadLabel": "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
+    }
+  },
+  {
+    "id": "systemMessageThreadOwnershipRemoved",
+    "body": "[bb system]: The following thread is no longer assigned to you:\n{{threadLabel}}",
+    "fileName": "system-message-thread-ownership-removed.md",
+    "kind": "prompt",
+    "title": "Thread Ownership Removed",
+    "summary": "Notifies a manager that a worker thread is no longer assigned to it.",
+    "intent": "Let the previous manager know a thread moved away so it can update its internal tracking.",
+    "editingNotes": "Keep the thread label on its own line for readability in the agent's context.",
+    "variables": {
+      "threadLabel": "Thread identifier and title, e.g. 'thr_abc123: Fix login bug'."
+    }
+  },
+  {
     "id": "threadOperationCommitFailureFollowUp",
     "body": "Commit in {{targetDescription}} failed. Please inspect the workspace, fix the commit blocker, and retry the commit.\n{{#if exactCommitMessageInstruction}}\n{{exactCommitMessageInstruction}}\n{{/if}}{{#if errorMessage}}\nGit reported: {{errorMessage}}.\n{{/if}}",
     "fileName": "thread-operation-commit-failure-follow-up.md",
@@ -228,6 +279,17 @@ export interface TemplateVariables {
     projectRootPath: string;
   };
   openaiResponsesDefaultInstructions: Record<string, never>;
+  systemMessageManagedThreadComplete: {
+    threadId: string;
+    titleSuffix?: string;
+  };
+  systemMessageManagerWelcome: Record<string, never>;
+  systemMessageThreadOwnershipAssigned: {
+    threadLabel: string;
+  };
+  systemMessageThreadOwnershipRemoved: {
+    threadLabel: string;
+  };
   threadOperationCommitFailureFollowUp: {
     targetDescription: string;
     exactCommitMessageInstruction?: string;

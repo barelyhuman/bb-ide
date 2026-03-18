@@ -82,6 +82,7 @@ import {
   type ThreadProviderId,
 } from "@bb/core";
 import { resolveBbPath } from "@bb/core/storage-paths";
+import { renderTemplate } from "@bb/templates";
 import {
   EnvironmentRegistry,
   EnvironmentSquashMergeCommitFailureError,
@@ -1545,7 +1546,7 @@ export class Orchestrator implements ThreadOrchestrator {
         input: [
           {
             type: "text",
-            text: `[bb system]: The following thread is no longer assigned to you:\n${threadLabel}`,
+            text: renderTemplate("systemMessageThreadOwnershipRemoved", { threadLabel }),
           },
         ],
       }).catch((error) => {
@@ -1561,8 +1562,7 @@ export class Orchestrator implements ThreadOrchestrator {
         input: [
           {
             type: "text",
-            text:
-              `[bb system]: The following thread is now assigned to you for management:\n${threadLabel}`,
+            text: renderTemplate("systemMessageThreadOwnershipAssigned", { threadLabel }),
           },
         ],
       }).catch((error) => {
@@ -6161,11 +6161,10 @@ export class Orchestrator implements ThreadOrchestrator {
   private _buildParentThreadCompletionNotification(childThread: Thread): string {
     const title = childThread.title?.trim();
     const titleSuffix = title ? ` (${title})` : "";
-    return [
-      `[bb system] Managed thread complete: ${childThread.id}${titleSuffix}`,
-      "Review that thread's result and decide whether to update the user or delegate a follow-up.",
-      "Managed-thread work usually lives in that thread's worktree; do not reapply its edits into the manager checkout unless the user explicitly asked for that.",
-    ].join("\n");
+    return renderTemplate("systemMessageManagedThreadComplete", {
+      threadId: childThread.id,
+      titleSuffix,
+    });
   }
 
   private _extractExecutionOptionsFromParams(
