@@ -172,8 +172,8 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                   </span>
                 </SidebarMenuButton>
               ) : (
-                <div
-                  className="flex min-w-0 items-center gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80"
+                <SidebarMenuButton
+                  className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none cursor-default hover:bg-sidebar/70 hover:text-sidebar-foreground/80 active:bg-sidebar/70"
                   aria-label={`Server status: ${serverStatusLabel}`}
                   title={`Server status: ${serverStatusLabel}`}
                 >
@@ -187,7 +187,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                   <span className="truncate text-xs font-medium leading-none">
                     {serverStatusLabel}
                   </span>
-                </div>
+                </SidebarMenuButton>
               )}
             </SidebarMenuItem>
           </SidebarMenu>
