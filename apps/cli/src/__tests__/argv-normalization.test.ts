@@ -76,21 +76,6 @@ describe("normalizeCliArgv", () => {
     ).toEqual(["node", "bb", "thread", "show", "--json", "--", "-thread-1"]);
   });
 
-  it("moves manager send flags ahead of dash-prefixed manager ids", () => {
-    expect(
-      normalizeCliArgv(["node", "bb", "manager", "send", "-manager-1", "hello", "--json"]),
-    ).toEqual([
-      "node",
-      "bb",
-      "manager",
-      "send",
-      "--json",
-      "--",
-      "-manager-1",
-      "hello",
-    ]);
-  });
-
   it("moves manager delete flags ahead of dash-prefixed manager ids", () => {
     expect(
       normalizeCliArgv(["node", "bb", "manager", "delete", "--yes", "-manager-1"]),

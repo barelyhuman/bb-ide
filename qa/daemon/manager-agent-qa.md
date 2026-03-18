@@ -113,13 +113,13 @@ Record the returned `<project-id>` from the JSON response.
 
 ```bash
 node apps/cli/dist/index.js manager hire <project-id> --json
-node apps/cli/dist/index.js manager show <project-id>
+node apps/cli/dist/index.js manager list <project-id>
 ```
 
 Expected:
 
 - `manager hire` returns a manager thread id
-- `manager show` returns a manager thread with `type=manager`
+- `manager list` returns manager threads for the project
 
 ### 2. Verify hatching
 
@@ -127,7 +127,7 @@ Use the returned `<manager-id>`:
 
 ```bash
 node apps/cli/dist/index.js manager status <manager-id>
-node apps/cli/dist/index.js manager log <manager-id>
+node apps/cli/dist/index.js thread log <manager-id>
 node apps/cli/dist/index.js thread wait <manager-id> --status idle --timeout 120
 node apps/cli/dist/index.js thread output <manager-id>
 ```
@@ -141,7 +141,7 @@ Expected:
 ### 3. Meet-and-greet
 
 ```bash
-node apps/cli/dist/index.js manager send <manager-id> \
+node apps/cli/dist/index.js thread tell <manager-id> \
   "I want you to help with coding tasks. Delegate substantive implementation by default."
 node apps/cli/dist/index.js thread wait <manager-id> --status idle --timeout 120
 node apps/cli/dist/index.js thread output <manager-id>
@@ -155,7 +155,7 @@ Expected:
 ### 4. Ask for edits
 
 ```bash
-node apps/cli/dist/index.js manager send <manager-id> \
+node apps/cli/dist/index.js thread tell <manager-id> \
   "Please make a few edits: add a subtract function to src/math.js, create src/format.js with a small formatter, and update src/index.js to print the formatted result."
 ```
 
@@ -169,7 +169,7 @@ Use manager status while the task is active:
 
 ```bash
 node apps/cli/dist/index.js manager status <manager-id>
-node apps/cli/dist/index.js manager threads <manager-id>
+node apps/cli/dist/index.js thread list --parent-thread <manager-id>
 node apps/cli/dist/index.js thread list --project <project-id> --parent-thread <manager-id>
 ```
 
@@ -184,9 +184,9 @@ Expected:
 Wait for the child and manager to settle:
 
 ```bash
-node apps/cli/dist/index.js manager threads <manager-id>
+node apps/cli/dist/index.js thread list --parent-thread <manager-id>
 node apps/cli/dist/index.js thread wait <manager-id> --status idle --timeout 240
-node apps/cli/dist/index.js manager log <manager-id>
+node apps/cli/dist/index.js thread log <manager-id>
 node apps/cli/dist/index.js thread output <manager-id>
 ```
 
@@ -224,7 +224,7 @@ Expected:
 Ask the manager for a written artifact:
 
 ```bash
-node apps/cli/dist/index.js manager send <manager-id> \
+node apps/cli/dist/index.js thread tell <manager-id> \
   "Write a short markdown summary of the recent task in your workspace, then tell me where you put it."
 node apps/cli/dist/index.js thread wait <manager-id> --status idle --timeout 120
 node apps/cli/dist/index.js thread output <manager-id>

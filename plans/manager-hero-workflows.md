@@ -174,7 +174,7 @@ User asks the manager to look through recent work, extract learnings, and propos
 Manager asks another project's manager for context — preferences, working style, past decisions.
 
 - User: "Ask my other project's manager how I like my commit messages."
-- Manager: identifies the other manager, sends a message via `bb manager send`, reads the response, applies the context.
+- Manager: identifies the other manager, sends a message via `bb thread tell`, reads the response, applies the context.
 
 **What this tests:**
 - Cross-project manager discovery
@@ -183,7 +183,7 @@ Manager asks another project's manager for context — preferences, working styl
 
 **Current gaps:**
 - **Backend:** No first-class inter-agent messaging tool yet (punch list item #2).
-- **CLI:** `bb manager send` exists but the response loop isn't clean — how does the sending manager read the reply?
+- **CLI:** `bb thread tell` covers inter-manager messaging but the response loop isn't clean — how does the sending manager read the reply?
 - **Prompt:** No guidance on cross-manager coordination.
 
 ---

@@ -640,33 +640,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     )
     .action(threadShowAction);
 
-  // Hidden backward-compatibility alias for "thread status"
-  thread
-    .command("status [id]", { hidden: true })
-    .description("Show thread status (alias for show)")
-    .option("--json", "Print machine-readable JSON output")
-    .option("--recent-events <count>", "Include last N thread events")
-    .option(
-      "--event-mode <mode>",
-      "summary|raw event formatting for --recent-events",
-      "summary",
-    )
-    .option(
-      "--include-low-signal",
-      "Include low-signal internal lifecycle events in recent events",
-    )
-    .option("--work-status", "Include work status (git state) in output")
-    .option("--git-diff", "Include git diff in output")
-    .option(
-      "--diff-selection <type>",
-      "Diff selection type: combined or commit (used with --git-diff)",
-    )
-    .option(
-      "--diff-merge-base <branch>",
-      "Merge base branch for diff (used with --git-diff)",
-    )
-    .action(threadShowAction);
-
   thread
     .command("update [id]")
     .description("Update a thread (defaults to BB_THREAD_ID)")
@@ -846,20 +819,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     )
     .option("--mode <mode>", "Message mode (e.g. steer)")
     .action(tellAction);
-
-  // Backward-compatibility alias: "thread steer" is equivalent to "thread tell --mode steer"
-  thread
-    .command("steer <id> <message>", { hidden: true })
-    .description("Alias for tell --mode steer")
-    .option("--json", "Print machine-readable JSON output")
-    .option("--model <model>", "Model ID for this message")
-    .option(
-      "--reasoning-level <level>",
-      "Reasoning level: low, medium, high, xhigh",
-    )
-    .action(async (id: string, message: string, opts: { json?: boolean; model?: string; reasoningLevel?: string }) => {
-      await tellAction(id, message, { ...opts, mode: "steer" });
-    });
 
   thread
     .command("commit <id>")

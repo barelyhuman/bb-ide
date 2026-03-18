@@ -40,9 +40,9 @@ bb thread output <thread-id>                          # Get the final output of 
 Interacting:
 
 ```
-bb thread tell <thread-id> "Please also add tests"    # Send a follow-up message
-bb thread steer <thread-id> "Focus on the API first"  # Steer an active thread
-bb thread stop <thread-id>                            # Stop an active thread
+bb thread tell <thread-id> "Please also add tests"           # Send a follow-up message
+bb thread tell <thread-id> "Focus on the API first" --mode steer  # Steer an active thread
+bb thread stop <thread-id>                                   # Stop an active thread
 ```
 
 Ownership:
@@ -75,16 +75,16 @@ bb thread demote                                      # Demote the currently pro
 ```
 bb manager hire [projectId]            # Hire a new manager for a project
 bb manager list [projectId]            # List managers for a project
+bb manager status <manager-id>         # Show manager status and managed threads
 bb manager delete <manager-id>         # Delete a manager permanently
 ```
 
-Note: Most manager operations use the standard thread commands. `bb manager threads`, `bb manager status`, `bb manager send`, and `bb manager log` are shorthands for the equivalent `bb thread` commands. Prefer `bb thread` for consistency:
+Use `bb thread` commands for other manager interactions:
 
 ```
-bb thread list --parent-thread <manager-id>  # List managed threads (= bb manager threads)
-bb thread show <manager-id>                  # Show manager details (= bb manager status)
-bb thread tell <manager-id> "message"        # Message a manager (= bb manager send)
-bb thread log <manager-id>                   # Show manager log (= bb manager log)
+bb thread list --parent-thread <manager-id>  # List managed threads
+bb thread tell <manager-id> "message"        # Message a manager
+bb thread log <manager-id>                   # Show manager log
 ```
 
 ## Projects

@@ -250,8 +250,8 @@ node apps/cli/dist/index.js thread spawn \
 
 Wait until `thread wait <thread-id> --event turn/started --timeout 30` succeeds, then steer:
 
-node apps/cli/dist/index.js thread steer <thread-id> \
-  'Stop the previous plan. Reply with exactly LOCAL-STEER and finish.'
+node apps/cli/dist/index.js thread tell <thread-id> \
+  'Stop the previous plan. Reply with exactly LOCAL-STEER and finish.' --mode steer
 ```
 
 Stop then follow-up:
@@ -947,9 +947,8 @@ Use this when the user already has the main daemon running and wants direct QA a
 - OK:
   - `daemon health`
   - `project create/list/files`
-  - `thread spawn/show/status/log/output`
-  - `thread tell`
-  - `thread steer`
+  - `thread spawn/show/log/output`
+  - `thread tell` (with `--mode steer` for steering)
   - `thread stop`
   - `thread archive` / `thread unarchive`
   - worktree spawn/follow-up
@@ -983,7 +982,7 @@ sqlite3 "$bb_root/bb.db" \
   - The test project directory was deleted or moved.
   - Fix the test setup before blaming the daemon.
 
-- `thread steer` returns `HTTP 409`:
+- `thread tell --mode steer` returns `HTTP 409`:
   - The thread has no active turn yet.
   - Wait for an actual provider `turn/started` event, not just a transient thread status of `active`.
 

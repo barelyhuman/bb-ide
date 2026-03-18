@@ -18,11 +18,6 @@ const THREAD_COMMAND_OPTION_SPECS: Record<
     optionsWithValues: new Set(),
     flagOptions: new Set(["--json"]),
   },
-  status: {
-    positionalCount: 1,
-    optionsWithValues: new Set(["--recent-events", "--event-mode"]),
-    flagOptions: new Set(["--include-low-signal", "--json"]),
-  },
   show: {
     positionalCount: 1,
     optionsWithValues: new Set(),
@@ -47,11 +42,6 @@ const THREAD_COMMAND_OPTION_SPECS: Record<
     positionalCount: 2,
     optionsWithValues: new Set(),
     flagOptions: new Set(["--json"]),
-  },
-  steer: {
-    positionalCount: 2,
-    optionsWithValues: new Set(),
-    flagOptions: new Set(),
   },
   commit: {
     positionalCount: 1,
@@ -100,27 +90,7 @@ const MANAGER_COMMAND_OPTION_SPECS: Record<string, CommandOptionSpec> = {
     optionsWithValues: new Set(),
     flagOptions: new Set(["--json"]),
   },
-  show: {
-    positionalCount: 1,
-    optionsWithValues: new Set(),
-    flagOptions: new Set(["--json"]),
-  },
   status: {
-    positionalCount: 1,
-    optionsWithValues: new Set(),
-    flagOptions: new Set(["--json"]),
-  },
-  threads: {
-    positionalCount: 1,
-    optionsWithValues: new Set(),
-    flagOptions: new Set(["--json"]),
-  },
-  send: {
-    positionalCount: 2,
-    optionsWithValues: new Set(),
-    flagOptions: new Set(["--json"]),
-  },
-  log: {
     positionalCount: 1,
     optionsWithValues: new Set(),
     flagOptions: new Set(["--json"]),

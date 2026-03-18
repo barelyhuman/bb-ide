@@ -7,7 +7,7 @@ Ship a credible V1 for the manager mode in bb.
 | # | Item | What shipped |
 |---|------|-------------|
 | 1 | Multi-manager support | Dropped `primaryManagerThreadId`, hire always creates, multi-manager UI selector, DB migration |
-| 2 | Inter-agent messaging | Deferred — CLI (`bb thread tell` / `bb manager send`) covers inter-agent communication for V1 |
+| 2 | Inter-agent messaging | Deferred — CLI (`bb thread tell`) covers inter-agent communication for V1 |
 | 3 | Manager default provider/model | Defaults to `claude-code` + `claude-opus-4-6` with fallback |
 | 4 | Hire manager modal | Name input, provider/model picker with defaults, improved layout |
 | 5 | Manager @-mention support | Thread suggestion modes (managers/all), type-aware rendering in mention menu |

@@ -55,13 +55,11 @@ All commands now support `--json` (enforced by `apps/cli/src/__tests__/json-flag
 |---------|-------|-------|
 | `bb thread spawn` | `--prompt`, `--json`, `--project`, `--environment`, `--new-environment`, `--parent-thread`, `--provider`, `--model`, `--reasoning-level`, `--title`, `--no-context-parent-thread` | Missing: `--service-tier`, `--sandbox-mode`, `--developer-instructions` |
 | `bb thread list` | `--project`, `--parent-thread`, `--include-archived`, `--json` | Missing: `--include-work-status` |
-| `bb thread show [id]` | `--json` | Overlaps with `thread status`. See redundancy. |
-| `bb thread status [id]` | `--json`, `--recent-events`, `--event-mode`, `--include-low-signal` | Overlaps with `thread show`. See redundancy. |
+| `bb thread show [id]` | `--json`, `--recent-events`, `--event-mode`, `--include-low-signal`, `--work-status`, `--git-diff`, `--diff-selection`, `--diff-merge-base` | Merged `thread status` flags into `show` |
 | `bb thread output [id]` | `--json` | |
 | `bb thread log [id]` | `--json`, `--format` | `--json` aliases `--format json` |
 | `bb thread sessions [id]` | `--json` | |
-| `bb thread tell <id> <message>` | `--json`, `--model`, `--reasoning-level` | Missing: `--service-tier`, `--sandbox-mode`, `--demote-primary-if-needed` |
-| `bb thread steer <id> <message>` | `--json`, `--model`, `--reasoning-level` | Redundant with `tell --mode steer`. See redundancy. |
+| `bb thread tell <id> <message>` | `--json`, `--model`, `--reasoning-level`, `--mode` | `--mode steer` replaces old `thread steer`. Missing: `--service-tier`, `--sandbox-mode`, `--demote-primary-if-needed` |
 | `bb thread update [id]` | `--json`, `--title`, `--parent-thread`, `--clear-parent-thread` | Missing: `--merge-base-branch` |
 | `bb thread wait [id]` | `--status`, `--event`, `--timeout`, `--poll-interval`, `--json` | |
 | `bb thread commit <id>` | `--message`, `--staged-only`, `--json` | |
@@ -81,9 +79,6 @@ All commands now support `--json` (enforced by `apps/cli/src/__tests__/json-flag
 | `bb manager hire [projectId]` | `--project`, `--title`, `--provider`, `--model`, `--json` | Dual positional/flag for project ID |
 | `bb manager list [projectId]` | `--project`, `--json` | Dual positional/flag for project ID |
 | `bb manager status <id>` | `--json` | Manager-specific: shows manager + managed threads |
-| `bb manager threads <id>` | `--json` | Redundant with `thread list --parent-thread` |
-| `bb manager send <id> <message>` | `--json` | Redundant with `thread tell`. Fewer flags. |
-| `bb manager log <id>` | `--json` | Redundant with `thread log`. No `--format`. |
 | `bb manager delete <id>` | `--yes`, `--json` | |
 
 ### `bb daemon`
@@ -95,25 +90,17 @@ All commands now support `--json` (enforced by `apps/cli/src/__tests__/json-flag
 
 ## 2. Redundancy analysis
 
-### `thread show` vs `thread status`
+### `thread show` vs `thread status` — DONE
 
-Both fetch the same thread from `GET /threads/:id`. `show` prints a detail card; `status` prints a summary with optional event inspection. With `--json`, they return different shapes.
+Merged into `bb thread show` with all of `status`'s event flags. Hidden `thread status` alias removed.
 
-**Proposal:** Merge into `bb thread show` with `status`'s event flags (`--recent-events`, `--event-mode`, `--include-low-signal`). Deprecate `bb thread status`.
+### `thread tell` vs `thread steer` — DONE
 
-### `thread tell` vs `thread steer`
+`--mode steer` added to `tell`. Hidden `thread steer` alias removed.
 
-`steer` is `tell` with `mode: "steer"`. They share the same helper function.
+### `manager threads` / `manager send` / `manager log` — DONE
 
-**Proposal:** Add `--mode steer` to `tell`. Deprecate `bb thread steer`.
-
-### `manager threads` / `manager send` / `manager log`
-
-These are thin wrappers around `thread list --parent-thread`, `thread tell`, and `thread log` respectively. The `thread` variants are more capable (more flags, better formatting).
-
-**Proposal:** Deprecate all three. Keep `manager hire`, `manager list`, `manager status`, `manager delete` as the manager-specific surface.
-
-**Deprecation follow-through:** If deprecations are implemented, also update `packages/templates/src/templates/bb-cli-guide.md` and `packages/templates/src/templates/bb-manager-workflows.md` to use the canonical `bb thread` commands, then regenerate templates.
+All three removed. The canonical `bb thread` commands (`thread list --parent-thread`, `thread tell`, `thread log`) are the only path. Templates and QA docs updated.
 
 ## 3. Thread ID argument safety policy
 
@@ -173,7 +160,7 @@ Note: `bb thread log` has special `--json` semantics (alias for `--format json`)
 - `--json` enforcement: test exists and passes (`apps/cli/src/__tests__/json-flag-enforcement.test.ts`)
 - For new commands: add tests in `apps/cli/src/__tests__/command-output.test.ts` covering both human and JSON output modes
 - For flag additions: verify via `--help` and with actual API calls
-- For deprecations: keep deprecated commands functional with stderr warnings; update CLI guide and workflow templates; run `pnpm exec turbo run typecheck` across workspace
+- For deprecations: deprecated commands have been removed (P2 cleanup); CLI guide and workflow templates updated
 - Package-scoped validation: `pnpm exec turbo run typecheck --filter=@bb/cli` and `pnpm exec turbo run test --filter=@bb/cli`
 
 # Open Questions/Risks

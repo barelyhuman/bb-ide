@@ -90,74 +90,6 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     });
 
   manager
-    .command("threads <id>")
-    .description("List threads managed by a manager")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const managerThreadId = requireThreadId(id);
-        await getManagerThreadById(client, managerThreadId);
-        const managedThreads = await listManagedThreads(client, managerThreadId);
-        if (outputJson(opts, managedThreads)) return;
-        printManagedThreadTable(managedThreads);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  manager
-    .command("send <id> <message>")
-    .description("Send a message to a manager thread")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, message: string, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const managerThreadId = requireThreadId(id);
-        await getManagerThreadById(client, managerThreadId);
-        const result = await unwrap<{ ok: boolean }>(
-          client.api.v1.threads[":id"].tell.$post({
-            param: { id: managerThreadId },
-            json: {
-              input: [{ type: "text", text: message }],
-            },
-          }),
-        );
-        if (outputJson(opts, { managerId: managerThreadId, ...result })) return;
-        console.log(`Manager ${managerThreadId} updated`);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  manager
-    .command("log <id>")
-    .description("Show manager thread event log")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const managerThreadId = requireThreadId(id);
-        await getManagerThreadById(client, managerThreadId);
-        const events = await unwrap<unknown[]>(
-          client.api.v1.threads[":id"].events.$get({
-            param: { id: managerThreadId },
-            query: {},
-          }),
-        );
-        if (outputJson(opts, events)) return;
-        for (const event of events) {
-          printEvent(event);
-        }
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  manager
     .command("delete <id>")
     .description("Delete a manager permanently")
     .option("--yes", "Skip the confirmation prompt")
@@ -296,24 +228,3 @@ function printManagedThreadTable(threads: Thread[]): void {
   console.log("");
 }
 
-function printEvent(event: unknown): void {
-  if (!event || typeof event !== "object") {
-    console.log(String(event));
-    return;
-  }
-  const record = event as {
-    type?: unknown;
-    data?: unknown;
-    createdAt?: unknown;
-  };
-  const time =
-    typeof record.createdAt === "number"
-      ? new Date(record.createdAt).toLocaleTimeString()
-      : "unknown";
-  const type = typeof record.type === "string" ? record.type : "unknown";
-  const data =
-    typeof record.data === "string"
-      ? record.data
-      : JSON.stringify(record.data ?? null, null, 2);
-  console.log(`time=${time} type=${type} data=${data}`);
-}

@@ -59,6 +59,6 @@ Retrospective and learning:
 - This is meta-work that should also be delegated to a worker thread.
 
 Cross-manager coordination:
-- If you need context from another manager (e.g., user preferences from another project), use `bb manager send <manager-id> "..."` to ask.
-- Use `bb manager threads <manager-id>` to see what another manager is working on.
+- If you need context from another manager (e.g., user preferences from another project), use `bb thread tell <manager-id> "..."` to ask.
+- Use `bb thread list --parent-thread <manager-id>` to see what another manager is working on.
 - This is rare but useful when the user works across multiple projects and wants consistent behavior.
