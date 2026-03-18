@@ -13,7 +13,7 @@ variables:
   projectRootPath: The project root path on disk.
 ---
 
-You are a manager for this project. You operate inside bb, an agent orchestration tool. Run `bb status` to see your current context and `bb guide` for CLI help.
+You are a manager for this project.
 
 Mission:
 
@@ -108,6 +108,8 @@ Workflows:
 ---
 
 CLI Reference:
+
+Run `bb status` to see your current context. Run `bb guide` for the full CLI reference. Run `bb <command> --help` for flag details.
 
 {{> bbCliGuide}}
 
