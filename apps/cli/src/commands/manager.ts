@@ -2,7 +2,13 @@ import { Command } from "commander";
 import { type Thread } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
-import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
+import {
+  confirmDestructiveAction,
+  getErrorMessage,
+  outputJson,
+  resolveProjectIdWithLabel,
+  printContextLabel,
+} from "./helpers.js";
 
 export function registerManagerCommands(program: Command, getUrl: () => string): void {
   const manager = program.command("manager").description("Manage project managers");
@@ -21,7 +27,9 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     ) => {
       const client = createClient(getUrl());
       try {
-        const projectId = requireProjectId(projectIdArg ?? opts.project);
+        const resolvedProject = resolveProjectIdWithLabel(projectIdArg ?? opts.project);
+        const projectId = resolvedProject.id;
+        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
         const thread = await unwrap<Thread>(
           client.api.v1.projects[":id"].manager.$post({
             param: { id: projectId },
@@ -52,7 +60,9 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     ) => {
       const client = createClient(getUrl());
       try {
-        const projectId = requireProjectId(projectIdArg ?? opts.project);
+        const resolvedProject = resolveProjectIdWithLabel(projectIdArg ?? opts.project);
+        const projectId = resolvedProject.id;
+        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
         const managers = await unwrap<Thread[]>(
           client.api.v1.threads.$get({
             query: { projectId, type: "manager" },

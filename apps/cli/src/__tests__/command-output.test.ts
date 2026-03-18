@@ -579,7 +579,7 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb thread archive falls back to BB_THREAD_ID and forwards --force", async () => {
+  it("bb thread archive --self resolves from BB_THREAD_ID and forwards --force", async () => {
     process.env.BB_THREAD_ID = "thread-archive-2";
     const archivePost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(asDaemonClient({
@@ -596,7 +596,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "archive", "--force"], (program) =>
+    await runCommand(["thread", "archive", "--self", "--force"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 
@@ -606,7 +606,7 @@ describe("CLI command output contracts", () => {
     });
   });
 
-  it("bb thread unarchive falls back to BB_THREAD_ID", async () => {
+  it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {
     process.env.BB_THREAD_ID = "thread-unarchive-1";
     const unarchivePost = vi.fn(async () => ({ ok: true }));
     createClientMock.mockReturnValue(asDaemonClient({
@@ -623,7 +623,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "unarchive"], (program) =>
+    await runCommand(["thread", "unarchive", "--self"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 
@@ -714,8 +714,7 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb thread delete --yes skips confirmation", async () => {
-    process.env.BB_THREAD_ID = "thread-delete-3";
+  it("bb thread delete --yes skips confirmation (requires explicit id)", async () => {
     const thread: Thread = {
       id: "thread-delete-3",
       projectId: "proj-1",
@@ -740,7 +739,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "delete", "--yes"], (program) =>
+    await runCommand(["thread", "delete", "thread-delete-3", "--yes"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 
@@ -1104,7 +1103,7 @@ describe("CLI JSON output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "update", "--clear-parent-thread"], (program) =>
+    await runCommand(["thread", "update", "--self", "--clear-parent-thread"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
     );
 

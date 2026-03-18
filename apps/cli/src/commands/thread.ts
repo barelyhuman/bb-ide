@@ -14,7 +14,15 @@ import {
 } from "@bb/core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
-import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
+import {
+  confirmDestructiveAction,
+  getErrorMessage,
+  outputJson,
+  resolveThreadIdOrSelf,
+  resolveThreadIdWithLabel,
+  resolveProjectIdWithLabel,
+  printContextLabel,
+} from "./helpers.js";
 import {
   resolveEnvironmentId,
   requireProjectId,
@@ -252,7 +260,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       ) => {
         const client = createClient(getUrl());
         try {
-          const threadId = requireThreadId(id);
+          const resolved = resolveThreadIdWithLabel(id);
+          const threadId = resolved.id;
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
           const target = parseThreadWaitTarget(opts);
           const timeoutSeconds = parseThreadWaitTimeoutSeconds(opts.timeout);
           const pollIntervalMs = parseThreadWaitPollIntervalMs(opts.pollInterval);
@@ -444,7 +454,15 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; includeWorkStatus?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const projectId = resolveProjectId(opts.project);
+        const resolvedProject = opts.project
+          ? { id: opts.project, source: "arg" as const }
+          : process.env.BB_PROJECT_ID?.trim()
+            ? { id: process.env.BB_PROJECT_ID.trim(), source: "env" as const }
+            : undefined;
+        const projectId = resolvedProject?.id;
+        if (resolvedProject) {
+          printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+        }
         const parentThreadId = resolveThreadId(opts.parentThread);
         const threads = await unwrap<Thread[]>(
           client.api.v1.threads.$get({
@@ -474,7 +492,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--json", "Print machine-readable JSON output")
     .action(async (id: string | undefined, opts: { json?: boolean }) => {
       try {
-        const threadId = requireThreadId(id);
+        const resolved = resolveThreadIdWithLabel(id);
+        const threadId = resolved.id;
+        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
         const client = createClient(getUrl());
         const response = await unwrap<ThreadSessionsPayload>(
           client.api.v1.threads[":id"]["env-daemon"].sessions.$get({
@@ -505,7 +525,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   ): Promise<void> => {
     const client = createClient(getUrl());
     try {
-      const threadId = requireThreadId(id);
+      const resolved = resolveThreadIdWithLabel(id);
+      const threadId = resolved.id;
+      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
       const recentEvents =
         opts.recentEvents === undefined
           ? undefined
@@ -670,7 +692,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
   thread
     .command("update [id]")
-    .description("Update a thread (defaults to BB_THREAD_ID)")
+    .description("Update a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--title <title>", "Set the thread title")
     .option("--merge-base-branch <branch>", "Set the merge base branch")
@@ -680,6 +703,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       async (
         id: string | undefined,
         opts: {
+          self?: boolean;
           json?: boolean;
           title?: string;
           mergeBaseBranch?: string;
@@ -700,7 +724,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             );
           }
 
-          const threadId = requireThreadId(id);
+          const threadId = resolveThreadIdOrSelf(id, opts);
           const body: Record<string, unknown> = {};
           if (opts.title) {
             body.title = opts.title;
@@ -743,15 +767,16 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
   thread
     .command("archive [id]")
-    .description("Archive a thread (defaults to BB_THREAD_ID)")
+    .description("Archive a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option(
       "--force",
       "Archive even when the thread workspace has uncommitted or unmerged work",
     )
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { force?: boolean; json?: boolean }) => {
+    .action(async (id: string | undefined, opts: { self?: boolean; force?: boolean; json?: boolean }) => {
       try {
-        const threadId = requireThreadId(id);
+        const threadId = resolveThreadIdOrSelf(id, opts);
         const client = createClient(getUrl());
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].archive.$post({
@@ -769,12 +794,13 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
   thread
     .command("unarchive [id]")
-    .description("Unarchive a thread (defaults to BB_THREAD_ID)")
+    .description("Unarchive a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { json?: boolean }) => {
+    .action(async (id: string | undefined, opts: { self?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const threadId = requireThreadId(id);
+        const threadId = resolveThreadIdOrSelf(id, opts);
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].unarchive.$post({
             param: { id: threadId },
@@ -789,14 +815,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     });
 
   thread
-    .command("delete [id]")
-    .description("Delete a thread permanently (defaults to BB_THREAD_ID)")
+    .command("delete <id>")
+    .description("Delete a thread permanently")
     .option("--yes", "Skip the confirmation prompt")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { yes?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { yes?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const threadId = requireThreadId(id);
+        const threadId = id;
         const thread = await unwrap<Thread>(
           client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
         );
@@ -857,14 +883,16 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(tellAction);
 
   thread
-    .command("commit <id>")
+    .command("commit [id]")
     .description("Request an agent-driven commit operation for a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--message <message>", "Commit message hint")
     .option("--staged-only", "Commit only currently staged changes")
     .option("--json", "Print machine-readable JSON output")
     .action(async (
-      id: string,
+      id: string | undefined,
       opts: {
+        self?: boolean;
         message?: string;
         stagedOnly?: boolean;
         json?: boolean;
@@ -872,9 +900,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     ) => {
       const client = createClient(getUrl());
       try {
+        const threadId = resolveThreadIdOrSelf(id, opts);
         const result = await unwrap<ThreadOperationResponse>(
           client.api.v1.threads[":id"].operations.$post({
-            param: { id },
+            param: { id: threadId },
             json: {
               operation: "commit",
               options: {
@@ -893,8 +922,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     });
 
   thread
-    .command("squash-merge <id>")
+    .command("squash-merge [id]")
     .description("Request an agent-driven squash-merge operation for a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--commit-if-needed", "Allow a prep commit before squash merge")
     .option("--staged-only", "Use only staged changes for the prep commit")
     .option("--commit-message <message>", "Prep commit message hint")
@@ -902,8 +932,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--merge-base-branch <branch>", "Merge-base branch hint")
     .option("--json", "Print machine-readable JSON output")
     .action(async (
-      id: string,
+      id: string | undefined,
       opts: {
+        self?: boolean;
         commitIfNeeded?: boolean;
         stagedOnly?: boolean;
         commitMessage?: string;
@@ -914,9 +945,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     ) => {
       const client = createClient(getUrl());
       try {
+        const threadId = resolveThreadIdOrSelf(id, opts);
         const result = await unwrap<ThreadOperationResponse>(
           client.api.v1.threads[":id"].operations.$post({
-            param: { id },
+            param: { id: threadId },
             json: {
               operation: "squash_merge",
               options: {
@@ -938,17 +970,19 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     });
 
   thread
-    .command("stop <id>")
+    .command("stop [id]")
     .description("Stop an active thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
+    .action(async (id: string | undefined, opts: { self?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
+        const threadId = resolveThreadIdOrSelf(id, opts);
         await unwrap<{ ok: boolean }>(
-          client.api.v1.threads[":id"].stop.$post({ param: { id } }),
+          client.api.v1.threads[":id"].stop.$post({ param: { id: threadId } }),
         );
-        if (outputJson(opts, { ok: true, threadId: id })) return;
-        console.log(`Thread ${id} stopped`);
+        if (outputJson(opts, { ok: true, threadId })) return;
+        console.log(`Thread ${threadId} stopped`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -1024,7 +1058,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (opts: { project?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const projectId = requireProjectId(opts.project);
+        const resolvedProject = resolveProjectIdWithLabel(opts.project);
+        const projectId = resolvedProject.id;
+        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
         const threads = await unwrap<Thread[]>(
           client.api.v1.threads.$get({
             query: { projectId },
@@ -1062,7 +1098,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       ) => {
         const client = createClient(getUrl());
         try {
-          const threadId = requireThreadId(id);
+          const resolved = resolveThreadIdWithLabel(id);
+          const threadId = resolved.id;
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
           const format: TimelineFormat = opts.json
             ? "json"
             : ((opts.format ?? "minimal") as TimelineFormat);
@@ -1102,7 +1140,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (id: string | undefined, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const threadId = requireThreadId(id);
+        const resolved = resolveThreadIdWithLabel(id);
+        const threadId = resolved.id;
+        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
         const result = await unwrap<{ output: string }>(
           client.api.v1.threads[":id"].output.$get({ param: { id: threadId } }),
         );

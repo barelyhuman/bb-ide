@@ -1,7 +1,13 @@
 import { Command } from "commander";
 import { type Project } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
-import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
+import {
+  confirmDestructiveAction,
+  getErrorMessage,
+  outputJson,
+  resolveProjectIdWithLabel,
+  printContextLabel,
+} from "./helpers.js";
 import { requireProjectId } from "../context-env.js";
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
@@ -150,7 +156,9 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .action(async (query: string, opts: { project?: string; limit?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const projectId = requireProjectId(opts.project);
+        const resolvedProject = resolveProjectIdWithLabel(opts.project);
+        const projectId = resolvedProject.id;
+        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
         const limitValue = opts.limit ? Number.parseInt(opts.limit, 10) : 8;
         if (!Number.isFinite(limitValue) || limitValue <= 0) {
           throw new Error("Limit must be a positive integer");
