@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { tmpdir } from "node:os";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Hono } from "hono";
 import type {
@@ -444,7 +444,11 @@ describe("Project routes", () => {
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       threadManager.spawn.mockResolvedValue(managerThread);
+      // Create a regular file at "workspace" to block mkdirSync("workspace/<id>")
+      // On some systems recursive mkdir succeeds even with a blocking file, so
+      // also make it read-only to ensure the directory creation fails.
       writeFileSync(join(bbRoot, "workspace"), "occupied");
+      chmodSync(join(bbRoot, "workspace"), 0o444);
 
       const res = await app.request("/projects/proj-1/manager", { method: "POST" });
 
