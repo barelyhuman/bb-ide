@@ -8,7 +8,15 @@
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "BB_RUNTIME_MODE",
+        "BB_ROOT",
+        "BB_SERVER_PORT",
+        "BB_APP_PORT",
+        "BB_PROVIDER",
+        "BB_DEFAULT_PROVIDER"
+      ]
     },
     "clean": {
       "cache": false
