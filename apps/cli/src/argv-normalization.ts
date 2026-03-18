@@ -124,6 +124,12 @@ function normalizeSubcommandArgs(
     return args;
   }
 
+  // Never rewrite when the user is requesting help — Commander needs to see
+  // --help / -h as an option, not hidden behind a `--` separator.
+  if (rest.includes("--help") || rest.includes("-h")) {
+    return args;
+  }
+
   const optionTokens: string[] = [];
   const positionalTokens: string[] = [];
   const trailingTokens: string[] = [];

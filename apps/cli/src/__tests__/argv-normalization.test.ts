@@ -103,4 +103,22 @@ describe("normalizeCliArgv", () => {
       "-project-1",
     ]);
   });
+
+  it("preserves --help so Commander can display subcommand help", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "thread", "show", "--help"]),
+    ).toEqual(["node", "bb", "thread", "show", "--help"]);
+  });
+
+  it("preserves -h so Commander can display subcommand help", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "thread", "wait", "-h"]),
+    ).toEqual(["node", "bb", "thread", "wait", "-h"]);
+  });
+
+  it("preserves --help for manager subcommands", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "manager", "delete", "--help"]),
+    ).toEqual(["node", "bb", "manager", "delete", "--help"]);
+  });
 });
