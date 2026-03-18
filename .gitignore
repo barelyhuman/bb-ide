@@ -26,6 +26,9 @@ out
 .DS_Store
 *.pem
 
+# temporary scripts
+.tmp/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
