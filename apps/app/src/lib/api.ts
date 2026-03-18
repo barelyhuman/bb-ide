@@ -28,6 +28,7 @@ import type {
   SystemStatus,
   TellThreadRequest,
   Thread,
+  ThreadType,
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
@@ -336,6 +337,7 @@ export async function spawnThread(req: SpawnThreadRequest): Promise<Thread> {
 export async function listThreads(
   filters?: {
     projectId?: string;
+    type?: ThreadType;
     parentThreadId?: string;
     includeArchived?: boolean;
     includeWorkStatus?: boolean;
@@ -346,6 +348,7 @@ export async function listThreads(
     apiClient.threads.$get({
       query: {
         ...(filters?.projectId ? { projectId: filters.projectId } : {}),
+        ...(filters?.type ? { type: filters.type } : {}),
         ...(filters?.parentThreadId ? { parentThreadId: filters.parentThreadId } : {}),
         ...(filters?.includeArchived !== undefined
           ? { includeArchived: String(filters.includeArchived) as "true" | "false" }

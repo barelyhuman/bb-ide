@@ -40,6 +40,7 @@ import type {
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
   ThreadDetailRow,
+  ThreadType,
 } from "@bb/core";
 import * as api from "../lib/api";
 import { wsManager } from "../lib/ws";
@@ -290,6 +291,7 @@ function removeQueuedThreadMessage(
 
 interface ThreadListFilters {
   projectId?: string;
+  type?: ThreadType;
   parentThreadId?: string;
   includeArchived?: boolean;
   includeWorkStatus?: boolean;
@@ -303,6 +305,13 @@ function isThreadListFilters(value: unknown): value is ThreadListFilters {
   if (
     maybeFilters.projectId !== undefined &&
     typeof maybeFilters.projectId !== "string"
+  ) {
+    return false;
+  }
+  if (
+    maybeFilters.type !== undefined &&
+    maybeFilters.type !== "standard" &&
+    maybeFilters.type !== "manager"
   ) {
     return false;
   }
@@ -351,6 +360,9 @@ function threadMatchesListFilters(
     return false;
   }
   if (filters?.projectId && thread.projectId !== filters.projectId) {
+    return false;
+  }
+  if (filters?.type && thread.type !== filters.type) {
     return false;
   }
   if (
