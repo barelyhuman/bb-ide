@@ -40,12 +40,12 @@ describe("provider registry", () => {
     expect(ids).toEqual(["codex", "claude-code", "pi"]);
   });
 
-  it("prefers BB_PROVIDER when resolving the default provider", () => {
-    expect(resolveDefaultProviderId({ BB_PROVIDER: "pi" })).toBe("pi");
-    expect(resolveDefaultProviderId({ BB_PROVIDER: "claude-code" })).toBe("claude-code");
+  it("prefers BB_DEFAULT_PROVIDER when resolving the default provider", () => {
+    expect(resolveDefaultProviderId({ BB_DEFAULT_PROVIDER: "pi" })).toBe("pi");
+    expect(resolveDefaultProviderId({ BB_DEFAULT_PROVIDER: "claude-code" })).toBe("claude-code");
   });
 
-  it("falls back to BB_E2E_PROVIDER when BB_PROVIDER is unset", () => {
+  it("falls back to BB_E2E_PROVIDER when no default provider override is set", () => {
     expect(resolveDefaultProviderId({ BB_E2E_PROVIDER: "pi" })).toBe("pi");
   });
 });

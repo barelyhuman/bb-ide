@@ -20,17 +20,19 @@ That script runs a disposable standalone server against the real provider and ex
 
 ## Provider selection
 
-By default, the QA pass uses the Codex provider. To run against a different provider, set `BB_PROVIDER` and the required auth:
+The standalone server should be started without a global default provider. When
+you want to test a specific provider, pass `--provider <id>` on the relevant
+CLI command and configure the required auth:
 
 **Claude Code:**
 ```bash
-BB_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-server-qa.mjs
+ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-server-qa.mjs
 ANTHROPIC_API_KEY=... pnpm qa:server:smoke:claude-code
 ```
 
 **Pi:**
 ```bash
-BB_PROVIDER=pi node scripts/qa/start-standalone-server-qa.mjs --provider pi
+node scripts/qa/start-standalone-server-qa.mjs
 pnpm qa:server:smoke:pi
 ```
 
@@ -132,11 +134,10 @@ BB_ROOT="$bb_root" \
 node apps/server/dist/index.js --port 4311
 ```
 
-For Claude Code, also set the provider:
+For Claude Code, set auth only:
 
 ```bash
 BB_ROOT="$bb_root" \
-BB_PROVIDER=claude-code \
 ANTHROPIC_API_KEY=... \
 node apps/server/dist/index.js --port 4311
 ```
@@ -201,7 +202,7 @@ After spawning a thread and letting it reach `idle`, verify that the thread reco
 node apps/cli/dist/index.js thread show <thread-id>
 ```
 
-Expected: the `providerId` field matches the configured `BB_PROVIDER` (e.g. `codex`, `claude-code`, or `pi`).
+Expected: the `providerId` field matches the provider you selected (e.g. `codex`, `claude-code`, or `pi`).
 
 Inspect raw events to confirm provider event envelopes carry the correct provider:
 
@@ -780,8 +781,8 @@ usage is completely broken. Past bugs in this area include:
 - One provider child exiting spuriously rejects another child's in-flight requests
 
 Prerequisites: at least two providers must be available (e.g. codex + pi, or
-codex + claude-code). The server must be started without `BB_PROVIDER` so it
-uses the default and can accept explicit `providerId` per thread.
+codex + claude-code). The server must be started without a global default
+provider so each thread can select its provider explicitly.
 
 **Required multi-provider matrix:**
 

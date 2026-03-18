@@ -43,14 +43,14 @@ export function listAvailableProviderInfos(): SystemProviderInfo[] {
 /**
  * Resolve the default provider ID.
  *
- * Checks the server/provider override (`BB_PROVIDER`), then the
+ * Checks the server/provider override (`BB_DEFAULT_PROVIDER`), then the
  * test/env-var override (`BB_E2E_PROVIDER`),
  * then falls back to the compile-time default (codex).
  */
 export function resolveDefaultProviderId(
   env: NodeJS.ProcessEnv = process.env,
 ): ThreadProviderId {
-  const configuredDefault = env.BB_PROVIDER;
+  const configuredDefault = env.BB_DEFAULT_PROVIDER;
   if (configuredDefault && isThreadProviderId(configuredDefault.trim().toLowerCase())) {
     return configuredDefault.trim().toLowerCase() as ThreadProviderId;
   }

@@ -30,7 +30,7 @@ describe("createServer default provider", () => {
     sqlite = undefined;
   });
 
-  it("uses BB_PROVIDER from the runtime env when seeding the default provider", async () => {
+  it("uses BB_DEFAULT_PROVIDER from the runtime env when seeding the default provider", async () => {
     const db = createConnection(":memory:");
     migrate(db);
     sqlite = sqliteClient(db);
@@ -46,7 +46,7 @@ describe("createServer default provider", () => {
       environmentAgentCommandRepo: new EnvironmentAgentCommandRepository(db),
       runtimeEnv: {
         ...process.env,
-        BB_PROVIDER: "pi",
+        BB_DEFAULT_PROVIDER: "pi",
       },
       dbPath: ":memory:",
       serverLogFilePath: "/tmp/bb-server-default-provider.log",

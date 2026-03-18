@@ -14,7 +14,6 @@ const workspaceRoot = resolve(__dirname, "..", "..");
 function parseArgs(argv) {
   const options = {
     projectName: "qa-standalone",
-    provider: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -22,10 +21,6 @@ function parseArgs(argv) {
     switch (arg) {
       case "--project-name":
         options.projectName = argv[index + 1] ?? options.projectName;
-        index += 1;
-        break;
-      case "--provider":
-        options.provider = argv[index + 1];
         index += 1;
         break;
       default:
@@ -87,7 +82,7 @@ async function createProject(baseUrl, projectName, projectRoot) {
 }
 
 async function main() {
-  const { projectName, provider } = parseArgs(process.argv.slice(2));
+  const { projectName } = parseArgs(process.argv.slice(2));
   const tmpRoot = await import("node:fs/promises").then(({ mkdtemp }) =>
     mkdtemp(join(tmpdir(), "bb-qa-")),
   );
@@ -118,11 +113,9 @@ async function main() {
   const serverEnv = {
     ...process.env,
     BB_ROOT: bbRoot,
-    ...(provider ? { BB_PROVIDER: provider } : {}),
   };
   const relaunchEnvPrefix = [
     `BB_ROOT="${bbRoot}"`,
-    ...(provider ? [`BB_PROVIDER="${provider}"`] : []),
   ].join(" ");
   const relaunchCommand = [
     relaunchEnvPrefix,
@@ -162,7 +155,6 @@ async function main() {
     bbRoot,
     port,
     serverUrl,
-    provider: provider ?? "codex",
     nodePath: process.execPath,
     nodeVersion: process.version,
     nodeAbi: process.versions.modules,
