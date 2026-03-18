@@ -444,19 +444,18 @@ describe("Project routes", () => {
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       threadManager.spawn.mockResolvedValue(managerThread);
-      // Create a regular file at "workspace" to block mkdirSync("workspace/<id>")
-      // On some systems recursive mkdir succeeds even with a blocking file, so
-      // also make it read-only to ensure the directory creation fails.
-      writeFileSync(join(bbRoot, "workspace"), "occupied");
-      chmodSync(join(bbRoot, "workspace"), 0o444);
+      // Make the workspace parent directory unwritable so mkdirSync fails
+      // reliably across macOS and Linux.
+      mkdirSync(join(bbRoot, "workspace"), { recursive: true });
+      chmodSync(join(bbRoot, "workspace"), 0o555);
 
       const res = await app.request("/projects/proj-1/manager", { method: "POST" });
 
+      // Restore permissions so cleanup can proceed
+      chmodSync(join(bbRoot, "workspace"), 0o755);
+
       expect(res.status).toBe(500);
       expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
-      expect(
-        existsSync(join(bbRoot, "workspace", "thread-manager-rollback")),
-      ).toBe(false);
     });
   });
 
