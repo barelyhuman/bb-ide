@@ -1,8 +1,10 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/bb-logo-white.png" width="120">
-  <source media="(prefers-color-scheme: light)" srcset="assets/bb-logo.png" width="120">
-  <img alt="bb" src="assets/bb-logo.png" width="120">
-</picture>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/bb-logo-white.png" width="128">
+    <source media="(prefers-color-scheme: light)" srcset="assets/bb-logo.png" width="128">
+    <img alt="bb" src="assets/bb-logo.png" width="128">
+  </picture>
+</p>
 
 # bb
 
