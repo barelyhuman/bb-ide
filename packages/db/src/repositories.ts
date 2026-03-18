@@ -52,6 +52,7 @@ import {
   queuedThreadMessages,
   events,
 } from "./schema.js";
+import { createProjectId, createThreadId } from "./ids.js";
 
 function deriveEventLookupFields(type: string, data: unknown): {
   normType: string;
@@ -356,7 +357,7 @@ export class ProjectRepository {
   create(data: { name: string; rootPath: string; projectInstructions?: string; defaultProviderId?: string }): Project {
     const now = Date.now();
     const row = {
-      id: nanoid(),
+      id: createProjectId(),
       name: data.name,
       rootPath: data.rootPath,
       projectInstructions: data.projectInstructions ?? null,
@@ -731,7 +732,7 @@ export class ThreadRepository {
   }): Thread {
     const now = Date.now();
     const row = {
-      id: nanoid(),
+      id: createThreadId(),
       projectId: data.projectId,
       providerId: data.providerId ?? DEFAULT_THREAD_PROVIDER_ID,
       type: data.type ?? "standard",

@@ -61,6 +61,17 @@ describe("repository strict normalization", () => {
     );
   });
 
+  it("creates prettier prefixed project and thread ids", () => {
+    const project = projects.create({
+      name: "test-project",
+      rootPath: "/tmp/test-project",
+    });
+    const thread = threads.create({ projectId: project.id });
+
+    expect(project.id).toMatch(/^proj_[23456789abcdefghijkmnpqrstuvwxyz]{10}$/);
+    expect(thread.id).toMatch(/^thr_[23456789abcdefghijkmnpqrstuvwxyz]{10}$/);
+  });
+
   it("persists and loads parent thread metadata", () => {
     const projectId = createProjectId();
     const parentThread = threads.create({ projectId });
