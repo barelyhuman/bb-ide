@@ -34,8 +34,6 @@ import {
 } from "@/hooks/useApi"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
-  formatThreadActivitySummaryForTitle,
-  summarizeThreadActivity,
 } from "@/lib/thread-activity"
 import { HireManagerModal } from "@/components/HireManagerModal"
 
@@ -255,21 +253,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     : threadId
       ? `Thread ${threadId.slice(0, 8)}`
       : "Thread"
-  const projectThreads = useMemo(
-    () =>
-      projectId
-        ? (threads ?? []).filter((candidate) => candidate.projectId === projectId)
-        : [],
-    [projectId, threads]
-  )
-  const projectThreadSummary = useMemo(
-    () => formatThreadActivitySummaryForTitle(summarizeThreadActivity(projectThreads)),
-    [projectThreads]
-  )
-  const allThreadsSummary = useMemo(
-    () => formatThreadActivitySummaryForTitle(summarizeThreadActivity(threads ?? [])),
-    [threads]
-  )
   const meta = threadMatch
     ? {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
@@ -309,36 +292,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
       : (routeTitles[location.pathname] ?? { title: "" })
 
   const documentTitle = (() => {
-    const parts: string[] = []
-
     if (threadMatch) {
-      parts.push(threadDisplayTitle)
-    } else if (projectSettingsMatch) {
-      parts.push(projectLabel ?? projectSettingsMatch[1])
-      parts.push("Settings")
-      if (projectThreadSummary) {
-        parts.push(projectThreadSummary)
-      }
-    } else if (projectArchivedMatch) {
-      parts.push(projectLabel ?? projectArchivedMatch[1])
-      parts.push("Archived")
-      if (projectThreadSummary) {
-        parts.push(projectThreadSummary)
-      }
-    } else if (projectMatch) {
-      parts.push(projectLabel ?? projectMatch[1])
-      if (projectThreadSummary) {
-        parts.push(projectThreadSummary)
-      }
-    } else {
-      const routeTitle = routeTitles[location.pathname]?.title
-      parts.push(routeTitle && routeTitle.length > 0 ? routeTitle : "BB")
-      if (allThreadsSummary) {
-        parts.push(allThreadsSummary)
-      }
+      return threadDisplayTitle
     }
-
-    return parts.join(" · ")
+    if (projectSettingsMatch) {
+      return `${projectLabel ?? projectSettingsMatch[1]} · Settings`
+    }
+    if (projectArchivedMatch) {
+      return `${projectLabel ?? projectArchivedMatch[1]} · Archived`
+    }
+    if (projectMatch) {
+      return projectLabel ?? projectMatch[1]
+    }
+    const routeTitle = routeTitles[location.pathname]?.title
+    return routeTitle && routeTitle.length > 0 ? routeTitle : "BB"
   })()
 
   const handleResizeMouseDown = useCallback(
