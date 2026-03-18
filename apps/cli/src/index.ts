@@ -36,7 +36,7 @@ Current context:
 Quick start:
   bb status
   bb project list
-  bb thread status
+  bb thread show
   bb thread spawn --prompt "..."
 `;
 });

@@ -88,7 +88,11 @@ Run bb guide for help getting started.
 - `--json` returns the full structured payload
 - Falls back gracefully if daemon is unreachable (just print env vars like today)
 
-## 3. Update guide templates for freshness
+## 3. Fix `bb --help` quick start (DONE)
+
+The quick start section in `bb --help` referenced `bb thread status` which was removed. Fixed to `bb thread show`.
+
+## 4. Update guide templates for freshness
 
 The CLI guide (`bb-cli-guide.md`) is stale after our changes. Update:
 
@@ -103,7 +107,7 @@ The CLI guide (`bb-cli-guide.md`) is stale after our changes. Update:
 
 The system overview (`bb-system-overview.md`) is still current — no changes needed.
 
-## 4. Manager instructions: concise CLI reference
+## 5. Manager instructions: concise CLI reference
 
 Currently the manager instructions inline the full CLI guide. This is a lot of tokens for something the agent can get from `bb guide` and `bb <cmd> --help`.
 
@@ -119,7 +123,7 @@ This saves tokens in the manager prompt while keeping the full reference accessi
 - Keep `{{{bbSystemOverview}}}` and `{{{bbManagerWorkflows}}}` as-is (these are behavioral, not reference)
 - Remove `bbCliGuide` from the template variables if no longer inlined
 
-## 5. Agent base instructions: CLI awareness
+## 6. Agent base instructions: CLI awareness
 
 Currently the agent base instructions are one line: "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code."
 
@@ -131,7 +135,7 @@ You are running inside bb, an agent orchestration tool. Use `bb status` to see y
 
 This is not a full CLI guide — just enough for a worker to orient itself and know how to commit.
 
-## 6. Regenerate templates after changes
+## 7. Regenerate templates after changes
 
 After updating the template markdown files:
 1. Run `node packages/templates/scripts/generate-templates.mjs`
