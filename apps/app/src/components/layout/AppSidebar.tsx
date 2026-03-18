@@ -22,6 +22,7 @@ import {
 import { useServerConnectionState } from "@/hooks/useWebSocket"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
 import { resolveServerStatusIndicatorState } from "@/lib/server-status-indicator"
+import { isDevelopmentRuntimeMode } from "@/lib/runtime-mode"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -60,6 +61,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const blockingThreadCount =
     threads?.filter((thread) => shutdownBlockingStatuses.includes(thread.status)).length ??
     0
+  const isDevelopment = isDevelopmentRuntimeMode(restartPolicy?.runtimeMode)
   const shouldRestart = restartPolicy?.shouldRestart === true
   const serverStatus = resolveServerStatusIndicatorState({
     connectionState: serverConnectionState,
@@ -149,27 +151,44 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={requestRestart}
-                disabled={isRestartDisabled}
-                className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none hover:bg-sidebar-accent/40 hover:text-sidebar-foreground active:bg-sidebar-accent/55"
-                tooltip={restartTooltip}
-                aria-label={restartTooltip}
-                title={restartTooltip}
-              >
-                <span
-                  className={cn(
-                    "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
-                    serverIndicatorClassName,
-                  )}
-                  aria-hidden
-                />
-                <span
-                  className="truncate text-xs font-medium leading-none"
+              {isDevelopment ? (
+                <SidebarMenuButton
+                  onClick={requestRestart}
+                  disabled={isRestartDisabled}
+                  className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none hover:bg-sidebar-accent/40 hover:text-sidebar-foreground active:bg-sidebar-accent/55"
+                  tooltip={restartTooltip}
+                  aria-label={restartTooltip}
+                  title={restartTooltip}
                 >
-                  {serverStatusLabel}
-                </span>
-              </SidebarMenuButton>
+                  <span
+                    className={cn(
+                      "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
+                      serverIndicatorClassName,
+                    )}
+                    aria-hidden
+                  />
+                  <span className="truncate text-xs font-medium leading-none">
+                    {serverStatusLabel}
+                  </span>
+                </SidebarMenuButton>
+              ) : (
+                <div
+                  className="flex min-w-0 items-center gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80"
+                  aria-label={`Server status: ${serverStatusLabel}`}
+                  title={`Server status: ${serverStatusLabel}`}
+                >
+                  <span
+                    className={cn(
+                      "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
+                      serverIndicatorClassName,
+                    )}
+                    aria-hidden
+                  />
+                  <span className="truncate text-xs font-medium leading-none">
+                    {serverStatusLabel}
+                  </span>
+                </div>
+              )}
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>

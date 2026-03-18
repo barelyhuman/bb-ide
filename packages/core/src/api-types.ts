@@ -387,7 +387,10 @@ export interface SystemHealthReport {
 export type SystemRestartAction =
   | "noop";
 
+export type ServerRuntimeMode = "development" | "production";
+
 export interface SystemRestartPolicy {
+  runtimeMode: ServerRuntimeMode;
   restartPolicyByStatus: Record<ThreadStatus, SystemRestartAction>;
   shutdownBlockingStatuses: ThreadStatus[];
   shouldRestart: boolean;

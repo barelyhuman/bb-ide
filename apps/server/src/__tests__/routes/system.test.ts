@@ -640,6 +640,7 @@ describe("System routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
+        runtimeMode: "production",
         restartPolicyByStatus: {
           created: "noop",
           provisioning: "noop",
@@ -658,6 +659,7 @@ describe("System routes", () => {
       const restartAwareApp = new Hono().route(
         "/system",
         createSystemRoutes(threadManager, startTime, {
+          getRuntimeMode: () => "development",
           shouldRestart: () => true,
         }),
       );
@@ -666,6 +668,7 @@ describe("System routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
+        runtimeMode: "development",
         restartPolicyByStatus: {
           created: "noop",
           provisioning: "noop",

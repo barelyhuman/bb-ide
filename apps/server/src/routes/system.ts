@@ -6,6 +6,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import type {
   AvailableModel,
+  ServerRuntimeMode,
   OpenPathEditor,
   OpenPathRequest,
   SystemEnvironmentInfo,
@@ -37,6 +38,7 @@ type OpenPathFn = (args: OpenPathRequest) => void;
 type RequestShutdownFn = (reason: string) => void;
 type RequestRestartFn = (reason: string) => void;
 type ShouldRestartFn = () => boolean;
+type RuntimeModeFn = () => ServerRuntimeMode;
 type HealthReportFn = () => SystemHealthReport | Promise<SystemHealthReport>;
 
 export interface CreateSystemRoutesOptions {
@@ -50,6 +52,7 @@ export interface CreateSystemRoutesOptions {
   requestShutdown?: RequestShutdownFn;
   requestRestart?: RequestRestartFn;
   shouldRestart?: ShouldRestartFn;
+  getRuntimeMode?: RuntimeModeFn;
   getHealthReport?: HealthReportFn;
 }
 
@@ -189,6 +192,7 @@ export function createSystemRoutes(
   const requestShutdown = opts.requestShutdown ?? (() => {});
   const requestRestart = opts.requestRestart ?? (() => {});
   const shouldRestart = opts.shouldRestart ?? (() => false);
+  const getRuntimeMode = opts.getRuntimeMode ?? (() => "production");
   const getHealthReport = opts.getHealthReport;
 
   return new Hono()
@@ -322,10 +326,12 @@ export function createSystemRoutes(
       }
     })
     .get("/restart-policy", async (c) => {
+      const runtimeMode = getRuntimeMode();
       return c.json({
+        runtimeMode,
         restartPolicyByStatus: RESTART_POLICY_BY_STATUS,
         shutdownBlockingStatuses: ["created", "provisioning", "provisioned", "active"] as const,
-        shouldRestart: shouldRestart(),
+        shouldRestart: runtimeMode === "development" ? shouldRestart() : false,
       });
     })
     .post("/shutdown", zValidator("json", shutdownRequestSchema), async (c) => {

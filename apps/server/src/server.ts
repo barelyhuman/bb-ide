@@ -16,7 +16,11 @@ import type {
   ThreadRepository,
   EventRepository,
 } from "@bb/db";
-import type { ProviderToolCallResponse, SpawnThreadRequest } from "@bb/core";
+import type {
+  ProviderToolCallResponse,
+  ServerRuntimeMode,
+  SpawnThreadRequest,
+} from "@bb/core";
 import {
   createCodexLlmCompletionService,
   createProviderAdapter,
@@ -80,11 +84,13 @@ export interface ServerDeps {
   providerToolHost?: ProviderToolHost;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
+  runtimeMode?: ServerRuntimeMode;
 }
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono();
   const runtimeEnv = deps.runtimeEnv ?? process.env;
+  const runtimeMode = deps.runtimeMode ?? "production";
 
   // Request logging
   app.use(logger());
@@ -262,11 +268,16 @@ export function createServer(deps: ServerDeps) {
 
   // API routes
   const startTime = Date.now();
-  const restartRecommendationMonitor = createRestartRecommendationMonitor(startTime, {
-    onChange: () => {
-      wsManager.broadcast("system", undefined, ["restart-policy-changed"]);
-    },
-  });
+  const restartRecommendationMonitor = runtimeMode === "development"
+    ? createRestartRecommendationMonitor(startTime, {
+      onChange: () => {
+        wsManager.broadcast("system", undefined, ["restart-policy-changed"]);
+      },
+    })
+    : {
+      shouldRestart: () => false,
+      close: () => {},
+    };
   const apiRoutes = createApiRoutes({
     projectRepo: deps.projectRepo,
     environmentRepo: deps.environmentRepo,
@@ -280,6 +291,7 @@ export function createServer(deps: ServerDeps) {
     requestShutdown: deps.requestShutdown,
     requestRestart: deps.requestRestart,
     shouldRestart: () => restartRecommendationMonitor.shouldRestart(),
+    getRuntimeMode: () => runtimeMode,
     getHealthReport: createSystemHealthReporter({
       projectRepo: deps.projectRepo,
       threadRepo: deps.threadRepo,

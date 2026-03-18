@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { serve } from "@hono/node-server";
+import type { ServerRuntimeMode } from "@bb/core";
 import { resolveBbPath } from "@bb/core/storage-paths";
 
 // Load .env from the workspace root. Never overwrites existing env vars.
@@ -97,12 +98,17 @@ function relaunchCurrentProcess(): boolean {
 const SUPERVISED_RESTART_ENV = "BB_SUPERVISED_RESTART";
 const SUPERVISED_RESTART_EXIT_CODE = 75;
 
+function resolveRuntimeMode(env: NodeJS.ProcessEnv): ServerRuntimeMode {
+  return env.BB_RUNTIME_MODE === "development" ? "development" : "production";
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
   const { port, dbPath, logFilePath } = parseArgs();
+  const runtimeMode = resolveRuntimeMode(process.env);
   installConsoleFileLogger(logFilePath);
 
   // Ensure the data directory exists
@@ -212,6 +218,7 @@ async function main(): Promise<void> {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       dbPath,
       serverLogFilePath: logFilePath,
+      runtimeMode,
       requestShutdown: (reason) => {
         void shutdown(reason);
       },

@@ -112,6 +112,7 @@ export type {
   SystemHealthEnvironmentAgentCompatibility,
   SystemHealthEnvironmentAgentSession,
   SystemHealthReport,
+  ServerRuntimeMode,
   SystemRestartAction,
   SystemRestartPolicy,
   SystemRestartRequest,

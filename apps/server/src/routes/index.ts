@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ThreadOrchestrator, ThreadWorkStatus } from "@bb/core";
+import type { ServerRuntimeMode, ThreadOrchestrator, ThreadWorkStatus } from "@bb/core";
 import type {
   EnvironmentRepository,
   EventRepository,
@@ -28,6 +28,7 @@ export interface ApiRouteDeps {
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
   shouldRestart?: () => boolean;
+  getRuntimeMode?: () => ServerRuntimeMode;
   getHealthReport?: () => SystemHealthReport;
   runtimeEnv: NodeJS.ProcessEnv;
 }
@@ -76,6 +77,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
         requestShutdown: deps.requestShutdown,
         requestRestart: deps.requestRestart,
         shouldRestart: deps.shouldRestart,
+        getRuntimeMode: deps.getRuntimeMode,
         getHealthReport: deps.getHealthReport,
       }),
     );
