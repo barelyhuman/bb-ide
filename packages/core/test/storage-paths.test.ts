@@ -20,8 +20,8 @@ describe("storage paths", () => {
     delete process.env.BB_ROOT;
 
     expect(resolveBbRoot(process.env)).toBe("/Users/tester/.bb");
-    expect(resolveBbPath(process.env, "logs", "daemon.log")).toBe(
-      "/Users/tester/.bb/logs/daemon.log",
+    expect(resolveBbPath(process.env, "logs", "server.log")).toBe(
+      "/Users/tester/.bb/logs/server.log",
     );
   });
 

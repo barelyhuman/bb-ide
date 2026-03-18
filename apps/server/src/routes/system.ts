@@ -336,7 +336,7 @@ export function createSystemRoutes(
         if (!force && blockingThreads.length > 0) {
           return c.json({
             code: "shutdown_blocked",
-            message: "Daemon shutdown blocked by active thread work",
+            message: "Server shutdown blocked by active thread work",
             blockingThreads,
           }, 409);
         }
@@ -362,7 +362,7 @@ export function createSystemRoutes(
         if (!force && blockingThreads.length > 0) {
           return c.json({
             code: "shutdown_blocked",
-            message: "Daemon shutdown blocked by active thread work",
+            message: "Server shutdown blocked by active thread work",
             blockingThreads,
           }, 409);
         }

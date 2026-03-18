@@ -61,7 +61,7 @@ describe("EnvironmentAgentClient", () => {
         payload: {
           protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
           latestSequence: 2,
-          connectedToDaemon: true,
+          connectedToServer: true,
           pendingEventCount: 0,
           pendingCommandCount: 0,
         },
@@ -70,7 +70,7 @@ describe("EnvironmentAgentClient", () => {
 
     await expect(statusPromise).resolves.toMatchObject({
       latestSequence: 2,
-      connectedToDaemon: true,
+      connectedToServer: true,
     });
     expect(providerLineSpy).not.toHaveBeenCalled();
   });

@@ -704,7 +704,7 @@ describe("System routes", () => {
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         code: "shutdown_blocked",
-        message: "Daemon shutdown blocked by active thread work",
+        message: "Server shutdown blocked by active thread work",
         blockingThreads: [
           {
             id: "t-active",
@@ -796,7 +796,7 @@ describe("System routes", () => {
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         code: "shutdown_blocked",
-        message: "Daemon shutdown blocked by active thread work",
+        message: "Server shutdown blocked by active thread work",
         blockingThreads: [
           {
             id: "t-active",

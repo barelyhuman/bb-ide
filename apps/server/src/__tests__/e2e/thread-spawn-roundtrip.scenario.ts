@@ -3,7 +3,7 @@ import type { Project, Thread, ThreadEvent } from "@bb/core";
 import { isProviderEventEnvelope, DEFAULT_THREAD_PROVIDER_ID } from "@bb/core";
 import {
   runCliCommand,
-  startDaemonE2eHarness,
+  startServerE2eHarness,
 } from "./harness.js";
 import {
   readJson,
@@ -20,7 +20,7 @@ async function createProject(baseUrl: string, rootPath: string): Promise<Project
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: "e2e-daemon-project",
+      name: "e2e-server-project",
       rootPath,
     }),
   });
@@ -77,7 +77,7 @@ function resolveExpectedProviderId(): string {
 }
 
 export async function runThreadSpawnRoundtripScenario(): Promise<void> {
-  const harness = await startDaemonE2eHarness({
+  const harness = await startServerE2eHarness({
     fakeCodex: {
       defaultTurnDelayMs: 25,
     },

@@ -53,7 +53,7 @@ const CLI_SOURCE_PATH = resolve(WORKSPACE_ROOT, "apps", "cli", "src", "index.ts"
 const TSX_CLI_PATH = resolve(
   WORKSPACE_ROOT,
   "apps",
-  "daemon",
+  "server",
   "node_modules",
   "tsx",
   "dist",
@@ -120,7 +120,7 @@ async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
     server.listen(0, host, () => {
       const address = server.address();
       if (!address || typeof address === "string") {
-        server.close(() => rejectPort(new Error("Failed to allocate daemon e2e port")));
+        server.close(() => rejectPort(new Error("Failed to allocate server e2e port")));
         return;
       }
       server.close((error) => {
@@ -134,7 +134,7 @@ async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
   });
 }
 
-export interface StartDaemonE2eHarnessOptions {
+export interface StartServerE2eHarnessOptions {
   providerMode?: E2eProviderMode;
   providerToolHost?: ProviderToolHost;
   fakeCodex?: FakeCodexOptions;
@@ -152,7 +152,7 @@ export interface StartDaemonE2eHarnessOptions {
   port?: number;
 }
 
-export interface DaemonE2eHarness {
+export interface ServerE2eHarness {
   baseUrl: string;
   wsUrl: string;
   tempDir: string;
@@ -189,9 +189,9 @@ function detachThreadManager(threadManager: unknown): void {
   rawThreadManager.detachAll?.();
 }
 
-export async function startDaemonE2eHarness(
-  opts?: StartDaemonE2eHarnessOptions,
-): Promise<DaemonE2eHarness> {
+export async function startServerE2eHarness(
+  opts?: StartServerE2eHarnessOptions,
+): Promise<ServerE2eHarness> {
   // Install process-exit safety net once so orphaned child processes are
   // killed even when vitest terminates the worker on timeout.
   installProcessExitSafetyNet();
@@ -203,8 +203,8 @@ export async function startDaemonE2eHarness(
       : {}),
     ...(opts?.environmentAgentSessionOptions ?? {}),
   };
-  const daemonPort = opts?.port ?? await allocatePort();
-  const tempDir = opts?.tempDir ?? mkdtempSync(bbTestTmpPrefix("bb-daemon-e2e-"));
+  const serverPort = opts?.port ?? await allocatePort();
+  const tempDir = opts?.tempDir ?? mkdtempSync(bbTestTmpPrefix("bb-server-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
   if (opts?.initGitRepo && !existsSync(join(projectRoot, ".git"))) {
@@ -245,7 +245,7 @@ export async function startDaemonE2eHarness(
       stdio: "pipe",
     });
   }
-  const daemonRuntimeEnv: NodeJS.ProcessEnv = {
+  const serverRuntimeEnv: NodeJS.ProcessEnv = {
     ...process.env,
     ...(fakeCodexBinDir
       ? { PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir) }
@@ -281,10 +281,10 @@ export async function startDaemonE2eHarness(
         environmentAgentCommandRepo,
         environmentAgentSessionOptions,
         ...(opts?.providerToolHost ? { providerToolHost: opts.providerToolHost } : {}),
-        runtimeEnv: daemonRuntimeEnv,
+        runtimeEnv: serverRuntimeEnv,
         dbPath,
-        daemonLogFilePath: join(tempDir, "daemon.log"),
-        daemonBaseUrl: `http://127.0.0.1:${daemonPort}/api/v1`,
+        serverLogFilePath: join(tempDir, "server.log"),
+        serverBaseUrl: `http://127.0.0.1:${serverPort}/api/v1`,
         provider:
           providerMode === "fake"
             ? createCodexProviderAdapter({
@@ -307,7 +307,7 @@ export async function startDaemonE2eHarness(
         {
           fetch: app.fetch,
           hostname: "127.0.0.1",
-          port: daemonPort,
+          port: serverPort,
         },
         (info) => resolvePort(info.port),
       );
@@ -322,7 +322,7 @@ export async function startDaemonE2eHarness(
     let closed = false;
     let stopped = false;
 
-    const closeDaemon = async (): Promise<void> => {
+    const closeServerHarness = async (): Promise<void> => {
       if (closed) return;
       closed = true;
       closeServer();
@@ -352,7 +352,7 @@ export async function startDaemonE2eHarness(
           sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
         ]);
       }
-      await closeDaemon();
+      await closeServerHarness();
       // After successful teardown, untrack all agent PIDs (they should be
       // dead now) so the exit handler does not try to kill recycled PIDs.
       for (const pid of listManagedHostEnvironmentAgentPids()) {
@@ -372,13 +372,13 @@ export async function startDaemonE2eHarness(
       const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
       rawThreadManager.agentServer?.stopAllSessions?.("BB server restart");
       // Restart recovery expects managed environments to remain resumable after
-      // daemon shutdown, so detach without destroying — mirrors production shutdown.
+      // server shutdown, so detach without destroying — mirrors production shutdown.
       detachThreadManager(threadManager);
       await Promise.race([
         Promise.allSettled(pendingProvisioningTasks),
         sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
       ]);
-      await closeDaemon();
+      await closeServerHarness();
     };
 
     return {
@@ -496,7 +496,7 @@ export function runCliCommand(opts: RunCliCommandOptions): Promise<CliRunResult>
         env: {
           ...process.env,
           ...opts.env,
-          BB_DAEMON_URL: opts.baseUrl,
+          BB_SERVER_URL: opts.baseUrl,
         },
         stdio: ["ignore", "pipe", "pipe"],
       },

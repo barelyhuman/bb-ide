@@ -73,9 +73,9 @@ export interface ServerDeps {
   environmentAgentCommandRepo: EnvironmentAgentCommandRepository;
   provider?: ProviderAdapter;
   runtimeEnv?: NodeJS.ProcessEnv;
-  daemonBaseUrl?: string;
+  serverBaseUrl?: string;
   dbPath: string;
-  daemonLogFilePath: string;
+  serverLogFilePath: string;
   environmentAgentSessionOptions?: EnvironmentAgentSessionTimingOptions;
   providerToolHost?: ProviderToolHost;
   requestShutdown?: (reason: string) => void;
@@ -152,14 +152,14 @@ export function createServer(deps: ServerDeps) {
       resolveEnvironmentId: resolveAttachedEnvironmentId,
     },
   );
-  const daemonRuntimeEnv = {
+  const serverRuntimeEnv = {
     ...runtimeEnv,
-    ...(deps.daemonBaseUrl
-      ? { BB_DAEMON_URL: deps.daemonBaseUrl }
+    ...(deps.serverBaseUrl
+      ? { BB_SERVER_URL: deps.serverBaseUrl }
       : {}),
   };
   const environmentAgentSessionOptions = {
-    ...resolveEnvironmentAgentSessionTimingOptions(daemonRuntimeEnv),
+    ...resolveEnvironmentAgentSessionTimingOptions(serverRuntimeEnv),
     ...(deps.environmentAgentSessionOptions ?? {}),
   };
   const environmentAgentEventApplier = new EnvironmentAgentEventApplier(
@@ -221,7 +221,7 @@ export function createServer(deps: ServerDeps) {
     wsManager,
     llmCompletionService,
     configuredProviderController,
-    daemonRuntimeEnv,
+    serverRuntimeEnv,
     environmentRegistry,
     providerCatalog,
     environmentCatalog,
@@ -239,7 +239,7 @@ export function createServer(deps: ServerDeps) {
     environmentAgentSessionService.expireLeases();
   }, environmentAgentLeaseSweepIntervalMs);
   environmentAgentLeaseSweepInterval.unref();
-  const managedArtifactSweepIntervalMs = resolveManagedArtifactSweepIntervalMs(daemonRuntimeEnv);
+  const managedArtifactSweepIntervalMs = resolveManagedArtifactSweepIntervalMs(serverRuntimeEnv);
   const managedArtifactSweepInterval = managedArtifactSweepIntervalMs > 0
     ? setInterval(() => {
       void threadManager.reconcileManagedArtifacts().catch((error: unknown) => {
@@ -287,10 +287,10 @@ export function createServer(deps: ServerDeps) {
       getRunningCount: () => threadManager.getRunningCount(),
       startTime,
       dbPath: deps.dbPath,
-      daemonLogFilePath: deps.daemonLogFilePath,
-      runtimeEnv: daemonRuntimeEnv,
+      serverLogFilePath: deps.serverLogFilePath,
+      runtimeEnv: serverRuntimeEnv,
     }),
-    runtimeEnv: daemonRuntimeEnv,
+    runtimeEnv: serverRuntimeEnv,
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);

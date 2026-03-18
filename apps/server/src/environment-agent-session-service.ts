@@ -59,13 +59,13 @@ const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
 function cursorForReply(args: {
   batchGeneration: number;
   acknowledgedCursor?: EnvironmentAgentCursorPosition;
-  daemonCursor?: EnvironmentAgentCursorPosition;
+  serverCursor?: EnvironmentAgentCursorPosition;
 }): EnvironmentAgentCursorPosition {
   if (args.acknowledgedCursor) {
     return args.acknowledgedCursor;
   }
-  if (args.daemonCursor) {
-    return args.daemonCursor;
+  if (args.serverCursor) {
+    return args.serverCursor;
   }
   return {
     generation: args.batchGeneration,
@@ -283,9 +283,9 @@ export class EnvironmentAgentSessionService {
           channels: this.listAllowedChannelIds(args.threadId).map((channelId) => {
             const bootstrap = bootstrapByChannelId.get(channelId);
             let cursor = this.cursors.getByThreadId(channelId);
-            if (cursor && bootstrap?.lastDaemonAcked === undefined) {
+            if (cursor && bootstrap?.lastServerAcked === undefined) {
               // A fresh environment-agent process has no local delivery state, so the
-              // daemon cursor must be reset to accept the restarted event stream.
+              // server cursor must be reset to accept the restarted event stream.
               this.cursors.deleteByThreadId(channelId);
               cursor = undefined;
             }
@@ -333,7 +333,7 @@ export class EnvironmentAgentSessionService {
   closeSession(args: {
     threadId: string;
     sessionId: string;
-    reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error";
+    reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error";
     now?: number;
   }): EnvironmentAgentSessionRecord {
     this.requireActiveSession(args.threadId, args.sessionId);
@@ -351,7 +351,7 @@ export class EnvironmentAgentSessionService {
 
   retireActiveSessionForThread(args: {
     threadId: string;
-    reason: "daemon_shutdown" | "migration" | "internal_error";
+    reason: "server_shutdown" | "migration" | "internal_error";
     now?: number;
   }): EnvironmentAgentSessionRecord | undefined {
     const now = args.now ?? this.clock();
@@ -420,7 +420,7 @@ export class EnvironmentAgentSessionService {
       threadId,
       latestSequence: cursor?.sequence ?? 0,
       ...(cursor ? { lastAckedSequence: cursor.sequence } : {}),
-      connectedToDaemon: true,
+      connectedToServer: true,
       pendingEventCount: 0,
       pendingCommandCount: this.commandDispatcher?.getPendingCommandCount(threadId) ?? 0,
       deliveryState: "healthy",
@@ -448,7 +448,7 @@ export class EnvironmentAgentSessionService {
             `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
           );
         }
-        const daemonCursor = this.cursors.getByThreadId(batch.channelId);
+        const serverCursor = this.cursors.getByThreadId(batch.channelId);
         const result = await eventApplier.applyChannelBatch({
           threadId: batch.channelId,
           batch,
@@ -464,8 +464,8 @@ export class EnvironmentAgentSessionService {
           ackedThrough: cursorForReply({
             batchGeneration: batch.generation,
             acknowledgedCursor: result.acknowledgedCursor,
-            daemonCursor: daemonCursor
-              ? { generation: daemonCursor.generation, sequence: daemonCursor.sequence }
+            serverCursor: serverCursor
+              ? { generation: serverCursor.generation, sequence: serverCursor.sequence }
               : undefined,
           }),
         };

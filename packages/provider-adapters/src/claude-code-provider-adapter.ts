@@ -157,9 +157,9 @@ function withThreadEnvironmentPolicy(
     configEntries["shell_environment_policy.set.BB_THREAD_ID"] =
       context.threadId;
   }
-  if (context.daemonUrl) {
-    configEntries["shell_environment_policy.set.BB_DAEMON_URL"] =
-      context.daemonUrl;
+  if (context.serverUrl) {
+    configEntries["shell_environment_policy.set.BB_SERVER_URL"] =
+      context.serverUrl;
   }
   if (context.path) {
     configEntries["shell_environment_policy.set.PATH"] = context.path;

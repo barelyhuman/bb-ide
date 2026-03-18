@@ -281,7 +281,7 @@ export class EnvironmentAgentSessionSync {
 
   async closeSession(
     threadId: string,
-    reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error",
+    reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error",
   ): Promise<void> {
     const state = this.requireSessionState(threadId);
     await this.options.client.closeSession(state.sessionId, reason);

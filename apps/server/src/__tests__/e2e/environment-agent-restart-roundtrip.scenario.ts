@@ -9,12 +9,12 @@ import {
   waitForThreadStatus,
 } from "./environment-agent-api.js";
 import {
-  startDaemonE2eHarness,
+  startServerE2eHarness,
 } from "./harness.js";
 
 export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<void> {
   const port = await allocateLocalPort();
-  let harness = await startDaemonE2eHarness({
+  let harness = await startServerE2eHarness({
     port,
     fakeCodex: {
       defaultTurnDelayMs: 4_000,
@@ -32,7 +32,7 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
     const thread = await createThread(
       harness.baseUrl,
       project.id,
-      "Start a long-running turn so the daemon can restart mid-flight.",
+      "Start a long-running turn so the server can restart mid-flight.",
     );
 
     await waitForThreadStatus(harness.baseUrl, thread.id, "active", 5_000, harness.wsUrl);
@@ -42,7 +42,7 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
     await harness.shutdownForRestart();
     harness.emitFakeCodexControlEvent();
 
-    harness = await startDaemonE2eHarness({
+    harness = await startServerE2eHarness({
       tempDir,
       port,
       fakeCodex: {

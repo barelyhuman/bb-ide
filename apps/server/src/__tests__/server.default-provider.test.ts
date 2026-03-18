@@ -49,7 +49,7 @@ describe("createServer default provider", () => {
         BB_PROVIDER: "pi",
       },
       dbPath: ":memory:",
-      daemonLogFilePath: "/tmp/bb-server-default-provider.log",
+      serverLogFilePath: "/tmp/bb-server-default-provider.log",
     });
 
     await expect(threadManager.getProviderInfo()).resolves.toMatchObject({ id: "pi" });

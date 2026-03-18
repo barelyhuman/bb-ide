@@ -2,7 +2,7 @@
 
 ## Goal
 
-Allow users to extend bb with custom providers, environments, and lifecycle hooks without forking the repo. Extensions are TypeScript modules discovered from `.bb/extensions/` (project-local) and `~/.bb/extensions/` (global), loaded at daemon startup alongside the built-in registrations.
+Allow users to extend bb with custom providers, environments, and lifecycle hooks without forking the repo. Extensions are TypeScript modules discovered from `.bb/extensions/` (project-local) and `~/.bb/extensions/` (global), loaded at server startup alongside the built-in registrations.
 
 ## Scope
 
@@ -204,10 +204,10 @@ bb does not impose a config schema — each extension reads its own config. This
 
 ### Error Isolation
 
-Extensions run in the daemon process. To prevent a broken extension from crashing the daemon:
+Extensions run in the server process. To prevent a broken extension from crashing the server:
 
 1. Extension loading is wrapped in try/catch — a failing extension logs an error and is skipped
-2. Provider/environment calls from extensions are wrapped similarly — errors are surfaced as thread-level errors, not daemon crashes
+2. Provider/environment calls from extensions are wrapped similarly — errors are surfaced as thread-level errors, not server crashes
 3. No worker thread isolation for v1 (keep it simple), but the try/catch boundary is sufficient for most failure modes
 
 ### Examples Directory
@@ -288,7 +288,7 @@ The built-in provider IDs are a closed union (`"codex" | "claude-code" | "pi"`) 
    };
    ```
 
-### Step 4: Wire extension registrations into daemon startup
+### Step 4: Wire extension registrations into server startup
 
 In `apps/server/src/server.ts` (`createServer()`):
 
@@ -339,7 +339,7 @@ In `apps/server/src/index.ts` (`main()`):
 1. Write a working Gemini provider extension implementing the full `ProviderAdapter` interface from `@bb/core` (the process-based MCP bridge pattern)
 2. Write a working E2B environment extension implementing `EnvironmentDefinition<E2BState>` and returning an `IEnvironment` from `create()`/`restore()`
 3. Each example includes setup instructions for installing dependencies and configuring API keys
-4. Test each example end-to-end: install extension, start daemon, spawn thread with extension provider/environment
+4. Test each example end-to-end: install extension, start server, spawn thread with extension provider/environment
 
 ### Step 7: Document
 
@@ -352,11 +352,11 @@ In `apps/server/src/index.ts` (`main()`):
 
 1. **Unit test — provider registration:** Write a test extension that registers a mock provider adapter. Verify it appears in the `listProviders()` API response alongside the built-in `codex`, `claude-code`, and `pi` entries.
 2. **Unit test — environment registration:** Write a test extension that registers a mock `EnvironmentDefinition`. Verify `EnvironmentRegistry.has(kind)` returns true and `registry.list()` includes its `EnvironmentInfo`.
-3. **Fault tolerance:** Verify a broken extension (throws on load) does not crash the daemon — the daemon starts normally with the broken extension logged and skipped.
+3. **Fault tolerance:** Verify a broken extension (throws on load) does not crash the server — the server starts normally with the broken extension logged and skipped.
 4. **ID conflict:** Verify that registering a provider with a built-in ID (`"codex"`, `"claude-code"`, `"pi"`) logs a warning and is rejected.
 5. **E2E — extension provider:** With the Gemini example installed, spawn a thread with `providerId: "gemini"` and verify the MCP bridge process launches and events flow.
 6. **E2E — extension environment:** With the E2B example installed, spawn a thread with `environmentCreationArgs: { kind: "e2b" }` and verify provisioning completes.
-7. **Scoping:** Verify project-local extensions are only loaded for threads in that project, not for other projects on the same daemon.
+7. **Scoping:** Verify project-local extensions are only loaded for threads in that project, not for other projects on the same server.
 
 ## Open Questions/Risks
 
@@ -367,4 +367,4 @@ In `apps/server/src/index.ts` (`main()`):
 - **TypeScript loading:** jiti is battle-tested (used by Nuxt, etc.) but adds a dependency. Alternative: require extensions to be pre-compiled JS. Recommendation: use jiti — the DX of writing raw TypeScript is worth it.
 - **Dependency resolution:** Extensions with `package.json` need their `node_modules` installed. The user runs `npm install` in their extension directory. bb does not manage this — document it. Future: could auto-install on discovery.
 - **Provisioning system integration:** Extension environments need to work with the `resolveProvisioningSelection()` machinery in `apps/server/src/environment-provisioning-systems.ts`. The current built-in provisioning systems (`reuse-existing`, `direct-path`, `worktree`, `docker`) are a hardcoded array. Extension environments will either need to register a corresponding `EnvironmentProvisioningSystem`, or the resolution fallback at the bottom of `resolveProvisioningSelection()` needs to be made extension-aware.
-- **Daemon restart on extension change:** v1 requires a daemon restart to pick up new or changed extensions. Document this clearly. Hot reload is deferred.
+- **Server restart on extension change:** v1 requires a server restart to pick up new or changed extensions. Document this clearly. Hot reload is deferred.

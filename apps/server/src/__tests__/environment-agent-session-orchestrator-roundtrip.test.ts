@@ -878,7 +878,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       latestSequence: 1,
       lastAckedSequence: 1,
       pendingCommandCount: 1,
-      connectedToDaemon: true,
+      connectedToServer: true,
       deliveryState: "healthy",
     });
   });
@@ -1181,7 +1181,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     );
   });
 
-  it("accepts resumed tell events after a fresh agent session resets a stale daemon cursor", async () => {
+  it("accepts resumed tell events after a fresh agent session resets a stale server cursor", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);
     cursors.upsert(threadId, { generation: 1, sequence: 9 }, 900);

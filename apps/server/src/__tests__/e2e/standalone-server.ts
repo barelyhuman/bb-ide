@@ -7,9 +7,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const WORKSPACE_ROOT = resolve(__dirname, "../../../../..");
 
-export interface StandaloneDaemonHandle {
+export interface StandaloneServerHandle {
   pid: number | undefined;
-  /** Snapshot child PIDs before the daemon exits (they get reparented to PID 1 after). */
+  /** Snapshot child PIDs before the server exits (they get reparented to PID 1 after). */
   snapshotChildPids(): number[];
   waitForExit: () => Promise<number | null>;
   /** Graceful SIGTERM — does NOT kill child processes (env-agents survive for restart tests). */
@@ -18,11 +18,11 @@ export interface StandaloneDaemonHandle {
   stopAndCleanup: () => Promise<void>;
 }
 
-function resolveDaemonLaunchTarget(): { command: string; args: string[] } {
+function resolveServerLaunchTarget(): { command: string; args: string[] } {
   const distEntry = resolve(WORKSPACE_ROOT, "apps/server/dist/index.js");
   if (!existsSync(distEntry)) {
     throw new Error(
-      `Daemon dist entry not found at ${distEntry}. Run "pnpm exec turbo run build --filter=@bb/server" first.`,
+      `Server dist entry not found at ${distEntry}. Run "pnpm exec turbo run build --filter=@bb/server" first.`,
     );
   }
   return { command: process.execPath, args: [distEntry] };
@@ -69,11 +69,11 @@ function isAlive(pid: number): boolean {
   }
 }
 
-export function startStandaloneDaemon(args: {
+export function startStandaloneServer(args: {
   port: number;
   env: NodeJS.ProcessEnv;
-}): StandaloneDaemonHandle {
-  const launchTarget = resolveDaemonLaunchTarget();
+}): StandaloneServerHandle {
+  const launchTarget = resolveServerLaunchTarget();
   const child = spawn(
     launchTarget.command,
     [...launchTarget.args, "--port", String(args.port)],
@@ -108,7 +108,7 @@ export function startStandaloneDaemon(args: {
       ]);
     },
     stopAndCleanup: async () => {
-      // Snapshot child PIDs BEFORE killing — once the daemon exits,
+      // Snapshot child PIDs BEFORE killing — once the server exits,
       // children get reparented to PID 1 and we can't find them.
       const childPids = child.pid ? collectChildPids(child.pid) : [];
 

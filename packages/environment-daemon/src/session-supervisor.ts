@@ -236,7 +236,7 @@ export class EnvironmentAgentSessionSupervisor {
           {
             channelId: this.options.threadId,
             generation: state?.generation ?? 1,
-            ...(state?.lastAcked ? { lastDaemonAcked: state.lastAcked } : {}),
+            ...(state?.lastAcked ? { lastServerAcked: state.lastAcked } : {}),
           },
         ],
       },
@@ -395,7 +395,7 @@ export class EnvironmentAgentSessionSupervisor {
         : undefined;
 
     this.options.runtime.setDaemonDeliveryState({
-      connectedToDaemon: this.running && Boolean(state?.sessionId) && retryAttemptCount === 0,
+      connectedToServer: this.running && Boolean(state?.sessionId) && retryAttemptCount === 0,
       deliveryState: !this.running
         ? "stopped"
         : retryAttemptCount > 0

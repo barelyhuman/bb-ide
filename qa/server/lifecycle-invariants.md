@@ -1,6 +1,6 @@
-# Daemon / Env-Agent Lifecycle Invariants
+# Server / Env-Agent Lifecycle Invariants
 
-This document defines the durable behaviors that daemon/env-agent QA should assert.
+This document defines the durable behaviors that server/env-agent QA should assert.
 
 Use these invariants to judge correctness during manual QA, harness development, and regression triage.
 Do not prefer fragile timing assumptions when one of these stronger checks can be used instead.
@@ -10,13 +10,13 @@ Do not prefer fragile timing assumptions when one of these stronger checks can b
 - Assert **eventual state and allowed transitions**, not exact timing.
 - Prefer **supported CLI/API surfaces** for common-path checks.
 - Use SQLite or raw logs as a deeper debugging layer, not the first-line operator workflow.
-- Treat low-level session data as helpful evidence, but keep the core quality bar centered on user-visible behavior and daemon correctness.
+- Treat low-level session data as helpful evidence, but keep the core quality bar centered on user-visible behavior and server correctness.
 
 ## Core invariants
 
 ### 1. Thread state and persisted state must converge
 
-For a given thread, CLI/API-visible state and persisted daemon state must eventually agree.
+For a given thread, CLI/API-visible state and persisted server state must eventually agree.
 
 Examples:
 - `thread show` and `thread status` should not disagree on the settled terminal state.
@@ -38,9 +38,9 @@ Implications:
 - late old-agent traffic must not take over a recovered thread
 - replacement after restart or worker loss must not create split-brain behavior
 
-### 4. Active work must converge after daemon restart
+### 4. Active work must converge after server restart
 
-If the daemon restarts while a thread is active, the system must converge cleanly:
+If the server restarts while a thread is active, the system must converge cleanly:
 
 - if the original env-agent successfully reconnects within the allowed liveness window, the thread may continue and finish normally
 - if it does not reconnect, the thread must converge to a visible error state rather than hanging forever or silently appearing healthy
@@ -64,7 +64,7 @@ Examples:
 
 ### 7. Session retirement after idle must be clean
 
-When BB intentionally retires the worker after a turn settles back to `idle`, it should do so without leaving duplicate active session state behind.
+When the server intentionally retires the worker after a turn settles back to `idle`, it should do so without leaving duplicate active session state behind.
 
 Implications:
 - historical session rows are acceptable
@@ -108,13 +108,13 @@ Prefer these assertion styles in QA and harness code:
 - fixed sleeps
 - exact heartbeat timing expectations
 - assumptions that an idle thread must still have a live session at the end of the run
-- assertions that depend on daemon log ordering more strictly than the product contract requires
+- assertions that depend on server log ordering more strictly than the product contract requires
 
 ## Recommended evidence order during QA
 
 1. CLI/API-visible thread behavior
-2. CLI/API-visible daemon health and status
-3. daemon logs
+2. CLI/API-visible server health and status
+3. server logs
 4. session inspection surfaces
 5. SQLite inspection for deeper debugging
 

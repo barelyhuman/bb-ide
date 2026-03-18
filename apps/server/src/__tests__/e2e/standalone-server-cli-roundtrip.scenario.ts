@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,17 +23,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const WORKSPACE_ROOT = resolve(__dirname, "..", "..", "..", "..", "..");
-const DAEMON_DIST_PATH = resolve(WORKSPACE_ROOT, "apps", "daemon", "dist", "index.js");
-const DAEMON_SOURCE_PATH = resolve(WORKSPACE_ROOT, "apps", "daemon", "src", "index.ts");
-const TSX_CLI_PATH = resolve(
-  WORKSPACE_ROOT,
-  "apps",
-  "daemon",
-  "node_modules",
-  "tsx",
-  "dist",
-  "cli.mjs",
-);
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   GIT_AUTHOR_NAME: "BB Test",
@@ -42,16 +31,11 @@ const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   GIT_COMMITTER_EMAIL: "bb-test@example.com",
 };
 
-interface LaunchTarget {
-  command: string;
-  args: string[];
-}
-
 import {
-  startStandaloneDaemon,
+  startStandaloneServer,
   collectChildPids,
-  type StandaloneDaemonHandle,
-} from "./standalone-daemon.js";
+  type StandaloneServerHandle,
+} from "./standalone-server.js";
 
 type EnvironmentKind = "local" | "worktree";
 
@@ -62,54 +46,6 @@ function prependPathEntry(pathValue: string | undefined, entryToPrepend: string)
   return [entryToPrepend, ...entries].join(delimiter);
 }
 
-function latestModifiedAtMs(rootPath: string): number {
-  const stat = statSync(rootPath);
-  if (!stat.isDirectory()) {
-    return stat.mtimeMs;
-  }
-
-  let latest = stat.mtimeMs;
-  for (const entry of readdirSync(rootPath)) {
-    latest = Math.max(latest, latestModifiedAtMs(join(rootPath, entry)));
-  }
-  return latest;
-}
-
-function isCurrentDaemonDistAvailable(): boolean {
-  if (!existsSync(DAEMON_DIST_PATH)) {
-    return false;
-  }
-
-  const daemonRoot = resolve(WORKSPACE_ROOT, "apps", "server");
-  const distModifiedAtMs = statSync(DAEMON_DIST_PATH).mtimeMs;
-  const sourceLatestMs = Math.max(
-    latestModifiedAtMs(resolve(daemonRoot, "src")),
-    latestModifiedAtMs(resolve(daemonRoot, "package.json")),
-    latestModifiedAtMs(resolve(daemonRoot, "tsconfig.json")),
-  );
-  return distModifiedAtMs >= sourceLatestMs;
-}
-
-function resolveDaemonLaunchTarget(): LaunchTarget {
-  if (isCurrentDaemonDistAvailable()) {
-    return {
-      command: process.execPath,
-      args: [DAEMON_DIST_PATH],
-    };
-  }
-
-  if (existsSync(TSX_CLI_PATH) && existsSync(DAEMON_SOURCE_PATH)) {
-    return {
-      command: process.execPath,
-      args: [TSX_CLI_PATH, DAEMON_SOURCE_PATH],
-    };
-  }
-
-  throw new Error(
-    "Unable to launch daemon: missing tsx source runner and apps/server/dist/index.js fallback.",
-  );
-}
-
 async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
   return new Promise<number>((resolvePort, rejectPort) => {
     const server = createNetServer();
@@ -117,7 +53,7 @@ async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
     server.listen(0, host, () => {
       const address = server.address();
       if (!address || typeof address === "string") {
-        server.close(() => rejectPort(new Error("Failed to allocate standalone daemon port")));
+        server.close(() => rejectPort(new Error("Failed to allocate standalone server port")));
         return;
       }
       server.close((error) => {
@@ -140,14 +76,14 @@ async function waitForHealth(baseUrl: string, timeoutMs: number = 10_000): Promi
         return;
       }
     } catch {
-      // Daemon still starting.
+      // Server still starting.
     }
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 50));
   }
-  throw new Error(`Timed out waiting for standalone daemon health at ${baseUrl}`);
+  throw new Error(`Timed out waiting for standalone server health at ${baseUrl}`);
 }
 
-// startStandaloneDaemon, collectChildPids, StandaloneDaemonHandle imported from ./standalone-daemon.js
+// startStandaloneServer, collectChildPids, StandaloneServerHandle imported from ./standalone-server.js
 
 function parseThreadIdFromCliOutput(stdout: string): string {
   const match = stdout.match(/Thread spawned:\s+([A-Za-z0-9_-]+)/);
@@ -287,7 +223,7 @@ async function runEnvironmentBattery(
   environmentKind: EnvironmentKind,
 ): Promise<void> {
   const tempDir = mkdtempSync(
-    bbTestTmpPrefix(`bb-standalone-daemon-${environmentKind}-`),
+    bbTestTmpPrefix(`bb-standalone-server-${environmentKind}-`),
   );
   const bbRoot = join(tempDir, "bb-root");
   const projectRoot = join(tempDir, "project");
@@ -314,7 +250,7 @@ async function runEnvironmentBattery(
   const port = await allocatePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const wsUrl = `ws://127.0.0.1:${port}/ws`;
-  const daemonEnv = withFakeE2eEnvironmentAgentTimingEnv({
+  const serverEnv = withFakeE2eEnvironmentAgentTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
     BB_ROOT: bbRoot,
@@ -322,14 +258,14 @@ async function runEnvironmentBattery(
     BB_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
   });
 
-  // Track all daemon instances so we can kill their process trees on cleanup.
-  // The daemon restart test replaces `daemon` mid-test, but the old daemon's
+  // Track all server instances so we can kill their process trees on cleanup.
+  // The server restart test replaces `server` mid-test, but the old server's
   // env-agents survive as orphans. We need to kill them all.
-  const allDaemonChildPids: number[] = [];
+  const allServerChildPids: number[] = [];
 
-  let daemon = startStandaloneDaemon({
+  let server = startStandaloneServer({
     port,
-    env: daemonEnv,
+    env: serverEnv,
   });
 
   try {
@@ -337,7 +273,7 @@ async function runEnvironmentBattery(
     const project = await createProject(
       baseUrl,
       projectRoot,
-      `standalone-daemon-${environmentKind}`,
+      `standalone-server-${environmentKind}`,
     );
 
     const initialThreadId = await spawnThread({
@@ -387,22 +323,22 @@ async function runEnvironmentBattery(
         "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, restartThreadId, 0);
-    // Snapshot child PIDs before restart kills the daemon — once the daemon
+    // Snapshot child PIDs before restart kills the server — once the server
     // exits, its children (env-agents, codex) get reparented to PID 1.
-    allDaemonChildPids.push(...daemon.snapshotChildPids());
+    allServerChildPids.push(...server.snapshotChildPids());
 
     const restartResult = await expectCliSuccess(
       runCliCommand({
         baseUrl,
-        args: ["daemon", "restart", "--force"],
+        args: ["server", "restart", "--force"],
       }),
     );
-    expect(restartResult.stdout).toContain("Daemon shutdown requested");
-    expect(await daemon.waitForExit()).toBe(0);
+    expect(restartResult.stdout).toContain("Server shutdown requested");
+    expect(await server.waitForExit()).toBe(0);
     appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
-    daemon = startStandaloneDaemon({
+    server = startStandaloneServer({
       port,
-      env: daemonEnv,
+      env: serverEnv,
     });
     await waitForHealth(baseUrl, 15_000);
     await waitForThreadStatus(baseUrl, restartThreadId, "idle", 20_000, wsUrl);
@@ -489,17 +425,17 @@ async function runEnvironmentBattery(
       previousCompletedTurns: countCompletedTurns(stoppedEvents),
     });
   } finally {
-    // stopAndCleanup kills the daemon + its entire process tree.
-    await daemon.stopAndCleanup();
-    // Also kill children from earlier daemon instances (pre-restart orphans).
-    for (const pid of allDaemonChildPids.reverse()) {
+    // stopAndCleanup kills the server + its entire process tree.
+    await server.stopAndCleanup();
+    // Also kill children from earlier server instances (pre-restart orphans).
+    for (const pid of allServerChildPids.reverse()) {
       try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
     }
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-export async function runStandaloneDaemonCliRoundtripScenario(): Promise<void> {
+export async function runStandaloneServerCliRoundtripScenario(): Promise<void> {
   const environments: readonly EnvironmentKind[] = ["local", "worktree"];
   for (const environmentKind of environments) {
     await runEnvironmentBattery(environmentKind);

@@ -268,7 +268,7 @@ export function useWebSocket(): void {
   }, [queryClient]);
 }
 
-export function useDaemonConnectionState() {
+export function useServerConnectionState() {
   return useSyncExternalStore(
     (callback) => wsManager.onConnectionStateChange(callback),
     () => wsManager.getConnectionState(),

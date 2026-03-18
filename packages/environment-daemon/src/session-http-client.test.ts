@@ -64,7 +64,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     const client = new EnvironmentAgentSessionHttpClient({
-      daemonUrl: "http://127.0.0.1:3333/api/v1",
+      serverUrl: "http://127.0.0.1:3333/api/v1",
       threadId: "thread-1",
       authToken: "token-1",
       fetchImpl,
@@ -165,7 +165,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     );
     const client = createEnvironmentAgentSessionHttpClientFromConnection(
       {
-        daemonUrl: "http://127.0.0.1:3333/api/v1",
+        serverUrl: "http://127.0.0.1:3333/api/v1",
         threadId: "thread-1",
         authToken: "token-1",
       },

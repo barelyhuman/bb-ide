@@ -11,9 +11,9 @@ an agent to work like you would, then watch it use bb like you would.
 
 ```text
 apps/
-  daemon/   Hono REST + WebSocket server, provider runtime orchestration
+  server/   Hono REST + WebSocket server, provider runtime orchestration
   app/      React + Vite frontend
-  cli/      bb CLI for daemon/thread operations
+  cli/      bb CLI for server/thread operations
 packages/
   agent-core/   Shared contracts/types/schemas + event -> UI message projection
   provider-adapters/ Built-in provider adapters, model catalogs, and LLM helper utilities
@@ -37,9 +37,9 @@ Endpoints:
 - API base: `http://localhost:3333/api/v1`
 - WebSocket: `ws://localhost:3333/ws`
 
-`apps/app` proxies `/api` and `/ws` to the daemon on `:3333` in development.
+`apps/app` proxies `/api` and `/ws` to the server on `:3333` in development.
 
-## CLI and Daemon Run Modes
+## CLI and Server Run Modes
 
 Development (source + watch):
 
@@ -57,16 +57,16 @@ Production (built `dist`):
 ```bash
 pnpm build
 
-# run built daemon and built CLI
-pnpm daemon --help
+# run built server and built CLI
+pnpm server --help
 pnpm bb --help
 ```
 
 Notes:
 
 - `dist/` output is generated for `@bb/core`, `@bb/provider-adapters`, `@bb/environment`, `@bb/ui-core`, `@bb/db`, `@bb/server`, `@bb/app`, and `@bb/cli`.
-- `pnpm dev` starts the daemon on `:3333`.
-- CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
+- `pnpm dev` starts the server on `:3333`.
+- CLI uses `BB_SERVER_URL` when set, otherwise defaults to `http://localhost:3333`.
 
 ## Build, Typecheck, Test
 
@@ -106,7 +106,7 @@ Transition rules are centralized in
 - `spawn`: creates a DB thread, then provisions async.
 - `tell`: sends `turn/start` or `turn/steer` (`mode=auto|start|steer`).
 - `archive`: stops process/runtime and sets `archivedAt`.
-- daemon boot: reconciles persisted active/provisioning threads.
+- server boot: reconciles persisted active/provisioning threads.
 
 ## CLI Context Env
 
@@ -115,7 +115,7 @@ Thread execution context is exposed to agent shells as:
 - `BB_PROJECT_ID`
 - `BB_THREAD_ID`
 - `BB_ENVIRONMENT_ID`
-- `BB_DAEMON_URL` (optional daemon endpoint override; default is `http://localhost:3333`)
+- `BB_SERVER_URL` (optional server endpoint override; default is `http://localhost:3333`)
 
 `bb` is also kept on `PATH` for agent shell commands.
 
@@ -151,15 +151,15 @@ Provider and environment selection:
 - `BB_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.bb/worktrees`; absolute roots are scoped by project id).
 - `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
-Daemon e2e provider mode:
+Server e2e provider mode:
 
-- `BB_E2E_PROVIDER_MODE=fake|real` selects whether daemon e2e tests use the fake Codex harness or the real Codex provider. Deprecated alias: `BB_E2E_PROVIDER_MODE`.
+- `BB_E2E_PROVIDER_MODE=fake|real` selects whether server e2e tests use the fake Codex harness or the real Codex provider. Deprecated alias: `BB_E2E_PROVIDER_MODE`.
 - The low-level e2e default is still `fake` when the variable is unset.
-- The checked-in daemon QA entrypoints (`pnpm qa:daemon:smoke`, `pnpm qa:daemon:stress`, `pnpm qa:daemon:regression`) override this to `real`.
-- `pnpm --filter @bb/server test:e2e` runs the default smoke daemon e2e suite.
-- `pnpm --filter @bb/server test:e2e:stress` runs the slower recovery/stress daemon e2e suite.
-- `pnpm --filter @bb/server test:e2e:real` runs the smoke daemon e2e suite in `real` mode.
-- `pnpm --filter @bb/server test:e2e:stress:real` runs the slower recovery/stress daemon e2e suite in `real` mode.
+- The checked-in server QA entrypoints (`pnpm qa:server:smoke`, `pnpm qa:server:stress`, `pnpm qa:server:regression`) override this to `real`.
+- `pnpm --filter @bb/server test:e2e` runs the default smoke server e2e suite.
+- `pnpm --filter @bb/server test:e2e:stress` runs the slower recovery/stress server e2e suite.
+- `pnpm --filter @bb/server test:e2e:real` runs the smoke server e2e suite in `real` mode.
+- `pnpm --filter @bb/server test:e2e:stress:real` runs the slower recovery/stress server e2e suite in `real` mode.
 - Fake-only tests that depend on manual fake-codex event control are skipped automatically in `real` mode.
 
 ## Typed Codex Event Schema
@@ -178,13 +178,13 @@ pnpm --filter @bb/core gen:codex-event-types
 
 ## Database and Local State
 
-Default daemon DB:
+Default server DB:
 
 ```text
 ~/.bb/bb.db
 ```
 
-CLI daemon PID file:
+CLI server PID file:
 
 ```text
 ~/.bb/agent-server.pid

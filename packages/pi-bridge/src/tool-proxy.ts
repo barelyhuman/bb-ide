@@ -14,7 +14,7 @@ export type ToolCallForwarder = (
 
 /**
  * Builds Pi-compatible ToolDefinition objects from dynamic tool definitions
- * that forward execution back to the daemon via the bridge protocol.
+ * that forward execution back to the server via the bridge protocol.
  */
 export function buildDynamicTools(
   dynamicTools: DynamicToolDefinition[],

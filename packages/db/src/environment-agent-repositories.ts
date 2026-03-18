@@ -25,7 +25,7 @@ export type EnvironmentAgentSessionStatus =
 
 export type EnvironmentAgentSessionCloseReason =
   | "agent_shutdown"
-  | "daemon_shutdown"
+  | "server_shutdown"
   | "lease_expired"
   | "newer_session"
   | "migration"
@@ -159,7 +159,7 @@ function isEnvironmentAgentSessionCloseReason(
 ): value is EnvironmentAgentSessionCloseReason {
   return (
     value === "agent_shutdown" ||
-    value === "daemon_shutdown" ||
+    value === "server_shutdown" ||
     value === "lease_expired" ||
     value === "newer_session" ||
     value === "migration" ||

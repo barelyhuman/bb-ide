@@ -25,15 +25,15 @@ vi.mock("node:readline/promises", () => ({
 
 import { createClient, unwrap } from "../client.js";
 import { registerManagerCommands } from "../commands/manager.js";
-import { registerDaemonCommands } from "../commands/daemon.js";
+import { registerServerCommands } from "../commands/server.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerStatusCommand } from "../commands/status.js";
 import { registerThreadCommands } from "../commands/thread.js";
 
-type DaemonClient = ReturnType<typeof createClient>;
+type ServerClient = ReturnType<typeof createClient>;
 
-function asDaemonClient(value: unknown): DaemonClient {
-  return value as DaemonClient;
+function asServerClient(value: unknown): ServerClient {
+  return value as ServerClient;
 }
 
 function collectLogLines(logSpy: ReturnType<typeof vi.spyOn>): string[] {
@@ -103,7 +103,7 @@ describe("CLI command output contracts", () => {
       },
     ];
     const get = vi.fn(async () => projects);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           projects: {
@@ -114,7 +114,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["project", "list", "--json"], (program) =>
-      registerProjectCommands(program, () => "http://daemon"),
+      registerProjectCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -131,7 +131,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     };
     const post = vi.fn(async () => created);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           projects: {
@@ -143,7 +143,7 @@ describe("CLI command output contracts", () => {
 
     await runCommand(
       ["project", "create", "--name", "Alpha", "--root", "/tmp/alpha", "--json"],
-      (program) => registerProjectCommands(program, () => "http://daemon"),
+      (program) => registerProjectCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -161,7 +161,7 @@ describe("CLI command output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           projects: {
@@ -176,7 +176,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["manager", "hire", "project-123"], (program) =>
-      registerManagerCommands(program, () => "http://daemon"),
+      registerManagerCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -188,7 +188,7 @@ describe("CLI command output contracts", () => {
 
   it("bb manager list reports when no managers are hired", async () => {
     const list = vi.fn(async () => []);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -199,7 +199,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["manager", "list", "project-123"], (program) =>
-      registerManagerCommands(program, () => "http://daemon"),
+      registerManagerCommands(program, () => "http://server"),
     );
 
     expect(list).toHaveBeenCalledWith({
@@ -238,7 +238,7 @@ describe("CLI command output contracts", () => {
       expect(query.parentThreadId).toBe("thread-manager-1");
       return [managedThread];
     });
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -252,7 +252,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["manager", "status", "thread-manager-1"], (program) =>
-      registerManagerCommands(program, () => "http://daemon"),
+      registerManagerCommands(program, () => "http://server"),
     );
 
     const lines = collectLogLines(vi.mocked(console.log));
@@ -273,7 +273,7 @@ describe("CLI command output contracts", () => {
     };
     const get = vi.fn(async () => managerThread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -288,7 +288,7 @@ describe("CLI command output contracts", () => {
 
     await runCommand(
       ["manager", "delete", "thread-manager-1", "--yes"],
-      (program) => registerManagerCommands(program, () => "http://daemon"),
+      (program) => registerManagerCommands(program, () => "http://server"),
     );
 
     expect(deleteFn).toHaveBeenCalledWith({
@@ -304,7 +304,7 @@ describe("CLI command output contracts", () => {
     process.env.BB_THREAD_ID = "thread-1";
 
     await runCommand(["status"], (program) =>
-      registerStatusCommand(program, () => "http://daemon"),
+      registerStatusCommand(program, () => "http://server"),
     );
 
     const lines = collectLogLines(vi.mocked(console.log));
@@ -324,7 +324,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -335,7 +335,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -348,7 +348,7 @@ describe("CLI command output contracts", () => {
 
   it("bb thread list supports parent-thread filtering", async () => {
     const list = vi.fn(async () => []);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -360,7 +360,7 @@ describe("CLI command output contracts", () => {
 
     await runCommand(
       ["thread", "list", "--project", "proj-1", "--parent-thread", "thread-manager-1"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(list).toHaveBeenCalledWith({
@@ -383,7 +383,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -394,7 +394,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "spawn", "--json"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -415,7 +415,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -427,7 +427,7 @@ describe("CLI command output contracts", () => {
 
     await runCommand(
       ["thread", "spawn", "--parent-thread", "thread-parent"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -452,7 +452,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -463,7 +463,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "spawn", "--environment", "env-worktree-001"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -488,7 +488,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -500,7 +500,7 @@ describe("CLI command output contracts", () => {
 
     await runCommand(
       ["thread", "spawn", "--new-environment", "worktree"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -528,7 +528,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -539,7 +539,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "spawn"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -552,7 +552,7 @@ describe("CLI command output contracts", () => {
 
   it("bb thread archive sends the thread id from args", async () => {
     const archivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -567,7 +567,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "archive", "thread-archive-1"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(archivePost).toHaveBeenCalledWith({
@@ -582,7 +582,7 @@ describe("CLI command output contracts", () => {
   it("bb thread archive --self resolves from BB_THREAD_ID and forwards --force", async () => {
     process.env.BB_THREAD_ID = "thread-archive-2";
     const archivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -597,7 +597,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "archive", "--self", "--force"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(archivePost).toHaveBeenCalledWith({
@@ -609,7 +609,7 @@ describe("CLI command output contracts", () => {
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {
     process.env.BB_THREAD_ID = "thread-unarchive-1";
     const unarchivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -624,7 +624,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "unarchive", "--self"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(unarchivePost).toHaveBeenCalledWith({
@@ -648,7 +648,7 @@ describe("CLI command output contracts", () => {
     };
     const get = vi.fn(async () => thread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -663,7 +663,7 @@ describe("CLI command output contracts", () => {
     readlineState.question.mockResolvedValue("yes");
 
     await runCommand(["thread", "delete", "thread-delete-1"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(get).toHaveBeenCalledWith({
@@ -690,7 +690,7 @@ describe("CLI command output contracts", () => {
     };
     const get = vi.fn(async () => thread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -705,7 +705,7 @@ describe("CLI command output contracts", () => {
     readlineState.question.mockResolvedValue("no");
 
     await runCommand(["thread", "delete", "thread-delete-2"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(deleteFn).not.toHaveBeenCalled();
@@ -726,7 +726,7 @@ describe("CLI command output contracts", () => {
     };
     const get = vi.fn(async () => thread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -740,7 +740,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "delete", "thread-delete-3", "--yes"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(readlineState.question).not.toHaveBeenCalled();
@@ -749,7 +749,7 @@ describe("CLI command output contracts", () => {
     });
   });
 
-  it("bb daemon restart requests daemon shutdown", async () => {
+  it("bb server restart requests server shutdown", async () => {
     const shutdownPost = vi.fn(async () =>
       new Response(
         JSON.stringify({
@@ -762,7 +762,7 @@ describe("CLI command output contracts", () => {
           headers: { "Content-Type": "application/json" },
         },
       ));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           system: {
@@ -778,18 +778,18 @@ describe("CLI command output contracts", () => {
       return response.json();
     });
 
-    await runCommand(["daemon", "restart"], (program) =>
-      registerDaemonCommands(program, () => "http://daemon"),
+    await runCommand(["server", "restart"], (program) =>
+      registerServerCommands(program, () => "http://server"),
     );
 
     expect(shutdownPost).toHaveBeenCalledWith({
       json: {},
     });
     const lines = collectLogLines(vi.mocked(console.log));
-    expect(lines).toContain("Daemon shutdown requested.");
+    expect(lines).toContain("Server shutdown requested.");
   });
 
-  it("bb daemon health prints storage and thread summary", async () => {
+  it("bb server health prints storage and thread summary", async () => {
     const healthGet = vi.fn(async () =>
       new Response(
         JSON.stringify({
@@ -829,7 +829,7 @@ describe("CLI command output contracts", () => {
           headers: { "Content-Type": "application/json" },
         },
       ));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           system: {
@@ -845,13 +845,13 @@ describe("CLI command output contracts", () => {
       return response.json();
     });
 
-    await runCommand(["daemon", "health"], (program) =>
-      registerDaemonCommands(program, () => "http://daemon"),
+    await runCommand(["server", "health"], (program) =>
+      registerServerCommands(program, () => "http://server"),
     );
 
     expect(healthGet).toHaveBeenCalledTimes(1);
     const lines = collectLogLines(vi.mocked(console.log));
-    expect(lines).toContain("Daemon Health");
+    expect(lines).toContain("Server Health");
     expect(lines).toContain("Projects: 2");
     expect(lines).toContain("Running threads: 1");
     expect(lines).toContain("Managed storage: 1.50 KiB");
@@ -872,7 +872,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     };
     const get = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -885,7 +885,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(["thread", "show", "thread-archived-1"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(get).toHaveBeenCalledWith({
@@ -895,12 +895,12 @@ describe("CLI command output contracts", () => {
     expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
   });
 
-  it("bb daemon restart exits when shutdown is blocked by active work", async () => {
+  it("bb server restart exits when shutdown is blocked by active work", async () => {
     const shutdownPost = vi.fn(async () =>
       new Response(
         JSON.stringify({
           code: "shutdown_blocked",
-          message: "Daemon shutdown blocked by active thread work",
+          message: "Server shutdown blocked by active thread work",
           blockingThreads: [
             { id: "thread-1", status: "active", projectId: "proj-1" },
           ],
@@ -910,7 +910,7 @@ describe("CLI command output contracts", () => {
           headers: { "Content-Type": "application/json" },
         },
       ));
-    vi.mocked(createClient).mockReturnValue(asDaemonClient({
+    vi.mocked(createClient).mockReturnValue(asServerClient({
       api: {
         v1: {
           system: {
@@ -923,13 +923,13 @@ describe("CLI command output contracts", () => {
     }));
 
     await expect(
-      runCommand(["daemon", "restart"], (program) =>
-        registerDaemonCommands(program, () => "http://daemon"),
+      runCommand(["server", "restart"], (program) =>
+        registerServerCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
 
     const errorLines = collectLogLines(vi.mocked(console.error));
-    expect(errorLines).toContain("Daemon shutdown blocked by active thread work");
+    expect(errorLines).toContain("Server shutdown blocked by active thread work");
     expect(errorLines).toContain("Blocking threads:");
     expect(errorLines).toContain("- thread-1 (active, project proj-1)");
   });
@@ -957,7 +957,7 @@ describe("CLI JSON output contracts", () => {
     vi.restoreAllMocks();
   });
 
-  it("bb daemon health --json prints the raw report", async () => {
+  it("bb server health --json prints the raw report", async () => {
     const report = {
       generatedAt: 1_700_000_000_000,
       uptime: 3661,
@@ -984,7 +984,7 @@ describe("CLI JSON output contracts", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           system: {
@@ -1000,8 +1000,8 @@ describe("CLI JSON output contracts", () => {
       return response.json();
     });
 
-    await runCommand(["daemon", "health", "--json"], (program) =>
-      registerDaemonCommands(program, () => "http://daemon"),
+    await runCommand(["server", "health", "--json"], (program) =>
+      registerServerCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -1020,7 +1020,7 @@ describe("CLI JSON output contracts", () => {
       updatedAt: 2,
     };
     const get = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1033,7 +1033,7 @@ describe("CLI JSON output contracts", () => {
     }));
 
     await runCommand(["thread", "show", "thread-json-show", "--json"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -1053,7 +1053,7 @@ describe("CLI JSON output contracts", () => {
       updatedAt: 1,
     };
     const patch = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1067,7 +1067,7 @@ describe("CLI JSON output contracts", () => {
 
     await runCommand(
       ["thread", "update", "thread-update-1", "--parent-thread", "thread-manager-1"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(patch).toHaveBeenCalledWith({
@@ -1091,7 +1091,7 @@ describe("CLI JSON output contracts", () => {
       updatedAt: 1,
     };
     const patch = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1104,7 +1104,7 @@ describe("CLI JSON output contracts", () => {
     }));
 
     await runCommand(["thread", "update", "--self", "--clear-parent-thread"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(patch).toHaveBeenCalledWith({
@@ -1136,7 +1136,7 @@ describe("CLI JSON output contracts", () => {
       ],
     };
     const sessionsGet = vi.fn(async () => payload);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1153,7 +1153,7 @@ describe("CLI JSON output contracts", () => {
     }));
 
     await runCommand(["thread", "sessions", "thread-sessions", "--json"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(sessionsGet).toHaveBeenCalledWith({
@@ -1166,7 +1166,7 @@ describe("CLI JSON output contracts", () => {
 
   it("bb thread tell --json prints the raw response plus thread id", async () => {
     const post = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1182,7 +1182,7 @@ describe("CLI JSON output contracts", () => {
 
     await runCommand(
       ["thread", "tell", "thread-json-tell", "hello", "--json"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
@@ -1201,7 +1201,7 @@ describe("CLI JSON output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     } satisfies Thread));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1214,7 +1214,7 @@ describe("CLI JSON output contracts", () => {
     }));
 
     await runCommand(["thread", "wait", "thread-wait", "--status", "idle"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(collectLogLines(vi.mocked(console.log))).toContain(
@@ -1232,7 +1232,7 @@ describe("CLI JSON output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     } satisfies Thread));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1247,7 +1247,7 @@ describe("CLI JSON output contracts", () => {
     await expect(
       runCommand(
         ["thread", "wait", "thread-wait-timeout", "--status", "idle", "--timeout", "0"],
-        (program) => registerThreadCommands(program, () => "http://daemon"),
+        (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:2");
   });
@@ -1282,7 +1282,7 @@ describe("CLI JSON output contracts", () => {
     ];
     const get = vi.fn(async () => thread);
     const getEvents = vi.fn(async () => events);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1299,7 +1299,7 @@ describe("CLI JSON output contracts", () => {
 
     await runCommand(
       ["thread", "show", "thread-json-status", "--recent-events", "5", "--json"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -1327,7 +1327,7 @@ describe("CLI JSON output contracts", () => {
       },
     ];
     const getEvents = vi.fn(async () => events);
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1342,7 +1342,7 @@ describe("CLI JSON output contracts", () => {
     }));
 
     await runCommand(["thread", "log", "thread-json-log", "--json"], (program) =>
-      registerThreadCommands(program, () => "http://daemon"),
+      registerThreadCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
@@ -1352,7 +1352,7 @@ describe("CLI JSON output contracts", () => {
 
   it("bb thread output --json prints the raw output payload", async () => {
     const getOutput = vi.fn(async () => ({ output: "FINAL" }));
-    createClientMock.mockReturnValue(asDaemonClient({
+    createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
@@ -1368,7 +1368,7 @@ describe("CLI JSON output contracts", () => {
 
     await runCommand(
       ["thread", "output", "thread-json-output", "--json"],
-      (program) => registerThreadCommands(program, () => "http://daemon"),
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({

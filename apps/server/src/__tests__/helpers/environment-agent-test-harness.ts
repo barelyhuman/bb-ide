@@ -174,7 +174,7 @@ export function respondToEnvironmentAgentControlMessage(
             payload: {
               protocolVersion: 1,
               latestSequence: 0,
-              connectedToDaemon: true,
+              connectedToServer: true,
               pendingEventCount: 0,
               pendingCommandCount: 0,
               deliveryState: "healthy",
@@ -518,7 +518,7 @@ export function createFakeEnvironmentAgentClient(
     status: async () => ({
       protocolVersion: 1,
       latestSequence: 0,
-      connectedToDaemon: true,
+      connectedToServer: true,
       pendingEventCount: 0,
       pendingCommandCount: 0,
       deliveryState: "healthy",

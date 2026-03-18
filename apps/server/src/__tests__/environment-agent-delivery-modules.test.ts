@@ -62,8 +62,8 @@ describe("environment-agent delivery modules", () => {
 
   function createProject() {
     return projects.create({
-      name: "daemon-delivery-modules-project",
-      rootPath: "/tmp/daemon-delivery-modules-project",
+      name: "server-delivery-modules-project",
+      rootPath: "/tmp/server-delivery-modules-project",
     });
   }
 
@@ -80,7 +80,7 @@ describe("environment-agent delivery modules", () => {
       projectId: thread.projectId,
       descriptor: {
         type: "path",
-        path: `/tmp/daemon-delivery-modules-project/.worktrees/${threadId}`,
+        path: `/tmp/server-delivery-modules-project/.worktrees/${threadId}`,
       },
       managed: true,
     });

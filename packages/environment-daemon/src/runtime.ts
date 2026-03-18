@@ -17,7 +17,7 @@ import {
   type EnvironmentAgentCommand,
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentCommandAck,
-  type EnvironmentAgentDaemonConnectionConfig,
+  type EnvironmentAgentServerConnectionConfig,
   type EnvironmentAgentDeliveryReason,
   type EnvironmentAgentDeliveryRuntimeState,
   type EnvironmentAgentEvent,
@@ -53,7 +53,7 @@ export interface EnvironmentAgentRuntimeOptions {
   projectId?: string;
   environmentId?: string;
   providerId?: string;
-  daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
+  serverConnection?: EnvironmentAgentServerConnectionConfig;
   providerCommand?: string;
   providerArgs?: string[];
   providerLaunchCommand?: string;
@@ -112,7 +112,7 @@ export class EnvironmentAgentRuntime {
   private hasObservedWork = false;
   private turnState: EnvironmentAgentRuntimeTurnState = "unknown";
   private deliveryState: EnvironmentAgentDeliveryRuntimeState = "stopped";
-  private connectedToDaemon = false;
+  private connectedToServer = false;
   private retryAttemptCount = 0;
   private lastAckedSequence: number | undefined;
   private nextRetryAt: number | undefined;
@@ -266,7 +266,7 @@ export class EnvironmentAgentRuntime {
       ...(this.lastAckedSequence !== undefined
         ? { lastAckedSequence: this.lastAckedSequence }
         : {}),
-      connectedToDaemon: this.connectedToDaemon,
+      connectedToServer: this.connectedToServer,
       pendingEventCount,
       pendingCommandCount: this.pendingProviderRequests.size,
       deliveryState: this.deliveryState,
@@ -278,7 +278,7 @@ export class EnvironmentAgentRuntime {
   }
 
   setDaemonDeliveryState(args: {
-    connectedToDaemon: boolean;
+    connectedToServer: boolean;
     deliveryState: EnvironmentAgentDeliveryRuntimeState;
     retryAttemptCount: number;
     lastAckedSequence?: number;
@@ -286,7 +286,7 @@ export class EnvironmentAgentRuntime {
     deliveryIssue?: EnvironmentAgentDeliveryReason;
     lastDeliveryError?: string;
   }): void {
-    this.connectedToDaemon = args.connectedToDaemon;
+    this.connectedToServer = args.connectedToServer;
     this.deliveryState = args.deliveryState;
     this.retryAttemptCount = args.retryAttemptCount;
     this.lastAckedSequence = args.lastAckedSequence;

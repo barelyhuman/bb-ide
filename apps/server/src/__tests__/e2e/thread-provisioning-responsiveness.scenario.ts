@@ -8,7 +8,7 @@ import type {
   ThreadTimelineResponse,
 } from "@bb/core";
 import {
-  startDaemonE2eHarness,
+  startServerE2eHarness,
 } from "./harness.js";
 import { waitForThreadCondition } from "./environment-agent-api.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
@@ -80,7 +80,7 @@ async function waitForThreadToEnterProvisioning(
 }
 
 export async function runThreadProvisioningResponsivenessScenario(): Promise<void> {
-  const harness = await startDaemonE2eHarness({
+  const harness = await startServerE2eHarness({
     fakeCodex: {
       defaultTurnDelayMs: 10,
     },

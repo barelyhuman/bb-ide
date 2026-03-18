@@ -1,7 +1,7 @@
 export type {
   EnvironmentAgentConnectionTarget,
   EnvironmentAgentTransportKind,
-  EnvironmentAgentDaemonConnectionConfig,
+  EnvironmentAgentServerConnectionConfig,
   EnvironmentAgentProviderLaunchWrapper,
   EnvironmentAgentProviderSpec,
   EnvironmentAgentProviderFile,

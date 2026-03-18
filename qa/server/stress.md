@@ -1,16 +1,16 @@
-# Daemon / Env-Agent Stress QA
+# Server / Env-Agent Stress QA
 
 Use this pass for restart, recovery, and timing-sensitive lifecycle coverage.
 
 ## Goal
 
-Exercise the parts of daemon/env-agent behavior most likely to regress under restart, worker loss, queued work, and lifecycle boundary conditions.
+Exercise the parts of server/env-agent behavior most likely to regress under restart, worker loss, queued work, and lifecycle boundary conditions.
 
 ## When to run
 
 - nightly or pre-release manual validation
 - after major lifecycle rewrite or recovery-path changes
-- when debugging flaky or timing-sensitive daemon behavior
+- when debugging flaky or timing-sensitive server behavior
 
 ## Suggested runtime
 
@@ -19,20 +19,20 @@ Exercise the parts of daemon/env-agent behavior most likely to regress under res
 ## Required setup
 
 Use the full setup instructions in:
-- [`./standalone-daemon-qa.md`](./standalone-daemon-qa.md)
+- [`./standalone-server-qa.md`](./standalone-server-qa.md)
 
 ## Automation entrypoint
 
 For the checked-in deterministic harness:
 
 ```bash
-pnpm qa:daemon:stress
-pnpm qa:daemon:recovery:fake
+pnpm qa:server:stress
+pnpm qa:server:recovery:fake
 ```
 
-`qa:daemon:stress` is the real-provider scripted stress slice.
+`qa:server:stress` is the real-provider scripted stress slice.
 
-`qa:daemon:recovery:fake` is the deterministic recovery slice for scenarios that require fake Codex control hooks, such as worker-loss injection, restart matrix coverage, and standalone restart cases that cannot be driven reliably through the real provider alone.
+`qa:server:recovery:fake` is the deterministic recovery slice for scenarios that require fake Codex control hooks, such as worker-loss injection, restart matrix coverage, and standalone restart cases that cannot be driven reliably through the real provider alone.
 
 Keep real-provider restart/liveness confirmation in the manual pass when timing sensitivity matters.
 

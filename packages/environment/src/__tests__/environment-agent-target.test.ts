@@ -26,7 +26,7 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
         defaultTarget: {
           transport: "http",
           baseUrl: "http://127.0.0.1:4010",
-          daemonConnection: {
+          serverConnection: {
             threadId: "thread-1",
           },
           providerLaunch: {
@@ -41,7 +41,7 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
       headers: {
         authorization: "Bearer secret-token",
       },
-      daemonConnection: {
+      serverConnection: {
         threadId: "thread-1",
       },
       providerLaunch: {

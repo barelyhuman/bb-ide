@@ -1,6 +1,6 @@
 # Manager Agent QA
 
-This guide covers end-to-end QA for the manager agent flow against a real standalone daemon and the real Codex provider.
+This guide covers end-to-end QA for the manager agent flow against a real standalone server and the real Codex provider.
 
 Use this pass after changes to:
 
@@ -30,16 +30,16 @@ Additional manager-specific coverage:
 
 ## Prerequisites
 
-- Build the daemon and CLI:
+- Build the server and CLI:
 
 ```bash
 pnpm exec turbo run build --filter=@bb/server --filter=@bb/cli
 ```
 
 - Use a disposable repo, disposable BB root, and disposable `HOME`.
-- Use a real standalone daemon, not the app-integrated daemon.
-- Keep the daemon log open in another shell while running the pass.
-- Copy the current Codex auth/config into the disposable `HOME` before starting the daemon. This avoids shared host state while preserving provider auth.
+- Use a real standalone server, not the app-integrated server.
+- Keep the server log open in another shell while running the pass.
+- Copy the current Codex auth/config into the disposable `HOME` before starting the server. This avoids shared host state while preserving provider auth.
 
 ## Setup
 
@@ -85,7 +85,7 @@ GIT_COMMITTER_EMAIL='bb-test@example.com' \
 git -C "$project_root" commit -m init
 ```
 
-Start the standalone daemon:
+Start the standalone server:
 
 ```bash
 HOME="$tmp_home" \
@@ -96,7 +96,7 @@ node apps/server/dist/index.js --port 4311
 In another shell:
 
 ```bash
-export BB_DAEMON_URL=http://127.0.0.1:4311
+export BB_SERVER_URL=http://127.0.0.1:4311
 ```
 
 Create the project:
@@ -261,5 +261,5 @@ Record at least:
 - whether the failure was:
   - prompt behavior
   - CLI surface gap
-  - daemon/orchestration bug
+  - server/orchestration bug
   - documentation drift

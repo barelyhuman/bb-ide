@@ -58,7 +58,7 @@ async function ensureDependencyBuilds() {
   return null;
 }
 
-function runDaemonOnce() {
+function runServerOnce() {
   return new Promise((resolve) => {
     const child = spawn(
       "tsx",
@@ -93,7 +93,7 @@ while (true) {
     process.exit(normalizeExitCode(buildFailure.code, buildFailure.signal));
   }
 
-  const { code, signal } = await runDaemonOnce();
+  const { code, signal } = await runServerOnce();
 
   if (stopRequested) {
     process.exit(normalizeExitCode(code, signal));

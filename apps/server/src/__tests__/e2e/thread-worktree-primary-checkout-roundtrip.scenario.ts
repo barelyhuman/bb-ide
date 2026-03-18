@@ -7,7 +7,7 @@ import {
   waitForThreadCondition,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
-import { runCliCommand, startDaemonE2eHarness } from "./harness.js";
+import { runCliCommand, startServerE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
 async function waitForPrimaryCheckoutState(args: {
@@ -37,7 +37,7 @@ async function waitForPrimaryCheckoutState(args: {
 }
 
 export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promise<void> {
-  const harness = await startDaemonE2eHarness({
+  const harness = await startServerE2eHarness({
     fakeCodex: {
       defaultTurnDelayMs: 25,
       defaultScenario: "turn-complete",

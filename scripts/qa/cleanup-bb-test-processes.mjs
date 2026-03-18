@@ -11,17 +11,17 @@ const __dirname = dirname(__filename);
 const WORKSPACE_ROOT = resolve(__dirname, "..", "..");
 const KNOWN_TEST_PROCESS_PATTERNS = [
   resolve(WORKSPACE_ROOT, "packages", "environment-agent", "dist", "environment-agent.bundle.mjs"),
-  resolve(WORKSPACE_ROOT, "apps", "daemon", "dist", "index.js"),
+  resolve(WORKSPACE_ROOT, "apps", "server", "dist", "index.js"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "run-fake-recovery-suite.mjs"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "cleanup-bb-test-processes.mjs"),
-  resolve(WORKSPACE_ROOT, "scripts", "qa", "start-standalone-daemon-qa.mjs"),
-  resolve(WORKSPACE_ROOT, "scripts", "qa", "stop-standalone-daemon-qa.mjs"),
-  resolve(WORKSPACE_ROOT, "scripts", "qa", "relaunch-standalone-daemon-qa.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "start-standalone-server-qa.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "stop-standalone-server-qa.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "relaunch-standalone-server-qa.mjs"),
 ];
 
 const KNOWN_TMP_PREFIXES = [
-  "bb-daemon-e2e-",
-  "bb-standalone-daemon-",
+  "bb-server-e2e-",
+  "bb-standalone-server-",
   "bb-standalone-blocked-",
   "bb-qa-",
   "bb-environment-daemon",

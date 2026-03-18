@@ -119,11 +119,11 @@ Ownership: `EnvironmentAgentSessionRepository`.
 
 Closed-internal invariants:
 
-- `control_base_url` and `control_auth_token` are persisted restart hints for daemon nudges, not thread truth
+- `control_base_url` and `control_auth_token` are persisted restart hints for server nudges, not thread truth
 - valid `status`: `active`, `expired`, `closed`, `replaced`
 - valid `close_reason` when present:
   - `agent_shutdown`
-  - `daemon_shutdown`
+  - `server_shutdown`
   - `lease_expired`
   - `newer_session`
   - `migration`

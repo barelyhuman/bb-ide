@@ -40,7 +40,7 @@ No other cross-package runtime imports are allowed.
 ### `@bb/environment`
 
 - Environment adapter registry and implementations (`local`, `worktree`).
-- Workspace/process helpers used by daemon orchestration.
+- Workspace/process helpers used by server orchestration.
 
 ### `@bb/db`
 

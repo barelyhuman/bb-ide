@@ -69,7 +69,7 @@ export function decodeSystemShutdownBlockedResponse(
     code: "shutdown_blocked",
     message:
       getStringField(record, "message") ??
-      "Daemon shutdown blocked by active thread work",
+      "Server shutdown blocked by active thread work",
     blockingThreads,
   };
 }

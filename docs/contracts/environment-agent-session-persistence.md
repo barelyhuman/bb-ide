@@ -2,7 +2,7 @@
 
 Status: current
 
-This document describes the persistence model that matches the current daemon `<->` environment-agent lifecycle.
+This document describes the persistence model that matches the current server `<->` environment-agent lifecycle.
 
 It complements:
 
@@ -10,27 +10,27 @@ It complements:
 
 ## Ownership
 
-The daemon database is the only durable source of truth for:
+The server database is the only durable source of truth for:
 
 - thread status
 - applied thread event history
 - env-agent session lease records
-- daemon-applied event cursors
-- daemon-owned command delivery state
+- server-applied event cursors
+- server-owned command delivery state
 - last-known env-agent control endpoint used for restart nudges
 
 The environment-agent only keeps best-effort in-memory runtime state for:
 
 - current bound session id
-- current generation and last daemon-acked cursor
+- current generation and last server-acked cursor
 - unacked outbound events
 - command receipt and result dedupe
 
 If the environment-agent dies, its local state may be lost. That is acceptable by design.
 
-## Daemon Persistence
+## Server Persistence
 
-The daemon persists three transport-facing concerns:
+The server persists three transport-facing concerns:
 
 ### `environment_agent_sessions`
 
@@ -61,7 +61,7 @@ Important invariants:
 
 ### `environment_agent_cursors`
 
-Tracks the daemon's last durably applied event cursor per thread.
+Tracks the server's last durably applied event cursor per thread.
 
 Important fields:
 
@@ -78,7 +78,7 @@ Important invariants:
 
 ### `environment_agent_commands`
 
-Tracks the daemon-owned command log and delivery lifecycle.
+Tracks the server-owned command log and delivery lifecycle.
 
 Important fields:
 
@@ -108,22 +108,22 @@ The environment-agent keeps runtime-only in-memory state in `packages/environmen
 Important state:
 
 - thread session state
-- outbox events waiting for daemon ack
+- outbox events waiting for server ack
 - command receipts and reported results
 
 Important invariants:
 
 - runtime state is not crash-durable
-- daemon correctness must not depend on recovering it
+- server correctness must not depend on recovering it
 - reconnect may flush surviving buffered state, but recovery does not require it
 
 ## Liveness
 
-Liveness is daemon-owned and heartbeat-based.
+Liveness is server-owned and heartbeat-based.
 
-- the daemon persists heartbeat timestamps
+- the server persists heartbeat timestamps
 - the agent retries failed heartbeats with backoff
-- daemon restart nudges known live agents and resets the liveness baseline
+- server restart nudges known live agents and resets the liveness baseline
 - missing heartbeat past timeout is treated as worker loss, not as a replay problem
 
 ## Status Consequences
@@ -138,5 +138,5 @@ Liveness is daemon-owned and heartbeat-based.
 This model does not provide:
 
 - crash-durable agent-local outbox storage
-- daemon recovery that depends on hidden agent-local state
+- server recovery that depends on hidden agent-local state
 - broker-style session rebinding across replacement workers

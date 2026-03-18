@@ -169,18 +169,18 @@ describe("environment-agent repositories", () => {
 
     const closed = sessions.markClosed({
       sessionId: created.id,
-      reason: "daemon_shutdown",
+      reason: "server_shutdown",
       now: 7_000,
     });
     expect(closed).toMatchObject({
       id: created.id,
       status: "closed",
-      closeReason: "daemon_shutdown",
+      closeReason: "server_shutdown",
       closedAt: 7_000,
     });
   });
 
-  it("closes all active sessions for daemon restart recovery", () => {
+  it("closes all active sessions for server restart recovery", () => {
     const firstThreadId = createThreadId();
     const secondThreadId = createThreadId();
     sessions.create({
@@ -205,19 +205,19 @@ describe("environment-agent repositories", () => {
     });
 
     const closedCount = sessions.closeAllActive({
-      reason: "daemon_shutdown",
+      reason: "server_shutdown",
       now: 2_000,
     });
 
     expect(closedCount).toBe(2);
     expect(sessions.getById("sess-active-1")).toMatchObject({
       status: "closed",
-      closeReason: "daemon_shutdown",
+      closeReason: "server_shutdown",
       closedAt: 2_000,
     });
     expect(sessions.getById("sess-active-2")).toMatchObject({
       status: "closed",
-      closeReason: "daemon_shutdown",
+      closeReason: "server_shutdown",
       closedAt: 2_000,
     });
   });

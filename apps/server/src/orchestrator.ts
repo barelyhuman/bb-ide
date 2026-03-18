@@ -290,7 +290,7 @@ function resolveBbBinDir(pathValue: string | undefined): string | undefined {
   return undefined;
 }
 
-function resolveCliDaemonUrl(rawUrl: string | undefined): string | undefined {
+function resolveCliServerUrl(rawUrl: string | undefined): string | undefined {
   const trimmed = rawUrl?.trim();
   if (!trimmed) return undefined;
   return trimmed.replace(/\/api\/v1\/?$/u, "");
@@ -684,7 +684,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private tellInFlightByThreadId = new Map<string, Promise<void>>();
   /** Last known active turn id derived from delivered provider lifecycle events. */
   private activeTurnIdByThreadId = new Map<string, string>();
-  /** Provider thread ids attached in the current daemon process. */
+  /** Provider thread ids attached in the current server process. */
   private providerThreadIdByThreadId = new Map<string, string>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
@@ -894,7 +894,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   /**
-   * Startup only reconstructs minimal daemon state:
+   * Startup only reconstructs minimal server state:
    * - finalize archived environments that still claim persisted resources
    * - leave non-archived environments to reconnect or restart lazily on demand
    */
@@ -922,8 +922,8 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const message =
         thread.status === "provisioned"
-          ? "Daemon restart interrupted provider bootstrap before the thread became active."
-          : "Daemon restart interrupted environment provisioning before provider bootstrap completed.";
+          ? "Server restart interrupted provider bootstrap before the thread became active."
+          : "Server restart interrupted environment provisioning before provider bootstrap completed.";
       this._appendEvent(
         threadId,
         "system/error",
@@ -5039,8 +5039,8 @@ export class Orchestrator implements ThreadOrchestrator {
     return {
       projectId: args.projectId,
       threadId: args.threadId,
-      ...(resolveCliDaemonUrl(this.runtimeEnv.BB_DAEMON_URL)
-        ? { daemonUrl: resolveCliDaemonUrl(this.runtimeEnv.BB_DAEMON_URL) }
+      ...(resolveCliServerUrl(this.runtimeEnv.BB_SERVER_URL)
+        ? { serverUrl: resolveCliServerUrl(this.runtimeEnv.BB_SERVER_URL) }
         : {}),
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
     };
@@ -5074,8 +5074,8 @@ export class Orchestrator implements ThreadOrchestrator {
                 : {}),
               "shell_environment_policy.set.BB_PROJECT_ID": context.projectId,
               "shell_environment_policy.set.BB_THREAD_ID": context.threadId,
-              ...(context.daemonUrl
-                ? { "shell_environment_policy.set.BB_DAEMON_URL": context.daemonUrl }
+              ...(context.serverUrl
+                ? { "shell_environment_policy.set.BB_SERVER_URL": context.serverUrl }
                 : {}),
               "shell_environment_policy.set.PATH": context.path,
             },

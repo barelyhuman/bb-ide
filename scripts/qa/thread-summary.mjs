@@ -39,7 +39,7 @@ async function readJson(url) {
 }
 
 const { threadId, outPath } = parseArgs(process.argv.slice(2));
-const baseUrl = process.env.BB_DAEMON_URL ?? "http://127.0.0.1:4310";
+const baseUrl = process.env.BB_SERVER_URL ?? "http://127.0.0.1:4310";
 
 const [thread, sessions, status, health] = await Promise.all([
   readJson(`${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}`),
@@ -52,7 +52,7 @@ const [thread, sessions, status, health] = await Promise.all([
 
 const summary = {
   generatedAt: new Date().toISOString(),
-  daemonUrl: baseUrl,
+  serverUrl: baseUrl,
   threadId,
   thread: {
     id: thread.id,
@@ -72,7 +72,7 @@ const summary = {
     Array.isArray(sessions.sessions) && sessions.sessions.length > 0
       ? sessions.sessions[0]
       : null,
-  daemonHealth: health,
+  serverHealth: health,
 };
 
 const payload = JSON.stringify(summary, null, 2);

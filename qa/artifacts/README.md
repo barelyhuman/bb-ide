@@ -4,7 +4,7 @@ Use this folder for failure bundles and saved outputs from QA runs.
 
 ## Preferred artifact capture
 
-For a thread-specific daemon/env-agent failure:
+For a thread-specific server/env-agent failure:
 
 ```bash
 node scripts/qa/capture-thread-failure-bundle.mjs <thread-id> --scenario <short-name>
@@ -17,8 +17,8 @@ That writes a timestamped folder under `qa/artifacts/` containing:
 - thread log
 - thread output
 - thread session inspection output
-- daemon health snapshot
-- daemon log copy when `BB_ROOT` is available
+- server health snapshot
+- server log copy when `BB_ROOT` is available
 
 For a quick thread summary without a full bundle:
 

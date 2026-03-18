@@ -47,8 +47,8 @@ describe("EnvironmentAgentSessionManager", () => {
 
   function createProject() {
     return projects.create({
-      name: "daemon-session-manager-project",
-      rootPath: "/tmp/daemon-session-manager-project",
+      name: "server-session-manager-project",
+      rootPath: "/tmp/server-session-manager-project",
     });
   }
 
@@ -65,7 +65,7 @@ describe("EnvironmentAgentSessionManager", () => {
       projectId: thread.projectId,
       descriptor: {
         type: "path",
-        path: `/tmp/daemon-session-manager-project/.worktrees/${threadId}`,
+        path: `/tmp/server-session-manager-project/.worktrees/${threadId}`,
       },
       managed: true,
     });

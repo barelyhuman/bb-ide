@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  DEFAULT_DAEMON_URL,
+  DEFAULT_SERVER_URL,
   requireProjectId,
   requireThreadId,
   resolveContextSnapshot,
-  resolveDaemonUrl,
+  resolveServerUrl,
   resolveProjectId,
   resolveThreadId,
 } from "../context-env.js";
 
-const ENV_KEYS = ["BB_PROJECT_ID", "BB_THREAD_ID", "BB_DAEMON_URL"] as const;
+const ENV_KEYS = ["BB_PROJECT_ID", "BB_THREAD_ID", "BB_SERVER_URL"] as const;
 
 describe("context-env", () => {
   const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
@@ -31,10 +31,10 @@ describe("context-env", () => {
     }
   });
 
-  it("resolves daemon url from env with fallback", () => {
-    expect(resolveDaemonUrl()).toBe(DEFAULT_DAEMON_URL);
-    process.env.BB_DAEMON_URL = "http://127.0.0.1:5555";
-    expect(resolveDaemonUrl()).toBe("http://127.0.0.1:5555");
+  it("resolves server url from env with fallback", () => {
+    expect(resolveServerUrl()).toBe(DEFAULT_SERVER_URL);
+    process.env.BB_SERVER_URL = "http://127.0.0.1:5555";
+    expect(resolveServerUrl()).toBe("http://127.0.0.1:5555");
   });
 
   it("requires project and thread context when missing", () => {
@@ -65,13 +65,13 @@ describe("context-env", () => {
   it("captures a consistent context snapshot", () => {
     process.env.BB_PROJECT_ID = "proj-1";
     process.env.BB_THREAD_ID = "thread-1";
-    process.env.BB_DAEMON_URL = "http://localhost:4444";
+    process.env.BB_SERVER_URL = "http://localhost:4444";
 
     expect(resolveContextSnapshot()).toEqual({
       projectId: "proj-1",
       threadId: "thread-1",
-      daemonUrl: "http://localhost:4444",
-      daemonUrlFromEnv: "http://localhost:4444",
+      serverUrl: "http://localhost:4444",
+      serverUrlFromEnv: "http://localhost:4444",
     });
   });
 });

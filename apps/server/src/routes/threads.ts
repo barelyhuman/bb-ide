@@ -72,7 +72,7 @@ const environmentAgentSessionCursorSchema = z.object({
 const environmentAgentSessionChannelBootstrapSchema = z.object({
   channelId: z.string().min(1),
   generation: z.number().int().min(0),
-  lastDaemonAcked: environmentAgentSessionCursorSchema.optional(),
+  lastServerAcked: environmentAgentSessionCursorSchema.optional(),
 });
 
 const environmentAgentSessionCapabilitiesSchema = z.object({
@@ -265,7 +265,7 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
   environmentAgentSessionMessageBaseSchema.extend({
     type: z.literal("session_close"),
     payload: z.object({
-      reason: z.enum(["agent_shutdown", "daemon_shutdown", "migration", "internal_error"]),
+      reason: z.enum(["agent_shutdown", "server_shutdown", "migration", "internal_error"]),
     }),
   }),
 ]);
@@ -898,7 +898,7 @@ export function createThreadRoutes(
               environmentAgentSessionService.closeSession({
                 threadId,
                 sessionId: body.sessionId,
-                reason: (body.payload as { reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error" }).reason,
+                reason: (body.payload as { reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error" }).reason,
               });
               return c.body(null, 204);
             default:

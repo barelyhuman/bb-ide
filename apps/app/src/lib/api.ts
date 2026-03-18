@@ -627,7 +627,7 @@ export async function getSystemRestartPolicy(): Promise<SystemRestartPolicy> {
   return request<SystemRestartPolicy>(apiClient.system["restart-policy"].$get());
 }
 
-export async function shutdownDaemon(
+export async function shutdownServer(
   req: SystemShutdownRequest = {},
 ): Promise<SystemShutdownAcceptedResponse> {
   const res = await apiClient.system.shutdown.$post({ json: req });
@@ -675,7 +675,7 @@ export async function shutdownDaemon(
   return JSON.parse(text) as SystemShutdownAcceptedResponse;
 }
 
-export async function restartDaemon(
+export async function restartServer(
   req: SystemRestartRequest = {},
 ): Promise<SystemRestartAcceptedResponse> {
   const res = await apiClient.system.restart.$post({ json: req });

@@ -25,7 +25,7 @@ import {
   waitForThreadCondition,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
-import { startDaemonE2eHarness } from "./harness.js";
+import { startServerE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
 type EnvironmentKind = "local" | "worktree";
@@ -165,7 +165,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
 ): Promise<void> {
   debugLog(`queued-followup/${environmentKind}: start`);
   const port = await allocateLocalPort();
-  let harness = await startDaemonE2eHarness({
+  let harness = await startServerE2eHarness({
     port,
     fakeCodex: {
       defaultTurnDelayMs: 2_000,
@@ -216,7 +216,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
     await harness.shutdownForRestart();
     killSessionProcess(activeSession!);
 
-    harness = await startDaemonE2eHarness({
+    harness = await startServerE2eHarness({
       tempDir,
       port,
       fakeCodex: {
@@ -286,7 +286,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
 export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void> {
   debugLog("archive-after-worker-loss: start");
   const port = await allocateLocalPort();
-  let harness = await startDaemonE2eHarness({
+  let harness = await startServerE2eHarness({
     port,
     fakeCodex: {
       defaultTurnDelayMs: 2_000,
@@ -326,7 +326,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
     await harness.shutdownForRestart();
     killSessionProcess(activeSession!);
 
-    harness = await startDaemonE2eHarness({
+    harness = await startServerE2eHarness({
       tempDir,
       port,
       fakeCodex: {
@@ -474,7 +474,7 @@ async function postStaleEventBatch(args: {
 export async function runStaleOldSessionNoiseScenario(): Promise<void> {
   debugLog("stale-old-session-noise: start");
   const port = await allocateLocalPort();
-  let harness = await startDaemonE2eHarness({
+  let harness = await startServerE2eHarness({
     port,
     fakeCodex: {
       defaultTurnDelayMs: 2_000,
@@ -513,7 +513,7 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
     await harness.shutdownForRestart();
     killSessionProcess(oldSession!);
 
-    harness = await startDaemonE2eHarness({
+    harness = await startServerE2eHarness({
       tempDir,
       port,
       fakeCodex: {

@@ -120,6 +120,6 @@ bb provider models [providerId]        # List available models (optionally filte
 ```
 bb status                              # Show current context (resolved project and thread IDs)
 bb guide                               # Show the BB system overview and CLI guide
-bb daemon health                       # Show daemon health and storage usage
-bb daemon restart                      # Restart the daemon
+bb server health                       # Show server health and storage usage
+bb server restart                      # Restart the server
 ```

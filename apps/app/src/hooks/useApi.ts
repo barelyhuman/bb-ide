@@ -1169,24 +1169,24 @@ export function useDemotePrimaryCheckout() {
   });
 }
 
-export function useShutdownDaemon() {
+export function useShutdownServer() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (req?: SystemShutdownRequest): Promise<SystemShutdownAcceptedResponse> =>
-      api.shutdownDaemon(req),
+      api.shutdownServer(req),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });
 }
 
-export function useRestartDaemon() {
+export function useRestartServer() {
   return useMutation({
     mutationFn: (req?: SystemRestartRequest): Promise<SystemRestartAcceptedResponse> =>
-      api.restartDaemon(req),
+      api.restartServer(req),
     // Avoid immediately refetching system endpoints here: a successful restart
-    // request intentionally drops the daemon for a moment, which can produce
+    // request intentionally drops the server for a moment, which can produce
     // noisy transient 5xx proxy errors in the browser console. The websocket
-    // reconnect path already invalidates queries once the daemon is back.
+    // reconnect path already invalidates queries once the server is back.
   });
 }

@@ -441,7 +441,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(resumeThreadCommand).toHaveBeenCalled();
   });
 
-  it("retries a provider resume after session loss through the daemon ensure path", async () => {
+  it("retries a provider resume after session loss through the server ensure path", async () => {
     const env = createTestEnvironment(environmentRepo, projectId);
     const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
@@ -645,7 +645,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(2);
   });
 
-  it("revalidates persisted provider thread ids when hot daemon state disagrees", async () => {
+  it("revalidates persisted provider thread ids when hot server state disagrees", async () => {
     const env = createTestEnvironment(environmentRepo, projectId);
     const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
@@ -977,7 +977,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       protocolVersion: 1,
       threadId: thread.id,
       latestSequence: 3,
-      connectedToDaemon: true,
+      connectedToServer: true,
       pendingEventCount: 0,
       pendingCommandCount: 1,
       deliveryState: "healthy",

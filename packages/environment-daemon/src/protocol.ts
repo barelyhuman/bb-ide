@@ -43,12 +43,12 @@ export type EnvironmentAgentConnectionTarget =
     transport: "http";
     baseUrl: string;
     headers?: Record<string, string>;
-    daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
+    serverConnection?: EnvironmentAgentServerConnectionConfig;
     providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
   };
 
-export interface EnvironmentAgentDaemonConnectionConfig {
-  daemonUrl?: string;
+export interface EnvironmentAgentServerConnectionConfig {
+  serverUrl?: string;
   authToken?: string;
   threadId?: string;
   projectId?: string;
@@ -256,7 +256,7 @@ export interface EnvironmentAgentStatusSnapshot {
   environmentId?: string;
   latestSequence: number;
   lastAckedSequence?: number;
-  connectedToDaemon: boolean;
+  connectedToServer: boolean;
   pendingEventCount: number;
   pendingCommandCount: number;
   deliveryState: EnvironmentAgentDeliveryRuntimeState;

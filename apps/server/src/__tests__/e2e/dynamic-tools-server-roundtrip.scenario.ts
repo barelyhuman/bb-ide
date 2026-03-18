@@ -7,9 +7,9 @@ import {
   readJson,
   waitForThreadCondition,
 } from "./environment-agent-api.js";
-import { startDaemonE2eHarness } from "./harness.js";
+import { startServerE2eHarness } from "./harness.js";
 
-export async function runDynamicToolsDaemonRoundtripScenario(): Promise<void> {
+export async function runDynamicToolsServerRoundtripScenario(): Promise<void> {
   const toolCalls: string[] = [];
   const toolHost = new ProviderToolHost([
     {
@@ -34,7 +34,7 @@ export async function runDynamicToolsDaemonRoundtripScenario(): Promise<void> {
       },
     },
   ]);
-  const harness = await startDaemonE2eHarness({
+  const harness = await startServerE2eHarness({
     providerMode: "real",
     providerToolHost: toolHost,
   });
@@ -43,7 +43,7 @@ export async function runDynamicToolsDaemonRoundtripScenario(): Promise<void> {
     const project = await createProject(
       harness.baseUrl,
       harness.projectRoot,
-      "e2e-daemon-dynamic-tools-project",
+      "e2e-server-dynamic-tools-project",
     );
     const thread = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads`, {
       method: "POST",
@@ -54,7 +54,7 @@ export async function runDynamicToolsDaemonRoundtripScenario(): Promise<void> {
           {
             type: "text",
             text:
-              'Use echo_test_tool with message "from-daemon-dynamic". After the tool returns, reply with exactly the returned text and nothing else.',
+              'Use echo_test_tool with message "from-server-dynamic". After the tool returns, reply with exactly the returned text and nothing else.',
           },
         ],
       }),
@@ -77,7 +77,7 @@ export async function runDynamicToolsDaemonRoundtripScenario(): Promise<void> {
     ]);
 
     expect(toolCalls).toContain("echo_test_tool");
-    expect(output?.toLowerCase()).toContain("from-daemon-dynamic");
+    expect(output?.toLowerCase()).toContain("from-server-dynamic");
     expect(events.some((event) => event.type === "item/completed")).toBe(true);
   } finally {
     await harness.cleanup();

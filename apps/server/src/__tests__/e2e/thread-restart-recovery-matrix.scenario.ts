@@ -14,7 +14,7 @@ import {
   waitForThreadCondition,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
-import { startDaemonE2eHarness } from "./harness.js";
+import { startServerE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
 type EnvironmentKind = "local" | "worktree";
@@ -150,7 +150,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
   environmentKind: EnvironmentKind;
 }): Promise<void> {
   const port = await allocateLocalPort();
-  let harness = await startDaemonE2eHarness({
+  let harness = await startServerE2eHarness({
     port,
     fakeCodex: {
       defaultTurnDelayMs: 2_000,
@@ -195,7 +195,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
     await harness.shutdownForRestart();
     killSessionProcess(activeSession!);
 
-    harness = await startDaemonE2eHarness({
+    harness = await startServerE2eHarness({
       tempDir,
       port,
       fakeCodex: {
@@ -268,7 +268,7 @@ async function runIdleRestartFreshSessionScenario(args: {
   environmentKind: EnvironmentKind;
 }): Promise<void> {
   const port = await allocateLocalPort();
-  let harness = await startDaemonE2eHarness({
+  let harness = await startServerE2eHarness({
     port,
     fakeCodex: {
       defaultTurnDelayMs: 25,
@@ -310,7 +310,7 @@ async function runIdleRestartFreshSessionScenario(args: {
     const tempDir = harness.tempDir;
     await harness.shutdownForRestart();
 
-    harness = await startDaemonE2eHarness({
+    harness = await startServerE2eHarness({
       tempDir,
       port,
       fakeCodex: {

@@ -151,7 +151,7 @@ export function ThreadTimelinePane({
       >
         {isTransientThreadLoadError ? (
           <div className="mb-2 rounded-md border border-border/80 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            Daemon temporarily unavailable. Showing cached thread state while reconnecting.
+            Server temporarily unavailable. Showing cached thread state while reconnecting.
           </div>
         ) : null}
         <ConversationTimeline>

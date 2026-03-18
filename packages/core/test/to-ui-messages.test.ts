@@ -911,7 +911,7 @@ describe("toUIMessages replay coverage", () => {
         type: "system/thread-title/updated",
         data: {
           turnId: "turn-1",
-          title: "daemon restart bug",
+          title: "server restart bug",
           previousTitle: "threads - why is that?",
         },
         createdAt: 2,

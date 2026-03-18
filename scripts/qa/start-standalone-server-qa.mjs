@@ -64,11 +64,11 @@ async function waitForHealth(baseUrl, timeoutMs = 15_000) {
       const response = await fetch(`${baseUrl}/api/v1/system/health`);
       if (response.ok) return;
     } catch {
-      // Daemon still starting.
+      // Server still starting.
     }
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 100));
   }
-  throw new Error(`Timed out waiting for daemon health at ${baseUrl}`);
+  throw new Error(`Timed out waiting for server health at ${baseUrl}`);
 }
 
 async function createProject(baseUrl, projectName, projectRoot) {
@@ -113,9 +113,9 @@ async function main() {
   });
 
   const port = await allocatePort();
-  const daemonUrl = `http://127.0.0.1:${port}`;
-  const daemonEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
-  const daemonEnv = {
+  const serverUrl = `http://127.0.0.1:${port}`;
+  const serverEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
+  const serverEnv = {
     ...process.env,
     BB_ROOT: bbRoot,
     ...(provider ? { BB_PROVIDER: provider } : {}),
@@ -127,29 +127,29 @@ async function main() {
   const relaunchCommand = [
     relaunchEnvPrefix,
     `"${process.execPath}"`,
-    `"${daemonEntry}"`,
+    `"${serverEntry}"`,
     "--port",
     String(port),
   ].join(" ");
-  const daemonChild = spawn(
+  const serverChild = spawn(
     process.execPath,
-    [daemonEntry, "--port", String(port)],
+    [serverEntry, "--port", String(port)],
     {
       cwd: workspaceRoot,
-      env: daemonEnv,
+      env: serverEnv,
       detached: true,
       stdio: "ignore",
     },
   );
-  daemonChild.unref();
+  serverChild.unref();
 
-  await waitForHealth(daemonUrl);
-  const project = await createProject(daemonUrl, projectName, projectRoot);
+  await waitForHealth(serverUrl);
+  const project = await createProject(serverUrl, projectName, projectRoot);
   const cleanupCommand = [
     `"${process.execPath}"`,
-    `"${resolve(workspaceRoot, "scripts", "qa", "stop-standalone-daemon-qa.mjs")}"`,
+    `"${resolve(workspaceRoot, "scripts", "qa", "stop-standalone-server-qa.mjs")}"`,
     "--pid",
-    String(daemonChild.pid),
+    String(serverChild.pid),
     "--tmp-root",
     `"${tmpRoot}"`,
     "--bb-root",
@@ -161,13 +161,13 @@ async function main() {
     projectRoot,
     bbRoot,
     port,
-    daemonUrl,
+    serverUrl,
     provider: provider ?? "codex",
     nodePath: process.execPath,
     nodeVersion: process.version,
     nodeAbi: process.versions.modules,
-    daemonPid: daemonChild.pid,
-    daemonLogPath: join(bbRoot, "logs", "daemon.log"),
+    serverPid: serverChild.pid,
+    serverLogPath: join(bbRoot, "logs", "server.log"),
     projectId: project.id,
     relaunchCommand,
     cleanupCommand,

@@ -76,13 +76,13 @@ describe("EnvironmentAgentSessionService", () => {
 
   function createThreadId(): string {
     const project = projects.create({
-      name: "daemon-session-service-project",
-      rootPath: "/tmp/daemon-session-service-project",
+      name: "server-session-service-project",
+      rootPath: "/tmp/server-session-service-project",
     });
     return threads.create({ projectId: project.id }).id;
   }
 
-  it("negotiates a session and returns a welcome payload from the daemon cursor", () => {
+  it("negotiates a session and returns a welcome payload from the server cursor", () => {
     const threadId = createThreadId();
     cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
 
@@ -121,7 +121,7 @@ describe("EnvironmentAgentSessionService", () => {
           {
             channelId: threadId,
             generation: 7,
-            lastDaemonAcked: {
+            lastServerAcked: {
               generation: 7,
               sequence: 5,
             },
@@ -197,7 +197,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
-  it("falls back to the agent bootstrap generation when the daemon has no cursor yet", () => {
+  it("falls back to the agent bootstrap generation when the server has no cursor yet", () => {
     const threadId = createThreadId();
 
     const opened = service.openSession({
@@ -283,7 +283,7 @@ describe("EnvironmentAgentSessionService", () => {
       projectId,
       descriptor: {
         type: "path",
-        path: "/tmp/daemon-session-service-project/.worktrees/env-shared",
+        path: "/tmp/server-session-service-project/.worktrees/env-shared",
       },
       managed: true,
     });
@@ -335,8 +335,8 @@ describe("EnvironmentAgentSessionService", () => {
 
   it("accepts heartbeats from sibling routes for a shared environment session", () => {
     const project = projects.create({
-      name: "daemon-session-service-shared-project",
-      rootPath: "/tmp/daemon-session-service-shared-project",
+      name: "server-session-service-shared-project",
+      rootPath: "/tmp/server-session-service-shared-project",
     });
     const firstThreadId = threads.create({ projectId: project.id }).id;
     const secondThreadId = threads.create({ projectId: project.id }).id;
@@ -344,7 +344,7 @@ describe("EnvironmentAgentSessionService", () => {
       projectId: project.id,
       descriptor: {
         type: "path",
-        path: "/tmp/daemon-session-service-shared-project/.worktrees/shared",
+        path: "/tmp/server-session-service-shared-project/.worktrees/shared",
       },
       managed: true,
     }).id;
@@ -405,7 +405,7 @@ describe("EnvironmentAgentSessionService", () => {
       projectId,
       descriptor: {
         type: "path",
-        path: "/tmp/daemon-session-service-project/.worktrees/env-shared",
+        path: "/tmp/server-session-service-project/.worktrees/env-shared",
       },
       managed: true,
     });
@@ -476,7 +476,7 @@ describe("EnvironmentAgentSessionService", () => {
     ]);
   });
 
-  it("resets a stale daemon cursor when a fresh agent opens without lastDaemonAcked", async () => {
+  it("resets a stale server cursor when a fresh agent opens without lastServerAcked", async () => {
     const threadId = createThreadId();
     cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
 
@@ -930,7 +930,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
-  it("applies event batches and resets the agent cursor when the daemon detects a gap", async () => {
+  it("applies event batches and resets the agent cursor when the server detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({
       threadId,

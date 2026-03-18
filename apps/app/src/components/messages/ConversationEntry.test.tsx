@@ -85,7 +85,7 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("group-hover:opacity-100");
   });
 
-  it("renders user local image thumbnails through daemon attachment endpoint when projectId is provided", () => {
+  it("renders user local image thumbnails through server attachment endpoint when projectId is provided", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "user",

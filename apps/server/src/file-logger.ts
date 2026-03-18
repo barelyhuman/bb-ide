@@ -2,8 +2,8 @@ import { formatWithOptions } from "node:util";
 import { createRotatingJsonLineFileWriter } from "@bb/environment-daemon";
 
 type ConsoleMethod = "log" | "info" | "warn" | "error" | "debug";
-const DEFAULT_DAEMON_LOG_MAX_BYTES = 10 * 1024 * 1024;
-const DEFAULT_DAEMON_LOG_MAX_FILES = 5;
+const DEFAULT_SERVER_LOG_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_SERVER_LOG_MAX_FILES = 5;
 
 interface ConsoleMethodEntry {
   (...args: unknown[]): void;
@@ -32,8 +32,8 @@ function writeLogEntry(level: ConsoleMethod, args: unknown[]): Record<string, un
 export function installConsoleFileLogger(filePath: string): void {
   const writer = createRotatingJsonLineFileWriter({
     filePath,
-    maxBytes: DEFAULT_DAEMON_LOG_MAX_BYTES,
-    maxFiles: DEFAULT_DAEMON_LOG_MAX_FILES,
+    maxBytes: DEFAULT_SERVER_LOG_MAX_BYTES,
+    maxFiles: DEFAULT_SERVER_LOG_MAX_FILES,
   });
 
   for (const level of ["log", "info", "warn", "error", "debug"] as const) {
@@ -42,7 +42,7 @@ export function installConsoleFileLogger(filePath: string): void {
       try {
         writer.write(writeLogEntry(level, args));
       } catch {
-        // Logging must never break daemon startup or request handling.
+        // Logging must never break server startup or request handling.
       }
       original(...args);
     }) as ConsoleMethodEntry;

@@ -109,7 +109,7 @@ function withThreadEnvironmentPolicy(
   return withConfigValues(params, {
     "shell_environment_policy.set.BB_PROJECT_ID": context.projectId,
     "shell_environment_policy.set.BB_THREAD_ID": context.threadId,
-    "shell_environment_policy.set.BB_DAEMON_URL": context.daemonUrl,
+    "shell_environment_policy.set.BB_SERVER_URL": context.serverUrl,
     "shell_environment_policy.set.PATH": context.path,
   });
 }

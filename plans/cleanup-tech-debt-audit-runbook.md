@@ -292,7 +292,7 @@ Out of scope:
 
       - `apps/app` (frontend — largest files: ThreadDetailView.tsx, useApi.ts, api.ts)
       - `apps/cli` (CLI — largest files: commands/thread.ts, commands/manager.ts)
-      - `apps/server` (daemon server — largest files: orchestrator.ts, environment-service.ts, environment-agent-session-service.ts, environment-provisioning-systems.ts, provider-session-controller.ts)
+      - `apps/server` (BB server — largest files: orchestrator.ts, environment-service.ts, environment-agent-session-service.ts, environment-provisioning-systems.ts, provider-session-controller.ts)
       - `packages/core` (shared types/contracts — largest files: to-ui-messages.ts, thread-detail-rows.ts, thread-event-normalization.ts, api-types.ts, types.ts)
       - `packages/db` (SQLite persistence — largest files: repositories.ts, environment-agent-repositories.ts, schema.ts)
       - `packages/environment` (environment abstractions — largest files: git-workspace.ts, docker-environment.ts, local-git-workspace.ts)
@@ -367,8 +367,8 @@ Out of scope:
 - Confirm each proposed deletion/consolidation has a plausible validation path:
   - package-scoped typecheck via `pnpm exec turbo run typecheck --filter=@bb/<pkg>`
   - focused tests (unit tests colocated with source, or `apps/server/src/__tests__/`)
-  - e2e daemon scenarios under `apps/server/src/__tests__/e2e/`
-  - daemon QA tiers under `qa/daemon/` (see `qa/daemon/standalone-daemon-qa.md` for the full checklist)
+  - e2e server scenarios under `apps/server/src/__tests__/e2e/`
+  - server QA tiers under `qa/server/` (see `qa/server/standalone-server-qa.md` for the full checklist)
   - manual UI verification where relevant (the app runs at `http://localhost:5173/`)
 - Before closing an audit pass, ensure it produced:
   - a findings doc

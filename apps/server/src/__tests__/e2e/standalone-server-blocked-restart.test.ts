@@ -1,13 +1,13 @@
 import { describe, it } from "vitest";
-import { runStandaloneDaemonBlockedRestartScenario } from "./standalone-daemon-blocked-restart.scenario.js";
+import { runStandaloneServerBlockedRestartScenario } from "./standalone-server-blocked-restart.scenario.js";
 import { supportsFakeCodexControl } from "./provider-mode.js";
 
 const itWithSupportedProvider = supportsFakeCodexControl() ? it : it.skip;
 
-describe.sequential("e2e: standalone daemon blocked restart", () => {
+describe.sequential("e2e: standalone server blocked restart", () => {
   itWithSupportedProvider(
     "rejects non-forced restart requests while active local and worktree threads exist",
-    runStandaloneDaemonBlockedRestartScenario,
+    runStandaloneServerBlockedRestartScenario,
     60_000,
   );
 });

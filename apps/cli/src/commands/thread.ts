@@ -55,7 +55,7 @@ interface ThreadSessionDebugView {
   closedAt?: number;
   closeReason?:
     | "agent_shutdown"
-    | "daemon_shutdown"
+    | "server_shutdown"
     | "lease_expired"
     | "newer_session"
     | "migration"

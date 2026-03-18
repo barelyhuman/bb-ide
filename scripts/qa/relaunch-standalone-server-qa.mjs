@@ -7,14 +7,14 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
-const defaultDaemonEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
+const defaultServerEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
 
 function parseArgs(argv) {
   const options = {
     port: null,
     bbRoot: null,
     nodePath: process.execPath,
-    daemonEntry: defaultDaemonEntry,
+    serverEntry: defaultServerEntry,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -32,8 +32,8 @@ function parseArgs(argv) {
         options.nodePath = argv[index + 1] ?? options.nodePath;
         index += 1;
         break;
-      case "--daemon-entry":
-        options.daemonEntry = argv[index + 1] ?? options.daemonEntry;
+      case "--server-entry":
+        options.serverEntry = argv[index + 1] ?? options.serverEntry;
         index += 1;
         break;
       default:
@@ -52,7 +52,7 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const { port, bbRoot, nodePath, daemonEntry } = parseArgs(process.argv.slice(2));
+  const { port, bbRoot, nodePath, serverEntry } = parseArgs(process.argv.slice(2));
   const runtimeSummary = execFileSync(
     nodePath,
     ["-p", "JSON.stringify({ version: process.version, abi: process.versions.modules })"],
@@ -61,12 +61,12 @@ async function main() {
   const { version, abi } = JSON.parse(runtimeSummary);
 
   console.error(
-    `Relaunching standalone daemon with ${nodePath} (node ${version}, abi ${abi})`,
+    `Relaunching standalone server with ${nodePath} (node ${version}, abi ${abi})`,
   );
   console.error(`BB_ROOT=${bbRoot}`);
-  console.error(`Daemon entry=${daemonEntry}`);
+  console.error(`Server entry=${serverEntry}`);
 
-  const daemonChild = spawn(nodePath, [daemonEntry, "--port", String(port)], {
+  const serverChild = spawn(nodePath, [serverEntry, "--port", String(port)], {
     cwd: workspaceRoot,
     env: {
       ...process.env,
@@ -75,7 +75,7 @@ async function main() {
     stdio: "inherit",
   });
 
-  daemonChild.on("exit", (code, signal) => {
+  serverChild.on("exit", (code, signal) => {
     if (signal) {
       process.kill(process.pid, signal);
       return;

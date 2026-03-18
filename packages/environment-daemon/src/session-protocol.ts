@@ -42,7 +42,7 @@ export type EnvironmentAgentSessionCapabilityFeature =
 
 export type EnvironmentAgentSessionCloseReason =
   | "agent_shutdown"
-  | "daemon_shutdown"
+  | "server_shutdown"
   | "lease_expired"
   | "newer_session"
   | "migration"
@@ -61,7 +61,7 @@ export interface EnvironmentAgentSessionCursorExclusive {
 export interface EnvironmentAgentSessionChannelBootstrap {
   channelId: string;
   generation: number;
-  lastDaemonAcked?: EnvironmentAgentSessionCursor;
+  lastServerAcked?: EnvironmentAgentSessionCursor;
 }
 
 export interface EnvironmentAgentSessionControlEndpoint {

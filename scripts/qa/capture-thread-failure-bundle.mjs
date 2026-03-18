@@ -53,7 +53,7 @@ async function writeJson(path, value) {
 }
 
 const { threadId, scenario, outDir } = parseArgs(process.argv.slice(2));
-const baseUrl = process.env.BB_DAEMON_URL ?? "http://127.0.0.1:4310";
+const baseUrl = process.env.BB_SERVER_URL ?? "http://127.0.0.1:4310";
 const bbRoot = process.env.BB_ROOT ?? process.env.BB_ROOT;
 const artifactRoot = resolve(
   outDir ?? join(process.cwd(), "qa", "artifacts", `${scenario}-${threadId}-${Date.now()}`),
@@ -61,7 +61,7 @@ const artifactRoot = resolve(
 
 await mkdir(artifactRoot, { recursive: true });
 
-const [thread, threadStatus, threadLog, threadOutput, threadSessions, daemonHealth] =
+const [thread, threadStatus, threadLog, threadOutput, threadSessions, serverHealth] =
   await Promise.all([
     readJson(`${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}`),
     readJson(
@@ -80,7 +80,7 @@ const [thread, threadStatus, threadLog, threadOutput, threadSessions, daemonHeal
 await Promise.all([
   writeJson(join(artifactRoot, "metadata.json"), {
     generatedAt: new Date().toISOString(),
-    daemonUrl: baseUrl,
+    serverUrl: baseUrl,
     bbRoot: bbRoot ?? null,
     scenario,
     threadId,
@@ -90,17 +90,17 @@ await Promise.all([
   writeJson(join(artifactRoot, "thread-log.json"), threadLog),
   writeJson(join(artifactRoot, "thread-output.json"), threadOutput),
   writeJson(join(artifactRoot, "thread-sessions.json"), threadSessions),
-  writeJson(join(artifactRoot, "daemon-health.json"), daemonHealth),
+  writeJson(join(artifactRoot, "server-health.json"), serverHealth),
 ]);
 
 if (bbRoot) {
-  const daemonLogPath = join(bbRoot, "logs", "daemon.log");
+  const serverLogPath = join(bbRoot, "logs", "server.log");
   try {
-    await cp(daemonLogPath, join(artifactRoot, basename(daemonLogPath)));
+    await cp(serverLogPath, join(artifactRoot, basename(serverLogPath)));
   } catch {
     try {
-      const missingMessage = await readFile(daemonLogPath, "utf8");
-      await writeFile(join(artifactRoot, basename(daemonLogPath)), missingMessage, "utf8");
+      const missingMessage = await readFile(serverLogPath, "utf8");
+      await writeFile(join(artifactRoot, basename(serverLogPath)), missingMessage, "utf8");
     } catch {
       // Ignore missing log file.
     }

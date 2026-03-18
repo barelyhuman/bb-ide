@@ -46,7 +46,7 @@ describe("EnvironmentAgentRuntime", () => {
       latestSequence: 2,
       pendingEventCount: 2,
       pendingCommandCount: 0,
-      connectedToDaemon: false,
+      connectedToServer: false,
       deliveryState: "stopped",
       retryAttemptCount: 0,
     });
@@ -57,7 +57,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.setDaemonDeliveryState({
-      connectedToDaemon: false,
+      connectedToServer: false,
       deliveryState: "retrying",
       retryAttemptCount: 2,
       lastAckedSequence: 1,
@@ -70,7 +70,7 @@ describe("EnvironmentAgentRuntime", () => {
       latestSequence: 1,
       lastAckedSequence: 1,
       pendingEventCount: 0,
-      connectedToDaemon: false,
+      connectedToServer: false,
       deliveryState: "retrying",
       retryAttemptCount: 2,
       nextRetryAt: 123_456,

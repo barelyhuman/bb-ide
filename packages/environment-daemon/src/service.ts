@@ -60,7 +60,7 @@ export interface EnvironmentAgentServiceOptions {
 }
 
 const BB_ENV_DAEMON_AUTH_TOKEN = "BB_ENV_DAEMON_AUTH_TOKEN";
-const BB_DAEMON_URL = "BB_DAEMON_URL";
+const BB_SERVER_URL = "BB_SERVER_URL";
 const BB_ENV_DAEMON_CONTROL_BASE_URL =
   "BB_ENV_DAEMON_CONTROL_BASE_URL";
 const BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS =
@@ -179,8 +179,8 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       projectId: args.env.BB_PROJECT_ID,
       environmentId: args.env.BB_ENVIRONMENT_ID,
       providerId: args.env[BB_THREAD_PROVIDER_ID]?.trim(),
-      daemonConnection: {
-        daemonUrl: args.env[BB_DAEMON_URL],
+      serverConnection: {
+        serverUrl: args.env[BB_SERVER_URL],
         authToken,
         threadId: args.env.BB_THREAD_ID,
         projectId: args.env.BB_PROJECT_ID,
@@ -232,7 +232,7 @@ export async function startEnvironmentAgentService(
     threadId: options.runtime.threadId,
     projectId: options.runtime.projectId,
     environmentId: options.runtime.environmentId,
-    daemonUrl: options.runtime.daemonConnection?.daemonUrl,
+    serverUrl: options.runtime.serverConnection?.serverUrl,
   });
 
   const runtime = new EnvironmentAgentRuntime({
@@ -296,11 +296,11 @@ export async function startEnvironmentAgentService(
     return closePromise;
   };
   try {
-    if (options.runtime.daemonConnection?.daemonUrl && options.runtime.threadId) {
+    if (options.runtime.serverConnection?.serverUrl && options.runtime.threadId) {
       const sessionStore = new InMemoryEnvironmentAgentSessionStore();
       const sessionRuntime = new EnvironmentAgentSessionRuntime({ store: sessionStore });
       const sessionClient = createEnvironmentAgentSessionHttpClientFromConnection(
-        options.runtime.daemonConnection,
+        options.runtime.serverConnection,
       );
       const sessionSync = new EnvironmentAgentSessionSync({
         runtime: sessionRuntime,

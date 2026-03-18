@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { EnvironmentAgentDaemonConnectionConfig } from "./protocol.js";
+import type { EnvironmentAgentServerConnectionConfig } from "./protocol.js";
 import type {
   EnvironmentAgentSessionClientMessage,
   EnvironmentAgentSessionCommandAckPayload,
@@ -21,7 +21,7 @@ type EnvironmentAgentSessionBoundClientMessage = Exclude<
 >;
 
 export interface EnvironmentAgentSessionHttpClientOptions {
-  daemonUrl: string;
+  serverUrl: string;
   threadId: string;
   authToken?: string;
   headers?: Record<string, string>;
@@ -77,13 +77,13 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
 
 export class EnvironmentAgentSessionHttpClient {
   private readonly fetchImpl: typeof fetch;
-  private readonly daemonUrl: string;
+  private readonly serverUrl: string;
   private readonly threadId: string;
   private readonly defaultHeaders: Record<string, string>;
 
   constructor(options: EnvironmentAgentSessionHttpClientOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.daemonUrl = options.daemonUrl;
+    this.serverUrl = options.serverUrl;
     this.threadId = options.threadId;
     this.defaultHeaders = {
       ...(options.authToken
@@ -186,7 +186,7 @@ export class EnvironmentAgentSessionHttpClient {
 
   async closeSession(
     sessionId: string,
-    reason: "agent_shutdown" | "daemon_shutdown" | "migration" | "internal_error",
+    reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error",
   ): Promise<void> {
     await this.postClientMessage({
       type: "session_close",
@@ -227,7 +227,7 @@ export class EnvironmentAgentSessionHttpClient {
     options?: { signal?: AbortSignal },
   ): Promise<unknown> {
     try {
-      const response = await this.fetchImpl(joinUrl(this.daemonUrl, path), {
+      const response = await this.fetchImpl(joinUrl(this.serverUrl, path), {
         method: "GET",
         headers: this.defaultHeaders,
         ...(options?.signal ? { signal: options.signal } : {}),
@@ -249,7 +249,7 @@ export class EnvironmentAgentSessionHttpClient {
     body: unknown,
     expectedStatus: number,
   ): Promise<unknown> {
-    const response = await this.fetchImpl(joinUrl(this.daemonUrl, path), {
+    const response = await this.fetchImpl(joinUrl(this.serverUrl, path), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -261,7 +261,7 @@ export class EnvironmentAgentSessionHttpClient {
   }
 
   private async postNoContent(path: string, body: unknown): Promise<void> {
-    const response = await this.fetchImpl(joinUrl(this.daemonUrl, path), {
+    const response = await this.fetchImpl(joinUrl(this.serverUrl, path), {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -325,19 +325,19 @@ export function isEnvironmentAgentSessionInactiveError(
 }
 
 export function createEnvironmentAgentSessionHttpClientFromConnection(
-  config: EnvironmentAgentDaemonConnectionConfig,
+  config: EnvironmentAgentServerConnectionConfig,
   args?: {
     headers?: Record<string, string>;
     fetchImpl?: typeof fetch;
   },
 ): EnvironmentAgentSessionHttpClient {
-  if (!config.daemonUrl || !config.threadId) {
+  if (!config.serverUrl || !config.threadId) {
     throw new EnvironmentAgentSessionHttpClientError({
-      message: "Environment-agent daemon session connection requires daemonUrl and threadId",
+      message: "Environment-agent daemon session connection requires serverUrl and threadId",
     });
   }
   return new EnvironmentAgentSessionHttpClient({
-    daemonUrl: config.daemonUrl,
+    serverUrl: config.serverUrl,
     threadId: config.threadId,
     authToken: config.authToken,
     ...(args?.headers ? { headers: args.headers } : {}),

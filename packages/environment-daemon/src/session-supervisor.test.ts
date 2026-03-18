@@ -330,7 +330,7 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       await vi.advanceTimersByTimeAsync(120);
 
       expect(runtime.getStatusSnapshot()).toMatchObject({
-        connectedToDaemon: false,
+        connectedToServer: false,
         deliveryState: "retrying",
         retryAttemptCount: 1,
       });
@@ -342,7 +342,7 @@ describe("EnvironmentAgentSessionSupervisor", () => {
 
       await vi.advanceTimersByTimeAsync(0);
       expect(runtime.getStatusSnapshot()).toMatchObject({
-        connectedToDaemon: true,
+        connectedToServer: true,
         deliveryState: "healthy",
         retryAttemptCount: 0,
       });

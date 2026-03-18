@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __testOnly__getManagedDockerEnvironmentAgentRecord,
-  __testOnly__resolveDockerDaemonUrl,
+  __testOnly__resolveDockerServerUrl,
   DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
   ensureDockerEnvironmentImageAvailable,
   ensureManagedDockerEnvironmentAgent,
@@ -88,31 +88,31 @@ describe("docker environment-agent helper", () => {
     ).toBe(DEFAULT_DOCKER_ENVIRONMENT_IMAGE);
   });
 
-  it("rewrites loopback daemon URLs for docker containers", () => {
+  it("rewrites loopback server URLs for docker containers", () => {
     expect(
-      __testOnly__resolveDockerDaemonUrl({
-        BB_DAEMON_URL: "http://127.0.0.1:3333/api/v1",
+      __testOnly__resolveDockerServerUrl({
+        BB_SERVER_URL: "http://127.0.0.1:3333/api/v1",
       }),
     ).toBe("http://host.docker.internal:3333/api/v1");
     expect(
-      __testOnly__resolveDockerDaemonUrl({
-        BB_DAEMON_URL: "http://localhost:3333/api/v1",
+      __testOnly__resolveDockerServerUrl({
+        BB_SERVER_URL: "http://localhost:3333/api/v1",
       }),
     ).toBe("http://host.docker.internal:3333/api/v1");
   });
 
-  it("keeps non-loopback daemon URLs unchanged", () => {
+  it("keeps non-loopback server URLs unchanged", () => {
     expect(
-      __testOnly__resolveDockerDaemonUrl({
-        BB_DAEMON_URL: "http://10.0.0.5:3333/api/v1",
+      __testOnly__resolveDockerServerUrl({
+        BB_SERVER_URL: "http://10.0.0.5:3333/api/v1",
       }),
     ).toBe("http://10.0.0.5:3333/api/v1");
   });
 
   it("uses an explicit docker daemon host override when provided", () => {
     expect(
-      __testOnly__resolveDockerDaemonUrl({
-        BB_DAEMON_URL: "http://127.0.0.1:3333/api/v1",
+      __testOnly__resolveDockerServerUrl({
+        BB_SERVER_URL: "http://127.0.0.1:3333/api/v1",
         BB_DOCKER_DAEMON_HOST: "docker-host.internal",
       }),
     ).toBe("http://docker-host.internal:3333/api/v1");
@@ -205,7 +205,7 @@ describe("docker environment-agent helper", () => {
         environmentId: "docker",
         runtimeEnv: {
           BB_ROOT: bbRoot,
-          BB_DAEMON_URL: "http://127.0.0.1:9000",
+          BB_SERVER_URL: "http://127.0.0.1:9000",
         },
         dockerBin: "docker",
         containerName: "bb-thread-thread-1",
@@ -263,7 +263,7 @@ describe("docker environment-agent helper", () => {
           "-e",
           `BB_ROOT=${bbRoot}`,
           "-e",
-          "BB_DAEMON_URL=http://host.docker.internal:9000",
+          "BB_SERVER_URL=http://host.docker.internal:9000",
           "bb-thread-thread-1",
           "node",
           "/opt/bb/environment-daemon/environment-agent.bundle.mjs",
@@ -294,7 +294,7 @@ describe("docker environment-agent helper", () => {
       environmentId: "docker",
       runtimeEnv: {
         BB_ROOT: bbRoot,
-        BB_DAEMON_URL: "http://127.0.0.1:9000",
+        BB_SERVER_URL: "http://127.0.0.1:9000",
       },
       dockerBin: "docker",
       containerName: "bb-thread-thread-lock",

@@ -5081,7 +5081,7 @@ describe("Orchestrator", () => {
     });
 
 
-    it("preserves managed environments during daemon shutdown", () => {
+    it("preserves managed environments during server shutdown", () => {
       const dispose = vi.fn();
       const stopWatchingWorkspaceStatus = vi.fn();
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
@@ -5103,7 +5103,7 @@ describe("Orchestrator", () => {
       expect(dispose).not.toHaveBeenCalled();
     });
 
-    it("does not mark active managed sessions idle during daemon shutdown", async () => {
+    it("does not mark active managed sessions idle during server shutdown", async () => {
       const thread = createTestThread(threadRepo, project.id, { status: "active" });
       asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
         environment: makeRuntimeEnvironment({

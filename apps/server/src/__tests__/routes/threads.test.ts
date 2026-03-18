@@ -519,7 +519,7 @@ describe("Thread routes", () => {
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
         threadId: "thread-1",
         latestSequence: 4,
-        connectedToDaemon: true,
+        connectedToServer: true,
         pendingEventCount: 1,
         pendingCommandCount: 0,
         deliveryState: "healthy",

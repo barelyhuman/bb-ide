@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { resolveDaemonStatusIndicatorState } from "./daemon-status-indicator"
+import { resolveServerStatusIndicatorState } from "./server-status-indicator"
 
-describe("resolveDaemonStatusIndicatorState", () => {
+describe("resolveServerStatusIndicatorState", () => {
   it("returns up-to-date when connected and current", () => {
     expect(
-      resolveDaemonStatusIndicatorState({
+      resolveServerStatusIndicatorState({
         connectionState: "connected",
         isRestartPending: false,
         shouldRestart: false,
@@ -14,7 +14,7 @@ describe("resolveDaemonStatusIndicatorState", () => {
 
   it("returns out-of-date when connected but restart is recommended", () => {
     expect(
-      resolveDaemonStatusIndicatorState({
+      resolveServerStatusIndicatorState({
         connectionState: "connected",
         isRestartPending: false,
         shouldRestart: true,
@@ -24,7 +24,7 @@ describe("resolveDaemonStatusIndicatorState", () => {
 
   it("returns reconnecting while waiting on a restart request", () => {
     expect(
-      resolveDaemonStatusIndicatorState({
+      resolveServerStatusIndicatorState({
         connectionState: "connected",
         isRestartPending: true,
         shouldRestart: false,
@@ -34,7 +34,7 @@ describe("resolveDaemonStatusIndicatorState", () => {
 
   it("returns reconnecting while the websocket is not connected", () => {
     expect(
-      resolveDaemonStatusIndicatorState({
+      resolveServerStatusIndicatorState({
         connectionState: "reconnecting",
         isRestartPending: false,
         shouldRestart: true,

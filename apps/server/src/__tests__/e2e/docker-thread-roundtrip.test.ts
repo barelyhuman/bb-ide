@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Project, Thread, ThreadEvent } from "@bb/core";
 import {
-  startDaemonE2eHarness,
-  type DaemonE2eHarness,
+  startServerE2eHarness,
+  type ServerE2eHarness,
 } from "./harness.js";
 import {
   readJson,
@@ -28,7 +28,7 @@ async function createProject(baseUrl: string, rootPath: string): Promise<Project
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: "docker-e2e-daemon-project",
+      name: "docker-e2e-server-project",
       rootPath,
     }),
   });
@@ -92,8 +92,8 @@ async function waitForThreadRoundTrip(
 const describeDocker =
   hasDocker() && supportsFakeCodexControl() ? describe.sequential : describe.sequential.skip;
 
-describeDocker("e2e: daemon -> docker environment", () => {
-  let harness: DaemonE2eHarness | undefined;
+describeDocker("e2e: server -> docker environment", () => {
+  let harness: ServerE2eHarness | undefined;
 
   afterEach(async () => {
     if (harness) {
@@ -105,7 +105,7 @@ describeDocker("e2e: daemon -> docker environment", () => {
   it(
     "spawns a docker-backed thread and completes a provider roundtrip inside the container",
     async () => {
-      harness = await startDaemonE2eHarness({
+      harness = await startServerE2eHarness({
         fakeCodex: {
           defaultTurnDelayMs: 0,
         },

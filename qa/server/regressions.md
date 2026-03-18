@@ -1,10 +1,10 @@
-# Daemon / Env-Agent Regression QA
+# Server / Env-Agent Regression QA
 
 Use this pass to capture stable repros for previously discovered bugs.
 
 ## Goal
 
-Make sure once a daemon/env-agent lifecycle bug is fixed, it stays fixed.
+Make sure once a server/env-agent lifecycle bug is fixed, it stays fixed.
 
 ## How to use
 
@@ -20,11 +20,11 @@ Add one entry per regression with:
 For the checked-in regression seed suite:
 
 ```bash
-pnpm qa:daemon:regression
-pnpm qa:daemon:recovery:fake
+pnpm qa:server:regression
+pnpm qa:server:recovery:fake
 ```
 
-The checked-in regression seed suite targets the real provider by default. Recovery regressions that require fake Codex control should also be covered by `qa:daemon:recovery:fake`.
+The checked-in regression seed suite targets the real provider by default. Recovery regressions that require fake Codex control should also be covered by `qa:server:recovery:fake`.
 
 ## Current seed regression areas
 

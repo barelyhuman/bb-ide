@@ -25,7 +25,7 @@ describe("environment-agent service config", () => {
         BB_ENVIRONMENT_ID: "docker",
         BB_THREAD_PROVIDER_ID: "codex",
         BB_ROOT: "/tmp/bb-root",
-        BB_DAEMON_URL: "http://127.0.0.1:9000",
+        BB_SERVER_URL: "http://127.0.0.1:9000",
         BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
       },
     });
@@ -36,8 +36,8 @@ describe("environment-agent service config", () => {
         projectId: "project-1",
         environmentId: "docker",
         providerId: "codex",
-        daemonConnection: {
-          daemonUrl: "http://127.0.0.1:9000",
+        serverConnection: {
+          serverUrl: "http://127.0.0.1:9000",
           authToken: "secret-token",
           threadId: "thread-1",
           projectId: "project-1",
@@ -209,8 +209,8 @@ describe("environment-agent service config", () => {
         threadId: "thread-1",
         projectId: "project-1",
         environmentId: "local",
-        daemonConnection: {
-          daemonUrl: "http://127.0.0.1:9000/api/v1",
+        serverConnection: {
+          serverUrl: "http://127.0.0.1:9000/api/v1",
           authToken: "secret-token",
           threadId: "thread-1",
           projectId: "project-1",
@@ -329,8 +329,8 @@ describe("environment-agent service config", () => {
         projectId: "project-1",
         environmentId: "local",
         providerId: "codex",
-        daemonConnection: {
-          daemonUrl: "http://127.0.0.1:9000/api/v1",
+        serverConnection: {
+          serverUrl: "http://127.0.0.1:9000/api/v1",
           authToken: "secret-token",
           threadId: "thread-1",
           projectId: "project-1",

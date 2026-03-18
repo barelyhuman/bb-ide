@@ -6,7 +6,7 @@ import {
   waitForThreadCondition,
 } from "./environment-agent-api.js";
 import {
-  startDaemonE2eHarness,
+  startServerE2eHarness,
 } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
@@ -108,7 +108,7 @@ async function waitForIdleAfterTurnProgress(
 }
 
 export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void> {
-  const harness = await startDaemonE2eHarness({
+  const harness = await startServerE2eHarness({
     fakeCodex: {
       defaultTurnDelayMs: 25,
     },

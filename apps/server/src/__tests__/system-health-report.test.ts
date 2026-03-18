@@ -65,13 +65,13 @@ describe("system health report", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "bb-health-project-"));
     cleanupPaths.push(projectRoot);
     const dbPath = resolve(bbRoot, "bb.db");
-    const daemonLogPath = resolve(bbRoot, "logs", "daemon.log");
+    const serverLogPath = resolve(bbRoot, "logs", "server.log");
 
     writeBytes(dbPath, "db!");
     writeBytes(`${dbPath}-wal`, "wal!");
     writeBytes(`${dbPath}-shm`, "shm");
-    writeBytes(daemonLogPath, "daemon");
-    writeBytes(`${daemonLogPath}.1`, "archive");
+    writeBytes(serverLogPath, "server");
+    writeBytes(`${serverLogPath}.1`, "archive");
     writeBytes(resolve(bbRoot, "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
     writeBytes(resolve(bbRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
     writeBytes(resolve(bbRoot, "attachments", "proj-1", "image.png"), "img");
@@ -131,7 +131,7 @@ describe("system health report", () => {
       getRunningCount: () => 1,
       startTime: now - 3_600_000,
       dbPath,
-      daemonLogFilePath: daemonLogPath,
+      serverLogFilePath: serverLogPath,
       runtimeEnv: process.env,
     })();
 
@@ -218,10 +218,10 @@ describe("system health report", () => {
         paths: [`${dbPath}-shm`],
       },
       {
-        key: "daemon_logs",
-        label: "Daemon Logs",
+        key: "server_logs",
+        label: "Server Logs",
         bytes: 13,
-        paths: [daemonLogPath, `${daemonLogPath}.1`],
+        paths: [serverLogPath, `${serverLogPath}.1`],
       },
       {
         key: "environment_agent_logs",

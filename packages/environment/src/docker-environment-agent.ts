@@ -175,23 +175,23 @@ async function executeOrThrow(args: {
   }
 }
 
-function resolveDockerDaemonUrl(
+function resolveDockerServerUrl(
   runtimeEnv: Record<string, string | undefined>,
 ): string | undefined {
-  const daemonUrl = runtimeEnv.BB_DAEMON_URL?.trim();
-  if (!daemonUrl) {
+  const serverUrl = runtimeEnv.BB_SERVER_URL?.trim();
+  if (!serverUrl) {
     return undefined;
   }
 
   let parsed: URL;
   try {
-    parsed = new URL(daemonUrl);
+    parsed = new URL(serverUrl);
   } catch {
-    return daemonUrl;
+    return serverUrl;
   }
 
   if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
-    return daemonUrl;
+    return serverUrl;
   }
 
   const dockerHost =
@@ -296,7 +296,7 @@ export async function ensureManagedDockerEnvironmentAgent(
       args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
     const installRoot =
       args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
-    const dockerDaemonUrl = resolveDockerDaemonUrl(args.runtimeEnv);
+    const dockerServerUrl = resolveDockerServerUrl(args.runtimeEnv);
 
     await executeOrThrow({
       executor,
@@ -348,8 +348,8 @@ export async function ensureManagedDockerEnvironmentAgent(
         ...((args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BB_ROOT?.trim())
           ? ["-e", `BB_ROOT=${args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BB_ROOT}`]
           : []),
-        ...(dockerDaemonUrl
-          ? ["-e", `BB_DAEMON_URL=${dockerDaemonUrl}`]
+        ...(dockerServerUrl
+          ? ["-e", `BB_SERVER_URL=${dockerServerUrl}`]
           : []),
         args.containerName,
         "node",
@@ -387,10 +387,10 @@ export async function ensureManagedDockerEnvironmentAgent(
   return managedTarget;
 }
 
-export function __testOnly__resolveDockerDaemonUrl(
+export function __testOnly__resolveDockerServerUrl(
   runtimeEnv: Record<string, string | undefined>,
 ): string | undefined {
-  return resolveDockerDaemonUrl(runtimeEnv);
+  return resolveDockerServerUrl(runtimeEnv);
 }
 
 export async function disposeManagedDockerEnvironmentAgent(args: {

@@ -8,13 +8,13 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
-const daemonEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
+const serverEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
 const cliEntry = resolve(workspaceRoot, "apps", "cli", "dist", "index.js");
-const startHelperEntry = resolve(workspaceRoot, "scripts", "qa", "start-standalone-daemon-qa.mjs");
-const stopHelperEntry = resolve(workspaceRoot, "scripts", "qa", "stop-standalone-daemon-qa.mjs");
+const startHelperEntry = resolve(workspaceRoot, "scripts", "qa", "start-standalone-server-qa.mjs");
+const stopHelperEntry = resolve(workspaceRoot, "scripts", "qa", "stop-standalone-server-qa.mjs");
 
 function assertBuiltArtifactsExist() {
-  const missing = [daemonEntry, cliEntry].filter((path) => !existsSync(path));
+  const missing = [serverEntry, cliEntry].filter((path) => !existsSync(path));
   if (missing.length > 0) {
     throw new Error(
       `Missing built artifacts:\n${missing.join("\n")}\nRun pnpm build first.`,
@@ -55,7 +55,7 @@ async function waitForHealth(baseUrl, timeoutMs = 15_000) {
     }
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 100));
   }
-  throw new Error(`Timed out waiting for daemon health at ${baseUrl}`);
+  throw new Error(`Timed out waiting for server health at ${baseUrl}`);
 }
 
 function assertIncludes(text, expected, label) {
@@ -76,16 +76,16 @@ function runCli(metadata, args, { allowFailure = false } = {}) {
   return runCommand(process.execPath, [cliEntry, ...args], {
     env: {
       ...process.env,
-      BB_DAEMON_URL: metadata.daemonUrl,
+      BB_SERVER_URL: metadata.serverUrl,
     },
     allowFailure,
   });
 }
 
-async function relaunchDaemon(metadata) {
-  const daemonChild = spawn(
+async function relaunchServer(metadata) {
+  const serverChild = spawn(
     metadata.nodePath,
-    [daemonEntry, "--port", String(metadata.port)],
+    [serverEntry, "--port", String(metadata.port)],
     {
       cwd: workspaceRoot,
       env: {
@@ -96,9 +96,9 @@ async function relaunchDaemon(metadata) {
       stdio: "ignore",
     },
   );
-  daemonChild.unref();
-  await waitForHealth(metadata.daemonUrl);
-  return daemonChild.pid;
+  serverChild.unref();
+  await waitForHealth(metadata.serverUrl);
+  return serverChild.pid;
 }
 
 async function waitForThreadStatus(metadata, threadId, status, timeoutSeconds = 120) {
@@ -113,7 +113,7 @@ async function main() {
   assertBuiltArtifactsExist();
 
   const metadata = JSON.parse(runNodeScript(startHelperEntry));
-  let currentDaemonPid = metadata.daemonPid;
+  let currentServerPid = metadata.serverPid;
   let failed = false;
   let shuttingDown = false;
 
@@ -122,7 +122,7 @@ async function main() {
     shuttingDown = true;
     runNodeScript(stopHelperEntry, [
       "--pid",
-      String(currentDaemonPid),
+      String(currentServerPid),
       "--tmp-root",
       metadata.tmpRoot,
       "--bb-root",
@@ -149,7 +149,7 @@ async function main() {
 
   try {
     logStep("health and project sanity");
-    assertIncludes(runCli(metadata, ["daemon", "health"]).stdout, "Daemon Health", "daemon health");
+    assertIncludes(runCli(metadata, ["server", "health"]).stdout, "Server Health", "server health");
     assertIncludes(
       runCli(metadata, ["project", "files", "--project", metadata.projectId, "alpha"]).stdout,
       "alpha.txt",
@@ -226,14 +226,14 @@ async function main() {
     );
     runCli(metadata, ["thread", "wait", restartThreadId, "--event", "turn/started", "--timeout", "60"]);
 
-    const blockedRestart = runCli(metadata, ["daemon", "restart"], { allowFailure: true });
+    const blockedRestart = runCli(metadata, ["server", "restart"], { allowFailure: true });
     if (blockedRestart.status === 0) {
       throw new Error("Unforced restart unexpectedly succeeded while work was active.");
     }
     assertIncludes(blockedRestart.stderr || blockedRestart.stdout, "blocked by active thread work", "blocked restart");
 
-    assertIncludes(runCli(metadata, ["daemon", "restart", "--force"]).stdout, "shutdown requested", "forced restart");
-    currentDaemonPid = await relaunchDaemon(metadata);
+    assertIncludes(runCli(metadata, ["server", "restart", "--force"]).stdout, "shutdown requested", "forced restart");
+    currentServerPid = await relaunchServer(metadata);
 
     runCli(metadata, ["thread", "show", restartThreadId]);
     runCli(metadata, ["thread", "stop", restartThreadId]);
@@ -253,7 +253,7 @@ async function main() {
           ok: true,
           tmpRoot: metadata.tmpRoot,
           bbRoot: metadata.bbRoot,
-          daemonUrl: metadata.daemonUrl,
+          serverUrl: metadata.serverUrl,
           projectId: metadata.projectId,
           checkedThreads: {
             local: localThreadId,
@@ -274,8 +274,8 @@ async function main() {
         {
           tmpRoot: metadata.tmpRoot,
           bbRoot: metadata.bbRoot,
-          daemonUrl: metadata.daemonUrl,
-          daemonLogPath: metadata.daemonLogPath,
+          serverUrl: metadata.serverUrl,
+          serverLogPath: metadata.serverLogPath,
           projectId: metadata.projectId,
         },
         null,
@@ -284,7 +284,7 @@ async function main() {
     );
     process.exitCode = 1;
   } finally {
-    if (currentDaemonPid) {
+    if (currentServerPid) {
       stopStandalone();
     }
     if (failed) {

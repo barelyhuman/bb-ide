@@ -47,7 +47,7 @@ function formatUptime(seconds: number): string {
 }
 
 function printHealthReport(report: SystemHealthReport): void {
-  console.log("Daemon Health");
+  console.log("Server Health");
   console.log(`Generated: ${new Date(report.generatedAt).toISOString()}`);
   console.log(`Uptime: ${formatUptime(report.uptime)}`);
   console.log(`Projects: ${report.projectCount}`);
@@ -79,12 +79,12 @@ function printHealthReport(report: SystemHealthReport): void {
   }
 }
 
-export function registerDaemonCommands(program: Command, getUrl: () => string): void {
-  const daemon = program.command("daemon").description("Manage daemon lifecycle");
+export function registerServerCommands(program: Command, getUrl: () => string): void {
+  const server = program.command("server").description("Manage server lifecycle");
 
-  daemon
+  server
     .command("health")
-    .description("Show daemon health and managed storage usage")
+    .description("Show server health and managed storage usage")
     .option("--json", "Print machine-readable JSON output")
     .action(async (opts: { json?: boolean }) => {
       const client = createClient(getUrl());
@@ -100,9 +100,9 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
       }
     });
 
-  daemon
+  server
     .command("restart")
-    .description("Safely request daemon shutdown before restart")
+    .description("Safely request server shutdown before restart")
     .option("--force", "Shutdown even when active/provisioning work exists")
     .option("--json", "Print machine-readable JSON output")
     .action(async (opts: { force?: boolean; json?: boolean }) => {
@@ -117,7 +117,7 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
           const blockingThreads = blocked.blockingThreads ?? [];
           console.error(
             blocked.message ??
-              "Daemon shutdown blocked by active thread work. Use --force to override.",
+              "Server shutdown blocked by active thread work. Use --force to override.",
           );
           if (blockingThreads.length > 0) {
             console.error("Blocking threads:");
@@ -135,11 +135,11 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
         if (outputJson(opts, payload)) return;
         console.log(
           payload.forced
-            ? "Daemon shutdown requested (forced)."
-            : "Daemon shutdown requested.",
+            ? "Server shutdown requested (forced)."
+            : "Server shutdown requested.",
         );
         console.log(
-          "Restart daemon now (for example: `pnpm daemon` or your configured dev watcher).",
+          "Restart server now (for example: `pnpm server` or your configured dev watcher).",
         );
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);

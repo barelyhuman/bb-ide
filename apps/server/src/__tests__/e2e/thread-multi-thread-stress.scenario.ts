@@ -9,7 +9,7 @@ import {
   tellThread,
   waitForThreadCondition,
 } from "./environment-agent-api.js";
-import { startDaemonE2eHarness } from "./harness.js";
+import { startServerE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
 interface TurnProgressCounts {
@@ -84,7 +84,7 @@ async function waitForIdleAfterTurnProgress(args: {
  * multi-child provider collisions, sibling-channel event routing errors.
  */
 export async function runMultiThreadStressScenario(): Promise<void> {
-  const harness = await startDaemonE2eHarness({
+  const harness = await startServerE2eHarness({
     fakeCodex: {
       defaultTurnDelayMs: 25,
     },

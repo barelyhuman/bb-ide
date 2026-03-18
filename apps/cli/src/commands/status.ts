@@ -38,9 +38,9 @@ export function registerStatusCommand(
         managedThreads: null,
       };
 
-      let daemonAvailable = false;
+      let serverAvailable = false;
 
-      // Try to fetch enriched data from the daemon
+      // Try to fetch enriched data from the server
       if (context.projectId || context.threadId) {
         try {
           const client = createClient(getUrl());
@@ -57,7 +57,7 @@ export function registerStatusCommand(
                 name: project.name,
                 rootPath: project.rootPath,
               };
-              daemonAvailable = true;
+              serverAvailable = true;
             } catch {
               // Project fetch failed; will fall back below
             }
@@ -81,7 +81,7 @@ export function registerStatusCommand(
                 parentThreadId: thread.parentThreadId ?? null,
                 environment: envDisplay,
               };
-              daemonAvailable = true;
+              serverAvailable = true;
 
               // If the thread is a manager, fetch managed (child) threads
               if (thread.type === "manager") {
@@ -105,7 +105,7 @@ export function registerStatusCommand(
             }
           }
         } catch {
-          // Daemon unreachable; fall back to env-var-only output
+          // Server unreachable; fall back to env-var-only output
         }
       }
 
@@ -113,7 +113,7 @@ export function registerStatusCommand(
       if (outputJson(opts, payload)) return;
 
       // Human-readable output
-      if (daemonAvailable && payload.project) {
+      if (serverAvailable && payload.project) {
         console.log(`Project: ${payload.project.name} (${payload.project.id})`);
         console.log(`  Root: ${payload.project.rootPath}`);
       } else if (context.projectId) {
@@ -124,7 +124,7 @@ export function registerStatusCommand(
 
       console.log("");
 
-      if (daemonAvailable && payload.thread) {
+      if (serverAvailable && payload.thread) {
         console.log(`Thread: ${payload.thread.id}`);
         console.log(`  Type: ${payload.thread.type}`);
         console.log(`  Status: ${payload.thread.status}`);

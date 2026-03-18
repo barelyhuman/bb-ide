@@ -1,22 +1,22 @@
-# Standalone Daemon CLI QA
+# Standalone Server CLI QA
 
 This document describes how to QA BB server and CLI flows against a real provider.
 
 Use this guide when you want to validate user-visible behavior end-to-end, especially after changes to:
 
-- standalone daemon startup and restart
+- standalone server startup and restart
 - thread spawn, follow-up, steer, and stop flows
 - worktree provisioning and recovery
 - provider-initiated tool calls through env-daemon session supervision
-- CLI commands that should work against a running daemon
+- CLI commands that should work against a running server
 
 For a faster representative pass, use:
 
 ```bash
-pnpm qa:daemon:manual-smoke
+pnpm qa:server:manual-smoke
 ```
 
-That script runs a disposable standalone daemon against the real provider and exercises a smaller CLI-first matrix. Use this full guide when you need exhaustive coverage or failure triage.
+That script runs a disposable standalone server against the real provider and exercises a smaller CLI-first matrix. Use this full guide when you need exhaustive coverage or failure triage.
 
 ## Provider selection
 
@@ -24,14 +24,14 @@ By default, the QA pass uses the Codex provider. To run against a different prov
 
 **Claude Code:**
 ```bash
-BB_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-daemon-qa.mjs
-ANTHROPIC_API_KEY=... pnpm qa:daemon:smoke:claude-code
+BB_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-server-qa.mjs
+ANTHROPIC_API_KEY=... pnpm qa:server:smoke:claude-code
 ```
 
 **Pi:**
 ```bash
-BB_PROVIDER=pi node scripts/qa/start-standalone-daemon-qa.mjs --provider pi
-pnpm qa:daemon:smoke:pi
+BB_PROVIDER=pi node scripts/qa/start-standalone-server-qa.mjs --provider pi
+pnpm qa:server:smoke:pi
 ```
 
 Pi reads auth from `~/.pi/agent/auth.json` (set up via `npx @mariozechner/pi-ai login`). No env var needed.
@@ -40,7 +40,7 @@ All the test scenarios in this document apply to all providers. The only differe
 
 ### Multi-provider coverage strategy
 
-It is fine to run the full exhaustive QA pass against only one provider and then run a lighter smoke pass (`pnpm qa:daemon:smoke` or `pnpm qa:daemon:smoke:claude-code`) against the other supported providers. The daemon lifecycle, restart, and recovery behaviors are provider-agnostic — a full pass on one provider gives high confidence that the core paths work, while a smoke pass on the others confirms that the provider-specific bridge and adapter wiring is healthy.
+It is fine to run the full exhaustive QA pass against only one provider and then run a lighter smoke pass (`pnpm qa:server:smoke` or `pnpm qa:server:smoke:claude-code`) against the other supported providers. The server lifecycle, restart, and recovery behaviors are provider-agnostic — a full pass on one provider gives high confidence that the core paths work, while a smoke pass on the others confirms that the provider-specific bridge and adapter wiring is healthy.
 
 **Multi-provider coexistence is NOT covered by single-provider passes.** When touching environment-daemon runtime code, provider bridges, or command routing, you MUST also run the multi-provider scenario below. Bugs in this area only manifest when two different providers are active in the same env-daemon simultaneously — single-provider tests will pass while multi-provider usage is completely broken.
 
@@ -51,16 +51,16 @@ It is fine to run the full exhaustive QA pass against only one provider and then
 - Use the built binaries directly:
   - `node apps/server/dist/index.js`
   - `node apps/cli/dist/index.js`
-- For restart and relaunch checks, use the exact Node binary that started the standalone daemon. Do not assume plain `node` resolves to the same runtime across shells.
+- For restart and relaunch checks, use the exact Node binary that started the standalone server. Do not assume plain `node` resolves to the same runtime across shells.
 - Use the real Codex provider. Do not use the fake-codex test harness for this QA pass.
-- Some recovery scenarios in the automated suite are fake-provider-only because they require explicit worker-loss control hooks. Those are covered by `pnpm qa:daemon:recovery:fake`, not by the real-provider scripts.
+- Some recovery scenarios in the automated suite are fake-provider-only because they require explicit worker-loss control hooks. Those are covered by `pnpm qa:server:recovery:fake`, not by the real-provider scripts.
 - Prefer disposable test repositories and disposable BB roots so failures do not contaminate real projects.
-- When testing a user’s already-running main daemon, do not run `bb daemon restart` unless they explicitly want that daemon restarted.
-- If a test project root is temporary, keep it on disk until all worktree checks finish. Cleaning it up early will correctly fail with `project_root_missing`, which is a test setup mistake, not a daemon bug.
+- When testing a user’s already-running main server, do not run `bb server restart` unless they explicitly want that server restarted.
+- If a test project root is temporary, keep it on disk until all worktree checks finish. Cleaning it up early will correctly fail with `project_root_missing`, which is a test setup mistake, not a server bug.
 
 ## Prerequisites
 
-Build the daemon stack first:
+Build the server stack first:
 
 ```bash
 pnpm exec turbo run build \
@@ -69,7 +69,7 @@ pnpm exec turbo run build \
   --filter=@bb/cli
 ```
 
-For Codex: confirm `codex` is available in `PATH` and can be used by the daemon.
+For Codex: confirm `codex` is available in `PATH` and can be used by the server.
 
 For Claude Code: confirm `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set and the `@bb/claude-code-bridge` package is built (`pnpm --filter @bb/claude-code-bridge build`).
 
@@ -77,20 +77,20 @@ For Pi: confirm `pi` is in `PATH` and auth is configured (`npx @mariozechner/pi-
 
 Recommended during restart/liveness QA:
 
-- keep one shell tailing the daemon log:
+- keep one shell tailing the server log:
 
 ```bash
-tail -f "$bb_root/logs/daemon.log"
+tail -f "$bb_root/logs/server.log"
 ```
 
-- keep a separate persistent shell or terminal tab for daemon relaunches; avoid backgrounding the relaunched daemon from a one-shot shell command
+- keep a separate persistent shell or terminal tab for server relaunches; avoid backgrounding the relaunched server from a one-shot shell command
 
-## Standalone Daemon QA
+## Standalone Server QA
 
-This path validates the standalone daemon process directly, with its own BB root.
+This path validates the standalone server process directly, with its own BB root.
 
 Run the cases in order and record pass/fail for each one. Do not stop the whole pass after the
-first failure unless the daemon is completely unusable. The goal is to learn which recovery paths
+first failure unless the server is completely unusable. The goal is to learn which recovery paths
 still work, not just which case fails first.
 
 ### 1. Prepare a disposable project
@@ -98,14 +98,14 @@ still work, not just which case fails first.
 Fast setup wrapper:
 
 ```bash
-node scripts/qa/start-standalone-daemon-qa.mjs
+node scripts/qa/start-standalone-server-qa.mjs
 ```
 
-That creates a disposable repo + BB root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, daemon PID, exact Node runtime details, a ready-to-run `relaunchCommand`, and a `cleanupCommand` as JSON.
+That creates a disposable repo + BB root, starts the standalone server, creates a project, and prints the resulting `serverUrl`, `projectId`, paths, server PID, exact Node runtime details, a ready-to-run `relaunchCommand`, and a `cleanupCommand` as JSON.
 
-Keep the reported `nodePath`, `nodeVersion`, and `nodeAbi` with your QA notes. If you later relaunch the daemon under a different Node ABI, native modules such as `better-sqlite3` can fail before BB finishes booting.
+Keep the reported `nodePath`, `nodeVersion`, and `nodeAbi` with your QA notes. If you later relaunch the server under a different Node ABI, native modules such as `better-sqlite3` can fail before BB finishes booting.
 
-When you finish the pass, run the reported `cleanupCommand` to stop the detached daemon and remove the disposable temp root.
+When you finish the pass, run the reported `cleanupCommand` to stop the detached server and remove the disposable temp root.
 
 Manual setup:
 
@@ -125,7 +125,7 @@ GIT_COMMITTER_EMAIL='bb-test@example.com' \
 git -C "$project_root" commit -m init
 ```
 
-### 2. Start the standalone daemon
+### 2. Start the standalone server
 
 ```bash
 BB_ROOT="$bb_root" \
@@ -141,16 +141,16 @@ ANTHROPIC_API_KEY=... \
 node apps/server/dist/index.js --port 4311
 ```
 
-In another shell, target that daemon:
+In another shell, target that server:
 
 ```bash
-export BB_DAEMON_URL=http://127.0.0.1:4311
+export BB_SERVER_URL=http://127.0.0.1:4311
 ```
 
 Sanity check:
 
 ```bash
-node apps/cli/dist/index.js daemon health
+node apps/cli/dist/index.js server health
 ```
 
 ### 3. Create a project
@@ -191,7 +191,7 @@ sqlite3 "$bb_root/bb.db" \
   "select thread_id,type,substr(json_data,1,160) from events order by seq desc limit 20;"
 ```
 
-Use SQLite only when the CLI/API surfaces are insufficient and you need to confirm the daemon’s persisted view directly.
+Use SQLite only when the CLI/API surfaces are insufficient and you need to confirm the server’s persisted view directly.
 
 ### 3b. Provider verification
 
@@ -377,7 +377,7 @@ Expected after unarchive:
 
 ### 6. Validate standalone restart behavior
 
-Only do this on the standalone daemon you started for testing.
+Only do this on the standalone server you started for testing.
 
 Required matrix:
 
@@ -404,7 +404,7 @@ For both environments, start a thread and wait until `thread status --recent-eve
 shows a real `turn/started` event, then in another shell:
 
 ```bash
-node apps/cli/dist/index.js daemon restart
+node apps/cli/dist/index.js server restart
 ```
 
 Expected when active work exists:
@@ -415,7 +415,7 @@ Expected when active work exists:
 Then force restart:
 
 ```bash
-node apps/cli/dist/index.js daemon restart --force
+node apps/cli/dist/index.js server restart --force
 ```
 
 ### 7. Validate shared environment / multi-thread behavior
@@ -434,7 +434,7 @@ Required matrix:
 - archive one thread while the sibling remains attached
 - confirm the archived thread rejects `tell`
 - confirm the sibling still accepts follow-ups on the same shared environment
-- restart the daemon while the shared environment exists
+- restart the server while the shared environment exists
 - confirm a sibling follow-up after restart reuses or recreates the env-daemon cleanly and returns to `idle`
 
 **Implicit shared environment** (critical — covers the `reserveThreadEnvironment` attachment path):
@@ -523,13 +523,13 @@ Expected:
 - `thread-2` still reaches `idle`
 - `thread-2` still shows the same attached environment id
 
-7. Restart the daemon and verify shared-thread recovery:
+7. Restart the server and verify shared-thread recovery:
 
 ```bash
-node apps/cli/dist/index.js daemon restart --force
+node apps/cli/dist/index.js server restart --force
 ```
 
-Relaunch the standalone daemon using the same Node binary and `BB_ROOT`, wait for health,
+Relaunch the standalone server using the same Node binary and `BB_ROOT`, wait for health,
 then run:
 
 ```bash
@@ -549,27 +549,27 @@ Expected:
 Expected:
 
 - CLI reports shutdown requested
-- daemon exits cleanly
-- after relaunching the daemon on the same `BB_ROOT`, the daemon nudges the previously active env-agent
+- server exits cleanly
+- after relaunching the server on the same `BB_ROOT`, the server nudges the previously active env-agent
 - if the same env-agent checks back in and flushes its buffered state, the thread continues normally
-- if the env-agent does not check back in before the liveness deadline, the daemon marks the thread `error`
+- if the env-agent does not check back in before the liveness deadline, the server marks the thread `error`
 - `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after the thread reaches either a healthy resumed state or `error`
-- after relaunching the daemon on the same `BB_ROOT`, the interrupted thread eventually returns to `idle`
+- after relaunching the server on the same `BB_ROOT`, the interrupted thread eventually returns to `idle`
 - the interrupted turn may resume or complete before the thread returns to `idle`; that is acceptable as long as recovery finishes cleanly
 - `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after relaunch
 
 Relaunch:
 
 ```bash
-node scripts/qa/relaunch-standalone-daemon-qa.mjs \
+node scripts/qa/relaunch-standalone-server-qa.mjs \
   --bb-root "$bb_root" \
   --port 4311
 ```
 
-If you used `start-standalone-daemon-qa.mjs`, prefer its printed `relaunchCommand` or pass the reported `nodePath` explicitly:
+If you used `start-standalone-server-qa.mjs`, prefer its printed `relaunchCommand` or pass the reported `nodePath` explicitly:
 
 ```bash
-node scripts/qa/relaunch-standalone-daemon-qa.mjs \
+node scripts/qa/relaunch-standalone-server-qa.mjs \
   --bb-root "$bb_root" \
   --port 4311 \
   --node-path "/absolute/path/to/node"
@@ -584,7 +584,7 @@ node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread log <thread-id>
 ```
 
-Daemon-log expectations after relaunch:
+Server-log expectations after relaunch:
 
 - surviving-worker case:
   - startup log reports at least one env-agent was poked
@@ -616,9 +616,9 @@ sqlite3 "$bb_root/bb.db" \
   "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
-6. Force-restart the daemon and relaunch it on the same `BB_ROOT`.
+6. Force-restart the server and relaunch it on the same `BB_ROOT`.
 7. Send a follow-up to the now-idle thread.
-8. Verify that the daemon starts a fresh env-agent session cleanly:
+8. Verify that the server starts a fresh env-agent session cleanly:
 
 ```bash
 sqlite3 "$bb_root/bb.db" \
@@ -635,7 +635,7 @@ Expected result:
 - the immediate follow-up before restart does not fail with `agent_shutdown`
 - after restart, the session count increases by exactly one for the fresh follow-up session
 - the previously idle session is closed or expires rather than remaining the live worker for the new follow-up
-- the daemon does not leave multiple live sessions competing for the same idle thread
+- the server does not leave multiple live sessions competing for the same idle thread
 - by the time the follow-up settles back to `idle`, there may be zero active session rows because BB intentionally retires the worker again; check for duplicate active rows during the run, not after final idle
 
 Additional rapid-repeat follow-up check for both `local` and `worktree`:
@@ -659,8 +659,8 @@ Expected result:
 Recommended provisioning-boundary restart check:
 
 1. Spawn a fresh thread.
-2. Restart the daemon after `provisioned` work has begun but before the first real provider `turn/started` arrives.
-3. Relaunch the daemon and inspect:
+2. Restart the server after `provisioned` work has begun but before the first real provider `turn/started` arrives.
+3. Relaunch the server and inspect:
 
 ```bash
 node apps/cli/dist/index.js thread show <thread-id>
@@ -679,8 +679,8 @@ Recommended queued-follow-up worker-loss check:
 
 1. Start a long-running turn and wait for `turn/started`.
 2. Queue a follow-up while that turn is still active.
-3. Force-restart the daemon and hard-kill the env-agent.
-4. Relaunch the daemon and wait for the active thread to become `error`.
+3. Force-restart the server and hard-kill the env-agent.
+4. Relaunch the server and wait for the active thread to become `error`.
 5. Send a manual follow-up and then inspect the queue and events.
 
 Expected result:
@@ -706,7 +706,7 @@ Expected result:
 Recommended late-old-agent noise check:
 
 1. Run a forced restart where the old env-agent does not reconnect successfully.
-2. Watch daemon logs for late 404s from the old env-agent.
+2. Watch server logs for late 404s from the old env-agent.
 3. While that noise is happening, inspect the thread repeatedly.
 
 Expected result:
@@ -718,9 +718,9 @@ Expected result:
 Missing-worker restart check:
 
 1. Start a long-running turn, wait for a real `turn/started`, then record its `control_base_url`.
-2. Force-restart the daemon.
-3. Kill the env-agent process or otherwise make that `control_base_url` unreachable before relaunching the daemon.
-4. Relaunch the daemon on the same `BB_ROOT`.
+2. Force-restart the server.
+3. Kill the env-agent process or otherwise make that `control_base_url` unreachable before relaunching the server.
+4. Relaunch the server on the same `BB_ROOT`.
 5. Wait through the liveness deadline, then verify:
 
 ```bash
@@ -758,8 +758,8 @@ Expected result:
 Recommended explicit provisioning-interruption check:
 
 1. Spawn a fresh thread.
-2. Restart the daemon while the thread is still `provisioning` or `provisioned` and before the first real `turn/started`.
-3. Relaunch the daemon and observe the result.
+2. Restart the server while the thread is still `provisioning` or `provisioned` and before the first real `turn/started`.
+3. Relaunch the server and observe the result.
 
 Expected result:
 
@@ -780,7 +780,7 @@ usage is completely broken. Past bugs in this area include:
 - One provider child exiting spuriously rejects another child's in-flight requests
 
 Prerequisites: at least two providers must be available (e.g. codex + pi, or
-codex + claude-code). The daemon must be started without `BB_PROVIDER` so it
+codex + claude-code). The server must be started without `BB_PROVIDER` so it
 uses the default and can accept explicit `providerId` per thread.
 
 **Required multi-provider matrix:**
@@ -897,7 +897,7 @@ Expected:
 - returning to A after using B still works
 - stopping or finishing A does not terminate B's ability to follow up
 - continuing B does not corrupt A's later follow-up path
-- no "Already initialized" errors in the daemon log
+- no "Already initialized" errors in the server log
 - no provider rpc errors or timeouts in the event stream
 
 **What to look for if it fails:**
@@ -919,16 +919,16 @@ Automated real-provider coverage already exists for this path:
 
 ```bash
 pnpm --filter @bb/server exec vitest run \
-  src/__tests__/e2e/dynamic-tools-daemon-roundtrip.test.ts \
-  src/__tests__/e2e/codex-dynamic-tools-daemon-roundtrip.test.ts
+  src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts \
+  src/__tests__/e2e/codex-dynamic-tools-server-roundtrip.test.ts
 ```
 
 If you are doing a manual standalone pass, also verify at least one provider-initiated tool call end-to-end:
 
-1. Start the standalone daemon normally.
+1. Start the standalone server normally.
 2. Spawn a thread that is guaranteed to invoke a BB tool exposed through the provider bridge.
 3. Wait for the thread to settle.
-4. Inspect the final output, raw events, and daemon log.
+4. Inspect the final output, raw events, and server log.
 
 Expected:
 
@@ -936,16 +936,16 @@ Expected:
 - the provider receives a successful response, not `undefined`
 - the thread does not hang on the tool call
 - raw events show the tool request and completion, with no `provider_rpc_error`
-- no `Unhandled provider request` or env-daemon session-supervisor errors appear in the daemon log
+- no `Unhandled provider request` or env-daemon session-supervisor errors appear in the server log
 
-## Main Daemon QA
+## Main Server QA
 
-Use this when the user already has the main daemon running and wants direct QA against it.
+Use this when the user already has the main server running and wants direct QA against it.
 
 ### Safe scope
 
 - OK:
-  - `daemon health`
+  - `server health`
   - `project create/list/files`
   - `thread spawn/show/log/output`
   - `thread tell` (with `--mode steer` for steering)
@@ -953,7 +953,7 @@ Use this when the user already has the main daemon running and wants direct QA a
   - `thread archive` / `thread unarchive`
   - worktree spawn/follow-up
 - Avoid unless explicitly approved:
-  - `daemon restart`
+  - `server restart`
 
 ### Procedure
 
@@ -966,7 +966,7 @@ Use this when the user already has the main daemon running and wants direct QA a
 ```bash
 node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread log <thread-id>
-node apps/cli/dist/index.js daemon health
+node apps/cli/dist/index.js server health
 ```
 
 When a result looks suspicious, also inspect:
@@ -980,7 +980,7 @@ sqlite3 "$bb_root/bb.db" \
 
 - `provisioning_failed` with `project_root_missing`:
   - The test project directory was deleted or moved.
-  - Fix the test setup before blaming the daemon.
+  - Fix the test setup before blaming the server.
 
 - `thread tell --mode steer` returns `HTTP 409`:
   - The thread has no active turn yet.
@@ -988,15 +988,15 @@ sqlite3 "$bb_root/bb.db" \
 
 - Restart appears to work, but the thread stays `active` without reconnect progress or a transition to `error`:
   - This is a real liveness/recovery bug candidate.
-  - Check whether the thread log shows daemon restart, missing env-agent check-ins, or a stuck reconnect path.
+  - Check whether the thread log shows server restart, missing env-agent check-ins, or a stuck reconnect path.
 
 - `thread tell` after `thread stop` fails with missing session state:
   - This is a real recovery bug candidate.
-  - Capture `thread show`, `thread log`, and daemon logs before retrying.
+  - Capture `thread show`, `thread log`, and server logs before retrying.
 
 - A follow-up fails with `Environment-agent session ... closed (...) while command execution was in progress`:
   - This is a real session retirement / cleanup race.
-  - Capture session rows from SQLite and the daemon log around the failing `tell`.
+  - Capture session rows from SQLite and the server log around the failing `tell`.
 
 - Session rows look “wrong” after a successful follow-up:
   - Do not assume a healthy thread must still have an active env-agent session after final `idle`.
@@ -1014,7 +1014,7 @@ Use the tier names **light**, **extended**, or **full** when requesting a QA pas
 
 ~5 minutes per provider. Catches bridge wiring, event translation, and basic turn lifecycle bugs. Run this on every PR for all providers.
 
-- standalone daemon health
+- standalone server health
 - project create, list, files
 - local start
 - local follow-up
@@ -1022,7 +1022,7 @@ Use the tier names **light**, **extended**, or **full** when requesting a QA pas
 - worktree start
 - worktree follow-up
 - provider verification (`providerId` in thread show + raw event envelopes)
-- provider-initiated tool-call roundtrip through env-daemon (`dynamic-tools-daemon-roundtrip`)
+- provider-initiated tool-call roundtrip through env-daemon (`dynamic-tools-server-roundtrip`)
 
 ### Extended QA pass
 
@@ -1043,7 +1043,7 @@ Everything in **light**, plus:
 
 ### Full QA pass
 
-~30 minutes. Run against one real provider + the fake recovery suite. Run this before shipping big daemon or environment-agent changes.
+~30 minutes. Run against one real provider + the fake recovery suite. Run this before shipping big server or environment-agent changes.
 
 Everything in **extended**, plus:
 
@@ -1061,7 +1061,7 @@ Everything in **extended**, plus:
 - archive/unarchive after worker-loss recovery
 - late old-agent noise rejection
 - shared environment multi-thread spawn, sibling follow-up, archive sibling, restart recovery
-- `pnpm qa:daemon:recovery:fake` (8 automated fake-provider tests)
+- `pnpm qa:server:recovery:fake` (8 automated fake-provider tests)
 
 ## Cleanup
 
@@ -1071,7 +1071,7 @@ For standalone runs:
 rm -rf "$tmp_root"
 ```
 
-For main-daemon runs:
+For main-server runs:
 
 - keep the temp project around until worktree checks are done
 - after QA completes, remove the temp repo manually

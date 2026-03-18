@@ -36,7 +36,7 @@ export interface CreateSystemHealthReporterArgs {
   getRunningCount: () => number;
   startTime: number;
   dbPath: string;
-  daemonLogFilePath: string;
+  serverLogFilePath: string;
   runtimeEnv: NodeJS.ProcessEnv;
 }
 
@@ -44,7 +44,7 @@ const STORAGE_BUCKET_LABELS: Record<SystemHealthStorageBucketKey, string> = {
   database: "Database",
   database_wal: "Database WAL",
   database_shm: "Database SHM",
-  daemon_logs: "Daemon Logs",
+  server_logs: "Server Logs",
   environment_agent_logs: "Environment Agent Logs",
   worktrees: "Worktrees",
   attachments: "Attachments",
@@ -241,7 +241,7 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
       buildStorageBucket("database", [args.dbPath]),
       buildStorageBucket("database_wal", [`${args.dbPath}-wal`]),
       buildStorageBucket("database_shm", [`${args.dbPath}-shm`]),
-      buildStorageBucket("daemon_logs", listRotatingLogArtifacts(args.daemonLogFilePath)),
+      buildStorageBucket("server_logs", listRotatingLogArtifacts(args.serverLogFilePath)),
       buildStorageBucket("environment_agent_logs", [join(bbRoot, "environment-agent-logs")]),
       buildStorageBucket("worktrees", resolveWorktreeBucketPaths(projects, args.runtimeEnv)),
       buildStorageBucket("attachments", [join(bbRoot, "attachments")]),

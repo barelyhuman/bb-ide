@@ -1,21 +1,21 @@
 import type { WebSocketConnectionState } from "./ws"
 
-export type DaemonStatusIndicatorState =
+export type ServerStatusIndicatorState =
   | "up-to-date"
   | "reconnecting"
   | "out-of-date"
 
-interface ResolveDaemonStatusIndicatorStateArgs {
+interface ResolveServerStatusIndicatorStateArgs {
   connectionState: WebSocketConnectionState
   isRestartPending: boolean
   shouldRestart: boolean
 }
 
-export function resolveDaemonStatusIndicatorState({
+export function resolveServerStatusIndicatorState({
   connectionState,
   isRestartPending,
   shouldRestart,
-}: ResolveDaemonStatusIndicatorStateArgs): DaemonStatusIndicatorState {
+}: ResolveServerStatusIndicatorStateArgs): ServerStatusIndicatorState {
   if (isRestartPending || connectionState !== "connected") {
     return "reconnecting"
   }

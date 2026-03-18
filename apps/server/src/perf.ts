@@ -31,7 +31,7 @@ export function logPerf(label: string, fields?: Record<string, unknown>): void {
   }
   console.info(
     JSON.stringify({
-      scope: "daemon-perf",
+      scope: "server-perf",
       label,
       ...(fields ?? {}),
       ...(eventLoopDelaySummary() ?? {}),

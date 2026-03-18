@@ -64,7 +64,7 @@ export async function unwrap<T>(
   } catch (err) {
     if (isTypeErrorWithCauseCode(err, "ECONNREFUSED")) {
       throw new Error(
-        "Cannot connect to BB server. Ensure it is running and BB_DAEMON_URL is correct.",
+        "Cannot connect to BB server. Ensure it is running and BB_SERVER_URL is correct.",
       );
     }
     throw err;

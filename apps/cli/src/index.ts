@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { registerDaemonCommands } from "./commands/daemon.js";
+import { registerServerCommands } from "./commands/server.js";
 import { registerEnvironmentAgentCommand } from "./commands/environment-agent.js";
 import { registerGuideCommand } from "./commands/guide.js";
 import { registerManagerCommands } from "./commands/manager.js";
@@ -10,7 +10,7 @@ import { registerProviderCommands } from "./commands/provider.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread.js";
 import { normalizeCliArgv } from "./argv-normalization.js";
-import { resolveContextSnapshot, resolveDaemonUrl } from "./context-env.js";
+import { resolveContextSnapshot, resolveServerUrl } from "./context-env.js";
 
 const program = new Command();
 
@@ -23,16 +23,16 @@ program.addHelpText("after", () => {
   const context = resolveContextSnapshot();
   const project = context.projectId ?? "<unset>";
   const thread = context.threadId ?? "<unset>";
-  const daemonEnv = context.daemonUrlFromEnv ?? "<unset>";
-  const daemonResolved = context.daemonUrl;
+  const serverEnv = context.serverUrlFromEnv ?? "<unset>";
+  const serverResolved = context.serverUrl;
 
   return `
 
 Current context:
   BB_PROJECT_ID: ${project}
   BB_THREAD_ID: ${thread}
-  BB_DAEMON_URL: ${daemonEnv}
-  Daemon URL: ${daemonResolved}
+  BB_SERVER_URL: ${serverEnv}
+  Server URL: ${serverResolved}
 
 Quick start:
   bb status
@@ -44,7 +44,7 @@ Quick start:
 
 // Helper to get the URL from the program's options
 function getUrl(): string {
-  return resolveDaemonUrl();
+  return resolveServerUrl();
 }
 
 // Register all command groups
@@ -53,7 +53,7 @@ registerProjectCommands(program, getUrl);
 registerProviderCommands(program, getUrl);
 registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
-registerDaemonCommands(program, getUrl);
+registerServerCommands(program, getUrl);
 registerEnvironmentAgentCommand(program);
 registerGuideCommand(program);
 

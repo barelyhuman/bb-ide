@@ -1,4 +1,4 @@
-export const DEFAULT_DAEMON_URL = "http://localhost:3333";
+export const DEFAULT_SERVER_URL = "http://localhost:3333";
 
 function normalizeValue(value?: string): string | undefined {
   if (value === undefined) return undefined;
@@ -6,12 +6,12 @@ function normalizeValue(value?: string): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-export function resolveDaemonUrlFromEnv(): string | undefined {
-  return normalizeValue(process.env.BB_DAEMON_URL);
+export function resolveServerUrlFromEnv(): string | undefined {
+  return normalizeValue(process.env.BB_SERVER_URL);
 }
 
-export function resolveDaemonUrl(): string {
-  return resolveDaemonUrlFromEnv() ?? DEFAULT_DAEMON_URL;
+export function resolveServerUrl(): string {
+  return resolveServerUrlFromEnv() ?? DEFAULT_SERVER_URL;
 }
 
 export function resolveProjectId(flagValue?: string): string | undefined {
@@ -43,16 +43,16 @@ export function requireThreadId(flagValue?: string): string {
 export interface ContextSnapshot {
   projectId?: string;
   threadId?: string;
-  daemonUrl: string;
-  daemonUrlFromEnv?: string;
+  serverUrl: string;
+  serverUrlFromEnv?: string;
 }
 
 export function resolveContextSnapshot(): ContextSnapshot {
-  const daemonUrlFromEnv = resolveDaemonUrlFromEnv();
+  const serverUrlFromEnv = resolveServerUrlFromEnv();
   return {
     projectId: resolveProjectId(),
     threadId: resolveThreadId(),
-    daemonUrl: daemonUrlFromEnv ?? DEFAULT_DAEMON_URL,
-    daemonUrlFromEnv,
+    serverUrl: serverUrlFromEnv ?? DEFAULT_SERVER_URL,
+    serverUrlFromEnv,
   };
 }

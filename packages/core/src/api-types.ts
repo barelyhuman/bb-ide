@@ -65,7 +65,7 @@ export interface SpawnThreadRequest {
   developerInstructions?: string;
   parentThreadId?: string;
   /**
-   * Internal-only override for daemon-authored bootstrap/system turns.
+   * Internal-only override for server-authored bootstrap/system turns.
    */
   spawnInitiator?: ThreadTurnInitiator;
 }
@@ -293,7 +293,7 @@ export type SystemHealthStorageBucketKey =
   | "database"
   | "database_wal"
   | "database_shm"
-  | "daemon_logs"
+  | "server_logs"
   | "environment_agent_logs"
   | "worktrees"
   | "attachments"

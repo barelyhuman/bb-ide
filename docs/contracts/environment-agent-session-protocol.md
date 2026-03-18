@@ -9,9 +9,9 @@ It defines the session-based model used for liveness, command delivery, event de
 ## Goals
 
 - fast: low-latency command and event propagation over a live connection when available
-- reliable: daemon-side durable acknowledgement semantics with idempotent retry behavior
-- resilient: surviving agents can reconnect after daemon restart or outage, but daemon correctness does not depend on agent-local durability
-- scalable: supports many concurrent agents without daemon-side polling of every agent
+- reliable: server-side durable acknowledgement semantics with idempotent retry behavior
+- resilient: surviving agents can reconnect after server restart or outage, but server correctness does not depend on agent-local durability
+- scalable: supports many concurrent agents without server-side polling of every agent
 - adaptable: message semantics stay stable across WebSocket, HTTP long-poll, SSE+POST, or future transports
 
 ## Non-Goals
@@ -23,27 +23,27 @@ It defines the session-based model used for liveness, command delivery, event de
 ## Terminology
 
 - **Agent**: the environment-agent process managing one or more thread channels.
-- **Daemon**: the BB server.
-- **Session**: an explicit leased relationship between daemon and a specific agent instance.
-- **Lease**: the daemon-granted validity window for a session. A session is active until its lease expires, is explicitly closed, or is replaced.
+- **Server**: the BB server.
+- **Session**: an explicit leased relationship between server and a specific agent instance.
+- **Lease**: the server-granted validity window for a session. A session is active until its lease expires, is explicitly closed, or is replaced.
 - **Channel**: an independently ordered logical stream carried inside a session. In v1, a channel is expected to map to a thread.
 - **Generation**: a monotonically changing identifier for a channel stream after agent-side restart/reset.
-- **Cursor**: the daemon's last durably applied position for a channel stream, expressed as `(generation, sequence)`.
-- **Outbox**: the agent's local store of outbound messages/events not yet acknowledged by the daemon. In the current model this is best-effort, not crash-durable.
+- **Cursor**: the server's last durably applied position for a channel stream, expressed as `(generation, sequence)`.
+- **Outbox**: the agent's local store of outbound messages/events not yet acknowledged by the server. In the current model this is best-effort, not crash-durable.
 
 ## Core Invariants
 
 1. Wire delivery is **at least once**, never assumed to be exactly once.
 2. Both sides must apply messages **idempotently** using stable ids.
 3. Ordering is guaranteed **per channel** only.
-4. The daemon advances a channel cursor only after it has **durably applied** the corresponding events.
-5. The agent removes outbound events from its local outbox only after receiving a daemon ack that covers them. If the agent crashes first, those uncommitted events may be lost.
+4. The server advances a channel cursor only after it has **durably applied** the corresponding events.
+5. The agent removes outbound events from its local outbox only after receiving a server ack that covers them. If the agent crashes first, those uncommitted events may be lost.
 6. A new agent instance must not reuse an old channel stream without changing its **generation**.
 7. Session liveness is determined by **lease state**, not inferred from one-off request success.
 
 ## Session Model
 
-A session is established or resumed by an agent. The daemon does not need to discover or poll all agents continuously.
+A session is established or resumed by an agent. The server does not need to discover or poll all agents continuously.
 
 ### Session Identity
 
@@ -53,7 +53,7 @@ Each session is associated with:
 - `agentInstanceId`: unique id for the current agent process instance
 - `sessionId`: server-issued id for the current session lease
 - `protocolVersion`: negotiated version
-- `controlEndpoint`: optional daemon-reachable control URL and auth token used for restart nudges
+- `controlEndpoint`: optional server-reachable control URL and auth token used for restart nudges
 
 ### Channel Identity
 
@@ -113,7 +113,7 @@ Sent by agent when no valid resumable session is known.
       {
         "channelId": "thread-1",
         "generation": 7,
-        "lastDaemonAcked": {
+        "lastServerAcked": {
           "generation": 7,
           "sequence": 104
         }
@@ -123,11 +123,11 @@ Sent by agent when no valid resumable session is known.
 }
 ```
 
-`controlEndpoint` is optional restart metadata. When present, the daemon may use it to send `/control/session-sync` nudges after restart so a surviving agent resets reconnect backoff and checks in quickly.
+`controlEndpoint` is optional restart metadata. When present, the server may use it to send `/control/session-sync` nudges after restart so a surviving agent resets reconnect backoff and checks in quickly.
 
 ### `session_welcome`
 
-Sent by daemon in response to `session_open`.
+Sent by server in response to `session_open`.
 
 ```json
 {
@@ -153,7 +153,7 @@ Sent by daemon in response to `session_open`.
 }
 ```
 
-The daemon may issue a new `sessionId` on resume.
+The server may issue a new `sessionId` on resume.
 
 ### `heartbeat`
 
@@ -232,7 +232,7 @@ Sent by agent. Each batch may include events for one or more channels, but event
 
 ### `event_ack`
 
-Sent by daemon after durable application.
+Sent by server after durable application.
 
 ```json
 {
@@ -259,7 +259,7 @@ Sent by daemon after durable application.
 
 ### `command_batch`
 
-Sent by daemon. Commands are durable before sending.
+Sent by server. Commands are durable before sending.
 
 ```json
 {
@@ -352,7 +352,7 @@ Either side may close the session explicitly.
 
 ### `session_replaced`
 
-Sent by daemon to an older session when a newer agent instance takes over.
+Sent by server to an older session when a newer agent instance takes over.
 
 ```json
 {
@@ -371,17 +371,17 @@ Sent by daemon to an older session when a newer agent instance takes over.
 
 A session is considered active when all of the following are true:
 
-- it has been accepted by the daemon
+- it has been accepted by the server
 - it has not been explicitly closed or replaced
 - its heartbeat deadline has not passed
 
-The daemon extends the stored liveness deadline when it receives timely heartbeats or other valid session traffic.
+The server extends the stored liveness deadline when it receives timely heartbeats or other valid session traffic.
 
 Suggested v1 defaults:
 
 - `livenessTimeoutMs`: 30_000
 - `heartbeatIntervalMs`: 10_000
-- daemon may expire a session after missing enough heartbeats to pass the liveness deadline
+- server may expire a session after missing enough heartbeats to pass the liveness deadline
 
 Important distinctions:
 
@@ -393,9 +393,9 @@ A brief transport blip does not immediately make the session inactive if the hea
 
 ## Durable State Requirements
 
-### Daemon
+### Server
 
-The daemon must durably persist:
+The server must durably persist:
 
 - session metadata needed to resume or replace sessions safely
 - per-channel last applied event cursor `(generation, sequence)`
@@ -418,27 +418,27 @@ The agent keeps best-effort in-memory runtime state for:
 1. agent keeps unacked events in its local outbox
 2. transport disconnects
 3. agent reconnects and sends `session_open`
-4. daemon responds with `session_welcome`
-5. daemon tells agent to resume from daemon cursor
+4. server responds with `session_welcome`
+5. server tells agent to resume from server cursor
 6. agent resends unacked events after that cursor
 7. normal `event_ack` flow resumes
 
-### Daemon restart while agent keeps running
+### Server restart while agent keeps running
 
-1. daemon restarts and restores persisted cursors/command log
+1. server restarts and restores persisted cursors/command log
 2. agent reconnects using `session_open`
-3. daemon issues fresh `session_welcome`
-4. daemon requests events from its last durably applied cursor
+3. server issues fresh `session_welcome`
+4. server requests events from its last durably applied cursor
 5. agent resends any surviving local outbox events from that cursor
-6. daemon reissues still-outstanding commands after its last acknowledged command cursor
+6. server reissues still-outstanding commands after its last acknowledged command cursor
 
-### Agent restart before daemon ack
+### Agent restart before server ack
 
-1. agent had locally buffered events but not received daemon ack
+1. agent had locally buffered events but not received server ack
 2. agent restarts
 3. agent increments channel generation if stream continuity is lost
 4. agent resumes from empty or surviving local runtime state
-5. daemon either:
+5. server either:
    - continues same generation if continuity is valid, or
    - accepts new generation and applies according to explicit generation rules
 
@@ -447,18 +447,18 @@ Generation change must be explicit; sequence reuse within the same generation is
 ### Session replacement
 
 1. newer agent instance opens/resumes the same logical `agentId`/channel set
-2. daemon chooses replacement policy
-3. daemon grants lease to newer instance
-4. daemon sends `session_replaced` to older session if reachable
+2. server chooses replacement policy
+3. server grants lease to newer instance
+4. server sends `session_replaced` to older session if reachable
 5. older session must stop sending new traffic
 
 ## Ordering and Deduplication Rules
 
 ### Events
 
-- Within a channel generation, the daemon applies only contiguous sequences.
+- Within a channel generation, the server applies only contiguous sequences.
 - Events with sequence less than or equal to the durable cursor are duplicates and must be ignored safely.
-- Events ahead of the cursor must not silently advance the durable cursor. The daemon responds with an `event_ack` at the last contiguous cursor so the agent can reset and resend from there.
+- Events ahead of the cursor must not silently advance the durable cursor. The server responds with an `event_ack` at the last contiguous cursor so the agent can reset and resend from there.
 - A generation mismatch must be handled explicitly, never heuristically.
 
 ### Commands
@@ -466,7 +466,7 @@ Generation change must be explicit; sequence reuse within the same generation is
 - Every retry uses the same `commandId`.
 - The agent persists command receipt before acknowledging `received`.
 - If a duplicate `commandId` arrives, the agent must not re-execute it.
-- The daemon treats `command_ack` and `command_result` idempotently.
+- The server treats `command_ack` and `command_result` idempotently.
 
 ## Error Handling
 
@@ -517,21 +517,21 @@ One possible mapping:
   - carries `session_open`
   - returns `session_welcome`
 - `POST /sessions/:sessionId/push`
-  - carries agent→daemon envelopes such as `heartbeat`, `event_batch`, `command_ack`, `command_result`
+  - carries agent→server envelopes such as `heartbeat`, `event_batch`, `command_ack`, `command_result`
 - `GET /sessions/:sessionId/pull?waitMs=30000`
-  - blocks until daemon has outbound envelopes such as `command_batch`, `event_ack`, `session_replaced`
+  - blocks until server has outbound envelopes such as `command_batch`, `event_ack`, `session_replaced`
 
 This preserves the same session, cursor, and ack semantics without requiring WebSockets.
 
 ### SSE + POST Mapping
 
-- daemon→agent: SSE stream of protocol envelopes
-- agent→daemon: POST of protocol envelopes
+- server→agent: SSE stream of protocol envelopes
+- agent→server: POST of protocol envelopes
 - same ids, same cursors, same lease rules
 
 ## Versioning and Capability Negotiation
 
-The daemon and agent negotiate:
+The server and agent negotiate:
 
 - protocol version
 
@@ -546,6 +546,6 @@ The current HTTP implementation uses:
 - `POST /threads/:id/environment-agent/session/messages`
   - agent sends `heartbeat`, `event_batch`, `command_ack`, `command_result`, and `session_close`
 - `GET /threads/:id/environment-agent/session/commands`
-  - agent long-polls for daemon `command_batch` responses
+  - agent long-polls for server `command_batch` responses
 
 This is the intentional v1 transport boundary for the current codebase.

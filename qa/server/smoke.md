@@ -1,15 +1,15 @@
-# Daemon / Env-Agent Smoke QA
+# Server / Env-Agent Smoke QA
 
 Use this pass for the fastest high-signal manual validation.
 
 ## Goal
 
-Confirm the most important daemon/env-agent flows still work end-to-end against the real provider.
+Confirm the most important server/env-agent flows still work end-to-end against the real provider.
 
 ## When to run
 
-- before or after changes to daemon lifecycle logic
-- before merging high-risk CLI / daemon changes when a fast manual pass is needed
+- before or after changes to server lifecycle logic
+- before merging high-risk CLI / server changes when a fast manual pass is needed
 - as the first pass before deeper stress or regression coverage
 
 ## Suggested runtime
@@ -19,24 +19,24 @@ Confirm the most important daemon/env-agent flows still work end-to-end against 
 ## Required setup
 
 Use the full setup instructions in:
-- [`./standalone-daemon-qa.md`](./standalone-daemon-qa.md)
+- [`./standalone-server-qa.md`](./standalone-server-qa.md)
 
-For standalone restart scenarios in this pass, pin the exact Node runtime reported by `start-standalone-daemon-qa.mjs` or use `scripts/qa/relaunch-standalone-daemon-qa.mjs` instead of plain `node`.
+For standalone restart scenarios in this pass, pin the exact Node runtime reported by `start-standalone-server-qa.mjs` or use `scripts/qa/relaunch-standalone-server-qa.mjs` instead of plain `node`.
 
 ## Automation entrypoint
 
 For the checked-in automation tiers:
 
 ```bash
-pnpm qa:daemon:manual-smoke
-pnpm qa:daemon:smoke
-pnpm qa:daemon:smoke:claude-code
-pnpm qa:daemon:smoke:pi
+pnpm qa:server:manual-smoke
+pnpm qa:server:smoke
+pnpm qa:server:smoke:claude-code
+pnpm qa:server:smoke:pi
 ```
 
-`qa:daemon:manual-smoke` provisions a disposable standalone daemon and runs a representative CLI-first pass against the real provider.
+`qa:server:manual-smoke` provisions a disposable standalone server and runs a representative CLI-first pass against the real provider.
 
-`qa:daemon:smoke` runs the real-provider scripted smoke suite against Codex. `qa:daemon:smoke:claude-code` and `qa:daemon:smoke:pi` run the same suite against Claude Code and Pi respectively. Some recovery scenarios still require fake Codex control and are covered separately by `pnpm qa:daemon:recovery:fake`.
+`qa:server:smoke` runs the real-provider scripted smoke suite against Codex. `qa:server:smoke:claude-code` and `qa:server:smoke:pi` run the same suite against Claude Code and Pi respectively. Some recovery scenarios still require fake Codex control and are covered separately by `pnpm qa:server:recovery:fake`.
 
 ## Required scenarios
 
@@ -84,7 +84,7 @@ pnpm qa:daemon:smoke:pi
 Record:
 - scenario name
 - thread id
-- daemon log path
+- server log path
 - relevant CLI outputs
 - whether the failure looks like product bug, flake, or stale QA expectation
 
@@ -94,4 +94,4 @@ Preferred bundle capture:
 node scripts/qa/capture-thread-failure-bundle.mjs <thread-id> --scenario smoke
 ```
 
-Then continue the remaining smoke scenarios if the daemon is still usable.
+Then continue the remaining smoke scenarios if the server is still usable.

@@ -15,13 +15,13 @@ import {
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
 import {
-  useRestartDaemon,
+  useRestartServer,
   useSystemRestartPolicy,
   useThreads,
 } from "@/hooks/useApi"
-import { useDaemonConnectionState } from "@/hooks/useWebSocket"
+import { useServerConnectionState } from "@/hooks/useWebSocket"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
-import { resolveDaemonStatusIndicatorState } from "@/lib/daemon-status-indicator"
+import { resolveServerStatusIndicatorState } from "@/lib/server-status-indicator"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -40,8 +40,8 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const { createFromPicker, isCreating } = useQuickCreateProject()
   const { data: threads } = useThreads()
   const { data: restartPolicy } = useSystemRestartPolicy()
-  const restartDaemon = useRestartDaemon()
-  const daemonConnectionState = useDaemonConnectionState()
+  const restartServer = useRestartServer()
+  const serverConnectionState = useServerConnectionState()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -61,51 +61,51 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     threads?.filter((thread) => shutdownBlockingStatuses.includes(thread.status)).length ??
     0
   const shouldRestart = restartPolicy?.shouldRestart === true
-  const daemonStatus = resolveDaemonStatusIndicatorState({
-    connectionState: daemonConnectionState,
-    isRestartPending: restartDaemon.isPending,
+  const serverStatus = resolveServerStatusIndicatorState({
+    connectionState: serverConnectionState,
+    isRestartPending: restartServer.isPending,
     shouldRestart,
   })
   const isRestartDisabled =
-    restartDaemon.isPending ||
-    daemonStatus === "reconnecting"
+    restartServer.isPending ||
+    serverStatus === "reconnecting"
 
-  const restartTooltip = restartDaemon.isPending
-    ? "Requesting daemon restart…"
+  const restartTooltip = restartServer.isPending
+    ? "Requesting server restart…"
     : blockingThreadCount > 0
-      ? `Force restart daemon. ${blockingThreadCount} active thread${blockingThreadCount === 1 ? "" : "s"} will reconnect if possible`
-      : daemonStatus === "reconnecting"
-        ? "Daemon reconnecting"
-        : daemonStatus === "out-of-date"
-          ? "Daemon connected but out of date. Click to restart"
-          : "Daemon connected and up to date. Click to restart"
+      ? `Force restart server. ${blockingThreadCount} active thread${blockingThreadCount === 1 ? "" : "s"} will reconnect if possible`
+      : serverStatus === "reconnecting"
+        ? "Server reconnecting"
+        : serverStatus === "out-of-date"
+          ? "Server connected but out of date. Click to restart"
+          : "Server connected and up to date. Click to restart"
 
-  const daemonIndicatorClassName = {
+  const serverIndicatorClassName = {
     "up-to-date":
       "bg-emerald-500 ring-emerald-500/25 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]",
     reconnecting:
       "bg-amber-400 ring-amber-400/30 shadow-[0_0_0_4px_rgba(251,191,36,0.18)] animate-pulse",
     "out-of-date":
       "bg-red-500 ring-red-500/25 shadow-[0_0_0_4px_rgba(239,68,68,0.16)]",
-  }[daemonStatus]
+  }[serverStatus]
 
-  const daemonStatusLabel = {
+  const serverStatusLabel = {
     "up-to-date": "Connected",
     reconnecting: "Reconnecting...",
     "out-of-date": "Restart required",
-  }[daemonStatus]
+  }[serverStatus]
 
   const requestRestart = () => {
     if (isRestartDisabled) return
-    restartDaemon.mutate({ force: true }, {
+    restartServer.mutate({ force: true }, {
       onSuccess: () => {
-        toast.success("Daemon restart requested")
+        toast.success("Server restart requested")
       },
       onError: (error) => {
         toast.error(
           error instanceof Error
             ? error.message
-            : "Failed to request daemon restart",
+            : "Failed to request server restart",
         )
       },
     })
@@ -160,14 +160,14 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 <span
                   className={cn(
                     "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
-                    daemonIndicatorClassName,
+                    serverIndicatorClassName,
                   )}
                   aria-hidden
                 />
                 <span
                   className="truncate text-xs font-medium leading-none"
                 >
-                  {daemonStatusLabel}
+                  {serverStatusLabel}
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>

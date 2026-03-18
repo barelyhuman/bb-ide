@@ -76,12 +76,12 @@ function hasChangesSince(rootPath: string, startedAt: number): boolean {
 
 function resolveWatchRoots(): string[] {
   const thisDir = dirname(fileURLToPath(import.meta.url));
-  const daemonRoot = resolve(thisDir, "..");
-  const repoRoot = resolve(daemonRoot, "..", "..");
+  const serverRoot = resolve(thisDir, "..");
+  const repoRoot = resolve(serverRoot, "..", "..");
 
   return [
-    resolve(daemonRoot, "src"),
-    resolve(daemonRoot, "dist"),
+    resolve(serverRoot, "src"),
+    resolve(serverRoot, "dist"),
     resolve(repoRoot, "packages", "agent-core", "src"),
     resolve(repoRoot, "packages", "agent-core", "dist"),
     resolve(repoRoot, "packages", "agent-server", "src"),

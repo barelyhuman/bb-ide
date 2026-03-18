@@ -19,9 +19,9 @@
 
 ## Debugging Data Flows
 
-- When investigating entity/state issues from a route like `http://localhost:5173/projects/<projectId>/threads/<threadId>`, prefer inspecting data through the daemon HTTP API or CLI first.
-- For data-only debugging, prefer daemon API/CLI over `curl` + browser workflows; it is faster to inspect entities directly without frontend/UI noise.
-- Use direct SQLite queries as an alternative fast path, especially when you need to validate persisted state or compare raw stored values against daemon/API responses.
+- When investigating entity/state issues from a route like `http://localhost:5173/projects/<projectId>/threads/<threadId>`, prefer inspecting data through the server HTTP API or CLI first.
+- For data-only debugging, prefer server API/CLI over `curl` + browser workflows; it is faster to inspect entities directly without frontend/UI noise.
+- Use direct SQLite queries as an alternative fast path, especially when you need to validate persisted state or compare raw stored values against server/API responses.
 
 ## Planning Workflow
 
@@ -64,8 +64,8 @@ Mock at boundaries, not inside the system.
 
 ### QA Passes
 
-- For daemon or environment-agent changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader daemon QA tiers when touching critical daemon/environment-agent code so regressions are caught early.
-- Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/server/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for daemon/env-agent behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
+- For server or environment-agent changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader server QA tiers when touching critical server/environment-agent code so regressions are caught early.
+- Start with the checked-in server QA tiers in `qa/` and the package scripts in `apps/server/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for server/env-agent behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
 - Use the fast e2e suite in `apps/server/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
-- For the full manual daemon workflow and scenario checklist, see `qa/daemon/standalone-daemon-qa.md`.
+- For the full manual server workflow and scenario checklist, see `qa/server/standalone-server-qa.md`.
 - For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@bb/<pkg>`.

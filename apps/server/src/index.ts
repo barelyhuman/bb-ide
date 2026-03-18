@@ -8,8 +8,8 @@ import { resolveBbPath } from "@bb/core/storage-paths";
 
 // Load .env from the workspace root. Never overwrites existing env vars.
 // Works for `pnpm dev`, standalone QA, and production runs from the repo.
-const __daemon_dirname = dirname(fileURLToPath(import.meta.url));
-const workspaceEnvPath = resolve(__daemon_dirname, "..", "..", "..", ".env");
+const __server_dirname = dirname(fileURLToPath(import.meta.url));
+const workspaceEnvPath = resolve(__server_dirname, "..", "..", "..", ".env");
 dotenv.config({ path: workspaceEnvPath });
 import {
   createConnection,
@@ -39,7 +39,7 @@ function parseArgs(): { port: number; dbPath: string; logFilePath: string } {
   const args = process.argv.slice(2);
   let port = 3333;
   let dbPath = resolveBbPath(process.env, "bb.db");
-  let logFilePath = resolveBbPath(process.env, "logs", "daemon.log");
+  let logFilePath = resolveBbPath(process.env, "logs", "server.log");
 
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
@@ -64,7 +64,7 @@ Usage: bb-server [options]
 Options:
   --port, -p <number>   Port to listen on (default: 3333)
   --db, -d <path>       Path to SQLite database (default: <bb-root>/bb.db)
-  --log-file, -l <path> Path to daemon log file (default: <bb-root>/logs/daemon.log)
+  --log-file, -l <path> Path to server log file (default: <bb-root>/logs/server.log)
   --help, -h            Show this help message
 `);
       process.exit(0);
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
       }
       const relaunched = relaunchCurrentProcess();
       if (!relaunched) {
-        console.error("Failed to relaunch daemon process.");
+        console.error("Failed to relaunch server process.");
       }
     }
 
@@ -209,9 +209,9 @@ async function main(): Promise<void> {
       environmentAgentSessionRepo,
       environmentAgentCursorRepo,
       environmentAgentCommandRepo,
-      daemonBaseUrl: `http://127.0.0.1:${port}/api/v1`,
+      serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       dbPath,
-      daemonLogFilePath: logFilePath,
+      serverLogFilePath: logFilePath,
       requestShutdown: (reason) => {
         void shutdown(reason);
       },

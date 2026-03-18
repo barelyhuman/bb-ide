@@ -56,7 +56,7 @@ export function closeHttpServer(
     closeIdleConnections(server);
 
     // Let the restart response flush, then drop long-poll and keep-alive sockets
-    // so restart is not delayed by lingering daemon clients.
+    // so restart is not delayed by lingering server clients.
     forceTimer = setTimeout(() => {
       closeIdleConnections(server);
       closeAllConnections(server);

@@ -12,7 +12,7 @@ export default defineConfig({
     include: [
       "src/__tests__/e2e/thread-recovery-heavy-runbook.test.ts",
       "src/__tests__/e2e/thread-restart-recovery-matrix.test.ts",
-      "src/__tests__/e2e/standalone-daemon-cli-roundtrip.test.ts",
+      "src/__tests__/e2e/standalone-server-cli-roundtrip.test.ts",
     ],
   },
 });

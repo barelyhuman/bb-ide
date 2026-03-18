@@ -9,7 +9,7 @@ interface StartupTaskLogger {
 
 const DEFAULT_SESSION_SYNC_TIMEOUT_MS = 2_000;
 
-// Defer startup maintenance until the daemon is already serving requests.
+// Defer startup maintenance until the server is already serving requests.
 export function scheduleManagedArtifactReconciliation(
   threadManager: Pick<Orchestrator, "reconcileManagedArtifacts">,
   logger: StartupTaskLogger = console,
