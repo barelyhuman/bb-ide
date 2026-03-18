@@ -9,6 +9,7 @@ import {
   FolderOpen,
   MoreHorizontal,
   PencilLine,
+  Plus,
   SquarePen,
   Trash2,
   UserRound,
@@ -549,7 +550,19 @@ export function ProjectList({
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Projects</SidebarGroupLabel>
+      <SidebarGroupLabel className="flex items-center justify-between pr-1 mb-1">
+        Projects
+        <button
+          type="button"
+          onClick={onNewProject}
+          disabled={isCreatingProject}
+          title={isCreatingProject ? "Creating project..." : "Add project"}
+          aria-label="Add project"
+          className="inline-flex size-5 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50"
+        >
+          <Plus className="size-4" />
+        </button>
+      </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu className="gap-2">
           {projectsLoading ? (
@@ -783,17 +796,6 @@ export function ProjectList({
               </div>
             </SidebarMenuItem>
           )}
-          <SidebarMenuItem>
-            <button
-              type="button"
-              onClick={onNewProject}
-              disabled={isCreatingProject}
-              title={isCreatingProject ? "Creating Project..." : "Add Project"}
-              className="flex h-8 w-full items-center justify-center rounded-md border border-sidebar-border/80 bg-sidebar-accent/10 px-2 text-xs font-medium text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isCreatingProject ? "Adding Project..." : "Add Project"}
-            </button>
-          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroupContent>
       <Dialog
