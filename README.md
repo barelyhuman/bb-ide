@@ -12,8 +12,8 @@ all operate through. Use it to run work in threads, inspect progress, steer
 execution, and keep humans and agents working in the same loop.
 
 > [!NOTE]
-> bb is still pre-alpha. Core ideas are in place, but interfaces, workflows,
-> and APIs may still change quickly.
+> bb is still pre-alpha. Core ideas are in place, but workflows, internal
+> boundaries, and route surfaces are still evolving quickly.
 
 ## Table of Contents
 
@@ -97,20 +97,21 @@ pnpm bb --help
 
 | Concept        | What it means                                                                                                                                                                |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project        | The top-level container for related work, usually mapped to a repository.                                                                                                    |
-| Thread         | The fundamental unit of agent work. Standard threads do the work directly. Manager threads coordinate other threads and can delegate work across the project.                |
-| Thread Ownership | Threads can be managed by the user or another thread. Delegation and handoff are core to bb's model, not bolt-on workflow features.                                      |
-| Environment    | The execution context a thread runs in, such as a local checkout, worktree, or other sandboxed environment. Environments are first-class, multiple threads can share one, and bb is designed to support different execution backends. |
-| Environment Provisioning | bb can provision and manage environments for you, but the system is designed to support both managed and unmanaged environments.                                  |
-| Agent provider | The model runtime that powers a thread, such as `codex`, `claude-code`, or `pi`. bb is designed to support different provider implementations.                               |
+| Project        | The top-level container for related work, usually mapped to a repository plus its bb-managed state.                                                                          |
+| Thread         | The core unit of work. A thread has durable history, lifecycle state, execution settings, and usually a dedicated environment context.                                      |
+| Standard thread | A coding thread that does the work directly in an environment and exposes git, diff, and workspace-oriented behavior.                                                       |
+| Manager thread | A coordinator thread for a project. It can plan, delegate, and publish user-facing output, and it uses a separate BB-managed workspace instead of a coding worktree flow.   |
+| Thread ownership | Threads can be user-created or managed by another thread. Delegation and handoff are first-class parts of the model.                                                     |
+| Environment    | The execution context a thread runs in, such as `local`, `worktree`, or `docker`. Environments are first-class and may be managed by bb or attached separately.            |
+| Agent provider | The model/runtime behind a thread, such as `codex`, `claude-code`, or `pi`.                                                                                                  |
 
 ### Runtime Components
 
 | Part               | What it does                                                                                                                      |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Server             | The main bb service that owns state, orchestration, APIs, provider coordination, and thread lifecycle.                            |
-| Environments       | The runtime layer where threads actually execute, whether that is a local checkout, worktree, or another environment kind.        |
-| Environment daemon | The environment-side session layer that communicates with the server and manages agent and command execution within environments. This split keeps orchestration in the server and execution inside environments. |
+| Server             | The durable coordinator. It owns persisted state, orchestration, route handling, realtime invalidation, and environment-agent session state. |
+| Environments       | The runtime layer where threads execute. Built-in environments currently include `local`, `worktree`, and `docker`.              |
+| Environment agent  | The per-thread sidecar that runs inside the environment, talks to the server, and brokers command and event flow with the provider runtime. |
 | Agent providers    | The provider runtimes that power threads and models.                                                                              |
 
 ### System Surfaces
@@ -120,9 +121,8 @@ pnpm bb --help
 | Web app  | The visual surface for inspecting projects and threads, following progress, and steering active work.              |
 | `bb` CLI | A first-class interface for both users and agents. It can inspect and operate the same bb system programmatically. |
 
-Several of these boundaries are intentional extension points. bb is meant to
-support different provider implementations, environment models, and execution
-setups over time.
+Several of these boundaries are intentional extension points, but they should
+be read as current architecture, not as a frozen public platform surface.
 
 ## Configuration
 
@@ -132,8 +132,10 @@ Local state defaults to `~/.bb/`. Thread execution context also exposes `BB_PROJ
 
 ## Further Reading
 
-- [Vision](docs/VISION.md)
+- [Architecture](ARCHITECTURE.md)
+- [Contracts](docs/contracts/README.md)
 - [QA docs](qa/README.md)
+- [Vision](docs/VISION.md)
 - [.env.example](./.env.example)
 
 ## Contributing

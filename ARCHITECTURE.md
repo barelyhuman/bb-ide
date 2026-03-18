@@ -2,198 +2,111 @@
 
 ## Overview
 
-BB is a local-first coding-agent workspace built as a pnpm/Turbo monorepo.
-A local server is the durable coordinator: it owns the HTTP/WebSocket API,
-persists state in SQLite, manages per-thread execution environments, and serves
-both the React app and the `bb` CLI.
+bb is a local-first coding-agent workspace built as a pnpm/Turbo monorepo.
+The server is the durable coordinator: it owns the HTTP and WebSocket surface,
+persists state in SQLite, manages environments, and coordinates provider work
+through per-thread environment-agents.
 
 At a high level:
 
-1. The app and CLI talk to the server over HTTP.
-2. The server persists projects, threads, events, queued follow-ups, environment records, and environment-agent session state via `@bb/db`.
-3. Each thread runs in a selected environment (`local`, `worktree`, or `docker`).
-4. Each active environment runs a per-thread `environment-agent` beside the provider runtime.
-5. The environment-agent opens a server-hosted session, long-polls for commands, and posts heartbeats, event batches, and command results.
-6. The server applies those events to thread state, stores the durable history, and emits targeted WebSocket invalidations.
-7. The app refreshes affected React Query queries; the CLI reads and mutates the same server-backed state.
-8. Provider adapters currently support `codex`, `claude-code`, and `pi`, with bridge packages where needed to translate between BB's runtime contract and provider-specific CLIs/SDKs.
+1. The app and CLI talk to the server.
+2. The server persists projects, threads, events, attachments, environments,
+   and environment-agent session state through `@bb/db`.
+3. Each thread runs in an environment such as `local`, `worktree`, or `docker`.
+4. Managed environments start a per-thread environment-agent alongside the
+   provider runtime.
+5. The environment-agent and server communicate through a leased session
+   protocol with heartbeats, event batches, command delivery, and command
+   results.
+6. The server applies durable state changes, then emits targeted invalidations
+   to the UI.
 
-## Monorepo Components
+## Main packages
 
 ### `apps/app`
 
 React 19 + Vite frontend.
 
-Responsibilities:
-
-- talks only to the server HTTP API for reads and writes
-- uses React Query for server state
-- uses a small WebSocket subscription layer for invalidation messages (`thread` and `system` entities)
-- keeps one canonical thread-detail rendering path based on timeline rows + UI message projection from `@bb/core`
-- fetches heavier payloads such as git diffs, tool-group expansions, attachment content, and health data on demand
-
-Notable behavior:
-
-- realtime updates are invalidation-based, not state-replication-based
-- thread timeline invalidation is throttled for bursty event streams, but status transitions flush immediately
-- local UI preferences (theme, open-path preferences, auto-archive preferences, prompt draft state, panel state) remain browser-local
+- Reads and mutates state through the server HTTP API only.
+- Uses React Query plus a small invalidation-oriented WebSocket layer.
+- Renders threads through shared projection helpers from `@bb/core` and shared
+  primitives from `@bb/ui-core`.
 
 ### `apps/cli`
 
-`bb` CLI for server, project, and thread operations.
+The `bb` CLI.
 
-Responsibilities:
-
-- uses the same server APIs as the app
-- supports thread lifecycle operations, follow-ups, archive/unarchive, stop, and git-backed thread operations
-- can run inside agent shells with context injected through:
-  - `BB_PROJECT_ID`
-  - `BB_THREAD_ID`
-  - `BB_ENVIRONMENT_ID`
-  - `BB_SERVER_URL`
+- Uses the same server-backed model as the app.
+- Supports project, thread, queue, archive, and git-oriented operations.
+- Can run inside agent shells with `BB_PROJECT_ID`, `BB_THREAD_ID`,
+  `BB_ENVIRONMENT_ID`, and `BB_SERVER_URL` injected.
 
 ### `apps/server`
 
-The server is the system coordinator.
+The system coordinator.
 
-Responsibilities:
-
-- owns the HTTP API and WebSocket server
-- persists projects, threads, events, queued follow-ups, environment metadata, environment-agent sessions, command queues, and command results
-- owns project-level manager-thread lifecycle, including the primary manager thread pointer on projects
-- provisions, restores, suspends, archives, unarchives, and deletes thread environments
-- manages provider sessions through per-thread environment-agents
-- normalizes provider/runtime notifications into BB thread events
-- computes work status, git diffs, merge-base candidates, and thread/project summaries
-- exposes system APIs for provider/environment catalogs, health reporting, restart recommendations, open-path, and voice transcription
-- reconciles managed artifacts such as logs, worktrees, and stored attachments
-
-Important server subsystems include:
-
-- `Orchestrator`
-- `EnvironmentService`
-- `EnvironmentAgentSessionService`
-- `EnvironmentAgentCommandDispatcher`
-- `EnvironmentAgentEventApplier`
-- `InMemorySchedulerService`
-- startup reconciliation, restart recommendation, and system health reporting
-- managed artifact reconciliation for logs, worktrees, and attachments
+- Owns the route surface under `apps/server/src/routes/**`.
+- Orchestrates thread lifecycle, environment lifecycle, manager threads,
+  provider interaction, and restart/shutdown policy.
+- Applies environment-agent events, persists durable state, and emits
+  WebSocket invalidations.
 
 ### `packages/core`
 
-Shared contracts and projection helpers for the rest of the monorepo.
+Shared contracts and projection helpers.
 
-Includes:
-
-- API request/response types
-- realtime message schemas
-- thread/project domain types
-- event normalization helpers
-- timeline/detail-row/UI message projection helpers
-- shared guards, decoders, and utilities such as `assertNever`
-
-This is the main contract boundary between the app, server, CLI, environment implementations, environment-agent runtime, and provider adapters.
+- Domain types for projects, threads, events, and API payloads.
+- Shared schemas and decoders.
+- Event normalization and UI projection helpers.
+- The main type boundary shared by app, server, CLI, environments, and
+  provider adapters.
 
 ### `packages/db`
 
 SQLite persistence layer built on Drizzle.
 
-Durable entities include:
-
-- projects
-- threads
-- thread events
-- queued follow-up messages
-- persisted environment records on threads
-- environment-agent sessions and event cursors
-- environment-agent command queue and command results
-
-A thread row is created immediately; provisioning and provider bootstrap continue asynchronously afterward.
+- Schema definitions live in `packages/db/src/schema.ts`.
+- Repository invariants live in `packages/db/src/repositories.ts` and
+  `packages/db/src/environment-agent-repositories.ts`.
 
 ### `packages/environment`
 
-Environment implementations define where thread work runs.
+Environment implementations that decide where thread work runs.
 
-Built-in environments:
-
-- `local`
-- `worktree`
-- `docker`
-
-Environment responsibilities:
-
-- prepare or restore the workspace
-- start the per-thread environment-agent
-- expose workspace status, git diff, merge-base candidates, and open-path resolution
-- suspend, archive, unarchive, or destroy resources as the thread lifecycle changes
-- support environment-specific capabilities such as isolated workspaces and primary-checkout promotion/demotion
-
-`docker` currently layers container execution on top of an isolated worktree-backed workspace.
+- Built-in environment kinds are `local`, `worktree`, and `docker`.
+- Environments prepare or restore workspaces, start the environment-agent,
+  and expose workspace/git inspection used by the server.
 
 ### `packages/environment-daemon`
 
-Per-thread sidecar process between the server and the provider runtime.
+The per-thread environment-agent runtime.
 
-Responsibilities:
-
-- start and supervise the provider runtime
-- maintain an in-memory event/outbox stream for provider/runtime activity
-- open an authenticated session back to the server
-- pull queued server commands
-- push heartbeats, event batches, command acknowledgements, and command results
-- expose a minimal local authenticated control surface for status inspection
-
-Important nuances:
-
-- event/session delivery state inside the environment-agent is in-memory, not durably journaled on disk
-- the main control plane is server-hosted and session-based
-- the local HTTP surface is intentionally small; today the important endpoint is `POST /control/status`
-- the package also builds the bundled `environment-agent.bundle.mjs` binary used by managed environments
+- Manages provider runtime interaction.
+- Speaks the server-hosted session protocol.
+- Exposes a small local control surface for status and session sync.
+- Builds the bundled `environment-agent.bundle.mjs` artifact used by managed
+  environments.
 
 ### `packages/provider-adapters`
 
-Shared built-in provider adapter layer.
+Built-in provider integration layer.
 
-Responsibilities:
-
-- provider registry and adapter selection
-- model catalog access
-- title generation and commit-message generation helpers
-- shared provider-side launch metadata and request/response helpers consumed by env-daemon
-
-Current built-in provider registry:
-
-- `codex`
-- `claude-code`
-- `pi`
+- Registry and adapter selection.
+- Shared provider launch metadata and helper logic.
+- Current built-in providers are `codex`, `claude-code`, and `pi`.
 
 ### `packages/ui-core`
 
-Shared React UI primitives used by the app for page shells, cards/detail rows,
-collapsible sections, prompt affordances, and other reusable UI building blocks.
+Shared UI primitives used by the app.
 
 ### Supporting packages
 
-Additional packages round out the architecture:
+- `packages/templates`: checked-in instruction and prompt templates.
+- `packages/claude-code-bridge`: Claude Code bridge package.
+- `packages/pi-bridge`: PI bridge package.
+- `packages/tsconfig`: shared TypeScript config.
 
-- `packages/templates`: checked-in prompt and instruction templates, including manager-thread instructions
-- `packages/claude-code-bridge`: bridge binary/library used by the Claude Code provider adapter
-- `packages/pi-bridge`: bridge binary/library used by the PI provider adapter
-- `packages/tsconfig`: shared TypeScript config base for workspace packages
-
-## Server API Shape
-
-Broadly, the server exposes:
-
-- project APIs: CRUD, project file search, workspace status, and prompt attachment upload/content
-- project manager APIs: create/read/delete the primary manager thread for a project
-- thread APIs: spawn, tell, queued follow-up management, stop, archive/unarchive, promote/demote primary checkout, git operations, read-state updates, open-path, timeline, work status, git diff, manager workspace inspection, and environment-agent session endpoints
-- system APIs: status, health, available models, provider/environment catalogs, open-path, restart/shutdown controls, and voice transcription
-- realtime invalidations over `/ws`
-
-The app proxies `/api` and `/ws` to the server in development.
-
-## Thread Lifecycle
+## Thread model
 
 Persisted thread statuses are:
 
@@ -205,173 +118,28 @@ Persisted thread statuses are:
 - `active`
 - `error`
 
-Transition rules are centralized in `apps/server/src/thread-status-machine.ts`.
+Transition rules are centralized in
+`apps/server/src/thread-status-machine.ts`.
 
 Thread types are:
 
 - `standard`
 - `manager`
 
-Manager threads are project-scoped coordinator threads. They keep a separate BB-managed workspace for plans, notes, and user-facing deliverables, can own child worker threads, and intentionally hide git/environment-specific UI that only applies to standard coding threads.
+Manager threads are project-scoped coordinators. They maintain a BB-managed
+workspace for plans, notes, and user-facing deliverables, and they expose a
+different UI/tool surface than standard coding threads.
 
-### New thread
+## Where to look for truth
 
-1. App or CLI sends `POST /threads`.
-2. Server creates the thread row immediately with status `created`.
-3. Server schedules provisioning asynchronously and transitions to `provisioning`.
-4. The selected environment prepares or restores the workspace.
-5. The environment starts the per-thread environment-agent.
-6. The environment-agent opens a session back to the server.
-7. The server queues bootstrap commands such as `provider.ensure`, `thread.start`, and optionally `turn.start`.
-8. The environment-agent pulls commands, runs them against the provider runtime, and posts resulting events/results back to the server.
-9. The server persists events, updates derived thread state, and broadcasts thread invalidations.
-10. The thread can pass through `provisioned`, become `active` while a turn is running, and eventually settle in `idle` or `error`.
+This doc is intentionally high level. For concrete inventories, use the code:
 
-### Follow-up on an existing thread
+- HTTP routes: `apps/server/src/routes/**`
+- Request/response types: `packages/core/src/api-types.ts`
+- Zod request schemas: `packages/core/src/schemas.ts`
+- Thread and event types: `packages/core/src/types.ts`
+- Event normalization: `packages/core/src/thread-event-normalization.ts`
+- DB schema and repository invariants: `packages/db/src/**`
+- Environment-agent protocol: `packages/environment-daemon/src/session-protocol.ts`
 
-1. App or CLI sends `POST /threads/:id/tell`.
-2. Server validates thread state, execution options, and prompt attachments.
-3. If the thread is already active and steering is allowed, the server can send `turn.steer`.
-4. Otherwise it sends `turn.start`.
-5. If no live provider session is available, the server restores the environment and resumes or recreates provider state first.
-6. If the thread cannot accept the follow-up immediately, the server can queue it for later dispatch.
-
-Manager threads use the same durable lifecycle machinery, but their prompt/tool surface is specialized for orchestration. The server gates manager-only capabilities, such as publishing user messages and exposing the manager workspace APIs, by thread type.
-
-### Queued follow-ups and thread operations
-
-The server persists per-thread queues for:
-
-- follow-up prompts
-- git-backed thread operations such as commit and squash-merge
-
-This queueing is durable across server restarts.
-
-### Archive, unarchive, and primary checkout
-
-Additional thread lifecycle behaviors include:
-
-- `POST /threads/:id/archive` may reject with `worktree_not_clean` unless `force=true`
-- archived isolated environments can later be restored through `POST /threads/:id/unarchive`
-- worktree-capable environments can be promoted into the project primary checkout and later demoted back to an isolated checkout
-- server/UI timelines surface these operations as first-class thread events
-
-### Recovery behavior
-
-BB treats the server and SQLite as the durable source of truth.
-
-On startup the server reconciles threads that were previously active or provisioning, restores enough environment metadata to continue, and pokes surviving env-agents. Session heartbeats and command cursors determine whether workers are still alive.
-
-A special reprovision fallback exists when a persisted provider thread id exists but `thread.resume` fails because the upstream provider no longer recognizes the thread. In that case the server reprovisions the environment, starts a fresh provider thread session, and continues the pending follow-up from the new session.
-
-Provider-facing recovery is covered by checked-in server e2e/QA suites in `apps/server/src/__tests__/e2e/` and the root `qa:server:*` scripts. Real-provider smoke/stress runs are the default regression path for server and environment-agent behavior.
-
-## Environment-Agent Session Protocol
-
-The server ↔ environment-agent control plane is session-based and server-hosted.
-
-### Session shape
-
-For each active thread, the environment-agent opens a logical channel keyed by thread id. The server records:
-
-- active session metadata
-- heartbeat / last-seen state
-- per-channel event cursors (`generation`, `sequence`)
-- queued commands, command cursors, and final command result state
-
-Sessions are heartbeat-driven:
-
-- the server records protocol version, liveness settings, and channel bootstrap state when the session opens
-- the environment-agent keeps the session alive with heartbeats
-- heartbeat timeout invalidates the session
-- a newer session for the same thread replaces the previous one
-
-### Command flow
-
-1. The server persists a command in the environment-agent command queue.
-2. The environment-agent long-polls `GET /threads/:id/environment-agent/session/commands`.
-3. The server returns commands after the last acknowledged cursor.
-4. The environment-agent acknowledges receipt and executes the command against the local provider runtime.
-5. The environment-agent posts lifecycle updates such as `started`, `completed`, or `failed` through `POST /threads/:id/environment-agent/session/messages`.
-6. The server records the final result and unblocks higher-level orchestration.
-
-### Event flow
-
-1. The environment-agent observes provider/runtime events and assigns per-channel sequence numbers.
-2. It pushes contiguous event batches through `POST /threads/:id/environment-agent/session/messages`.
-3. The server applies unseen events in order and advances the persisted cursor.
-4. The server replies with accepted cursors so the environment-agent can drop acknowledged in-memory outbox entries.
-
-## Workspace, Git, and Attachments
-
-Workspace and git data are server-driven.
-
-The server can ask environments for:
-
-- work status
-- merge-base branch candidates
-- git diffs
-- commit and squash-merge execution
-- open-path resolution inside the thread workspace
-
-Important behavior:
-
-- workspace status feeds thread badges, archive safety checks, and project-level summaries
-- full git diffs are fetched on demand, not streamed over WebSocket
-- worktree and docker environments can use managed isolated workspaces rooted under BB-managed storage
-- prompt attachments are stored under BB-managed per-project attachment directories and then referenced as `localImage` / `localFile` inputs
-- the app loads local attachment content back through server attachment endpoints rather than reading arbitrary filesystem paths directly
-
-## Realtime Model
-
-### App side
-
-- WebSocket messages are invalidations, not a replicated event log
-- clients subscribe by entity (`thread` or `system`) and optionally by id
-- the app translates thread change kinds into targeted React Query invalidations for thread lists, thread detail, work status, timeline, server status, and restart policy
-
-### Server side
-
-The server emits targeted change kinds such as:
-
-- `thread-created`
-- `thread-deleted`
-- `archived-changed`
-- `read-state-changed`
-- `title-changed`
-- `queue-changed`
-- `status-changed`
-- `work-status-changed`
-- `events-appended`
-
-This keeps the websocket layer narrow while leaving authoritative state in HTTP + SQLite-backed reads.
-
-## Persistence and Recovery
-
-Durable state in SQLite includes:
-
-- projects and threads
-- thread events and read-state-related metadata
-- queued follow-ups
-- persisted environment records
-- environment-agent sessions, cursors, commands, and command results
-
-Non-durable state includes:
-
-- in-memory provider child processes
-- environment-agent outbox buffers and active long polls
-- server-side timers and transient caches such as projected timeline data
-- manager-thread workspace materialized files outside SQLite
-- browser-local UI preferences and prompt drafts
-
-## Summary
-
-BB is organized around one durable coordinator (the server), one durable store (SQLite), and one per-thread execution sidecar (the environment-agent).
-
-The most important current architectural traits are:
-
-- server-hosted environment-agent sessions rather than agent-owned stream endpoints
-- environment-specific workspace management (`local`, `worktree`, `docker`)
-- a single durable event history projected into app/CLI views
-- narrow realtime invalidations instead of full replicated client state
-- server-managed git, attachment, and system-health services around the core thread runtime
+When this file and code disagree, the code wins.
