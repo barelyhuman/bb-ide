@@ -13,6 +13,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@bb/api-contract": "workspace:*",
     "@bb/core": "workspace:*",
     "@bb/ui-core": "workspace:*",
     "@pierre/diffs": "^1.0.11",
@@ -41,7 +42,6 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
-    "@bb/server": "workspace:*",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

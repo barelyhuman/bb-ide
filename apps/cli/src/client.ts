@@ -1,9 +1,8 @@
-import { hc } from "hono/client";
-import type { AppType } from "@bb/server/app-type";
+import { createApiClient } from "@bb/api-contract";
 import { extractErrorMessage } from "@bb/core";
 
 export function createClient(baseUrl: string) {
-  return hc<AppType>(baseUrl);
+  return createApiClient(baseUrl);
 }
 
 export type Client = ReturnType<typeof createClient>;

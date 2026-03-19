@@ -5,10 +5,11 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types": "./src/index.ts"
+      "types": "./dist/index.d.ts"
     },
     "./app-type": {
-      "types": "./src/app-type.ts"
+      "import": "./dist/app-type.js",
+      "types": "./dist/app-type.d.ts"
     }
   },
   "scripts": {
