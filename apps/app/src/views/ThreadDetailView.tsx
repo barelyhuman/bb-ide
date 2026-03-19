@@ -1142,7 +1142,7 @@ export function ThreadDetailView() {
           valueClassName="min-w-0"
         >
           {parentThreadId ? (
-            <div className="inline-flex h-7 max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
+            <div className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
               <Link
                 to={`/projects/${projectId}/threads/${parentThreadId}`}
                 className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
@@ -1177,7 +1177,7 @@ export function ThreadDetailView() {
                       ? -1
                       : 0
                   }
-                  className="inline-flex h-8 w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+                  className="inline-flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
                 >
                   <span className="min-w-0 truncate text-xs text-foreground">
                     {selectedManagerOption?.label ?? "None"}
