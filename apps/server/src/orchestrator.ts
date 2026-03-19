@@ -649,6 +649,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private activeTurnIdByThreadId = new Map<string, string>();
   /** Turn ids explicitly interrupted by the user; late events for them must be dropped. */
   private suppressedTurnIdsByThreadId = new Map<string, Set<string>>();
+  /** After stop(), all late provider notifications are dropped until a new outbound turn starts. */
+  private blockedProviderNotificationsByThreadId = new Set<string>();
   /** Provider thread ids attached in the current server process. */
   private providerThreadIdByThreadId = new Map<string, string>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
@@ -1815,6 +1817,7 @@ export class Orchestrator implements ThreadOrchestrator {
     },
   ): boolean {
     return this.threadRepo.withTransaction((connection) => {
+      this._unblockProviderNotifications(threadId);
       const statusChanged = this._setThreadStatus(threadId, "active", false, {
         connection,
       });
@@ -2129,6 +2132,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (interruptedTurnId) {
       this._suppressTurnId(threadId, interruptedTurnId);
     }
+    this._blockProviderNotifications(threadId);
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
@@ -2209,6 +2213,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
     this.suppressedTurnIdsByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
@@ -2228,6 +2233,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
     this.suppressedTurnIdsByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
@@ -3416,6 +3422,8 @@ export class Orchestrator implements ThreadOrchestrator {
     this.turnLifecycleEpochs.clear();
     this.tellInFlightByThreadId.clear();
     this.activeTurnIdByThreadId.clear();
+    this.suppressedTurnIdsByThreadId.clear();
+    this.blockedProviderNotificationsByThreadId.clear();
     this.providerThreadIdByThreadId.clear();
     this.lastNotifiedCompletionEpochs.clear();
     this.queueDispatchInFlight.clear();
@@ -3819,6 +3827,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
     this.suppressedTurnIdsByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
@@ -5096,6 +5105,14 @@ export class Orchestrator implements ThreadOrchestrator {
     suppressed.add(turnId);
   }
 
+  private _blockProviderNotifications(threadId: string): void {
+    this.blockedProviderNotificationsByThreadId.add(threadId);
+  }
+
+  private _unblockProviderNotifications(threadId: string): void {
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
+  }
+
   private _clearSuppressedTurnId(threadId: string, turnId: string): void {
     const suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
     if (!suppressed) return;
@@ -5109,6 +5126,9 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     event: ProviderSessionNotification,
   ): boolean {
+    if (this.blockedProviderNotificationsByThreadId.has(threadId)) {
+      return true;
+    }
     const turnId = event.turnId ?? this._extractTurnIdFromEventData(event.eventData);
     if (!turnId) {
       return false;
@@ -5914,6 +5934,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this._detachEnvironmentRuntime(threadId);
 

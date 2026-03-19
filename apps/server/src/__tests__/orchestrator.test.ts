@@ -2609,6 +2609,39 @@ describe("Orchestrator", () => {
       ).toHaveLength(0);
     });
 
+    it("drops late provider events after stop even when they omit turn ids", () => {
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      const harness = asOrchestratorHarness(manager);
+      harness.activeTurnIds.set(thread.id, "turn-1");
+
+      manager.stop(thread.id);
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (
+            threadId: string,
+            event: ProviderSessionNotification,
+          ) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          threadId: thread.id,
+          item: createAgentMessageItem("SHOULD-NOT-LAND"),
+        } as unknown as ThreadEventDataForType<"item/completed">,
+        shouldPersist: true,
+        shouldBroadcast: true,
+      });
+
+      expect(
+        eventRepo.listByThread(thread.id).some((event) =>
+          JSON.stringify(event.data).includes("SHOULD-NOT-LAND"),
+        ),
+      ).toBe(false);
+    });
+
 
     it("suspends managed environments on stop without destroying the workspace", () => {
       const suspendEnvironmentRuntime = vi.spyOn(
