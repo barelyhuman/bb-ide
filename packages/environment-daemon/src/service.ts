@@ -229,7 +229,6 @@ export async function startEnvironmentDaemonService(
 }> {
   const logger = createEnvironmentDaemonFileLogger(options.logging.filePath);
   logger.log("info", "environment-daemon starting", {
-    threadId: options.runtime.threadId,
     projectId: options.runtime.projectId,
     environmentId: options.runtime.environmentId,
     serverUrl: options.runtime.serverConnection?.serverUrl,
@@ -238,12 +237,17 @@ export async function startEnvironmentDaemonService(
   const runtime = new EnvironmentDaemonRuntime({
     ...options.runtime,
     onProviderRequest: async (request) => {
-      if (!sessionSupervisor || !options.runtime.threadId) {
+      if (!sessionSupervisor) {
         throw new Error("Environment-daemon session supervisor is unavailable");
+      }
+      if (!request.resolvedThreadId) {
+        throw new Error(
+          "Environment-daemon provider request could not be routed to a thread",
+        );
       }
       const response = await sessionSupervisor.forwardProviderRequest({
         ...request,
-        threadId: request.resolvedThreadId ?? options.runtime.threadId,
+        threadId: request.resolvedThreadId,
       });
       if (!response.ok) {
         throw new Error(
@@ -299,7 +303,7 @@ export async function startEnvironmentDaemonService(
     return closePromise;
   };
   try {
-    if (options.runtime.serverConnection?.serverUrl && options.runtime.serverConnection.environmentId && options.runtime.threadId) {
+    if (options.runtime.serverConnection?.serverUrl && options.runtime.serverConnection.environmentId) {
       const sessionStore = new InMemoryEnvironmentDaemonSessionStore();
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({ store: sessionStore });
       const sessionClient = createEnvironmentDaemonSessionHttpClientFromConnection(
@@ -310,7 +314,7 @@ export async function startEnvironmentDaemonService(
         client: sessionClient,
       });
       sessionSupervisor = new EnvironmentDaemonSessionSupervisor({
-        threadId: options.runtime.threadId,
+        environmentId: options.runtime.serverConnection.environmentId,
         runtime,
         sessionRuntime,
         sessionSync,

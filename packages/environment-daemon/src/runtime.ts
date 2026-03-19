@@ -123,10 +123,13 @@ export class EnvironmentDaemonRuntime {
   constructor(private readonly opts: EnvironmentDaemonRuntimeOptions) {}
 
   start(): ChildProcess | null {
-    this.appendEvent({
-      type: "environment.ready",
-      threadId: this.resolveThreadId(),
-    });
+    const readyThreadId = this.resolveAnyRoutableThreadId();
+    if (readyThreadId) {
+      this.appendEvent({
+        type: "environment.ready",
+        threadId: readyThreadId,
+      });
+    }
 
     return this.ensureProviderRunning();
   }
@@ -508,7 +511,10 @@ export class EnvironmentDaemonRuntime {
           if (this.tryHandleProviderRpcMessage(line, child)) {
             return;
           }
-          this.appendEvent(this.toProviderEvent(line, child));
+          const event = this.toProviderEvent(line, child);
+          if (event) {
+            this.appendEvent(event);
+          }
         },
       });
       this.providerStdoutBuffers.set(specKey, updated);
@@ -522,11 +528,14 @@ export class EnvironmentDaemonRuntime {
         onLine: (line) => {
           this.opts.onStderrLine?.(line);
           this.emitProviderStderrLine(line);
-          this.appendEvent({
-            type: "provider.stderr",
-            threadId: this.resolveThreadId(),
-            line,
-          });
+          const threadId = this.resolveThreadIdForChild(child);
+          if (threadId) {
+            this.appendEvent({
+              type: "provider.stderr",
+              threadId,
+              line,
+            });
+          }
         },
       });
       this.providerStderrBuffers.set(specKey, updated);
@@ -559,11 +568,14 @@ export class EnvironmentDaemonRuntime {
       this.opts.onStderrLine?.(
         `provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`,
       );
-      this.appendEvent({
-        type: "environment.degraded",
-        threadId: this.resolveThreadId(),
-        message: "Provider runtime exited",
-      });
+      const degradedThreadId = this.resolveThreadIdForChild(child);
+      if (degradedThreadId) {
+        this.appendEvent({
+          type: "environment.degraded",
+          threadId: degradedThreadId,
+          message: "Provider runtime exited",
+        });
+      }
     });
 
     return child;
@@ -609,7 +621,7 @@ export class EnvironmentDaemonRuntime {
     return path.join(
       tmpdir(),
       "bb-environment-daemon",
-      this.resolveThreadId(),
+      this.opts.environmentId ?? "unknown-environment",
       `provider-home-${specHash}`,
     );
   }
@@ -693,47 +705,52 @@ export class EnvironmentDaemonRuntime {
     });
   }
 
-  private resolveThreadId(): string {
-    return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
-  }
-
   private resolveProviderEventThreadId(
     params: unknown,
     providerId: string | undefined,
-  ): string {
+    sourceChild?: ChildProcess,
+  ): string | undefined {
     const providerThreadId = this.extractProviderThreadId(params, providerId);
     if (!providerThreadId) {
-      return this.resolveThreadId();
+      return this.resolveThreadIdForChild(sourceChild);
     }
     return (
       this.threadIdByProviderThreadKey.get(
         this.createProviderThreadKey(providerId, providerThreadId),
       ) ??
-      this.resolveThreadId()
+      this.resolveThreadIdForChild(sourceChild)
     );
   }
 
   private toProviderEvent(
     line: string,
     sourceChild?: ChildProcess,
-  ): EnvironmentDaemonEvent {
+  ): EnvironmentDaemonEvent | undefined {
     let parsed: unknown;
     const providerId = this.resolveProviderIdForChild(sourceChild);
     try {
       parsed = JSON.parse(line);
     } catch {
+      const threadId = this.resolveThreadIdForChild(sourceChild);
+      if (!threadId) {
+        return undefined;
+      }
       return {
         type: "provider.event",
-        threadId: this.resolveThreadId(),
+        threadId,
         method: "provider.stdout",
         payload: { line },
       };
     }
 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      const threadId = this.resolveThreadIdForChild(sourceChild);
+      if (!threadId) {
+        return undefined;
+      }
       return {
         type: "provider.event",
-        threadId: this.resolveThreadId(),
+        threadId,
         method: "provider.stdout",
         payload: { line },
       };
@@ -741,9 +758,13 @@ export class EnvironmentDaemonRuntime {
 
     const record = parsed as Record<string, unknown>;
     if (typeof record.method !== "string") {
+      const threadId = this.resolveThreadIdForChild(sourceChild);
+      if (!threadId) {
+        return undefined;
+      }
       return {
         type: "provider.event",
-        threadId: this.resolveThreadId(),
+        threadId,
         method: "provider.stdout",
         payload: { line },
       };
@@ -752,9 +773,17 @@ export class EnvironmentDaemonRuntime {
     const payload = record.params ?? {};
     const normalized = this.getProviderSemanticsForProviderId(providerId)
       ?.normalizeEvent(record.method, payload);
+    const threadId = this.resolveProviderEventThreadId(
+      payload,
+      providerId,
+      sourceChild,
+    );
+    if (!threadId) {
+      return undefined;
+    }
     return {
       type: "provider.event",
-      threadId: this.resolveProviderEventThreadId(payload, providerId),
+      threadId,
       method: record.method,
       payload,
       ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
@@ -1217,12 +1246,15 @@ export class EnvironmentDaemonRuntime {
     const pending = this.pendingProviderRequests.get(id);
     if (!pending) {
       if (record.error !== undefined) {
-        this.appendEvent({
-          type: "provider.rpc_error",
-          threadId: this.resolveThreadId(),
-          requestId: id,
-          message: this.toProviderErrorMessage(record.error),
-        });
+        const threadId = this.resolveThreadIdForChild(sourceChild);
+        if (threadId) {
+          this.appendEvent({
+            type: "provider.rpc_error",
+            threadId,
+            requestId: id,
+            message: this.toProviderErrorMessage(record.error),
+          });
+        }
         return true;
       }
       return false;
@@ -1268,7 +1300,11 @@ export class EnvironmentDaemonRuntime {
 
     const providerId = this.resolveProviderIdForChild(sourceChild);
     const providerSemantics = this.getProviderSemanticsForProviderId(providerId);
-    const resolvedThreadId = this.resolveProviderEventThreadId(args.params, providerId);
+    const resolvedThreadId = this.resolveProviderEventThreadId(
+      args.params,
+      providerId,
+      sourceChild,
+    );
 
     try {
       const response = await this.opts.onProviderRequest({
@@ -1299,12 +1335,14 @@ export class EnvironmentDaemonRuntime {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.appendEvent({
-        type: "provider.rpc_error",
-        threadId: this.resolveThreadId(),
-        requestId: args.requestId,
-        message,
-      });
+      if (resolvedThreadId) {
+        this.appendEvent({
+          type: "provider.rpc_error",
+          threadId: resolvedThreadId,
+          requestId: args.requestId,
+          message,
+        });
+      }
       stdin.write(
         `${JSON.stringify({
           jsonrpc: "2.0",
@@ -1458,6 +1496,36 @@ export class EnvironmentDaemonRuntime {
       this.opts.providerId ??
       process.env.BB_THREAD_PROVIDER_ID
     );
+  }
+
+  private resolveThreadIdForChild(child: ChildProcess | undefined): string | undefined {
+    const mappedThreadIds = child ? this.getLiveThreadIdsForChild(child) : [];
+    if (mappedThreadIds.length === 1) {
+      return mappedThreadIds[0];
+    }
+    return this.resolveAnyRoutableThreadId();
+  }
+
+  private resolveAnyRoutableThreadId(): string | undefined {
+    const liveThreadIds = [...new Set([
+      ...this.threadIdToChild.keys(),
+      ...this.threadIdByProviderThreadKey.values(),
+    ])];
+    if (liveThreadIds.length === 1) {
+      return liveThreadIds[0];
+    }
+    const configuredThreadId = this.opts.threadId ?? process.env.BB_THREAD_ID;
+    return configuredThreadId?.trim() ? configuredThreadId : undefined;
+  }
+
+  private getLiveThreadIdsForChild(child: ChildProcess): string[] {
+    const threadIds: string[] = [];
+    for (const [threadId, candidate] of this.threadIdToChild) {
+      if (candidate === child && !candidate.killed && candidate.exitCode === null) {
+        threadIds.push(threadId);
+      }
+    }
+    return threadIds;
   }
 
   private createProviderThreadKey(

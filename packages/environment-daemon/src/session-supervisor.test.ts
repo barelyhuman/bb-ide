@@ -20,6 +20,100 @@ function makeClientMock(): EnvironmentDaemonSessionHttpClient {
 }
 
 describe("EnvironmentDaemonSessionSupervisor", () => {
+  it("can open an environment session before any thread channel is known", async () => {
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonRuntime({});
+    const sessionRuntime = new EnvironmentDaemonSessionRuntime({
+      store,
+      clock: () => 10_000,
+    });
+    const client = makeClientMock();
+    (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "bb.env-daemon.v1",
+      type: "session_welcome",
+      messageId: "msg-open",
+      sessionId: "sess-1",
+      sentAt: 2_000,
+      payload: {
+        leaseTtlMs: 30_000,
+        heartbeatIntervalMs: 10_000,
+        protocolVersion: 1,
+        channels: [],
+      },
+    });
+    (client.pullCommands as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        protocol: "bb.env-daemon.v1",
+        type: "command_batch",
+        messageId: "msg-cmd",
+        sessionId: "sess-1",
+        sentAt: 3_000,
+        payload: {
+          commands: [
+            {
+              channelId: "thread-1",
+              commandCursor: 1,
+              commandId: "cmd-1",
+              createdAt: 2_500,
+              command: {
+                type: "workspace.status",
+                threadId: "thread-1",
+              },
+            },
+          ],
+        },
+      })
+      .mockResolvedValue({
+        protocol: "bb.env-daemon.v1",
+        type: "command_batch",
+        messageId: "msg-cmd-empty",
+        sessionId: "sess-1",
+        sentAt: 3_500,
+        payload: { commands: [] },
+      });
+    (client.acknowledgeCommands as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (client.sendCommandResult as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+    (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    vi.spyOn(runtime, "executeCommand").mockResolvedValue({
+      protocolVersion: 1,
+      commandId: "cmd-1",
+      idempotencyKey: "cmd-1",
+      state: "accepted",
+      acknowledgedAt: 3_250,
+      latestSequence: 0,
+      result: { ok: true },
+    });
+
+    const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentDaemonSessionSupervisor({
+      environmentId: "env-1",
+      runtime,
+      sessionRuntime,
+      sessionSync: sync,
+      pollIntervalMs: 5,
+    });
+
+    await supervisor.start();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await supervisor.close();
+
+    expect(client.openSession).toHaveBeenCalledWith(
+      expect.objectContaining({ channels: [] }),
+    );
+    expect(runtime.executeCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: {
+          type: "workspace.status",
+          threadId: "thread-1",
+        },
+      }),
+    );
+    expect(sessionRuntime.loadThreadState("thread-1")).toMatchObject({
+      sessionId: "sess-1",
+    });
+  });
+
   it("opens a session, persists runtime events, executes pulled commands, and reports results", async () => {
     const store = new InMemoryEnvironmentDaemonSessionStore();
     const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
@@ -38,7 +132,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
         protocolVersion: 1,
-        channels: [],
+        channels: [
+          {
+            channelId: "thread-1",
+            applyFrom: { generation: 1, sequenceExclusive: 0 },
+          },
+        ],
       },
     });
     (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -99,7 +198,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
     const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
     const supervisor = new EnvironmentDaemonSessionSupervisor({
-      threadId: "thread-1",
+      environmentId: "env-1",
       runtime,
       sessionRuntime,
       sessionSync: sync,
@@ -155,7 +254,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
             leaseTtlMs: 30_000,
             heartbeatIntervalMs: 5,
             protocolVersion: 1,
-            channels: [],
+            channels: [
+              {
+                channelId: "thread-1",
+                applyFrom: { generation: 1, sequenceExclusive: 0 },
+              },
+            ],
           },
         })
         .mockResolvedValueOnce({
@@ -168,7 +272,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
             leaseTtlMs: 30_000,
             heartbeatIntervalMs: 5,
             protocolVersion: 1,
-            channels: [],
+            channels: [
+              {
+                channelId: "thread-1",
+                applyFrom: { generation: 1, sequenceExclusive: 0 },
+              },
+            ],
           },
         });
       (client.heartbeat as ReturnType<typeof vi.fn>)
@@ -193,7 +302,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
       const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
       const onError = vi.fn();
       const supervisor = new EnvironmentDaemonSessionSupervisor({
-        threadId: "thread-1",
+        environmentId: "env-1",
         runtime,
         sessionRuntime,
         sessionSync: sync,
@@ -238,7 +347,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 50,
           protocolVersion: 1,
-          channels: [],
+          channels: [
+            {
+              channelId: "thread-1",
+              applyFrom: { generation: 1, sequenceExclusive: 0 },
+            },
+          ],
         },
       });
       (client.heartbeat as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
@@ -253,7 +367,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
       const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
       const supervisor = new EnvironmentDaemonSessionSupervisor({
-        threadId: "thread-1",
+        environmentId: "env-1",
         runtime,
         sessionRuntime,
         sessionSync: sync,
@@ -301,7 +415,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 5,
           protocolVersion: 1,
-          channels: [],
+          channels: [
+            {
+              channelId: "thread-1",
+              applyFrom: { generation: 1, sequenceExclusive: 0 },
+            },
+          ],
         },
       });
       (client.heartbeat as ReturnType<typeof vi.fn>)
@@ -319,7 +438,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
       const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
       const supervisor = new EnvironmentDaemonSessionSupervisor({
-        threadId: "thread-1",
+        environmentId: "env-1",
         runtime,
         sessionRuntime,
         sessionSync: sync,
@@ -374,7 +493,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 10_000,
           protocolVersion: 1,
-          channels: [],
+          channels: [
+            {
+              channelId: "thread-1",
+              applyFrom: { generation: 1, sequenceExclusive: 0 },
+            },
+          ],
         },
       });
       (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -427,7 +551,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
       const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
       const supervisor = new EnvironmentDaemonSessionSupervisor({
-        threadId: "thread-1",
+        environmentId: "env-1",
         runtime,
         sessionRuntime,
         sessionSync: sync,
@@ -497,7 +621,12 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 10_000,
           protocolVersion: 1,
-          channels: [],
+          channels: [
+            {
+              channelId: "thread-1",
+              applyFrom: { generation: 1, sequenceExclusive: 0 },
+            },
+          ],
         },
       });
       (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -541,7 +670,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
       const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
       const supervisor = new EnvironmentDaemonSessionSupervisor({
-        threadId: "thread-1",
+        environmentId: "env-1",
         runtime,
         sessionRuntime,
         sessionSync: sync,
@@ -675,13 +804,20 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
     const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
     const supervisor = new EnvironmentDaemonSessionSupervisor({
-      threadId: "thread-1",
+      environmentId: "env-1",
       runtime,
       sessionRuntime,
       sessionSync: sync,
       pollIntervalMs: 1_000,
     });
 
+    sessionRuntime.initializeThread({
+      threadId: "thread-1",
+      agentId: "agent-shared",
+      agentInstanceId: "instance-shared",
+      generation: 1,
+      now: 2_000,
+    });
     sessionRuntime.recordEvent({
       threadId: "thread-1",
       eventId: "evt-1",
@@ -801,7 +937,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
     const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
     const supervisor = new EnvironmentDaemonSessionSupervisor({
-      threadId: "thread-1",
+      environmentId: "env-1",
       runtime,
       sessionRuntime,
       sessionSync: sync,

@@ -260,6 +260,114 @@ describe("environment-daemon service config", () => {
     await started.close();
   });
 
+  it("starts session supervision without a bootstrap threadId", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/env-daemon/session/open")) {
+        return new Response(
+          JSON.stringify({
+            protocol: "bb.env-daemon.v1",
+            type: "session_welcome",
+            messageId: "msg-open",
+            sessionId: "sess-1",
+            sentAt: 1_000,
+            payload: {
+              leaseTtlMs: 30_000,
+              heartbeatIntervalMs: 10_000,
+              protocolVersion: 1,
+              channels: [],
+            },
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/env-daemon/session/commands")) {
+        return new Response(
+          JSON.stringify({
+            protocol: "bb.env-daemon.v1",
+            type: "command_batch",
+            messageId: "msg-cmd",
+            sessionId: "sess-1",
+            sentAt: 1_100,
+            payload: { commands: [] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/env-daemon/session/messages")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string };
+        if (body.type === "event_batch") {
+          return new Response(
+            JSON.stringify({
+              protocol: "bb.env-daemon.v1",
+              type: "event_ack",
+              messageId: "msg-ack",
+              sessionId: "sess-1",
+              sentAt: 1_200,
+              payload: { channels: [] },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const started = await startEnvironmentDaemonService({
+      runtime: {
+        projectId: "project-1",
+        environmentId: "local",
+        serverConnection: {
+          serverUrl: "http://127.0.0.1:9000/api/v1",
+          authToken: "secret-token",
+          projectId: "project-1",
+          environmentId: "local",
+        },
+      },
+      server: {
+        host: "127.0.0.1",
+        port: 0,
+        bearerToken: "secret-token",
+      },
+      logging: {
+        filePath: "/tmp/bb-environment-daemon-service-test.log",
+      },
+      control: {
+        endpoint: undefined,
+      },
+      session: {
+        pollIntervalMs: 10_000,
+        commandBatchLimit: 10,
+        capabilities: {
+          commands: [
+            "provider.ensure",
+            "thread.start",
+            "thread.resume",
+            "thread.stop",
+            "turn.run",
+            "thread.rename",
+            "workspace.status",
+            "workspace.diff",
+          ],
+          features: ["worker_metadata"],
+        },
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+        },
+      },
+    });
+
+    expect(started.sessionSupervisor).toBeDefined();
+    expect(fetchSpy.mock.calls).toContainEqual([
+      "http://127.0.0.1:9000/api/v1/environments/local/env-daemon/session/open",
+      expect.objectContaining({ method: "POST" }),
+    ]);
+
+    await started.close();
+  });
+
   it("returns tool-call responses from session-backed provider requests", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
@@ -380,6 +488,7 @@ describe("environment-daemon service config", () => {
             params?: unknown;
             providerId?: string;
             normalizedMethod?: string;
+            resolvedThreadId?: string;
           }) => Promise<unknown>;
         };
       }
@@ -391,6 +500,7 @@ describe("environment-daemon service config", () => {
         method: "item/tool/call",
         providerId: "codex",
         normalizedMethod: "item/tool/call",
+        resolvedThreadId: "thread-1",
       }),
     ).resolves.toEqual({
       success: true,

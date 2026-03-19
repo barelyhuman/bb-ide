@@ -76,7 +76,7 @@ const environmentDaemonSessionOpenBodySchema = z.object({
     baseUrl: z.string().url(),
     authToken: z.string().min(1),
   }).optional(),
-  channels: z.array(environmentDaemonSessionChannelBootstrapSchema).min(1),
+  channels: z.array(environmentDaemonSessionChannelBootstrapSchema),
 });
 
 const environmentDaemonSessionCommandsQuerySchema = z.object({
