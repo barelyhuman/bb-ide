@@ -170,6 +170,19 @@ describe("EnvironmentDaemonRuntime", () => {
     });
   });
 
+  it("does not emit a synthetic ready event without an explicitly routed thread", () => {
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const events: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      events.push(event.event.type);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.start();
+
+    expect(events).toEqual([]);
+  });
+
   it("materializes launch env and auth files before spawning the provider", async () => {
     const tempHome = await mkdtemp(join(tmpdir(), "bb-env-daemon-runtime-"));
     cleanup.push(() => rm(tempHome, { recursive: true, force: true }));
@@ -654,11 +667,33 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("captures provider stderr as events", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
+      providerId: "codex",
+    });
+    const events: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.stderr") {
+        events.push(event.event.line);
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.error('refresh token has already been used'); setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1");
+
+    await expect.poll(() => events).toContain("refresh token has already been used");
+  });
+
+  it("drops provider stderr when no thread routing exists", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
       providerCommand: "node",
       providerArgs: [
         "-e",
-        "console.error('refresh token has already been used'); setTimeout(() => process.exit(0), 20);",
+        "console.error('unattributed stderr'); setTimeout(() => process.exit(0), 20);",
       ],
     });
     const events: string[] = [];
@@ -671,12 +706,38 @@ describe("EnvironmentDaemonRuntime", () => {
 
     runtime.start();
 
-    await expect.poll(() => events).toContain("refresh token has already been used");
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+    expect(events).toEqual([]);
   });
 
   it("captures unmatched provider rpc errors as events", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
+      providerId: "codex",
+    });
+    const errors: Array<{ requestId: string | number; message: string }> = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.rpc_error") {
+        errors.push({ requestId: event.event.requestId, message: event.event.message });
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ id: 999, error: { message: 'provider exploded' } })); setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1");
+
+    await expect.poll(() => errors).toContainEqual({
+      requestId: 999,
+      message: "provider exploded",
+    });
+  });
+
+  it("drops unmatched provider rpc errors when no thread routing exists", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -693,10 +754,8 @@ describe("EnvironmentDaemonRuntime", () => {
 
     runtime.start();
 
-    await expect.poll(() => errors).toContainEqual({
-      requestId: 999,
-      message: "provider exploded",
-    });
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+    expect(errors).toEqual([]);
   });
 
   it("routes RPC commands to the correct child when multiple providers are active", async () => {
@@ -1355,7 +1414,7 @@ describe("EnvironmentDaemonRuntime", () => {
           arguments: { text: "hi" },
         },
         providerId: "codex",
-        resolvedThreadId: "thread-1",
+        resolvedThreadId: undefined,
         normalizedMethod: "item/tool/call",
         toolCall: {
           requestId: 62,

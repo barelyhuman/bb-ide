@@ -263,7 +263,6 @@ export class EnvironmentDaemonRuntime {
     );
     return {
       protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
-      ...(this.opts.threadId ? { threadId: this.opts.threadId } : {}),
       ...(this.opts.projectId ? { projectId: this.opts.projectId } : {}),
       ...(this.opts.environmentId ? { environmentId: this.opts.environmentId } : {}),
       latestSequence: this.sequence,
@@ -1523,8 +1522,7 @@ export class EnvironmentDaemonRuntime {
     if (liveThreadIds.length === 1) {
       return liveThreadIds[0];
     }
-    const configuredThreadId = this.opts.threadId ?? process.env.BB_THREAD_ID;
-    return configuredThreadId?.trim() ? configuredThreadId : undefined;
+    return undefined;
   }
 
   private getLiveThreadIdsForChild(child: ChildProcess): string[] {

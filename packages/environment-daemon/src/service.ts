@@ -175,14 +175,12 @@ export function resolveEnvironmentDaemonServiceOptions(args: {
 
   return {
     runtime: {
-      threadId: args.env.BB_THREAD_ID,
       projectId: args.env.BB_PROJECT_ID,
       environmentId: args.env.BB_ENVIRONMENT_ID,
       providerId: args.env[BB_THREAD_PROVIDER_ID]?.trim(),
       serverConnection: {
         serverUrl: args.env[BB_SERVER_URL],
         authToken,
-        threadId: args.env.BB_THREAD_ID,
         projectId: args.env.BB_PROJECT_ID,
         environmentId: args.env.BB_ENVIRONMENT_ID,
       },

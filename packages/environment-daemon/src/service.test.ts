@@ -20,7 +20,6 @@ describe("environment-daemon service config", () => {
         httpHost: "0.0.0.0",
       },
       env: {
-        BB_THREAD_ID: "thread-1",
         BB_PROJECT_ID: "project-1",
         BB_ENVIRONMENT_ID: "docker",
         BB_THREAD_PROVIDER_ID: "codex",
@@ -32,14 +31,12 @@ describe("environment-daemon service config", () => {
 
     expect(resolved).toEqual({
       runtime: {
-        threadId: "thread-1",
         projectId: "project-1",
         environmentId: "docker",
         providerId: "codex",
         serverConnection: {
           serverUrl: "http://127.0.0.1:9000",
           authToken: "secret-token",
-          threadId: "thread-1",
           projectId: "project-1",
           environmentId: "docker",
         },
@@ -124,7 +121,6 @@ describe("environment-daemon service config", () => {
         httpPort: "4123",
       },
       env: {
-        BB_THREAD_ID: "thread-1",
         BB_PROJECT_ID: "project-1",
         BB_THREAD_PROVIDER_ID: "codex",
         BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
@@ -206,13 +202,11 @@ describe("environment-daemon service config", () => {
 
     const started = await startEnvironmentDaemonService({
       runtime: {
-        threadId: "thread-1",
         projectId: "project-1",
         environmentId: "local",
         serverConnection: {
           serverUrl: "http://127.0.0.1:9000/api/v1",
           authToken: "secret-token",
-          threadId: "thread-1",
           projectId: "project-1",
           environmentId: "local",
         },
@@ -433,14 +427,12 @@ describe("environment-daemon service config", () => {
 
     const started = await startEnvironmentDaemonService({
       runtime: {
-        threadId: "thread-1",
         projectId: "project-1",
         environmentId: "local",
         providerId: "codex",
         serverConnection: {
           serverUrl: "http://127.0.0.1:9000/api/v1",
           authToken: "secret-token",
-          threadId: "thread-1",
           projectId: "project-1",
           environmentId: "local",
         },
