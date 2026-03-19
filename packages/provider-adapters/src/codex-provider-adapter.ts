@@ -326,15 +326,16 @@ export function createCodexProviderAdapter(
       };
     },
     createThreadResumeParams(
-      providerThreadId: string,
+      providerThreadId: string | undefined,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
       _resumePath?: string,
     ): Record<string, unknown> {
+      const threadId = providerThreadId ?? context.threadId;
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
           {
-            threadId: providerThreadId,
+            threadId,
             // Codex currently rejects thread/resume.path unless experimentalApi
             // is enabled. Keep the adapter compatible with the default provider
             // surface and resume by thread id only.
@@ -347,13 +348,14 @@ export function createCodexProviderAdapter(
       );
     },
     createTurnStartParams(
-      providerThreadId: string,
+      threadId: string,
+      providerThreadId: string | undefined,
       input: PromptInput[],
       options?: ProviderExecutionOptions,
     ): Record<string, unknown> {
       return withExecutionOptions(
         {
-          threadId: providerThreadId,
+          threadId: providerThreadId ?? threadId,
           input,
           approvalPolicy: DEFAULT_APPROVAL_POLICY,
           sandboxPolicy: toTurnSandboxPolicy(options?.sandboxMode),
@@ -362,20 +364,25 @@ export function createCodexProviderAdapter(
       );
     },
     createTurnSteerParams: (
-      providerThreadId: string,
+      threadId: string,
+      providerThreadId: string | undefined,
       expectedTurnId: string,
       input: PromptInput[],
     ): Record<string, unknown> => {
       return {
-        threadId: providerThreadId,
+        threadId: providerThreadId ?? threadId,
         expectedTurnId,
         input,
       };
     },
     createThreadNameSetParams: supportsRename
-      ? (providerThreadId: string, title: string): Record<string, unknown> => {
+      ? (
+          threadId: string,
+          providerThreadId: string | undefined,
+          title: string,
+        ): Record<string, unknown> => {
           return {
-            threadId: providerThreadId,
+            threadId: providerThreadId ?? threadId,
             name: title,
           };
         }

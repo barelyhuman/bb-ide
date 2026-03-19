@@ -10,7 +10,10 @@ import {
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
-import { createCodexProviderAdapter } from "@bb/provider-adapters";
+import {
+  createClaudeCodeProviderAdapter,
+  createCodexProviderAdapter,
+} from "@bb/provider-adapters";
 import { createEnvironmentDaemonSessionCapabilities } from "@bb/environment-daemon";
 import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
 import { EnvironmentDaemonSessionCommandClient } from "../environment-daemon-session-command-client.js";
@@ -437,6 +440,55 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
     });
     expect(commands.getById(secondCommand.id)).toMatchObject({
       threadId: second.threadId,
+      state: "completed",
+    });
+  });
+
+  it("treats explicit null providerThreadId results as unknown provider metadata", async () => {
+    const thread = createThreadRecord();
+    const client = createSessionClient({
+      threadId: thread.threadId,
+      sessionId: "sess-claude-start",
+    });
+    const server = new ProviderSessionController({
+      provider: createClaudeCodeProviderAdapter(),
+    });
+    const ensureCompletion = completeNextQueuedCommand({
+      threadId: thread.threadId,
+      result: { running: true, launched: true, pid: 303 },
+    });
+    const startCompletion = (async () => {
+      await ensureCompletion;
+      return completeNextQueuedCommand({
+        threadId: thread.threadId,
+        result: { threadId: thread.threadId, providerThreadId: null },
+      });
+    })();
+
+    await expect(
+      server.startThreadCommand({
+        client,
+        threadId: thread.threadId,
+        projectId: thread.projectId,
+        request: {
+          projectId: thread.projectId,
+          input: [{ type: "text", text: "hello" }],
+        },
+        context: {
+          projectId: thread.projectId,
+          threadId: thread.threadId,
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).resolves.toEqual({ providerThreadId: undefined });
+
+    await ensureCompletion;
+    const queuedCommand = await startCompletion;
+    expect(commands.getById(queuedCommand.id)).toMatchObject({
+      commandType: "thread.start",
+      payload: expect.objectContaining({
+        threadId: thread.threadId,
+      }),
       state: "completed",
     });
   });

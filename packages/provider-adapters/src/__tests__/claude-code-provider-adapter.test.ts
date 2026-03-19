@@ -87,4 +87,73 @@ describe("claude-code provider adapter", () => {
     ).toBe(false);
     expect(shouldFetchClaudeCodeModelsFromAnthropic({})).toBe(false);
   });
+
+  it("keeps BB thread routing separate from Claude provider session ids", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const context = {
+      projectId: "proj-1",
+      threadId: "bb-thread-1",
+      path: "/tmp/project",
+    };
+
+    expect(
+      adapter.createThreadStartParams(
+        { projectId: "proj-1", input: [{ type: "text", text: "hello" }] },
+        context,
+      ),
+    ).toMatchObject({
+      threadId: "bb-thread-1",
+    });
+
+    expect(
+      adapter.createThreadResumeParams(undefined, context),
+    ).toMatchObject({
+      threadId: "bb-thread-1",
+      providerThreadId: null,
+    });
+
+    expect(
+      adapter.createThreadResumeParams("claude-session-1", context),
+    ).toMatchObject({
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+    });
+
+    expect(
+      adapter.createTurnStartParams(
+        "bb-thread-1",
+        "claude-session-1",
+        [{ type: "text", text: "follow up" }],
+      ),
+    ).toMatchObject({
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+    });
+
+    expect(
+      adapter.createTurnSteerParams?.(
+        "bb-thread-1",
+        "claude-session-1",
+        "turn-1",
+        [{ type: "text", text: "steer" }],
+      ),
+    ).toMatchObject({
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+      expectedTurnId: "turn-1",
+    });
+
+    expect(
+      adapter.extractThreadIdFromResult({
+        threadId: "bb-thread-1",
+        providerThreadId: "claude-session-1",
+      }),
+    ).toBe("bb-thread-1");
+    expect(
+      adapter.extractThreadIdFromEventData({
+        threadId: "bb-thread-1",
+        providerThreadId: "claude-session-1",
+      }),
+    ).toBe("bb-thread-1");
+  });
 });

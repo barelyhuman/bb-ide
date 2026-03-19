@@ -1794,7 +1794,8 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       input: [{ type: "text", text: "Retry stale turn start" }],
       request: {
         params: expect.objectContaining({
-          threadId: "provider-thread-2",
+          threadId,
+          providerThreadId: "provider-thread-2",
         }),
       },
     });

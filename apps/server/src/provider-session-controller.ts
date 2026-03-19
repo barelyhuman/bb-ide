@@ -154,6 +154,18 @@ export class ProviderSessionController {
     return this.opts.provider.outputFromEvent(event);
   }
 
+  private extractProviderThreadIdFromResult(result: unknown): string | undefined {
+    if (result && typeof result === "object" && !Array.isArray(result)) {
+      const record = result as Record<string, unknown>;
+      if (Object.hasOwn(record, "providerThreadId")) {
+        return typeof record.providerThreadId === "string"
+          ? record.providerThreadId
+          : undefined;
+      }
+    }
+    return this.opts.provider.extractThreadIdFromResult(result);
+  }
+
   async startThreadCommand(args: {
     client: EnvironmentDaemonClient;
     threadId: string;
@@ -161,7 +173,7 @@ export class ProviderSessionController {
     request: SpawnThreadRequest;
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
-  }): Promise<{ providerThreadId: string }> {
+  }): Promise<{ providerThreadId?: string }> {
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
@@ -179,13 +191,7 @@ export class ProviderSessionController {
           context: args.context,
         }) ?? this.opts.dynamicTools,
     });
-    const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
-    if (!providerThreadId) {
-      throw new ProviderSessionError(
-        "provider_rpc_error",
-        `[thread ${args.threadId}] RPC response missing thread ID. Response: ${JSON.stringify(ack.result)}`,
-      );
-    }
+    const providerThreadId = this.extractProviderThreadIdFromResult(ack.result);
     return { providerThreadId };
   }
 
@@ -193,13 +199,13 @@ export class ProviderSessionController {
     client: EnvironmentDaemonClient;
     threadId: string;
     projectId: string;
-    providerThreadId: string;
+    providerThreadId?: string;
     context: ProviderThreadContext;
     options?: ProviderExecutionOptions;
     resumePath?: string;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
     dynamicTools?: ProviderDynamicTool[];
-  }): Promise<{ providerThreadId: string }> {
+  }): Promise<{ providerThreadId?: string }> {
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
@@ -215,27 +221,21 @@ export class ProviderSessionController {
       ...(args.resumePath ? { resumePath: args.resumePath } : {}),
       ...(args.dynamicTools ? { dynamicTools: args.dynamicTools } : {}),
     });
-    const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
-    if (!providerThreadId) {
-      throw new ProviderSessionError(
-        "provider_rpc_error",
-        `[thread ${args.threadId}] RPC response missing thread ID. Response: ${JSON.stringify(ack.result)}`,
-      );
-    }
+    const providerThreadId = this.extractProviderThreadIdFromResult(ack.result);
     return { providerThreadId };
   }
 
   async sendTurnCommand(args: {
     client: EnvironmentDaemonClient;
     threadId: string;
-    providerThreadId: string;
+    providerThreadId?: string;
     activeTurnId?: string;
     input: PromptInput[];
     options?: ProviderExecutionOptions;
     mode?: "auto" | "steer" | "start";
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
-  }): Promise<{ mode: "steer" | "start"; providerThreadId: string }> {
+  }): Promise<{ mode: "steer" | "start"; providerThreadId?: string }> {
     const hasExecutionOverrides = Boolean(
       args.options?.model ||
       args.options?.serviceTier ||
@@ -297,13 +297,14 @@ export class ProviderSessionController {
   async renameThreadCommand(args: {
     client: EnvironmentDaemonClient;
     threadId: string;
-    providerThreadId: string;
+    providerThreadId?: string;
     title: string;
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<void> {
     if (!this.opts.provider.threadNameSetMethod) return;
     if (!this.opts.provider.createThreadNameSetParams) return;
+    if (!args.providerThreadId) return;
 
     await this.ensureProviderRunningForCommand(
       args.client,

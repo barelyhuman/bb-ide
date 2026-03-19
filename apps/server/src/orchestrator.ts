@@ -645,6 +645,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private turnLifecycleEpochs = new Map<string, number>();
   /** Per-thread mutex for serializing _tell calls. */
   private tellInFlightByThreadId = new Map<string, Promise<void>>();
+  /** Dedupes env-daemon access recovery per runtime scope so stale-session callers share one restart. */
+  private environmentDaemonRecoveryByScopeKey = new Map<string, Promise<void>>();
   /** Last known active turn id derived from delivered provider lifecycle events. */
   private activeTurnIdByThreadId = new Map<string, string>();
   /** Turn ids explicitly interrupted by the user; late events for them must be dropped. */
@@ -1746,6 +1748,7 @@ export class Orchestrator implements ThreadOrchestrator {
           mode: tellMode === "steer" ? "steer" : tellMode === "auto" ? "auto" : "start",
         });
         const turnParams = this._buildTurnStartParams(
+          threadId,
           acceptedProviderThreadId,
           providerInput,
           options,
@@ -3694,7 +3697,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     this._appendProvisioningProgressEvent(threadId, "start_provider_session", "started");
     const providerStartStartedAt = Date.now();
-    let started: { providerThreadId: string };
+    let started: { providerThreadId?: string };
     try {
       started = await this._withEnvironmentDaemonAccess(
         threadId,
@@ -3718,7 +3721,11 @@ export class Orchestrator implements ThreadOrchestrator {
       throw error;
     }
     let providerThreadId = started.providerThreadId;
-    this.providerThreadIdByThreadId.set(threadId, providerThreadId);
+    if (providerThreadId) {
+      this.providerThreadIdByThreadId.set(threadId, providerThreadId);
+    } else {
+      this.providerThreadIdByThreadId.delete(threadId);
+    }
     this._appendEvent(
       threadId,
       "system/provisioning/completed",
@@ -3726,7 +3733,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ...(attachedEnvironmentIdAfterProvision
           ? { attachedEnvironmentId: attachedEnvironmentIdAfterProvision }
           : {}),
-        providerThreadId,
+        ...(providerThreadId ? { providerThreadId } : {}),
         workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
         reason: provisioningReason,
         transcript: [
@@ -3780,7 +3787,12 @@ export class Orchestrator implements ThreadOrchestrator {
       ) {
         this._sendThreadNameSet(threadId, providerThreadId, hydratedThreadAfterStart.title);
       }
-      const turnStartParams = this._buildTurnStartParams(providerThreadId, providerInput, req);
+      const turnStartParams = this._buildTurnStartParams(
+        threadId,
+        providerThreadId,
+        providerInput,
+        req,
+      );
       const statusChanged = this._activateThreadAndPersistOutboundStartEvent(threadId, {
         type: "client/turn/start",
         params: turnStartParams,
@@ -3853,9 +3865,57 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
+  private _getEnvironmentDaemonRecoveryScopeKey(threadId: string): string {
+    return this.environmentService.getAttachedEnvironmentId(threadId) ?? `thread:${threadId}`;
+  }
+
+  private async _awaitRecoverableEnvironmentDaemonSession(
+    threadId: string,
+    timeoutMs: number = ENVIRONMENT_DAEMON_SESSION_RECOVERY_WAIT_MS,
+  ): Promise<boolean> {
+    if (!this.environmentDaemonCommandDispatcher) {
+      return false;
+    }
+    try {
+      await this.environmentDaemonCommandDispatcher.awaitActiveSession({
+        threadId,
+        timeoutMs,
+      });
+      return true;
+    } catch (error) {
+      if (!isEnvironmentDaemonSessionUnavailableError(error)) {
+        throw error;
+      }
+      return false;
+    }
+  }
+
   private async _recoverEnvironmentDaemonAccess(threadId: string): Promise<void> {
-    await this._cleanupThreadRuntimeAndWait(threadId, { retireActiveSession: true });
-    await this._ensureEnvironmentDaemonAccess(threadId);
+    const scopeKey = this._getEnvironmentDaemonRecoveryScopeKey(threadId);
+    const existingRecovery = this.environmentDaemonRecoveryByScopeKey.get(scopeKey);
+    if (existingRecovery) {
+      await existingRecovery;
+      return;
+    }
+
+    let recoveryPromise: Promise<void>;
+    recoveryPromise = (async () => {
+      if (await this._awaitRecoverableEnvironmentDaemonSession(threadId)) {
+        return;
+      }
+      await this._cleanupThreadRuntimeAndWait(threadId, { retireActiveSession: true });
+      if (await this._awaitRecoverableEnvironmentDaemonSession(threadId)) {
+        return;
+      }
+      await this._ensureEnvironmentDaemonAccess(threadId);
+    })().finally(() => {
+      if (this.environmentDaemonRecoveryByScopeKey.get(scopeKey) === recoveryPromise) {
+        this.environmentDaemonRecoveryByScopeKey.delete(scopeKey);
+      }
+    });
+
+    this.environmentDaemonRecoveryByScopeKey.set(scopeKey, recoveryPromise);
+    await recoveryPromise;
   }
 
   private async _withEnvironmentDaemonClient<T>(
@@ -4503,7 +4563,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _ensureProviderSession(
     threadId: string,
     options?: PromptExecutionOptions,
-  ): Promise<string> {
+  ): Promise<string | undefined> {
     const inMemoryThreadId = this.providerThreadIdByThreadId.get(threadId);
     const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
     const hasActiveEnvironmentDaemonSession =
@@ -4523,6 +4583,14 @@ export class Orchestrator implements ThreadOrchestrator {
       (!this.environmentDaemonCommandDispatcher || hasActiveEnvironmentDaemonSession)
     ) {
       return inMemoryThreadId;
+    }
+    if (
+      !inMemoryThreadId &&
+      !persistedThreadId &&
+      this.environmentDaemonCommandDispatcher &&
+      hasActiveEnvironmentDaemonSession
+    ) {
+      return undefined;
     }
     if (inMemoryThreadId && this.environmentDaemonCommandDispatcher) {
       this.providerThreadIdByThreadId.delete(threadId);
@@ -4570,7 +4638,11 @@ export class Orchestrator implements ThreadOrchestrator {
                 : undefined,
             }),
         );
-        this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);
+        if (resumed.providerThreadId) {
+          this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);
+        } else {
+          this.providerThreadIdByThreadId.delete(threadId);
+        }
         return resumed.providerThreadId;
       } catch (err) {
         lastResumeError = err;
@@ -4638,7 +4710,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _restartProviderThreadAfterMissingTurnStart(
     threadId: string,
     options?: PromptExecutionOptions,
-  ): Promise<string> {
+  ): Promise<string | undefined> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -4700,21 +4772,25 @@ export class Orchestrator implements ThreadOrchestrator {
           providerLaunch,
         }),
     });
-    this.providerThreadIdByThreadId.set(threadId, started.providerThreadId);
+    if (started.providerThreadId) {
+      this.providerThreadIdByThreadId.set(threadId, started.providerThreadId);
+    } else {
+      this.providerThreadIdByThreadId.delete(threadId);
+    }
     return started.providerThreadId;
   }
 
   private async _sendTurnCommandWithStaleProviderRetry(args: {
     threadId: string;
     projectId: string;
-    providerThreadId: string;
+    providerThreadId?: string;
     activeTurnId?: string;
     input: PromptInput[];
     options?: PromptExecutionOptions;
     mode: "auto" | "steer" | "start";
-  }): Promise<string> {
+  }): Promise<string | undefined> {
     const agentServer = this._getAgentServerForThreadId(args.threadId);
-    const sendTurn = async (providerThreadId: string): Promise<void> => {
+    const sendTurn = async (providerThreadId: string | undefined): Promise<void> => {
       await this._withEnvironmentDaemonAccess(args.threadId, async ({ client, providerLaunch }) => {
         await agentServer.sendTurnCommand({
           client,
@@ -4821,12 +4897,14 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _buildTurnStartParams(
-    providerThreadId: string,
+    threadId: string,
+    providerThreadId: string | undefined,
     input: PromptInput[],
     options?: ProviderExecutionOptions,
   ): Record<string, unknown> {
     return {
-      threadId: providerThreadId,
+      threadId,
+      ...(providerThreadId ? { providerThreadId } : {}),
       ...this._buildTurnRequestParams(input, options),
     };
   }
@@ -5003,6 +5081,12 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       return;
     }
+    const providerThreadId = extractProviderThreadIdFromPersistedEventData(
+      event.eventData,
+    );
+    if (providerThreadId) {
+      this.providerThreadIdByThreadId.set(resolvedThreadId, providerThreadId);
+    }
     if (this._shouldSuppressNotification(resolvedThreadId, event)) {
       return;
     }
@@ -5046,6 +5130,15 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     event: ProviderSessionNotification,
   ): string | undefined {
+    const payload = toRecord(unwrapProviderEventPayload(event.eventData));
+    const routingThreadId =
+      getStringField(payload, "threadId") ??
+      getStringField(payload, "thread_id") ??
+      getStringField(toRecord(payload?.thread), "id");
+    if (routingThreadId && routingThreadId === threadId) {
+      return threadId;
+    }
+
     const providerThreadId = extractProviderThreadIdFromPersistedEventData(
       event.eventData,
     );
@@ -6206,7 +6299,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _maybeAutogenerateThreadTitle(
     threadId: string,
     cwd: string,
-    providerThreadId: string,
+    providerThreadId: string | undefined,
     input: PromptInput[],
   ): void {
     if (this.lockedTitleThreadIds.has(threadId)) return;
@@ -6230,7 +6323,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _runAutogeneratedThreadTitle(
     threadId: string,
     cwd: string,
-    providerThreadId: string,
+    providerThreadId: string | undefined,
     input: PromptInput[],
   ): Promise<void> {
     try {
@@ -6274,9 +6367,10 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _sendThreadNameSet(
     threadId: string,
-    providerThreadId: string,
+    providerThreadId: string | undefined,
     title: string,
   ): void {
+    if (!providerThreadId) return;
     void this._withEnvironmentDaemonAccess(
       threadId,
       async ({ client, thread, providerLaunch }) => {

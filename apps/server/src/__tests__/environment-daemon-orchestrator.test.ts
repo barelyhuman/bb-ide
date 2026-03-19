@@ -569,9 +569,152 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
     )._ensureProviderSession(thread.id);
 
     expect(providerThreadId).toBe("provider-thread-1");
-    expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
+    expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(1);
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(2);
     expect(resumeThreadCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("dedupes concurrent env-daemon access recovery for the same runtime scope", async () => {
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
+      status: "idle",
+      environmentId: env.id,
+    });
+    attachmentRepo.attachThread({
+      threadId: thread.id,
+      environmentId: env.id,
+    });
+
+    const dispatcher = {
+      awaitActiveSession: vi
+        .fn()
+        .mockRejectedValue(new EnvironmentDaemonSessionUnavailableError(thread.id)),
+    } as unknown as EnvironmentDaemonCommandDispatcher;
+
+    const localManager = new Orchestrator(
+      threadRepo,
+      eventRepo,
+      projectRepo,
+      ws,
+      createMockLlmCompletionService(),
+      undefined,
+      createTestRuntimeEnv({
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
+      }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dispatcher,
+      sessionService as never,
+      undefined,
+      undefined,
+      attachmentRepo,
+    );
+
+    let releaseCleanup: (() => void) | undefined;
+    const cleanupStarted = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const cleanupRuntime = vi.fn(async () => {
+      await cleanupStarted;
+    });
+    const ensureAccess = vi.fn(async () => undefined);
+
+    (
+      localManager as unknown as {
+        _cleanupThreadRuntimeAndWait: typeof cleanupRuntime;
+        _ensureEnvironmentDaemonAccess: typeof ensureAccess;
+      }
+    )._cleanupThreadRuntimeAndWait = cleanupRuntime;
+    (
+      localManager as unknown as {
+        _cleanupThreadRuntimeAndWait: typeof cleanupRuntime;
+        _ensureEnvironmentDaemonAccess: typeof ensureAccess;
+      }
+    )._ensureEnvironmentDaemonAccess = ensureAccess;
+
+    const recover = localManager as unknown as {
+      _recoverEnvironmentDaemonAccess: (threadId: string) => Promise<void>;
+    };
+    const firstRecovery = recover._recoverEnvironmentDaemonAccess(thread.id);
+    const secondRecovery = recover._recoverEnvironmentDaemonAccess(thread.id);
+
+    await vi.waitFor(() => {
+      expect(cleanupRuntime).toHaveBeenCalledTimes(1);
+    });
+    releaseCleanup?.();
+
+    await Promise.all([firstRecovery, secondRecovery]);
+
+    expect(cleanupRuntime).toHaveBeenCalledTimes(1);
+    expect(ensureAccess).toHaveBeenCalledTimes(1);
+    expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips heavy env-daemon recovery when a fresh session is already active", async () => {
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
+      status: "idle",
+      environmentId: env.id,
+    });
+    attachmentRepo.attachThread({
+      threadId: thread.id,
+      environmentId: env.id,
+    });
+
+    const dispatcher = {
+      awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-fresh" }),
+    } as unknown as EnvironmentDaemonCommandDispatcher;
+
+    const localManager = new Orchestrator(
+      threadRepo,
+      eventRepo,
+      projectRepo,
+      ws,
+      createMockLlmCompletionService(),
+      undefined,
+      createTestRuntimeEnv({
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
+      }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dispatcher,
+      sessionService as never,
+      undefined,
+      undefined,
+      attachmentRepo,
+    );
+
+    const cleanupRuntime = vi.fn(async () => undefined);
+    const ensureAccess = vi.fn(async () => undefined);
+
+    (
+      localManager as unknown as {
+        _cleanupThreadRuntimeAndWait: typeof cleanupRuntime;
+        _ensureEnvironmentDaemonAccess: typeof ensureAccess;
+      }
+    )._cleanupThreadRuntimeAndWait = cleanupRuntime;
+    (
+      localManager as unknown as {
+        _cleanupThreadRuntimeAndWait: typeof cleanupRuntime;
+        _ensureEnvironmentDaemonAccess: typeof ensureAccess;
+      }
+    )._ensureEnvironmentDaemonAccess = ensureAccess;
+
+    await (
+      localManager as unknown as {
+        _recoverEnvironmentDaemonAccess: (threadId: string) => Promise<void>;
+      }
+    )._recoverEnvironmentDaemonAccess(thread.id);
+
+    expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(1);
+    expect(cleanupRuntime).not.toHaveBeenCalled();
+    expect(ensureAccess).not.toHaveBeenCalled();
   });
 
   it("recycles the runtime when env-daemon access cannot find a fresh session", async () => {

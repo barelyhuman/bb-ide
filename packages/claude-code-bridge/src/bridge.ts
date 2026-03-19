@@ -50,6 +50,7 @@ interface ThreadSession {
   turnId: string | undefined;
   turnCounter: TurnCounterState;
   pendingToolCalls: Map<string | number, PendingToolCall>;
+  providerThreadId?: string;
 }
 
 const sessions = new Map<string, ThreadSession>();
@@ -250,7 +251,13 @@ function handleThreadStart(
   id: string | number,
   params: Record<string, unknown>,
 ): void {
-  const threadIdRef = { current: `bridge-${Date.now()}` };
+  const routingThreadId =
+    typeof params.threadId === "string" ? params.threadId : undefined;
+  if (!routingThreadId) {
+    sendError(id, -32602, "Missing threadId");
+    return;
+  }
+  const threadIdRef = { current: routingThreadId };
 
   // Stop existing session for this thread if any
   const existing = sessions.get(threadIdRef.current);
@@ -286,12 +293,18 @@ function handleThreadStart(
   // subsequent events carry the real SDK session ID. The orchestrator
   // picks up the real ID from persisted event data (same field it
   // uses for Codex's conversationId).
-  sendResult(id, { threadId: threadIdRef.current });
+  sendResult(id, { threadId: threadIdRef.current, providerThreadId: null });
 
   void session.waitForSessionId().then((sdkSessionId) => {
-    sessions.delete(threadIdRef.current);
-    threadIdRef.current = sdkSessionId;
-    sessions.set(sdkSessionId, threadSession);
+    threadSession.providerThreadId = sdkSessionId;
+    send({
+      jsonrpc: "2.0",
+      method: "thread/started",
+      params: {
+        threadId: threadIdRef.current,
+        providerThreadId: sdkSessionId,
+      },
+    });
   });
 }
 
@@ -299,12 +312,18 @@ function handleThreadResume(
   id: string | number,
   params: Record<string, unknown>,
 ): void {
-  // The threadId from the orchestrator IS the SDK session ID (persisted
-  // from the original thread/start result). Use it to resume the session.
   const threadId =
     typeof params.threadId === "string"
       ? params.threadId
-      : `bridge-${Date.now()}`;
+      : undefined;
+  if (!threadId) {
+    sendError(id, -32602, "Missing threadId");
+    return;
+  }
+  const providerThreadId =
+    typeof params.providerThreadId === "string"
+      ? params.providerThreadId
+      : undefined;
 
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
@@ -321,18 +340,18 @@ function handleThreadResume(
   const turnCounter = createTurnCounterState();
   const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
 
-  // Resume using the threadId as the SDK session ID.
-  session.start(threadId);
+  session.start(providerThreadId);
 
   const threadSession: ThreadSession = {
     session,
     turnId: undefined,
     turnCounter,
     pendingToolCalls: new Map(),
+    ...(providerThreadId ? { providerThreadId } : {}),
   };
   sessions.set(threadId, threadSession);
 
-  sendResult(id, { threadId });
+  sendResult(id, { threadId, providerThreadId: providerThreadId ?? null });
 }
 
 function handleTurnStart(

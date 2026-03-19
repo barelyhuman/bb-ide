@@ -819,6 +819,79 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("accepts provider thread identity updates when the event carries the BB routing thread id", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const claudeThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "claude-code",
+      });
+      attachmentRepo.attachThread({ threadId: claudeThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      )._handleAgentServerNotification(claudeThread.id, {
+        method: "thread/started",
+        normalizedMethod: "thread/started",
+        eventType: "thread/started",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "claude-code",
+            method: "thread/started",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: claudeThread.id,
+            providerThreadId: "claude-session-1",
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(claudeThread.id)).toContainEqual(
+        expect.objectContaining({
+          threadId: claudeThread.id,
+          type: "thread/started",
+        }),
+      );
+      expect(
+        (
+          manager as unknown as {
+            providerThreadIdByThreadId: Map<string, string>;
+          }
+        ).providerThreadIdByThreadId.get(claudeThread.id),
+      ).toBe("claude-session-1");
+    });
+
     it("drops ambiguous shared environment provider events for the same provider", () => {
       const env = environmentRepo.create({
         projectId: project.id,

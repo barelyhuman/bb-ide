@@ -99,7 +99,7 @@ export type EnvironmentDaemonCommand =
       type: "thread.resume";
       threadId: string;
       projectId: string;
-      providerThreadId: string;
+      providerThreadId?: string;
       context?: ProviderThreadContext;
       options?: ProviderExecutionOptions;
       resumePath?: string;
@@ -114,7 +114,7 @@ export type EnvironmentDaemonCommand =
   | {
       type: "turn.run";
       threadId: string;
-      providerThreadId: string;
+      providerThreadId?: string;
       requestedMode?: "auto" | "steer" | "start";
       activeTurnId?: string;
       input?: PromptInput[];
@@ -124,7 +124,7 @@ export type EnvironmentDaemonCommand =
   | {
       type: "thread.rename";
       threadId: string;
-      providerThreadId: string;
+      providerThreadId?: string;
       title: string;
       initialize?: EnvironmentDaemonInitializeRequest;
     }

@@ -138,23 +138,26 @@ export interface ProviderAdapter {
     dynamicTools?: ProviderDynamicTool[],
   ): Record<string, unknown>;
   createThreadResumeParams(
-    providerThreadId: string,
+    providerThreadId: string | undefined,
     context: ProviderThreadContext,
     options?: ProviderExecutionOptions,
     resumePath?: string,
   ): Record<string, unknown>;
   createTurnStartParams(
-    providerThreadId: string,
+    threadId: string,
+    providerThreadId: string | undefined,
     input: PromptInput[],
     options?: ProviderExecutionOptions,
   ): Record<string, unknown>;
   createTurnSteerParams?(
-    providerThreadId: string,
+    threadId: string,
+    providerThreadId: string | undefined,
     expectedTurnId: string,
     input: PromptInput[],
   ): Record<string, unknown>;
   createThreadNameSetParams?(
-    providerThreadId: string,
+    threadId: string,
+    providerThreadId: string | undefined,
     title: string,
   ): Record<string, unknown>;
   extractThreadIdFromResult(result: unknown): string | undefined;
