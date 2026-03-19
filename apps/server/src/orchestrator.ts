@@ -647,6 +647,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private tellInFlightByThreadId = new Map<string, Promise<void>>();
   /** Last known active turn id derived from delivered provider lifecycle events. */
   private activeTurnIdByThreadId = new Map<string, string>();
+  /** Turn ids explicitly interrupted by the user; late events for them must be dropped. */
+  private suppressedTurnIdsByThreadId = new Map<string, Set<string>>();
   /** Provider thread ids attached in the current server process. */
   private providerThreadIdByThreadId = new Map<string, string>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
@@ -1200,6 +1202,12 @@ export class Orchestrator implements ThreadOrchestrator {
     throw invalidRequestError(
       `Environment ${args.environmentId} has multiple attached threads; explicit provider routing is required`,
     );
+  }
+
+  private _resolveEnvironmentSessionTransportThread(
+    environmentId: string,
+  ): Thread | undefined {
+    return this._getNonArchivedThreadsAttachedToEnvironment(environmentId)[0];
   }
 
   private _isThreadAttachedToPromotedEnvironment(threadId: string): boolean {
@@ -2111,10 +2119,16 @@ export class Orchestrator implements ThreadOrchestrator {
       thread?.status === "active" ||
       thread?.status === "provisioning" ||
       thread?.status === "provisioned";
+    const interruptedTurnId =
+      this.activeTurnIdByThreadId.get(threadId) ??
+      this._resolvePersistedActiveTurnId(threadId);
 
     this._cleanupThreadRuntime(threadId, {
       retireActiveSession: true,
     });
+    if (interruptedTurnId) {
+      this._suppressTurnId(threadId, interruptedTurnId);
+    }
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
@@ -2194,6 +2208,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.suppressedTurnIdsByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
@@ -2212,6 +2227,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.suppressedTurnIdsByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
@@ -3802,6 +3818,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.suppressedTurnIdsByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
@@ -3952,9 +3969,9 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const transportThread = this._resolveEnvironmentCommandTransportThread({
+    const transportThread = this._resolveEnvironmentSessionTransportThread(
       environmentId,
-    });
+    );
     if (!transportThread) {
       throw invalidRequestError(
         `No active thread is attached to environment ${environmentId}`,
@@ -4977,6 +4994,9 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       return;
     }
+    if (this._shouldSuppressNotification(resolvedThreadId, event)) {
+      return;
+    }
     const changes: ThreadChangeKind[] = [];
     let persistedEvent: ThreadEvent | undefined;
 
@@ -5065,6 +5085,42 @@ export class Orchestrator implements ThreadOrchestrator {
       return threadId;
     }
     return matchingThreadIds.length === 1 ? matchingThreadIds[0] : undefined;
+  }
+
+  private _suppressTurnId(threadId: string, turnId: string): void {
+    let suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
+    if (!suppressed) {
+      suppressed = new Set<string>();
+      this.suppressedTurnIdsByThreadId.set(threadId, suppressed);
+    }
+    suppressed.add(turnId);
+  }
+
+  private _clearSuppressedTurnId(threadId: string, turnId: string): void {
+    const suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
+    if (!suppressed) return;
+    suppressed.delete(turnId);
+    if (suppressed.size === 0) {
+      this.suppressedTurnIdsByThreadId.delete(threadId);
+    }
+  }
+
+  private _shouldSuppressNotification(
+    threadId: string,
+    event: ProviderSessionNotification,
+  ): boolean {
+    const turnId = event.turnId ?? this._extractTurnIdFromEventData(event.eventData);
+    if (!turnId) {
+      return false;
+    }
+    const suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
+    if (!suppressed?.has(turnId)) {
+      return false;
+    }
+    if (event.normalizedMethod === "turn/completed" || event.normalizedMethod === "turn/end") {
+      this._clearSuppressedTurnId(threadId, turnId);
+    }
+    return true;
   }
 
   private _flushQueuedProviderThreadChanged(threadId: string): void {

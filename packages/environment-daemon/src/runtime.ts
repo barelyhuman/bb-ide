@@ -450,7 +450,12 @@ export class EnvironmentDaemonRuntime {
     providerId?: string,
   ): EnvironmentDaemonProviderStatus {
     const launchedBefore = this.getProviderStatus().running;
-    const child = this.ensureProviderRunning(spec);
+    const effectiveSpec = this.applyThreadScopedProviderIsolation(
+      spec,
+      forThreadId,
+      providerId,
+    );
+    const child = this.ensureProviderRunning(effectiveSpec);
     if (child && forThreadId) {
       this.threadIdToChild.set(forThreadId, child);
       const resolvedProviderId = providerId?.trim() || this.opts.providerId?.trim();
@@ -467,6 +472,25 @@ export class EnvironmentDaemonRuntime {
       };
     }
     return status;
+  }
+
+  private applyThreadScopedProviderIsolation(
+    spec: EnvironmentDaemonProviderSpec | undefined,
+    forThreadId: string | undefined,
+    providerId: string | undefined,
+  ): EnvironmentDaemonProviderSpec | undefined {
+    if (!spec || !forThreadId || providerId !== "pi") {
+      return spec;
+    }
+    // The Pi bridge mutates process.env per session, so each thread must get
+    // its own bridge process until the upstream SDK supports per-session env.
+    return {
+      ...spec,
+      env: {
+        ...(spec.env ?? {}),
+        BB_PI_BRIDGE_OWNER_THREAD_ID: forThreadId,
+      },
+    };
   }
 
   private resolveProviderSpec(

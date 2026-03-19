@@ -58,7 +58,10 @@ import {
   type LlmCompletionService,
 } from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
-import { ProviderSessionController } from "../provider-session-controller.js";
+import {
+  ProviderSessionController,
+  type ProviderSessionNotification,
+} from "../provider-session-controller.js";
 import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
 import { EnvironmentDaemonSessionCommandClient } from "../environment-daemon-session-command-client.js";
 import type { EnvironmentService } from "../environment-service.js";
@@ -2550,6 +2553,62 @@ describe("Orchestrator", () => {
       expect(interruptionEvents).toHaveLength(0);
     });
 
+    it("drops late provider events for an interrupted turn", () => {
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      const harness = asOrchestratorHarness(manager);
+      harness.activeTurnIds.set(thread.id, "turn-1");
+
+      manager.stop(thread.id);
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (
+            threadId: string,
+            event: ProviderSessionNotification,
+          ) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: createItemCompletedData({
+          threadId: thread.id,
+          turnId: "turn-1",
+          item: createAgentMessageItem("SHOULD-NOT-LAND"),
+        }),
+        shouldPersist: true,
+        shouldBroadcast: true,
+        turnId: "turn-1",
+      });
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (
+            threadId: string,
+            event: ProviderSessionNotification,
+          ) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "turn/completed",
+        normalizedMethod: "turn/completed",
+        eventType: "turn/completed",
+        eventData: createTurnCompletedData(thread.id, "turn-1"),
+        shouldPersist: true,
+        shouldBroadcast: true,
+        nextStatus: "idle",
+        turnState: "idle",
+        turnId: "turn-1",
+      });
+
+      expect(
+        eventRepo.listByThread(thread.id).some((event) =>
+          JSON.stringify(event.data).includes("SHOULD-NOT-LAND"),
+        ),
+      ).toBe(false);
+      expect(
+        eventRepo.listByThread(thread.id).filter((event) => event.type === "turn/completed"),
+      ).toHaveLength(0);
+    });
+
 
     it("suspends managed environments on stop without destroying the workspace", () => {
       const suspendEnvironmentRuntime = vi.spyOn(
@@ -3237,7 +3296,7 @@ describe("Orchestrator", () => {
       );
     });
 
-    it("rejects ambiguous environment-scoped provider discovery instead of picking the first thread", async () => {
+    it("allows environment-scoped provider discovery for shared environments", async () => {
       const repos = createTestRepos(testDb.db);
       const envRepo = repos.environmentRepo;
       const attachmentRepo = repos.attachmentRepo;
@@ -3293,12 +3352,32 @@ describe("Orchestrator", () => {
       const sendCommand = vi.spyOn(
         EnvironmentDaemonSessionCommandClient.prototype,
         "sendCommand",
-      );
+      ).mockResolvedValue({
+        protocolVersion: 1,
+        commandId: "provider-catalog-1",
+        idempotencyKey: "provider-catalog-1",
+        state: "accepted",
+        acknowledgedAt: Date.now(),
+        latestSequence: 0,
+        result: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: { supportsRename: true },
+          },
+          {
+            id: "pi",
+            displayName: "Pi",
+            capabilities: { supportsRename: false },
+          },
+        ],
+      });
 
-      await expect(manager.listProviders(environment.id)).rejects.toThrow(
-        `Environment ${environment.id} has multiple attached threads; explicit provider routing is required`,
-      );
-      expect(sendCommand).not.toHaveBeenCalled();
+      await expect(manager.listProviders(environment.id)).resolves.toMatchObject([
+        { id: "codex" },
+        { id: "pi" },
+      ]);
+      expect(sendCommand).toHaveBeenCalledTimes(1);
     });
   });
 

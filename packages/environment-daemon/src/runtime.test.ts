@@ -1080,6 +1080,41 @@ describe("EnvironmentDaemonRuntime", () => {
     expect(markers).toContain("child-B");
   });
 
+  it("isolates pi bridge children per thread even when the launch spec matches", async () => {
+    const runtime = new EnvironmentDaemonRuntime({});
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+    cleanup.push(() => runtime.shutdown());
+
+    const spec: EnvironmentDaemonProviderSpec = {
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ owner: process.env.BB_PI_BRIDGE_OWNER_THREAD_ID })); process.stdin.resume();",
+      ],
+    };
+
+    runtime.ensureProviderStatus(spec, "thread-1", "pi");
+    runtime.ensureProviderStatus(spec, "thread-2", "pi");
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(2);
+
+    const owners = lines
+      .map((line) => {
+        try {
+          return JSON.parse(line).owner as string | undefined;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((owner): owner is string => typeof owner === "string");
+    expect(owners).toContain("thread-1");
+    expect(owners).toContain("thread-2");
+  });
+
   it("routes provider-initiated RPC responses back to the originating child", async () => {
     // Spawn two providers: child A sends a server request (tool call),
     // child B just idles. The RPC response must go to child A, not child B.
