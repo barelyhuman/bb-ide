@@ -15,7 +15,7 @@ Use this folder to:
 
 ## Current QA Entry Points
 
-### Full server/env-agent QA pass
+### Full server/env-daemon QA pass
 
 Use the standalone server CLI QA guide:
 
@@ -25,7 +25,7 @@ This is currently the primary full QA pass for validating:
 
 - server startup and restart behavior
 - thread lifecycle behavior
-- env-agent liveness and recovery
+- env-daemon liveness and recovery
 - worktree flows
 - CLI behavior against a real running server
 
@@ -37,7 +37,7 @@ The standalone server QA guide defines three named tiers. Use these names when r
 |---|---|---|---|
 | **Light QA pass** | start + follow-up + steer + worktree basics + provider verification | ~5 min/provider | Every PR, all providers |
 | **Extended QA pass** | + stop/follow-up, archive/unarchive, promote/demote, rapid follow-ups | ~15 min/provider | Lifecycle or state changes |
-| **Full QA pass** | + all restart/recovery, worker loss, session replacement, shared env | ~30 min | Big server/env-agent changes |
+| **Full QA pass** | + all restart/recovery, worker loss, session replacement, shared env | ~30 min | Big server/env-daemon changes |
 
 See [`./server/standalone-server-qa.md` § QA Tiers](./server/standalone-server-qa.md#qa-tiers) for the complete checklist per tier.
 
@@ -86,7 +86,7 @@ Current server QA docs:
 
 ## Automation entrypoints
 
-For checked-in server/env-agent automation tiers:
+For checked-in server/env-daemon automation tiers:
 
 - `pnpm qa:server:manual-smoke`
 - `pnpm qa:server:smoke`
@@ -110,4 +110,4 @@ Likely future additions:
 - `qa/app/`
 - `qa/regressions/`
 
-The server/env-agent QA roadmap has been completed; keep this folder updated directly as the source of truth for future QA changes.
+The server/env-daemon QA roadmap has been completed; keep this folder updated directly as the source of truth for future QA changes.

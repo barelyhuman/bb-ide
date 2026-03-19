@@ -1,13 +1,13 @@
-# Environment-Agent Session Persistence
+# Environment-Daemon Session Persistence
 
-This document describes what the server persists for the environment-agent
-session model and what the environment-agent is allowed to keep only in memory.
+This document describes what the server persists for the environment-daemon
+session model and what the environment-daemon is allowed to keep only in memory.
 
 Source of truth:
 
 - `packages/db/src/schema.ts`
-- `packages/db/src/environment-agent-repositories.ts`
-- `apps/server/src/environment-agent-session-service.ts`
+- `packages/db/src/environment-daemon-repositories.ts`
+- `apps/server/src/environment-daemon-session-service.ts`
 
 ## Durable server state
 
@@ -21,7 +21,7 @@ The server owns the durable record of:
 
 ## Agent runtime state
 
-The environment-agent keeps best-effort in-memory state for:
+The environment-daemon keeps best-effort in-memory state for:
 
 - the currently bound session
 - pending outbound events waiting for ack
@@ -42,9 +42,9 @@ That state is intentionally not crash-durable.
 
 When debugging this area, inspect:
 
-- `environment_agent_sessions`
-- `environment_agent_cursors`
-- `environment_agent_commands`
+- `environment_daemon_sessions`
+- `environment_daemon_cursors`
+- `environment_daemon_commands`
 
 But treat the schema files and repository code as the authoritative definition
 of fields and invariants.

@@ -43,7 +43,7 @@ const baseUrl = process.env.BB_SERVER_URL ?? "http://127.0.0.1:4310";
 
 const [thread, sessions, status, health] = await Promise.all([
   readJson(`${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}`),
-  readJson(`${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}/environment-agent/sessions`).catch(
+  readJson(`${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}/environment-daemon/sessions`).catch(
     () => ({ threadId, sessions: [] }),
   ),
   readJson(`${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}/events`).catch(() => []),

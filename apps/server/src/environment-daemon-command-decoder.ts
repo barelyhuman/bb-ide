@@ -12,7 +12,7 @@ import type {
   EnvironmentDaemonProviderFile,
 } from "@bb/environment-daemon";
 
-const ENVIRONMENT_AGENT_COMMAND_TYPES = [
+const ENVIRONMENT_DAEMON_COMMAND_TYPES = [
   "provider.ensure",
   "thread.start",
   "thread.resume",
@@ -28,7 +28,7 @@ const ENVIRONMENT_AGENT_COMMAND_TYPES = [
 function decodeEnvironmentDaemonCommandType(
   value: string,
 ): EnvironmentDaemonCommand["type"] | null {
-  return ENVIRONMENT_AGENT_COMMAND_TYPES.find((candidate) => candidate === value) ?? null;
+  return ENVIRONMENT_DAEMON_COMMAND_TYPES.find((candidate) => candidate === value) ?? null;
 }
 
 function decodeStringArray(value: unknown): string[] | null {

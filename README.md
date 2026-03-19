@@ -117,9 +117,9 @@ pnpm bb --help
 
 | Part               | What it does                                                                                                                      |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Server             | The durable coordinator. It owns persisted state, orchestration, route handling, realtime invalidation, and environment-agent session state. |
+| Server             | The durable coordinator. It owns persisted state, orchestration, route handling, realtime invalidation, and environment-daemon session state. |
 | Environments       | The runtime layer where threads execute. Built-in environments currently include `local`, `worktree`, and `docker`.              |
-| Environment agent  | The per-thread sidecar that runs inside the environment, talks to the server, and brokers command and event flow with the provider runtime. |
+| Environment daemon | The per-environment daemon that runs inside the environment, talks to the server, and brokers command and event flow with the provider runtime. |
 | Agent providers    | The provider runtimes that power threads and models.                                                                              |
 
 ### System Surfaces

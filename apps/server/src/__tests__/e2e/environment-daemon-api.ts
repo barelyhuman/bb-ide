@@ -53,7 +53,7 @@ export async function readError(
 export async function createProject(
   baseUrl: string,
   rootPath: string,
-  name: string = "e2e-env-agent-project",
+  name: string = "e2e-env-daemon-project",
 ): Promise<Project> {
   return readJson<Project>(`${baseUrl}/api/v1/projects`, {
     method: "POST",

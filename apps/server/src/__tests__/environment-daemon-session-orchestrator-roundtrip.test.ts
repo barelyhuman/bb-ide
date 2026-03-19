@@ -1305,7 +1305,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
     });
   });
 
-  it("revalidates the provider thread after an env-agent session closes and reopens", async () => {
+  it("revalidates the provider thread after an env-daemon session closes and reopens", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);
     const firstSessionId = openSession(threadId);

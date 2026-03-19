@@ -6,8 +6,8 @@ import {
 } from "./rotating-file-logger.js";
 
 const BB_ENV_DAEMON_LOG_FILE = "BB_ENV_DAEMON_LOG_FILE";
-const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES = 5 * 1024 * 1024;
-const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES = 3;
+const DEFAULT_ENVIRONMENT_DAEMON_LOG_MAX_BYTES = 5 * 1024 * 1024;
+const DEFAULT_ENVIRONMENT_DAEMON_LOG_MAX_FILES = 3;
 
 export interface EnvironmentDaemonLogIdentity {
   projectId: string | undefined;
@@ -65,8 +65,8 @@ export function createEnvironmentDaemonFileLogger(
 ): EnvironmentDaemonFileLogger {
   const writer = createRotatingJsonLineFileWriter({
     filePath,
-    maxBytes: DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES,
-    maxFiles: DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES,
+    maxBytes: DEFAULT_ENVIRONMENT_DAEMON_LOG_MAX_BYTES,
+    maxFiles: DEFAULT_ENVIRONMENT_DAEMON_LOG_MAX_FILES,
   });
   return {
     filePath: writer.filePath,

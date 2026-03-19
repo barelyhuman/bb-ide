@@ -46,7 +46,7 @@ function isAlive(pid: number): boolean {
 
 function collectProcessTree(rootPids: number[]): number[] {
   // Build a full process tree from tracked root PIDs so we also kill
-  // grandchild processes (e.g. fake-codex spawned by env-agents).
+  // grandchild processes (e.g. fake-codex spawned by env-daemons).
   try {
     const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
     const output = execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" });

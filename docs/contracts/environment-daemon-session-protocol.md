@@ -1,7 +1,7 @@
-# Environment-Agent Session Protocol
+# Environment-Daemon Session Protocol
 
 This document explains the current durable contract between the BB server and
-the per-thread environment-agent.
+the per-environment environment-daemon.
 
 Source of truth: `packages/environment-daemon/src/session-protocol.ts`.
 
@@ -9,12 +9,12 @@ Source of truth: `packages/environment-daemon/src/session-protocol.ts`.
 
 The session protocol is a real cross-process boundary. It is worth documenting
 because it affects restart behavior, liveness, idempotency, and how the server
-and environment-agent recover from partial failure.
+and environment-daemon recover from partial failure.
 
 ## Model
 
 - The server is the durable source of truth.
-- The environment-agent is a best-effort runtime peer for one or more thread
+- The environment-daemon is a best-effort runtime peer for one or more thread
   channels.
 - A session is a leased relationship between one agent instance and the server.
 - Ordering is per channel, not global.

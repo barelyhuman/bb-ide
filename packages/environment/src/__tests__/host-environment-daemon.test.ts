@@ -14,7 +14,7 @@ const tempDirs: string[] = [];
 const originalBbRoot = process.env.BB_ROOT;
 
 function makeTempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "bb-host-env-agent-"));
+  const dir = mkdtempSync(join(tmpdir(), "bb-host-env-daemon-"));
   tempDirs.push(dir);
   return dir;
 }

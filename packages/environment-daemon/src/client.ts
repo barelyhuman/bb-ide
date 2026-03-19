@@ -105,7 +105,7 @@ class EnvironmentDaemonClientImpl implements EnvironmentDaemonClient {
     this.closed = true;
 
     const closeError =
-      reason ?? new EnvironmentDaemonClientError("Environment agent transport closed");
+      reason ?? new EnvironmentDaemonClientError("Environment daemon transport closed");
     for (const [requestId, pending] of this.pending) {
       pending.reject(closeError);
       this.pending.delete(requestId);
@@ -133,11 +133,11 @@ class EnvironmentDaemonClientImpl implements EnvironmentDaemonClient {
   ): Promise<TResponse> {
     if (this.closed) {
       return Promise.reject(
-        new EnvironmentDaemonClientError("Environment agent transport is closed"),
+        new EnvironmentDaemonClientError("Environment daemon transport is closed"),
       );
     }
 
-    const requestId = `env-agent-${++this.requestCounter}`;
+    const requestId = `env-daemon-${++this.requestCounter}`;
     const message: EnvironmentDaemonControlRequest = {
       environmentDaemonMessage: true,
       requestId,

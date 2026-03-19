@@ -1,10 +1,10 @@
-# Server / Env-Agent Stress QA
+# Server / Env-Daemon Stress QA
 
 Use this pass for restart, recovery, and timing-sensitive lifecycle coverage.
 
 ## Goal
 
-Exercise the parts of server/env-agent behavior most likely to regress under restart, worker loss, queued work, and lifecycle boundary conditions.
+Exercise the parts of server/env-daemon behavior most likely to regress under restart, worker loss, queued work, and lifecycle boundary conditions.
 
 ## When to run
 
@@ -39,10 +39,10 @@ Keep real-provider restart/liveness confirmation in the manual pass when timing 
 ## Required scenarios
 
 ### Restart and liveness
-- local restart while active -> surviving env-agent reconnect
-- local restart while active -> missing env-agent becomes error
-- worktree restart while active -> surviving env-agent reconnect
-- worktree restart while active -> missing env-agent becomes error
+- local restart while active -> surviving env-daemon reconnect
+- local restart while active -> missing env-daemon becomes error
+- worktree restart while active -> surviving env-daemon reconnect
+- worktree restart while active -> missing env-daemon becomes error
 - restart during provisioning boundary / before first real `turn/started`
 
 ### Idle/session behavior
@@ -54,7 +54,7 @@ Keep real-provider restart/liveness confirmation in the manual pass when timing 
 ### Recovery-heavy flows
 - queued follow-up present while worker is lost
 - archive / unarchive after worker-loss recovery
-- late old env-agent traffic after replacement does not change thread state
+- late old env-daemon traffic after replacement does not change thread state
 
 ## Primary invariants covered
 

@@ -4,7 +4,7 @@ Use this folder for failure bundles and saved outputs from QA runs.
 
 ## Preferred artifact capture
 
-For a thread-specific server/env-agent failure:
+For a thread-specific server/env-daemon failure:
 
 ```bash
 node scripts/qa/capture-thread-failure-bundle.mjs <thread-id> --scenario <short-name>

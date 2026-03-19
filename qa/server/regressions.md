@@ -1,10 +1,10 @@
-# Server / Env-Agent Regression QA
+# Server / Env-Daemon Regression QA
 
 Use this pass to capture stable repros for previously discovered bugs.
 
 ## Goal
 
-Make sure once a server/env-agent lifecycle bug is fixed, it stays fixed.
+Make sure once a server/env-daemon lifecycle bug is fixed, it stays fixed.
 
 ## How to use
 

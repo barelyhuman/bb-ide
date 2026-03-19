@@ -29,7 +29,7 @@ import type {
   PromoteEnvironmentResult,
 } from "./contracts.js";
 import {
-  DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
+  DEFAULT_DOCKER_ENVIRONMENT_DAEMON_CONTAINER_PORT,
   disposeManagedDockerEnvironmentDaemon,
   ensureDockerEnvironmentImageAvailable,
   ensureManagedDockerEnvironmentDaemon,
@@ -800,7 +800,7 @@ export function createDockerEnvironmentDefinition(
             runtimeEnv: context.runtimeEnv,
           }),
           mountPath,
-          agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
+          agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_DAEMON_CONTAINER_PORT,
         },
         context.runtimeEnv,
         dockerBin,
@@ -855,7 +855,7 @@ export async function resolveDockerEnvironmentState(args: {
     }),
     mountPath: args.mountPath ?? DEFAULT_MOUNT_PATH,
     agentHostPort: await allocatePort(),
-    agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
+    agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_DAEMON_CONTAINER_PORT,
   };
 }
 

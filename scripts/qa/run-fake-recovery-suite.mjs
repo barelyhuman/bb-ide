@@ -50,7 +50,7 @@ async function main() {
     "vitest.e2e.config.ts",
     "src/__tests__/e2e/standalone-server-cli-roundtrip.test.ts",
     "src/__tests__/e2e/standalone-server-blocked-restart.test.ts",
-    "src/__tests__/e2e/environment-agent-restart-roundtrip.test.ts",
+    "src/__tests__/e2e/environment-daemon-restart-roundtrip.test.ts",
     "src/__tests__/e2e/thread-restart-recovery-matrix.test.ts",
     "src/__tests__/e2e/thread-recovery-heavy-runbook.test.ts",
   ];

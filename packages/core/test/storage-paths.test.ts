@@ -29,8 +29,8 @@ describe("storage paths", () => {
     process.env.BB_ROOT = "/tmp/bb-root";
 
     expect(resolveBbRoot(process.env)).toBe("/tmp/bb-root");
-    expect(resolveBbPath(process.env, "environment-agents")).toBe(
-      "/tmp/bb-root/environment-agents",
+    expect(resolveBbPath(process.env, "environment-daemons")).toBe(
+      "/tmp/bb-root/environment-daemons",
     );
   });
 

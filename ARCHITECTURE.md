@@ -5,17 +5,17 @@
 bb is a local-first coding-agent workspace built as a pnpm/Turbo monorepo.
 The server is the durable coordinator: it owns the HTTP and WebSocket surface,
 persists state in SQLite, manages environments, and coordinates provider work
-through per-thread environment-agents.
+through per-thread environment-daemons.
 
 At a high level:
 
 1. The app and CLI talk to the server.
 2. The server persists projects, threads, events, attachments, environments,
-   and environment-agent session state through `@bb/db`.
+   and environment-daemon session state through `@bb/db`.
 3. Each thread runs in an environment such as `local`, `worktree`, or `docker`.
-4. Managed environments start a per-thread environment-agent alongside the
+4. Managed environments start a per-thread environment-daemon alongside the
    provider runtime.
-5. The environment-agent and server communicate through a leased session
+5. The environment-daemon and server communicate through a leased session
    protocol with heartbeats, event batches, command delivery, and command
    results.
 6. The server applies durable state changes, then emits targeted invalidations
@@ -48,7 +48,7 @@ The system coordinator.
 - Owns the route surface under `apps/server/src/routes/**`.
 - Orchestrates thread lifecycle, environment lifecycle, manager threads,
   provider interaction, and restart/shutdown policy.
-- Applies environment-agent events, persists durable state, and emits
+- Applies environment-daemon events, persists durable state, and emits
   WebSocket invalidations.
 
 ### `packages/core`
@@ -67,24 +67,24 @@ SQLite persistence layer built on Drizzle.
 
 - Schema definitions live in `packages/db/src/schema.ts`.
 - Repository invariants live in `packages/db/src/repositories.ts` and
-  `packages/db/src/environment-agent-repositories.ts`.
+  `packages/db/src/environment-daemon-repositories.ts`.
 
 ### `packages/environment`
 
 Environment implementations that decide where thread work runs.
 
 - Built-in environment kinds are `local`, `worktree`, and `docker`.
-- Environments prepare or restore workspaces, start the environment-agent,
+- Environments prepare or restore workspaces, start the environment-daemon,
   and expose workspace/git inspection used by the server.
 
 ### `packages/environment-daemon`
 
-The per-thread environment-agent runtime.
+The per-thread environment-daemon runtime.
 
 - Manages provider runtime interaction.
 - Speaks the server-hosted session protocol.
 - Exposes a small local control surface for status and session sync.
-- Builds the bundled `environment-agent.bundle.mjs` artifact used by managed
+- Builds the bundled `environment-daemon.bundle.mjs` artifact used by managed
   environments.
 
 ### `packages/provider-adapters`
@@ -140,6 +140,6 @@ This doc is intentionally high level. For concrete inventories, use the code:
 - Thread and event types: `packages/core/src/types.ts`
 - Event normalization: `packages/core/src/thread-event-normalization.ts`
 - DB schema and repository invariants: `packages/db/src/**`
-- Environment-agent protocol: `packages/environment-daemon/src/session-protocol.ts`
+- Environment-daemon protocol: `packages/environment-daemon/src/session-protocol.ts`
 
 When this file and code disagree, the code wins.

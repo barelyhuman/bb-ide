@@ -45,7 +45,7 @@ const STORAGE_BUCKET_LABELS: Record<SystemHealthStorageBucketKey, string> = {
   database_wal: "Database WAL",
   database_shm: "Database SHM",
   server_logs: "Server Logs",
-  environment_daemon_logs: "Environment Agent Logs",
+  environment_daemon_logs: "Environment Daemon Logs",
   worktrees: "Worktrees",
   attachments: "Attachments",
   backups: "Backups",

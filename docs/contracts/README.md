@@ -10,7 +10,7 @@ or packages and cannot be understood quickly from one source file alone.
 
 Current examples:
 
-- the server `<->` environment-agent session protocol
+- the server `<->` environment-daemon session protocol
 - the server-side persistence expectations around that protocol
 
 ## What does not belong here
@@ -33,8 +33,8 @@ Those drift too easily and already have better sources of truth in code.
   `packages/core/src/thread-event-normalization.ts`
 - Database schema and repositories: `packages/db/src/schema.ts`,
   `packages/db/src/repositories.ts`,
-  `packages/db/src/environment-agent-repositories.ts`
+  `packages/db/src/environment-daemon-repositories.ts`
 - Package boundaries: workspace `package.json` files plus import sites
-- Env-agent session protocol types: `packages/environment-daemon/src/session-protocol.ts`
+- Env-daemon session protocol types: `packages/environment-daemon/src/session-protocol.ts`
 
 If a doc here cannot stay tighter and clearer than those files, remove it.

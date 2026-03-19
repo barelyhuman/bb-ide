@@ -662,7 +662,6 @@ describe("EnvironmentService", () => {
 
     expect(removeEnvironmentDaemonDefaultLogArtifacts).toHaveBeenCalledWith({
       projectId,
-      threadId: thread.id,
       environmentId: "worktree",
     });
   });

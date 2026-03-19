@@ -68,11 +68,11 @@ Out of scope:
    - UI-to-event transformation layers (`packages/core/src/to-ui-messages.ts`, `packages/core/src/thread-detail-rows.ts`)
    - event normalization (`packages/core/src/thread-event-normalization.ts`)
    - environment provisioning (`apps/server/src/environment-provisioning-systems.ts`, `apps/server/src/environment-service.ts`)
-   - environment agent session management (`apps/server/src/environment-agent-session-service.ts`, `apps/server/src/environment-agent-session-compatibility.ts`)
+   - environment daemon session management (`apps/server/src/environment-daemon-session-service.ts`, `apps/server/src/environment-daemon-session-compatibility.ts`)
    - provider session control (`apps/server/src/provider-session-controller.ts`)
    - the provider bridge layers (`packages/claude-code-bridge/src/bridge.ts`, `packages/pi-bridge/src/bridge.ts`)
    - the environment daemon runtime (`packages/environment-daemon/src/runtime.ts`, `packages/environment-daemon/src/service.ts`)
-   - repository/data-access layers (`packages/db/src/repositories.ts`, `packages/db/src/environment-agent-repositories.ts`)
+   - repository/data-access layers (`packages/db/src/repositories.ts`, `packages/db/src/environment-daemon-repositories.ts`)
    - the frontend thread detail view (`apps/app/src/views/ThreadDetailView.tsx`)
    - the app API layer (`apps/app/src/lib/api.ts`, `apps/app/src/hooks/useApi.ts`)
    - git workspace management (`packages/environment/src/git-workspace.ts`, `packages/environment/src/local-git-workspace.ts`)
@@ -292,11 +292,11 @@ Out of scope:
 
       - `apps/app` (frontend — largest files: ThreadDetailView.tsx, useApi.ts, api.ts)
       - `apps/cli` (CLI — largest files: commands/thread.ts, commands/manager.ts)
-      - `apps/server` (BB server — largest files: orchestrator.ts, environment-service.ts, environment-agent-session-service.ts, environment-provisioning-systems.ts, provider-session-controller.ts)
+      - `apps/server` (BB server — largest files: orchestrator.ts, environment-service.ts, environment-daemon-session-service.ts, environment-provisioning-systems.ts, provider-session-controller.ts)
       - `packages/core` (shared types/contracts — largest files: to-ui-messages.ts, thread-detail-rows.ts, thread-event-normalization.ts, api-types.ts, types.ts)
-      - `packages/db` (SQLite persistence — largest files: repositories.ts, environment-agent-repositories.ts, schema.ts)
+      - `packages/db` (SQLite persistence — largest files: repositories.ts, environment-daemon-repositories.ts, schema.ts)
       - `packages/environment` (environment abstractions — largest files: git-workspace.ts, docker-environment.ts, local-git-workspace.ts)
-      - `packages/environment-daemon` (env-agent daemon runtime — largest files: runtime.ts, session-protocol.ts, session-supervisor.ts, session-runtime.ts, service.ts)
+      - `packages/environment-daemon` (env-daemon runtime — largest files: runtime.ts, session-protocol.ts, session-supervisor.ts, session-runtime.ts, service.ts)
       - `packages/provider-adapters` (multi-provider adapters — claude-code-provider-adapter.ts, codex-provider-adapter.ts, pi-provider-adapter.ts, openai-responses-model.ts)
       - `packages/claude-code-bridge` (Claude Code SDK bridge — bridge.ts, event-translator.ts, sdk-session.ts)
       - `packages/pi-bridge` (Pi SDK bridge — bridge.ts, event-translator.ts, sdk-session.ts)
@@ -327,7 +327,7 @@ Out of scope:
       - `rg -n "hc<AppType>|apiClient|from.*api-client|from.*\/api" apps/app/src --glob '*.{ts,tsx}'` (old vs typed RPC client usage)
       - `rg -n "legacyKeys|fallbackMatch|placeholderData" apps packages --glob '!**/generated/**'`
       - `rg -n "ProviderEventEnvelope|unwrapProviderEventPayload|isProviderEventEnvelope" apps packages --glob '!**/generated/**'`
-      - `rg -n "assessEnvironmentAgentSessionCompatibility|ENVIRONMENT_AGENT_PROTOCOL_VERSION" apps packages --glob '!**/generated/**'`
+      - `rg -n "assessEnvironmentDaemonSessionCompatibility|ENVIRONMENT_DAEMON_PROTOCOL_VERSION" apps packages --glob '!**/generated/**'`
 
    7. Historical compatibility validation
 
@@ -384,4 +384,4 @@ Out of scope:
 - The provider bridge symmetry between `packages/claude-code-bridge` and `packages/pi-bridge` is by design; structural similarity is not duplication when the bridges adapt different external SDKs.
 - The Hono RPC migration (`api-client.ts` typed client vs legacy `api.ts` fetch wrapper) may still be in progress; verify before classifying the old client as dead code.
 - Cleanup work can become noisy if plans are not split into contract migration first, consolidation second, and fixture/doc pruning last.
-- Environment agent protocol versioning (`ENVIRONMENT_AGENT_PROTOCOL_VERSION`) and session compatibility checks are intentional forward-compatibility infrastructure; do not treat as debt unless clearly unused.
+- Environment daemon protocol versioning (`ENVIRONMENT_DAEMON_PROTOCOL_VERSION`) and session compatibility checks are intentional forward-compatibility infrastructure; do not treat as debt unless clearly unused.

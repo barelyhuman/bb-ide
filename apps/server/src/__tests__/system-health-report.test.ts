@@ -223,7 +223,7 @@ describe("system health report", () => {
       },
       {
         key: "environment_daemon_logs",
-        label: "Environment Agent Logs",
+        label: "Environment Daemon Logs",
         bytes: 6,
         paths: [resolve(bbRoot, "environment-daemon-logs")],
       },

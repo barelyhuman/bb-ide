@@ -1,6 +1,6 @@
-# Server / Env-Agent Lifecycle Invariants
+# Server / Env-Daemon Lifecycle Invariants
 
-This document defines the durable behaviors that server/env-agent QA should assert.
+This document defines the durable behaviors that server/env-daemon QA should assert.
 
 Use these invariants to judge correctness during manual QA, harness development, and regression triage.
 Do not prefer fragile timing assumptions when one of these stronger checks can be used instead.
@@ -30,7 +30,7 @@ Examples:
 - a newly spawned thread should not appear to complete without a real run/turn sequence
 - a provisioning-boundary restart must not silently produce `idle` if no real turn actually ran
 
-### 3. At most one live env-agent session may control a thread at a time
+### 3. At most one live env-daemon session may control a thread at a time
 
 A thread may accumulate historical session rows, but there must not be multiple competing live sessions for the same thread.
 
@@ -42,7 +42,7 @@ Implications:
 
 If the server restarts while a thread is active, the system must converge cleanly:
 
-- if the original env-agent successfully reconnects within the allowed liveness window, the thread may continue and finish normally
+- if the original env-daemon successfully reconnects within the allowed liveness window, the thread may continue and finish normally
 - if it does not reconnect, the thread must converge to a visible error state rather than hanging forever or silently appearing healthy
 
 ### 5. Recovery from missing worker must be explicit and actionable

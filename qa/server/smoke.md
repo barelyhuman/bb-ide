@@ -1,10 +1,10 @@
-# Server / Env-Agent Smoke QA
+# Server / Env-Daemon Smoke QA
 
 Use this pass for the fastest high-signal manual validation.
 
 ## Goal
 
-Confirm the most important server/env-agent flows still work end-to-end against the real provider.
+Confirm the most important server/env-daemon flows still work end-to-end against the real provider.
 
 ## When to run
 

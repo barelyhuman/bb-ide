@@ -8,9 +8,9 @@ const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
 const DOCKER_DAEMON_HOST_OVERRIDE_ENV = "BB_DOCKER_DAEMON_HOST";
 const DEFAULT_DOCKER_DAEMON_HOST = "host.docker.internal";
-export const DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT = 4310;
+export const DEFAULT_DOCKER_ENVIRONMENT_DAEMON_CONTAINER_PORT = 4310;
 export const DEFAULT_DOCKER_ENVIRONMENT_IMAGE = "bb/environment:local";
-const DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT = "/opt/bb/environment-daemon";
+const DEFAULT_DOCKER_ENVIRONMENT_DAEMON_INSTALL_ROOT = "/opt/bb/environment-daemon";
 
 export interface ManagedDockerEnvironmentDaemonRecord {
   baseUrl: string;
@@ -293,9 +293,9 @@ export async function ensureManagedDockerEnvironmentDaemon(
     const authToken =
       (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
     const containerPort =
-      args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
+      args.containerPort ?? DEFAULT_DOCKER_ENVIRONMENT_DAEMON_CONTAINER_PORT;
     const installRoot =
-      args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
+      args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_DAEMON_INSTALL_ROOT;
     const dockerServerUrl = resolveDockerServerUrl(args.runtimeEnv);
 
     await executeOrThrow({

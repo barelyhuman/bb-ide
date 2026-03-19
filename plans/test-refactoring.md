@@ -58,7 +58,7 @@ Out of scope:
 
 **Current state:** Mocks the entire `ThreadOrchestrator` with 30+ `vi.fn()` methods. This is the biggest offender — 2500+ lines of tests that never touch the real orchestrator.
 
-**Target state:** Use real `Orchestrator` with in-memory DB for most tests. Mock only true boundaries (provider, environment agent).
+**Target state:** Use real `Orchestrator` with in-memory DB for most tests. Mock only true boundaries (provider, environment daemon).
 
 **How:**
 

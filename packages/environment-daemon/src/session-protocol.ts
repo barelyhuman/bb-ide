@@ -16,7 +16,7 @@ export const ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS = [
 export type EnvironmentDaemonSessionProtocolVersion =
   (typeof ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number];
 
-export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
+export const ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS = [
   "provider.ensure",
   "thread.start",
   "thread.resume",
@@ -29,16 +29,16 @@ export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
   "workspace.diff",
 ] as const satisfies readonly EnvironmentDaemonCommand["type"][];
 export type EnvironmentDaemonSessionCapabilityCommand =
-  (typeof ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS)[number];
+  (typeof ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS)[number];
 
-export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES = [
+export const ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES = [
   "worker_metadata",
   "provider_metadata",
   "provider_runtime_version",
   "control_endpoint",
 ] as const;
 export type EnvironmentDaemonSessionCapabilityFeature =
-  (typeof ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES)[number];
+  (typeof ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES)[number];
 
 export type EnvironmentDaemonSessionCloseReason =
   | "agent_shutdown"
@@ -143,7 +143,7 @@ function uniqueInOrder<T>(values: readonly T[]): T[] {
 function isKnownCommand(
   value: string,
 ): value is EnvironmentDaemonSessionCapabilityCommand {
-  return ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS.includes(
+  return ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS.includes(
     value as EnvironmentDaemonSessionCapabilityCommand,
   );
 }
@@ -151,7 +151,7 @@ function isKnownCommand(
 function isKnownFeature(
   value: string,
 ): value is EnvironmentDaemonSessionCapabilityFeature {
-  return ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES.includes(
+  return ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES.includes(
     value as EnvironmentDaemonSessionCapabilityFeature,
   );
 }
@@ -187,7 +187,7 @@ export function createEnvironmentDaemonSessionCapabilities(args: {
 }): EnvironmentDaemonSessionCapabilities {
   const inferred = inferEnvironmentDaemonSessionCapabilities(args);
   return {
-    commands: [...ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS],
+    commands: [...ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS],
     features: inferred.features,
   };
 }
@@ -222,10 +222,10 @@ export function negotiateEnvironmentDaemonSessionCapabilities(args: {
     : inferEnvironmentDaemonSessionCapabilities(args.fallback);
   return {
     commands: advertised.commands.filter((command) =>
-      ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS.includes(command),
+      ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS.includes(command),
     ),
     features: advertised.features.filter((feature) =>
-      ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES.includes(feature),
+      ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES.includes(feature),
     ),
   };
 }

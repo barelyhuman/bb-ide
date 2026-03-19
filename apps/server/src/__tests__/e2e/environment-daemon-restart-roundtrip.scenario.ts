@@ -27,7 +27,7 @@ export async function runEnvironmentDaemonRestartRoundtripScenario(): Promise<vo
     const project = await createProject(
       harness.baseUrl,
       harness.projectRoot,
-      "e2e-env-agent-restart-project",
+      "e2e-env-daemon-restart-project",
     );
     const thread = await createThread(
       harness.baseUrl,

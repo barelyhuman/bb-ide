@@ -186,7 +186,7 @@ sqlite3 "$bb_root/bb.db" \
   "select id,status,updated_at from threads order by updated_at desc;"
 
 sqlite3 "$bb_root/bb.db" \
-  "select thread_id,status,control_base_url,lease_expires_at,last_heartbeat_at from environment_agent_sessions order by created_at desc;"
+  "select thread_id,status,control_base_url,lease_expires_at,last_heartbeat_at from environment_daemon_sessions order by created_at desc;"
 
 sqlite3 "$bb_root/bb.db" \
   "select thread_id,type,substr(json_data,1,160) from events order by seq desc limit 20;"
@@ -221,11 +221,11 @@ Required matrix:
 - `local` two immediate follow-ups in a row
 - `local` steer
 - `local` stop then follow-up
-- `local` restart while active -> surviving env-agent reconnect
-- `local` restart while active -> missing env-agent becomes \`error\`
+- `local` restart while active -> surviving env-daemon reconnect
+- `local` restart while active -> missing env-daemon becomes \`error\`
 - `local` follow-up after restart failure
 - `local` immediate follow-up after idle completion
-- `local` restart while idle -> follow-up starts a fresh env-agent cleanly
+- `local` restart while idle -> follow-up starts a fresh env-daemon cleanly
 
 Spawn:
 
@@ -273,7 +273,7 @@ Useful checks while waiting:
 node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread wait <thread-id> --status idle --timeout 90
 node apps/cli/dist/index.js thread sessions <thread-id>
-find "$bb_root/environment-agents" -maxdepth 3 -type f | sort
+find "$bb_root/environment-daemons" -maxdepth 3 -type f | sort
 ```
 
 Expected result:
@@ -283,8 +283,8 @@ Expected result:
 - `thread log` shows the expected `turn/started` and `turn/completed` events
 - `thread show` and raw `thread status` agree on the terminal state
 - the thread row in SQLite matches the CLI status
-- while the local thread is active, a managed env-agent state file appears under `$bb_root/environment-agents`
-- after the local thread returns to `idle`, that local env-agent state file is removed within a short delay
+- while the local thread is active, a managed env-daemon state file appears under `$bb_root/environment-daemons`
+- after the local thread returns to `idle`, that local env-daemon state file is removed within a short delay
 
 ### 5. Validate worktree flows
 
@@ -294,15 +294,15 @@ Required matrix:
 - `worktree` follow-up
 - `worktree` two immediate follow-ups in a row
 - `worktree` stop then follow-up
-- `worktree` restart while active -> surviving env-agent reconnect
-- `worktree` restart while active -> missing env-agent becomes \`error\`
+- `worktree` restart while active -> surviving env-daemon reconnect
+- `worktree` restart while active -> missing env-daemon becomes \`error\`
 - `worktree` follow-up after restart failure
 - `worktree` archive/unarchive
 - `worktree` restart recovery
 - `worktree` follow-up after restart recovery
 - `worktree` promote/demote
 - `worktree` immediate follow-up after idle completion
-- `worktree` restart while idle -> follow-up starts a fresh env-agent cleanly
+- `worktree` restart while idle -> follow-up starts a fresh env-daemon cleanly
 
 Spawn a worktree thread:
 
@@ -384,22 +384,22 @@ Required matrix:
 
 - blocked restart while local thread is active
 - forced restart while local thread is active
-- local thread stays `active` if the env-agent checks back in
-- local thread becomes `error` if the env-agent does not check back in
+- local thread stays `active` if the env-daemon checks back in
+- local thread becomes `error` if the env-daemon does not check back in
 - local thread accepts a follow-up after restart failure
-- local idle thread follow-up after restart starts a fresh env-agent and closes the prior idle session cleanly
+- local idle thread follow-up after restart starts a fresh env-daemon and closes the prior idle session cleanly
 - blocked restart while worktree thread is active
 - forced restart while worktree thread is active
-- worktree thread stays `active` if the env-agent checks back in
-- worktree thread becomes `error` if the env-agent does not check back in
+- worktree thread stays `active` if the env-daemon checks back in
+- worktree thread becomes `error` if the env-daemon does not check back in
 - worktree thread accepts a follow-up after restart failure
-- worktree idle thread follow-up after restart starts a fresh env-agent and closes the prior idle session cleanly
+- worktree idle thread follow-up after restart starts a fresh env-daemon and closes the prior idle session cleanly
 - active-thread restart failure emits `system/error` with `provider_unavailable`
 - follow-up after restart failure clears `error` back to a healthy terminal state
 - restart during `provisioned` or just before first real `turn/started`
-- queued follow-up present while the env-agent is lost
+- queued follow-up present while the env-daemon is lost
 - archive/unarchive after worker-loss recovery
-- late old env-agent traffic after replacement does not change thread state
+- late old env-daemon traffic after replacement does not change thread state
 
 For both environments, start a thread and wait until `thread status --recent-events ... --event-mode raw`
 shows a real `turn/started` event, then in another shell:
@@ -551,9 +551,9 @@ Expected:
 
 - CLI reports shutdown requested
 - server exits cleanly
-- after relaunching the server on the same `BB_ROOT`, the server nudges the previously active env-agent
-- if the same env-agent checks back in and flushes its buffered state, the thread continues normally
-- if the env-agent does not check back in before the liveness deadline, the server marks the thread `error`
+- after relaunching the server on the same `BB_ROOT`, the server nudges the previously active env-daemon
+- if the same env-daemon checks back in and flushes its buffered state, the thread continues normally
+- if the env-daemon does not check back in before the liveness deadline, the server marks the thread `error`
 - `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after the thread reaches either a healthy resumed state or `error`
 - after relaunching the server on the same `BB_ROOT`, the interrupted thread eventually returns to `idle`
 - the interrupted turn may resume or complete before the thread returns to `idle`; that is acceptable as long as recovery finishes cleanly
@@ -588,7 +588,7 @@ node apps/cli/dist/index.js thread log <thread-id>
 Server-log expectations after relaunch:
 
 - surviving-worker case:
-  - startup log reports at least one env-agent was poked
+  - startup log reports at least one env-daemon was poked
   - the original session eventually resumes traffic
 - missing-worker case:
   - startup log reports at least one session is awaiting heartbeat timeout handling
@@ -600,33 +600,33 @@ Additional idle-thread follow-up checks for both `local` and `worktree`:
 2. Immediately send a follow-up before doing any restart.
 3. Verify that the follow-up succeeds without any transient `agent_shutdown` / session-closed failure.
 4. Start another thread and let it complete to `idle`.
-5. Record the last active env-agent control endpoint from the BB DB:
+5. Record the last active env-daemon control endpoint from the BB DB:
 
 ```bash
 sqlite3 "$bb_root/bb.db" \
-  "select control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at desc limit 1;"
+  "select control_base_url from environment_daemon_sessions where thread_id='<thread-id>' order by created_at desc limit 1;"
 ```
 
 Also record the current session count and all session rows:
 
 ```bash
 sqlite3 "$bb_root/bb.db" \
-  "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
+  "select count(*) from environment_daemon_sessions where thread_id='<thread-id>';"
 
 sqlite3 "$bb_root/bb.db" \
-  "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
+  "select id,status,control_base_url from environment_daemon_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
 6. Force-restart the server and relaunch it on the same `BB_ROOT`.
 7. Send a follow-up to the now-idle thread.
-8. Verify that the server starts a fresh env-agent session cleanly:
+8. Verify that the server starts a fresh env-daemon session cleanly:
 
 ```bash
 sqlite3 "$bb_root/bb.db" \
-  "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
+  "select count(*) from environment_daemon_sessions where thread_id='<thread-id>';"
 
 sqlite3 "$bb_root/bb.db" \
-  "select id,status,close_reason,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
+  "select id,status,close_reason,control_base_url from environment_daemon_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
 Expected result:
@@ -648,7 +648,7 @@ Additional rapid-repeat follow-up check for both `local` and `worktree`:
 
 ```bash
 sqlite3 "$bb_root/bb.db" \
-  "select id,status,close_reason,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
+  "select id,status,close_reason,control_base_url from environment_daemon_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
 Expected result:
@@ -674,13 +674,13 @@ Expected result:
 
 - the thread either continues into `active`/`idle` normally or lands in `provisioning_failed`
 - it must not silently jump straight to `idle` without a real turn
-- there must not be duplicate live env-agent sessions for the thread
+- there must not be duplicate live env-daemon sessions for the thread
 
 Recommended queued-follow-up worker-loss check:
 
 1. Start a long-running turn and wait for `turn/started`.
 2. Queue a follow-up while that turn is still active.
-3. Force-restart the server and hard-kill the env-agent.
+3. Force-restart the server and hard-kill the env-daemon.
 4. Relaunch the server and wait for the active thread to become `error`.
 5. Send a manual follow-up and then inspect the queue and events.
 
@@ -701,13 +701,13 @@ Recommended archive/unarchive recovery check:
 Expected result:
 
 - archive succeeds without leaving duplicate session state behind
-- unarchive does not resurrect stale env-agent sessions
+- unarchive does not resurrect stale env-daemon sessions
 - follow-up after unarchive still works
 
 Recommended late-old-agent noise check:
 
-1. Run a forced restart where the old env-agent does not reconnect successfully.
-2. Watch server logs for late 404s from the old env-agent.
+1. Run a forced restart where the old env-daemon does not reconnect successfully.
+2. Watch server logs for late 404s from the old env-daemon.
 3. While that noise is happening, inspect the thread repeatedly.
 
 Expected result:
@@ -720,7 +720,7 @@ Missing-worker restart check:
 
 1. Start a long-running turn, wait for a real `turn/started`, then record its `control_base_url`.
 2. Force-restart the server.
-3. Kill the env-agent process or otherwise make that `control_base_url` unreachable before relaunching the server.
+3. Kill the env-daemon process or otherwise make that `control_base_url` unreachable before relaunching the server.
 4. Relaunch the server on the same `BB_ROOT`.
 5. Wait through the liveness deadline, then verify:
 
@@ -764,7 +764,7 @@ Recommended explicit provisioning-interruption check:
 
 Expected result:
 
-- no duplicate env-agent is created during retry/recovery
+- no duplicate env-daemon is created during retry/recovery
 - the thread either continues into `active` or lands in `provisioning_failed`
 - it must not jump directly to `idle` without a real successful turn
 
@@ -919,7 +919,7 @@ Expected:
 
 - Thread stuck `active` with `turn/started` but no `turn/completed` → command routing bug: RPC commands going to wrong child
 - `provisioning_failed` with "Already initialized" → `providerInitializedPid` not tracked per-child
-- `provisioning_failed` with "Timed out waiting for active environment-agent session" → env-daemon failed to spawn or connect
+- `provisioning_failed` with "Timed out waiting for active environment-daemon session" → env-daemon failed to spawn or connect
 - Thread output contains response from the wrong provider → stdin writes going to wrong child
 - A thread starts receiving provider envelopes for the other provider → thread-to-child routing bug (check `extractProviderThreadId` in `packages/environment-daemon/src/runtime.ts`)
 - B's output contains A's requested token (or vice versa) → cross-thread/provider state contamination
@@ -988,7 +988,7 @@ When a result looks suspicious, also inspect:
 
 ```bash
 sqlite3 "$bb_root/bb.db" \
-  "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
+  "select id,status,control_base_url from environment_daemon_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
 ## Interpreting Failures
@@ -1003,23 +1003,23 @@ sqlite3 "$bb_root/bb.db" \
 
 - Restart appears to work, but the thread stays `active` without reconnect progress or a transition to `error`:
   - This is a real liveness/recovery bug candidate.
-  - Check whether the thread log shows server restart, missing env-agent check-ins, or a stuck reconnect path.
+  - Check whether the thread log shows server restart, missing env-daemon check-ins, or a stuck reconnect path.
 
 - `thread tell` after `thread stop` fails with missing session state:
   - This is a real recovery bug candidate.
   - Capture `thread show`, `thread log`, and server logs before retrying.
 
-- A follow-up fails with `Environment-agent session ... closed (...) while command execution was in progress`:
+- A follow-up fails with `Environment-daemon session ... closed (...) while command execution was in progress`:
   - This is a real session retirement / cleanup race.
   - Capture session rows from SQLite and the server log around the failing `tell`.
 
 - Session rows look “wrong” after a successful follow-up:
-  - Do not assume a healthy thread must still have an active env-agent session after final `idle`.
+  - Do not assume a healthy thread must still have an active env-daemon session after final `idle`.
   - The real invariant is that there must not be duplicate active sessions competing for the same thread.
 
-- local thread reaches `idle`, but its env-agent state file or process still exists after a short delay:
+- local thread reaches `idle`, but its env-daemon state file or process still exists after a short delay:
   - This is a real local cleanup bug candidate.
-  - Capture `thread show`, `thread log`, `find "$bb_root/environment-agents" -maxdepth 3 -type f`, and `ps` output before cleaning it up manually.
+  - Capture `thread show`, `thread log`, `find "$bb_root/environment-daemons" -maxdepth 3 -type f`, and `ps` output before cleaning it up manually.
 
 ## QA Tiers
 
@@ -1050,7 +1050,7 @@ Everything in **light**, plus:
 - worktree stop then follow-up
 - worktree two immediate follow-ups in a row
 - worktree promote-status, promote, demote
-- worktree archive removes the managed worktree and clears env-agent state
+- worktree archive removes the managed worktree and clears env-daemon state
 - archived thread is visibly marked as archived in thread inspection output
 - worktree unarchive then follow-up
 - **multi-provider coexistence** (see scenario below) — spawn threads with two different providers in the same project/environment and confirm both work
@@ -1058,18 +1058,18 @@ Everything in **light**, plus:
 
 ### Full QA pass
 
-~30 minutes. Run against one real provider + the fake recovery suite. Run this before shipping big server or environment-agent changes.
+~30 minutes. Run against one real provider + the fake recovery suite. Run this before shipping big server or environment-daemon changes.
 
 Everything in **extended**, plus:
 
 - local blocked restart
-- local forced restart with surviving env-agent reconnect or thread `error`
+- local forced restart with surviving env-daemon reconnect or thread `error`
 - local follow-up after restart failure
-- local idle thread follow-up after restart starts fresh env-agent cleanly
+- local idle thread follow-up after restart starts fresh env-daemon cleanly
 - worktree blocked restart
-- worktree forced restart with surviving env-agent reconnect or thread `error`
+- worktree forced restart with surviving env-daemon reconnect or thread `error`
 - worktree follow-up after restart failure
-- worktree idle thread follow-up after restart starts fresh env-agent cleanly
+- worktree idle thread follow-up after restart starts fresh env-daemon cleanly
 - active-thread restart failure emits `system/error` with `provider_unavailable`
 - provisioning-boundary restart check
 - queued follow-up during worker loss

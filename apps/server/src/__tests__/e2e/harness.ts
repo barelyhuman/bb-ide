@@ -60,7 +60,7 @@ const TSX_CLI_PATH = resolve(
   "cli.mjs",
 );
 const PROVISIONING_SETTLE_TIMEOUT_MS = 5_000;
-export const FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS = {
+export const FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS = {
   leaseTtlMs: 2_000,
   heartbeatIntervalMs: 500,
   commandLongPollTimeoutMs: 1_000,
@@ -74,19 +74,19 @@ export function withFakeE2eEnvironmentDaemonTimingEnv(
   return {
     ...env,
     BB_ENV_DAEMON_LEASE_TTL_MS: String(
-      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.leaseTtlMs,
+      FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS.leaseTtlMs,
     ),
     BB_ENV_DAEMON_HEARTBEAT_INTERVAL_MS: String(
-      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.heartbeatIntervalMs,
+      FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS.heartbeatIntervalMs,
     ),
     BB_ENV_DAEMON_COMMAND_LONG_POLL_TIMEOUT_MS: String(
-      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.commandLongPollTimeoutMs,
+      FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS.commandLongPollTimeoutMs,
     ),
     BB_ENV_DAEMON_COMMAND_LONG_POLL_INTERVAL_MS: String(
-      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.commandLongPollIntervalMs,
+      FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS.commandLongPollIntervalMs,
     ),
     BB_ENV_DAEMON_LEASE_SWEEP_INTERVAL_MS: String(
-      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.leaseSweepIntervalMs,
+      FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS.leaseSweepIntervalMs,
     ),
     BB_ENV_DAEMON_STARTUP_RECOVERY_REQUEST_TIMEOUT_MS: "250",
   };
@@ -199,7 +199,7 @@ export async function startServerE2eHarness(
   const providerMode = opts?.providerMode ?? resolveE2eProviderMode();
   const environmentDaemonSessionOptions = {
     ...(providerMode === "fake"
-      ? FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS
+      ? FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS
       : {}),
     ...(opts?.environmentDaemonSessionOptions ?? {}),
   };
@@ -317,7 +317,7 @@ export async function startServerE2eHarness(
       sessionRepo: environmentDaemonSessionRepo,
       requestTimeoutMs:
         environmentDaemonSessionOptions.heartbeatIntervalMs
-          ?? FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.heartbeatIntervalMs,
+          ?? FAKE_E2E_ENVIRONMENT_DAEMON_SESSION_OPTIONS.heartbeatIntervalMs,
     });
     let closed = false;
     let stopped = false;

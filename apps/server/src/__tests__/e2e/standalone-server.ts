@@ -12,7 +12,7 @@ export interface StandaloneServerHandle {
   /** Snapshot child PIDs before the server exits (they get reparented to PID 1 after). */
   snapshotChildPids(): number[];
   waitForExit: () => Promise<number | null>;
-  /** Graceful SIGTERM — does NOT kill child processes (env-agents survive for restart tests). */
+  /** Graceful SIGTERM — does NOT kill child processes (env-daemons survive for restart tests). */
   stop: () => Promise<void>;
   /** SIGTERM + force-kill entire process tree. Use in finally blocks for test cleanup. */
   stopAndCleanup: () => Promise<void>;
@@ -120,7 +120,7 @@ export function startStandaloneServer(args: {
         ]);
       }
 
-      // Kill any orphaned children (env-agents, codex processes)
+      // Kill any orphaned children (env-daemons, codex processes)
       for (const pid of childPids.reverse()) {
         if (isAlive(pid)) {
           try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }

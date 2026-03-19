@@ -72,7 +72,7 @@ const [thread, threadStatus, threadLog, threadOutput, threadSessions, serverHeal
       (error) => ({ error: String(error) }),
     ),
     readJson(
-      `${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}/environment-agent/sessions`,
+      `${baseUrl}/api/v1/threads/${encodeURIComponent(threadId)}/environment-daemon/sessions`,
     ).catch((error) => ({ error: String(error), threadId, sessions: [] })),
     readJson(`${baseUrl}/api/v1/system/health`).catch((error) => ({ error: String(error) })),
   ]);

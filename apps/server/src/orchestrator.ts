@@ -183,8 +183,8 @@ export type PromptExecutionOptions = ProviderExecutionOptions;
 const BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS =
   "BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS";
 const MODEL_LIST_CACHE_TTL_MS = 60_000;
-const ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS = 1_000;
-const ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS = 5_000;
+const ENVIRONMENT_DAEMON_SESSION_RECOVERY_WAIT_MS = 1_000;
+const ENVIRONMENT_DAEMON_SESSION_RECOVERY_RETRY_WAIT_MS = 5_000;
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -3989,7 +3989,7 @@ export class Orchestrator implements ThreadOrchestrator {
     try {
       await this.environmentDaemonCommandDispatcher.awaitActiveSession({
         threadId: thread.id,
-        timeoutMs: ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS,
+        timeoutMs: ENVIRONMENT_DAEMON_SESSION_RECOVERY_WAIT_MS,
       });
       return ensured;
     } catch (error) {
@@ -4006,7 +4006,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     await this.environmentDaemonCommandDispatcher.awaitActiveSession({
       threadId: thread.id,
-      timeoutMs: ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS,
+      timeoutMs: ENVIRONMENT_DAEMON_SESSION_RECOVERY_RETRY_WAIT_MS,
     });
     return ensured;
   }
@@ -4494,7 +4494,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     // Resume can fail when provider-side rollout state has been evicted.
-    // Allow one timeout-only retry in case the env-agent handoff was transient,
+    // Allow one timeout-only retry in case the env-daemon handoff was transient,
     // then fall back to fresh provisioning so the pending tell can continue.
     await this._provisionThread(
       threadId,

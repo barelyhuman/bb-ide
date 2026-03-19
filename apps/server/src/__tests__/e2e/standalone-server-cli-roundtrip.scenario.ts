@@ -260,7 +260,7 @@ async function runEnvironmentBattery(
 
   // Track all server instances so we can kill their process trees on cleanup.
   // The server restart test replaces `server` mid-test, but the old server's
-  // env-agents survive as orphans. We need to kill them all.
+  // env-daemons survive as orphans. We need to kill them all.
   const allServerChildPids: number[] = [];
 
   let server = startStandaloneServer({
@@ -324,7 +324,7 @@ async function runEnvironmentBattery(
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, restartThreadId, 0);
     // Snapshot child PIDs before restart kills the server — once the server
-    // exits, its children (env-agents, codex) get reparented to PID 1.
+    // exits, its children (env-daemons, codex) get reparented to PID 1.
     allServerChildPids.push(...server.snapshotChildPids());
 
     const restartResult = await expectCliSuccess(

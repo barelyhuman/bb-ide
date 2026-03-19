@@ -98,7 +98,7 @@ export class PiSdkSession {
 
     // The Pi SDK does not support per-session environment variables — its
     // built-in tools (bash, etc.) inherit from process.env. Since each
-    // bridge subprocess serves a single thread (one env-agent → one bridge),
+    // bridge subprocess serves a single thread (one env-daemon → one bridge),
     // setting process.env here is safe. If the bridge ever serves multiple
     // concurrent sessions, this will need a per-session env wrapper.
     if (this.options.env) {

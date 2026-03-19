@@ -56,7 +56,7 @@ describe("startup tasks", () => {
     );
   });
 
-  it("pokes reachable env-agents and leaves unreachable sessions for heartbeat timeout handling", async () => {
+  it("pokes reachable env-daemons and leaves unreachable sessions for heartbeat timeout handling", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.startsWith("http://127.0.0.1:4310/")) {
@@ -121,7 +121,7 @@ describe("startup tasks", () => {
     });
   });
 
-  it("defers env-agent startup recovery into the background", async () => {
+  it("defers env-daemon startup recovery into the background", async () => {
     const sessionRepo = {
       listActive: vi.fn().mockReturnValue([]),
     };
@@ -147,7 +147,7 @@ describe("startup tasks", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("times out slow env-agent pokes instead of hanging boot recovery", async () => {
+  it("times out slow env-daemon pokes instead of hanging boot recovery", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(
       (_input, init) =>
         new Promise((_resolve, reject) => {
