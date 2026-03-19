@@ -75,6 +75,15 @@ export interface GenerateOpenAIResponsesTextResult {
   responseId?: string;
 }
 
+interface OpenAIResponsesRequestBody {
+  model: string;
+  input: string;
+  instructions: string;
+  stream: true;
+  max_output_tokens?: number;
+  temperature?: number;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -124,6 +133,13 @@ function parseUpstreamErrorMessage(rawBody: string): string | null {
   }
 
   return extractErrorMessage(normalized, ERROR_EXTRACT_OPTS);
+}
+
+function isUnsupportedTemperatureError(message: string | null): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes("unsupported parameter") &&
+    normalized.includes("temperature");
 }
 
 function decodeOpenAIResponse(value: unknown): DecodedOpenAIResponse | null {
@@ -324,48 +340,74 @@ export async function generateOpenAIResponsesText(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${baseUrl}/responses`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        authorization: `Bearer ${auth.bearerToken}`,
-        "content-type": "application/json",
-        ...(auth.accountId ? { "openai-account-id": auth.accountId } : {}),
-      },
-      body: JSON.stringify({
-        model,
-        input: args.prompt,
-        instructions: DEFAULT_RESPONSES_INSTRUCTIONS,
-        stream: true,
-        ...(args.maxOutputTokens ? { max_output_tokens: args.maxOutputTokens } : {}),
-        ...(args.temperature !== undefined ? { temperature: args.temperature } : {}),
-      }),
-    });
-
-    const rawBody = await response.text();
-    if (!response.ok) {
-      throw new Error(parseUpstreamErrorMessage(rawBody) ?? `OpenAI error ${response.status}`);
-    }
-
-    const parsedSse = parseSseResponsePayload(rawBody);
-    if (parsedSse) {
-      return {
-        text: parsedSse.text,
-        model,
-        ...(parsedSse.responseId ? { responseId: parsedSse.responseId } : {}),
-      };
-    }
-
-    const decoded = decodeOpenAIResponse(JSON.parse(rawBody));
-    if (!decoded?.text) {
-      throw new Error("OpenAI response did not include output text");
-    }
-
-    return {
-      text: decoded.text,
-      model,
-      ...(decoded.id ? { responseId: decoded.id } : {}),
+    const headers = {
+      authorization: `Bearer ${auth.bearerToken}`,
+      "content-type": "application/json",
+      ...(auth.accountId ? { "openai-account-id": auth.accountId } : {}),
     };
+    const baseBody: OpenAIResponsesRequestBody = {
+      model,
+      input: args.prompt,
+      instructions: DEFAULT_RESPONSES_INSTRUCTIONS,
+      stream: true,
+      ...(args.maxOutputTokens ? { max_output_tokens: args.maxOutputTokens } : {}),
+      ...(args.temperature !== undefined ? { temperature: args.temperature } : {}),
+    };
+
+    const sendRequest = async (
+      body: OpenAIResponsesRequestBody,
+    ): Promise<GenerateOpenAIResponsesTextResult | null> => {
+      const response = await fetch(`${baseUrl}/responses`, {
+        method: "POST",
+        signal: controller.signal,
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      const rawBody = await response.text();
+      if (!response.ok) {
+        const message = parseUpstreamErrorMessage(rawBody);
+        if (
+          body.temperature !== undefined &&
+          isUnsupportedTemperatureError(message)
+        ) {
+          return null;
+        }
+        throw new Error(message ?? `OpenAI error ${response.status}`);
+      }
+
+      const parsedSse = parseSseResponsePayload(rawBody);
+      if (parsedSse) {
+        return {
+          text: parsedSse.text,
+          model,
+          ...(parsedSse.responseId ? { responseId: parsedSse.responseId } : {}),
+        };
+      }
+
+      const decoded = decodeOpenAIResponse(JSON.parse(rawBody));
+      if (!decoded?.text) {
+        throw new Error("OpenAI response did not include output text");
+      }
+
+      return {
+        text: decoded.text,
+        model,
+        ...(decoded.id ? { responseId: decoded.id } : {}),
+      };
+    };
+
+    const firstAttempt = await sendRequest(baseBody);
+    if (firstAttempt) {
+      return firstAttempt;
+    }
+
+    const { temperature: _ignored, ...retryBody } = baseBody;
+    const retryResult = await sendRequest(retryBody);
+    if (!retryResult) {
+      throw new Error("OpenAI responses request could not be retried without temperature");
+    }
+    return retryResult;
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error(`Timed out after ${timeoutMs}ms`);
