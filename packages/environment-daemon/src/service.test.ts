@@ -55,7 +55,7 @@ describe("environment-daemon service config", () => {
       },
       logging: {
         filePath: expect.stringContaining(
-          "/tmp/bb-root/environment-daemon-logs/project-1/docker-thread-1.log",
+          "/tmp/bb-root/environment-daemon-logs/project-1/docker.log",
         ),
       },
       control: {
