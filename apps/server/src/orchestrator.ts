@@ -1325,7 +1325,9 @@ export class Orchestrator implements ThreadOrchestrator {
       providerId,
       type: threadType,
       ...(explicitTitle ? { title: explicitTitle } : {}),
-      ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
+      ...(attachedEnvironmentId && !this.threadEnvironmentAttachmentRepo
+        ? { environmentId: attachedEnvironmentId }
+        : {}),
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     if (explicitTitle) {

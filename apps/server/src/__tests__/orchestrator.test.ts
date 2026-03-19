@@ -1424,6 +1424,52 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("does not persist thread.environmentId when attachments are authoritative during spawn", async () => {
+      const repos = createTestRepos(testDb.db);
+      const createSpy = vi.spyOn(repos.threadRepo, "create");
+      const updateSpy = vi.spyOn(repos.threadRepo, "update");
+      const managerWithAttachments = new Orchestrator(
+        repos.threadRepo,
+        repos.eventRepo,
+        repos.projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        repos.environmentRepo,
+        repos.attachmentRepo,
+      );
+      const project = createTestProject(repos.projectRepo, { rootPath: "/test" });
+      const environment = repos.environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/test" },
+        managed: false,
+      });
+
+      const result = await managerWithAttachments.spawn({
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({ environmentId: environment.id }),
+      );
+      expect(
+        updateSpy.mock.calls.some(([, updates]) =>
+          Object.hasOwn(updates, "environmentId"),
+        ),
+      ).toBe(false);
+      expect(repos.attachmentRepo.getByThreadId(result.id)?.environmentId).toBe(environment.id);
+      expect(managerWithAttachments.getRawById(result.id)?.environmentId).toBe(environment.id);
+    });
+
     it("emits env-setup started before optional setup finishes", async () => {
       const tempRoot = mkdtempSync(join(tmpdir(), "bb-orchestrator-env-setup-"));
       const workspaceRoot = join(tempRoot, "workspace");
