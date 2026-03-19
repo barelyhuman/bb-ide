@@ -547,30 +547,42 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   activeTurnIds.delete = (threadId: string) => orchestratorActiveTurnIds.delete(threadId);
   activeTurnIds.clear = () => orchestratorActiveTurnIds.clear();
   const rawEnvironmentRuntimes = rawManager.environmentService.environmentRuntimes;
-  const normalizeEnvironmentRuntimeKey = (key: string) =>
-    key.includes(":") ? key : `thread:${key}`;
   const environmentRuntimes = new Map<string, unknown>() as Map<string, unknown>;
   environmentRuntimes.get = (key: string) =>
-    rawEnvironmentRuntimes.get(normalizeEnvironmentRuntimeKey(key));
+    rawEnvironmentRuntimes.get(key) ??
+    (key.includes(":") ? undefined : rawEnvironmentRuntimes.get(`thread:${key}`));
   environmentRuntimes.set = (key: string, value: unknown) => {
-    const normalizedKey = normalizeEnvironmentRuntimeKey(key);
     const normalizedValue =
       value && typeof value === "object"
         ? {
           ...(value as Record<string, unknown>),
-          scopeKey: (value as { scopeKey?: string }).scopeKey ?? normalizedKey,
+          scopeKey: (value as { scopeKey?: string }).scopeKey ?? key,
           ownerThreadId:
             (value as { ownerThreadId?: string }).ownerThreadId ??
-            (normalizedKey.startsWith("thread:") ? normalizedKey.slice("thread:".length) : key),
+            (key.startsWith("thread:") ? key.slice("thread:".length) : key),
         }
         : value;
-    rawEnvironmentRuntimes.set(normalizedKey, normalizedValue);
+    rawEnvironmentRuntimes.set(key, normalizedValue);
+    if (!key.includes(":")) {
+      rawEnvironmentRuntimes.set(`thread:${key}`, {
+        ...(normalizedValue as Record<string, unknown>),
+        scopeKey: (normalizedValue as { scopeKey?: string }).scopeKey ?? `thread:${key}`,
+        ownerThreadId:
+          (normalizedValue as { ownerThreadId?: string }).ownerThreadId ?? key,
+      });
+    }
     return environmentRuntimes;
   };
   environmentRuntimes.has = (key: string) =>
-    rawEnvironmentRuntimes.has(normalizeEnvironmentRuntimeKey(key));
-  environmentRuntimes.delete = (key: string) =>
-    rawEnvironmentRuntimes.delete(normalizeEnvironmentRuntimeKey(key));
+    rawEnvironmentRuntimes.has(key) ||
+    (!key.includes(":") && rawEnvironmentRuntimes.has(`thread:${key}`));
+  environmentRuntimes.delete = (key: string) => {
+    const deleted = rawEnvironmentRuntimes.delete(key);
+    if (!key.includes(":")) {
+      rawEnvironmentRuntimes.delete(`thread:${key}`);
+    }
+    return deleted;
+  };
   environmentRuntimes.clear = () => rawEnvironmentRuntimes.clear();
   Object.assign(rawManager, {
     processes,
@@ -3151,6 +3163,56 @@ describe("Orchestrator", () => {
     });
   });
 
+  describe("environment attachment resolution", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+    let environmentRepo: EnvironmentRepository;
+    let attachmentRepo: ThreadEnvironmentAttachmentRepository;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      environmentRepo = repos.environmentRepo;
+      attachmentRepo = repos.attachmentRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environmentRepo,
+        attachmentRepo,
+      );
+    });
+
+    it("does not fall back to stale thread.environmentId when attachments exist", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: false,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+      });
+
+      expect((manager as any)._resolveThreadEnvironmentReference(thread.id)).toBeUndefined();
+    });
+  });
+
   describe("getOutput()", () => {
     let testDb: ReturnType<typeof createTestDb>;
     let project: ReturnType<typeof createTestProject>;
@@ -3981,7 +4043,7 @@ describe("Orchestrator", () => {
       const envRepo = new EnvironmentRepository(testDb.db);
       const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
       const thread1 = createTestThread(threadRepo, project.id, { status: "idle", title: "Promoted", environmentId: env.id });
-      createTestThread(threadRepo, project.id, { status: "idle", title: "Other", environmentId: env.id });
+      const thread2 = createTestThread(threadRepo, project.id, { status: "idle", title: "Other", environmentId: env.id });
 
       const projectRoot = mkdtempSync(join(tmpdir(), "bb-orchestrator-"));
       git(projectRoot, "init");
@@ -3993,6 +4055,8 @@ describe("Orchestrator", () => {
       git(projectRoot, "commit", "-m", "initial");
       const head = git(projectRoot, "rev-parse", "HEAD");
       projectRepo.update(project.id, { rootPath: projectRoot });
+      attachmentRepo.attachThread({ threadId: thread1.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread2.id, environmentId: env.id });
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
@@ -4020,7 +4084,8 @@ describe("Orchestrator", () => {
       const envRepo = new EnvironmentRepository(testDb.db);
       const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+      const runtimeEntry = {
         environment: {
           kind: "worktree",
           info: {
@@ -4092,7 +4157,9 @@ describe("Orchestrator", () => {
           },
           run: vi.fn(),
         },
-      });
+      };
+      asOrchestratorHarness(manager).environmentRuntimes.set(env.id, runtimeEntry);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, runtimeEntry);
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
@@ -4144,6 +4211,7 @@ describe("Orchestrator", () => {
         managed: true,
       });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
       const getCheckoutSnapshot = vi
         .fn()
         .mockResolvedValueOnce({
@@ -4151,7 +4219,7 @@ describe("Orchestrator", () => {
           head: "next-head",
           detached: false,
         });
-      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
+      const runtimeEntry = {
         environment: makeRuntimeEnvironment({
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
@@ -4170,7 +4238,9 @@ describe("Orchestrator", () => {
             },
           },
         }),
-      });
+      };
+      asOrchestratorHarness(manager).environmentRuntimes.set(env.id, runtimeEntry);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, runtimeEntry);
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
         environmentId: env.id,
@@ -4500,6 +4570,7 @@ describe("Orchestrator", () => {
         managed: true,
       });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
       await expect(
@@ -4519,6 +4590,7 @@ describe("Orchestrator", () => {
         managed: true,
       });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
       await expect(

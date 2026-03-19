@@ -1146,10 +1146,10 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _resolveThreadEnvironmentReference(threadId: string): string | undefined {
-    return (
-      this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId ??
-      this.threadRepo.getById(threadId)?.environmentId
-    );
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.threadEnvironmentAttachmentRepo.getByThreadId(threadId)?.environmentId;
+    }
+    return this.threadRepo.getById(threadId)?.environmentId;
   }
 
   private _getThreadsAttachedToEnvironment(environmentId: string): Thread[] {
@@ -3482,8 +3482,11 @@ export class Orchestrator implements ThreadOrchestrator {
     const effectiveEnvironmentRequest =
       req.environmentId || req.environmentDescriptor || req.environmentCreationArgs
         ? req
-        : thread?.environmentId
-          ? { ...req, environmentId: thread.environmentId }
+        : this._resolveThreadEnvironmentReference(threadId)
+          ? {
+              ...req,
+              environmentId: this._resolveThreadEnvironmentReference(threadId),
+            }
           : req.parentThreadId
             ? {
                 ...req,
