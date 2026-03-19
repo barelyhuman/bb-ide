@@ -781,15 +781,15 @@ export class Orchestrator implements ThreadOrchestrator {
             projectRootPath,
             reason,
           ),
-        ensureManagedEnvironmentArtifacts: (threadId, projectRootPath) =>
+        ensureManagedEnvironmentArtifacts: ({ environmentId, projectRootPath }) =>
           this.envFactory.ensureManagedEnvironmentArtifacts({
-            threadId,
+            environmentId,
             projectRootPath,
             runtimeEnv: this.runtimeEnv,
           }),
-        cleanupManagedEnvironmentArtifacts: (threadId, projectRootPath) =>
+        cleanupManagedEnvironmentArtifacts: ({ environmentId, projectRootPath }) =>
           this.envFactory.cleanupManagedEnvironmentArtifacts({
-            threadId,
+            environmentId,
             projectRootPath,
             runtimeEnv: this.runtimeEnv,
           }),

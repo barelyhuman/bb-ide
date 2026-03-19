@@ -65,12 +65,18 @@ interface EnvironmentServiceCallbacks {
     reason: ThreadEnvironmentStartReason,
   ) => Promise<void>;
   ensureManagedEnvironmentArtifacts?: (
-    threadId: string,
-    projectRootPath: string,
+    args: {
+      threadId: string;
+      environmentId: string;
+      projectRootPath: string;
+    },
   ) => Promise<{ created: boolean }>;
   cleanupManagedEnvironmentArtifacts?: (
-    threadId: string,
-    projectRootPath: string,
+    args: {
+      threadId: string;
+      environmentId: string;
+      projectRootPath: string;
+    },
   ) => Promise<void>;
 }
 
@@ -234,6 +240,25 @@ export class EnvironmentService {
 
   private resolveAttachedEnvironmentProperties(threadId: string): EnvironmentProperties | undefined {
     return this.resolveAttachedEnvironmentRecord(threadId)?.properties;
+  }
+
+  private resolveManagedEnvironmentArtifactArgs(
+    threadId: string,
+    projectRootPath: string,
+  ): {
+    threadId: string;
+    environmentId: string;
+    projectRootPath: string;
+  } | undefined {
+    const environmentId = this.resolveAttachedEnvironment(threadId)?.environmentId;
+    if (!environmentId) {
+      return undefined;
+    }
+    return {
+      threadId,
+      environmentId,
+      projectRootPath,
+    };
   }
 
   private isThreadIsolatedWorkspaceEnvironment(threadId: string): boolean {
@@ -426,9 +451,15 @@ export class EnvironmentService {
         };
       }
 
+      const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+        threadId,
+        projectRootPath,
+      );
       const materialization =
-        await this.callbacks.ensureManagedEnvironmentArtifacts?.(threadId, projectRootPath) ??
-        { created: false };
+        artifactArgs
+          ? await this.callbacks.ensureManagedEnvironmentArtifacts?.(artifactArgs) ??
+            { created: false }
+          : { created: false };
 
       const thread = this.threadRepo.getById(threadId);
       const environment =
@@ -453,7 +484,13 @@ export class EnvironmentService {
         }
         if (materialization.created) {
           try {
-            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+            const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+              threadId,
+              projectRootPath,
+            );
+            if (artifactArgs) {
+              await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+            }
           } catch {
             // Best-effort cleanup for partially provisioned environments.
           }
@@ -495,9 +532,15 @@ export class EnvironmentService {
         };
       }
 
+      const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+        thread.id,
+        projectRootPath,
+      );
       const materialization =
-        await this.callbacks.ensureManagedEnvironmentArtifacts?.(thread.id, projectRootPath) ??
-        { created: false };
+        artifactArgs
+          ? await this.callbacks.ensureManagedEnvironmentArtifacts?.(artifactArgs) ??
+            { created: false }
+          : { created: false };
 
       const environmentId = this.resolveThreadRuntimeKind(thread, projectRootPath);
       const environment =
@@ -523,7 +566,13 @@ export class EnvironmentService {
         }
         if (materialization.created) {
           try {
-            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(thread.id, projectRootPath);
+            const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+              thread.id,
+              projectRootPath,
+            );
+            if (artifactArgs) {
+              await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+            }
           } catch {
             // Best-effort cleanup for partially restored environments.
           }
@@ -724,7 +773,13 @@ export class EnvironmentService {
         } else {
           await this.destroyDetachedRuntime(threadId, runtime);
           if (projectRootPath) {
-            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+            const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+              threadId,
+              projectRootPath,
+            );
+            if (artifactArgs) {
+              await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+            }
           }
           this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey);
         }
@@ -759,7 +814,11 @@ export class EnvironmentService {
         !attachedEnvironment.hasSiblingAttachments &&
         projectRootPath
       ) {
-        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+        await this.callbacks.cleanupManagedEnvironmentArtifacts?.({
+          threadId,
+          environmentId: attachedEnvironment.environmentId,
+          projectRootPath,
+        });
       }
     } finally {
       refresh();
@@ -794,13 +853,25 @@ export class EnvironmentService {
     }
     if (!environment) {
       if (project.rootPath) {
-        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, project.rootPath);
+        const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+          threadId,
+          project.rootPath,
+        );
+        if (artifactArgs) {
+          await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+        }
       }
       this.clearPersistedEnvironmentState(threadId);
       return;
     }
     await Promise.resolve(environment.destroy());
-    await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, project.rootPath);
+    const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+      threadId,
+      project.rootPath,
+    );
+    if (artifactArgs) {
+      await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+    }
     this.clearPersistedEnvironmentState(threadId);
   }
 

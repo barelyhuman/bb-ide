@@ -1,6 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createConnection, migrate, EnvironmentRepository, ProjectRepository, ThreadEnvironmentAttachmentRepository, ThreadRepository, type DbConnection } from "@bb/db";
+import {
+  ensureDockerEnvironmentArtifacts,
+  ensureLocalGitWorkspace,
+  removeDockerEnvironmentArtifacts,
+  removeLocalGitWorkspace,
+  resolveDockerEnvironmentState,
+  resolveLocalGitWorkspaceState,
+} from "@bb/environment";
 import { EnvironmentFactory } from "../env-factory.js";
+
+vi.mock("@bb/environment", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@bb/environment")>();
+  return {
+    ...actual,
+    ensureLocalGitWorkspace: vi.fn(actual.ensureLocalGitWorkspace),
+    removeLocalGitWorkspace: vi.fn(actual.removeLocalGitWorkspace),
+    ensureDockerEnvironmentArtifacts: vi.fn(actual.ensureDockerEnvironmentArtifacts),
+    removeDockerEnvironmentArtifacts: vi.fn(actual.removeDockerEnvironmentArtifacts),
+    resolveLocalGitWorkspaceState: vi.fn(actual.resolveLocalGitWorkspaceState),
+    resolveDockerEnvironmentState: vi.fn(actual.resolveDockerEnvironmentState),
+  };
+});
 
 interface SqliteClient {
   close(): void;
@@ -30,6 +51,7 @@ describe("EnvironmentFactory", () => {
 
   afterEach(() => {
     sqlite.close();
+    vi.clearAllMocks();
   });
 
   it("stores authoritative properties when reserving a managed environment", () => {
@@ -125,5 +147,103 @@ describe("EnvironmentFactory", () => {
       threadId: thread2.id,
       environmentId: envId2,
     });
+  });
+
+  it("materializes managed worktree artifacts by environmentId", async () => {
+    vi.mocked(resolveLocalGitWorkspaceState).mockReturnValue({
+      workspaceRoot: "/tmp/factory-project/.worktrees/env-1",
+      branchName: "bb/env-env-1",
+    });
+    vi.mocked(ensureLocalGitWorkspace).mockResolvedValue(true);
+
+    const project = projects.create({
+      name: "factory-managed-worktree-project",
+      rootPath: "/tmp/factory-project",
+    });
+    const env = environments.create({
+      projectId: project.id,
+      managed: true,
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
+    });
+    const factory = new EnvironmentFactory(environments, attachments);
+
+    const result = await factory.ensureManagedEnvironmentArtifacts({
+      environmentId: env.id,
+      projectRootPath: project.rootPath,
+      runtimeEnv: {},
+    });
+
+    expect(result).toEqual({ created: true });
+    expect(resolveLocalGitWorkspaceState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: project.id,
+        environmentId: env.id,
+      }),
+    );
+    expect(ensureLocalGitWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: {
+          workspaceRoot: "/tmp/factory-project/.worktrees/env-1",
+          branchName: "bb/env-env-1",
+        },
+      }),
+    );
+  });
+
+  it("cleans up managed docker artifacts by environmentId", async () => {
+    vi.mocked(removeDockerEnvironmentArtifacts).mockResolvedValue(undefined);
+    vi.mocked(removeLocalGitWorkspace).mockResolvedValue(undefined);
+
+    const project = projects.create({
+      name: "factory-managed-docker-project",
+      rootPath: "/tmp/factory-project",
+    });
+    const env = environments.create({
+      projectId: project.id,
+      managed: true,
+      properties: {
+        provisioningSystemKind: "docker-worktree",
+        location: "docker",
+        workspaceKind: "arbitrary_path",
+      },
+      runtimeState: {
+        kind: "docker",
+        state: {
+          worktree: {
+            workspaceRoot: "/tmp/factory-project/.worktrees/env-1",
+            branchName: "bb/env-env-1",
+          },
+          containerName: "bb-env-1",
+          image: "bb/environment:local",
+          mountPath: "/workspace",
+          agentHostPort: 4311,
+          agentContainerPort: 4310,
+        },
+      },
+    });
+    const factory = new EnvironmentFactory(environments, attachments);
+
+    await factory.cleanupManagedEnvironmentArtifacts({
+      environmentId: env.id,
+      projectRootPath: project.rootPath,
+      runtimeEnv: {},
+    });
+
+    expect(removeDockerEnvironmentArtifacts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: expect.objectContaining({
+          containerName: "bb-env-1",
+        }),
+      }),
+    );
+    expect(removeLocalGitWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceRoot: "/tmp/factory-project/.worktrees/env-1",
+      }),
+    );
   });
 });

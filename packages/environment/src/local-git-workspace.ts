@@ -820,7 +820,7 @@ export function createLocalGitWorkspaceDefinition(
 
 export function resolveLocalGitWorkspaceState(args: {
   projectId: string;
-  threadId: string;
+  threadId?: string;
   environmentId?: string;
   projectRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
@@ -837,6 +837,9 @@ export function resolveLocalGitWorkspaceState(args: {
     ? resolve(configuredWorktreeRoot, args.projectId)
     : configuredWorktreeRoot;
   const worktreeId = args.environmentId ?? args.threadId;
+  if (!worktreeId) {
+    throw new Error("Local git workspace state requires environmentId or threadId");
+  }
   return {
     workspaceRoot: resolve(worktreeRoot, worktreeId),
     branchName: toWorktreeBranchName(worktreeId),
