@@ -1676,7 +1676,7 @@ export function ThreadDetailView() {
   return (
     <>
       <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
-        <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
+        <PanelGroup direction="horizontal" className="h-full w-full min-w-0" autoSaveId="bb.thread.panelLayout">
           <Panel
             id="thread-detail-timeline-panel"
             defaultSize={
