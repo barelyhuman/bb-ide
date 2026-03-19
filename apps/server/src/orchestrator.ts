@@ -3540,7 +3540,12 @@ export class Orchestrator implements ThreadOrchestrator {
         environmentCreationArgs: effectiveEnvironmentRequest.environmentCreationArgs,
       });
     }
-    if (attachedEnvironmentId && thread && thread.environmentId !== attachedEnvironmentId) {
+    if (
+      attachedEnvironmentId &&
+      !this.threadEnvironmentAttachmentRepo &&
+      thread &&
+      thread.environmentId !== attachedEnvironmentId
+    ) {
       this.threadRepo.update(threadId, { environmentId: attachedEnvironmentId });
     }
     if (attachedEnvironmentId && this.threadEnvironmentAttachmentRepo) {
@@ -3611,9 +3616,11 @@ export class Orchestrator implements ThreadOrchestrator {
       );
     }
     if (attachedEnvironmentIdAfterProvision) {
-      this.threadRepo.update(threadId, {
-        environmentId: attachedEnvironmentIdAfterProvision,
-      });
+      if (!this.threadEnvironmentAttachmentRepo) {
+        this.threadRepo.update(threadId, {
+          environmentId: attachedEnvironmentIdAfterProvision,
+        });
+      }
     }
     const provisionedEnvironmentPresentation = this._resolveProvisioningPresentation({
       attachedEnvironmentId: attachedEnvironmentIdAfterProvision,
