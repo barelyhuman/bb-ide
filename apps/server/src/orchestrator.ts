@@ -1170,10 +1170,36 @@ export class Orchestrator implements ThreadOrchestrator {
       .filter((thread) => thread.archivedAt === undefined);
   }
 
-  private _resolveEnvironmentCommandTransportThread(
-    environmentId: string,
-  ): Thread | undefined {
-    return this._getNonArchivedThreadsAttachedToEnvironment(environmentId)[0];
+  private _resolveEnvironmentCommandTransportThread(args: {
+    environmentId: string;
+    providerId?: string;
+  }): Thread | undefined {
+    const attachedThreads = this._getNonArchivedThreadsAttachedToEnvironment(args.environmentId);
+    if (attachedThreads.length === 0) {
+      return undefined;
+    }
+    if (args.providerId) {
+      const matchingThreads = attachedThreads.filter(
+        (thread) => thread.providerId === args.providerId,
+      );
+      if (matchingThreads.length === 1) {
+        return matchingThreads[0];
+      }
+      if (matchingThreads.length > 1) {
+        throw invalidRequestError(
+          `Environment ${args.environmentId} has multiple attached threads for provider ${args.providerId}`,
+        );
+      }
+      throw invalidRequestError(
+        `Environment ${args.environmentId} has no attached thread for provider ${args.providerId}`,
+      );
+    }
+    if (attachedThreads.length === 1) {
+      return attachedThreads[0];
+    }
+    throw invalidRequestError(
+      `Environment ${args.environmentId} has multiple attached threads; explicit provider routing is required`,
+    );
   }
 
   private _isThreadAttachedToPromotedEnvironment(threadId: string): boolean {
@@ -3830,7 +3856,10 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const transportThread = this._resolveEnvironmentCommandTransportThread(environmentId);
+    const transportThread = this._resolveEnvironmentCommandTransportThread({
+      environmentId,
+      providerId,
+    });
     if (!transportThread) {
       throw invalidRequestError(
         `No active thread is attached to environment ${environmentId}`,
@@ -3890,7 +3919,9 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const transportThread = this._resolveEnvironmentCommandTransportThread(environmentId);
+    const transportThread = this._resolveEnvironmentCommandTransportThread({
+      environmentId,
+    });
     if (!transportThread) {
       throw invalidRequestError(
         `No active thread is attached to environment ${environmentId}`,

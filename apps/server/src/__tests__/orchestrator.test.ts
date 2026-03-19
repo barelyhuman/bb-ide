@@ -34,6 +34,7 @@ import {
 } from "@bb/environment";
 import {
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  createEnvironmentDaemonSessionCapabilities,
   type EnvironmentDaemonClient,
   type EnvironmentDaemonCommandAck,
   type EnvironmentDaemonEventEnvelope,
@@ -41,6 +42,8 @@ import {
 import {
   createConnection,
   migrate,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonSessionRepository,
   ThreadRepository,
   EventRepository,
   ProjectRepository,
@@ -56,6 +59,8 @@ import {
 } from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
 import { ProviderSessionController } from "../provider-session-controller.js";
+import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonSessionCommandClient } from "../environment-daemon-session-command-client.js";
 import type { EnvironmentService } from "../environment-service.js";
 import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import { WSManager } from "../ws.js";
@@ -2908,6 +2913,241 @@ describe("Orchestrator", () => {
       await expect(manager.listModels()).resolves.toEqual(models);
 
       expect(providerListModels).toHaveBeenCalledTimes(3);
+    });
+
+    it("routes environment-scoped model discovery through the matching provider thread", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      const piThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "pi",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      attachmentRepo.attachThread({ threadId: piThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi
+        .spyOn(EnvironmentDaemonSessionCommandClient.prototype, "sendCommand")
+        .mockResolvedValue({
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+          commandId: "provider-models-pi",
+          idempotencyKey: "provider-models-pi",
+          state: "accepted",
+          acknowledgedAt: Date.now(),
+          latestSequence: 0,
+          result: [
+            {
+              id: "pi-fast",
+              model: "pi-fast",
+              displayName: "Pi Fast",
+              description: "",
+              supportedReasoningEfforts: [
+                { reasoningEffort: "low", description: "Low effort" },
+              ],
+              defaultReasoningEffort: "low",
+              isDefault: true,
+            },
+          ],
+        });
+
+      await expect(manager.listModels("pi", environment.id)).resolves.toEqual([
+        {
+          id: "pi-fast",
+          model: "pi-fast",
+          displayName: "Pi Fast",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ]);
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+      expect(commandRepo.listPendingByThreadId(codexThread.id)).toHaveLength(0);
+      expect(commandRepo.listPendingByThreadId(piThread.id)).toHaveLength(0);
+    });
+
+    it("rejects environment-scoped model discovery when no attached thread matches the provider", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi.spyOn(
+        EnvironmentDaemonSessionCommandClient.prototype,
+        "sendCommand",
+      );
+
+      await expect(manager.listModels("pi", environment.id)).rejects.toThrow(
+        `Environment ${environment.id} has no attached thread for provider pi`,
+      );
+      expect(sendCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("listProviders()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
+    it("rejects ambiguous environment-scoped provider discovery instead of picking the first thread", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      const piThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "pi",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      attachmentRepo.attachThread({ threadId: piThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi.spyOn(
+        EnvironmentDaemonSessionCommandClient.prototype,
+        "sendCommand",
+      );
+
+      await expect(manager.listProviders(environment.id)).rejects.toThrow(
+        `Environment ${environment.id} has multiple attached threads; explicit provider routing is required`,
+      );
+      expect(sendCommand).not.toHaveBeenCalled();
     });
   });
 
