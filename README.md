@@ -76,6 +76,12 @@ Then open: `http://localhost:3333`
 
 `pnpm start` builds the app, server, and CLI when needed, then runs the built server without watch mode or hot reloading.
 
+To clear the local state created by `pnpm start`, run:
+
+```bash
+pnpm reset
+```
+
 If you want to work on bb itself, use the development loop instead:
 
 ```bash
@@ -83,6 +89,20 @@ pnpm dev
 ```
 
 That starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by default so it can run alongside `pnpm start`.
+
+To clear the local state created by `pnpm dev`, run:
+
+```bash
+pnpm reset:dev
+```
+
+If you want to wipe both default state directories after trying bb locally:
+
+```bash
+pnpm reset:all
+```
+
+These reset commands prompt for confirmation before deleting anything.
 
 If you want to drive bb from the CLI during development:
 
@@ -136,7 +156,9 @@ be read as current architecture, not as a frozen public platform surface.
 
 Most runtime configuration lives in [.env.example](./.env.example), including provider selection, authentication, server settings, worktree settings, and inference options.
 
-Local state defaults to `~/.bb/`. Thread execution context also exposes `BB_PROJECT_ID`, `BB_THREAD_ID`, and `BB_ENVIRONMENT_ID`.
+Local state defaults to `~/.bb/`. `pnpm dev` uses `~/.bb-dev/` by default so it can run alongside the production-style server. Thread execution context also exposes `BB_PROJECT_ID`, `BB_THREAD_ID`, and `BB_ENVIRONMENT_ID`.
+
+`pnpm reset`, `pnpm reset:dev`, and `pnpm reset:all` remove bb-managed local state only. They do not remove provider credentials or config owned by other tools.
 
 ## Further Reading
 
