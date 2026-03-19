@@ -214,8 +214,9 @@ export function reconcileManagedArtifactStorage(
 
   for (const thread of args.threads) {
     const environmentId = (
-      attachedEnvironmentIdByThreadId?.get(thread.id) ??
-      thread.environmentId
+      hasFirstClassManagedEnvironments
+        ? attachedEnvironmentIdByThreadId?.get(thread.id)
+        : thread.environmentId
     )?.trim();
     if (environmentId) {
       const shouldKeepLogs =

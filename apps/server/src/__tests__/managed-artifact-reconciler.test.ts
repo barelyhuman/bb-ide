@@ -270,6 +270,48 @@ describe("managed artifact reconciler", () => {
     expect(existsSync(staleLogPath)).toBe(false);
   });
 
+  it("does not preserve logs based only on stale thread environment ids when attachments are authoritative", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "bb-reconcile-home-"));
+    cleanupPaths.push(homeDir);
+    process.env.HOME = homeDir;
+    const bbRoot = mkdtempSync(join(tmpdir(), "bb-reconcile-root-"));
+    cleanupPaths.push(bbRoot);
+    process.env.BB_ROOT = bbRoot;
+    const now = Date.now();
+    const retentionMs = 3 * 24 * 60 * 60 * 1000;
+
+    const project = makeProject({
+      id: "proj-1",
+      rootPath: mkdtempSync(join(tmpdir(), "bb-project-root-")),
+    });
+    cleanupPaths.push(project.rootPath);
+
+    const thread = makeThread({
+      id: "thread-stale",
+      environmentId: "env-stale-thread-field",
+    });
+    const staleLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
+      projectId: project.id,
+      environmentId: "env-stale-thread-field",
+      runtimeEnv: process.env,
+    });
+
+    writeTextFile(staleLogPath, "stale\n");
+
+    const result = reconcileManagedArtifactStorage({
+      threads: [thread],
+      environments: [],
+      environmentAttachments: [],
+      projects: [project],
+      runtimeEnv: process.env,
+      now,
+      archivedLogRetentionMs: retentionMs,
+    });
+
+    expect(result.removedLogArtifacts).toBe(1);
+    expect(existsSync(staleLogPath)).toBe(false);
+  });
+
   it("does not preserve managed worktrees based only on stale thread environment ids", () => {
     const homeDir = mkdtempSync(join(tmpdir(), "bb-reconcile-home-"));
     cleanupPaths.push(homeDir);
