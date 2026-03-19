@@ -200,7 +200,10 @@ async function main() {
       "initial promote status",
     );
     assertIncludes(
-      runCli(metadata, ["environment", "promote", worktreeEnvironmentId]).stdout,
+      runCli(
+        metadata,
+        ["environment", "promote", worktreeEnvironmentId, "--thread", worktreeThreadId],
+      ).stdout,
       "promoted",
       "promote output",
     );
@@ -211,7 +214,7 @@ async function main() {
     );
     const demoteOutput = runCli(
       metadata,
-      ["environment", "demote", "--project", metadata.projectId],
+      ["environment", "demote", "--thread", worktreeThreadId],
       { allowFailure: true },
     );
     assertIncludes(demoteOutput.stderr || demoteOutput.stdout, "demoted", "demote output");
@@ -264,12 +267,10 @@ async function main() {
     currentServerPid = await relaunchServer(metadata);
 
     runCli(metadata, ["thread", "show", restartThreadId]);
-    runCli(metadata, ["thread", "stop", restartThreadId]);
-    await waitForThreadStatus(metadata, restartThreadId, "idle", 180);
-    runCli(metadata, ["thread", "tell", restartThreadId, "Reply with exactly LOCAL-SMOKE-POST-RESTART and finish."]);
-    await waitForThreadStatus(metadata, restartThreadId, "idle", 180);
+    runCli(metadata, ["thread", "tell", localThreadId, "Reply with exactly LOCAL-SMOKE-POST-RESTART and finish."]);
+    await waitForThreadStatus(metadata, localThreadId, "idle", 180);
     assertIncludes(
-      threadOutput(metadata, restartThreadId),
+      threadOutput(metadata, localThreadId),
       "LOCAL-SMOKE-POST-RESTART",
       "post-restart follow-up output",
     );

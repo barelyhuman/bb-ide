@@ -167,8 +167,8 @@ For worktree primary-checkout checks, use the environment subcommands rather tha
 
 ```bash
 node apps/cli/dist/index.js environment promote-status --project <project-id>
-node apps/cli/dist/index.js environment promote <environment-id>
-node apps/cli/dist/index.js environment demote --project <project-id>
+node apps/cli/dist/index.js environment promote <environment-id> --thread <thread-id>
+node apps/cli/dist/index.js environment demote --thread <thread-id>
 ```
 
 ## Relaunch guidance
