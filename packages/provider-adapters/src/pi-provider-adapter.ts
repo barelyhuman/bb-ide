@@ -320,15 +320,16 @@ export function createPiProviderAdapter(
       return params;
     },
     createThreadResumeParams(
-      providerThreadId: string,
+      providerThreadId: string | undefined,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
       resumePath?: string,
     ): Record<string, unknown> {
+      const threadId = providerThreadId ?? context.threadId;
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
           {
-            threadId: providerThreadId,
+            threadId,
             ...(resumePath ? { sessionPath: resumePath } : {}),
           },
           context,
@@ -337,22 +338,24 @@ export function createPiProviderAdapter(
       );
     },
     createTurnStartParams(
-      providerThreadId: string,
+      threadId: string,
+      providerThreadId: string | undefined,
       input: PromptInput[],
       options?: ProviderExecutionOptions,
     ): Record<string, unknown> {
       return withExecutionOptions(
-        { threadId: providerThreadId, input },
+        { threadId: providerThreadId ?? threadId, input },
         options,
       );
     },
     createTurnSteerParams(
-      providerThreadId: string,
+      threadId: string,
+      providerThreadId: string | undefined,
       expectedTurnId: string,
       input: PromptInput[],
     ): Record<string, unknown> {
       return {
-        threadId: providerThreadId,
+        threadId: providerThreadId ?? threadId,
         expectedTurnId,
         input,
       };

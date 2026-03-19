@@ -20,7 +20,6 @@ import type {
 import {
   assertNever,
   decodeThreadEventData,
-  decodeThreadIdFromWireValue,
   toRecord,
 } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
@@ -111,6 +110,15 @@ function normalizeTitle(value: unknown): string | undefined {
   if (!normalized) return undefined;
   if (normalized.length <= 60) return normalized;
   return `${normalized.slice(0, 57).trimEnd()}...`;
+}
+
+function decodeClaudeRoutingThreadId(value: unknown): string | undefined {
+  const payload = toRecord(value);
+  if (!payload) return undefined;
+  return (
+    (typeof payload.threadId === "string" ? payload.threadId : undefined) ??
+    (typeof payload.thread_id === "string" ? payload.thread_id : undefined)
+  );
 }
 
 function resolveBaseInstructions(developerInstructions?: string): string {
@@ -460,47 +468,60 @@ export function createClaudeCodeProviderAdapter(
         req,
       );
       const tools = toClaudeCodeDynamicTools(dynamicTools);
-      if (!tools) return params;
-      return { ...params, dynamicTools: tools };
+      return {
+        ...params,
+        threadId: context.threadId,
+        ...(tools ? { dynamicTools: tools } : {}),
+      };
     },
     createThreadResumeParams(
-      providerThreadId: string,
+      providerThreadId: string | undefined,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
       _resumePath?: string,
     ): Record<string, unknown> {
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
-          { threadId: providerThreadId },
+          {
+            threadId: context.threadId,
+            providerThreadId: providerThreadId ?? null,
+          },
           context,
         ),
         options,
       );
     },
     createTurnStartParams(
-      providerThreadId: string,
+      threadId: string,
+      providerThreadId: string | undefined,
       input: PromptInput[],
       options?: ProviderExecutionOptions,
     ): Record<string, unknown> {
       return withExecutionOptions(
-        { threadId: providerThreadId, input },
+        {
+          threadId,
+          providerThreadId: providerThreadId ?? null,
+          input,
+        },
         options,
       );
     },
     createTurnSteerParams(
-      providerThreadId: string,
+      threadId: string,
+      providerThreadId: string | undefined,
       expectedTurnId: string,
       input: PromptInput[],
     ): Record<string, unknown> {
       return {
-        threadId: providerThreadId,
+        threadId,
+        providerThreadId: providerThreadId ?? null,
         expectedTurnId,
         input,
       };
     },
     createThreadNameSetParams: undefined,
-    extractThreadIdFromResult: decodeThreadIdFromWireValue,
-    extractThreadIdFromEventData: decodeThreadIdFromWireValue,
+    extractThreadIdFromResult: decodeClaudeRoutingThreadId,
+    extractThreadIdFromEventData: decodeClaudeRoutingThreadId,
     normalizeEventType(type: string): string {
       return normalizeProviderEventType(type);
     },

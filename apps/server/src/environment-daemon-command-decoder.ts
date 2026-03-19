@@ -250,16 +250,17 @@ export function decodePersistedEnvironmentDaemonCommand(args: {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
         projectId: requireStringField(record, "projectId", commandType),
-        providerThreadId: requireStringField(
-          record,
-          "providerThreadId",
-          commandType,
-        ),
+        ...(getStringField(record, "providerThreadId")
+          ? { providerThreadId: getStringField(record, "providerThreadId")! }
+          : {}),
         ...(decodeThreadContext(record.context)
           ? { context: decodeThreadContext(record.context)! }
           : {}),
         ...(decodeExecutionOptions(record.options)
           ? { options: decodeExecutionOptions(record.options)! }
+          : {}),
+        ...(decodeDynamicTools(record.dynamicTools)
+          ? { dynamicTools: decodeDynamicTools(record.dynamicTools)! }
           : {}),
         ...(getStringField(record, "resumePath")
           ? { resumePath: getStringField(record, "resumePath")! }
@@ -293,11 +294,9 @@ export function decodePersistedEnvironmentDaemonCommand(args: {
       return {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
-        providerThreadId: requireStringField(
-          record,
-          "providerThreadId",
-          commandType,
-        ),
+        ...(getStringField(record, "providerThreadId")
+          ? { providerThreadId: getStringField(record, "providerThreadId")! }
+          : {}),
         ...(requestedMode ? { requestedMode } : {}),
         ...(activeTurnId ? { activeTurnId } : {}),
         input: decodePromptInputArray(record.input)!,
@@ -311,11 +310,9 @@ export function decodePersistedEnvironmentDaemonCommand(args: {
       return {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
-        providerThreadId: requireStringField(
-          record,
-          "providerThreadId",
-          commandType,
-        ),
+        ...(getStringField(record, "providerThreadId")
+          ? { providerThreadId: getStringField(record, "providerThreadId")! }
+          : {}),
         title: requireStringField(record, "title", commandType),
         ...(initialize ? { initialize } : {}),
       };

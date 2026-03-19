@@ -98,6 +98,7 @@ function toProviderParams(command: EnvironmentDaemonRpcCommand): unknown {
     case "turn.run":
       if (command.requestedMode === "steer") {
         return provider.createTurnSteerParams!(
+          command.threadId,
           command.providerThreadId,
           command.activeTurnId!,
           command.input!,
@@ -105,18 +106,21 @@ function toProviderParams(command: EnvironmentDaemonRpcCommand): unknown {
       }
       if (command.requestedMode !== "start" && command.activeTurnId && command.input) {
         return provider.createTurnSteerParams!(
+          command.threadId,
           command.providerThreadId,
           command.activeTurnId,
           command.input,
         );
       }
       return provider.createTurnStartParams(
+        command.threadId,
         command.providerThreadId,
         command.input!,
         command.options,
       );
     case "thread.rename":
       return provider.createThreadNameSetParams!(
+        command.threadId,
         command.providerThreadId,
         command.title,
       );

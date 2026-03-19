@@ -1116,6 +1116,7 @@ export class EnvironmentDaemonRuntime {
       throw new Error("turn/start params are unavailable");
     }
     return provider.createTurnStartParams(
+      command.threadId,
       command.providerThreadId,
       command.input,
       command.options,
@@ -1135,6 +1136,7 @@ export class EnvironmentDaemonRuntime {
       return undefined;
     }
     return provider.createTurnSteerParams(
+      command.threadId,
       command.providerThreadId,
       command.activeTurnId,
       command.input,
@@ -1195,6 +1197,7 @@ export class EnvironmentDaemonRuntime {
           throw new Error("thread/name/set params are unavailable");
         }
         return provider.createThreadNameSetParams(
+          command.threadId,
           command.providerThreadId,
           command.title,
         );

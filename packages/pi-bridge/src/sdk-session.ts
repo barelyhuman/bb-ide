@@ -111,16 +111,7 @@ export class PiSdkSession {
       const { session } = await createAgentSession(sessionOptions);
       this.session = session;
 
-      // Explicitly activate custom tools so they survive internal tool
-      // registry refreshes (e.g. compaction). Without this, the Pi SDK may
-      // drop custom tools from the active set after the first turn.
-      if (this.options.customTools && this.options.customTools.length > 0) {
-        const activeToolNames = new Set(session.getActiveToolNames());
-        for (const tool of this.options.customTools) {
-          activeToolNames.add(tool.name);
-        }
-        session.setActiveToolsByName(Array.from(activeToolNames));
-      }
+      this.ensureCustomToolsActive();
 
       // Subscribe to session events
       this.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
@@ -136,6 +127,7 @@ export class PiSdkSession {
     if (!this.session) return;
     this.isProcessing = true;
     try {
+      this.ensureCustomToolsActive();
       if (this.session.isStreaming) {
         await this.session.prompt(text, {
           streamingBehavior: "steer",
@@ -155,6 +147,7 @@ export class PiSdkSession {
   async steer(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.session) return;
     try {
+      this.ensureCustomToolsActive();
       if (this.session.isStreaming) {
         await this.session.prompt(text, {
           streamingBehavior: "steer",
@@ -192,6 +185,25 @@ export class PiSdkSession {
       // ready for next input" — NOT session termination. The session stays
       // alive across multiple turns. onDone() is only called on fatal errors
       // (prompt() catch) or explicit stop().
+    }
+  }
+
+  private ensureCustomToolsActive(): void {
+    if (!this.session || !this.options.customTools || this.options.customTools.length === 0) {
+      return;
+    }
+
+    const activeToolNames = new Set(this.session.getActiveToolNames());
+    let missingCustomTool = false;
+    for (const tool of this.options.customTools) {
+      if (!activeToolNames.has(tool.name)) {
+        missingCustomTool = true;
+        activeToolNames.add(tool.name);
+      }
+    }
+
+    if (missingCustomTool) {
+      this.session.setActiveToolsByName(Array.from(activeToolNames));
     }
   }
 }
