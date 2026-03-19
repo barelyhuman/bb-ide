@@ -9,6 +9,7 @@ Current focus:
 Default pass:
 
 - [`./core.md`](./core.md)
+- [`./manager-mode.md`](./manager-mode.md)
 
 Related docs:
 

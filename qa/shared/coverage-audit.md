@@ -107,11 +107,12 @@ Recommended next depth increase:
 
 What is weak today:
 
-- manager QA has strong scenario detail, but it still exists as two large product docs rather than a smaller shared structure with clear smoke/core/deeper layers
+- manager QA now has a normalized entrypoint, but the detailed history still lives in two larger supporting docs
 
 Recommended next depth increase:
 
-- consolidate manager QA into a shared `product/core` checklist plus scenario appendices only where needed
+- keep adding new manager scenarios through `qa/product/manager-mode.md`
+- fold duplicate scenario text out of the older supporting docs over time if they become hard to maintain
 
 ## Recommended Priority Order
 

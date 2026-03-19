@@ -12,5 +12,6 @@ Use this pass for higher-level product behavior changes, especially manager mode
 
 ## Current detail docs
 
+- [`./manager-mode.md`](./manager-mode.md)
 - [`./manager-agent-qa.md`](./manager-agent-qa.md)
 - [`./manager-v1-qa.md`](./manager-v1-qa.md)

@@ -12,4 +12,3 @@ When a scenario is clearly covered by a new surface doc, delete the legacy copy 
 Current legacy material:
 
 - [`./server/standalone-server-qa.md`](./server/standalone-server-qa.md)
-- [`./server/lifecycle-invariants.md`](./server/lifecycle-invariants.md)
