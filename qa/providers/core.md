@@ -28,6 +28,7 @@ Use this pass when changing provider bridges, protocol handling, or request/resp
 
 ## Existing automation
 
+- `pnpm qa:providers:core`
 - `apps/server/src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/codex-dynamic-tools-server-roundtrip.test.ts`
 - provider-specific smoke entrypoints in the root `package.json`
@@ -42,10 +43,19 @@ Use this pass when changing provider bridges, protocol handling, or request/resp
 Use the currently available provider-specific smoke entrypoints plus the deeper server/env-daemon flows when the change touches provider runtime integration:
 
 ```bash
+pnpm qa:providers:core
 pnpm qa:providers:smoke
 pnpm qa:providers:smoke:claude-code
 pnpm qa:providers:smoke:pi
 ```
+
+`qa:providers:core` currently gives explicit scripted coverage for:
+
+- one single-turn spawn path
+- one immediate follow-up / multi-turn path
+- one dynamic-tools path
+
+It does not yet give a dedicated scripted check for system instructions or provider-visible error handling. Keep those in the shared manual matrix until we add first-class scripted slices for them.
 
 If the provider change also touches daemon/tool-call runtime behavior, add:
 

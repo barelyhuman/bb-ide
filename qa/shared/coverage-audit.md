@@ -4,12 +4,12 @@ This document tracks what the new QA structure already covers well and where the
 
 ## Tester-Pass Notes
 
-Reviewing the new QA system like a future tester surfaces these rough edges:
+Reviewing the new QA system like a future tester surfaced these rough edges:
 
 - the top-level docs need to map requests to both docs and commands, not just docs
-- some surfaces still lack an exact scripted alias for their default pass
-- provider depth is easy to understand conceptually, but the automated slices are still named around the older server-centric history
-- CLI QA is now structurally clear, but still lighter on explicit automation than the other surfaces
+- some surfaces initially lacked an exact scripted alias for their default pass; the main missing aliases are now in place
+- provider depth is easier to invoke now, but still only partially overlaps the full manual provider matrix
+- CLI QA is now structurally clear and has smoke/core aliases, but it is still lighter on explicit automation than the other surfaces
 - a tester-style dry run found that one early CLI smoke alias was accidentally wired to a fake-only test; the process should keep favoring real-provider-compatible scripts for public entrypoints
 - a later tester-style dry run found that `qa:e2e:smoke` still included fake-only skipped tests and that the stress path had a broken restart filename; both are the kind of rough edge the public QA entrypoints should avoid
 - the env-daemon recovery alias also needed tightening so the named pass resolves to the deterministic fake-provider suite rather than a mostly-skipped transitional real-provider script
@@ -66,27 +66,28 @@ Representative files:
 
 Already covered well enough for a baseline:
 
+- provider core through shared/provider-specific aliases
 - provider smoke through shared/provider-specific smoke aliases
 - dynamic tool roundtrip for real-provider paths
 
 Representative files:
 
+- `apps/server/src/__tests__/e2e/thread-spawn-roundtrip.test.ts`
+- `apps/server/src/__tests__/e2e/thread-immediate-followups-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/codex-dynamic-tools-server-roundtrip.test.ts`
 
 ## Current Gaps
 
-### Server core still leans on older automation naming
+### Server core still needs deeper restart coverage
 
 What is weak today:
 
-- server docs are clear, but the default server pass still maps to older `qa:server:*` names rather than a dedicated `qa:server:core`
 - route/API contract checks and restart-visible-state checks are not clearly separated in automation
 - real-provider smoke does not yet include a server-restart sanity check, so restart confidence still comes from deeper or fake-only paths
 
 Recommended next depth increase:
 
-- add a dedicated server-core automation alias or slice once the intended checklist is stable
 - split route/API-focused checks from deeper restart-focused checks if the server surface grows further
 - add one honest real-provider restart sanity slice if the harness can support it cheaply
 
@@ -106,7 +107,7 @@ Recommended next depth increase:
 
 What is weak today:
 
-- the shared provider matrix is documented, but most automated coverage is still embedded in server/e2e naming
+- the shared provider matrix now has a dedicated core alias, but it still only partially overlaps the full manual matrix
 - provider-specific overlays exist, but they do not yet contain explicit provider-only regressions or exclusions beyond setup notes
 - multi-turn, context-preservation, and system-instruction checks are not yet called out as clearly named automated slices
 
@@ -120,13 +121,13 @@ Recommended next depth increase:
 
 What is weak today:
 
-- CLI smoke now has a dedicated entrypoint, but deeper CLI coverage is still thinner than the other surfaces
+- CLI smoke and core now have dedicated entrypoints, but deeper CLI coverage is still thinner than the other surfaces
 - most CLI depth still depends on broader standalone or e2e flows
 
 Recommended next depth increase:
 
-- keep the new CLI smoke slice, then define a deeper CLI-focused pass around inspection surfaces and control-plane commands
-- add a second CLI-focused scripted slice if the current e2e harness supports it cheaply
+- extend the current CLI core slice with explicit `thread show/status/log/output` assertions if the current e2e harness supports it cheaply
+- keep using the standalone workflow for richer operator-facing inspection coverage until those scripted assertions exist
 
 ### Environment depth can still go deeper on implicit attachment behavior
 
@@ -164,7 +165,7 @@ Recommended next depth increase:
 
 ## Recommended Priority Order
 
-1. Provider depth and explicit provider automation naming
-2. CLI-focused smoke/core pass
-3. Environment-focused attachment/reuse depth
-4. Server-core automation naming that matches the docs
+1. Provider depth beyond the new core alias
+2. Environment-focused attachment/reuse depth
+3. Real-provider restart/recovery smoke
+4. Richer CLI inspection assertions

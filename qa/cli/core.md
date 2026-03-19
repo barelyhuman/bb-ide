@@ -29,6 +29,19 @@ node apps/cli/dist/index.js thread log <thread-id> --json
 node apps/cli/dist/index.js thread output <thread-id>
 ```
 
+## Current automation
+
+```bash
+pnpm qa:cli:smoke
+pnpm qa:cli:core
+```
+
+`qa:cli:core` currently covers:
+
+- CLI-driven thread spawn
+- immediate follow-up after idle
+- archive / unarchive control-plane behavior
+
 ## Notes
 
 - Many CLI checks still live inside older standalone server flows.

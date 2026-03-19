@@ -22,10 +22,11 @@ Deeper pass:
 Fastest available scripts today:
 
 - `pnpm qa:server:manual-smoke`
+- `pnpm qa:server:core`
 - `pnpm qa:server:smoke`
 - `pnpm qa:server:stress`
 - `pnpm qa:server:recovery:fake`
 
-There is not yet a fully honest `qa:server:core` alias. Use `qa:server:smoke` for the real-provider baseline, and treat `qa:server:stress` as supplemental transitional coverage rather than the main recovery path. For deterministic restart and worker-loss behavior, prefer `qa:server:recovery:fake` or `qa/env-daemon/recovery.md`, depending on ownership.
+`qa:server:core` gives a dedicated real-provider baseline for spawn, follow-up, and control-plane state transitions. Use `qa:server:smoke` for the broader assembled-system smoke path, and treat `qa:server:stress` as supplemental transitional coverage rather than the main recovery path. For deterministic restart and worker-loss behavior, prefer `qa:server:recovery:fake` or `qa/env-daemon/recovery.md`, depending on ownership.
 
 If a scenario is really about multi-provider session runtime, thread isolation inside one daemon, or worker-loss handling mechanics, it likely belongs in `qa/env-daemon/` instead.

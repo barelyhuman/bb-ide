@@ -40,12 +40,19 @@ Current automation is still named with the old server-centric scheme:
 
 ```bash
 pnpm qa:server:manual-smoke
+pnpm qa:server:core
 pnpm qa:server:smoke
 pnpm qa:server:stress
 pnpm qa:server:regression
 ```
 
-Use the command that best matches the intended depth until the automation names are updated.
+`qa:server:core` gives explicit scripted coverage for:
+
+- thread spawn visibility through CLI/API
+- immediate follow-up after idle
+- archive / unarchive control-plane behavior
+
+Add the standalone workflow or `qa/server/recovery.md` when the change is restart-sensitive.
 For deterministic restart and worker-loss behavior, prefer `pnpm qa:server:recovery:fake` or the env-daemon recovery pass instead of assuming `qa:server:stress` is the default recovery path.
 
 ## Related docs

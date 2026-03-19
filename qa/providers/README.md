@@ -23,6 +23,7 @@ Interpretation:
 Fastest scripted entrypoints:
 
 - shared provider smoke: `pnpm qa:providers:smoke`
+- shared provider core: `pnpm qa:providers:core`
 - dynamic-tool provider roundtrip: `pnpm qa:providers:dynamic-tools`
 - Claude Code smoke: `pnpm qa:providers:smoke:claude-code`
 - Pi smoke: `pnpm qa:providers:smoke:pi`
