@@ -26,7 +26,6 @@ execution, and keep humans and agents working in the same loop.
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [Setup](#setup)
 - [Core Concepts](#core-concepts)
   - [Data Model](#data-model)
   - [Runtime Components](#runtime-components)
@@ -37,52 +36,41 @@ execution, and keep humans and agents working in the same loop.
 
 ## Quick Start
 
-bb currently runs from source.
+bb runs from source and orchestrates coding agents you already have installed.
 
 ### Prerequisites
 
 - Node.js
 - pnpm
-- Credentials for at least one supported agent provider
+- At least one supported agent provider: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://developers.openai.com/codex/cli), or [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)
+
+If you already use one of these, bb will pick up your existing credentials. If you use all three, you can mix and match per task.
+
+### Install and run
 
 ```bash
 pnpm install
-```
-
-## Setup
-
-Before starting bb, configure credentials for at least one supported provider.
-
-1. Copy `.env.example` to `.env`.
-2. Configure at least one provider:
-
-| Provider      | Setup                                                                                                                                                                                                                                                                            |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then either set `OPENAI_API_KEY` in your environment or `.env`, or run `codex login`.                                                                                                                          |
-| `claude-code` | Either set `ANTHROPIC_API_KEY` in your environment or `.env`, or run `claude setup-token` and then set the resulting token as `CLAUDE_CODE_OAUTH_TOKEN` in your environment or `.env`.                                                                                           |
-| `pi`          | Authenticate with the Pi agent. See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Pi supports API keys in the environment, or interactive login through `pi` and then `/login` to authenticate with a supported subscription. |
-
-3. Set `OPENAI_API_KEY` in your environment or `.env`. bb uses it for non-agent inference features such as thread title generation and commit message generation.
-
-See [.env.example](./.env.example) for the full set of options and setup notes.
-
-### Start bb
-
-```bash
 pnpm start
 ```
 
 Then open: `http://localhost:3333`
 
-`pnpm start` builds the app, server, and CLI when needed, then runs the built server without watch mode or hot reloading.
+### Provider credentials
 
-To clear the local state created by `pnpm start`, run:
+bb uses whichever providers you have configured. If you need to set one up:
 
-```bash
-pnpm reset
-```
+| Provider      | Setup                                                                                                                                                                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then either set `OPENAI_API_KEY` in your environment or `.env`, or run `codex login`.                                                                                                                          |
+| `claude-code` | Either set `ANTHROPIC_API_KEY` in your environment or `.env`, or run `claude setup-token` and then set the resulting token as `CLAUDE_CODE_OAUTH_TOKEN` in your environment or `.env`.                                                                                           |
+| `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Pi supports API keys in the environment, or interactive login through `pi` and then `/login`.                                                                              |
 
-If you want to work on bb itself, use the development loop instead:
+bb also uses `OPENAI_API_KEY` for non-agent features like thread title generation and commit message generation. See [.env.example](./.env.example) for the full set of options.
+
+<details>
+<summary>Development setup</summary>
+
+If you want to work on bb itself, use the development loop:
 
 ```bash
 pnpm dev
@@ -90,34 +78,16 @@ pnpm dev
 
 That starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by default so it can run alongside `pnpm start`.
 
-To clear the local state created by `pnpm dev`, run:
-
 ```bash
-pnpm reset:dev
-```
-
-If you want to wipe both default state directories after trying bb locally:
-
-```bash
-pnpm reset:all
+pnpm bb:dev --help        # CLI during development
+pnpm reset:dev            # clear dev state
+pnpm reset                # clear production state
+pnpm reset:all            # clear both
 ```
 
 These reset commands prompt for confirmation before deleting anything.
 
-If you want to drive bb from the CLI during development:
-
-```bash
-pnpm bb:dev --help
-pnpm bb:dev status
-```
-
-To run the built server and CLI instead of the dev setup:
-
-```bash
-pnpm build
-pnpm server --help
-pnpm bb --help
-```
+</details>
 
 ## Core Concepts
 
