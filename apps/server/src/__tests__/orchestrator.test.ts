@@ -2597,6 +2597,44 @@ describe("Orchestrator", () => {
       expect(updated?.archivedAt).toBeTypeOf("number");
     });
 
+    it("preserves attached environment state on archive so unarchive can reprovision", async () => {
+      const environmentRepo = new EnvironmentRepository(testDb.db);
+      const attachmentRepo = new ThreadEnvironmentAttachmentRepository(testDb.db);
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environmentRepo as never,
+        attachmentRepo as never,
+      );
+
+      await manager.archive(thread.id);
+
+      expect(attachmentRepo.getByThreadId(thread.id)?.environmentId).toBe(env.id);
+      expect(environmentRepo.getById(env.id)).toBeTruthy();
+    });
+
     it("rebroadcasts work status after async workspace cleanup settles", async () => {
       let resolveCleanup: (() => void) | undefined;
       const cleanup = vi.fn(

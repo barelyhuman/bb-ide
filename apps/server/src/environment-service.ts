@@ -738,6 +738,35 @@ export class EnvironmentService {
     }
   }
 
+  async archiveThreadEnvironment(threadId: string): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    const projectRootPath = this.projectRepo.getById(thread.projectId)?.rootPath;
+
+    this.workspaceCleanupInFlightThreadIds.add(threadId);
+    const refresh = () => {
+      this.workspaceCleanupInFlightThreadIds.delete(threadId);
+      if (this.threadRepo.getById(threadId)) {
+        this.callbacks.onThreadChanged(threadId, ["work-status-changed"]);
+      }
+    };
+
+    try {
+      await this.suspendEnvironmentRuntimeAndWait(threadId);
+      if (
+        attachedEnvironment?.managed &&
+        !attachedEnvironment.hasSiblingAttachments &&
+        projectRootPath
+      ) {
+        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+      }
+    } finally {
+      refresh();
+    }
+  }
+
   destroyEnvironmentRuntime(threadId: string): void {
     void this.destroyThreadEnvironment(threadId).catch(() => {
       // Errors are already reported via onCleanupFailure.

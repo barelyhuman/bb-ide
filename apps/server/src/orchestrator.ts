@@ -2147,7 +2147,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   /**
-   * Archive a thread and destroy any persisted environment state.
+   * Archive a thread and tear down its live runtime while preserving persisted environment identity.
    */
   private _finalizeManagedThreadCleanup(threadId: string, projectId: string): void {
     this.queueDispatchInFlight.delete(threadId);
@@ -2204,7 +2204,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this._cleanupThreadRuntime(threadId, { retireActiveSession: true });
 
     try {
-      await this.environmentService.destroyThreadEnvironment(threadId);
+      await this.environmentService.archiveThreadEnvironment(threadId);
     } catch (error) {
       this.threadRepo.update(threadId, {
         status: previousStatus,
