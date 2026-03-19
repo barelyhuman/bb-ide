@@ -265,13 +265,11 @@ export class EnvironmentService {
 
   private resolveCleanupEnvironmentId(
     threadId: string,
-    fallbackThreadEnvironmentId?: string,
   ): string | undefined {
     if (this.threadEnvironmentAttachmentRepo) {
       return this.resolveAttachedEnvironment(threadId)?.environmentId;
     }
-    return fallbackThreadEnvironmentId?.trim() ??
-      this.threadRepo.getById(threadId)?.environmentId?.trim();
+    return this.threadRepo.getById(threadId)?.environmentId?.trim();
   }
 
   private isThreadIsolatedWorkspaceEnvironment(threadId: string): boolean {
@@ -684,7 +682,7 @@ export class EnvironmentService {
     } catch (error) {
       this.callbacks.onCleanupFailure(
         threadId,
-        this.resolveCleanupEnvironmentId(threadId, thread.environmentId) ?? "unknown",
+        this.resolveCleanupEnvironmentId(threadId) ?? "unknown",
         error,
       );
       return;
@@ -773,7 +771,7 @@ export class EnvironmentService {
         try {
           await this.destroyPersistedEnvironment(threadId);
         } catch (error) {
-          reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
+          reportFailure(this.resolveCleanupEnvironmentId(threadId) ?? "unknown", error);
           throw error;
         }
         return;
@@ -914,7 +912,6 @@ export class EnvironmentService {
   ): void {
     const environmentId = this.resolveCleanupEnvironmentId(
       thread.id,
-      thread.environmentId,
     );
     if (!environmentId) {
       return;
@@ -1284,7 +1281,7 @@ export class EnvironmentService {
         teardownTasks.push(
           this.destroyThreadEnvironment(scopedThreadId).catch((error: unknown) => {
             const environmentId =
-              this.threadRepo.getById(scopedThreadId)?.environmentId ?? "unknown";
+              this.resolveCleanupEnvironmentId(scopedThreadId) ?? "unknown";
             this.callbacks.onCleanupFailure(scopedThreadId, environmentId, error);
           }),
         );
@@ -1309,7 +1306,7 @@ export class EnvironmentService {
         if (runtimeScopeKeys.has(scopeKey)) continue;
         teardownTasks.push(
           this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
-            const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
+            const environmentId = this.resolveCleanupEnvironmentId(threadId) ?? "unknown";
             this.callbacks.onCleanupFailure(threadId, environmentId, error);
           }),
         );

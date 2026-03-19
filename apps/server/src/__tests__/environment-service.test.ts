@@ -777,6 +777,24 @@ describe("EnvironmentService", () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
+  it("does not report stale thread.environmentId when removeManagedThreadLogs receives a detached thread", () => {
+    const { service, attachmentRepo, thread, onCleanupFailure } = createService({
+      existsInitially: true,
+    });
+
+    attachmentRepo.deleteByThreadId(thread.id);
+
+    expect(() =>
+      service.removeManagedThreadLogs({
+        id: thread.id,
+        projectId: thread.projectId,
+        environmentId: thread.environmentId,
+      })
+    ).not.toThrow();
+
+    expect(onCleanupFailure).not.toHaveBeenCalled();
+  });
+
   it("clears persisted shared-environment attachments for all scoped threads during teardownAllForTestsOnly", async () => {
     const runtimeDestroySpy = vi.fn();
     const persistedDestroySpy = vi.fn();
