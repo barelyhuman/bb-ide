@@ -417,7 +417,6 @@ class DockerEnvironment implements IEnvironment {
 
     const managedAgentTarget = await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
-      threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.environmentId,
       runtimeEnv: this.runtimeEnv,
@@ -435,7 +434,6 @@ class DockerEnvironment implements IEnvironment {
     this.managedAgentTarget = undefined;
     await disposeManagedDockerEnvironmentDaemon({
       projectId: this.projectId,
-      threadId: this.threadId,
       environmentId: this.environmentId,
       dockerBin: this.dockerBin,
       containerName: this.state.containerName,
@@ -835,7 +833,7 @@ export function createDockerEnvironmentDefinition(
 
 export async function resolveDockerEnvironmentState(args: {
   projectId: string;
-  threadId: string;
+  threadId?: string;
   environmentId?: string;
   runtimeEnv: Record<string, string | undefined>;
   worktree: LocalGitWorkspaceState;
@@ -843,10 +841,14 @@ export async function resolveDockerEnvironmentState(args: {
   mountPath?: string;
   containerPrefix?: string;
 }): Promise<DockerEnvironmentState> {
+  const environmentIdentity = args.environmentId ?? args.threadId;
+  if (!environmentIdentity) {
+    throw new Error("Docker environment state requires environmentId or threadId");
+  }
   return {
     worktree: { ...args.worktree },
     containerName: resolveContainerName({
-      environmentId: args.environmentId ?? args.threadId,
+      environmentId: environmentIdentity,
       containerPrefix: args.containerPrefix ?? DEFAULT_CONTAINER_PREFIX,
     }),
     image: resolveDockerEnvironmentImage({

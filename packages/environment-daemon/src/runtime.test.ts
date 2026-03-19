@@ -170,6 +170,19 @@ describe("EnvironmentDaemonRuntime", () => {
     });
   });
 
+  it("does not emit a synthetic ready event without an explicitly routed thread", () => {
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const events: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      events.push(event.event.type);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.start();
+
+    expect(events).toEqual([]);
+  });
+
   it("materializes launch env and auth files before spawning the provider", async () => {
     const tempHome = await mkdtemp(join(tmpdir(), "bb-env-daemon-runtime-"));
     cleanup.push(() => rm(tempHome, { recursive: true, force: true }));
@@ -654,11 +667,33 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("captures provider stderr as events", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
+      providerId: "codex",
+    });
+    const events: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.stderr") {
+        events.push(event.event.line);
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.error('refresh token has already been used'); setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1");
+
+    await expect.poll(() => events).toContain("refresh token has already been used");
+  });
+
+  it("drops provider stderr when no thread routing exists", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
       providerCommand: "node",
       providerArgs: [
         "-e",
-        "console.error('refresh token has already been used'); setTimeout(() => process.exit(0), 20);",
+        "console.error('unattributed stderr'); setTimeout(() => process.exit(0), 20);",
       ],
     });
     const events: string[] = [];
@@ -671,12 +706,38 @@ describe("EnvironmentDaemonRuntime", () => {
 
     runtime.start();
 
-    await expect.poll(() => events).toContain("refresh token has already been used");
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+    expect(events).toEqual([]);
   });
 
   it("captures unmatched provider rpc errors as events", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
+      providerId: "codex",
+    });
+    const errors: Array<{ requestId: string | number; message: string }> = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.rpc_error") {
+        errors.push({ requestId: event.event.requestId, message: event.event.message });
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ id: 999, error: { message: 'provider exploded' } })); setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1");
+
+    await expect.poll(() => errors).toContainEqual({
+      requestId: 999,
+      message: "provider exploded",
+    });
+  });
+
+  it("drops unmatched provider rpc errors when no thread routing exists", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -693,10 +754,8 @@ describe("EnvironmentDaemonRuntime", () => {
 
     runtime.start();
 
-    await expect.poll(() => errors).toContainEqual({
-      requestId: 999,
-      message: "provider exploded",
-    });
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+    expect(errors).toEqual([]);
   });
 
   it("routes RPC commands to the correct child when multiple providers are active", async () => {
@@ -820,6 +879,58 @@ describe("EnvironmentDaemonRuntime", () => {
     // The critical assertion: the command must have been handled by
     // provider-A, not provider-B.
     expect((ackA2.result as Record<string, unknown>).role).toBe("provider-A");
+  });
+
+  it("rejects unmapped thread commands once explicit thread routing is in use", async () => {
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "console.log(JSON.stringify({ id: msg.id, result: { role: process.env.ROLE } }));",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentDaemonRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-A" },
+    }, "thread-a");
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-B" },
+    }, "thread-b");
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "cmd-unmapped",
+        idempotencyKey: "cmd-unmapped",
+        sentAt: 400,
+      },
+      command: {
+        type: "workspace.status",
+        threadId: "thread-c",
+      },
+    });
+
+    expect(ack).toMatchObject({
+      state: "rejected",
+      errorCode: "provider_unavailable",
+    });
   });
 
   it("does not re-initialize a provider child that was already initialized by another thread", async () => {
@@ -967,6 +1078,41 @@ describe("EnvironmentDaemonRuntime", () => {
       .filter(Boolean);
     expect(markers).toContain("child-A");
     expect(markers).toContain("child-B");
+  });
+
+  it("isolates pi bridge children per thread even when the launch spec matches", async () => {
+    const runtime = new EnvironmentDaemonRuntime({});
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+    cleanup.push(() => runtime.shutdown());
+
+    const spec: EnvironmentDaemonProviderSpec = {
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ owner: process.env.BB_PI_BRIDGE_OWNER_THREAD_ID })); process.stdin.resume();",
+      ],
+    };
+
+    runtime.ensureProviderStatus(spec, "thread-1", "pi");
+    runtime.ensureProviderStatus(spec, "thread-2", "pi");
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(2);
+
+    const owners = lines
+      .map((line) => {
+        try {
+          return JSON.parse(line).owner as string | undefined;
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((owner): owner is string => typeof owner === "string");
+    expect(owners).toContain("thread-1");
+    expect(owners).toContain("thread-2");
   });
 
   it("routes provider-initiated RPC responses back to the originating child", async () => {
@@ -1303,7 +1449,7 @@ describe("EnvironmentDaemonRuntime", () => {
           arguments: { text: "hi" },
         },
         providerId: "codex",
-        resolvedThreadId: "thread-1",
+        resolvedThreadId: undefined,
         normalizedMethod: "item/tool/call",
         toolCall: {
           requestId: 62,

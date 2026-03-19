@@ -33,7 +33,6 @@ import { derivePersistedEnvironmentRecordFromDescriptor } from "./env-factory.js
 
 export interface ActiveEnvironmentRuntime {
   scopeKey: string;
-  ownerThreadId: string;
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentDaemonConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
@@ -66,12 +65,18 @@ interface EnvironmentServiceCallbacks {
     reason: ThreadEnvironmentStartReason,
   ) => Promise<void>;
   ensureManagedEnvironmentArtifacts?: (
-    threadId: string,
-    projectRootPath: string,
+    args: {
+      threadId: string;
+      environmentId: string;
+      projectRootPath: string;
+    },
   ) => Promise<{ created: boolean }>;
   cleanupManagedEnvironmentArtifacts?: (
-    threadId: string,
-    projectRootPath: string,
+    args: {
+      threadId: string;
+      environmentId: string;
+      projectRootPath: string;
+    },
   ) => Promise<void>;
 }
 
@@ -162,14 +167,16 @@ export class EnvironmentService {
       .map((attachment) => attachment.threadId);
   }
 
-  private getThreadIdsForRuntimeScopeKey(scopeKey: string, fallbackThreadId: string): string[] {
-    if (scopeKey.startsWith("thread:") || !this.threadEnvironmentAttachmentRepo) {
-      return [fallbackThreadId];
+  private getThreadIdsForRuntimeScopeKey(scopeKey: string): string[] {
+    if (scopeKey.startsWith("thread:")) {
+      return [scopeKey.slice("thread:".length)];
     }
-    const attachedThreadIds = this.threadEnvironmentAttachmentRepo
+    if (!this.threadEnvironmentAttachmentRepo) {
+      return [];
+    }
+    return this.threadEnvironmentAttachmentRepo
       .listByEnvironmentId(scopeKey)
       .map((attachment) => attachment.threadId);
-    return attachedThreadIds.length > 0 ? attachedThreadIds : [fallbackThreadId];
   }
 
   hasSharedAttachedEnvironment(threadId: string): boolean {
@@ -177,8 +184,21 @@ export class EnvironmentService {
   }
 
   getAttachedEnvironmentId(threadId: string): string | undefined {
-    return this.resolveAttachedEnvironment(threadId)?.environmentId ??
-      this.threadRepo.getById(threadId)?.environmentId;
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.resolveAttachedEnvironment(threadId)?.environmentId;
+    }
+    return this.threadRepo.getById(threadId)?.environmentId;
+  }
+
+  private resolvePrimaryPromotionEnvironmentId(threadId: string): string | undefined {
+    const attachedEnvironmentId = this.getAttachedEnvironmentId(threadId);
+    if (attachedEnvironmentId) {
+      return attachedEnvironmentId;
+    }
+    if (this.threadEnvironmentAttachmentRepo) {
+      return undefined;
+    }
+    return threadId;
   }
 
   getAttachedThreadIdsForEnvironment(environmentId: string): string[] {
@@ -233,6 +253,34 @@ export class EnvironmentService {
 
   private resolveAttachedEnvironmentProperties(threadId: string): EnvironmentProperties | undefined {
     return this.resolveAttachedEnvironmentRecord(threadId)?.properties;
+  }
+
+  private resolveManagedEnvironmentArtifactArgs(
+    threadId: string,
+    projectRootPath: string,
+  ): {
+    threadId: string;
+    environmentId: string;
+    projectRootPath: string;
+  } | undefined {
+    const environmentId = this.resolveAttachedEnvironment(threadId)?.environmentId;
+    if (!environmentId) {
+      return undefined;
+    }
+    return {
+      threadId,
+      environmentId,
+      projectRootPath,
+    };
+  }
+
+  private resolveCleanupEnvironmentId(
+    threadId: string,
+  ): string | undefined {
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.resolveAttachedEnvironment(threadId)?.environmentId;
+    }
+    return this.threadRepo.getById(threadId)?.environmentId?.trim();
   }
 
   private isThreadIsolatedWorkspaceEnvironment(threadId: string): boolean {
@@ -425,9 +473,15 @@ export class EnvironmentService {
         };
       }
 
+      const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+        threadId,
+        projectRootPath,
+      );
       const materialization =
-        await this.callbacks.ensureManagedEnvironmentArtifacts?.(threadId, projectRootPath) ??
-        { created: false };
+        artifactArgs
+          ? await this.callbacks.ensureManagedEnvironmentArtifacts?.(artifactArgs) ??
+            { created: false }
+          : { created: false };
 
       const thread = this.threadRepo.getById(threadId);
       const environment =
@@ -452,7 +506,13 @@ export class EnvironmentService {
         }
         if (materialization.created) {
           try {
-            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+            const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+              threadId,
+              projectRootPath,
+            );
+            if (artifactArgs) {
+              await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+            }
           } catch {
             // Best-effort cleanup for partially provisioned environments.
           }
@@ -494,9 +554,15 @@ export class EnvironmentService {
         };
       }
 
+      const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+        thread.id,
+        projectRootPath,
+      );
       const materialization =
-        await this.callbacks.ensureManagedEnvironmentArtifacts?.(thread.id, projectRootPath) ??
-        { created: false };
+        artifactArgs
+          ? await this.callbacks.ensureManagedEnvironmentArtifacts?.(artifactArgs) ??
+            { created: false }
+          : { created: false };
 
       const environmentId = this.resolveThreadRuntimeKind(thread, projectRootPath);
       const environment =
@@ -522,7 +588,13 @@ export class EnvironmentService {
         }
         if (materialization.created) {
           try {
-            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(thread.id, projectRootPath);
+            const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+              thread.id,
+              projectRootPath,
+            );
+            if (artifactArgs) {
+              await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+            }
           } catch {
             // Best-effort cleanup for partially restored environments.
           }
@@ -557,7 +629,7 @@ export class EnvironmentService {
       void this.suspendDetachedRuntime(threadId, existingRuntime);
     }
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
-      for (const scopedThreadId of this.getThreadIdsForRuntimeScopeKey(scopeKey, threadId)) {
+      for (const scopedThreadId of this.getThreadIdsForRuntimeScopeKey(scopeKey)) {
         if (!this.threadRepo.getById(scopedThreadId)) {
           continue;
         }
@@ -566,7 +638,6 @@ export class EnvironmentService {
     });
     this.environmentRuntimes.set(scopeKey, {
       scopeKey,
-      ownerThreadId: threadId,
       environment,
       agentConnectionTarget,
       stopWatchingWorkspaceStatus,
@@ -622,7 +693,7 @@ export class EnvironmentService {
     } catch (error) {
       this.callbacks.onCleanupFailure(
         threadId,
-        this.resolveAttachedEnvironment(threadId)?.environmentId ?? thread.environmentId ?? "unknown",
+        this.resolveCleanupEnvironmentId(threadId) ?? "unknown",
         error,
       );
       return;
@@ -661,9 +732,8 @@ export class EnvironmentService {
 
   private clearPersistedEnvironmentStateForRuntimeScope(
     scopeKey: string,
-    fallbackThreadId: string,
   ): void {
-    const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(scopeKey, fallbackThreadId);
+    const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(scopeKey);
     for (const scopedThreadId of scopedThreadIds) {
       this.clearPersistedEnvironmentState(scopedThreadId);
     }
@@ -712,7 +782,7 @@ export class EnvironmentService {
         try {
           await this.destroyPersistedEnvironment(threadId);
         } catch (error) {
-          reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
+          reportFailure(this.resolveCleanupEnvironmentId(threadId) ?? "unknown", error);
           throw error;
         }
         return;
@@ -725,9 +795,15 @@ export class EnvironmentService {
         } else {
           await this.destroyDetachedRuntime(threadId, runtime);
           if (projectRootPath) {
-            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+            const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+              threadId,
+              projectRootPath,
+            );
+            if (artifactArgs) {
+              await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+            }
           }
-          this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey, threadId);
+          this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey);
         }
       } catch (error) {
         reportFailure(environmentId, error);
@@ -760,7 +836,11 @@ export class EnvironmentService {
         !attachedEnvironment.hasSiblingAttachments &&
         projectRootPath
       ) {
-        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+        await this.callbacks.cleanupManagedEnvironmentArtifacts?.({
+          threadId,
+          environmentId: attachedEnvironment.environmentId,
+          projectRootPath,
+        });
       }
     } finally {
       refresh();
@@ -795,13 +875,25 @@ export class EnvironmentService {
     }
     if (!environment) {
       if (project.rootPath) {
-        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, project.rootPath);
+        const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+          threadId,
+          project.rootPath,
+        );
+        if (artifactArgs) {
+          await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+        }
       }
       this.clearPersistedEnvironmentState(threadId);
       return;
     }
     await Promise.resolve(environment.destroy());
-    await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, project.rootPath);
+    const artifactArgs = this.resolveManagedEnvironmentArtifactArgs(
+      threadId,
+      project.rootPath,
+    );
+    if (artifactArgs) {
+      await this.callbacks.cleanupManagedEnvironmentArtifacts?.(artifactArgs);
+    }
     this.clearPersistedEnvironmentState(threadId);
   }
 
@@ -829,7 +921,9 @@ export class EnvironmentService {
   removeManagedThreadLogs(
     thread: Pick<Thread, "id" | "projectId" | "environmentId">,
   ): void {
-    const environmentId = thread.environmentId?.trim();
+    const environmentId = this.resolveCleanupEnvironmentId(
+      thread.id,
+    );
     if (!environmentId) {
       return;
     }
@@ -1024,12 +1118,15 @@ export class EnvironmentService {
       this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
       return;
     }
+    const promotionEnvironmentId = this.resolvePrimaryPromotionEnvironmentId(thread.id);
+    if (!promotionEnvironmentId) {
+      this.clearPrimaryPromotionState(projectId);
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
     this.setPrimaryPromotionState(project.id, {
       projectId: project.id,
-      environmentId:
-        this.getAttachedEnvironmentId(thread.id) ??
-        thread.environmentId ??
-        thread.id,
+      environmentId: promotionEnvironmentId,
       threadId: thread.id,
       promotedAt: Date.now(),
       promotedCheckout: workspaceCheckout,
@@ -1085,6 +1182,10 @@ export class EnvironmentService {
             : "already-promoted-other-thread",
       };
     }
+    const promotionEnvironmentId = this.resolvePrimaryPromotionEnvironmentId(args.thread.id);
+    if (!promotionEnvironmentId) {
+      throw new Error("Thread is not attached to an environment");
+    }
     const environment = this.restoreThreadEnvironment(args.thread, project.rootPath);
     if (!environment || !environment.supportsPromoteToActiveWorkspace()) {
       throw new Error("Promotion is not supported for this environment");
@@ -1097,10 +1198,7 @@ export class EnvironmentService {
     });
     const state: PrimaryPromotionState = {
       projectId: project.id,
-      environmentId:
-        this.getAttachedEnvironmentId(args.thread.id) ??
-        args.thread.environmentId ??
-        args.thread.id,
+      environmentId: promotionEnvironmentId,
       threadId: args.thread.id,
       promotedAt: Date.now(),
       previousCheckout: promoted.previousCheckout,
@@ -1184,18 +1282,31 @@ export class EnvironmentService {
   }
 
   async teardownAllForTestsOnly(): Promise<void> {
-    const runtimeThreadIds = new Set(
-      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
+    const runtimeScopeKeys = new Set(
+      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.scopeKey),
     );
     const teardownTasks: Promise<void>[] = [];
     for (const runtime of Array.from(this.environmentRuntimes.values())) {
-      teardownTasks.push(
-        this.destroyThreadEnvironment(runtime.ownerThreadId).catch((error: unknown) => {
-          const environmentId =
-            this.threadRepo.getById(runtime.ownerThreadId)?.environmentId ?? "unknown";
-          this.callbacks.onCleanupFailure(runtime.ownerThreadId, environmentId, error);
-        }),
-      );
+      const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(runtime.scopeKey);
+      if (scopedThreadIds.length === 0) {
+        teardownTasks.push(
+          Promise.resolve(runtime.environment.destroy()).catch((error: unknown) => {
+            this.callbacks.onCleanupFailure(runtime.scopeKey, runtime.environment.kind, error);
+          }).finally(() => {
+            this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
+          }),
+        );
+        continue;
+      }
+      for (const scopedThreadId of scopedThreadIds) {
+        teardownTasks.push(
+          this.destroyThreadEnvironment(scopedThreadId).catch((error: unknown) => {
+            const environmentId =
+              this.resolveCleanupEnvironmentId(scopedThreadId) ?? "unknown";
+            this.callbacks.onCleanupFailure(scopedThreadId, environmentId, error);
+          }),
+        );
+      }
     }
     const projects = this.projectRepo.list();
     if (!Array.isArray(projects) || projects.length === 0) {
@@ -1212,10 +1323,11 @@ export class EnvironmentService {
       const threadIds =
         this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id);
       for (const threadId of threadIds) {
-        if (runtimeThreadIds.has(threadId)) continue;
+        const scopeKey = this.getRuntimeScopeKey(threadId);
+        if (runtimeScopeKeys.has(scopeKey)) continue;
         teardownTasks.push(
           this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
-            const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
+            const environmentId = this.resolveCleanupEnvironmentId(threadId) ?? "unknown";
             this.callbacks.onCleanupFailure(threadId, environmentId, error);
           }),
         );

@@ -123,10 +123,13 @@ export class EnvironmentDaemonRuntime {
   constructor(private readonly opts: EnvironmentDaemonRuntimeOptions) {}
 
   start(): ChildProcess | null {
-    this.appendEvent({
-      type: "environment.ready",
-      threadId: this.resolveThreadId(),
-    });
+    const readyThreadId = this.resolveAnyRoutableThreadId();
+    if (readyThreadId) {
+      this.appendEvent({
+        type: "environment.ready",
+        threadId: readyThreadId,
+      });
+    }
 
     return this.ensureProviderRunning();
   }
@@ -260,7 +263,6 @@ export class EnvironmentDaemonRuntime {
     );
     return {
       protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
-      ...(this.opts.threadId ? { threadId: this.opts.threadId } : {}),
       ...(this.opts.projectId ? { projectId: this.opts.projectId } : {}),
       ...(this.opts.environmentId ? { environmentId: this.opts.environmentId } : {}),
       latestSequence: this.sequence,
@@ -349,6 +351,9 @@ export class EnvironmentDaemonRuntime {
     command: EnvironmentDaemonRpcCommand,
   ): Promise<unknown> {
     const child = await this.ensureProviderForCommand(command);
+    if (!child) {
+      throw new Error("Provider runtime is unavailable");
+    }
     return this.requestProviderCommand(command, child);
   }
 
@@ -445,7 +450,12 @@ export class EnvironmentDaemonRuntime {
     providerId?: string,
   ): EnvironmentDaemonProviderStatus {
     const launchedBefore = this.getProviderStatus().running;
-    const child = this.ensureProviderRunning(spec);
+    const effectiveSpec = this.applyThreadScopedProviderIsolation(
+      spec,
+      forThreadId,
+      providerId,
+    );
+    const child = this.ensureProviderRunning(effectiveSpec);
     if (child && forThreadId) {
       this.threadIdToChild.set(forThreadId, child);
       const resolvedProviderId = providerId?.trim() || this.opts.providerId?.trim();
@@ -462,6 +472,25 @@ export class EnvironmentDaemonRuntime {
       };
     }
     return status;
+  }
+
+  private applyThreadScopedProviderIsolation(
+    spec: EnvironmentDaemonProviderSpec | undefined,
+    forThreadId: string | undefined,
+    providerId: string | undefined,
+  ): EnvironmentDaemonProviderSpec | undefined {
+    if (!spec || !forThreadId || providerId !== "pi") {
+      return spec;
+    }
+    // The Pi bridge mutates process.env per session, so each thread must get
+    // its own bridge process until the upstream SDK supports per-session env.
+    return {
+      ...spec,
+      env: {
+        ...(spec.env ?? {}),
+        BB_PI_BRIDGE_OWNER_THREAD_ID: forThreadId,
+      },
+    };
   }
 
   private resolveProviderSpec(
@@ -508,7 +537,10 @@ export class EnvironmentDaemonRuntime {
           if (this.tryHandleProviderRpcMessage(line, child)) {
             return;
           }
-          this.appendEvent(this.toProviderEvent(line, child));
+          const event = this.toProviderEvent(line, child);
+          if (event) {
+            this.appendEvent(event);
+          }
         },
       });
       this.providerStdoutBuffers.set(specKey, updated);
@@ -522,11 +554,14 @@ export class EnvironmentDaemonRuntime {
         onLine: (line) => {
           this.opts.onStderrLine?.(line);
           this.emitProviderStderrLine(line);
-          this.appendEvent({
-            type: "provider.stderr",
-            threadId: this.resolveThreadId(),
-            line,
-          });
+          const threadId = this.resolveThreadIdForChild(child);
+          if (threadId) {
+            this.appendEvent({
+              type: "provider.stderr",
+              threadId,
+              line,
+            });
+          }
         },
       });
       this.providerStderrBuffers.set(specKey, updated);
@@ -559,11 +594,14 @@ export class EnvironmentDaemonRuntime {
       this.opts.onStderrLine?.(
         `provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`,
       );
-      this.appendEvent({
-        type: "environment.degraded",
-        threadId: this.resolveThreadId(),
-        message: "Provider runtime exited",
-      });
+      const degradedThreadId = this.resolveThreadIdForChild(child);
+      if (degradedThreadId) {
+        this.appendEvent({
+          type: "environment.degraded",
+          threadId: degradedThreadId,
+          message: "Provider runtime exited",
+        });
+      }
     });
 
     return child;
@@ -609,7 +647,7 @@ export class EnvironmentDaemonRuntime {
     return path.join(
       tmpdir(),
       "bb-environment-daemon",
-      this.resolveThreadId(),
+      this.opts.environmentId ?? "unknown-environment",
       `provider-home-${specHash}`,
     );
   }
@@ -693,47 +731,52 @@ export class EnvironmentDaemonRuntime {
     });
   }
 
-  private resolveThreadId(): string {
-    return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
-  }
-
   private resolveProviderEventThreadId(
     params: unknown,
     providerId: string | undefined,
-  ): string {
+    sourceChild?: ChildProcess,
+  ): string | undefined {
     const providerThreadId = this.extractProviderThreadId(params, providerId);
     if (!providerThreadId) {
-      return this.resolveThreadId();
+      return this.resolveThreadIdForChild(sourceChild);
     }
     return (
       this.threadIdByProviderThreadKey.get(
         this.createProviderThreadKey(providerId, providerThreadId),
       ) ??
-      this.resolveThreadId()
+      this.resolveThreadIdForChild(sourceChild)
     );
   }
 
   private toProviderEvent(
     line: string,
     sourceChild?: ChildProcess,
-  ): EnvironmentDaemonEvent {
+  ): EnvironmentDaemonEvent | undefined {
     let parsed: unknown;
     const providerId = this.resolveProviderIdForChild(sourceChild);
     try {
       parsed = JSON.parse(line);
     } catch {
+      const threadId = this.resolveThreadIdForChild(sourceChild);
+      if (!threadId) {
+        return undefined;
+      }
       return {
         type: "provider.event",
-        threadId: this.resolveThreadId(),
+        threadId,
         method: "provider.stdout",
         payload: { line },
       };
     }
 
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      const threadId = this.resolveThreadIdForChild(sourceChild);
+      if (!threadId) {
+        return undefined;
+      }
       return {
         type: "provider.event",
-        threadId: this.resolveThreadId(),
+        threadId,
         method: "provider.stdout",
         payload: { line },
       };
@@ -741,9 +784,13 @@ export class EnvironmentDaemonRuntime {
 
     const record = parsed as Record<string, unknown>;
     if (typeof record.method !== "string") {
+      const threadId = this.resolveThreadIdForChild(sourceChild);
+      if (!threadId) {
+        return undefined;
+      }
       return {
         type: "provider.event",
-        threadId: this.resolveThreadId(),
+        threadId,
         method: "provider.stdout",
         payload: { line },
       };
@@ -752,9 +799,17 @@ export class EnvironmentDaemonRuntime {
     const payload = record.params ?? {};
     const normalized = this.getProviderSemanticsForProviderId(providerId)
       ?.normalizeEvent(record.method, payload);
+    const threadId = this.resolveProviderEventThreadId(
+      payload,
+      providerId,
+      sourceChild,
+    );
+    if (!threadId) {
+      return undefined;
+    }
     return {
       type: "provider.event",
-      threadId: this.resolveProviderEventThreadId(payload, providerId),
+      threadId,
       method: record.method,
       payload,
       ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
@@ -917,11 +972,7 @@ export class EnvironmentDaemonRuntime {
       case "thread.stop":
       case "turn.run":
       case "thread.rename": {
-        // Route per-thread commands to the child registered via
-        // provider.ensure(forThreadId). Single-provider runtimes may not
-        // have a per-thread mapping, so they fall back to the shared child.
-        const mapped = this.resolveChildForThread(command.threadId);
-        const child = mapped ?? this.ensureProviderRunning();
+        const child = this.resolveCommandChild(command.threadId);
         if (!child) {
           throw new Error("Provider runtime is unavailable");
         }
@@ -944,14 +995,24 @@ export class EnvironmentDaemonRuntime {
       }
       case "workspace.status":
       case "workspace.diff": {
-        // Workspace commands also need routing to the correct child so
-        // they reach the provider that owns the thread's workspace.
-        const mapped = this.resolveChildForThread(command.threadId);
-        return mapped ?? this.providerChild ?? this.ensureProviderRunning() ?? undefined;
+        return this.resolveCommandChild(command.threadId);
       }
       default:
         return command satisfies never;
     }
+  }
+
+  private resolveCommandChild(threadId: string): ChildProcess | undefined {
+    const mapped = this.resolveChildForThread(threadId);
+    if (mapped) {
+      return mapped;
+    }
+    const hasExplicitThreadRouting =
+      this.threadIdToChild.size > 0 || this.threadIdToProviderId.size > 0;
+    if (hasExplicitThreadRouting) {
+      return undefined;
+    }
+    return this.ensureProviderRunning() ?? undefined;
   }
 
   /**
@@ -971,7 +1032,7 @@ export class EnvironmentDaemonRuntime {
 
   private requestProviderCommand(
     command: EnvironmentDaemonRpcCommand,
-    child?: ChildProcess,
+    child: ChildProcess,
   ): Promise<unknown> {
     if (command.type === "turn.run") {
       return this.requestProvider({
@@ -1151,9 +1212,9 @@ export class EnvironmentDaemonRuntime {
     method: string;
     params: unknown;
     timeoutMs?: number;
-    child?: ChildProcess;
+    child: ChildProcess;
   }): Promise<unknown> {
-    const child = args.child ?? this.providerChild;
+    const child = args.child;
     const stdin = child?.stdin;
     if (!stdin || child.killed || child.exitCode !== null) {
       return Promise.reject(new Error("Provider runtime is unavailable"));
@@ -1217,12 +1278,15 @@ export class EnvironmentDaemonRuntime {
     const pending = this.pendingProviderRequests.get(id);
     if (!pending) {
       if (record.error !== undefined) {
-        this.appendEvent({
-          type: "provider.rpc_error",
-          threadId: this.resolveThreadId(),
-          requestId: id,
-          message: this.toProviderErrorMessage(record.error),
-        });
+        const threadId = this.resolveThreadIdForChild(sourceChild);
+        if (threadId) {
+          this.appendEvent({
+            type: "provider.rpc_error",
+            threadId,
+            requestId: id,
+            message: this.toProviderErrorMessage(record.error),
+          });
+        }
         return true;
       }
       return false;
@@ -1268,7 +1332,11 @@ export class EnvironmentDaemonRuntime {
 
     const providerId = this.resolveProviderIdForChild(sourceChild);
     const providerSemantics = this.getProviderSemanticsForProviderId(providerId);
-    const resolvedThreadId = this.resolveProviderEventThreadId(args.params, providerId);
+    const resolvedThreadId = this.resolveProviderEventThreadId(
+      args.params,
+      providerId,
+      sourceChild,
+    );
 
     try {
       const response = await this.opts.onProviderRequest({
@@ -1299,12 +1367,14 @@ export class EnvironmentDaemonRuntime {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.appendEvent({
-        type: "provider.rpc_error",
-        threadId: this.resolveThreadId(),
-        requestId: args.requestId,
-        message,
-      });
+      if (resolvedThreadId) {
+        this.appendEvent({
+          type: "provider.rpc_error",
+          threadId: resolvedThreadId,
+          requestId: args.requestId,
+          message,
+        });
+      }
       stdin.write(
         `${JSON.stringify({
           jsonrpc: "2.0",
@@ -1458,6 +1528,35 @@ export class EnvironmentDaemonRuntime {
       this.opts.providerId ??
       process.env.BB_THREAD_PROVIDER_ID
     );
+  }
+
+  private resolveThreadIdForChild(child: ChildProcess | undefined): string | undefined {
+    const mappedThreadIds = child ? this.getLiveThreadIdsForChild(child) : [];
+    if (mappedThreadIds.length === 1) {
+      return mappedThreadIds[0];
+    }
+    return this.resolveAnyRoutableThreadId();
+  }
+
+  private resolveAnyRoutableThreadId(): string | undefined {
+    const liveThreadIds = [...new Set([
+      ...this.threadIdToChild.keys(),
+      ...this.threadIdByProviderThreadKey.values(),
+    ])];
+    if (liveThreadIds.length === 1) {
+      return liveThreadIds[0];
+    }
+    return undefined;
+  }
+
+  private getLiveThreadIdsForChild(child: ChildProcess): string[] {
+    const threadIds: string[] = [];
+    for (const [threadId, candidate] of this.threadIdToChild) {
+      if (candidate === child && !candidate.killed && candidate.exitCode === null) {
+        threadIds.push(threadId);
+      }
+    }
+    return threadIds;
   }
 
   private createProviderThreadKey(

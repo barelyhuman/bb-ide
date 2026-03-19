@@ -300,7 +300,6 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     }
     this.preparePromise = ensureManagedHostEnvironmentDaemon({
       workspaceRootPath: this.state.workspaceRoot,
-      threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.environmentId,
       runtimeEnv: this.env,
@@ -320,7 +319,6 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     if (this.manageEnvironmentDaemon) {
       await disposeManagedHostEnvironmentDaemon({
         projectId: this.projectId,
-        threadId: this.threadId,
         environmentId: this.environmentId,
         workspaceRootPath: this.rootPath,
         runtimeEnv: this.env,
@@ -822,7 +820,7 @@ export function createLocalGitWorkspaceDefinition(
 
 export function resolveLocalGitWorkspaceState(args: {
   projectId: string;
-  threadId: string;
+  threadId?: string;
   environmentId?: string;
   projectRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
@@ -839,6 +837,9 @@ export function resolveLocalGitWorkspaceState(args: {
     ? resolve(configuredWorktreeRoot, args.projectId)
     : configuredWorktreeRoot;
   const worktreeId = args.environmentId ?? args.threadId;
+  if (!worktreeId) {
+    throw new Error("Local git workspace state requires environmentId or threadId");
+  }
   return {
     workspaceRoot: resolve(worktreeRoot, worktreeId),
     branchName: toWorktreeBranchName(worktreeId),

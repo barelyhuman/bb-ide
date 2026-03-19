@@ -42,28 +42,15 @@ export class EnvironmentDaemonSessionSync {
   constructor(private readonly options: EnvironmentDaemonSessionSyncOptions) {}
 
   async openSession(args: {
-    threadId: string;
     payload: EnvironmentDaemonSessionOpenPayload;
   }): Promise<EnvironmentDaemonSessionWelcomeMessage> {
     const welcome = await this.options.client.openSession(args.payload);
-    this.options.runtime.bindSession({
-      threadId: args.threadId,
-      sessionId: welcome.sessionId,
+    this.bindWelcomeChannels({
+      welcome,
+      agentId: args.payload.agentId,
+      agentInstanceId: args.payload.agentInstanceId,
       now: welcome.sentAt,
     });
-    const channel = welcome.payload.channels.find(
-      (candidate) => candidate.channelId === args.threadId,
-    );
-    if (channel) {
-      this.options.runtime.alignEventCursor(
-        args.threadId,
-        {
-          generation: channel.applyFrom.generation,
-          sequence: channel.applyFrom.sequenceExclusive,
-        },
-        welcome.sentAt,
-      );
-    }
     return welcome;
   }
 
@@ -101,16 +88,18 @@ export class EnvironmentDaemonSessionSync {
     }
   }
 
-  async sendHeartbeat(threadIds: readonly string[]): Promise<void> {
-    const state = this.requireSessionState(threadIds[0]!);
-    await this.options.client.heartbeat(state.sessionId, {
+  async sendHeartbeat(args: {
+    sessionId: string;
+    threadIds: readonly string[];
+  }): Promise<void> {
+    await this.options.client.heartbeat(args.sessionId, {
       agentObservedAt: Date.now(),
-      outboxDepth: threadIds.reduce(
+      outboxDepth: args.threadIds.reduce(
         (count, threadId) =>
           count + (this.options.runtime.getPendingEventBatch({ threadId })?.events.length ?? 0),
         0,
       ),
-      channels: threadIds.map((threadId) => {
+      channels: args.threadIds.map((threadId) => {
         const channelState = this.requireSessionState(threadId);
         const pendingBatch = this.options.runtime.getPendingEventBatch({ threadId });
         return {
@@ -129,17 +118,17 @@ export class EnvironmentDaemonSessionSync {
     });
   }
 
-  async flushPendingEvents(
-    threadIds: readonly string[],
-  ): Promise<FlushEnvironmentDaemonEventBatchResult> {
-    const state = this.requireSessionState(threadIds[0]!);
-    const batches = threadIds
+  async flushPendingEvents(args: {
+    sessionId: string;
+    threadIds: readonly string[];
+  }): Promise<FlushEnvironmentDaemonEventBatchResult> {
+    const batches = args.threadIds
       .map((threadId) => this.options.runtime.getPendingEventBatch({ threadId }))
       .filter((batch) => batch !== undefined);
     if (batches.length === 0) {
       return {
-        sessionId: state.sessionId,
-        channelResults: threadIds.map((threadId) => ({
+        sessionId: args.sessionId,
+        channelResults: args.threadIds.map((threadId) => ({
           threadId,
           acknowledged: true,
         })),
@@ -147,11 +136,11 @@ export class EnvironmentDaemonSessionSync {
     }
 
     const response = await this.options.client.pushEvents({
-      sessionId: state.sessionId,
+      sessionId: args.sessionId,
       payload: { batches },
     });
     return {
-      sessionId: state.sessionId,
+      sessionId: args.sessionId,
       channelResults: batches.map((batch) => {
         const ack = response.payload.channels.find(
           (channel) => channel.channelId === batch.channelId,
@@ -182,15 +171,17 @@ export class EnvironmentDaemonSessionSync {
   }
 
   async pullCommands(args: {
+    sessionId: string;
     threadIds: readonly string[];
+    agentId: string;
+    agentInstanceId: string;
     afterCursor?: number;
     limit?: number;
     waitMs?: number;
     signal?: AbortSignal;
   }): Promise<EnvironmentDaemonPulledCommand[]> {
-    const state = this.requireSessionState(args.threadIds[0]!);
     const batch = await this.options.client.pullCommands({
-      sessionId: state.sessionId,
+      sessionId: args.sessionId,
       ...(args.afterCursor !== undefined && args.threadIds.length === 1
         ? { afterCursor: args.afterCursor }
         : {}),
@@ -203,9 +194,9 @@ export class EnvironmentDaemonSessionSync {
       .map((command) => {
         this.ensureChannelState({
           threadId: command.channelId,
-          sessionId: state.sessionId,
-          agentId: state.agentId,
-          agentInstanceId: state.agentInstanceId,
+          sessionId: args.sessionId,
+          agentId: args.agentId,
+          agentInstanceId: args.agentInstanceId,
           now: batch.sentAt,
         });
         const received = this.options.runtime.receiveCommand({
@@ -230,7 +221,7 @@ export class EnvironmentDaemonSessionSync {
       });
 
     if (pulled.length > 0) {
-      await this.options.client.acknowledgeCommands(state.sessionId, {
+      await this.options.client.acknowledgeCommands(args.sessionId, {
         commands: pulled.map((command) => ({
           commandId: command.commandId,
           channelId: command.threadId,
@@ -280,14 +271,14 @@ export class EnvironmentDaemonSessionSync {
   }
 
   async closeSession(
-    threadId: string,
+    sessionId: string,
     reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error",
   ): Promise<void> {
-    const state = this.requireSessionState(threadId);
-    await this.options.client.closeSession(state.sessionId, reason);
+    await this.options.client.closeSession(sessionId, reason);
   }
 
   async forwardProviderRequest(args: {
+    sessionId: string;
     threadId: string;
     requestId: string | number;
     method: string;
@@ -296,9 +287,8 @@ export class EnvironmentDaemonSessionSync {
     normalizedMethod?: string;
     toolCall?: import("@bb/core").ProviderToolCallRequest;
   }): Promise<EnvironmentDaemonSessionProviderResponsePayload> {
-    const state = this.requireSessionState(args.threadId);
     const response = await this.options.client.sendProviderRequest({
-      sessionId: state.sessionId,
+      sessionId: args.sessionId,
       payload: {
         requestId: args.requestId,
         method: args.method,
@@ -314,18 +304,20 @@ export class EnvironmentDaemonSessionSync {
     return response.payload;
   }
 
-  async flushPendingCommandResults(threadId: string): Promise<EnvironmentDaemonCommandReceiptRecord[]> {
-    const state = this.requireSessionState(threadId);
-    const pending = this.options.runtime.getPendingCommandResults(threadId);
+  async flushPendingCommandResults(args: {
+    sessionId: string;
+    threadId: string;
+  }): Promise<EnvironmentDaemonCommandReceiptRecord[]> {
+    const pending = this.options.runtime.getPendingCommandResults(args.threadId);
     const sent: EnvironmentDaemonCommandReceiptRecord[] = [];
 
     for (const receipt of pending) {
       if (receipt.state === "received") {
         continue;
       }
-      await this.options.client.sendCommandResult(state.sessionId, {
+      await this.options.client.sendCommandResult(args.sessionId, {
         commandId: receipt.commandId,
-        channelId: threadId,
+        channelId: args.threadId,
         state: receipt.state,
         ...(receipt.result !== undefined ? { result: receipt.result } : {}),
         ...(receipt.errorCode !== undefined ? { errorCode: receipt.errorCode } : {}),
@@ -344,11 +336,17 @@ export class EnvironmentDaemonSessionSync {
   }
 
   async flushPendingCommandResultsForThreads(
-    threadIds: readonly string[],
+    args: {
+      sessionId: string;
+      threadIds: readonly string[];
+    },
   ): Promise<EnvironmentDaemonCommandReceiptRecord[]> {
     const sent: EnvironmentDaemonCommandReceiptRecord[] = [];
-    for (const threadId of threadIds) {
-      sent.push(...await this.flushPendingCommandResults(threadId));
+    for (const threadId of args.threadIds) {
+      sent.push(...await this.flushPendingCommandResults({
+        sessionId: args.sessionId,
+        threadId,
+      }));
     }
     return sent;
   }

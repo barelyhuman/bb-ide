@@ -1454,6 +1454,185 @@ describe("environment-daemon session orchestrator roundtrip", () => {
     expect(threads.getById(threadId)?.status).toBe("idle");
   });
 
+  it("drops late session-backed provider events after stop until the next outbound turn", async () => {
+    const project = createProject();
+    const environmentId = createSharedEnvironment(project.id, "stop-shared-env");
+    const threadId = createThread("idle", { projectId: project.id, environmentId });
+    const siblingThreadId = createThread("idle", { projectId: project.id, environmentId });
+    installRuntime(threadId);
+    installRuntime(siblingThreadId);
+    const sessionId = openSession(threadId, [threadId, siblingThreadId]);
+    events.create({
+      threadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "codex",
+        method: "thread/started",
+        payload: {
+          thread: {
+            id: "provider-thread-1",
+            path: "/tmp/codex-rollout-1.jsonl",
+          },
+        },
+      }),
+    });
+
+    const tellPromise = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "Start a turn and stop it" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const providerEnsureForResume = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const resume = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const providerEnsureForTurn = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: resume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: providerEnsureForTurn.commandCursor,
+      result: { ok: true },
+    });
+    await vi.waitFor(() => {
+      expect(events.listByThread(threadId).map((event) => event.type)).toContain(
+        "client/turn/start",
+      );
+    });
+
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 1,
+      method: "turn/started",
+      payload: { turnId: "turn-1" },
+    });
+    await vi.waitFor(() => {
+      expect(threads.getById(threadId)?.status).toBe("active");
+    });
+
+    orchestrator.stop(threadId);
+    expect(threads.getById(threadId)?.status).toBe("idle");
+
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 2,
+      method: "item/completed",
+      payload: {
+        item: { type: "agentMessage", id: "assistant-1", text: "SHOULD-NOT-LAND" },
+      },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 3,
+      method: "turn/completed",
+      payload: { turnId: "turn-1" },
+    });
+
+    await tellPromise;
+
+    expect(events.listByThread(threadId).some((event) =>
+      JSON.stringify(event.data).includes("SHOULD-NOT-LAND"),
+    )).toBe(false);
+    expect(
+      events.listByThread(threadId).filter((event) => event.type === "turn/completed"),
+    ).toHaveLength(0);
+    expect(latestAgentMessageText(threadId)).toBeUndefined();
+
+    const recoveryTell = orchestrator.tell(threadId, {
+      input: [{ type: "text", text: "Retry after stop" }],
+    });
+
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const recoveryEnsureForResume = completeCommand({
+      threadId,
+      sessionId,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const recoveryResume = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: recoveryEnsureForResume.commandCursor,
+      result: { threadId: "provider-thread-1" },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    const recoveryEnsureForTurn = completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: recoveryResume.commandCursor,
+      result: { running: true, launched: true, pid: 123 },
+    });
+    await vi.waitFor(() => {
+      expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
+    });
+    completeCommand({
+      threadId,
+      sessionId,
+      afterCursor: recoveryEnsureForTurn.commandCursor,
+      result: { ok: true },
+    });
+
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 4,
+      method: "turn/started",
+      payload: { turnId: "turn-2" },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 5,
+      method: "item/completed",
+      payload: {
+        turnId: "turn-2",
+        item: { type: "agentMessage", id: "assistant-2", text: "AFTER-STOP-OK" },
+      },
+    });
+    await applyProviderEvent({
+      threadId,
+      sessionId,
+      sequence: 6,
+      method: "turn/completed",
+      payload: { turnId: "turn-2" },
+    });
+    await recoveryTell;
+
+    expect(latestAgentMessageText(threadId)).toBe("AFTER-STOP-OK");
+  });
+
   it("recovers a stale turn.run within the same tell and only persists the accepted turn", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);

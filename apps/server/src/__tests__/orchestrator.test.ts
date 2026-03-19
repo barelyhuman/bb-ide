@@ -34,6 +34,7 @@ import {
 } from "@bb/environment";
 import {
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  createEnvironmentDaemonSessionCapabilities,
   type EnvironmentDaemonClient,
   type EnvironmentDaemonCommandAck,
   type EnvironmentDaemonEventEnvelope,
@@ -41,6 +42,8 @@ import {
 import {
   createConnection,
   migrate,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonSessionRepository,
   ThreadRepository,
   EventRepository,
   ProjectRepository,
@@ -55,7 +58,12 @@ import {
   type LlmCompletionService,
 } from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
-import { ProviderSessionController } from "../provider-session-controller.js";
+import {
+  ProviderSessionController,
+  type ProviderSessionNotification,
+} from "../provider-session-controller.js";
+import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonSessionCommandClient } from "../environment-daemon-session-command-client.js";
 import type { EnvironmentService } from "../environment-service.js";
 import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import { WSManager } from "../ws.js";
@@ -542,30 +550,42 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   activeTurnIds.delete = (threadId: string) => orchestratorActiveTurnIds.delete(threadId);
   activeTurnIds.clear = () => orchestratorActiveTurnIds.clear();
   const rawEnvironmentRuntimes = rawManager.environmentService.environmentRuntimes;
-  const normalizeEnvironmentRuntimeKey = (key: string) =>
-    key.includes(":") ? key : `thread:${key}`;
   const environmentRuntimes = new Map<string, unknown>() as Map<string, unknown>;
   environmentRuntimes.get = (key: string) =>
-    rawEnvironmentRuntimes.get(normalizeEnvironmentRuntimeKey(key));
+    rawEnvironmentRuntimes.get(key) ??
+    (key.includes(":") ? undefined : rawEnvironmentRuntimes.get(`thread:${key}`));
   environmentRuntimes.set = (key: string, value: unknown) => {
-    const normalizedKey = normalizeEnvironmentRuntimeKey(key);
     const normalizedValue =
       value && typeof value === "object"
         ? {
           ...(value as Record<string, unknown>),
-          scopeKey: (value as { scopeKey?: string }).scopeKey ?? normalizedKey,
+          scopeKey: (value as { scopeKey?: string }).scopeKey ?? key,
           ownerThreadId:
             (value as { ownerThreadId?: string }).ownerThreadId ??
-            (normalizedKey.startsWith("thread:") ? normalizedKey.slice("thread:".length) : key),
+            (key.startsWith("thread:") ? key.slice("thread:".length) : key),
         }
         : value;
-    rawEnvironmentRuntimes.set(normalizedKey, normalizedValue);
+    rawEnvironmentRuntimes.set(key, normalizedValue);
+    if (!key.includes(":")) {
+      rawEnvironmentRuntimes.set(`thread:${key}`, {
+        ...(normalizedValue as Record<string, unknown>),
+        scopeKey: (normalizedValue as { scopeKey?: string }).scopeKey ?? `thread:${key}`,
+        ownerThreadId:
+          (normalizedValue as { ownerThreadId?: string }).ownerThreadId ?? key,
+      });
+    }
     return environmentRuntimes;
   };
   environmentRuntimes.has = (key: string) =>
-    rawEnvironmentRuntimes.has(normalizeEnvironmentRuntimeKey(key));
-  environmentRuntimes.delete = (key: string) =>
-    rawEnvironmentRuntimes.delete(normalizeEnvironmentRuntimeKey(key));
+    rawEnvironmentRuntimes.has(key) ||
+    (!key.includes(":") && rawEnvironmentRuntimes.has(`thread:${key}`));
+  environmentRuntimes.delete = (key: string) => {
+    const deleted = rawEnvironmentRuntimes.delete(key);
+    if (!key.includes(":")) {
+      rawEnvironmentRuntimes.delete(`thread:${key}`);
+    }
+    return deleted;
+  };
   environmentRuntimes.clear = () => rawEnvironmentRuntimes.clear();
   Object.assign(rawManager, {
     processes,
@@ -796,6 +816,99 @@ describe("Orchestrator", () => {
           threadId: claudeThread.id,
           type: "item/completed",
         }),
+      );
+    });
+
+    it("drops ambiguous shared environment provider events for the same provider", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const firstThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      const secondThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      attachmentRepo.attachThread({ threadId: firstThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: secondThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(firstThread.id, "shared-provider-thread");
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(secondThread.id, "shared-provider-thread");
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(firstThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "shared-provider-thread",
+            item: { type: "agentMessage", text: "hello" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(firstThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: firstThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(eventRepo.listByThread(secondThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: secondThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("dropped provider notification"),
       );
     });
 
@@ -1312,6 +1425,52 @@ describe("Orchestrator", () => {
       await vi.waitFor(() => {
         expect(onCreate).toHaveBeenCalledTimes(1);
       });
+    });
+
+    it("does not persist thread.environmentId when attachments are authoritative during spawn", async () => {
+      const repos = createTestRepos(testDb.db);
+      const createSpy = vi.spyOn(repos.threadRepo, "create");
+      const updateSpy = vi.spyOn(repos.threadRepo, "update");
+      const managerWithAttachments = new Orchestrator(
+        repos.threadRepo,
+        repos.eventRepo,
+        repos.projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        repos.environmentRepo,
+        repos.attachmentRepo,
+      );
+      const project = createTestProject(repos.projectRepo, { rootPath: "/test" });
+      const environment = repos.environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/test" },
+        managed: false,
+      });
+
+      const result = await managerWithAttachments.spawn({
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.not.objectContaining({ environmentId: environment.id }),
+      );
+      expect(
+        updateSpy.mock.calls.some(([, updates]) =>
+          Object.hasOwn(updates, "environmentId"),
+        ),
+      ).toBe(false);
+      expect(repos.attachmentRepo.getByThreadId(result.id)?.environmentId).toBe(environment.id);
+      expect(managerWithAttachments.getRawById(result.id)?.environmentId).toBe(environment.id);
     });
 
     it("emits env-setup started before optional setup finishes", async () => {
@@ -2394,6 +2553,95 @@ describe("Orchestrator", () => {
       expect(interruptionEvents).toHaveLength(0);
     });
 
+    it("drops late provider events for an interrupted turn", () => {
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      const harness = asOrchestratorHarness(manager);
+      harness.activeTurnIds.set(thread.id, "turn-1");
+
+      manager.stop(thread.id);
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (
+            threadId: string,
+            event: ProviderSessionNotification,
+          ) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: createItemCompletedData({
+          threadId: thread.id,
+          turnId: "turn-1",
+          item: createAgentMessageItem("SHOULD-NOT-LAND"),
+        }),
+        shouldPersist: true,
+        shouldBroadcast: true,
+        turnId: "turn-1",
+      });
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (
+            threadId: string,
+            event: ProviderSessionNotification,
+          ) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "turn/completed",
+        normalizedMethod: "turn/completed",
+        eventType: "turn/completed",
+        eventData: createTurnCompletedData(thread.id, "turn-1"),
+        shouldPersist: true,
+        shouldBroadcast: true,
+        nextStatus: "idle",
+        turnState: "idle",
+        turnId: "turn-1",
+      });
+
+      expect(
+        eventRepo.listByThread(thread.id).some((event) =>
+          JSON.stringify(event.data).includes("SHOULD-NOT-LAND"),
+        ),
+      ).toBe(false);
+      expect(
+        eventRepo.listByThread(thread.id).filter((event) => event.type === "turn/completed"),
+      ).toHaveLength(0);
+    });
+
+    it("drops late provider events after stop even when they omit turn ids", () => {
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      const harness = asOrchestratorHarness(manager);
+      harness.activeTurnIds.set(thread.id, "turn-1");
+
+      manager.stop(thread.id);
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (
+            threadId: string,
+            event: ProviderSessionNotification,
+          ) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          threadId: thread.id,
+          item: createAgentMessageItem("SHOULD-NOT-LAND"),
+        } as unknown as ThreadEventDataForType<"item/completed">,
+        shouldPersist: true,
+        shouldBroadcast: true,
+      });
+
+      expect(
+        eventRepo.listByThread(thread.id).some((event) =>
+          JSON.stringify(event.data).includes("SHOULD-NOT-LAND"),
+        ),
+      ).toBe(false);
+    });
+
 
     it("suspends managed environments on stop without destroying the workspace", () => {
       const suspendEnvironmentRuntime = vi.spyOn(
@@ -2883,6 +3131,359 @@ describe("Orchestrator", () => {
       await expect(manager.listModels()).resolves.toEqual(models);
 
       expect(providerListModels).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not share model cache entries across environment-scoped queries", async () => {
+      const models = [
+        {
+          id: "model-a",
+          model: "model-a",
+          displayName: "Model A",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ];
+
+      const providerListModels = vi.fn().mockResolvedValue(models);
+      asOrchestratorHarness(manager).provider.listModels = providerListModels;
+
+      await expect(manager.listModels(undefined, "env-1")).resolves.toEqual(models);
+      await expect(manager.listModels(undefined, "env-2")).resolves.toEqual(models);
+      await expect(manager.listModels()).resolves.toEqual(models);
+
+      expect(providerListModels).toHaveBeenCalledTimes(3);
+    });
+
+    it("routes environment-scoped model discovery through the matching provider thread", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      const piThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "pi",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      attachmentRepo.attachThread({ threadId: piThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi
+        .spyOn(EnvironmentDaemonSessionCommandClient.prototype, "sendCommand")
+        .mockResolvedValue({
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+          commandId: "provider-models-pi",
+          idempotencyKey: "provider-models-pi",
+          state: "accepted",
+          acknowledgedAt: Date.now(),
+          latestSequence: 0,
+          result: [
+            {
+              id: "pi-fast",
+              model: "pi-fast",
+              displayName: "Pi Fast",
+              description: "",
+              supportedReasoningEfforts: [
+                { reasoningEffort: "low", description: "Low effort" },
+              ],
+              defaultReasoningEffort: "low",
+              isDefault: true,
+            },
+          ],
+        });
+
+      await expect(manager.listModels("pi", environment.id)).resolves.toEqual([
+        {
+          id: "pi-fast",
+          model: "pi-fast",
+          displayName: "Pi Fast",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ]);
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+      expect(commandRepo.listPendingByThreadId(codexThread.id)).toHaveLength(0);
+      expect(commandRepo.listPendingByThreadId(piThread.id)).toHaveLength(0);
+    });
+
+    it("rejects environment-scoped model discovery when no attached thread matches the provider", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi.spyOn(
+        EnvironmentDaemonSessionCommandClient.prototype,
+        "sendCommand",
+      );
+
+      await expect(manager.listModels("pi", environment.id)).rejects.toThrow(
+        `Environment ${environment.id} has no attached thread for provider pi`,
+      );
+      expect(sendCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("listProviders()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
+    it("allows environment-scoped provider discovery for shared environments", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      const piThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "pi",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      attachmentRepo.attachThread({ threadId: piThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi.spyOn(
+        EnvironmentDaemonSessionCommandClient.prototype,
+        "sendCommand",
+      ).mockResolvedValue({
+        protocolVersion: 1,
+        commandId: "provider-catalog-1",
+        idempotencyKey: "provider-catalog-1",
+        state: "accepted",
+        acknowledgedAt: Date.now(),
+        latestSequence: 0,
+        result: [
+          {
+            id: "codex",
+            displayName: "Codex",
+            capabilities: { supportsRename: true },
+          },
+          {
+            id: "pi",
+            displayName: "Pi",
+            capabilities: { supportsRename: false },
+          },
+        ],
+      });
+
+      await expect(manager.listProviders(environment.id)).resolves.toMatchObject([
+        { id: "codex" },
+        { id: "pi" },
+      ]);
+      expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("environment attachment resolution", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+    let environmentRepo: EnvironmentRepository;
+    let attachmentRepo: ThreadEnvironmentAttachmentRepository;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      environmentRepo = repos.environmentRepo;
+      attachmentRepo = repos.attachmentRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environmentRepo,
+        attachmentRepo,
+      );
+    });
+
+    it("does not fall back to stale thread.environmentId when attachments exist", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: false,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+      });
+
+      expect((manager as any)._resolveThreadEnvironmentReference(thread.id)).toBeUndefined();
+      expect(manager.getRawById(thread.id)?.environmentId).toBeUndefined();
+      expect(manager.list().find((candidate) => candidate.id === thread.id)?.environmentId).toBeUndefined();
+    });
+
+    it("canonicalizes thread.environmentId from attachments on read paths", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: false,
+      });
+      const otherEnv = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/other-env" },
+        managed: false,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: otherEnv.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+
+      expect(manager.getRawById(thread.id)?.environmentId).toBe(env.id);
+      expect(manager.list().find((candidate) => candidate.id === thread.id)?.environmentId).toBe(env.id);
     });
   });
 
@@ -3716,7 +4317,7 @@ describe("Orchestrator", () => {
       const envRepo = new EnvironmentRepository(testDb.db);
       const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
       const thread1 = createTestThread(threadRepo, project.id, { status: "idle", title: "Promoted", environmentId: env.id });
-      createTestThread(threadRepo, project.id, { status: "idle", title: "Other", environmentId: env.id });
+      const thread2 = createTestThread(threadRepo, project.id, { status: "idle", title: "Other", environmentId: env.id });
 
       const projectRoot = mkdtempSync(join(tmpdir(), "bb-orchestrator-"));
       git(projectRoot, "init");
@@ -3728,6 +4329,8 @@ describe("Orchestrator", () => {
       git(projectRoot, "commit", "-m", "initial");
       const head = git(projectRoot, "rev-parse", "HEAD");
       projectRepo.update(project.id, { rootPath: projectRoot });
+      attachmentRepo.attachThread({ threadId: thread1.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread2.id, environmentId: env.id });
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
@@ -3755,7 +4358,8 @@ describe("Orchestrator", () => {
       const envRepo = new EnvironmentRepository(testDb.db);
       const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+      const runtimeEntry = {
         environment: {
           kind: "worktree",
           info: {
@@ -3827,7 +4431,9 @@ describe("Orchestrator", () => {
           },
           run: vi.fn(),
         },
-      });
+      };
+      asOrchestratorHarness(manager).environmentRuntimes.set(env.id, runtimeEntry);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, runtimeEntry);
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
@@ -3879,6 +4485,7 @@ describe("Orchestrator", () => {
         managed: true,
       });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
       const getCheckoutSnapshot = vi
         .fn()
         .mockResolvedValueOnce({
@@ -3886,7 +4493,7 @@ describe("Orchestrator", () => {
           head: "next-head",
           detached: false,
         });
-      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
+      const runtimeEntry = {
         environment: makeRuntimeEnvironment({
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
@@ -3905,7 +4512,9 @@ describe("Orchestrator", () => {
             },
           },
         }),
-      });
+      };
+      asOrchestratorHarness(manager).environmentRuntimes.set(env.id, runtimeEntry);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, runtimeEntry);
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
         environmentId: env.id,
@@ -4235,6 +4844,7 @@ describe("Orchestrator", () => {
         managed: true,
       });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
       await expect(
@@ -4254,6 +4864,7 @@ describe("Orchestrator", () => {
         managed: true,
       });
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
       await expect(
@@ -4263,6 +4874,56 @@ describe("Orchestrator", () => {
         }),
       ).rejects.toThrow(
         "Another environment git operation is already in progress for this project",
+      );
+    });
+
+    it("rejects demote_primary when only archived threads remain attached", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const archivedThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        archivedAt: 1234,
+      });
+      attachmentRepo.attachThread({ threadId: archivedThread.id, environmentId: env.id });
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "demote_primary",
+          initiatingThreadId: archivedThread.id,
+        }),
+      ).rejects.toThrow(
+        `Thread ${archivedThread.id} is archived`,
+      );
+    });
+
+    it("rejects promote_primary when the initiating thread is attached to a different environment", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const otherEnv = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/other-env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: otherEnv.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: otherEnv.id });
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "promote_primary",
+          initiatingThreadId: thread.id,
+        }),
+      ).rejects.toThrow(
+        `Thread ${thread.id} is not attached to environment ${env.id}`,
       );
     });
 

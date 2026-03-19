@@ -18,7 +18,7 @@ import type {
 import { ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
 
 export interface EnvironmentDaemonSessionSupervisorOptions {
-  threadId: string;
+  environmentId: string;
   runtime: EnvironmentDaemonRuntime;
   sessionRuntime: EnvironmentDaemonSessionRuntime;
   sessionSync: EnvironmentDaemonSessionSync;
@@ -95,12 +95,13 @@ export class EnvironmentDaemonSessionSupervisor {
   private consecutiveFailureCount = 0;
   private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
   private nextHeartbeatAt = 0;
+  private sessionId: string | undefined;
   private commandPullController: AbortController | undefined;
   private lastCommandPullAbortAt = 0;
   private readonly unsubscribeRuntimeEvents: () => void;
 
   constructor(private readonly options: EnvironmentDaemonSessionSupervisorOptions) {
-    this.agentId = options.agentId ?? `environment-daemon:${options.threadId}`;
+    this.agentId = options.agentId ?? `environment-daemon:${options.environmentId}`;
     this.agentInstanceId = options.agentInstanceId ?? randomUUID();
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
@@ -111,12 +112,6 @@ export class EnvironmentDaemonSessionSupervisor {
       ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS;
     this.onError = options.onError;
 
-    this.options.sessionRuntime.initializeThread({
-      threadId: options.threadId,
-      agentId: this.agentId,
-      agentInstanceId: this.agentInstanceId,
-      generation: 1,
-    });
     this.unsubscribeRuntimeEvents = this.options.runtime.subscribeToEvents((event) => {
       this.ensureThreadState(event.threadId);
       this.options.sessionRuntime.recordEvent({
@@ -171,18 +166,18 @@ export class EnvironmentDaemonSessionSupervisor {
     this.unsubscribeRuntimeEvents();
     this.publishRuntimeDeliveryState();
 
-    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
-    if (!state?.sessionId) {
+    if (!this.sessionId) {
       return;
     }
 
     try {
       await this.flushPendingEventsWithReplay();
-      await this.options.sessionSync.flushPendingCommandResultsForThreads(
-        this.getThreadIds(),
-      );
+      await this.options.sessionSync.flushPendingCommandResultsForThreads({
+        sessionId: this.sessionId,
+        threadIds: this.getThreadIds(),
+      });
       await this.flushPendingEventsWithReplay();
-      await this.options.sessionSync.closeSession(this.options.threadId, "agent_shutdown");
+      await this.options.sessionSync.closeSession(this.sessionId, "agent_shutdown");
     } catch (error) {
       const recovered = this.handleSessionError(error);
       if (!recovered) {
@@ -201,8 +196,13 @@ export class EnvironmentDaemonSessionSupervisor {
     threadId?: string;
   }): Promise<EnvironmentDaemonSessionProviderResponsePayload> {
     await this.openSession();
+    if (!args.threadId) {
+      throw new Error("Environment-daemon provider request is missing a resolved threadId");
+    }
+    const sessionId = this.requireSessionId();
     return this.options.sessionSync.forwardProviderRequest({
-      threadId: args.threadId ?? this.options.threadId,
+      sessionId,
+      threadId: args.threadId,
       requestId: args.requestId,
       method: args.method,
       ...(args.params !== undefined ? { params: args.params } : {}),
@@ -215,12 +215,18 @@ export class EnvironmentDaemonSessionSupervisor {
   }
 
   private async openSession(): Promise<void> {
-    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
-    if (state?.sessionId) {
+    if (this.sessionId) {
       return;
     }
+    const channelBootstraps = this.options.sessionRuntime.listThreadIds().map((threadId) => {
+      const state = this.options.sessionRuntime.loadThreadState(threadId);
+      return {
+        channelId: threadId,
+        generation: state?.generation ?? 1,
+        ...(state?.lastAcked ? { lastServerAcked: state.lastAcked } : {}),
+      };
+    });
     const welcome = await this.options.sessionSync.openSession({
-      threadId: this.options.threadId,
       payload: {
         agentId: this.agentId,
         agentInstanceId: this.agentInstanceId,
@@ -233,15 +239,10 @@ export class EnvironmentDaemonSessionSupervisor {
         ...(this.options.controlEndpoint
           ? { controlEndpoint: this.options.controlEndpoint }
           : {}),
-        channels: [
-          {
-            channelId: this.options.threadId,
-            generation: state?.generation ?? 1,
-            ...(state?.lastAcked ? { lastServerAcked: state.lastAcked } : {}),
-          },
-        ],
+        channels: channelBootstraps,
       },
     });
+    this.sessionId = welcome.sessionId;
     this.heartbeatIntervalMs = normalizeHeartbeatIntervalMs(
       welcome.payload.heartbeatIntervalMs,
     );
@@ -312,17 +313,24 @@ export class EnvironmentDaemonSessionSupervisor {
     this.cycleInFlight = true;
     try {
       await this.openSession();
+      const sessionId = this.requireSessionId();
       const threadIds = this.getThreadIds();
       if (this.isHeartbeatDue()) {
-        await this.options.sessionSync.sendHeartbeat(threadIds);
+        await this.options.sessionSync.sendHeartbeat({ sessionId, threadIds });
         this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
       }
       await this.flushPendingEventsWithReplay();
-      const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
+      const singleThreadState =
+        threadIds.length === 1
+          ? this.options.sessionRuntime.loadThreadState(threadIds[0]!)
+          : undefined;
       const commands = await this.pullCommands({
+        sessionId,
         threadIds,
-        ...(threadIds.length === 1 && state?.lastDeliveredCommandCursor !== undefined
-          ? { afterCursor: state.lastDeliveredCommandCursor }
+        agentId: this.agentId,
+        agentInstanceId: this.agentInstanceId,
+        ...(singleThreadState?.lastDeliveredCommandCursor !== undefined
+          ? { afterCursor: singleThreadState.lastDeliveredCommandCursor }
           : {}),
       });
       if (!this.running) {
@@ -333,7 +341,10 @@ export class EnvironmentDaemonSessionSupervisor {
           continue;
         }
         this.options.sessionRuntime.markCommandStarted(command.commandId);
-        await this.options.sessionSync.flushPendingCommandResults(command.threadId);
+        await this.options.sessionSync.flushPendingCommandResults({
+          sessionId,
+          threadId: command.threadId,
+        });
         const ack = await this.options.runtime.executeCommand(
           toCommandEnvelope({
             threadId: command.threadId,
@@ -353,13 +364,19 @@ export class EnvironmentDaemonSessionSupervisor {
             ...normalizeRejectedCommandError(ack),
           });
         }
-        await this.options.sessionSync.flushPendingCommandResults(command.threadId);
+        await this.options.sessionSync.flushPendingCommandResults({
+          sessionId,
+          threadId: command.threadId,
+        });
       }
       if (commands.length === 0) {
-        await this.options.sessionSync.flushPendingCommandResultsForThreads(threadIds);
+        await this.options.sessionSync.flushPendingCommandResultsForThreads({
+          sessionId,
+          threadIds,
+        });
       }
       if (this.isHeartbeatDue()) {
-        await this.options.sessionSync.sendHeartbeat(threadIds);
+        await this.options.sessionSync.sendHeartbeat({ sessionId, threadIds });
         this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
       }
     } finally {
@@ -378,13 +395,20 @@ export class EnvironmentDaemonSessionSupervisor {
     for (const threadId of this.getThreadIds()) {
       this.options.sessionRuntime.clearSession(threadId);
     }
+    this.sessionId = undefined;
     this.heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.nextHeartbeatAt = 0;
     return true;
   }
 
   private publishRuntimeDeliveryState(error?: unknown): void {
-    const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
+    const lastAckedSequence = this.getThreadIds()
+      .map((threadId) => this.options.sessionRuntime.loadThreadState(threadId)?.lastAcked?.sequence)
+      .filter((sequence): sequence is number => sequence !== undefined)
+      .reduce<number | undefined>(
+        (max, sequence) => max === undefined ? sequence : Math.max(max, sequence),
+        undefined,
+      );
     const retryAttemptCount = this.consecutiveFailureCount;
     const nextRetryAt = !this.running
       ? undefined
@@ -396,14 +420,14 @@ export class EnvironmentDaemonSessionSupervisor {
         : undefined;
 
     this.options.runtime.setDaemonDeliveryState({
-      connectedToServer: this.running && Boolean(state?.sessionId) && retryAttemptCount === 0,
+      connectedToServer: this.running && Boolean(this.sessionId) && retryAttemptCount === 0,
       deliveryState: !this.running
         ? "stopped"
         : retryAttemptCount > 0
           ? "retrying"
           : "healthy",
       retryAttemptCount,
-      ...(state?.lastAcked ? { lastAckedSequence: state.lastAcked.sequence } : {}),
+      ...(lastAckedSequence !== undefined ? { lastAckedSequence } : {}),
       ...(nextRetryAt !== undefined ? { nextRetryAt } : {}),
       ...(retryAttemptCount > 0 ? { deliveryIssue: "transport_error" as const } : {}),
       ...(error instanceof Error ? { lastDeliveryError: error.message } : {}),
@@ -463,14 +487,20 @@ export class EnvironmentDaemonSessionSupervisor {
   }
 
   private async pullCommands(args: {
+    sessionId: string;
     threadIds: readonly string[];
+    agentId: string;
+    agentInstanceId: string;
     afterCursor?: number;
   }): Promise<EnvironmentDaemonPulledCommand[]> {
     const controller = new AbortController();
     this.commandPullController = controller;
     try {
       return await this.options.sessionSync.pullCommands({
+        sessionId: args.sessionId,
         threadIds: args.threadIds,
+        agentId: args.agentId,
+        agentInstanceId: args.agentInstanceId,
         ...(args.afterCursor !== undefined ? { afterCursor: args.afterCursor } : {}),
         limit: this.commandBatchLimit,
         waitMs: this.getCommandPullWaitMs(),
@@ -489,10 +519,12 @@ export class EnvironmentDaemonSessionSupervisor {
   }
 
   private async flushPendingEventsWithReplay(): Promise<void> {
+    const sessionId = this.requireSessionId();
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      const flushResult = await this.options.sessionSync.flushPendingEvents(
-        this.getThreadIds(),
-      );
+      const flushResult = await this.options.sessionSync.flushPendingEvents({
+        sessionId,
+        threadIds: this.getThreadIds(),
+      });
       const needsReset = flushResult.channelResults.filter((result) => !result.acknowledged);
       if (needsReset.length === 0) {
         return;
@@ -512,7 +544,7 @@ export class EnvironmentDaemonSessionSupervisor {
       }
     }
     throw new Error(
-      `Environment-daemon event reset did not converge for thread ${this.options.threadId}`,
+      `Environment-daemon event reset did not converge for environment ${this.options.environmentId}`,
     );
   }
 
@@ -529,7 +561,15 @@ export class EnvironmentDaemonSessionSupervisor {
   }
 
   private getThreadIds(): string[] {
-    const threadIds = this.options.sessionRuntime.listThreadIds();
-    return threadIds.length > 0 ? threadIds : [this.options.threadId];
+    return this.options.sessionRuntime.listThreadIds();
+  }
+
+  private requireSessionId(): string {
+    if (!this.sessionId) {
+      throw new Error(
+        `Environment-daemon session is not open for environment ${this.options.environmentId}`,
+      );
+    }
+    return this.sessionId;
   }
 }

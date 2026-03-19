@@ -42,7 +42,15 @@ describe("EnvironmentDaemonSessionSync", () => {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
         protocolVersion: 1,
-        channels: [],
+        channels: [
+          {
+            channelId: "thread-1",
+            applyFrom: {
+              generation: 1,
+              sequenceExclusive: 0,
+            },
+          },
+        ],
       },
     });
     (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -86,7 +94,6 @@ describe("EnvironmentDaemonSessionSync", () => {
 
     const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     const welcome = await sync.openSession({
-      threadId: "thread-1",
       payload: {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
@@ -116,13 +123,21 @@ describe("EnvironmentDaemonSessionSync", () => {
       },
       emittedAt: 2_500,
     });
-    await expect(sync.flushPendingEvents(["thread-1"])).resolves.toEqual({
+    await expect(sync.flushPendingEvents({
+      sessionId: "sess-1",
+      threadIds: ["thread-1"],
+    })).resolves.toEqual({
       sessionId: "sess-1",
       channelResults: [{ threadId: "thread-1", acknowledged: true }],
     });
     expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toBeUndefined();
 
-    const pulled = await sync.pullCommands({ threadIds: ["thread-1"] });
+    const pulled = await sync.pullCommands({
+      sessionId: "sess-1",
+      threadIds: ["thread-1"],
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+    });
     expect(pulled).toEqual([
       {
         threadId: "thread-1",
@@ -143,13 +158,16 @@ describe("EnvironmentDaemonSessionSync", () => {
       result: { ok: true },
       now: 6_000,
     });
-    await expect(sync.flushPendingCommandResults("thread-1")).resolves.toEqual([
+    await expect(sync.flushPendingCommandResults({
+      sessionId: "sess-1",
+      threadId: "thread-1",
+    })).resolves.toEqual([
       expect.objectContaining({
         commandId: "cmd-1",
         lastResultReportedState: "completed",
       }),
     ]);
-    await expect(sync.closeSession("thread-1", "agent_shutdown")).resolves.toBeUndefined();
+    await expect(sync.closeSession("sess-1", "agent_shutdown")).resolves.toBeUndefined();
     expect(client.closeSession).toHaveBeenCalledWith("sess-1", "agent_shutdown");
   });
 
@@ -195,7 +213,10 @@ describe("EnvironmentDaemonSessionSync", () => {
     });
 
     const sync = new EnvironmentDaemonSessionSync({ runtime, client });
-    await expect(sync.flushPendingEvents(["thread-1"])).resolves.toMatchObject({
+    await expect(sync.flushPendingEvents({
+      sessionId: "sess-1",
+      threadIds: ["thread-1"],
+    })).resolves.toMatchObject({
       channelResults: [{
         threadId: "thread-1",
         acknowledged: false,
@@ -264,7 +285,6 @@ describe("EnvironmentDaemonSessionSync", () => {
 
     const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     await expect(sync.openSession({
-      threadId: "thread-1",
       payload: {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
@@ -332,7 +352,12 @@ describe("EnvironmentDaemonSessionSync", () => {
     (client.acknowledgeCommands as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
     const sync = new EnvironmentDaemonSessionSync({ runtime, client });
-    await expect(sync.pullCommands({ threadIds: ["thread-1"] })).resolves.toEqual([
+    await expect(sync.pullCommands({
+      sessionId: "sess-1",
+      threadIds: ["thread-1"],
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+    })).resolves.toEqual([
       {
         threadId: "thread-2",
         commandId: "cmd-2",

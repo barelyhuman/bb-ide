@@ -647,6 +647,10 @@ export class Orchestrator implements ThreadOrchestrator {
   private tellInFlightByThreadId = new Map<string, Promise<void>>();
   /** Last known active turn id derived from delivered provider lifecycle events. */
   private activeTurnIdByThreadId = new Map<string, string>();
+  /** Turn ids explicitly interrupted by the user; late events for them must be dropped. */
+  private suppressedTurnIdsByThreadId = new Map<string, Set<string>>();
+  /** After stop(), all late provider notifications are dropped until a new outbound turn starts. */
+  private blockedProviderNotificationsByThreadId = new Set<string>();
   /** Provider thread ids attached in the current server process. */
   private providerThreadIdByThreadId = new Map<string, string>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
@@ -695,12 +699,12 @@ export class Orchestrator implements ThreadOrchestrator {
   private readonly defaultProviderId: ThreadProviderId;
   private readonly providerCatalog: SystemProviderInfo[];
   private readonly providerToolHost?: ProviderToolHost;
-  private readonly cachedModelsByProviderId = new Map<
-    ThreadProviderId,
+  private readonly cachedModelsByRequestKey = new Map<
+    string,
     { expiresAt: number; value: AvailableModel[] }
   >();
-  private readonly pendingModelsRequestByProviderId = new Map<
-    ThreadProviderId,
+  private readonly pendingModelsRequestByRequestKey = new Map<
+    string,
     Promise<AvailableModel[]>
   >();
   private threadShellPath: string | undefined;
@@ -781,15 +785,15 @@ export class Orchestrator implements ThreadOrchestrator {
             projectRootPath,
             reason,
           ),
-        ensureManagedEnvironmentArtifacts: (threadId, projectRootPath) =>
+        ensureManagedEnvironmentArtifacts: ({ environmentId, projectRootPath }) =>
           this.envFactory.ensureManagedEnvironmentArtifacts({
-            threadId,
+            environmentId,
             projectRootPath,
             runtimeEnv: this.runtimeEnv,
           }),
-        cleanupManagedEnvironmentArtifacts: (threadId, projectRootPath) =>
+        cleanupManagedEnvironmentArtifacts: ({ environmentId, projectRootPath }) =>
           this.envFactory.cleanupManagedEnvironmentArtifacts({
-            threadId,
+            environmentId,
             projectRootPath,
             runtimeEnv: this.runtimeEnv,
           }),
@@ -1146,10 +1150,10 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _resolveThreadEnvironmentReference(threadId: string): string | undefined {
-    return (
-      this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId ??
-      this.threadRepo.getById(threadId)?.environmentId
-    );
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.threadEnvironmentAttachmentRepo.getByThreadId(threadId)?.environmentId;
+    }
+    return this.threadRepo.getById(threadId)?.environmentId;
   }
 
   private _getThreadsAttachedToEnvironment(environmentId: string): Thread[] {
@@ -1163,6 +1167,49 @@ export class Orchestrator implements ThreadOrchestrator {
     return attachedThreadIds
       .map((threadId) => this.threadRepo.getById(threadId))
       .filter((thread): thread is Thread => Boolean(thread));
+  }
+
+  private _getNonArchivedThreadsAttachedToEnvironment(environmentId: string): Thread[] {
+    return this._getThreadsAttachedToEnvironment(environmentId)
+      .filter((thread) => thread.archivedAt === undefined);
+  }
+
+  private _resolveEnvironmentCommandTransportThread(args: {
+    environmentId: string;
+    providerId?: string;
+  }): Thread | undefined {
+    const attachedThreads = this._getNonArchivedThreadsAttachedToEnvironment(args.environmentId);
+    if (attachedThreads.length === 0) {
+      return undefined;
+    }
+    if (args.providerId) {
+      const matchingThreads = attachedThreads.filter(
+        (thread) => thread.providerId === args.providerId,
+      );
+      if (matchingThreads.length === 1) {
+        return matchingThreads[0];
+      }
+      if (matchingThreads.length > 1) {
+        throw invalidRequestError(
+          `Environment ${args.environmentId} has multiple attached threads for provider ${args.providerId}`,
+        );
+      }
+      throw invalidRequestError(
+        `Environment ${args.environmentId} has no attached thread for provider ${args.providerId}`,
+      );
+    }
+    if (attachedThreads.length === 1) {
+      return attachedThreads[0];
+    }
+    throw invalidRequestError(
+      `Environment ${args.environmentId} has multiple attached threads; explicit provider routing is required`,
+    );
+  }
+
+  private _resolveEnvironmentSessionTransportThread(
+    environmentId: string,
+  ): Thread | undefined {
+    return this._getNonArchivedThreadsAttachedToEnvironment(environmentId)[0];
   }
 
   private _isThreadAttachedToPromotedEnvironment(threadId: string): boolean {
@@ -1288,7 +1335,9 @@ export class Orchestrator implements ThreadOrchestrator {
       providerId,
       type: threadType,
       ...(explicitTitle ? { title: explicitTitle } : {}),
-      ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
+      ...(attachedEnvironmentId && !this.threadEnvironmentAttachmentRepo
+        ? { environmentId: attachedEnvironmentId }
+        : {}),
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     if (explicitTitle) {
@@ -1768,6 +1817,7 @@ export class Orchestrator implements ThreadOrchestrator {
     },
   ): boolean {
     return this.threadRepo.withTransaction((connection) => {
+      this._unblockProviderNotifications(threadId);
       const statusChanged = this._setThreadStatus(threadId, "active", false, {
         connection,
       });
@@ -2072,10 +2122,17 @@ export class Orchestrator implements ThreadOrchestrator {
       thread?.status === "active" ||
       thread?.status === "provisioning" ||
       thread?.status === "provisioned";
+    const interruptedTurnId =
+      this.activeTurnIdByThreadId.get(threadId) ??
+      this._resolvePersistedActiveTurnId(threadId);
 
     this._cleanupThreadRuntime(threadId, {
       retireActiveSession: true,
     });
+    if (interruptedTurnId) {
+      this._suppressTurnId(threadId, interruptedTurnId);
+    }
+    this._blockProviderNotifications(threadId);
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
@@ -2155,6 +2212,8 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.suppressedTurnIdsByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
@@ -2173,6 +2232,8 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.suppressedTurnIdsByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
@@ -2693,7 +2754,8 @@ export class Orchestrator implements ThreadOrchestrator {
    * need hydrated work status or built-in action state.
    */
   getRawById(threadId: string): Thread | undefined {
-    return this.threadRepo.getById(threadId);
+    const thread = this.threadRepo.getById(threadId);
+    return thread ? this._withResolvedEnvironmentReference(thread) : undefined;
   }
 
   getById(threadId: string): Thread | undefined {
@@ -2848,22 +2910,41 @@ export class Orchestrator implements ThreadOrchestrator {
 
     switch (request.operation) {
       case "promote_primary": {
-        const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
-          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined);
+        const targetThread = this.threadRepo.getById(request.initiatingThreadId);
         if (!targetThread) {
+          throw threadNotFoundError(request.initiatingThreadId);
+        }
+        if (targetThread.archivedAt !== undefined) {
+          throw threadArchivedError(targetThread.id);
+        }
+        if (targetThread.projectId !== environmentRecord.projectId) {
           throw invalidRequestError(
-            `No active thread is attached to environment ${environmentId}`,
+            `Thread ${targetThread.id} does not belong to environment project ${environmentRecord.projectId}`,
+          );
+        }
+        if (this._resolveThreadEnvironmentReference(targetThread.id) !== environmentId) {
+          throw invalidRequestError(
+            `Thread ${targetThread.id} is not attached to environment ${environmentId}`,
           );
         }
         return this.promoteThreadEnvironmentToPrimaryCheckout(targetThread.id);
       }
       case "demote_primary": {
-        const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
-          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined)
-          ?? this._getThreadsAttachedToEnvironment(environmentId)[0];
+        const targetThread = this.threadRepo.getById(request.initiatingThreadId);
         if (!targetThread) {
+          throw threadNotFoundError(request.initiatingThreadId);
+        }
+        if (targetThread.archivedAt !== undefined) {
+          throw threadArchivedError(targetThread.id);
+        }
+        if (targetThread.projectId !== environmentRecord.projectId) {
           throw invalidRequestError(
-            `No thread is attached to environment ${environmentId}`,
+            `Thread ${targetThread.id} does not belong to environment project ${environmentRecord.projectId}`,
+          );
+        }
+        if (this._resolveThreadEnvironmentReference(targetThread.id) !== environmentId) {
+          throw invalidRequestError(
+            `Thread ${targetThread.id} is not attached to environment ${environmentId}`,
           );
         }
         return this.demoteThreadEnvironmentFromPrimaryCheckout(targetThread.id);
@@ -3112,36 +3193,43 @@ export class Orchestrator implements ThreadOrchestrator {
    * List available models from a provider. When no providerId is given, uses
    * the default provider.
    */
-  async listModels(providerId?: string): Promise<AvailableModel[]> {
+  async listModels(providerId?: string, environmentId?: string): Promise<AvailableModel[]> {
     const resolvedProviderId = providerId && isThreadProviderId(providerId)
       ? providerId
       : this.defaultProviderId;
+    const cacheKey = environmentId
+      ? `${resolvedProviderId}\0${environmentId}`
+      : resolvedProviderId;
     const now = Date.now();
-    const cached = this.cachedModelsByProviderId.get(resolvedProviderId);
+    const cached = this.cachedModelsByRequestKey.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       return cached.value;
     }
-    const pending = this.pendingModelsRequestByProviderId.get(resolvedProviderId);
+    const pending = this.pendingModelsRequestByRequestKey.get(cacheKey);
     if (pending) {
       return pending;
     }
 
     const request = (async () => {
-      const envDaemonModels =
-        await this._listProviderModelsFromEnvironmentDaemon(resolvedProviderId);
+      const envDaemonModels = environmentId
+        ? await this._listProviderModelsFromEnvironmentDaemon(
+            resolvedProviderId,
+            environmentId,
+          )
+        : undefined;
       const models =
         envDaemonModels ??
         await this._getProviderAdapterForProviderId(resolvedProviderId).listModels();
-      this.cachedModelsByProviderId.set(resolvedProviderId, {
+      this.cachedModelsByRequestKey.set(cacheKey, {
         value: models,
         expiresAt: Date.now() + MODEL_LIST_CACHE_TTL_MS,
       });
       return models;
     })().finally(() => {
-      this.pendingModelsRequestByProviderId.delete(resolvedProviderId);
+      this.pendingModelsRequestByRequestKey.delete(cacheKey);
     });
 
-    this.pendingModelsRequestByProviderId.set(resolvedProviderId, request);
+    this.pendingModelsRequestByRequestKey.set(cacheKey, request);
     return request;
   }
 
@@ -3162,8 +3250,8 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  async getProviderInfo(): Promise<SystemProviderInfo> {
-    const providers = await this.listProviders();
+  async getProviderInfo(environmentId?: string): Promise<SystemProviderInfo> {
+    const providers = await this.listProviders(environmentId);
     const provider =
       providers.find((entry) => entry.id === this.defaultProviderId) ??
       this.getDefaultProviderInfoFromCatalog();
@@ -3173,10 +3261,14 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  async listProviders(): Promise<SystemProviderInfo[]> {
-    const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentDaemon();
-    if (envDaemonCatalog && envDaemonCatalog.length > 0) {
-      return envDaemonCatalog;
+  async listProviders(environmentId?: string): Promise<SystemProviderInfo[]> {
+    if (environmentId) {
+      const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentDaemon(
+        environmentId,
+      );
+      if (envDaemonCatalog && envDaemonCatalog.length > 0) {
+        return envDaemonCatalog;
+      }
     }
     if (this.providerCatalog.length > 0) {
       return this.providerCatalog.map((provider) => ({
@@ -3330,6 +3422,8 @@ export class Orchestrator implements ThreadOrchestrator {
     this.turnLifecycleEpochs.clear();
     this.tellInFlightByThreadId.clear();
     this.activeTurnIdByThreadId.clear();
+    this.suppressedTurnIdsByThreadId.clear();
+    this.blockedProviderNotificationsByThreadId.clear();
     this.providerThreadIdByThreadId.clear();
     this.lastNotifiedCompletionEpochs.clear();
     this.queueDispatchInFlight.clear();
@@ -3435,8 +3529,11 @@ export class Orchestrator implements ThreadOrchestrator {
     const effectiveEnvironmentRequest =
       req.environmentId || req.environmentDescriptor || req.environmentCreationArgs
         ? req
-        : thread?.environmentId
-          ? { ...req, environmentId: thread.environmentId }
+        : this._resolveThreadEnvironmentReference(threadId)
+          ? {
+              ...req,
+              environmentId: this._resolveThreadEnvironmentReference(threadId),
+            }
           : req.parentThreadId
             ? {
                 ...req,
@@ -3469,7 +3566,12 @@ export class Orchestrator implements ThreadOrchestrator {
         environmentCreationArgs: effectiveEnvironmentRequest.environmentCreationArgs,
       });
     }
-    if (attachedEnvironmentId && thread && thread.environmentId !== attachedEnvironmentId) {
+    if (
+      attachedEnvironmentId &&
+      !this.threadEnvironmentAttachmentRepo &&
+      thread &&
+      thread.environmentId !== attachedEnvironmentId
+    ) {
       this.threadRepo.update(threadId, { environmentId: attachedEnvironmentId });
     }
     if (attachedEnvironmentId && this.threadEnvironmentAttachmentRepo) {
@@ -3540,9 +3642,11 @@ export class Orchestrator implements ThreadOrchestrator {
       );
     }
     if (attachedEnvironmentIdAfterProvision) {
-      this.threadRepo.update(threadId, {
-        environmentId: attachedEnvironmentIdAfterProvision,
-      });
+      if (!this.threadEnvironmentAttachmentRepo) {
+        this.threadRepo.update(threadId, {
+          environmentId: attachedEnvironmentIdAfterProvision,
+        });
+      }
     }
     const provisionedEnvironmentPresentation = this._resolveProvisioningPresentation({
       attachedEnvironmentId: attachedEnvironmentIdAfterProvision,
@@ -3722,6 +3826,8 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.suppressedTurnIdsByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
@@ -3797,38 +3903,36 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private async _listProviderModelsFromEnvironmentDaemon(
     providerId: ThreadProviderId,
+    environmentId: string,
   ): Promise<AvailableModel[] | undefined> {
     if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {
       return undefined;
     }
-    const matchingSession = this.environmentDaemonSessionRepo.listActive().find((session) => {
-      if (Array.isArray(session.providerMetadata)) {
-        return session.providerMetadata.some((entry) => {
-          const record = toRecord(entry);
-          return getStringField(record, "providerId") === providerId;
-        });
-      }
-      return false;
-    });
+    const matchingSession = this.environmentDaemonSessionRepo
+      .listActive()
+      .find((session) => session.environmentId === environmentId);
     if (!matchingSession) {
       return undefined;
     }
 
-    const representativeThreadId = this.threadEnvironmentAttachmentRepo
-      ?.listByEnvironmentId(matchingSession.environmentId)
-      .map((row) => row.threadId)[0];
-    if (!representativeThreadId) {
-      return undefined;
+    const transportThread = this._resolveEnvironmentCommandTransportThread({
+      environmentId,
+      providerId,
+    });
+    if (!transportThread) {
+      throw invalidRequestError(
+        `No active thread is attached to environment ${environmentId}`,
+      );
     }
 
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: representativeThreadId,
+      threadId: transportThread.id,
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentDaemonAccess(representativeThreadId);
+        await this._recoverEnvironmentDaemonAccess(transportThread.id);
       },
     });
     try {
@@ -3853,36 +3957,44 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _listProviderCatalogFromEnvironmentDaemon(): Promise<SystemProviderInfo[] | undefined> {
+  private async _listProviderCatalogFromEnvironmentDaemon(
+    environmentId: string,
+  ): Promise<SystemProviderInfo[] | undefined> {
     if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {
       return undefined;
     }
-    const matchingSession = this.environmentDaemonSessionRepo.listActive().find((session) => {
-      const capabilities = toRecord(session.selectedCapabilities);
-      const commands = Array.isArray(capabilities?.commands)
-        ? capabilities.commands
-        : [];
-      return commands.includes("provider.list_catalog");
-    });
+    const matchingSession = this.environmentDaemonSessionRepo
+      .listActive()
+      .find((session) => session.environmentId === environmentId);
     if (!matchingSession) {
       return undefined;
     }
 
-    const catalogRepThreadId = this.threadEnvironmentAttachmentRepo
-      ?.listByEnvironmentId(matchingSession.environmentId)
-      .map((row) => row.threadId)[0];
-    if (!catalogRepThreadId) {
+    const capabilities = toRecord(matchingSession.selectedCapabilities);
+    const commands = Array.isArray(capabilities?.commands)
+      ? capabilities.commands
+      : [];
+    if (!commands.includes("provider.list_catalog")) {
       return undefined;
     }
 
+    const transportThread = this._resolveEnvironmentSessionTransportThread(
+      environmentId,
+    );
+    if (!transportThread) {
+      throw invalidRequestError(
+        `No active thread is attached to environment ${environmentId}`,
+      );
+    }
+
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: catalogRepThreadId,
+      threadId: transportThread.id,
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentDaemonAccess(catalogRepThreadId);
+        await this._recoverEnvironmentDaemonAccess(transportThread.id);
       },
     });
     try {
@@ -4880,6 +4992,20 @@ export class Orchestrator implements ThreadOrchestrator {
     event: ProviderSessionNotification,
   ): void {
     const resolvedThreadId = this._resolveNotificationThreadId(threadId, event);
+    if (!resolvedThreadId) {
+      const providerThreadId = extractProviderThreadIdFromPersistedEventData(event.eventData);
+      const providerId =
+        decodeProviderEventEnvelope(event.eventData)?.__bb_provider_event.providerId;
+      console.warn(
+        `[thread ${threadId}] dropped provider notification: unable to resolve target thread` +
+        `${providerId ? ` for provider ${providerId}` : ""}` +
+        `${providerThreadId ? ` and provider thread ${providerThreadId}` : ""}`,
+      );
+      return;
+    }
+    if (this._shouldSuppressNotification(resolvedThreadId, event)) {
+      return;
+    }
     const changes: ThreadChangeKind[] = [];
     let persistedEvent: ThreadEvent | undefined;
 
@@ -4919,7 +5045,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _resolveNotificationThreadId(
     threadId: string,
     event: ProviderSessionNotification,
-  ): string {
+  ): string | undefined {
     const providerThreadId = extractProviderThreadIdFromPersistedEventData(
       event.eventData,
     );
@@ -4933,20 +5059,18 @@ export class Orchestrator implements ThreadOrchestrator {
     const currentProviderThreadId =
       this.providerThreadIdByThreadId.get(threadId) ??
       this._resolvePersistedProviderThreadId(threadId);
-    if (
+    const currentThreadMatches =
       currentProviderThreadId === providerThreadId &&
-      (!providerId || currentThread?.providerId === providerId)
-    ) {
-      return threadId;
-    }
+      (!providerId || currentThread?.providerId === providerId);
 
     const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
       ?.getByThreadId(threadId)
       ?.environmentId;
     if (!attachedEnvironmentId || !this.threadEnvironmentAttachmentRepo) {
-      return threadId;
+      return currentThreadMatches ? threadId : undefined;
     }
 
+    const matchingThreadIds: string[] = [];
     for (const attachment of this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
       attachedEnvironmentId,
     )) {
@@ -4959,11 +5083,64 @@ export class Orchestrator implements ThreadOrchestrator {
         this.providerThreadIdByThreadId.get(candidateThreadId) ??
         this._resolvePersistedProviderThreadId(candidateThreadId);
       if (candidateProviderThreadId === providerThreadId) {
-        return candidateThreadId;
+        matchingThreadIds.push(candidateThreadId);
       }
     }
 
-    return threadId;
+    if (
+      matchingThreadIds.length === 0 &&
+      currentThreadMatches
+    ) {
+      return threadId;
+    }
+    return matchingThreadIds.length === 1 ? matchingThreadIds[0] : undefined;
+  }
+
+  private _suppressTurnId(threadId: string, turnId: string): void {
+    let suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
+    if (!suppressed) {
+      suppressed = new Set<string>();
+      this.suppressedTurnIdsByThreadId.set(threadId, suppressed);
+    }
+    suppressed.add(turnId);
+  }
+
+  private _blockProviderNotifications(threadId: string): void {
+    this.blockedProviderNotificationsByThreadId.add(threadId);
+  }
+
+  private _unblockProviderNotifications(threadId: string): void {
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
+  }
+
+  private _clearSuppressedTurnId(threadId: string, turnId: string): void {
+    const suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
+    if (!suppressed) return;
+    suppressed.delete(turnId);
+    if (suppressed.size === 0) {
+      this.suppressedTurnIdsByThreadId.delete(threadId);
+    }
+  }
+
+  private _shouldSuppressNotification(
+    threadId: string,
+    event: ProviderSessionNotification,
+  ): boolean {
+    if (this.blockedProviderNotificationsByThreadId.has(threadId)) {
+      return true;
+    }
+    const turnId = event.turnId ?? this._extractTurnIdFromEventData(event.eventData);
+    if (!turnId) {
+      return false;
+    }
+    const suppressed = this.suppressedTurnIdsByThreadId.get(threadId);
+    if (!suppressed?.has(turnId)) {
+      return false;
+    }
+    if (event.normalizedMethod === "turn/completed" || event.normalizedMethod === "turn/end") {
+      this._clearSuppressedTurnId(threadId, turnId);
+    }
+    return true;
   }
 
   private _flushQueuedProviderThreadChanged(threadId: string): void {
@@ -5443,7 +5620,26 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _withDerivedThreadState(thread: Thread): Thread {
-    return this._withPrimaryCheckoutState(thread);
+    return this._withPrimaryCheckoutState(this._withResolvedEnvironmentReference(thread));
+  }
+
+  private _withResolvedEnvironmentReference(thread: Thread): Thread {
+    const attachedEnvironmentId = this._resolveThreadEnvironmentReference(thread.id);
+    if (!this.threadEnvironmentAttachmentRepo) {
+      return !attachedEnvironmentId || thread.environmentId === attachedEnvironmentId
+        ? thread
+        : {
+            ...thread,
+            environmentId: attachedEnvironmentId,
+          };
+    }
+    if (thread.environmentId === attachedEnvironmentId) {
+      return thread;
+    }
+    return {
+      ...thread,
+      environmentId: attachedEnvironmentId,
+    };
   }
 
   private _withPrimaryCheckoutState(thread: Thread): Thread {
@@ -5738,6 +5934,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.activeTurnIdByThreadId.delete(threadId);
+    this.blockedProviderNotificationsByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this._detachEnvironmentRuntime(threadId);
 

@@ -154,18 +154,14 @@ export class EnvironmentFactory {
   }
 
   async ensureManagedEnvironmentArtifacts(args: {
-    threadId: string;
+    environmentId: string;
     projectRootPath: string;
     runtimeEnv: Record<string, string | undefined>;
   }): Promise<{ created: boolean }> {
     if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
       return { created: false };
     }
-    const attachment = this.threadEnvironmentAttachmentRepo.getByThreadId(args.threadId);
-    if (!attachment) {
-      return { created: false };
-    }
-    const environmentRecord = this.environmentRepo.getById(attachment.environmentId);
+    const environmentRecord = this.environmentRepo.getById(args.environmentId);
     if (!environmentRecord?.managed) {
       return { created: false };
     }
@@ -178,7 +174,6 @@ export class EnvironmentFactory {
             ? environmentRecord.runtimeState.state
             : resolveLocalGitWorkspaceState({
                 projectId: environmentRecord.projectId,
-                threadId: args.threadId,
                 environmentId: environmentRecord.id,
                 projectRootPath: args.projectRootPath,
                 runtimeEnv: args.runtimeEnv,
@@ -210,7 +205,6 @@ export class EnvironmentFactory {
               ? environmentRecord.runtimeState.state
               : resolveLocalGitWorkspaceState({
                   projectId: environmentRecord.projectId,
-                  threadId: args.threadId,
                   environmentId: environmentRecord.id,
                   projectRootPath: args.projectRootPath,
                   runtimeEnv: args.runtimeEnv,
@@ -229,14 +223,13 @@ export class EnvironmentFactory {
               }
             : await resolveDockerEnvironmentState({
                 projectId: environmentRecord.projectId,
-                threadId: args.threadId,
                 environmentId: environmentRecord.id,
                 runtimeEnv: args.runtimeEnv,
                 worktree: worktreeState,
               });
         const dockerCreated = await ensureDockerEnvironmentArtifacts({
           projectId: environmentRecord.projectId,
-          threadId: args.threadId,
+          threadId: environmentRecord.id,
           projectRootPath: args.projectRootPath,
           state: dockerState,
           runtimeEnv: args.runtimeEnv,
@@ -261,18 +254,14 @@ export class EnvironmentFactory {
   }
 
   async cleanupManagedEnvironmentArtifacts(args: {
-    threadId: string;
+    environmentId: string;
     projectRootPath: string;
     runtimeEnv: Record<string, string | undefined>;
   }): Promise<void> {
     if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
       return;
     }
-    const attachment = this.threadEnvironmentAttachmentRepo.getByThreadId(args.threadId);
-    if (!attachment) {
-      return;
-    }
-    const environmentRecord = this.environmentRepo.getById(attachment.environmentId);
+    const environmentRecord = this.environmentRepo.getById(args.environmentId);
     if (!environmentRecord?.managed) {
       return;
     }
@@ -286,7 +275,6 @@ export class EnvironmentFactory {
             : environmentRecord.descriptor
               ? resolveLocalGitWorkspaceState({
                   projectId: environmentRecord.projectId,
-                  threadId: args.threadId,
                   environmentId: environmentRecord.id,
                   projectRootPath: args.projectRootPath,
                   runtimeEnv: args.runtimeEnv,

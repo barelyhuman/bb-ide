@@ -650,7 +650,7 @@ describe("EnvironmentService", () => {
   });
 
   it("removes managed thread logs only when explicitly requested", () => {
-    const { service, thread, projectId } = createService({
+    const { service, thread, projectId, env } = createService({
       existsInitially: true,
     });
 
@@ -662,8 +662,36 @@ describe("EnvironmentService", () => {
 
     expect(removeEnvironmentDaemonDefaultLogArtifacts).toHaveBeenCalledWith({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
     });
+  });
+
+  it("does not remove logs from stale thread.environmentId when the attachment row is missing", () => {
+    const { service, attachmentRepo, thread } = createService({
+      existsInitially: true,
+    });
+
+    attachmentRepo.deleteByThreadId(thread.id);
+
+    service.removeManagedThreadLogs({
+      id: thread.id,
+      projectId: thread.projectId,
+      environmentId: thread.environmentId,
+    });
+
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
+  });
+
+  it("does not treat thread.environmentId as attached when the attachment row is missing", () => {
+    const { service, attachmentRepo, thread, env } = createService({
+      existsInitially: true,
+    });
+
+    attachmentRepo.deleteByThreadId(thread.id);
+
+    expect(service.getAttachedEnvironmentId(thread.id)).toBeUndefined();
+    expect(service.isThreadAttachedToEnvironment(thread.id, env.id)).toBe(false);
+    expect(service.getAttachedThreadIdsForEnvironment(env.id)).toHaveLength(0);
   });
 
   it("teardownAllForTestsOnly cleans up persisted environments even when no runtime is restored", async () => {
@@ -719,12 +747,52 @@ describe("EnvironmentService", () => {
     service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
     destroySpy.mockClear();
 
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
 
     await service.teardownAllForTestsOnly();
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(attachmentRepo.listByEnvironmentId(thread.environmentId!)).toHaveLength(0);
+  });
+
+  it("can tear down a detached shared runtime when no attached threads remain", async () => {
+    const destroySpy = vi.fn();
+    const { service, attachmentRepo, thread, siblingThreads } = createService({
+      existsInitially: true,
+      destroySpy,
+      siblingThreadIds: ["thread-2"],
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
+    destroySpy.mockClear();
+
+    attachmentRepo.deleteByThreadId(thread.id);
+    attachmentRepo.deleteByThreadId(siblingThreads[0]!.id);
+
+    await service.teardownAllForTestsOnly();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report stale thread.environmentId when removeManagedThreadLogs receives a detached thread", () => {
+    const { service, attachmentRepo, thread, onCleanupFailure } = createService({
+      existsInitially: true,
+    });
+
+    attachmentRepo.deleteByThreadId(thread.id);
+
+    expect(() =>
+      service.removeManagedThreadLogs({
+        id: thread.id,
+        projectId: thread.projectId,
+        environmentId: thread.environmentId,
+      })
+    ).not.toThrow();
+
+    expect(onCleanupFailure).not.toHaveBeenCalled();
   });
 
   it("clears persisted shared-environment attachments for all scoped threads during teardownAllForTestsOnly", async () => {
@@ -838,7 +906,7 @@ describe("EnvironmentService", () => {
         },
       }),
     );
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
 
     emitWorkspaceStatusChange?.();
 
@@ -1091,6 +1159,165 @@ describe("EnvironmentService", () => {
       activeThreadId: thread.id,
       promotedAt: expect.any(Number),
     });
+  });
+
+  it("does not reconstruct primary promotion state from stale thread.environmentId without an attachment", async () => {
+    const environment = createTestEnvironment({ existsInitially: true });
+    const environmentRegistry = new EnvironmentRegistry().register({
+      kind: "worktree",
+      info: WORKTREE_INFO,
+      create(_context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      isState(_value: unknown): _value is unknown {
+        return true;
+      },
+    });
+
+    const { db } = createTestDb();
+    const { threadRepo, projectRepo, environmentRepo, attachmentRepo } = createTestRepos(db);
+
+    const project = projectRepo.create({
+      name: "Project",
+      rootPath: "/project/root",
+    });
+    const projectId = project.id;
+
+    const env = environmentRepo.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/project/root/.worktrees/thread-1",
+      },
+      managed: true,
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
+      runtimeState: {
+        kind: "worktree",
+        state: {},
+      },
+    });
+
+    const thread = createTestThread(threadRepo, projectId, {
+      status: "idle",
+      environmentId: env.id,
+    });
+
+    projectRepo.update(projectId, { primaryCheckoutThreadId: thread.id });
+
+    vi.mocked(resolveProjectCheckoutSnapshotAsync).mockResolvedValue({
+      branch: "bb/thread-thread-1",
+      head: "abc123",
+      detached: false,
+    });
+
+    const service = new EnvironmentService(
+      threadRepo,
+      projectRepo,
+      environmentRegistry,
+      {
+        createContext: (tid, projectRootPath) => ({
+          projectId,
+          threadId: tid,
+          projectRootPath,
+          runtimeEnv: {},
+        }),
+        onProvisioningEvent: vi.fn(),
+        onThreadChanged: vi.fn(),
+        onCleanupFailure: vi.fn(),
+        onPrimaryCheckoutDemoted: vi.fn(),
+        runOptionalSetup: vi.fn().mockResolvedValue(undefined),
+      },
+      environmentRepo,
+      attachmentRepo,
+    );
+
+    await service.ensurePrimaryPromotionStateIsCurrentAsync(projectId);
+
+    expect(service.getPrimaryCheckoutStatus(projectId)).toEqual({ projectId });
+    expect(service.getAttachedEnvironmentId(thread.id)).toBeUndefined();
+    expect(threadRepo_getEnvId(service, thread.id)).toBe(env.id);
+  });
+
+  it("rejects promotion when attachment-backed environment identity is missing", async () => {
+    const environment = createTestEnvironment({ existsInitially: true });
+    const environmentRegistry = new EnvironmentRegistry().register({
+      kind: "worktree",
+      info: WORKTREE_INFO,
+      create(_context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      isState(_value: unknown): _value is unknown {
+        return true;
+      },
+    });
+
+    const { db } = createTestDb();
+    const { threadRepo, projectRepo, environmentRepo, attachmentRepo } = createTestRepos(db);
+
+    const project = projectRepo.create({
+      name: "Project",
+      rootPath: "/project/root",
+    });
+    const env = environmentRepo.create({
+      projectId: project.id,
+      descriptor: {
+        type: "path",
+        path: "/project/root/.worktrees/thread-1",
+      },
+      managed: true,
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
+      runtimeState: {
+        kind: "worktree",
+        state: {},
+      },
+    });
+
+    const thread = createTestThread(threadRepo, project.id, {
+      status: "idle",
+      environmentId: env.id,
+    });
+
+    const service = new EnvironmentService(
+      threadRepo,
+      projectRepo,
+      environmentRegistry,
+      {
+        createContext: (tid, projectRootPath) => ({
+          projectId: project.id,
+          threadId: tid,
+          projectRootPath,
+          runtimeEnv: {},
+        }),
+        onProvisioningEvent: vi.fn(),
+        onThreadChanged: vi.fn(),
+        onCleanupFailure: vi.fn(),
+        onPrimaryCheckoutDemoted: vi.fn(),
+        runOptionalSetup: vi.fn().mockResolvedValue(undefined),
+      },
+      environmentRepo,
+      attachmentRepo,
+    );
+
+    await expect(
+      service.promoteThreadEnvironment({
+        thread,
+      }),
+    ).rejects.toThrow("Thread is not attached to an environment");
+    expect(service.getPrimaryCheckoutStatus(project.id)).toEqual({ projectId: project.id });
   });
 });
 
