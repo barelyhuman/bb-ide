@@ -816,6 +816,99 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("drops ambiguous shared environment provider events for the same provider", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const firstThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      const secondThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      attachmentRepo.attachThread({ threadId: firstThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: secondThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(firstThread.id, "shared-provider-thread");
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(secondThread.id, "shared-provider-thread");
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(firstThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "shared-provider-thread",
+            item: { type: "agentMessage", text: "hello" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(firstThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: firstThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(eventRepo.listByThread(secondThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: secondThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("dropped provider notification"),
+      );
+    });
+
     it("ignores active session invalidation during newer-session handoff", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "active" });
       const updateSpy = vi.spyOn(threadRepo, "update");

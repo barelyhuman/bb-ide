@@ -4936,6 +4936,17 @@ export class Orchestrator implements ThreadOrchestrator {
     event: ProviderSessionNotification,
   ): void {
     const resolvedThreadId = this._resolveNotificationThreadId(threadId, event);
+    if (!resolvedThreadId) {
+      const providerThreadId = extractProviderThreadIdFromPersistedEventData(event.eventData);
+      const providerId =
+        decodeProviderEventEnvelope(event.eventData)?.__bb_provider_event.providerId;
+      console.warn(
+        `[thread ${threadId}] dropped provider notification: unable to resolve target thread` +
+        `${providerId ? ` for provider ${providerId}` : ""}` +
+        `${providerThreadId ? ` and provider thread ${providerThreadId}` : ""}`,
+      );
+      return;
+    }
     const changes: ThreadChangeKind[] = [];
     let persistedEvent: ThreadEvent | undefined;
 
@@ -4975,7 +4986,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _resolveNotificationThreadId(
     threadId: string,
     event: ProviderSessionNotification,
-  ): string {
+  ): string | undefined {
     const providerThreadId = extractProviderThreadIdFromPersistedEventData(
       event.eventData,
     );
@@ -4989,20 +5000,18 @@ export class Orchestrator implements ThreadOrchestrator {
     const currentProviderThreadId =
       this.providerThreadIdByThreadId.get(threadId) ??
       this._resolvePersistedProviderThreadId(threadId);
-    if (
+    const currentThreadMatches =
       currentProviderThreadId === providerThreadId &&
-      (!providerId || currentThread?.providerId === providerId)
-    ) {
-      return threadId;
-    }
+      (!providerId || currentThread?.providerId === providerId);
 
     const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
       ?.getByThreadId(threadId)
       ?.environmentId;
     if (!attachedEnvironmentId || !this.threadEnvironmentAttachmentRepo) {
-      return threadId;
+      return currentThreadMatches ? threadId : undefined;
     }
 
+    const matchingThreadIds: string[] = [];
     for (const attachment of this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
       attachedEnvironmentId,
     )) {
@@ -5015,11 +5024,17 @@ export class Orchestrator implements ThreadOrchestrator {
         this.providerThreadIdByThreadId.get(candidateThreadId) ??
         this._resolvePersistedProviderThreadId(candidateThreadId);
       if (candidateProviderThreadId === providerThreadId) {
-        return candidateThreadId;
+        matchingThreadIds.push(candidateThreadId);
       }
     }
 
-    return threadId;
+    if (
+      matchingThreadIds.length === 0 &&
+      currentThreadMatches
+    ) {
+      return threadId;
+    }
+    return matchingThreadIds.length === 1 ? matchingThreadIds[0] : undefined;
   }
 
   private _flushQueuedProviderThreadChanged(threadId: string): void {
