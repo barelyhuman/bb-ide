@@ -12,3 +12,7 @@ Owned areas:
 Default pass:
 
 - [`./core.md`](./core.md)
+
+Fastest scripted entrypoint:
+
+- `pnpm qa:environments:core`

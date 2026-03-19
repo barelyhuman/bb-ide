@@ -2,6 +2,17 @@
 
 This document tracks what the new QA structure already covers well and where the depth is still thin.
 
+## Tester-Pass Notes
+
+Reviewing the new QA system like a future tester surfaces these rough edges:
+
+- the top-level docs need to map requests to both docs and commands, not just docs
+- some surfaces still lack an exact scripted alias for their default pass
+- provider depth is easy to understand conceptually, but the automated slices are still named around the older server-centric history
+- CLI QA is now structurally clear, but still lighter on explicit automation than the other surfaces
+
+The sections below track the substantive depth gaps by surface, not just the usability gaps.
+
 ## Current Strengths
 
 ### Server / E2E smoke
@@ -66,6 +77,18 @@ Representative files:
 
 ## Current Gaps
 
+### Server core still leans on older automation naming
+
+What is weak today:
+
+- server docs are clear, but the default server pass still maps to older `qa:server:*` names rather than a dedicated `qa:server:core`
+- route/API contract checks and restart-visible-state checks are not clearly separated in automation
+
+Recommended next depth increase:
+
+- add a dedicated server-core automation alias or slice once the intended checklist is stable
+- split route/API-focused checks from deeper restart-focused checks if the server surface grows further
+
 ### Provider depth is still too implicit
 
 What is weak today:
@@ -78,18 +101,30 @@ Recommended next depth increase:
 
 - add provider-focused automation entrypoints that map directly to the shared provider matrix
 - add short provider overlay docs for known exclusions or provider-specific regressions as they appear
+- add explicit coverage for multi-turn, context preservation, and system instructions as first-class scripted checks
 
 ### CLI depth is still mostly embedded in standalone flows
 
 What is weak today:
 
-- CLI coverage exists, but it is mostly mixed into standalone server flows
-- there is not yet a dedicated CLI smoke/core automation entrypoint
+- CLI smoke now has a dedicated entrypoint, but deeper CLI coverage is still thinner than the other surfaces
+- most CLI depth still depends on broader standalone or e2e flows
 
 Recommended next depth increase:
 
-- define a CLI-focused pass around inspection surfaces and control-plane commands
-- add a small scripted CLI-only smoke slice if the current e2e harness supports it cheaply
+- keep the new CLI smoke slice, then define a deeper CLI-focused pass around inspection surfaces and control-plane commands
+- add a second CLI-focused scripted slice if the current e2e harness supports it cheaply
+
+### Environment depth can still go deeper on implicit attachment behavior
+
+What is weak today:
+
+- explicit worktree and shared-environment behavior is covered better than implicit local-environment attachment behavior
+- attachment invariants are still easiest to infer from the shared-environment tests rather than a dedicated environment-focused slice
+
+Recommended next depth increase:
+
+- keep the new environment core slice, then add a more explicit check for implicit local-environment attachment and sibling reuse
 
 ### Regression depth is only partly normalized
 
@@ -118,5 +153,5 @@ Recommended next depth increase:
 
 1. Provider depth and explicit provider automation naming
 2. CLI-focused smoke/core pass
-3. Split legacy lifecycle invariants into owned server and env-daemon references
-4. Normalize product QA structure
+3. Environment-focused attachment/reuse depth
+4. Server-core automation naming that matches the docs

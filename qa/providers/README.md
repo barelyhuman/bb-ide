@@ -19,3 +19,12 @@ Interpretation:
 
 - "run provider QA" means run the shared provider pass
 - "run QA for the Pi provider" means run the shared provider pass, then apply the Pi overlay
+
+Fastest scripted entrypoints:
+
+- shared provider smoke: `pnpm qa:providers:smoke`
+- dynamic-tool provider roundtrip: `pnpm qa:providers:dynamic-tools`
+- Claude Code smoke: `pnpm qa:providers:smoke:claude-code`
+- Pi smoke: `pnpm qa:providers:smoke:pi`
+
+Use `core.md` when the change affects provider protocol behavior, not just bridge liveness.
