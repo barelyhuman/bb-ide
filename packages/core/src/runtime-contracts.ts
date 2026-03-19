@@ -8,8 +8,6 @@ import type {
   PromotePrimaryCheckoutResponse,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
-  ThreadOperationRequest,
-  ThreadOperationResponse,
   ProviderCapabilities,
   SpawnThreadRequest,
   SystemEnvironmentInfo,
@@ -238,10 +236,6 @@ export interface ThreadOrchestrator {
   ): Thread;
   markRead(threadId: string): Thread;
   markUnread(threadId: string): Thread;
-  requestThreadOperation(
-    threadId: string,
-    request: ThreadOperationRequest,
-  ): Promise<ThreadOperationResponse>;
   requestEnvironmentOperation(
     environmentId: string,
     request: EnvironmentOperationRequest,

@@ -19,7 +19,6 @@ import {
   confirmDestructiveAction,
   getErrorMessage,
   outputJson,
-  printThreadOperationResult,
   resolveThreadIdOrSelf,
   resolveThreadIdWithLabel,
   resolveProjectIdWithLabel,

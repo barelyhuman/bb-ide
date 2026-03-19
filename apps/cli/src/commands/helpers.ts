@@ -1,5 +1,8 @@
 import { createInterface } from "node:readline/promises";
-import type { ThreadOperationResponse } from "@bb/core";
+import type {
+  CommitEnvironmentOperationResponse,
+  SquashMergeEnvironmentOperationResponse,
+} from "@bb/core";
 
 /**
  * Print data as formatted JSON and return true, or return false if --json was not requested.
@@ -99,10 +102,14 @@ export function printContextLabel(
   }
 }
 
-export function printThreadOperationResult(result: ThreadOperationResponse): void {
+export function printEnvironmentGitOperationResult(
+  result: CommitEnvironmentOperationResponse | SquashMergeEnvironmentOperationResponse,
+): void {
   const flags = [
-    result.executionStatus,
-    ...(result.demotedPrimaryCheckout ? ["demoted-primary-checkout"] : []),
+    ...(result.operation === "commit"
+      ? [result.commitCreated ? "committed" : "noop"]
+      : [result.merged ? "merged" : "noop"]),
+    ...(result.autoArchived ? ["archived"] : []),
   ];
   console.log(`${result.message} [${flags.join(", ")}]`);
 }

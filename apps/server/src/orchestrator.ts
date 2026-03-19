@@ -9,7 +9,6 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import {
-  buildCommitFailureFollowUpInstruction,
   assertNever,
   createProviderEventEnvelope,
   DEFAULT_THREAD_PROVIDER_ID,
@@ -21,8 +20,6 @@ import {
   isThreadProviderId,
   resolveProviderEventMethod,
   buildThreadDetailRows,
-  buildSquashMergeCommitFailureFollowUpInstruction,
-  buildSquashMergeConflictFollowUpInstruction,
   extractThreadContextWindowUsage,
   toRecord,
   toUIMessages,
@@ -57,19 +54,18 @@ import {
   type ThreadProvisioningState,
   type PromotePrimaryCheckoutResponse,
   type ProvisioningTranscriptEntry,
+  type CommitEnvironmentOperationResponse,
   type DemotePrimaryCheckoutResponse,
   type EnvironmentOperationRequest,
   type EnvironmentOperationResponse,
+  type EnvironmentOperationFailureDetails,
   type EnqueueThreadMessageRequest,
   type PrimaryCheckoutStatus,
   type ReasoningLevel,
   type SandboxMode,
   type SendQueuedThreadMessageRequest,
   type SendQueuedThreadMessageResponse,
-  type ThreadOperationRequest,
-  type ThreadOperationResponse,
-  type ThreadOperationType,
-  type ThreadPendingOperation,
+  type SquashMergeEnvironmentOperationResponse,
   type ThreadTimelineResponse,
   type ThreadType,
   type ThreadGitDiffResponse,
@@ -92,7 +88,6 @@ import {
   listGitWorkspaceMergeBaseBranchesAsync,
   type CreateEnvironmentContext,
   type EnvironmentCommitSummary,
-  type EnvironmentSquashMergeCommitFailureStage,
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
 } from "@bb/environment";
@@ -130,6 +125,7 @@ import {
   ProviderSessionError,
 } from "./provider-session-controller.js";
 import {
+  DomainError,
   isDomainError,
   inactiveSessionError,
   invalidRequestError,
@@ -212,42 +208,6 @@ interface ThreadTimelineCacheEntry {
   latestSeq: number;
   threadStatus: Thread["status"] | undefined;
   byRequestKey: Map<string, ThreadTimelineResponse>;
-}
-
-interface QueuedThreadOperation {
-  operationId: string;
-  request: ThreadOperationRequest;
-  requestedAt: number;
-  demotedPrimaryCheckout: boolean;
-}
-
-interface EnqueueSquashMergeConflictFollowUpPostAction {
-  type: "enqueue_squash_merge_conflict_follow_up";
-  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>;
-  conflictFiles: string[];
-}
-
-interface EnqueueCommitFailureFollowUpPostAction {
-  type: "enqueue_commit_failure_follow_up";
-  request: Extract<ThreadOperationRequest, { operation: "commit" }>;
-  errorMessage: string;
-}
-
-interface EnqueueSquashMergeCommitFailureFollowUpPostAction {
-  type: "enqueue_squash_merge_commit_failure_follow_up";
-  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>;
-  stage: EnvironmentSquashMergeCommitFailureStage;
-  errorMessage: string;
-}
-
-type ThreadOperationPostAction =
-  | EnqueueCommitFailureFollowUpPostAction
-  | EnqueueSquashMergeConflictFollowUpPostAction
-  | EnqueueSquashMergeCommitFailureFollowUpPostAction;
-
-interface ThreadOperationRunResult {
-  message: string;
-  postActions?: ThreadOperationPostAction[];
 }
 
 // Open provider/runtime event type set: unknown values are intentionally not filtered.
@@ -722,14 +682,6 @@ export class Orchestrator implements ThreadOrchestrator {
   private primaryCheckoutTransitionsInFlight = new Set<string>();
   /** Prevents concurrent queued follow-up dispatch loops per thread. */
   private queueDispatchInFlight = new Set<string>();
-  /** Pending deterministic thread git operations keyed by thread id. */
-  private queuedOperationsByThreadId = new Map<string, QueuedThreadOperation[]>();
-  /** Prevents concurrent operation queue-drain loops per thread. */
-  private operationDispatchInFlight = new Set<string>();
-  /** Currently executing deterministic git operation keyed by thread id. */
-  private runningOperationByThreadId = new Map<string, QueuedThreadOperation>();
-  /** Ensures only one deterministic git operation mutates a project at a time. */
-  private projectOperationTransitionsInFlight = new Set<string>();
   /** Tracks threads whose workspace deletion is in progress. */
   private workspaceCleanupInFlightThreadIds: Set<string>;
   private readonly agentServerByProviderId = new Map<
@@ -751,7 +703,6 @@ export class Orchestrator implements ThreadOrchestrator {
     ThreadProviderId,
     Promise<AvailableModel[]>
   >();
-  private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
   private environmentAgentCommandPollIntervalMs: number | undefined;
@@ -821,15 +772,6 @@ export class Orchestrator implements ThreadOrchestrator {
           );
         },
         onPrimaryCheckoutDemoted: ({ projectId, threadId, currentCheckout }) => {
-          this._appendOperationEvent(threadId, "primary_checkout", "completed", {
-            message: "Primary checkout changed outside BB; marked as demoted",
-            metadata: {
-              action: "demote",
-              projectId,
-              activeThreadId: threadId,
-              ...(currentCheckout.branch ? { branch: currentCheckout.branch } : {}),
-            },
-          });
           this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
         },
         runOptionalSetup: (threadId, environment, projectRootPath, reason) =>
@@ -1890,229 +1832,10 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _nextOperationId(): string {
-    this.operationIdCounter += 1;
-    return `op-${this.operationIdCounter.toString(36)}`;
-  }
-
-  private _enqueueThreadOperation(
-    threadId: string,
-    request: ThreadOperationRequest,
-    demotedPrimaryCheckout: boolean,
-    operationId?: string,
-  ): QueuedThreadOperation {
-    const queuedOperation: QueuedThreadOperation = {
-      operationId: operationId ?? this._nextOperationId(),
-      request,
-      requestedAt: Date.now(),
-      demotedPrimaryCheckout,
-    };
-    const queue = this.queuedOperationsByThreadId.get(threadId) ?? [];
-    queue.push(queuedOperation);
-    this.queuedOperationsByThreadId.set(threadId, queue);
-    return queuedOperation;
-  }
-
-  private _scheduleQueuedOperationDispatch(threadId: string): void {
-    if (this.operationDispatchInFlight.has(threadId)) return;
-    this.operationDispatchInFlight.add(threadId);
-    setImmediate(() => {
-      void this._drainQueuedOperations(threadId).finally(() => {
-        this.operationDispatchInFlight.delete(threadId);
-      });
-    });
-  }
-
-  private async _drainQueuedOperations(threadId: string): Promise<void> {
-    while (true) {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread) return;
-      if (thread.archivedAt !== undefined) return;
-      if (thread.status !== "idle") return;
-      if (this.projectOperationTransitionsInFlight.has(thread.projectId)) return;
-
-      const queue = this.queuedOperationsByThreadId.get(threadId);
-      const nextOperation = queue?.[0];
-      if (!nextOperation) return;
-
-      queue?.shift();
-      if (!queue || queue.length === 0) {
-        this.queuedOperationsByThreadId.delete(threadId);
-      } else {
-        this.queuedOperationsByThreadId.set(threadId, queue);
-      }
-
-      await this._runQueuedThreadOperation(thread, nextOperation);
-    }
-  }
-
-  private async _runQueuedThreadOperation(
-    thread: Thread,
-    queuedOperation: QueuedThreadOperation,
-  ): Promise<void> {
-    if (this.projectOperationTransitionsInFlight.has(thread.projectId)) {
-      const queue = this.queuedOperationsByThreadId.get(thread.id) ?? [];
-      queue.unshift(queuedOperation);
-      this.queuedOperationsByThreadId.set(thread.id, queue);
-      return;
-    }
-
-    this.projectOperationTransitionsInFlight.add(thread.projectId);
-    this.runningOperationByThreadId.set(thread.id, queuedOperation);
-    this._appendOperationEvent(
-      thread.id,
-      queuedOperation.request.operation,
-      "running",
-      {
-        operationId: queuedOperation.operationId,
-        message: this._threadOperationRunningMessage(queuedOperation.request.operation),
-        ...(queuedOperation.demotedPrimaryCheckout
-          ? { metadata: { demotedPrimaryCheckout: true } }
-          : {}),
-      },
-    );
-
-    try {
-      let completionMessage = "";
-      let postActions: ThreadOperationPostAction[] = [];
-      switch (queuedOperation.request.operation) {
-        case "commit": {
-          const result = await this._runWorktreeCommitOperation(
-            thread.id,
-            queuedOperation.request.options,
-          );
-          completionMessage = result.message;
-          postActions = result.postActions ?? [];
-          break;
-        }
-        case "squash_merge": {
-          const result = await this._runWorktreeSquashMergeOperation(
-            thread.id,
-            queuedOperation.request.options,
-          );
-          completionMessage = result.message;
-          postActions = result.postActions ?? [];
-          break;
-        }
-        default:
-          assertNever(queuedOperation.request);
-      }
-
-      this._appendOperationEvent(
-        thread.id,
-        queuedOperation.request.operation,
-        "completed",
-        {
-          operationId: queuedOperation.operationId,
-          message: completionMessage,
-          ...(queuedOperation.demotedPrimaryCheckout
-            ? { metadata: { demotedPrimaryCheckout: true } }
-            : {}),
-        },
-      );
-
-      await this._applyThreadOperationPostActions(thread.id, postActions);
-    } catch (err) {
-      const failureMessage = this._toErrorMessage(err);
-      this._appendOperationEvent(
-        thread.id,
-        queuedOperation.request.operation,
-        "failed",
-        {
-          operationId: queuedOperation.operationId,
-          message: failureMessage,
-          ...(queuedOperation.demotedPrimaryCheckout
-            ? { metadata: { demotedPrimaryCheckout: true } }
-            : {}),
-        },
-      );
-      await this._applyThreadOperationPostActions(
-        thread.id,
-        this._threadOperationFailurePostActions(queuedOperation.request, err, failureMessage),
-      );
-    } finally {
-      this.runningOperationByThreadId.delete(thread.id);
-      this.projectOperationTransitionsInFlight.delete(thread.projectId);
-      this._scheduleQueuedOperationDispatch(thread.id);
-      for (const candidateThreadId of this.queuedOperationsByThreadId.keys()) {
-        if (candidateThreadId === thread.id) continue;
-        const candidateThread = this.threadRepo.getById(candidateThreadId);
-        if (!candidateThread || candidateThread.projectId !== thread.projectId) continue;
-        this._scheduleQueuedOperationDispatch(candidateThreadId);
-      }
-    }
-  }
-
-  private async _applyThreadOperationPostActions(
-    threadId: string,
-    postActions: readonly ThreadOperationPostAction[],
-  ): Promise<void> {
-    for (const postAction of postActions) {
-      const postActionType = postAction.type;
-      switch (postActionType) {
-        case "enqueue_commit_failure_follow_up":
-          this._enqueueCommitFailureFollowUp(
-            threadId,
-            postAction.request,
-            postAction.errorMessage,
-          );
-          break;
-        case "enqueue_squash_merge_conflict_follow_up":
-          this._enqueueSquashMergeConflictFollowUp(
-            threadId,
-            postAction.request,
-            postAction.conflictFiles,
-          );
-          break;
-        case "enqueue_squash_merge_commit_failure_follow_up":
-          this._enqueueSquashMergeCommitFailureFollowUp(
-            threadId,
-            postAction.request,
-            postAction.stage,
-            postAction.errorMessage,
-          );
-          break;
-        default:
-          assertNever(postActionType);
-      }
-    }
-  }
-
-  private _threadOperationFailurePostActions(
-    request: ThreadOperationRequest,
-    error: unknown,
-    errorMessage: string,
-  ): ThreadOperationPostAction[] {
-    switch (request.operation) {
-      case "commit":
-        return [
-          {
-            type: "enqueue_commit_failure_follow_up",
-            request,
-            errorMessage,
-          },
-        ];
-      case "squash_merge":
-        if (!(error instanceof EnvironmentSquashMergeCommitFailureError)) {
-          return [];
-        }
-        return [
-          {
-            type: "enqueue_squash_merge_commit_failure_follow_up",
-            request,
-            stage: error.stage,
-            errorMessage,
-          },
-        ];
-      default:
-        return assertNever(request);
-    }
-  }
-
   private async _runWorktreeCommitOperation(
     threadId: string,
-    request?: Extract<ThreadOperationRequest, { operation: "commit" }>["options"],
-  ): Promise<ThreadOperationRunResult> {
+    request?: Extract<EnvironmentOperationRequest, { operation: "commit" }>["options"],
+  ): Promise<CommitEnvironmentOperationResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -2136,37 +1859,44 @@ export class Orchestrator implements ThreadOrchestrator {
       message: request?.message?.trim(),
       includeUnstaged: request?.includeUnstaged,
     });
-    this._appendEvent(thread.id, "system/worktree/commit", {
-      status: result.commitCreated ? "committed" : "noop",
-      message: result.message,
-      ...(result.commitSha ? { commitSha: result.commitSha } : {}),
-      ...("commitSubject" in result && result.commitSubject
-        ? { commitSubject: result.commitSubject }
-        : {}),
-      ...(result.includeUnstaged !== undefined
-        ? { includeUnstaged: result.includeUnstaged }
-        : {}),
-    }, { broadcastChanges: ["events-appended", "work-status-changed"] });
-
-    if (
+    const autoArchived =
       result.commitCreated &&
       await this._shouldAutoArchiveThreadAsync({
         thread,
         projectRootPath: project.rootPath,
         environment,
         requested: request?.autoArchiveOnSuccess,
-      })
+        hadMeaningfulBranchWork: result.commitCreated,
+      });
+
+    this._broadcastEnvironmentThreadsChanged(
+      this._resolveThreadEnvironmentReference(thread.id),
+      ["work-status-changed"],
+    );
+    if (
+      autoArchived
     ) {
       await this.archive(thread.id);
     }
 
-    return { message: result.message };
+    return {
+      ok: true,
+      operation: "commit",
+      commitCreated: result.commitCreated,
+      message: result.message,
+      autoArchived,
+      ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+      ...(result.commitSubject ? { commitSubject: result.commitSubject } : {}),
+      ...(result.includeUnstaged !== undefined
+        ? { includeUnstaged: result.includeUnstaged }
+        : {}),
+    };
   }
 
   private async _runWorktreeSquashMergeOperation(
     threadId: string,
-    request?: Extract<ThreadOperationRequest, { operation: "squash_merge" }>["options"],
-  ): Promise<ThreadOperationRunResult> {
+    request?: Extract<EnvironmentOperationRequest, { operation: "squash_merge" }>["options"],
+  ): Promise<SquashMergeEnvironmentOperationResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -2202,54 +1932,24 @@ export class Orchestrator implements ThreadOrchestrator {
           includeUnstaged: false,
         }),
     });
-    if (mergeResult.prepCommit) {
-      this._appendEvent(thread.id, "system/worktree/commit", {
-        status: "committed",
-        message: mergeResult.prepCommit.message,
-        ...(mergeResult.prepCommit.commitSha
-          ? { commitSha: mergeResult.prepCommit.commitSha }
-          : {}),
-        ...("commitSubject" in mergeResult.prepCommit && mergeResult.prepCommit.commitSubject
-          ? { commitSubject: mergeResult.prepCommit.commitSubject }
-          : {}),
-        ...(mergeResult.prepCommit.includeUnstaged !== undefined
-          ? { includeUnstaged: mergeResult.prepCommit.includeUnstaged }
-          : {}),
-      }, { broadcastChanges: ["events-appended", "work-status-changed"] });
+    if (!mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0) {
+      throw invalidRequestError(mergeResult.message, {
+        operation: "squash_merge",
+        kind: "squash_merge_conflict",
+        request: {
+          operation: "squash_merge",
+          initiatingThreadId: threadId,
+          ...(request ? { options: request } : {}),
+        },
+        conflictFiles: mergeResult.conflictFiles,
+      } satisfies EnvironmentOperationFailureDetails);
     }
-    this._appendEvent(thread.id, "system/worktree/squash_merge", {
-      status: mergeResult.merged
-        ? "merged"
-        : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
-          ? "conflict"
-          : "noop",
-      message: mergeResult.message,
-      ...(mergeResult.committed !== undefined ? { committed: mergeResult.committed } : {}),
-      ...("commitSha" in mergeResult && mergeResult.commitSha
-        ? { commitSha: mergeResult.commitSha }
-        : {}),
-      ...("commitSubject" in mergeResult && mergeResult.commitSubject
-        ? { commitSubject: mergeResult.commitSubject }
-        : {}),
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
-    }, { broadcastChanges: ["events-appended", "work-status-changed"] });
+    this._broadcastEnvironmentThreadsChanged(
+      this._resolveThreadEnvironmentReference(thread.id),
+      ["work-status-changed"],
+    );
 
-    const postActions: ThreadOperationPostAction[] =
-      !mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
-        ? [
-            {
-              type: "enqueue_squash_merge_conflict_follow_up",
-              request: {
-                operation: "squash_merge",
-                ...(request ? { options: request } : {}),
-              },
-              conflictFiles: mergeResult.conflictFiles,
-            },
-          ]
-        : [];
-
-    if (
+    const autoArchived =
       mergeResult.merged &&
       await this._shouldAutoArchiveThreadAsync({
         thread,
@@ -2257,100 +1957,86 @@ export class Orchestrator implements ThreadOrchestrator {
         environment,
         mergeBaseBranch,
         requested: options.autoArchiveOnSuccess,
-      })
+        hadMeaningfulBranchWork: mergeResult.merged,
+      });
+    if (
+      autoArchived
     ) {
       await this.archive(thread.id);
     }
 
     return {
+      ok: true,
+      operation: "squash_merge",
+      merged: mergeResult.merged,
       message: mergeResult.message,
-      ...(postActions.length > 0 ? { postActions } : {}),
+      autoArchived,
+      ...(mergeResult.committed !== undefined ? { committed: mergeResult.committed } : {}),
+      ...(mergeResult.commitSha ? { commitSha: mergeResult.commitSha } : {}),
+      ...(mergeResult.commitSubject ? { commitSubject: mergeResult.commitSubject } : {}),
+      ...(mergeResult.prepCommit
+        ? {
+            prepCommit: {
+              message: mergeResult.prepCommit.message,
+              ...(mergeResult.prepCommit.commitSha
+                ? { commitSha: mergeResult.prepCommit.commitSha }
+                : {}),
+              ...(mergeResult.prepCommit.commitSubject
+                ? { commitSubject: mergeResult.prepCommit.commitSubject }
+                : {}),
+              ...(mergeResult.prepCommit.includeUnstaged !== undefined
+                ? { includeUnstaged: mergeResult.prepCommit.includeUnstaged }
+                : {}),
+            },
+          }
+        : {}),
     };
   }
 
-  private _enqueueSquashMergeConflictFollowUp(
-    threadId: string,
-    request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
-    conflictFiles: string[],
+  private _broadcastEnvironmentThreadsChanged(
+    environmentId: string | undefined,
+    changes: readonly ThreadChangeKind[],
   ): void {
-    const input: PromptInput[] = [
-      {
-        type: "text",
-        text: buildSquashMergeConflictFollowUpInstruction(request, { conflictFiles }),
-      },
-    ];
-
-    this._normalizePromptInputForProvider(
-      this.threadRepo.getById(threadId)?.providerId ?? DEFAULT_THREAD_PROVIDER_ID,
-      input,
-    );
-    const defaultOptions = this.getDefaultExecutionOptions(threadId);
-    this.threadRepo.enqueueQueuedMessage(threadId, {
-      input,
-      model: defaultOptions?.model,
-      reasoningLevel: normalizeQueuedReasoningLevel(defaultOptions?.reasoningLevel),
-      sandboxMode: normalizeQueuedSandboxMode(defaultOptions?.sandboxMode),
-    });
-    this._broadcastThreadChanged(threadId, ["queue-changed"]);
-    this._scheduleQueuedFollowUpDispatch(threadId);
+    if (!environmentId) {
+      return;
+    }
+    for (const thread of this._getThreadsAttachedToEnvironment(environmentId)) {
+      this._broadcastThreadChanged(thread.id, changes);
+    }
   }
 
-  private _enqueueCommitFailureFollowUp(
-    threadId: string,
-    request: Extract<ThreadOperationRequest, { operation: "commit" }>,
-    errorMessage: string,
-  ): void {
-    const input: PromptInput[] = [
-      {
-        type: "text",
-        text: buildCommitFailureFollowUpInstruction(request, { errorMessage }),
-      },
-    ];
-
-    this._normalizePromptInputForProvider(
-      this.threadRepo.getById(threadId)?.providerId ?? DEFAULT_THREAD_PROVIDER_ID,
-      input,
-    );
-    const defaultOptions = this.getDefaultExecutionOptions(threadId);
-    this.threadRepo.enqueueQueuedMessage(threadId, {
-      input,
-      model: defaultOptions?.model,
-      reasoningLevel: normalizeQueuedReasoningLevel(defaultOptions?.reasoningLevel),
-      sandboxMode: normalizeQueuedSandboxMode(defaultOptions?.sandboxMode),
-    });
-    this._broadcastThreadChanged(threadId, ["queue-changed"]);
-    this._scheduleQueuedFollowUpDispatch(threadId);
-  }
-
-  private _enqueueSquashMergeCommitFailureFollowUp(
-    threadId: string,
-    request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
-    stage: EnvironmentSquashMergeCommitFailureStage,
-    errorMessage: string,
-  ): void {
-    const input: PromptInput[] = [
-      {
-        type: "text",
-        text: buildSquashMergeCommitFailureFollowUpInstruction(request, {
-          stage,
-          errorMessage,
-        }),
-      },
-    ];
-
-    this._normalizePromptInputForProvider(
-      this.threadRepo.getById(threadId)?.providerId ?? DEFAULT_THREAD_PROVIDER_ID,
-      input,
-    );
-    const defaultOptions = this.getDefaultExecutionOptions(threadId);
-    this.threadRepo.enqueueQueuedMessage(threadId, {
-      input,
-      model: defaultOptions?.model,
-      reasoningLevel: normalizeQueuedReasoningLevel(defaultOptions?.reasoningLevel),
-      sandboxMode: normalizeQueuedSandboxMode(defaultOptions?.sandboxMode),
-    });
-    this._broadcastThreadChanged(threadId, ["queue-changed"]);
-    this._scheduleQueuedFollowUpDispatch(threadId);
+  private _environmentOperationFailureDetails(
+    request: Extract<EnvironmentOperationRequest, { operation: "commit" | "squash_merge" }>,
+    err: unknown,
+  ): EnvironmentOperationFailureDetails | undefined {
+    switch (request.operation) {
+      case "commit":
+        if (err instanceof DomainError) {
+          return undefined;
+        }
+        return {
+          operation: "commit",
+          kind: "commit_failed",
+          request,
+          errorMessage: this._toErrorMessage(err),
+        };
+      case "squash_merge":
+        if (err instanceof EnvironmentSquashMergeCommitFailureError) {
+          return {
+            operation: "squash_merge",
+            kind: "squash_merge_commit_failed",
+            request,
+            stage: err.stage,
+            errorMessage: this._toErrorMessage(err),
+          };
+        }
+        if (err instanceof DomainError) {
+          return undefined;
+        }
+        return undefined;
+      default:
+        return assertNever(request);
+    }
   }
 
   /**
@@ -2440,9 +2126,6 @@ export class Orchestrator implements ThreadOrchestrator {
    * Archive a thread and destroy any persisted environment state.
    */
   private _finalizeManagedThreadCleanup(threadId: string, projectId: string): void {
-    this.queuedOperationsByThreadId.delete(threadId);
-    this.operationDispatchInFlight.delete(threadId);
-    this.runningOperationByThreadId.delete(threadId);
     this.queueDispatchInFlight.delete(threadId);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
@@ -2471,9 +2154,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queueDispatchInFlight.delete(threadId);
-    this.queuedOperationsByThreadId.delete(threadId);
-    this.operationDispatchInFlight.delete(threadId);
-    this.runningOperationByThreadId.delete(threadId);
     this.provisioningTasks.delete(threadId);
     this.timelineByThread.delete(threadId);
     this.titleFallbackByThreadId.delete(threadId);
@@ -3133,95 +2813,6 @@ export class Orchestrator implements ThreadOrchestrator {
     );
   }
 
-  async requestThreadOperation(
-    threadId: string,
-    request: ThreadOperationRequest,
-  ): Promise<ThreadOperationResponse> {
-    return measureAsync("orchestrator.requestThreadOperation", async () => {
-      const thread = this.threadRepo.getById(threadId);
-      if (!thread) {
-        throw threadNotFoundError(threadId);
-      }
-      if (thread.archivedAt !== undefined) {
-        throw threadArchivedError(threadId);
-      }
-      if (request.operation === "squash_merge") {
-        const project = this.projectRepo.getById(thread.projectId);
-        if (!project) {
-          throw projectNotFoundError(thread.projectId);
-        }
-        const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-        if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
-          throw invalidRequestError("Squash merge is not supported for this environment");
-        }
-      }
-
-      const requiresDemoteFirst = this._isThreadAttachedToPromotedEnvironment(thread.id);
-
-      const operationId = this._nextOperationId();
-      let demotedPrimaryCheckout = false;
-      try {
-        if (requiresDemoteFirst) {
-          await this.demoteThreadEnvironmentFromPrimaryCheckout(thread.id);
-          demotedPrimaryCheckout = true;
-        }
-
-        this._appendOperationEvent(thread.id, request.operation, "requested", {
-          operationId,
-          message: this._threadOperationRequestedMessage(request.operation),
-          ...(demotedPrimaryCheckout ? { metadata: { demotedPrimaryCheckout: true } } : {}),
-        });
-        this._enqueueThreadOperation(
-          thread.id,
-          request,
-          demotedPrimaryCheckout,
-          operationId,
-        );
-
-        const latestThread = this.threadRepo.getById(thread.id);
-        const shouldQueue =
-          latestThread?.status !== "idle" ||
-          this.projectOperationTransitionsInFlight.has(thread.projectId);
-        if (shouldQueue) {
-          this._appendOperationEvent(thread.id, request.operation, "queued", {
-            operationId,
-            message: this._threadOperationQueuedMessage(request.operation),
-            ...(demotedPrimaryCheckout ? { metadata: { demotedPrimaryCheckout: true } } : {}),
-          });
-        }
-
-        this._scheduleQueuedOperationDispatch(thread.id);
-
-        return {
-          ok: true,
-          operationId,
-          operation: request.operation,
-          status: "accepted",
-          executionStatus: shouldQueue ? "queued" : "running",
-          queued: shouldQueue,
-          message: shouldQueue
-            ? this._threadOperationAcceptedQueuedMessage(request.operation)
-            : this._threadOperationAcceptedRunningMessage(request.operation),
-          demotedPrimaryCheckout,
-        };
-      } catch (err) {
-        const message = this._toErrorMessage(err);
-        this._appendOperationEvent(thread.id, request.operation, "failed", {
-          operationId,
-          message,
-          ...(demotedPrimaryCheckout ? { metadata: { demotedPrimaryCheckout: true } } : {}),
-        });
-        if (isDomainError(err)) {
-          throw err;
-        }
-        throw invalidRequestError(message);
-      }
-    }, {
-      threadId,
-      operation: request.operation,
-    });
-  }
-
   async requestEnvironmentOperation(
     environmentId: string,
     request: EnvironmentOperationRequest,
@@ -3255,12 +2846,32 @@ export class Orchestrator implements ThreadOrchestrator {
       }
       case "commit":
       case "squash_merge": {
+        const thread = this.threadRepo.getById(request.initiatingThreadId);
+        if (!thread) {
+          throw threadNotFoundError(request.initiatingThreadId);
+        }
+        if (thread.archivedAt !== undefined) {
+          throw threadArchivedError(thread.id);
+        }
         if (this._resolveThreadEnvironmentReference(request.initiatingThreadId) !== environmentId) {
           throw invalidRequestError(
             `Thread ${request.initiatingThreadId} is not attached to environment ${environmentId}`,
           );
         }
-        return this.requestThreadOperation(request.initiatingThreadId, request);
+        try {
+          return request.operation === "commit"
+            ? await this._runWorktreeCommitOperation(thread.id, request.options)
+            : await this._runWorktreeSquashMergeOperation(thread.id, request.options);
+        } catch (err) {
+          const details = this._environmentOperationFailureDetails(request, err);
+          if (details) {
+            throw invalidRequestError(this._toErrorMessage(err), details);
+          }
+          if (isDomainError(err)) {
+            throw err;
+          }
+          throw invalidRequestError(this._toErrorMessage(err));
+        }
       }
       default:
         return assertNever(request);
@@ -3296,18 +2907,6 @@ export class Orchestrator implements ThreadOrchestrator {
         threadEnvironmentId &&
         existingPromotion.environmentId === threadEnvironmentId
       ) {
-        this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
-          message: "Primary checkout is already promoted to this environment",
-          metadata: {
-            action: "promote",
-            projectId: project.id,
-            environmentId: existingPromotion.environmentId,
-            activeThreadId: thread.id,
-            ...(existingPromotion.promotedCheckout.branch
-              ? { branch: existingPromotion.promotedCheckout.branch }
-              : {}),
-          },
-        });
         return {
           ok: true,
           promoted: false,
@@ -3323,41 +2922,14 @@ export class Orchestrator implements ThreadOrchestrator {
             `Thread ${existingPromotion.threadId} is currently promoted in primary checkout`,
           );
         }
-        this._appendOperationEvent(activeThread.id, "primary_checkout", "started", {
-          message: "Demoting primary checkout back to pre-promotion state",
-          metadata: {
-            action: "demote",
-            projectId: project.id,
-            environmentId: existingPromotion.environmentId,
-            activeThreadId: activeThread.id,
-          },
-        });
         try {
           const demoteResult = await this.environmentService.demoteThreadEnvironment({
             thread: activeThread,
             ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
           });
-          this._appendOperationEvent(activeThread.id, "primary_checkout", "completed", {
-            message: "Primary checkout restored from promoted state",
-            metadata: {
-              action: "demote",
-              projectId: project.id,
-              environmentId: existingPromotion.environmentId,
-              ...(demoteResult.snapshot?.branch ? { branch: demoteResult.snapshot.branch } : {}),
-            },
-          });
           this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
         } catch (err) {
           const message = this._toErrorMessage(err);
-          this._appendOperationEvent(activeThread.id, "primary_checkout", "failed", {
-            message,
-            metadata: {
-              action: "demote",
-              projectId: project.id,
-              environmentId: existingPromotion.environmentId,
-              activeThreadId: activeThread.id,
-            },
-          });
           this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
           throw invalidRequestError(message);
         }
@@ -3373,18 +2945,6 @@ export class Orchestrator implements ThreadOrchestrator {
           result.reason === "already-promoted-same-environment") &&
         result.state
       ) {
-        this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
-          message: "Primary checkout is already promoted to this environment",
-          metadata: {
-            action: "promote",
-            projectId: project.id,
-            environmentId: result.state.environmentId,
-            activeThreadId: thread.id,
-            ...(result.state.promotedCheckout.branch
-              ? { branch: result.state.promotedCheckout.branch }
-              : {}),
-          },
-        });
         return {
           ok: true,
           promoted: false,
@@ -3401,30 +2961,9 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!environment.exists()) {
         throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
       }
-      this._appendOperationEvent(thread.id, "primary_checkout", "started", {
-        message: "Promoting thread worktree into primary checkout",
-        metadata: {
-          action: "promote",
-          projectId: project.id,
-          environmentId: threadEnvironmentId,
-          activeThreadId: thread.id,
-        },
-      });
 
       try {
         const promotedState = result.state;
-        this._appendOperationEvent(thread.id, "primary_checkout", "completed", {
-          message: "Primary checkout now reflects this thread worktree",
-          metadata: {
-            action: "promote",
-            projectId: project.id,
-            environmentId: promotedState?.environmentId ?? threadEnvironmentId,
-            activeThreadId: thread.id,
-            ...(promotedState?.promotedCheckout.branch
-              ? { branch: promotedState.promotedCheckout.branch }
-              : {}),
-          },
-        });
         const affectedThreads = promotedState
           ? this._getThreadsAttachedToEnvironment(promotedState.environmentId)
           : [thread];
@@ -3439,15 +2978,6 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
-        this._appendOperationEvent(thread.id, "primary_checkout", "failed", {
-          message,
-          metadata: {
-            action: "promote",
-            projectId: project.id,
-            environmentId: threadEnvironmentId,
-            activeThreadId: thread.id,
-          },
-        });
         this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
         throw invalidRequestError(message);
       }
@@ -3473,13 +3003,6 @@ export class Orchestrator implements ThreadOrchestrator {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
       const active = this.primaryPromotionByProjectId.get(project.id);
       if (!active) {
-        this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
-          message: "Primary checkout is already demoted",
-          metadata: {
-            action: "demote",
-            projectId: project.id,
-          },
-        });
         return {
           ok: true,
           demoted: false,
@@ -3495,29 +3018,11 @@ export class Orchestrator implements ThreadOrchestrator {
         );
       }
       const activeThread = this.threadRepo.getById(active.threadId);
-      this._appendOperationEvent(thread.id, "primary_checkout", "started", {
-        message: "Demoting primary checkout back to pre-promotion state",
-        metadata: {
-          action: "demote",
-          projectId: project.id,
-          environmentId: active.environmentId,
-          activeThreadId: thread.id,
-        },
-      });
 
       try {
         const result = await this.environmentService.demoteThreadEnvironment({
           thread,
           ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
-        });
-        this._appendOperationEvent(thread.id, "primary_checkout", "completed", {
-          message: "Primary checkout restored from promoted state",
-          metadata: {
-            action: "demote",
-            projectId: project.id,
-            environmentId: active.environmentId,
-            ...(result.snapshot?.branch ? { branch: result.snapshot.branch } : {}),
-          },
         });
 
         const affectedThreads = this._getThreadsAttachedToEnvironment(active.environmentId);
@@ -3538,15 +3043,6 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
-        this._appendOperationEvent(thread.id, "primary_checkout", "failed", {
-          message,
-          metadata: {
-            action: "demote",
-            projectId: project.id,
-            environmentId: active.environmentId,
-            activeThreadId: thread.id,
-          },
-        });
         const affectedThreads = this._getThreadsAttachedToEnvironment(active.environmentId);
         if (affectedThreads.length > 0) {
           for (const affectedThread of affectedThreads) {
@@ -3807,10 +3303,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this.providerThreadIdByThreadId.clear();
     this.lastNotifiedCompletionEpochs.clear();
     this.queueDispatchInFlight.clear();
-    this.queuedOperationsByThreadId.clear();
-    this.operationDispatchInFlight.clear();
-    this.runningOperationByThreadId.clear();
-    this.projectOperationTransitionsInFlight.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
         clearTimeout(queued.timer);
@@ -4204,9 +3696,6 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
-    this.queuedOperationsByThreadId.delete(threadId);
-    this.operationDispatchInFlight.delete(threadId);
-    this.runningOperationByThreadId.delete(threadId);
   }
 
   private async _cleanupThreadRuntimeAndWait(
@@ -5593,7 +5082,6 @@ export class Orchestrator implements ThreadOrchestrator {
     const primaryCheckoutActive =
       activePromotion !== undefined &&
       this._resolveThreadEnvironmentReference(args.thread.id) === activePromotion.environmentId;
-    const requiresDemoteFirst = primaryCheckoutActive;
     const archivedReason =
       args.thread.archivedAt !== undefined ? "Archived threads cannot run built-in actions" : undefined;
     const statusReason = archivedReason ?? this._threadActionStatusBlockReason(args.thread);
@@ -5606,6 +5094,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const commitDisabledReason = (() => {
       if (statusReason) return statusReason;
+      if (args.thread.status === "active") return "Wait for the current turn to finish";
       if (!environment) return environmentReason;
       if (!isGitWorkspace) return "Commit is only available inside a git repository";
       if (!workStatus?.hasUncommittedChanges) return "No uncommitted changes to commit";
@@ -5614,6 +5103,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const squashDisabledReason = (() => {
       if (statusReason) return statusReason;
+      if (args.thread.status === "active") return "Wait for the current turn to finish";
       if (!environment) return environmentReason;
       if (!environment.supportsSquashMergeIntoDefaultBranch()) {
         return "Squash merge is not supported for this environment";
@@ -5661,15 +5151,15 @@ export class Orchestrator implements ThreadOrchestrator {
         label: "Commit",
         available: commitDisabledReason === undefined,
         disabledReason: commitDisabledReason,
-        queuesWhenActive: true,
-        requiresDemoteFirst,
+        queuesWhenActive: false,
+        requiresDemoteFirst: false,
       }),
       this._threadBuiltInAction("squash_merge", {
         label: "Squash merge",
         available: squashDisabledReason === undefined,
         disabledReason: squashDisabledReason,
-        queuesWhenActive: true,
-        requiresDemoteFirst,
+        queuesWhenActive: false,
+        requiresDemoteFirst: false,
       }),
       this._threadBuiltInAction("promote", {
         label: "Promote",
@@ -5704,28 +5194,13 @@ export class Orchestrator implements ThreadOrchestrator {
     });
   }
 
-  private _threadHasMeaningfulBranchWork(threadId: string): boolean {
-    const events = this.eventRepo.listByThread(threadId);
-    return events.some((event) => {
-      if (event.type === "system/worktree/commit") {
-        const data = toRecord(event.data);
-        return getStringField(data, "status") === "committed";
-      }
-      if (event.type === "system/worktree/squash_merge") {
-        const data = toRecord(event.data);
-        const status = getStringField(data, "status");
-        return status === "merged" || status === "conflict";
-      }
-      return false;
-    });
-  }
-
   private async _shouldAutoArchiveThreadAsync(args: {
     thread: Thread;
     projectRootPath: string;
     environment: IEnvironment;
     mergeBaseBranch?: string;
     requested?: boolean;
+    hadMeaningfulBranchWork?: boolean;
   }): Promise<boolean> {
     if (args.requested !== true) {
       return false;
@@ -5746,67 +5221,12 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const hadMeaningfulBranchWork =
-      status.behindCount > 0 || this._threadHasMeaningfulBranchWork(args.thread.id);
+      args.hadMeaningfulBranchWork === true || status.behindCount > 0;
     if (!hadMeaningfulBranchWork) {
       return false;
     }
 
     return !status.hasUncommittedChanges && !status.hasCommittedUnmergedChanges;
-  }
-
-  private _threadOperationRequestedMessage(operation: ThreadOperationType): string {
-    switch (operation) {
-      case "commit":
-        return "Commit operation requested";
-      case "squash_merge":
-        return "Squash-merge operation requested";
-      default:
-        return assertNever(operation);
-    }
-  }
-
-  private _threadOperationQueuedMessage(operation: ThreadOperationType): string {
-    switch (operation) {
-      case "commit":
-        return "Commit operation queued for deterministic execution";
-      case "squash_merge":
-        return "Squash-merge operation queued for deterministic execution";
-      default:
-        return assertNever(operation);
-    }
-  }
-
-  private _threadOperationRunningMessage(operation: ThreadOperationType): string {
-    switch (operation) {
-      case "commit":
-        return "Running commit operation";
-      case "squash_merge":
-        return "Running squash-merge operation";
-      default:
-        return assertNever(operation);
-    }
-  }
-
-  private _threadOperationAcceptedQueuedMessage(operation: ThreadOperationType): string {
-    switch (operation) {
-      case "commit":
-        return "Commit operation accepted and queued";
-      case "squash_merge":
-        return "Squash-merge operation accepted and queued";
-      default:
-        return assertNever(operation);
-    }
-  }
-
-  private _threadOperationAcceptedRunningMessage(operation: ThreadOperationType): string {
-    switch (operation) {
-      case "commit":
-        return "Commit operation accepted and running";
-      case "squash_merge":
-        return "Squash-merge operation accepted and running";
-      default:
-        return assertNever(operation);
-    }
   }
 
   private _appendOperationEvent(
@@ -5979,44 +5399,8 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  private _readPendingOperation(threadId: string): ThreadPendingOperation | undefined {
-    const runningOperation = this.runningOperationByThreadId.get(threadId);
-    if (runningOperation) {
-      return {
-        operation: runningOperation.request.operation,
-        status: "running",
-        operationId: runningOperation.operationId,
-        requestedAt: runningOperation.requestedAt,
-      };
-    }
-
-    const queuedOperation = this.queuedOperationsByThreadId.get(threadId)?.[0];
-    if (!queuedOperation) {
-      return undefined;
-    }
-
-    return {
-      operation: queuedOperation.request.operation,
-      status: "queued",
-      operationId: queuedOperation.operationId,
-      requestedAt: queuedOperation.requestedAt,
-    };
-  }
-
-  private _withPendingOperationState(thread: Thread): Thread {
-    const pendingOperation = this._readPendingOperation(thread.id);
-    if (!pendingOperation) {
-      return thread;
-    }
-
-    return {
-      ...thread,
-      pendingOperation,
-    };
-  }
-
   private _withDerivedThreadState(thread: Thread): Thread {
-    return this._withPrimaryCheckoutState(this._withPendingOperationState(thread));
+    return this._withPrimaryCheckoutState(thread);
   }
 
   private _withPrimaryCheckoutState(thread: Thread): Thread {
@@ -6507,10 +5891,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _hasQueuedWork(thread: Thread): boolean {
-    if (Array.isArray(thread.queuedMessages) && thread.queuedMessages.length > 0) {
-      return true;
-    }
-    return (this.queuedOperationsByThreadId.get(thread.id)?.length ?? 0) > 0;
+    return Array.isArray(thread.queuedMessages) && thread.queuedMessages.length > 0;
   }
 
   private _setThreadStatus(
@@ -6562,7 +5943,6 @@ export class Orchestrator implements ThreadOrchestrator {
       const updatedThread = this.threadRepo.getById(threadId);
       if (updatedThread && updatedThread.archivedAt === undefined) {
         this._scheduleQueuedFollowUpDispatch(threadId);
-        this._scheduleQueuedOperationDispatch(threadId);
       }
     }
     return true;

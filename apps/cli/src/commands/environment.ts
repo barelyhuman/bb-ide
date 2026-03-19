@@ -1,11 +1,15 @@
 import { Command } from "commander";
-import type { Thread, ThreadOperationResponse } from "@bb/core";
+import type {
+  CommitEnvironmentOperationResponse,
+  SquashMergeEnvironmentOperationResponse,
+  Thread,
+} from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, resolveThreadId } from "../context-env.js";
 import {
   getErrorMessage,
   outputJson,
-  printThreadOperationResult,
+  printEnvironmentGitOperationResult,
   printContextLabel,
   resolveProjectIdWithLabel,
   resolveThreadIdOrSelf,
@@ -21,7 +25,7 @@ export function registerEnvironmentCommands(
 
   environment
     .command("commit <id>")
-    .description("Request an agent-driven commit operation for an environment")
+    .description("Commit changes in an environment")
     .option("--thread <thread-id>", "Initiating thread ID")
     .option("--self", "Use BB_THREAD_ID as the initiating thread")
     .option("--message <message>", "Commit message hint")
@@ -40,7 +44,7 @@ export function registerEnvironmentCommands(
       const client = createClient(getUrl());
       try {
         const initiatingThreadId = resolveThreadIdOrSelf(opts.thread, opts);
-        const result = await unwrap<ThreadOperationResponse>(
+        const result = await unwrap<CommitEnvironmentOperationResponse>(
           client.api.v1.environments[":id"].operations.$post({
             param: { id },
             json: {
@@ -54,7 +58,7 @@ export function registerEnvironmentCommands(
           }),
         );
         if (outputJson(opts, result)) return;
-        printThreadOperationResult(result);
+        printEnvironmentGitOperationResult(result);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -63,7 +67,7 @@ export function registerEnvironmentCommands(
 
   environment
     .command("squash-merge <id>")
-    .description("Request an agent-driven squash-merge operation for an environment")
+    .description("Squash-merge changes in an environment")
     .option("--thread <thread-id>", "Initiating thread ID")
     .option("--self", "Use BB_THREAD_ID as the initiating thread")
     .option("--commit-if-needed", "Allow a prep commit before squash merge")
@@ -88,7 +92,7 @@ export function registerEnvironmentCommands(
       const client = createClient(getUrl());
       try {
         const initiatingThreadId = resolveThreadIdOrSelf(opts.thread, opts);
-        const result = await unwrap<ThreadOperationResponse>(
+        const result = await unwrap<SquashMergeEnvironmentOperationResponse>(
           client.api.v1.environments[":id"].operations.$post({
             param: { id },
             json: {
@@ -105,7 +109,7 @@ export function registerEnvironmentCommands(
           }),
         );
         if (outputJson(opts, result)) return;
-        printThreadOperationResult(result);
+        printEnvironmentGitOperationResult(result);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);

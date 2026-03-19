@@ -225,16 +225,62 @@ export type EnvironmentOperationRequest =
       options?: SquashMergeOperationOptions;
     };
 
-export interface ThreadOperationResponse {
-  ok: true;
-  operationId: string;
-  operation: ThreadOperationType;
-  status: "accepted";
-  executionStatus: "queued" | "running";
-  queued: boolean;
+export interface EnvironmentOperationPrepCommitResult {
   message: string;
-  demotedPrimaryCheckout: boolean;
+  commitSha?: string;
+  commitSubject?: string;
+  includeUnstaged?: boolean;
 }
+
+export interface CommitEnvironmentOperationResponse {
+  ok: true;
+  operation: "commit";
+  commitCreated: boolean;
+  message: string;
+  autoArchived: boolean;
+  commitSha?: string;
+  commitSubject?: string;
+  includeUnstaged?: boolean;
+}
+
+export interface SquashMergeEnvironmentOperationResponse {
+  ok: true;
+  operation: "squash_merge";
+  merged: boolean;
+  message: string;
+  autoArchived: boolean;
+  committed?: boolean;
+  commitSha?: string;
+  commitSubject?: string;
+  prepCommit?: EnvironmentOperationPrepCommitResult;
+}
+
+export interface CommitFailureEnvironmentOperationDetails {
+  operation: "commit";
+  kind: "commit_failed";
+  request: Extract<EnvironmentOperationRequest, { operation: "commit" }>;
+  errorMessage: string;
+}
+
+export interface SquashMergeConflictEnvironmentOperationDetails {
+  operation: "squash_merge";
+  kind: "squash_merge_conflict";
+  request: Extract<EnvironmentOperationRequest, { operation: "squash_merge" }>;
+  conflictFiles: string[];
+}
+
+export interface SquashMergeCommitFailureEnvironmentOperationDetails {
+  operation: "squash_merge";
+  kind: "squash_merge_commit_failed";
+  request: Extract<EnvironmentOperationRequest, { operation: "squash_merge" }>;
+  stage: "prep_commit" | "squash_commit";
+  errorMessage: string;
+}
+
+export type EnvironmentOperationFailureDetails =
+  | CommitFailureEnvironmentOperationDetails
+  | SquashMergeConflictEnvironmentOperationDetails
+  | SquashMergeCommitFailureEnvironmentOperationDetails;
 
 export interface PrimaryCheckoutStatus {
   projectId: string;
@@ -260,7 +306,8 @@ export interface DemotePrimaryCheckoutResponse {
 export type EnvironmentOperationResponse =
   | PromotePrimaryCheckoutResponse
   | DemotePrimaryCheckoutResponse
-  | ThreadOperationResponse;
+  | CommitEnvironmentOperationResponse
+  | SquashMergeEnvironmentOperationResponse;
 
 export interface ProjectFileSuggestion {
   path: string;

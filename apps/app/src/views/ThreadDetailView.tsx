@@ -48,6 +48,7 @@ import {
 } from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import {
+  ThreadGitActionDialogError,
   ThreadGitActionDialog,
   type ThreadGitActionDialogTarget,
 } from "@/components/thread/ThreadGitActionDialog";
@@ -58,13 +59,16 @@ import {
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { DetailCard, DetailRow, StatusPill } from "@bb/ui-core";
 import {
+  buildCommitFailureFollowUpInstruction,
+  buildSquashMergeCommitFailureFollowUpInstruction,
+  buildSquashMergeConflictFollowUpInstruction,
+  type EnvironmentOperationFailureDetails,
   type PromptInput,
   type ServiceTier,
   type Thread,
 } from "@bb/core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
-import { HttpError } from "@/lib/api";
-import { openThreadPathInEditor } from "@/lib/api";
+import { HttpError, openThreadPathInEditor } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { getEnvironmentIconInfo } from "@/lib/environment-icon";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
@@ -94,6 +98,101 @@ import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { toast } from "sonner";
+
+function toEnvironmentOperationFailureDetails(error: unknown): EnvironmentOperationFailureDetails | undefined {
+  if (!(error instanceof HttpError) || typeof error.body !== "object" || error.body === null) {
+    return undefined;
+  }
+  const body = error.body as { details?: unknown };
+  if (typeof body.details !== "object" || body.details === null) {
+    return undefined;
+  }
+  const details = body.details as Partial<EnvironmentOperationFailureDetails>;
+  switch (details.kind) {
+    case "commit_failed":
+      return details.operation === "commit" &&
+          details.request !== undefined &&
+          typeof details.errorMessage === "string"
+        ? details as EnvironmentOperationFailureDetails
+        : undefined;
+    case "squash_merge_conflict":
+      return details.operation === "squash_merge" &&
+          details.request !== undefined &&
+          Array.isArray(details.conflictFiles)
+        ? details as EnvironmentOperationFailureDetails
+        : undefined;
+    case "squash_merge_commit_failed":
+      return details.operation === "squash_merge" &&
+          details.request !== undefined &&
+          typeof details.errorMessage === "string" &&
+          (details.stage === "prep_commit" || details.stage === "squash_commit")
+        ? details as EnvironmentOperationFailureDetails
+        : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | undefined {
+  const details = toEnvironmentOperationFailureDetails(error);
+  if (!details) {
+    return undefined;
+  }
+  switch (details.kind) {
+    case "commit_failed":
+      return [
+        {
+          type: "text",
+          text: buildCommitFailureFollowUpInstruction(
+            {
+              operation: "commit",
+              options: details.request.options,
+            },
+            { errorMessage: details.errorMessage },
+          ),
+        },
+      ];
+    case "squash_merge_conflict":
+      return [
+        {
+          type: "text",
+          text: buildSquashMergeConflictFollowUpInstruction(
+            {
+              operation: "squash_merge",
+              options: details.request.options,
+            },
+            { conflictFiles: details.conflictFiles },
+          ),
+        },
+      ];
+    case "squash_merge_commit_failed":
+      return [
+        {
+          type: "text",
+          text: buildSquashMergeCommitFailureFollowUpInstruction(
+            {
+              operation: "squash_merge",
+              options: details.request.options,
+            },
+            {
+              stage: details.stage,
+              errorMessage: details.errorMessage,
+            },
+          ),
+        },
+      ];
+    default:
+      return undefined;
+  }
+}
+
+function toThreadGitActionDialogError(error: unknown): ThreadGitActionDialogError {
+  const message =
+    error instanceof Error ? error.message : "Failed to start git action";
+  return new ThreadGitActionDialogError(message, {
+    askAgentInput: buildAskAgentInputForGitOperation(error),
+  });
+}
 
 function formatAttachedEnvironmentLabel(path: string): string {
   const segments = path.split("/").filter(Boolean);
@@ -1094,15 +1193,19 @@ export function ThreadDetailView() {
       return;
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-    await requestEnvironmentOperation.mutateAsync({
-      id: thread.environmentId,
-      operation: "commit",
-      initiatingThreadId: threadId,
-      options: {
-        includeUnstaged,
-        autoArchiveOnSuccess,
-      },
-    });
+    try {
+      await requestEnvironmentOperation.mutateAsync({
+        id: thread.environmentId,
+        operation: "commit",
+        initiatingThreadId: threadId,
+        options: {
+          includeUnstaged,
+          autoArchiveOnSuccess,
+        },
+      });
+    } catch (error) {
+      throw toThreadGitActionDialogError(error);
+    }
   };
   const handleSquashMergeThread = async ({
     commitIfNeeded,
@@ -1117,16 +1220,29 @@ export function ThreadDetailView() {
       return;
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-    await requestEnvironmentOperation.mutateAsync({
-      id: thread.environmentId,
-      operation: "squash_merge",
-      initiatingThreadId: threadId,
-      options: {
-        commitIfNeeded,
-        includeUnstaged,
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-        autoArchiveOnSuccess,
-      },
+    try {
+      await requestEnvironmentOperation.mutateAsync({
+        id: thread.environmentId,
+        operation: "squash_merge",
+        initiatingThreadId: threadId,
+        options: {
+          commitIfNeeded,
+          includeUnstaged,
+          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          autoArchiveOnSuccess,
+        },
+      });
+    } catch (error) {
+      throw toThreadGitActionDialogError(error);
+    }
+  };
+  const handleAskAgentToFixGitAction = async (input: PromptInput[]) => {
+    if (!threadId) {
+      return;
+    }
+    await tellThread.mutateAsync({
+      id: threadId,
+      input,
     });
   };
   const renderThreadMetadataRows = () => (
@@ -1821,6 +1937,7 @@ export function ThreadDetailView() {
         <ThreadGitActionDialog
           target={threadGitActionTarget}
           pending={requestEnvironmentOperation.isPending}
+          askAgentPending={tellThread.isPending}
           branchName={threadBranchName}
           gitStatusLabel={threadGitStatusDisplay.label}
           gitStatusSummary={threadGitStatusDisplay.summary}
@@ -1845,6 +1962,7 @@ export function ThreadDetailView() {
           }}
           onCommit={handleCommitThread}
           onSquashMerge={handleSquashMergeThread}
+          onAskAgentToFix={handleAskAgentToFixGitAction}
         />
       ) : null}
     </>
