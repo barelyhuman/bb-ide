@@ -5146,10 +5146,26 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     const providerId =
       decodeProviderEventEnvelope(event.eventData)?.__bb_provider_event.providerId;
+    const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
+      ?.getByThreadId(threadId)
+      ?.environmentId;
+    const attachedThreads =
+      attachedEnvironmentId && this.threadEnvironmentAttachmentRepo
+        ? this._getNonArchivedThreadsAttachedToEnvironment(attachedEnvironmentId)
+        : [];
     if (!providerThreadId) {
-      return !providerId || currentThread?.providerId === providerId
-        ? threadId
-        : undefined;
+      if (!attachedEnvironmentId || !this.threadEnvironmentAttachmentRepo) {
+        return !providerId || currentThread?.providerId === providerId
+          ? threadId
+          : undefined;
+      }
+      const providerScopedThreads = providerId
+        ? attachedThreads.filter((candidate) => candidate.providerId === providerId)
+        : attachedThreads;
+      if (providerScopedThreads.length !== 1) {
+        return undefined;
+      }
+      return providerScopedThreads[0]?.id === threadId ? threadId : undefined;
     }
 
     const currentProviderThreadId =
@@ -5159,20 +5175,14 @@ export class Orchestrator implements ThreadOrchestrator {
       currentProviderThreadId === providerThreadId &&
       (!providerId || currentThread?.providerId === providerId);
 
-    const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
-      ?.getByThreadId(threadId)
-      ?.environmentId;
     if (!attachedEnvironmentId || !this.threadEnvironmentAttachmentRepo) {
       return currentThreadMatches ? threadId : undefined;
     }
 
     const providerScopedThreadIds: string[] = [];
     const matchingThreadIds: string[] = [];
-    for (const attachment of this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
-      attachedEnvironmentId,
-    )) {
-      const candidateThreadId = attachment.threadId;
-      const candidateThread = this.threadRepo.getById(candidateThreadId);
+    for (const candidateThread of attachedThreads) {
+      const candidateThreadId = candidateThread.id;
       if (providerId && candidateThread?.providerId !== providerId) {
         continue;
       }

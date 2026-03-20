@@ -805,6 +805,77 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("does not route notification fallback through the callback thread when shared siblings use the same provider", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const threadA = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      const threadB = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      attachmentRepo.attachThread({ threadId: threadA.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: threadB.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(threadA.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            item: { type: "agentMessage", text: "ambiguous" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(threadA.id)).toEqual([]);
+      expect(eventRepo.listByThread(threadB.id)).toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("dropped provider notification: unable to resolve target thread"),
+      );
+    });
+
     it("does not cross-route shared environment events when providers reuse the same provider thread id", () => {
       const env = environmentRepo.create({
         projectId: project.id,
