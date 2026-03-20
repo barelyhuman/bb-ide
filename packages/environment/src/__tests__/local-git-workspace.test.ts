@@ -53,6 +53,7 @@ async function createRepoWithThreadAheadOfMain() {
   }).create({
     projectId: `project-${suffix}`,
     threadId: `thread-${suffix}`,
+    environmentId: `environment-${suffix}`,
     projectRootPath: repoRoot,
     runtimeEnv: {},
   });
@@ -98,6 +99,22 @@ afterEach(async () => {
 });
 
 describe("LocalGitWorkspace", () => {
+  it("requires an explicit environmentId when creating a worktree environment", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+
+    expect(() =>
+      createLocalGitWorkspaceDefinition({
+        manageEnvironmentDaemon: false,
+      }).create({
+        projectId: "project-1",
+        threadId: "thread-1",
+        projectRootPath: repoRoot,
+        runtimeEnv: {},
+      })
+    ).toThrow("Local git workspace requires an explicit environmentId");
+  });
+
   it("rejects promotion when the active workspace is dirty", async () => {
     const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
 

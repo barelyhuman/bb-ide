@@ -47,6 +47,7 @@ describe("EnvironmentRegistry", () => {
     const worktreeRoot = join(projectRoot, ".worktrees");
     const projectId = `proj-${Date.now()}`;
     const threadId = `thread-${Date.now()}`;
+    const environmentId = `env-${Date.now()}`;
 
     try {
       git(projectRoot, "init", "-b", "main");
@@ -67,6 +68,7 @@ describe("EnvironmentRegistry", () => {
       const environment = registry.create("local", {
         projectId,
         threadId,
+        environmentId,
         projectRootPath: projectRoot,
         environmentProperties: {
           provisioningSystemKind: "worktree",
@@ -89,6 +91,7 @@ describe("EnvironmentRegistry", () => {
         {
           projectId,
           threadId,
+          environmentId,
           projectRootPath: projectRoot,
           environmentProperties: {
             provisioningSystemKind: "worktree",
@@ -100,7 +103,7 @@ describe("EnvironmentRegistry", () => {
       );
 
       expect(restored.kind).toBe("local");
-      expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, threadId));
+      expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, environmentId));
 
       await restored.destroy();
     } finally {
@@ -197,6 +200,7 @@ describe("EnvironmentRegistry", () => {
 
   it("creates docker environments with a direct environment-daemon target", () => {
     const projectRoot = makeTempDir("bb-docker-env-project-");
+    const environmentId = "env-1";
 
     try {
       git(projectRoot, "init", "-b", "main");
@@ -218,6 +222,7 @@ describe("EnvironmentRegistry", () => {
       const environment = registry.create("docker", {
         projectId: "proj-1",
         threadId: "thread-1",
+        environmentId,
         projectRootPath: projectRoot,
         runtimeEnv: {
           BB_ENV_DAEMON_BASE_URL: "http://127.0.0.1:4312",

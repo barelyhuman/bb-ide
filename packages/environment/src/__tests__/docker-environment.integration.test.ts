@@ -71,10 +71,12 @@ async function createDockerEnvironmentForTest() {
 
   const projectId = `project-${Date.now()}`;
   const threadId = `thread-${Date.now()}`;
+  const environmentId = `environment-${Date.now()}`;
   const definition = createDockerEnvironmentDefinition();
   const seed = definition.create({
     projectId,
     threadId,
+    environmentId,
     projectRootPath: repoRoot,
     runtimeEnv: {},
   });
@@ -86,7 +88,7 @@ async function createDockerEnvironmentForTest() {
   });
   const dockerState = await resolveDockerEnvironmentState({
     projectId,
-    threadId,
+    environmentId,
     runtimeEnv: {},
     worktree: seedState.worktree,
   });
@@ -100,6 +102,7 @@ async function createDockerEnvironmentForTest() {
   const environment = definition.restore(dockerState, {
     projectId,
     threadId,
+    environmentId,
     projectRootPath: repoRoot,
     runtimeEnv: {},
   });
@@ -178,4 +181,20 @@ describe.skipIf(!hasDocker())("DockerEnvironment integration", () => {
     },
     120_000,
   );
+});
+
+describe("DockerEnvironment identity requirements", () => {
+  it("requires an explicit environmentId when creating docker state", async () => {
+    await expect(
+      resolveDockerEnvironmentState({
+        projectId: "project-1",
+        environmentId: "",
+        runtimeEnv: {},
+        worktree: {
+          workspaceRoot: "/tmp/worktree",
+          branchName: "bb/environment-1",
+        },
+      })
+    ).rejects.toThrow("Docker environment state requires an explicit environmentId");
+  });
 });

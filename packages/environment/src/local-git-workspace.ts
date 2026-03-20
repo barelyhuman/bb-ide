@@ -787,8 +787,7 @@ export function createLocalGitWorkspaceDefinition(
         projectRoot,
         resolveLocalGitWorkspaceState({
           projectId: context.projectId,
-          threadId: context.threadId,
-          environmentId: context.environmentId,
+          environmentId: requireEnvironmentId(context, "Local git workspace"),
           projectRootPath: context.projectRootPath,
           runtimeEnv: context.runtimeEnv,
           ...(opts?.worktreeRootName ? { worktreeRootName: opts.worktreeRootName } : {}),
@@ -818,10 +817,19 @@ export function createLocalGitWorkspaceDefinition(
   };
 }
 
+function requireEnvironmentId(
+  context: CreateEnvironmentContext,
+  environmentKind: string,
+): string {
+  if (context.environmentId?.trim()) {
+    return context.environmentId;
+  }
+  throw new Error(`${environmentKind} requires an explicit environmentId`);
+}
+
 export function resolveLocalGitWorkspaceState(args: {
   projectId: string;
-  threadId?: string;
-  environmentId?: string;
+  environmentId: string;
   projectRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
   worktreeRootName?: string;
@@ -836,10 +844,10 @@ export function resolveLocalGitWorkspaceState(args: {
   const worktreeRoot = isGlobalRoot
     ? resolve(configuredWorktreeRoot, args.projectId)
     : configuredWorktreeRoot;
-  const worktreeId = args.environmentId ?? args.threadId;
-  if (!worktreeId) {
-    throw new Error("Local git workspace state requires environmentId or threadId");
+  if (!args.environmentId.trim()) {
+    throw new Error("Local git workspace state requires an explicit environmentId");
   }
+  const worktreeId = args.environmentId;
   return {
     workspaceRoot: resolve(worktreeRoot, worktreeId),
     branchName: toWorktreeBranchName(worktreeId),

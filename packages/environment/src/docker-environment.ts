@@ -782,6 +782,7 @@ export function createDockerEnvironmentDefinition(
     create(context: CreateEnvironmentContext): IEnvironment {
       const inner = localGitWorkspaceDefinition.create(context);
       const worktreeState = inner.serialize() as LocalGitWorkspaceState;
+      const environmentId = requireEnvironmentId(context);
       return new DockerEnvironment(
         context.projectId,
         context.threadId,
@@ -790,7 +791,7 @@ export function createDockerEnvironmentDefinition(
         {
           worktree: worktreeState,
           containerName: resolveContainerName({
-            environmentId: context.environmentId ?? context.threadId,
+            environmentId,
             containerPrefix,
           }),
           image: resolveDockerEnvironmentImage({
@@ -833,18 +834,17 @@ export function createDockerEnvironmentDefinition(
 
 export async function resolveDockerEnvironmentState(args: {
   projectId: string;
-  threadId?: string;
-  environmentId?: string;
+  environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
   worktree: LocalGitWorkspaceState;
   image?: string;
   mountPath?: string;
   containerPrefix?: string;
 }): Promise<DockerEnvironmentState> {
-  const environmentIdentity = args.environmentId ?? args.threadId;
-  if (!environmentIdentity) {
-    throw new Error("Docker environment state requires environmentId or threadId");
+  if (!args.environmentId.trim()) {
+    throw new Error("Docker environment state requires an explicit environmentId");
   }
+  const environmentIdentity = args.environmentId;
   return {
     worktree: { ...args.worktree },
     containerName: resolveContainerName({
@@ -859,6 +859,13 @@ export async function resolveDockerEnvironmentState(args: {
     agentHostPort: await allocatePort(),
     agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_DAEMON_CONTAINER_PORT,
   };
+}
+
+function requireEnvironmentId(context: CreateEnvironmentContext): string {
+  if (context.environmentId?.trim()) {
+    return context.environmentId;
+  }
+  throw new Error("Docker environment requires an explicit environmentId");
 }
 
 export async function ensureDockerEnvironmentArtifacts(args: {
