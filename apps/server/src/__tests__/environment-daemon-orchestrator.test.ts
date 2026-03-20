@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Thread, ThreadEventDataForType } from "@bb/core";
 import type * as environmentDaemon from "@bb/environment-daemon";
+import { getEnvironmentDaemonEnvironmentChannelId } from "@bb/environment-daemon";
 import type { EnvironmentService } from "../environment-service.js";
 import {
   EnvironmentDaemonSessionUnavailableError,
@@ -441,7 +442,7 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
       "resume-existing-provider-session",
     );
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledWith({
-      threadId: thread.id,
+      channelId: getEnvironmentDaemonEnvironmentChannelId(env.id),
       timeoutMs: 1_000,
     });
     expect(resumeThreadCommand).toHaveBeenCalled();
