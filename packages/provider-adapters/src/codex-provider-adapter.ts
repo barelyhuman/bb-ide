@@ -21,6 +21,10 @@ import {
   resolveCodexProviderLaunchConfiguration,
 } from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
+import {
+  decodeProviderToolCallRequest,
+  encodeProviderToolCallResponse,
+} from "./provider-tool-call-contract.js";
 import type {
   ProviderAdapter,
   ProviderDynamicTool,
@@ -143,62 +147,6 @@ function toCodexDynamicTools(
     description: tool.description,
     inputSchema: cloneJsonValue(tool.inputSchema),
   }));
-}
-
-function decodeCodexToolCallRequest(
-  requestId: string | number,
-  method: string,
-  params: unknown,
-): ProviderToolCallRequest | null {
-  if (normalizeProviderEventType(method) !== "item/tool/call") {
-    return null;
-  }
-
-  const record = toRecord(params);
-  if (!record) return null;
-
-  const threadId =
-    typeof record.threadId === "string" ? record.threadId : undefined;
-  const turnId = typeof record.turnId === "string" ? record.turnId : undefined;
-  const callId = typeof record.callId === "string" ? record.callId : undefined;
-  const tool = typeof record.tool === "string" ? record.tool : undefined;
-
-  if (!threadId || !turnId || !callId || !tool) {
-    return null;
-  }
-
-  return {
-    requestId,
-    threadId,
-    turnId,
-    callId,
-    tool,
-    arguments: record.arguments,
-  };
-}
-
-function encodeCodexToolCallResponse(
-  response: ProviderToolCallResponse,
-): Record<string, unknown> {
-  return {
-    contentItems: response.contentItems.map((item) => {
-      switch (item.type) {
-        case "inputText":
-          return {
-            type: "inputText",
-            text: item.text,
-          };
-        case "inputImage":
-          return {
-            type: "inputImage",
-            imageUrl: item.imageUrl,
-          };
-        default:
-          return assertNever(item);
-      }
-    }),
-    success: response.success,
-  };
 }
 
 function toTurnSandboxPolicy(sandboxMode?: SandboxMode): Record<string, unknown> {
@@ -479,12 +427,12 @@ export function createCodexProviderAdapter(
       return `Thread ${threadId} has no codex session`;
     },
     decodeToolCallRequest(requestId, method, params): ProviderToolCallRequest | null {
-      return decodeCodexToolCallRequest(requestId, method, params);
+      return decodeProviderToolCallRequest(requestId, method, params);
     },
     encodeToolCallResponse(
       response: ProviderToolCallResponse,
     ): Record<string, unknown> {
-      return encodeCodexToolCallResponse(response);
+      return encodeProviderToolCallResponse(response);
     },
   };
 }

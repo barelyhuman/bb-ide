@@ -19,6 +19,10 @@ import {
   toRecord,
 } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
+import {
+  decodeProviderToolCallRequest,
+  encodeProviderToolCallResponse,
+} from "./provider-tool-call-contract.js";
 import type {
   ProviderAdapter,
   ProviderDynamicTool,
@@ -267,54 +271,6 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
   const decoded = decodeThreadEventData(event.data);
   if (decoded.item?.normalizedType !== "agentmessage") return undefined;
   return decoded.item.text.text || undefined;
-}
-
-function decodeClaudeCodeToolCallRequest(
-  requestId: string | number,
-  method: string,
-  params: unknown,
-): ProviderToolCallRequest | null {
-  if (normalizeProviderEventType(method) !== "item/tool/call") return null;
-
-  const record = toRecord(params);
-  if (!record) return null;
-
-  const threadId =
-    typeof record.threadId === "string" ? record.threadId : undefined;
-  const turnId =
-    typeof record.turnId === "string" ? record.turnId : undefined;
-  const callId =
-    typeof record.callId === "string" ? record.callId : undefined;
-  const tool = typeof record.tool === "string" ? record.tool : undefined;
-
-  if (!threadId || !turnId || !callId || !tool) return null;
-
-  return {
-    requestId,
-    threadId,
-    turnId,
-    callId,
-    tool,
-    arguments: record.arguments,
-  };
-}
-
-function encodeClaudeCodeToolCallResponse(
-  response: ProviderToolCallResponse,
-): Record<string, unknown> {
-  return {
-    contentItems: response.contentItems.map((item) => {
-      switch (item.type) {
-        case "inputText":
-          return { type: "inputText", text: item.text };
-        case "inputImage":
-          return { type: "inputImage", imageUrl: item.imageUrl };
-        default:
-          return assertNever(item);
-      }
-    }),
-    success: response.success,
-  };
 }
 
 function resolveBridgePath(): string {
@@ -611,12 +567,12 @@ export function createClaudeCodeProviderAdapter(
       method: string,
       params: unknown,
     ): ProviderToolCallRequest | null {
-      return decodeClaudeCodeToolCallRequest(requestId, method, params);
+      return decodeProviderToolCallRequest(requestId, method, params);
     },
     encodeToolCallResponse(
       response: ProviderToolCallResponse,
     ): Record<string, unknown> {
-      return encodeClaudeCodeToolCallResponse(response);
+      return encodeProviderToolCallResponse(response);
     },
   };
 }

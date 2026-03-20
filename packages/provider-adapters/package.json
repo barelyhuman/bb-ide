@@ -25,7 +25,8 @@
     "@bb/pi-bridge": "workspace:*",
     "@bb/templates": "workspace:*",
     "@mariozechner/pi-ai": "^0.58.3",
-    "@mariozechner/pi-coding-agent": "^0.58.3"
+    "@mariozechner/pi-coding-agent": "^0.58.3",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
