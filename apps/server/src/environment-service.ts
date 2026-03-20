@@ -1,7 +1,6 @@
 import {
   type EnvironmentProperties,
   type ThreadWorkStatus,
-  type EnvironmentProvisioningEvent,
   type PersistedEnvironmentRecord,
   type PrimaryCheckoutStatus,
   type SystemEnvironmentInfo,
@@ -30,6 +29,7 @@ import {
   resolveProjectDefaultBranchCheckoutAsync,
 } from "./git-project.js";
 import { derivePersistedEnvironmentRecordFromDescriptor } from "./env-factory.js";
+import type { EnvironmentProvisioningEvent } from "./server-contracts.js";
 
 export interface ActiveEnvironmentRuntime {
   scopeKey: string;

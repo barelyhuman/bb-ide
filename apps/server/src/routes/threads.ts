@@ -5,7 +5,6 @@ import {
   assertNever,
   type EnvironmentRecord,
   type OpenPathRequest,
-  type ThreadOrchestrator,
   enqueueThreadMessageSchema,
   sendQueuedThreadMessageSchema,
   spawnThreadSchema,
@@ -23,6 +22,7 @@ import type {
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import { openPathInEditor } from "./system.js";
+import type { ThreadOrchestrator } from "../server-contracts.js";
 import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,

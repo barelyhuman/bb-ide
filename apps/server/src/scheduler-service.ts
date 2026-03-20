@@ -2,7 +2,7 @@ import type {
   ScheduleRunRecord,
   SchedulerService,
   ThreadSchedule,
-} from "@bb/core";
+} from "./server-contracts.js";
 
 export class InMemorySchedulerService implements SchedulerService {
   private schedules = new Map<string, ThreadSchedule>();

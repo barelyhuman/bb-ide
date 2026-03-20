@@ -27,12 +27,9 @@ import {
   type AvailableModel,
   type EnvironmentCreationArgs,
   type EnvironmentDescriptor,
-  type EnvironmentProvisioningEvent,
-  type SchedulerService,
   type ServiceTier,
   type SystemProviderInfo,
   type SystemEnvironmentInfo,
-  type ThreadOrchestrator,
   type ThreadTurnInitiator,
   type ThreadExecutionOptions,
   type ThreadWorkStatus,
@@ -83,6 +80,11 @@ import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
 } from "@bb/provider-adapters";
+import type {
+  EnvironmentProvisioningEvent,
+  SchedulerService,
+  ThreadOrchestrator,
+} from "./server-contracts.js";
 import {
   EnvironmentRegistry,
   EnvironmentSquashMergeCommitFailureError,

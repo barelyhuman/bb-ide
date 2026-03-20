@@ -4,7 +4,6 @@ import { Hono } from "hono";
 import type {
   Thread,
   ThreadEvent,
-  ThreadOrchestrator,
   ThreadWorkStatus,
 } from "@bb/core";
 import { createThreadRoutes } from "../../routes/threads.js";
@@ -15,6 +14,7 @@ import {
 } from "@bb/db";
 import { resolveManagerWorkspacePath } from "../../manager-thread.js";
 import { createTestDb, createTestRepos, createTestProject, createTestThread } from "../test-factories.js";
+import type { ThreadOrchestrator } from "../../server-contracts.js";
 
 type LegacyThreadRouteMock = ThreadOrchestrator & {
   updateThread: ReturnType<typeof vi.fn>;

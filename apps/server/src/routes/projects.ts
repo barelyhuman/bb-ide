@@ -21,7 +21,7 @@ import {
   unsupportedOperationError,
 } from "../domain-errors.js";
 import { sendApiError, sendRouteError } from "./error-response.js";
-import type { ThreadOrchestrator } from "@bb/core";
+import type { ThreadOrchestrator } from "../server-contracts.js";
 
 const MANAGER_DEFAULT_PROVIDER_ID = "claude-code";
 const MANAGER_DEFAULT_MODEL = "claude-opus-4-6";

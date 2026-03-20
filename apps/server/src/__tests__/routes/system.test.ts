@@ -7,10 +7,10 @@ import type {
   SystemHealthReport,
   SystemProviderInfo,
   Thread,
-  ThreadOrchestrator,
 } from "@bb/core";
 import { createSystemRoutes } from "../../routes/system.js";
 import { invalidRequestError } from "../../domain-errors.js";
+import type { ThreadOrchestrator } from "../../server-contracts.js";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
   return {

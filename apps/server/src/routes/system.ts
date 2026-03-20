@@ -14,9 +14,9 @@ import type {
   SystemProviderInfo,
   Thread,
   SystemStatus,
-  ThreadOrchestrator,
 } from "@bb/core";
 import { assertNever } from "@bb/core";
+import type { ThreadOrchestrator } from "../server-contracts.js";
 import { pickFolderPath } from "../folder-picker.js";
 import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";

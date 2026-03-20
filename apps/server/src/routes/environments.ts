@@ -3,9 +3,9 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import {
   environmentOperationSchema,
-  type ThreadOrchestrator,
 } from "@bb/core";
 import type { EnvironmentRepository } from "@bb/db";
+import type { ThreadOrchestrator } from "../server-contracts.js";
 import { sendRouteError } from "./error-response.js";
 
 const listEnvironmentsQuerySchema = z.object({

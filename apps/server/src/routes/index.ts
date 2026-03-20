@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ServerRuntimeMode, ThreadOrchestrator, ThreadWorkStatus } from "@bb/core";
+import type { ServerRuntimeMode, ThreadWorkStatus } from "@bb/core";
 import type {
   EnvironmentRepository,
   EventRepository,
@@ -15,6 +15,7 @@ import { createSystemRoutes } from "./system.js";
 import type { WSManager } from "../ws.js";
 import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import type { SystemHealthReport } from "@bb/core";
+import type { ThreadOrchestrator } from "../server-contracts.js";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;

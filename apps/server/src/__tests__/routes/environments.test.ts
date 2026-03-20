@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { EnvironmentRecord, ThreadOrchestrator } from "@bb/core";
+import type { EnvironmentRecord } from "@bb/core";
 import { createEnvironmentRoutes } from "../../routes/environments.js";
 import type { EnvironmentRepository } from "@bb/db";
+import type { ThreadOrchestrator } from "../../server-contracts.js";
 
 function makeEnvironment(
   overrides: Partial<EnvironmentRecord> = {},
