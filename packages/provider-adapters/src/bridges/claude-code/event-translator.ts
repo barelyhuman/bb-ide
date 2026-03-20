@@ -1,10 +1,10 @@
 import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
-
-export interface JsonRpcNotification {
-  jsonrpc: "2.0";
-  method: string;
-  params: Record<string, unknown>;
-}
+import type {
+  BridgeItem,
+  BridgeNotification,
+  BridgeTokenUsage,
+  BridgeTokenUsageBreakdown,
+} from "../shared/bb-shapes.js";
 
 export interface TurnCounterState {
   turnCounter: number;
@@ -24,8 +24,8 @@ export function translateSdkMessage(
   threadId: string,
   currentTurnId: string | undefined,
   counterState: TurnCounterState,
-): { notifications: JsonRpcNotification[]; turnId: string | undefined } {
-  const notifications: JsonRpcNotification[] = [];
+): { notifications: BridgeNotification[]; turnId: string | undefined } {
+  const notifications: BridgeNotification[] = [];
   let turnId = currentTurnId;
 
   switch (message.type) {
@@ -143,7 +143,7 @@ export function translateSdkMessage(
 
 function extractTokenUsage(
   message: SDKResultMessage,
-): Record<string, unknown> | undefined {
+): BridgeTokenUsage | undefined {
   const total = toTokenUsageBreakdown(message.usage);
   const modelContextWindow = extractModelContextWindow(message.modelUsage);
 
@@ -167,7 +167,7 @@ function toTokenUsageBreakdown(
     cache_read_input_tokens?: number;
     cache_creation_input_tokens?: number;
   } | undefined,
-): Record<string, unknown> | undefined {
+): BridgeTokenUsageBreakdown | undefined {
   if (!usage) return undefined;
 
   const inputTokens = toNonNegativeNumber(usage.input_tokens);
@@ -187,7 +187,7 @@ function toTokenUsageBreakdown(
   };
 }
 
-function createEmptyTokenUsageBreakdown(): Record<string, unknown> {
+function createEmptyTokenUsageBreakdown(): BridgeTokenUsageBreakdown {
   return {
     totalTokens: 0,
     inputTokens: 0,
@@ -348,7 +348,7 @@ function translateToolCallToItem(
   callId: string,
   toolName: string,
   args: unknown,
-): Record<string, unknown> {
+): BridgeItem {
   const argsRecord =
     args && typeof args === "object" && !Array.isArray(args)
       ? (args as Record<string, unknown>)
@@ -402,7 +402,7 @@ function translateToolResultToItem(
   callId: string,
   toolName: string | undefined,
   content: unknown,
-): Record<string, unknown> {
+): BridgeItem {
   const outputText = extractResultText(content);
 
   if (toolName && BASH_TOOLS.has(toolName)) {

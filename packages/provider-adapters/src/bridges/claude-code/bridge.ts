@@ -12,9 +12,9 @@ import {
   translateSdkMessage,
   createTurnCounterState,
   nextTurnId,
-  type JsonRpcNotification,
   type TurnCounterState,
 } from "./event-translator.js";
+import type { BridgeNotification } from "../shared/bb-shapes.js";
 import {
   buildBridgeMcpServer,
   getAllowedToolNames,
@@ -68,7 +68,7 @@ const MANAGER_BUILTIN_TOOLS = [
   "LS",
 ] as const;
 
-function send(msg: JsonRpcResponse | JsonRpcNotification): void {
+function send(msg: JsonRpcResponse | BridgeNotification): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 

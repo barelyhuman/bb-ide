@@ -17,10 +17,10 @@ import {
   translatePiEvent,
   createTurnCounterState,
   nextTurnId,
-  type JsonRpcNotification,
   type PiTokenUsageSnapshot,
   type TurnCounterState,
 } from "./event-translator.js";
+import type { BridgeNotification } from "../shared/bb-shapes.js";
 import {
   buildDynamicTools,
   type DynamicToolDefinition,
@@ -64,7 +64,7 @@ interface ThreadSession {
 const sessions = new Map<string, ThreadSession>();
 let toolCallRequestIdCounter = 0;
 
-function send(msg: JsonRpcResponse | JsonRpcNotification): void {
+function send(msg: JsonRpcResponse | BridgeNotification): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 

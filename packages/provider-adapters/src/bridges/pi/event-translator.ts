@@ -3,12 +3,12 @@ import type {
   ContextUsage,
   SessionStats,
 } from "@mariozechner/pi-coding-agent";
-
-export interface JsonRpcNotification {
-  jsonrpc: "2.0";
-  method: string;
-  params: Record<string, unknown>;
-}
+import type {
+  BridgeItem,
+  BridgeNotification,
+  BridgeTokenUsage,
+  BridgeTokenUsageBreakdown,
+} from "../shared/bb-shapes.js";
 
 export interface TurnCounterState {
   turnCounter: number;
@@ -29,8 +29,8 @@ export function translatePiEvent(
   currentTurnId: string | undefined,
   counterState: TurnCounterState,
   tokenUsageSnapshot?: PiTokenUsageSnapshot,
-): { notifications: JsonRpcNotification[]; turnId: string | undefined } {
-  const notifications: JsonRpcNotification[] = [];
+): { notifications: BridgeNotification[]; turnId: string | undefined } {
+  const notifications: BridgeNotification[] = [];
   let turnId = currentTurnId;
 
   switch (event.type) {
@@ -168,7 +168,7 @@ function findLastAssistantMessage(
 function extractPiTokenUsage(
   lastAssistant: PiAssistantMessage | undefined,
   snapshot: PiTokenUsageSnapshot | undefined,
-): Record<string, unknown> | undefined {
+): BridgeTokenUsage | undefined {
   const total = toSessionStatsBreakdown(snapshot?.sessionStats);
   const last = toAssistantUsageBreakdown(lastAssistant);
   const modelContextWindow = toModelContextWindow(snapshot?.contextUsage);
@@ -188,7 +188,7 @@ function extractPiTokenUsage(
 
 function toSessionStatsBreakdown(
   sessionStats: SessionStats | undefined,
-): Record<string, unknown> | undefined {
+): BridgeTokenUsageBreakdown | undefined {
   const tokens = sessionStats?.tokens;
   if (!tokens) return undefined;
 
@@ -204,7 +204,7 @@ function toSessionStatsBreakdown(
 
 function toAssistantUsageBreakdown(
   lastAssistant: PiAssistantMessage | undefined,
-): Record<string, unknown> | undefined {
+): BridgeTokenUsageBreakdown | undefined {
   const typedUsage = lastAssistant?.usage;
   if (!typedUsage) return undefined;
 
@@ -233,7 +233,7 @@ function toModelContextWindow(contextUsage: ContextUsage | undefined): number | 
     : null;
 }
 
-function createEmptyTokenUsageBreakdown(): Record<string, unknown> {
+function createEmptyTokenUsageBreakdown(): BridgeTokenUsageBreakdown {
   return {
     totalTokens: 0,
     inputTokens: 0,
@@ -258,7 +258,7 @@ function translateToolCallToItem(
   callId: string,
   toolName: string,
   args: unknown,
-): Record<string, unknown> {
+): BridgeItem {
   const argsRecord =
     args && typeof args === "object" && !Array.isArray(args)
       ? (args as Record<string, unknown>)
@@ -338,7 +338,7 @@ function translateToolResultToItem(
   toolName: string,
   content: unknown,
   isError: boolean,
-): Record<string, unknown> {
+): BridgeItem {
   const outputText = extractResultText(content);
 
   if (BASH_TOOLS.has(toolName)) {
