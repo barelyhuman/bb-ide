@@ -12,9 +12,9 @@ import {
   assertNever,
   decodeThreadEventData,
   decodeThreadIdFromWireValue,
-  toRecord,
 } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
+import { z } from "zod";
 import {
   hasCodexAuth,
   readCodexAuthFile,
@@ -38,6 +38,22 @@ import type {
 const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
 const DEFAULT_APPROVAL_POLICY = "never";
 const DEFAULT_SANDBOX_MODE = "danger-full-access";
+const looseObjectSchema = z.record(z.string(), z.unknown());
+const codexErrorPayloadSchema = z.object({
+  message: z.string().optional(),
+  error: z.object({
+    message: z.string().optional(),
+  }).passthrough().optional(),
+}).passthrough();
+const codexThreadStartedPayloadSchema = z.object({
+  thread: z.object({
+    preview: z.string().optional(),
+  }).passthrough().optional(),
+}).passthrough();
+const codexThreadNameUpdatedPayloadSchema = z.object({
+  threadName: z.string().optional(),
+  thread_name: z.string().optional(),
+}).passthrough();
 const DEFAULT_WORKSPACE_WRITE_POLICY = {
   type: "workspaceWrite",
   writableRoots: [] as string[],
@@ -96,7 +112,7 @@ function withConfigValues(
   if (entries.length === 0) return params;
 
   const nextConfig = {
-    ...(toRecord(params.config) ?? {}),
+    ...readLooseObject(params.config),
     ...Object.fromEntries(entries),
   };
   return {
@@ -183,14 +199,18 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
 }
 
 function extractCodexErrorMessage(data: unknown): string | undefined {
-  const record = toRecord(data);
-  if (!record) return undefined;
-
-  const error = toRecord(record.error);
+  const parsed = codexErrorPayloadSchema.safeParse(data);
+  if (!parsed.success) return undefined;
+  const { message, error } = parsed.data;
   return (
-    (typeof record.message === "string" ? record.message : undefined) ??
-    (typeof error?.message === "string" ? error.message : undefined)
+    message ??
+    error?.message
   );
+}
+
+function readLooseObject(value: unknown): Record<string, unknown> {
+  const parsed = looseObjectSchema.safeParse(value);
+  return parsed.success ? parsed.data : {};
 }
 
 function isTerminalCodexErrorPayload(data: unknown): boolean {
@@ -403,15 +423,19 @@ export function createCodexProviderAdapter(
     },
     titleFromEvent(method: string, data: unknown): string | undefined {
       const normalizedMethod = normalizeProviderEventType(method);
-      const payload = toRecord(data);
 
       if (normalizedMethod === "thread/started") {
-        const thread = toRecord(payload?.thread);
-        return normalizeTitle(thread?.preview);
+        const parsed = codexThreadStartedPayloadSchema.safeParse(data);
+        return parsed.success
+          ? normalizeTitle(parsed.data.thread?.preview)
+          : undefined;
       }
 
       if (normalizedMethod === "thread/name/updated") {
-        return normalizeTitle(payload?.threadName ?? payload?.thread_name);
+        const parsed = codexThreadNameUpdatedPayloadSchema.safeParse(data);
+        return parsed.success
+          ? normalizeTitle(parsed.data.threadName ?? parsed.data.thread_name)
+          : undefined;
       }
 
       return undefined;

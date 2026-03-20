@@ -18,9 +18,9 @@ import type {
 import {
   decodeThreadEventData,
   decodeThreadIdFromWireValue,
-  toRecord,
 } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
+import { z } from "zod";
 import {
   decodeProviderToolCallRequest,
   encodeProviderToolCallResponse,
@@ -63,11 +63,17 @@ const PI_DEFAULT_MODEL_PREFERENCES = [
   "anthropic/claude-opus-4-20250514",
   "openai/codex-mini",
 ] as const;
+const looseObjectSchema = z.record(z.string(), z.unknown());
 
 type PiCatalogModel = Pick<
   Model<any>,
   "id" | "name" | "provider" | "reasoning" | "input"
 >;
+
+function readLooseObject(value: unknown): Record<string, unknown> {
+  const parsed = looseObjectSchema.safeParse(value);
+  return parsed.success ? parsed.data : {};
+}
 
 async function readPiAgentFile(path: string): Promise<string | null> {
   try {
@@ -245,7 +251,7 @@ function withExecutionOptions(
   }
   if (options.reasoningLevel) {
     const nextConfig = {
-      ...(toRecord(nextParams.config) ?? {}),
+      ...readLooseObject(nextParams.config),
       model_reasoning_effort: options.reasoningLevel,
     };
     nextParams.config = nextConfig;
@@ -272,7 +278,7 @@ function withThreadEnvironmentPolicy(
   }
   if (Object.keys(configEntries).length === 0) return params;
   const nextConfig = {
-    ...(toRecord(params.config) ?? {}),
+    ...readLooseObject(params.config),
     ...configEntries,
   };
   return { ...params, config: nextConfig };

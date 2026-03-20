@@ -16,9 +16,9 @@ import type {
 import {
   assertNever,
   decodeThreadEventData,
-  toRecord,
 } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
+import { z } from "zod";
 import {
   decodeProviderToolCallRequest,
   encodeProviderToolCallResponse,
@@ -111,6 +111,10 @@ const CLAUDE_CODE_AUTH_ENV_VARS = [
   "CLAUDE_CODE_USE_VERTEX",
   "CLAUDE_CODE_USE_FOUNDRY",
 ] as const;
+const looseObjectSchema = z.record(z.string(), z.unknown());
+const claudeRoutingPayloadSchema = z.object({
+  providerThreadId: z.string().optional(),
+}).passthrough();
 
 function normalizeProviderEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -125,16 +129,14 @@ function normalizeTitle(value: unknown): string | undefined {
 }
 
 function decodeClaudeRoutingThreadId(value: unknown): string | undefined {
-  const payload = toRecord(value);
-  if (!payload) return undefined;
-  return (
-    (typeof payload.providerThreadId === "string"
-      ? payload.providerThreadId
-      : undefined) ??
-    (typeof payload.provider_thread_id === "string"
-      ? payload.provider_thread_id
-      : undefined)
-  );
+  const parsed = claudeRoutingPayloadSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  return parsed.data.providerThreadId;
+}
+
+function readLooseObject(value: unknown): Record<string, unknown> {
+  const parsed = looseObjectSchema.safeParse(value);
+  return parsed.success ? parsed.data : {};
 }
 
 function resolveClaudeCodeLaunchEnv(
@@ -201,7 +203,7 @@ function withExecutionOptions(
   }
   if (options.reasoningLevel) {
     const nextConfig = {
-      ...(toRecord(nextParams.config) ?? {}),
+      ...readLooseObject(nextParams.config),
       model_reasoning_effort: options.reasoningLevel,
     };
     nextParams.config = nextConfig;
@@ -233,7 +235,7 @@ function withThreadEnvironmentPolicy(
   if (Object.keys(configEntries).length === 0) return params;
 
   const nextConfig = {
-    ...(toRecord(params.config) ?? {}),
+    ...readLooseObject(params.config),
     ...configEntries,
   };
   return { ...params, config: nextConfig };
