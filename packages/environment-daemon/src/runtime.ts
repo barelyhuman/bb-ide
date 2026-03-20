@@ -321,7 +321,7 @@ export class EnvironmentDaemonRuntime {
         result,
       });
     } catch (error) {
-      const normalizedError = this.normalizeCommandError(error);
+      const normalizedError = this.normalizeCommandError(error, envelope.command);
       this.trackRejectedCommand();
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
@@ -1440,9 +1440,17 @@ export class EnvironmentDaemonRuntime {
     return JSON.stringify(error);
   }
 
-  private normalizeCommandError(error: unknown): { code: string; message: string } {
+  private normalizeCommandError(
+    error: unknown,
+    command?: EnvironmentDaemonCommand,
+  ): { code: string; message: string } {
     const message = error instanceof Error ? error.message : String(error);
     const normalized = message.toLowerCase();
+    const providerId =
+      (command ? this.resolveProviderIdForCommand(command) : undefined) ??
+      this.resolveProviderIdForChild(this.resolveUniqueLiveProviderChild()) ??
+      this.opts.providerId ??
+      process.env.BB_THREAD_PROVIDER_ID;
     if (normalized.includes("timed out waiting for provider response")) {
       return { code: "provider_timeout", message };
     }
@@ -1453,9 +1461,7 @@ export class EnvironmentDaemonRuntime {
       return { code: "provider_unavailable", message };
     }
     if (
-      this.getProviderSemanticsForProviderId(
-        this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
-      )?.isMissingProviderThreadMessage(message) ||
+      this.getProviderSemanticsForProviderId(providerId)?.isMissingProviderThreadMessage(message) ||
       normalized.includes("no rollout found for thread id")
     ) {
       return { code: "missing_provider_thread", message };

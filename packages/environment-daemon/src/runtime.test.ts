@@ -412,6 +412,74 @@ describe("EnvironmentDaemonRuntime", () => {
     );
   });
 
+  it("classifies missing provider threads from routed shared-provider commands", async () => {
+    const runtime = new EnvironmentDaemonRuntime({});
+    cleanup.push(() => runtime.shutdown());
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "ensure-claude-missing-thread",
+        idempotencyKey: "ensure-claude-missing-thread",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.ensure",
+        providerId: "claude-code",
+        forThreadId: "thread-claude",
+        command: "node",
+        args: [
+          "-e",
+          [
+            "process.stdin.setEncoding('utf8');",
+            "let buffer='';",
+            "process.stdin.on('data',chunk=>{",
+            "buffer+=chunk;",
+            "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+            "buffer=parts.pop() ?? '';",
+            "for (const line of parts) {",
+            "if (!line.trim()) continue;",
+            "const msg = JSON.parse(line);",
+            "if (msg.method === 'initialize') {",
+            "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+            "} else if (msg.method === 'thread/start') {",
+            "console.log(JSON.stringify({ id: msg.id, error: { code: -32000, message: 'thread not found' } }));",
+            "}",
+            "}",
+            "});",
+          ].join(""),
+        ],
+      },
+    });
+    expect(ack.state).toBe("accepted");
+
+    const startAck = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "start-claude-missing-thread",
+        idempotencyKey: "start-claude-missing-thread",
+        sentAt: 124,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-claude",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-claude"),
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+
+    expect(startAck).toMatchObject({
+      state: "rejected",
+      errorCode: "missing_provider_thread",
+      message: "thread not found",
+    });
+  });
+
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentDaemonRuntime({
       providerId: "codex",
