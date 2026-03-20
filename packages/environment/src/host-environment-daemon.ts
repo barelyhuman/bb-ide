@@ -282,6 +282,13 @@ export function resolveManagedHostEnvironmentDaemonLaunchCommand(): {
   }
 }
 
+function toEnvironmentDaemonRuntimeEnv(
+  runtimeEnv: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const { BB_THREAD_ID: _ignoredThreadId, ...daemonRuntimeEnv } = runtimeEnv;
+  return daemonRuntimeEnv;
+}
+
 export async function ensureManagedHostEnvironmentDaemon(args: {
   workspaceRootPath: string;
   projectId: string;
@@ -378,12 +385,9 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
         cwd: args.workspaceRootPath,
         env: {
           ...process.env,
-          ...args.runtimeEnv,
+          ...toEnvironmentDaemonRuntimeEnv(args.runtimeEnv),
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
-          ...(args.runtimeEnv.BB_THREAD_ID
-            ? { BB_THREAD_ID: args.runtimeEnv.BB_THREAD_ID }
-            : {}),
           ...(args.runtimeEnv.BB_THREAD_PROVIDER_ID
             ? { BB_THREAD_PROVIDER_ID: args.runtimeEnv.BB_THREAD_PROVIDER_ID }
             : {}),

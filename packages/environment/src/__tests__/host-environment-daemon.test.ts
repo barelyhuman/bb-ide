@@ -209,7 +209,7 @@ describe("host environment-daemon helper", () => {
     expect(killProcess).not.toHaveBeenCalled();
   });
 
-  it("forwards BB_THREAD_ID to the managed environment-daemon process", async () => {
+  it("does not forward BB_THREAD_ID to the managed environment-daemon process", async () => {
     const bbRoot = makeTempDir();
     process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
@@ -248,10 +248,13 @@ describe("host environment-daemon helper", () => {
       expect.any(Array),
       expect.objectContaining({
         env: expect.objectContaining({
-          BB_THREAD_ID: "thread-123",
+          BB_ROOT: bbRoot,
         }),
       }),
     );
+    expect(
+      (spawnProcess as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]?.env,
+    ).not.toHaveProperty("BB_THREAD_ID");
   });
 
   it("reuses the same managed agent across threads on one environment", async () => {

@@ -66,7 +66,6 @@ const BB_ENV_DAEMON_CONTROL_BASE_URL =
   "BB_ENV_DAEMON_CONTROL_BASE_URL";
 const BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS =
   "BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS";
-const BB_THREAD_ID = "BB_THREAD_ID";
 const BB_THREAD_PROVIDER_ID = "BB_THREAD_PROVIDER_ID";
 const BB_ENV_DAEMON_BUILD_ID = "BB_ENV_DAEMON_BUILD_ID";
 const ENVIRONMENT_DAEMON_VERSION = "0.0.1";
@@ -208,9 +207,6 @@ export function resolveEnvironmentDaemonServiceOptions(args: {
           args.env[BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS],
         ) ?? 250,
       commandBatchLimit: 50,
-      ...(args.env[BB_THREAD_ID]?.trim()
-        ? { initialThreadIds: [args.env[BB_THREAD_ID]!.trim()] }
-        : {}),
       worker,
       providers,
       capabilities: createEnvironmentDaemonSessionCapabilities({
