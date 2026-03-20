@@ -35,6 +35,7 @@ import {
 import {
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
   createEnvironmentDaemonSessionCapabilities,
+  getEnvironmentDaemonEnvironmentChannelId,
   type EnvironmentDaemonClient,
   type EnvironmentDaemonCommandAck,
   type EnvironmentDaemonEventEnvelope,
@@ -108,6 +109,16 @@ function createEventData<TType extends ThreadEventType>(
   data: ThreadEventDataForType<TType>,
 ): ThreadEventDataForType<TType> {
   return data;
+}
+
+function resolveEnvironmentChannelId(args: {
+  environmentId: string;
+  attachmentRepo: ThreadEnvironmentAttachmentRepository;
+  channelId: string;
+}): string | undefined {
+  return args.channelId === getEnvironmentDaemonEnvironmentChannelId(args.environmentId)
+    ? args.environmentId
+    : args.attachmentRepo.getByThreadId(args.channelId)?.environmentId;
 }
 
 function createItemCompletedData(args: {
@@ -3461,17 +3472,21 @@ describe("Orchestrator", () => {
       expect(providerListModels).toHaveBeenCalledTimes(3);
     });
 
-    it("routes environment-scoped model discovery through the matching provider thread", async () => {
+    it("routes environment-scoped model discovery through the environment command channel", async () => {
       const repos = createTestRepos(testDb.db);
       const envRepo = repos.environmentRepo;
       const attachmentRepo = repos.attachmentRepo;
       const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
       const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
-      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
-        resolveEnvironmentId: (threadId) =>
-          attachmentRepo.getByThreadId(threadId)?.environmentId,
-      });
       const environment = envRepo.create({ projectId: project.id, managed: false });
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (channelId) =>
+          resolveEnvironmentChannelId({
+            environmentId: environment.id,
+            attachmentRepo,
+            channelId,
+          }),
+      });
       const codexThread = createTestThread(threadRepo, project.id, {
         status: "idle",
         providerId: "codex",
@@ -3557,6 +3572,84 @@ describe("Orchestrator", () => {
       expect(sendCommand).toHaveBeenCalledTimes(1);
       expect(commandRepo.listPendingByThreadId(codexThread.id)).toHaveLength(0);
       expect(commandRepo.listPendingByThreadId(piThread.id)).toHaveLength(0);
+      expect(
+        commandRepo.listPendingByThreadId(
+          getEnvironmentDaemonEnvironmentChannelId(environment.id),
+        ),
+      ).toHaveLength(0);
+    });
+
+    it("allows environment-scoped model discovery when multiple attached threads share a provider", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (channelId) =>
+          resolveEnvironmentChannelId({
+            environmentId: environment.id,
+            attachmentRepo,
+            channelId,
+          }),
+      });
+      const codexThreadA = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      const codexThreadB = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThreadA.id, environmentId: environment.id });
+      attachmentRepo.attachThread({ threadId: codexThreadB.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi
+        .spyOn(EnvironmentDaemonSessionCommandClient.prototype, "sendCommand")
+        .mockResolvedValue({
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+          commandId: "provider-models-codex",
+          idempotencyKey: "provider-models-codex",
+          state: "accepted",
+          acknowledgedAt: Date.now(),
+          latestSequence: 0,
+          result: [],
+        });
+
+      await expect(manager.listModels("codex", environment.id)).resolves.toEqual([]);
+      expect(sendCommand).toHaveBeenCalledTimes(1);
     });
 
     it("rejects environment-scoped model discovery when no attached thread matches the provider", async () => {
@@ -3565,11 +3658,15 @@ describe("Orchestrator", () => {
       const attachmentRepo = repos.attachmentRepo;
       const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
       const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
-      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
-        resolveEnvironmentId: (threadId) =>
-          attachmentRepo.getByThreadId(threadId)?.environmentId,
-      });
       const environment = envRepo.create({ projectId: project.id, managed: false });
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (channelId) =>
+          resolveEnvironmentChannelId({
+            environmentId: environment.id,
+            attachmentRepo,
+            channelId,
+          }),
+      });
       const codexThread = createTestThread(threadRepo, project.id, {
         status: "idle",
         providerId: "codex",
@@ -3644,11 +3741,15 @@ describe("Orchestrator", () => {
       const attachmentRepo = repos.attachmentRepo;
       const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
       const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
-      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
-        resolveEnvironmentId: (threadId) =>
-          attachmentRepo.getByThreadId(threadId)?.environmentId,
-      });
       const environment = envRepo.create({ projectId: project.id, managed: false });
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (channelId) =>
+          resolveEnvironmentChannelId({
+            environmentId: environment.id,
+            attachmentRepo,
+            channelId,
+          }),
+      });
       const codexThread = createTestThread(threadRepo, project.id, {
         status: "idle",
         providerId: "codex",
@@ -3728,11 +3829,15 @@ describe("Orchestrator", () => {
       const attachmentRepo = repos.attachmentRepo;
       const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
       const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
-      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
-        resolveEnvironmentId: (threadId) =>
-          attachmentRepo.getByThreadId(threadId)?.environmentId,
-      });
       const environment = envRepo.create({ projectId: project.id, managed: false });
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (channelId) =>
+          resolveEnvironmentChannelId({
+            environmentId: environment.id,
+            attachmentRepo,
+            channelId,
+          }),
+      });
       const codexThread = createTestThread(threadRepo, project.id, {
         status: "idle",
         providerId: "codex",

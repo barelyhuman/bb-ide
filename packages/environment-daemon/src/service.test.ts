@@ -3,6 +3,7 @@ import {
   resolveEnvironmentDaemonServiceOptions,
   startEnvironmentDaemonService,
 } from "./service.js";
+import { getEnvironmentDaemonEnvironmentChannelId } from "./session-channels.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -259,7 +260,12 @@ describe("environment-daemon service config", () => {
         ),
       ),
     ).toMatchObject({
-      channels: [],
+      channels: [
+        {
+          channelId: getEnvironmentDaemonEnvironmentChannelId("local"),
+          generation: 1,
+        },
+      ],
     });
 
     await started.close();

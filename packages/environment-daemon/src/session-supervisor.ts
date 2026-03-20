@@ -16,6 +16,7 @@ import type {
   EnvironmentDaemonSessionWorkerMetadata,
 } from "./session-protocol.js";
 import { ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
+import { getEnvironmentDaemonEnvironmentChannelId } from "./session-channels.js";
 
 export interface EnvironmentDaemonSessionSupervisorOptions {
   environmentId: string;
@@ -111,6 +112,9 @@ export class EnvironmentDaemonSessionSupervisor {
       options.supportedProtocolVersions ??
       ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS;
     this.onError = options.onError;
+    this.ensureThreadState(
+      getEnvironmentDaemonEnvironmentChannelId(this.options.environmentId),
+    );
 
     this.unsubscribeRuntimeEvents = this.options.runtime.subscribeToEvents((event) => {
       this.ensureThreadState(event.threadId);

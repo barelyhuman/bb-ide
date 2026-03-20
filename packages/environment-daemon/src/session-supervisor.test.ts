@@ -5,6 +5,7 @@ import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store
 import { EnvironmentDaemonSessionHttpClientError } from "./session-http-client.js";
 import { EnvironmentDaemonSessionSync } from "./session-sync.js";
 import { EnvironmentDaemonSessionSupervisor } from "./session-supervisor.js";
+import { getEnvironmentDaemonEnvironmentChannelId } from "./session-channels.js";
 import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
 
 function makeClientMock(): EnvironmentDaemonSessionHttpClient {
@@ -99,7 +100,13 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     await supervisor.close();
 
     expect(client.openSession).toHaveBeenCalledWith(
-      expect.objectContaining({ channels: [] }),
+      expect.objectContaining({
+        channels: [
+          expect.objectContaining({
+            channelId: getEnvironmentDaemonEnvironmentChannelId("env-1"),
+          }),
+        ],
+      }),
     );
     expect(runtime.executeCommand).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -331,6 +338,10 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
                 channelId: "thread-1",
                 applyFrom: { generation: 1, sequenceExclusive: 0 },
               },
+              {
+                channelId: getEnvironmentDaemonEnvironmentChannelId("env-1"),
+                applyFrom: { generation: 1, sequenceExclusive: 0 },
+              },
             ],
           },
         })
@@ -347,6 +358,10 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
             channels: [
               {
                 channelId: "thread-1",
+                applyFrom: { generation: 1, sequenceExclusive: 0 },
+              },
+              {
+                channelId: getEnvironmentDaemonEnvironmentChannelId("env-1"),
                 applyFrom: { generation: 1, sequenceExclusive: 0 },
               },
             ],
@@ -424,6 +439,10 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
               channelId: "thread-1",
               applyFrom: { generation: 1, sequenceExclusive: 0 },
             },
+            {
+              channelId: getEnvironmentDaemonEnvironmentChannelId("env-1"),
+              applyFrom: { generation: 1, sequenceExclusive: 0 },
+            },
           ],
         },
       });
@@ -490,6 +509,10 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
           channels: [
             {
               channelId: "thread-1",
+              applyFrom: { generation: 1, sequenceExclusive: 0 },
+            },
+            {
+              channelId: getEnvironmentDaemonEnvironmentChannelId("env-1"),
               applyFrom: { generation: 1, sequenceExclusive: 0 },
             },
           ],

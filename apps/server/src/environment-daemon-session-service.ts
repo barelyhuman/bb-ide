@@ -9,6 +9,7 @@ import {
   ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
   ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  getEnvironmentDaemonEnvironmentChannelId,
   negotiateEnvironmentDaemonSessionCapabilities,
   selectEnvironmentDaemonSessionProtocolVersion,
   type EnvironmentDaemonSessionCapabilities,
@@ -170,9 +171,15 @@ export class EnvironmentDaemonSessionService {
     this.onSessionInvalidated = options.onSessionInvalidated;
   }
 
+  private listThreadChannelIds(environmentId: string): string[] {
+    return this.listAttachedThreadIds?.(environmentId) ?? [];
+  }
+
   private listAllowedChannelIds(environmentId: string): string[] {
-    const attachedThreadIds = this.listAttachedThreadIds?.(environmentId) ?? [];
-    return attachedThreadIds;
+    return [
+      ...this.listThreadChannelIds(environmentId),
+      getEnvironmentDaemonEnvironmentChannelId(environmentId),
+    ];
   }
 
   private isAllowedChannelId(environmentId: string, channelId: string): boolean {
@@ -450,7 +457,7 @@ export class EnvironmentDaemonSessionService {
     const now = args.now ?? this.clock();
     const records = this.commandDispatcher.listDeliverableCommandRecords({
       sessionId: session.id,
-      ...(this.listAllowedChannelIds(args.environmentId).length === 1 &&
+      ...(this.listThreadChannelIds(args.environmentId).length === 1 &&
       args.afterCursor !== undefined
         ? { afterCursor: args.afterCursor }
         : {}),

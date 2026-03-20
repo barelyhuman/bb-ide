@@ -93,6 +93,10 @@ export {
   isEnvironmentDaemonSessionClientMessage,
   isEnvironmentDaemonSessionServerMessage,
 } from "./session-protocol.js";
+export {
+  getEnvironmentDaemonEnvironmentChannelId,
+  resolveEnvironmentIdForEnvironmentDaemonChannel,
+} from "./session-channels.js";
 
 export type {
   EnvironmentDaemonSessionStoreCommandReceiptState,

@@ -13,7 +13,10 @@ import {
   ThreadRepository,
 } from "@bb/db";
 import { vi } from "vitest";
-import { createEnvironmentDaemonSessionCapabilities } from "@bb/environment-daemon";
+import {
+  createEnvironmentDaemonSessionCapabilities,
+  getEnvironmentDaemonEnvironmentChannelId,
+} from "@bb/environment-daemon";
 import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
 import { EnvironmentDaemonEventApplier } from "../environment-daemon-event-applier.js";
 import { EnvironmentDaemonSessionManager } from "../environment-daemon-session-manager.js";
@@ -197,7 +200,7 @@ describe("EnvironmentDaemonSessionService", () => {
           ],
           features: ["worker_metadata", "provider_metadata"],
         },
-        channels: [
+        channels: expect.arrayContaining([
           {
             channelId: threadId,
             applyFrom: {
@@ -205,7 +208,14 @@ describe("EnvironmentDaemonSessionService", () => {
               sequenceExclusive: 9,
             },
           },
-        ],
+          {
+            channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
+            applyFrom: {
+              generation: 1,
+              sequenceExclusive: 0,
+            },
+          },
+        ]),
       },
     });
   });
@@ -229,15 +239,24 @@ describe("EnvironmentDaemonSessionService", () => {
       },
     });
 
-    expect(opened.welcome.payload.channels).toEqual([
-      {
-        channelId: threadId,
-        applyFrom: {
-          generation: 5,
-          sequenceExclusive: 0,
+    expect(opened.welcome.payload.channels).toEqual(
+      expect.arrayContaining([
+        {
+          channelId: threadId,
+          applyFrom: {
+            generation: 5,
+            sequenceExclusive: 0,
+          },
         },
-      },
-    ]);
+        {
+          channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
+          applyFrom: {
+            generation: 1,
+            sequenceExclusive: 0,
+          },
+        },
+      ]),
+    );
   });
 
   it("rejects session bootstrap channels that are not attached to the environment", () => {
@@ -262,6 +281,45 @@ describe("EnvironmentDaemonSessionService", () => {
       }),
     ).toThrow(
       `Environment-daemon session open payload contains unattached channel ${detachedThreadId}`,
+    );
+  });
+
+  it("allows the environment command channel in session bootstrap payloads", () => {
+    const { threadId, environmentId } = createTestIds();
+
+    const opened = service.openSession({
+      environmentId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [
+          {
+            channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(opened.welcome.payload.channels).toEqual(
+      expect.arrayContaining([
+        {
+          channelId: threadId,
+          applyFrom: {
+            generation: 1,
+            sequenceExclusive: 0,
+          },
+        },
+        {
+          channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
+          applyFrom: {
+            generation: 1,
+            sequenceExclusive: 0,
+          },
+        },
+      ]),
     );
   });
 
@@ -606,15 +664,24 @@ describe("EnvironmentDaemonSessionService", () => {
       },
     });
 
-    expect(opened.welcome.payload.channels).toEqual([
-      {
-        channelId: threadId,
-        applyFrom: {
-          generation: 1,
-          sequenceExclusive: 0,
+    expect(opened.welcome.payload.channels).toEqual(
+      expect.arrayContaining([
+        {
+          channelId: threadId,
+          applyFrom: {
+            generation: 1,
+            sequenceExclusive: 0,
+          },
         },
-      },
-    ]);
+        {
+          channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
+          applyFrom: {
+            generation: 1,
+            sequenceExclusive: 0,
+          },
+        },
+      ]),
+    );
     expect(cursors.getByThreadId(threadId)).toBeUndefined();
 
     const ack = await service.applyEventBatch({

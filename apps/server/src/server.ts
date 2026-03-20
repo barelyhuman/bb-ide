@@ -32,6 +32,7 @@ import {
 import {
   createDefaultEnvironmentRegistry,
 } from "@bb/environment";
+import { resolveEnvironmentIdForEnvironmentDaemonChannel } from "@bb/environment-daemon";
 import { WSManager } from "./ws.js";
 import { Orchestrator } from "./orchestrator.js";
 import { listBuiltInProvisioningSystemInfos } from "./environment-provisioning-systems.js";
@@ -145,8 +146,9 @@ export function createServer(deps: ServerDeps) {
   const environmentDaemonSessionManager = new EnvironmentDaemonSessionManager(
     deps.environmentDaemonSessionRepo,
   );
-  const resolveAttachedEnvironmentId = (threadId: string): string | undefined =>
-    deps.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
+  const resolveAttachedEnvironmentId = (channelId: string): string | undefined =>
+    resolveEnvironmentIdForEnvironmentDaemonChannel(channelId) ??
+    deps.threadEnvironmentAttachmentRepo?.getByThreadId(channelId)?.environmentId;
   const listAttachedThreadIds = (environmentId: string): string[] =>
     deps.threadEnvironmentAttachmentRepo?.listByEnvironmentId(environmentId).map((row) =>
       row.threadId

@@ -99,7 +99,10 @@ import type {
   EnvironmentDaemonEventEnvelope,
   EnvironmentDaemonStatusSnapshot,
 } from "@bb/environment-daemon";
-import { ENVIRONMENT_DAEMON_PROTOCOL_VERSION } from "@bb/environment-daemon";
+import {
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  getEnvironmentDaemonEnvironmentChannelId,
+} from "@bb/environment-daemon";
 import type {
   DbConnection,
   EnvironmentDaemonSessionCloseReason,
@@ -1176,42 +1179,19 @@ export class Orchestrator implements ThreadOrchestrator {
       .filter((thread) => thread.archivedAt === undefined);
   }
 
-  private _resolveEnvironmentCommandTransportThread(args: {
+  private _assertEnvironmentHasAttachedProviderThread(args: {
     environmentId: string;
-    providerId?: string;
-  }): Thread | undefined {
+    providerId: string;
+  }): void {
     const attachedThreads = this._getNonArchivedThreadsAttachedToEnvironment(args.environmentId);
-    if (attachedThreads.length === 0) {
-      return undefined;
-    }
-    if (args.providerId) {
-      const matchingThreads = attachedThreads.filter(
-        (thread) => thread.providerId === args.providerId,
-      );
-      if (matchingThreads.length === 1) {
-        return matchingThreads[0];
-      }
-      if (matchingThreads.length > 1) {
-        throw invalidRequestError(
-          `Environment ${args.environmentId} has multiple attached threads for provider ${args.providerId}`,
-        );
-      }
+    const hasMatch = attachedThreads.some(
+      (thread) => thread.providerId === args.providerId,
+    );
+    if (!hasMatch) {
       throw invalidRequestError(
         `Environment ${args.environmentId} has no attached thread for provider ${args.providerId}`,
       );
     }
-    if (attachedThreads.length === 1) {
-      return attachedThreads[0];
-    }
-    throw invalidRequestError(
-      `Environment ${args.environmentId} has multiple attached threads; explicit provider routing is required`,
-    );
-  }
-
-  private _resolveEnvironmentSessionTransportThread(
-    environmentId: string,
-  ): Thread | undefined {
-    return this._getNonArchivedThreadsAttachedToEnvironment(environmentId)[0];
   }
 
   private _isThreadAttachedToPromotedEnvironment(threadId: string): boolean {
@@ -3952,7 +3932,7 @@ export class Orchestrator implements ThreadOrchestrator {
       throw inactiveSessionError(args.thread.id);
     }
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: args.thread.id,
+      channelId: args.thread.id,
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
@@ -3987,25 +3967,17 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const transportThread = this._resolveEnvironmentCommandTransportThread({
+    this._assertEnvironmentHasAttachedProviderThread({
       environmentId,
       providerId,
     });
-    if (!transportThread) {
-      throw invalidRequestError(
-        `No active thread is attached to environment ${environmentId}`,
-      );
-    }
 
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: transportThread.id,
+      channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
-      ensureSessionAccess: async () => {
-        await this._recoverEnvironmentDaemonAccess(transportThread.id);
-      },
     });
     try {
       const commandId = `provider-models-${providerId}-${Date.now()}`;
@@ -4050,24 +4022,12 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const transportThread = this._resolveEnvironmentSessionTransportThread(
-      environmentId,
-    );
-    if (!transportThread) {
-      throw invalidRequestError(
-        `No active thread is attached to environment ${environmentId}`,
-      );
-    }
-
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: transportThread.id,
+      channelId: getEnvironmentDaemonEnvironmentChannelId(environmentId),
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
-      ensureSessionAccess: async () => {
-        await this._recoverEnvironmentDaemonAccess(transportThread.id);
-      },
     });
     try {
       const commandId = `provider-catalog-${Date.now()}`;

@@ -104,7 +104,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       now: 1_000,
     });
     return new EnvironmentDaemonSessionCommandClient({
-      threadId: args.threadId,
+      channelId: args.threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
       pollIntervalMs: 10,
@@ -143,7 +143,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       now: 1_000,
     });
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId,
+      channelId: threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
       pollIntervalMs: 10,
@@ -201,7 +201,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       now: 1_000,
     });
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId,
+      channelId: threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
       pollIntervalMs: 10,
@@ -250,7 +250,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       now: 1_000,
     });
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId,
+      channelId: threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 120,
       pollIntervalMs: 10,
@@ -312,7 +312,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       now: 1_000,
     });
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId,
+      channelId: threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
       pollIntervalMs: 10,

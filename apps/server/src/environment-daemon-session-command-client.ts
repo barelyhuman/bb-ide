@@ -31,7 +31,7 @@ function isEnvironmentDaemonProviderStatus(
 }
 
 export interface EnvironmentDaemonSessionCommandClientOptions {
-  threadId: string;
+  channelId: string;
   commandDispatcher: EnvironmentDaemonCommandDispatcher;
   commandTimeoutMs?: number;
   pollIntervalMs?: number;
@@ -168,7 +168,7 @@ export class EnvironmentDaemonSessionCommandClient implements EnvironmentDaemonC
     while (true) {
       try {
         return await this.options.commandDispatcher.enqueueForActiveSession({
-          threadId: this.options.threadId,
+          threadId: this.options.channelId,
           commandId: args.commandId,
           commandType: args.commandType,
           payload: args.payload,
