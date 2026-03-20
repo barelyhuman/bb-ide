@@ -23,6 +23,7 @@ export type {
 } from "./protocol.js";
 export { ENVIRONMENT_DAEMON_PROTOCOL_VERSION } from "./protocol.js";
 export {
+  decodePersistedEnvironmentDaemonCommand,
   isEnvironmentDaemonControlRequest,
   isEnvironmentDaemonControlResponse,
 } from "./protocol.js";
