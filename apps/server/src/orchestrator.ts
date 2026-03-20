@@ -3859,7 +3859,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _getEnvironmentDaemonRecoveryScopeKey(threadId: string): string {
-    return this.environmentService.getAttachedEnvironmentId(threadId) ?? `thread:${threadId}`;
+    return this.environmentService.getRuntimeScopeKeyForThread(threadId);
   }
 
   private _getEnvironmentDaemonSessionChannelId(threadId: string): string {

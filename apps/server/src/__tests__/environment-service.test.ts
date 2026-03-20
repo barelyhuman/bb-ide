@@ -815,7 +815,7 @@ describe("EnvironmentService", () => {
     expect(destroySpy).not.toHaveBeenCalled();
     expect(cleanupManagedEnvironmentArtifacts).not.toHaveBeenCalled();
     expect(service.getEnvironmentRuntime(thread.id)).toMatchObject({
-      scopeKey: env.id,
+      scopeKey: `environment:${env.id}`,
     });
     expect(siblingThreads[0]).toBeDefined();
   });

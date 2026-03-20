@@ -85,6 +85,9 @@ interface EnsureThreadEnvironmentRuntimeResult {
   runtime: ActiveEnvironmentRuntime;
 }
 
+const THREAD_RUNTIME_SCOPE_PREFIX = "thread:";
+const ENVIRONMENT_RUNTIME_SCOPE_PREFIX = "environment:";
+
 function isUnavailableCleanupTargetError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.message.includes("workspace is unavailable");
@@ -160,29 +163,65 @@ export class EnvironmentService {
     };
   }
 
-  private getRuntimeScopeKey(threadId: string): string {
-    return this.resolveAttachedEnvironment(threadId)?.environmentId ?? `thread:${threadId}`;
+  private getAuthoritativeEnvironmentId(threadId: string): string | undefined {
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.resolveAttachedEnvironment(threadId)?.environmentId;
+    }
+    return this.threadRepo.getById(threadId)?.environmentId?.trim() || undefined;
+  }
+
+  static getThreadRuntimeScopeKey(threadId: string): string {
+    return `${THREAD_RUNTIME_SCOPE_PREFIX}${threadId}`;
+  }
+
+  static getEnvironmentRuntimeScopeKey(environmentId: string): string {
+    return `${ENVIRONMENT_RUNTIME_SCOPE_PREFIX}${environmentId}`;
+  }
+
+  static parseRuntimeScopeKey(
+    scopeKey: string,
+  ): { type: "thread"; threadId: string } | { type: "environment"; environmentId: string } {
+    if (scopeKey.startsWith(THREAD_RUNTIME_SCOPE_PREFIX)) {
+      return {
+        type: "thread",
+        threadId: scopeKey.slice(THREAD_RUNTIME_SCOPE_PREFIX.length),
+      };
+    }
+    if (scopeKey.startsWith(ENVIRONMENT_RUNTIME_SCOPE_PREFIX)) {
+      return {
+        type: "environment",
+        environmentId: scopeKey.slice(ENVIRONMENT_RUNTIME_SCOPE_PREFIX.length),
+      };
+    }
+    return {
+      type: "environment",
+      environmentId: scopeKey,
+    };
+  }
+
+  getRuntimeScopeKeyForThread(threadId: string): string {
+    const environmentId = this.getAuthoritativeEnvironmentId(threadId);
+    return environmentId
+      ? EnvironmentService.getEnvironmentRuntimeScopeKey(environmentId)
+      : EnvironmentService.getThreadRuntimeScopeKey(threadId);
   }
 
   private getThreadIdsForRuntimeScope(threadId: string): string[] {
-    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
-    if (!attachedEnvironment || !this.threadEnvironmentAttachmentRepo) {
-      return [threadId];
-    }
-    return this.threadEnvironmentAttachmentRepo
-      .listByEnvironmentId(attachedEnvironment.environmentId)
-      .map((attachment) => attachment.threadId);
+    return this.getThreadIdsForRuntimeScopeKey(this.getRuntimeScopeKeyForThread(threadId));
   }
 
   private getThreadIdsForRuntimeScopeKey(scopeKey: string): string[] {
-    if (scopeKey.startsWith("thread:")) {
-      return [scopeKey.slice("thread:".length)];
+    const parsed = EnvironmentService.parseRuntimeScopeKey(scopeKey);
+    if (parsed.type === "thread") {
+      return [parsed.threadId];
     }
     if (!this.threadEnvironmentAttachmentRepo) {
-      return [];
+      return this.threadRepo.list()
+        .filter((thread) => thread.environmentId === parsed.environmentId)
+        .map((thread) => thread.id);
     }
     return this.threadEnvironmentAttachmentRepo
-      .listByEnvironmentId(scopeKey)
+      .listByEnvironmentId(parsed.environmentId)
       .map((attachment) => attachment.threadId);
   }
 
@@ -191,16 +230,13 @@ export class EnvironmentService {
   }
 
   getAttachedEnvironmentId(threadId: string): string | undefined {
-    if (this.threadEnvironmentAttachmentRepo) {
-      return this.resolveAttachedEnvironment(threadId)?.environmentId;
-    }
-    return this.threadRepo.getById(threadId)?.environmentId;
+    return this.getAuthoritativeEnvironmentId(threadId);
   }
 
   private resolvePrimaryPromotionEnvironmentId(threadId: string): string | undefined {
-    const attachedEnvironmentId = this.getAttachedEnvironmentId(threadId);
-    if (attachedEnvironmentId) {
-      return attachedEnvironmentId;
+    const environmentId = this.getAuthoritativeEnvironmentId(threadId);
+    if (environmentId) {
+      return environmentId;
     }
     if (this.threadEnvironmentAttachmentRepo) {
       return undefined;
@@ -282,10 +318,7 @@ export class EnvironmentService {
   private resolveCleanupEnvironmentId(
     threadId: string,
   ): string | undefined {
-    if (this.threadEnvironmentAttachmentRepo) {
-      return this.resolveAttachedEnvironment(threadId)?.environmentId;
-    }
-    return this.threadRepo.getById(threadId)?.environmentId?.trim();
+    return this.getAuthoritativeEnvironmentId(threadId);
   }
 
   private isThreadIsolatedWorkspaceEnvironment(threadId: string): boolean {
@@ -373,7 +406,7 @@ export class EnvironmentService {
   }
 
   restoreThreadEnvironment(thread: Thread, projectRootPath: string): IEnvironment | undefined {
-    const runtime = this.environmentRuntimes.get(this.getRuntimeScopeKey(thread.id));
+    const runtime = this.environmentRuntimes.get(this.getRuntimeScopeKeyForThread(thread.id));
     if (runtime) {
       this.restoreFailuresByThreadId.delete(thread.id);
       return runtime.environment;
@@ -402,7 +435,7 @@ export class EnvironmentService {
   }
 
   getEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
-    return this.environmentRuntimes.get(this.getRuntimeScopeKey(threadId));
+    return this.environmentRuntimes.get(this.getRuntimeScopeKeyForThread(threadId));
   }
 
   async getProjectWorkspaceStatusAsync(projectId: string, rootPath: string): Promise<ThreadWorkStatus> {
@@ -446,7 +479,7 @@ export class EnvironmentService {
     threadId: string,
     createEnsurePromise: () => Promise<EnsureThreadEnvironmentRuntimeResult>,
   ): Promise<EnsureThreadEnvironmentRuntimeResult> {
-    const scopeKey = this.getRuntimeScopeKey(threadId);
+    const scopeKey = this.getRuntimeScopeKeyForThread(threadId);
     const existingRuntime = this.environmentRuntimes.get(scopeKey);
     if (existingRuntime) {
       return {
@@ -634,7 +667,7 @@ export class EnvironmentService {
     environment: IEnvironment,
     agentConnectionTarget: EnvironmentDaemonConnectionTarget,
   ): void {
-    const scopeKey = this.getRuntimeScopeKey(threadId);
+    const scopeKey = this.getRuntimeScopeKeyForThread(threadId);
     const existingRuntime = this.detachEnvironmentRuntime(threadId);
     if (existingRuntime) {
       void this.suspendDetachedRuntime(threadId, existingRuntime);
@@ -663,7 +696,7 @@ export class EnvironmentService {
   }
 
   detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
-    return this.detachEnvironmentRuntimeByScopeKey(this.getRuntimeScopeKey(threadId));
+    return this.detachEnvironmentRuntimeByScopeKey(this.getRuntimeScopeKeyForThread(threadId));
   }
 
   private detachEnvironmentRuntimeByScopeKey(scopeKey: string): ActiveEnvironmentRuntime | undefined {
@@ -754,7 +787,7 @@ export class EnvironmentService {
     threadId: string,
     suspendPromise: Promise<void>,
   ): Promise<void> {
-    const scopeKey = this.getRuntimeScopeKey(threadId);
+    const scopeKey = this.getRuntimeScopeKeyForThread(threadId);
     const tracked = suspendPromise.finally(() => {
       if (this.environmentRuntimeSuspendsByScopeKey.get(scopeKey) === tracked) {
         this.environmentRuntimeSuspendsByScopeKey.delete(scopeKey);
@@ -765,7 +798,7 @@ export class EnvironmentService {
   }
 
   private async awaitEnvironmentRuntimeSuspension(threadId: string): Promise<void> {
-    await this.environmentRuntimeSuspendsByScopeKey.get(this.getRuntimeScopeKey(threadId));
+    await this.environmentRuntimeSuspendsByScopeKey.get(this.getRuntimeScopeKeyForThread(threadId));
   }
 
   async destroyThreadEnvironment(threadId: string): Promise<void> {
@@ -1336,7 +1369,7 @@ export class EnvironmentService {
       const threadIds =
         this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id);
       for (const threadId of threadIds) {
-        const scopeKey = this.getRuntimeScopeKey(threadId);
+        const scopeKey = this.getRuntimeScopeKeyForThread(threadId);
         if (runtimeScopeKeys.has(scopeKey)) continue;
         teardownTasks.push(
           this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {

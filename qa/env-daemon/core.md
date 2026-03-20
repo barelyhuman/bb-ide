@@ -31,12 +31,14 @@ Use this pass for changes to daemon supervision, session management, and runtime
 - confirm `thread sessions` on sibling threads converges to the same active env-daemon session where sharing is expected
 - run one simultaneous follow-up round and confirm both turns complete cleanly
 - archive one sibling and confirm the other still accepts follow-up work
+- archive all siblings in a managed shared environment, then unarchive one and confirm it reprovisions cleanly
 - if daemon routing changed, run one multi-provider shared-environment scenario rather than only single-provider smoke
 - if provider routing changed, interleave follow-ups across provider A and provider B in the same shared environment and confirm no event cross-contamination
 
 ## Existing automation
 
 - `apps/server/src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts`
+- `apps/server/src/__tests__/e2e/thread-multi-provider-shared-environment.test.ts`
 - `apps/server/src/__tests__/e2e/thread-multi-thread-stress.test.ts`
 
 ## Related docs

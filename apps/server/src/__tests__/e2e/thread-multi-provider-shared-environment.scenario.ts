@@ -9,6 +9,7 @@ import {
   readError,
   readJson,
   tellThread,
+  unarchiveThread,
   waitForThreadCondition,
 } from "./environment-daemon-api.js";
 import { startServerE2eHarness } from "./harness.js";
@@ -461,6 +462,51 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
       sharedEnvironmentPath!,
       e2eTimeoutMs(8_000, 30_000),
     );
+
+    await unarchiveThread(harness.baseUrl, primaryThread.id);
+    const reprovisionedPrimaryThread = await waitForArchivedState({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
+      threadId: primaryThread.id,
+      archived: false,
+      timeoutMs: e2eTimeoutMs(8_000, 30_000),
+    });
+    expect(reprovisionedPrimaryThread.providerId).toBe(primaryProviderId);
+
+    await tellThread(
+      harness.baseUrl,
+      primaryThread.id,
+      `Reply with exactly ${primaryTag}-AFTER-UNARCHIVE and finish.`,
+    );
+    const primaryAfterUnarchiveRoundTrip = await waitForIdleAfterTurnProgress({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
+      threadId: primaryThread.id,
+      previousCounts: primaryParallelRoundTrip.counts,
+      additionalTurns: 1,
+      timeoutMs: e2eTimeoutMs(30_000, 120_000),
+    });
+    expect(primaryAfterUnarchiveRoundTrip.thread.archivedAt).toBeUndefined();
+    expect(primaryAfterUnarchiveRoundTrip.thread.providerId).toBe(primaryProviderId);
+    expect(primaryAfterUnarchiveRoundTrip.thread.attachedEnvironment?.id).toBeTruthy();
+    expect(
+      primaryAfterUnarchiveRoundTrip.thread.attachedEnvironment?.descriptor?.type === "path"
+        ? existsSync(primaryAfterUnarchiveRoundTrip.thread.attachedEnvironment.descriptor.path)
+        : false,
+    ).toBe(true);
+    expect(latestCompletedAgentText(primaryAfterUnarchiveRoundTrip.events)).toContain(
+      `${primaryTag}-AFTER-UNARCHIVE`,
+    );
+    expectThreadToContainOnlyProviderOutputs({
+      events: primaryAfterUnarchiveRoundTrip.events,
+      expectedTokens: [
+        `${primaryTag}-HELLO`,
+        `${primaryTag}-FOLLOWUP-ONE`,
+        `${primaryTag}-PARALLEL`,
+        `${primaryTag}-AFTER-UNARCHIVE`,
+      ],
+      forbiddenTokens: [secondaryTag],
+    });
   } finally {
     await harness.cleanup();
   }
