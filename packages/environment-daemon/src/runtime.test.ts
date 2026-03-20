@@ -1037,6 +1037,67 @@ describe("EnvironmentDaemonRuntime", () => {
     expect((ackA2.result as Record<string, unknown>).role).toBe("provider-A");
   });
 
+  it("rejects unrouted commands when multiple live children exist without explicit thread routing", async () => {
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "if (msg.method === 'initialize') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, role: process.env.ROLE } }));",
+      "} else if (msg.method === 'thread/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: `${process.env.ROLE}-thread`, role: process.env.ROLE } }));",
+      "}",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentDaemonRuntime({});
+    cleanup.push(() => runtime.shutdown());
+
+    runtime.ensureProviderRunning({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-A" },
+    });
+    runtime.ensureProviderRunning({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-B" },
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "cmd-unrouted",
+        idempotencyKey: "cmd-unrouted",
+        sentAt: 400,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-unrouted",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-unrouted"),
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+
+    expect(ack).toMatchObject({
+      state: "rejected",
+      errorCode: "provider_unavailable",
+      message: "Provider runtime is unavailable",
+    });
+  });
+
   it("initializes a routed child with that child's provider adapter in mixed-provider runs", async () => {
     const echoProviderScript = [
       "process.stdin.setEncoding('utf8');",

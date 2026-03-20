@@ -1025,7 +1025,7 @@ export class EnvironmentDaemonRuntime {
     if (hasExplicitThreadRouting) {
       return undefined;
     }
-    return this.ensureProviderRunning() ?? undefined;
+    return this.resolveUniqueLiveProviderChild();
   }
 
   /**
@@ -1571,6 +1571,22 @@ export class EnvironmentDaemonRuntime {
       }
     }
     return threadIds;
+  }
+
+  private resolveUniqueLiveProviderChild(): ChildProcess | undefined {
+    const liveChildren = new Set<ChildProcess>();
+    if (this.providerChild && !this.providerChild.killed && this.providerChild.exitCode === null) {
+      liveChildren.add(this.providerChild);
+    }
+    for (const child of this.providerChildren.values()) {
+      if (!child.killed && child.exitCode === null) {
+        liveChildren.add(child);
+      }
+    }
+    if (liveChildren.size !== 1) {
+      return undefined;
+    }
+    return [...liveChildren][0];
   }
 
   private createProviderThreadKey(providerId: string, providerThreadId: string): string {
