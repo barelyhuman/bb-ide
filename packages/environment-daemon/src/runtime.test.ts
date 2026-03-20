@@ -749,6 +749,56 @@ describe("EnvironmentDaemonRuntime", () => {
     expect(events).toEqual([]);
   });
 
+  it("emits an environment.degraded event when a routed provider child exits", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
+      providerId: "codex",
+    });
+    const degradedThreadIds: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "environment.degraded") {
+        degradedThreadIds.push(event.event.threadId);
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1", "codex");
+
+    await expect.poll(() => degradedThreadIds).toEqual(["thread-1"]);
+  });
+
+  it("emits environment.degraded for each routed thread when a shared child exits", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
+      providerId: "codex",
+    });
+    const degradedThreadIds: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "environment.degraded") {
+        degradedThreadIds.push(event.event.threadId);
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    const sharedSpec = {
+      command: "node",
+      args: [
+        "-e",
+        "setTimeout(() => process.exit(0), 20);",
+      ],
+    } satisfies Parameters<EnvironmentDaemonRuntime["ensureProviderStatus"]>[0];
+    runtime.ensureProviderStatus(sharedSpec, "thread-1", "codex");
+    runtime.ensureProviderStatus(sharedSpec, "thread-2", "codex");
+
+    await expect
+      .poll(() => [...degradedThreadIds].sort())
+      .toEqual(["thread-1", "thread-2"]);
+  });
+
   it("does not attribute stderr from an unbound child to another routed thread", async () => {
     const runtime = new EnvironmentDaemonRuntime({
       providerId: "codex",

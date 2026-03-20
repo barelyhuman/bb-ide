@@ -571,6 +571,7 @@ export class EnvironmentDaemonRuntime {
     });
 
     child.once("exit", (_code, _signal) => {
+      const affectedThreadIds = this.getThreadIdsForChild(child);
       if (this.providerChild === child) {
         this.providerChild = null;
       }
@@ -578,9 +579,9 @@ export class EnvironmentDaemonRuntime {
       this.providerChildren.delete(specKey);
       this.providerStdoutBuffers.delete(specKey);
       this.providerStderrBuffers.delete(specKey);
-      // Remove any threadId → child mappings that point to this child.
-      for (const [tid, c] of this.threadIdToChild) {
-        if (c === child) this.threadIdToChild.delete(tid);
+      for (const threadId of affectedThreadIds) {
+        this.threadIdToChild.delete(threadId);
+        this.threadIdToProviderId.delete(threadId);
       }
       if (child.pid !== undefined) {
         this.providerInitializedPids.delete(child.pid);
@@ -597,8 +598,7 @@ export class EnvironmentDaemonRuntime {
       this.opts.onStderrLine?.(
         `provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`,
       );
-      const degradedThreadId = this.resolveThreadIdForChild(child);
-      if (degradedThreadId) {
+      for (const degradedThreadId of affectedThreadIds) {
         this.appendEvent({
           type: "environment.degraded",
           threadId: degradedThreadId,
@@ -1038,6 +1038,7 @@ export class EnvironmentDaemonRuntime {
     if (!child) return undefined;
     if (child.killed || child.exitCode !== null) {
       this.threadIdToChild.delete(threadId);
+      this.threadIdToProviderId.delete(threadId);
       return undefined;
     }
     return child;
@@ -1557,9 +1558,15 @@ export class EnvironmentDaemonRuntime {
   }
 
   private getLiveThreadIdsForChild(child: ChildProcess): string[] {
+    return this.getThreadIdsForChild(child).filter(() =>
+      !child.killed && child.exitCode === null
+    );
+  }
+
+  private getThreadIdsForChild(child: ChildProcess): string[] {
     const threadIds: string[] = [];
     for (const [threadId, candidate] of this.threadIdToChild) {
-      if (candidate === child && !candidate.killed && candidate.exitCode === null) {
+      if (candidate === child) {
         threadIds.push(threadId);
       }
     }
