@@ -22,7 +22,6 @@ export interface EnvironmentDaemonSessionSupervisorOptions {
   runtime: EnvironmentDaemonRuntime;
   sessionRuntime: EnvironmentDaemonSessionRuntime;
   sessionSync: EnvironmentDaemonSessionSync;
-  initialThreadIds?: readonly string[];
   supportedProtocolVersions?: readonly EnvironmentDaemonSessionProtocolVersion[];
   advertisedCapabilities?: EnvironmentDaemonSessionCapabilities;
   controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
@@ -131,9 +130,6 @@ export class EnvironmentDaemonSessionSupervisor {
     }
     this.running = true;
     try {
-      for (const threadId of this.options.initialThreadIds ?? []) {
-        this.ensureThreadState(threadId);
-      }
       await this.openSession();
       await this.runCycle();
     } catch (error) {

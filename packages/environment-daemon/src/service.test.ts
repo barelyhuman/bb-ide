@@ -225,7 +225,6 @@ describe("environment-daemon service config", () => {
       session: {
         pollIntervalMs: 10_000,
         commandBatchLimit: 10,
-        initialThreadIds: ["thread-1"],
         capabilities: {
           commands: [
             "provider.ensure",
@@ -260,7 +259,7 @@ describe("environment-daemon service config", () => {
         ),
       ),
     ).toMatchObject({
-      channels: [{ channelId: "thread-1", generation: 1 }],
+      channels: [],
     });
 
     await started.close();

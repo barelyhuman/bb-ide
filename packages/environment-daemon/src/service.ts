@@ -53,7 +53,6 @@ export interface EnvironmentDaemonServiceOptions {
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
-    initialThreadIds?: string[];
     capabilities: EnvironmentDaemonSessionCapabilities;
     worker: EnvironmentDaemonSessionWorkerMetadata;
     providers?: EnvironmentDaemonSessionProviderMetadata[];
@@ -317,7 +316,6 @@ export async function startEnvironmentDaemonService(
         runtime,
         sessionRuntime,
         sessionSync,
-        initialThreadIds: options.session.initialThreadIds,
         advertisedCapabilities: options.session.capabilities,
         workerMetadata: options.session.worker,
         providerMetadata: options.session.providers,
