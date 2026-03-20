@@ -49,7 +49,6 @@ type EnvironmentDaemonRpcCommand = Exclude<
 >;
 
 export interface EnvironmentDaemonRuntimeOptions {
-  threadId?: string;
   projectId?: string;
   environmentId?: string;
   providerId?: string;

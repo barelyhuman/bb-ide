@@ -36,7 +36,7 @@ function createThreadContext(
 
 describe("EnvironmentDaemonRuntime", () => {
   it("records sequenced events and reports basic status", () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.appendEvent({ type: "workspace.status.changed", threadId: "thread-1" });
@@ -53,7 +53,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("updates daemon delivery status for retry visibility", () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.setDaemonDeliveryState({
@@ -80,7 +80,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("publishes appended events to subscribers", () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
     const events: Array<{ sequence: number; type: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       events.push({ sequence: event.sequence, type: event.event.type });
@@ -98,7 +98,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("tracks quiescence lifecycle state from provider events and command failures", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
     });
 
@@ -161,7 +160,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("does not require a provider at startup when launched in control-plane mode", () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
 
     expect(runtime.start()).toBeNull();
     expect(runtime.getProviderStatus()).toEqual({
@@ -187,7 +186,7 @@ describe("EnvironmentDaemonRuntime", () => {
     const tempHome = await mkdtemp(join(tmpdir(), "bb-env-daemon-runtime-"));
     cleanup.push(() => rm(tempHome, { recursive: true, force: true }));
 
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const lines: string[] = [];
     const unsubscribe = runtime.subscribeToProviderStdout((line) => {
       lines.push(line);
@@ -245,7 +244,6 @@ describe("EnvironmentDaemonRuntime", () => {
       ],
     });
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
       createProviderAdapter: () => providerAdapter,
     });
@@ -270,7 +268,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("lists provider catalog through a BB-native env-daemon command", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
     });
 
@@ -293,7 +290,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("accepts explicit commands and forwards them to the provider transport", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
       providerCommand: "node",
       providerArgs: [
@@ -349,7 +345,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("accepts provider.ensure commands and returns provider status", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
     });
 
     const ack = await runtime.executeCommand({
@@ -384,7 +379,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("rejects thread-scoped provider.ensure without an explicit provider id", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
     });
 
     const ack = await runtime.executeCommand({
@@ -420,7 +414,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "owner-thread",
       providerId: "codex",
       providerCommand: "node",
       providerArgs: [
@@ -574,7 +567,6 @@ describe("EnvironmentDaemonRuntime", () => {
     ].join("");
 
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "owner-thread",
       providerId: "codex",
     });
     cleanup.push(() => runtime.shutdown());
@@ -946,7 +938,6 @@ describe("EnvironmentDaemonRuntime", () => {
     ].join("");
 
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
     });
     cleanup.push(() => runtime.shutdown());
@@ -1122,7 +1113,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
     const baseAdapter = createCodexProviderAdapter();
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "pi",
       createProviderAdapter: (providerId) => ({
         ...baseAdapter,
@@ -1195,7 +1185,6 @@ describe("EnvironmentDaemonRuntime", () => {
     ].join("");
 
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
     });
     cleanup.push(() => runtime.shutdown());
@@ -1262,7 +1251,7 @@ describe("EnvironmentDaemonRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentDaemonProviderSpec = {
@@ -1348,7 +1337,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("spawns separate children for specs with different env", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const lines: string[] = [];
     const unsubscribe = runtime.subscribeToProviderStdout((line) => {
       lines.push(line);
@@ -1463,7 +1452,6 @@ describe("EnvironmentDaemonRuntime", () => {
     const toolCalls: Array<{ requestId: string | number; method: string; toolCall?: unknown }> = [];
     const stdoutLines: string[] = [];
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
       onProviderRequest: async (request) => {
         toolCalls.push({
@@ -1539,7 +1527,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("only rejects requests for the exiting child, not siblings", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     // Child A: responds to initialize immediately, but delays thread/start
@@ -1618,7 +1606,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("derives unique managed HOME dirs for specs differing only in files", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const lines: string[] = [];
@@ -1650,7 +1638,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("does not leak raw secrets into managed HOME directory names", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const secretKey = "sk-super-secret-api-key-12345";
@@ -1683,7 +1671,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("preserves an explicit provider HOME when files are materialized", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const lines: string[] = [];
@@ -1704,7 +1692,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("derives CODEX_HOME from the managed provider HOME by default", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const lines: string[] = [];
@@ -1740,7 +1728,6 @@ describe("EnvironmentDaemonRuntime", () => {
     }> = [];
     const stdout: string[] = [];
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerId: "codex",
       providerCommand: "node",
       providerArgs: [
@@ -1826,7 +1813,6 @@ describe("EnvironmentDaemonRuntime", () => {
     ].join("");
 
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "owner-thread",
       providerId: "codex",
       onProviderRequest: async (request) => {
         requests.push(request);

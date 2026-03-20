@@ -14,7 +14,6 @@ describe("environment-daemon HTTP transport", () => {
 
   it("serves status over HTTP", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
       providerCommand: "codex",
       providerArgs: ["app-server"],
     });
@@ -43,9 +42,7 @@ describe("environment-daemon HTTP transport", () => {
   });
 
   it("rejects unauthenticated requests", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     runtime.start();
     const server = await createEnvironmentDaemonHttpServer({
       runtime,
@@ -65,9 +62,7 @@ describe("environment-daemon HTTP transport", () => {
   });
 
   it("accepts a session sync poke", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const onSessionSyncRequested = vi.fn();
     const server = await createEnvironmentDaemonHttpServer({
       runtime,
@@ -97,9 +92,7 @@ describe("environment-daemon HTTP transport", () => {
   });
 
   it("accepts a shutdown poke", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      threadId: "thread-1",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const onShutdownRequested = vi.fn();
     const server = await createEnvironmentDaemonHttpServer({
       runtime,

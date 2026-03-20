@@ -123,7 +123,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
   it("opens a session, persists runtime events, executes pulled commands, and reports results", async () => {
     const store = new InMemoryEnvironmentDaemonSessionStore();
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const sessionRuntime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
@@ -316,7 +316,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     vi.useFakeTimers();
     try {
       const store = new InMemoryEnvironmentDaemonSessionStore();
-      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const runtime = new EnvironmentDaemonRuntime({});
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
@@ -418,7 +418,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     vi.useFakeTimers();
     try {
       const store = new InMemoryEnvironmentDaemonSessionStore();
-      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const runtime = new EnvironmentDaemonRuntime({});
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
@@ -490,7 +490,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     vi.useFakeTimers();
     try {
       const store = new InMemoryEnvironmentDaemonSessionStore();
-      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const runtime = new EnvironmentDaemonRuntime({});
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
@@ -572,7 +572,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     vi.useFakeTimers();
     try {
       const store = new InMemoryEnvironmentDaemonSessionStore();
-      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const runtime = new EnvironmentDaemonRuntime({});
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
@@ -700,7 +700,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     try {
       vi.setSystemTime(0);
       const store = new InMemoryEnvironmentDaemonSessionStore();
-      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const runtime = new EnvironmentDaemonRuntime({});
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
@@ -829,7 +829,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
   it("resends buffered events when the daemon acks an older cursor", async () => {
     const store = new InMemoryEnvironmentDaemonSessionStore();
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const sessionRuntime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
@@ -977,7 +977,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
   it("flushes buffered events and command results before closing the session", async () => {
     const store = new InMemoryEnvironmentDaemonSessionStore();
-    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const sessionRuntime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
