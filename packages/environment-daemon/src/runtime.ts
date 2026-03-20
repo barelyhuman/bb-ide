@@ -162,24 +162,13 @@ export class EnvironmentDaemonRuntime {
 
   sendProviderLine(line: string): void {
     if (!line.trim()) return;
-    this.providerChild?.stdin?.write(`${line}\n`);
+    this.resolveUniqueLiveProviderChild()?.stdin?.write(`${line}\n`);
   }
 
   ensureProviderRunning(spec?: EnvironmentDaemonProviderSpec): ChildProcess | null {
     const resolvedSpec = this.resolveProviderSpec(spec);
     if (!resolvedSpec) {
-      // No spec and no default command — return the active child if alive,
-      // falling back to any live child in the map.
-      if (this.providerChild && !this.providerChild.killed) {
-        return this.providerChild;
-      }
-      for (const child of this.providerChildren.values()) {
-        if (!child.killed && child.exitCode === null) {
-          this.providerChild = child;
-          return child;
-        }
-      }
-      return null;
+      return this.resolveUniqueLiveProviderChild() ?? null;
     }
 
     // Look up an existing child for this provider spec (keyed by the full
@@ -201,16 +190,16 @@ export class EnvironmentDaemonRuntime {
   }
 
   getProviderStatus(): EnvironmentDaemonProviderStatus {
-    // Report running if any provider child is alive.
-    const child = this.providerChild;
-    const running = Boolean(child && child.exitCode === null && !child.killed)
-      || [...this.providerChildren.values()].some(
-        (c) => c.exitCode === null && !c.killed,
-      );
+    const liveChildren = this.listLiveProviderChildren();
+    const uniqueChild =
+      liveChildren.length === 1
+        ? liveChildren[0]
+        : undefined;
+    const running = liveChildren.length > 0;
     return {
       running,
       launched: running,
-      ...(typeof child?.pid === "number" ? { pid: child.pid } : {}),
+      ...(typeof uniqueChild?.pid === "number" ? { pid: uniqueChild.pid } : {}),
     };
   }
 
@@ -1574,6 +1563,14 @@ export class EnvironmentDaemonRuntime {
   }
 
   private resolveUniqueLiveProviderChild(): ChildProcess | undefined {
+    const liveChildren = this.listLiveProviderChildren();
+    if (liveChildren.length !== 1) {
+      return undefined;
+    }
+    return liveChildren[0];
+  }
+
+  private listLiveProviderChildren(): ChildProcess[] {
     const liveChildren = new Set<ChildProcess>();
     if (this.providerChild && !this.providerChild.killed && this.providerChild.exitCode === null) {
       liveChildren.add(this.providerChild);
@@ -1583,10 +1580,7 @@ export class EnvironmentDaemonRuntime {
         liveChildren.add(child);
       }
     }
-    if (liveChildren.size !== 1) {
-      return undefined;
-    }
-    return [...liveChildren][0];
+    return [...liveChildren];
   }
 
   private createProviderThreadKey(providerId: string, providerThreadId: string): string {

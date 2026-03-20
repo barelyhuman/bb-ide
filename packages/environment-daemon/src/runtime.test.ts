@@ -1377,6 +1377,51 @@ describe("EnvironmentDaemonRuntime", () => {
     expect(markers).toContain("child-B");
   });
 
+  it("fails closed for helper surfaces when multiple live children exist", async () => {
+    const runtime = new EnvironmentDaemonRuntime({});
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+    cleanup.push(() => runtime.shutdown());
+
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "console.log(JSON.stringify({ role: process.env.ROLE, line }));",
+      "}",
+      "});",
+      "process.stdin.resume();",
+    ].join("");
+
+    runtime.ensureProviderRunning({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-A" },
+    });
+    runtime.ensureProviderRunning({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-B" },
+    });
+
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(true);
+    expect(runtime.ensureProviderRunning()).toBeNull();
+
+    runtime.sendProviderLine(JSON.stringify({ ping: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(lines.some((line) => line.includes('"ping":true'))).toBe(false);
+    expect(runtime.getProviderStatus().pid).toBeUndefined();
+  });
+
   it("isolates pi bridge children per thread even when the launch spec matches", async () => {
     const runtime = new EnvironmentDaemonRuntime({});
     const lines: string[] = [];
