@@ -2,6 +2,11 @@
 
 import { createInterface } from "node:readline";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  decodeBridgeJsonRpcRequest,
+  decodeBridgeJsonRpcResponse,
+  decodeToolCallResponsePayload,
+} from "../shared/rpc-contract.js";
 import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
 import {
   translateSdkMessage,
@@ -452,39 +457,24 @@ function handleLine(line: string): void {
     return;
   }
 
-  const request = parsed as JsonRpcRequest;
-  if (!request || typeof request !== "object" || request.jsonrpc !== "2.0") {
-    return;
-  }
-
-  // Handle tool call responses (they come back as JSON-RPC responses or errors)
-  if (("result" in request || "error" in request) && findSessionByPendingToolCall(request.id)) {
-    const threadSession = findSessionByPendingToolCall(request.id)!;
-    const pending = threadSession.pendingToolCalls.get(request.id)!;
-    threadSession.pendingToolCalls.delete(request.id);
-    if ("error" in request) {
-      const error = (request as unknown as { error: { message?: string } }).error;
-      pending.resolve({ content: error?.message ?? "Tool call failed", isError: true });
-    } else {
-      const result = (request as unknown as { result: unknown }).result;
-      const record = result as Record<string, unknown> | undefined;
-      const contentItems = record?.contentItems as
-        | Array<{ type: string; text?: string }>
-        | undefined;
-      const text =
-        contentItems
-          ?.filter((item) => item.type === "inputText" && typeof item.text === "string")
-          .map((item) => item.text)
-          .join("\n") ?? "OK";
+  const response = decodeBridgeJsonRpcResponse(parsed);
+  if (response && findSessionByPendingToolCall(response.id)) {
+    const threadSession = findSessionByPendingToolCall(response.id)!;
+    const pending = threadSession.pendingToolCalls.get(response.id)!;
+    threadSession.pendingToolCalls.delete(response.id);
+    if ("error" in response) {
       pending.resolve({
-        content: text,
-        isError: (record?.success as boolean | undefined) === false,
+        content: response.error.message ?? "Tool call failed",
+        isError: true,
       });
+    } else {
+      pending.resolve(decodeToolCallResponsePayload(response.result));
     }
     return;
   }
 
-  if (typeof request.method !== "string") return;
+  const request = decodeBridgeJsonRpcRequest(parsed);
+  if (!request) return;
   handleRequest(request);
 }
 

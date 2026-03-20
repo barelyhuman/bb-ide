@@ -102,8 +102,8 @@ Shared UI primitives used by the app.
 ### Supporting packages
 
 - `packages/templates`: checked-in instruction and prompt templates.
-- `packages/claude-code-bridge`: Claude Code bridge package.
-- `packages/pi-bridge`: PI bridge package.
+- `packages/provider-adapters/src/bridges/claude-code`: Claude Code bridge runtime.
+- `packages/provider-adapters/src/bridges/pi`: PI bridge runtime.
 - `packages/tsconfig`: shared TypeScript config.
 
 ## Thread model

@@ -306,7 +306,7 @@ async function hasPiModelsAvailable(listModels: () => Promise<AvailableModel[]>)
 }
 
 function resolveBridgePath(): string {
-  return resolve(__dirname, "..", "..", "pi-bridge", "dist", "bridge.js");
+  return resolve(__dirname, "bridges", "pi", "bridge.js");
 }
 
 export interface CreatePiProviderAdapterOptions {

@@ -34,8 +34,8 @@ pnpm exec turbo run build \
 Provider setup:
 
 - Codex: confirm `codex` is in `PATH`
-- Claude Code: confirm `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set and `@bb/claude-code-bridge` is built
-- Pi: confirm `pi` is in `PATH`, auth is configured, and `@bb/pi-bridge` is built
+- Claude Code: confirm `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set and `@bb/provider-adapters` is built
+- Pi: confirm `pi` is in `PATH`, auth is configured, and `@bb/provider-adapters` is built
 
 Recommended during restart and liveness QA:
 

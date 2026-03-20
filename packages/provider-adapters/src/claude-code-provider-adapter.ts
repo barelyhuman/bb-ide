@@ -274,9 +274,7 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
 }
 
 function resolveBridgePath(): string {
-  // Resolve the bridge.js path relative to this package's location.
-  // In the monorepo layout: packages/provider-adapters/dist/ → packages/claude-code-bridge/dist/
-  return resolve(__dirname, "..", "..", "claude-code-bridge", "dist", "bridge.js");
+  return resolve(__dirname, "bridges", "claude-code", "bridge.js");
 }
 
 export function buildClaudeCodeAvailableModels(

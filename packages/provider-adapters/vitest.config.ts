@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     silent: "passed-only",
     name: "@bb/provider-adapters",
-    include: ["src/__tests__/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
   },
 });

@@ -18,7 +18,9 @@ describe("provider registry", () => {
     expect(provider.id).toBe("claude-code");
     expect(provider.processCommand).toBe("node");
     expect(provider.processArgs).toHaveLength(1);
-    expect(provider.processArgs[0]).toMatch(/claude-code-bridge\/dist\/bridge\.js$/);
+    expect(provider.processArgs[0]).toMatch(
+      /provider-adapters\/(src|dist)\/bridges\/claude-code\/bridge\.js$/,
+    );
   });
 
   it("creates pi provider with expected process command and args", () => {
@@ -26,7 +28,9 @@ describe("provider registry", () => {
     expect(provider.id).toBe("pi");
     expect(provider.processCommand).toBe("node");
     expect(provider.processArgs).toHaveLength(1);
-    expect(provider.processArgs[0]).toMatch(/pi-bridge\/dist\/bridge\.js$/);
+    expect(provider.processArgs[0]).toMatch(
+      /provider-adapters\/(src|dist)\/bridges\/pi\/bridge\.js$/,
+    );
   });
 
   it("rejects unsupported adapters", () => {
