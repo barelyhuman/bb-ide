@@ -237,6 +237,5 @@ export {
 export { assertNever } from "./assert-never.js";
 export { isRecord, toRecord, getStringField, extractErrorMessage } from "./unknown-helpers.js";
 export {
-  decodeSystemShutdownBlockedResponse,
   decodeThreadIdFromWireValue,
 } from "./wire-decoders.js";

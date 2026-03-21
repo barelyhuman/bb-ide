@@ -1,5 +1,4 @@
 import {
-  decodeSystemShutdownBlockedResponse,
   extractErrorMessage,
   toRecord,
 } from "@bb/core";
@@ -631,95 +630,32 @@ export async function shutdownServer(
   req: SystemShutdownRequest = {},
 ): Promise<SystemShutdownAcceptedResponse> {
   const res = await apiClient.system.shutdown.$post({ json: req });
-
-  if (res.status === 409) {
-    const rawBody = await res.text().catch(() => "");
-    const normalized = normalizeErrorText(rawBody);
-    if (normalized.length > 0) {
-      try {
-        const parsed = JSON.parse(normalized) as unknown;
-        const blocked = decodeSystemShutdownBlockedResponse(parsed);
-        if (blocked) {
-          throw new SystemShutdownBlockedError(
-            blocked.message,
-            blocked.blockingThreads,
-          );
-        }
-      } catch (err) {
-        if (err instanceof SystemShutdownBlockedError) {
-          throw err;
-        }
-      }
-    }
-    const message = deriveHttpErrorMessage(
-      res.status,
-      res.statusText,
-      rawBody,
-      res.headers.get("content-type"),
-    );
-    throw new Error(`HTTP ${res.status}: ${message}`);
-  }
-
-  if (!res.ok) {
+  if (!res.ok && res.status !== 409) {
     await throwHttpError(res);
   }
-
-  const text = await res.text();
-  if (!text) {
-    return {
-      ok: true,
-      forced: Boolean(req.force),
-      blockingThreadsCount: 0,
-    };
+  const body = await res.json();
+  if ("code" in body && body.code === "shutdown_blocked") {
+    throw new SystemShutdownBlockedError(
+      body.message,
+      body.blockingThreads,
+    );
   }
-  return JSON.parse(text) as SystemShutdownAcceptedResponse;
+  return body as SystemShutdownAcceptedResponse;
 }
 
 export async function restartServer(
   req: SystemRestartRequest = {},
 ): Promise<SystemRestartAcceptedResponse> {
   const res = await apiClient.system.restart.$post({ json: req });
-
-  if (res.status === 409) {
-    const rawBody = await res.text().catch(() => "");
-    const normalized = normalizeErrorText(rawBody);
-    if (normalized.length > 0) {
-      try {
-        const parsed = JSON.parse(normalized) as unknown;
-        const blocked = decodeSystemShutdownBlockedResponse(parsed);
-        if (blocked) {
-          throw new SystemShutdownBlockedError(
-            blocked.message,
-            blocked.blockingThreads,
-          );
-        }
-      } catch (err) {
-        if (err instanceof SystemShutdownBlockedError) {
-          throw err;
-        }
-      }
-    }
-    const message = deriveHttpErrorMessage(
-      res.status,
-      res.statusText,
-      rawBody,
-      res.headers.get("content-type"),
-    );
-    throw new Error(`HTTP ${res.status}: ${message}`);
-  }
-
-  if (!res.ok) {
+  if (!res.ok && res.status !== 409) {
     await throwHttpError(res);
   }
-
-  const text = await res.text();
-  if (!text) {
-    return {
-      ok: true,
-      forced: Boolean(req.force),
-      blockingThreadsCount: 0,
-      restarting: true,
-    };
+  const body = await res.json();
+  if ("code" in body && body.code === "shutdown_blocked") {
+    throw new SystemShutdownBlockedError(
+      body.message,
+      body.blockingThreads,
+    );
   }
-  return JSON.parse(text) as SystemRestartAcceptedResponse;
+  return body as SystemRestartAcceptedResponse;
 }
