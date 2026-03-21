@@ -27,8 +27,6 @@ export type {
   ThreadEventData,
   ThreadEventDataForType,
   PersistedThreadEventData,
-  ProviderEventEnvelopeMetadata,
-  ProviderEventEnvelope,
   ThreadEventOfType,
   ThreadEventRow,
 } from "./types.js";
@@ -243,15 +241,3 @@ export {
   decodeSystemShutdownBlockedResponse,
   decodeThreadIdFromWireValue,
 } from "./wire-decoders.js";
-export {
-  createProviderEventEnvelope,
-  decodeLooseTextContent,
-  decodeProviderEventEnvelope,
-  decodeThreadEventData,
-  isProviderEventEnvelope,
-  unwrapProviderEventPayload,
-  resolveProviderEventMethod,
-  normalizeThreadEventType,
-  extractTurnIdFromPersistedEventData,
-  extractProviderThreadIdFromPersistedEventData,
-} from "./thread-event-normalization.js";

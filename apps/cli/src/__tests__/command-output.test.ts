@@ -1501,7 +1501,7 @@ describe("CLI JSON output contracts", () => {
       {
         id: "evt-1",
         threadId: "thread-json-status",
-        type: "turn.started",
+        type: "turn/started",
         data: { ok: true },
         createdAt: 10,
         sequence: 1,
@@ -1509,7 +1509,7 @@ describe("CLI JSON output contracts", () => {
       {
         id: "evt-2",
         threadId: "thread-json-status",
-        type: "system.error",
+        type: "system/error",
         data: { code: "provider_unavailable" },
         createdAt: 20,
         sequence: 2,
@@ -1564,7 +1564,7 @@ describe("CLI JSON output contracts", () => {
       {
         id: "evt-1",
         threadId: "thread-json-log",
-        type: "system.error",
+        type: "system/error",
         data: { code: "provider_unavailable" },
         createdAt: 20,
         sequence: 2,

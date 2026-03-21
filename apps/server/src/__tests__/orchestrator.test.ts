@@ -402,6 +402,27 @@ vi.mock("@bb/environment-daemon", async (importOriginal) => {
   return importOriginal<typeof import("@bb/environment-daemon")>();
 });
 
+// Allow tests to override provider adapter methods (e.g. listModels) by
+// intercepting the dynamic createProviderAdapter() call the orchestrator uses.
+const providerAdapterOverrides: Record<string, (...args: unknown[]) => unknown> = {};
+vi.mock("@bb/provider-adapters", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@bb/provider-adapters")>();
+  return {
+    ...actual,
+    createProviderAdapter: (...args: unknown[]) => {
+      const adapter = actual.createProviderAdapter(...(args as Parameters<typeof actual.createProviderAdapter>));
+      return new Proxy(adapter, {
+        get(target, prop, receiver) {
+          if (typeof prop === "string" && prop in providerAdapterOverrides) {
+            return providerAdapterOverrides[prop];
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      });
+    },
+  };
+});
+
 const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
 
@@ -459,9 +480,6 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
           listModels: (...args: unknown[]) => unknown;
         };
       };
-    }>;
-    providerAdapterByProviderId: Map<string, {
-      listModels: (...args: unknown[]) => unknown;
     }>;
     environmentService: {
       environmentRuntimes: Map<string, unknown>;
@@ -604,14 +622,31 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     return rawEnvironmentRuntimes.delete(normalizeRuntimeScopeKey(key));
   };
   environmentRuntimes.clear = () => rawEnvironmentRuntimes.clear();
+  // Build a provider proxy that forwards listModels assignments to the
+  // providerAdapterOverrides bag so the orchestrator's dynamic
+  // createProviderAdapter() call picks them up.
+  const baseProvider =
+    Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider ?? {};
+  const providerProxy = new Proxy(baseProvider as Record<string, unknown>, {
+    set(_target, prop, value) {
+      if (typeof prop === "string") {
+        providerAdapterOverrides[prop] = value as (...args: unknown[]) => unknown;
+      }
+      return true;
+    },
+    get(target, prop, receiver) {
+      if (typeof prop === "string" && prop in providerAdapterOverrides) {
+        return providerAdapterOverrides[prop];
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
   Object.assign(rawManager, {
     processes,
     providerThreadIds,
     activeTurnIds,
     environmentRuntimes,
-    provider:
-      Array.from(rawManager.providerAdapterByProviderId.values())[0] ??
-      Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
+    provider: providerProxy,
   });
   return rawManager as OrchestratorTestHarness;
 }
@@ -721,20 +756,16 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(ownerThread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 1_234,
-          },
-          payload: {
-            threadId: "provider-thread-sibling",
+        translatedEvents: [
+          {
+            type: "item/completed",
             item: { type: "agentMessage", text: "hello" },
+          } as never,
+          {
+            type: "thread/identity",
+            providerThreadId: "provider-thread-sibling",
           },
-        },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -793,20 +824,17 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 1_234,
-          },
-          payload: {
-            threadId: "provider-thread-new",
+        translatedEvents: [
+          {
+            type: "item/completed",
+            threadId: thread.id,
             item: { type: "agentMessage", text: "hello after restart" },
           },
-        },
+          {
+            type: "thread/identity",
+            providerThreadId: "provider-thread-new",
+          },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -869,19 +897,12 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(threadA.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 1_234,
-          },
-          payload: {
+        translatedEvents: [
+          {
+            type: "item/completed",
             item: { type: "agentMessage", text: "ambiguous" },
-          },
-        },
+          } as never,
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -949,20 +970,16 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(codexThread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "claude-code",
-            method: "item/completed",
-            observedAt: 1_234,
-          },
-          payload: {
-            threadId: "shared-provider-thread",
+        translatedEvents: [
+          {
+            type: "item/completed",
             item: { type: "agentMessage", text: "hello from claude" },
+          } as never,
+          {
+            type: "thread/identity",
+            providerThreadId: "shared-provider-thread",
           },
-        },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -1021,20 +1038,17 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(claudeThread.id, {
         method: "thread/started",
         normalizedMethod: "thread/started",
-        eventType: "thread/started",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "claude-code",
-            method: "thread/started",
-            observedAt: 1_234,
-          },
-          payload: {
+        translatedEvents: [
+          {
+            type: "thread/started",
             threadId: claudeThread.id,
             providerThreadId: "claude-session-1",
           },
-        },
+          {
+            type: "thread/identity",
+            providerThreadId: "claude-session-1",
+          },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -1094,20 +1108,17 @@ describe("Orchestrator", () => {
       rawManager._handleAgentServerNotification(claudeThread.id, {
         method: "thread/started",
         normalizedMethod: "thread/started",
-        eventType: "thread/started",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "claude-code",
-            method: "thread/started",
-            observedAt: 1_234,
-          },
-          payload: {
+        translatedEvents: [
+          {
+            type: "thread/started",
             threadId: claudeThread.id,
             providerThreadId: "claude-session-1",
           },
-        },
+          {
+            type: "thread/identity",
+            providerThreadId: "claude-session-1",
+          },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -1115,21 +1126,14 @@ describe("Orchestrator", () => {
       rawManager._handleAgentServerNotification(claudeThread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "claude-code",
-            method: "item/completed",
-            observedAt: 1_235,
-          },
-          payload: {
+        translatedEvents: [
+          {
+            type: "item/completed",
             threadId: claudeThread.id,
             turnId: "claude-turn-1",
             item: { type: "agentMessage", text: "hello from claude" },
           },
-        },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -1197,20 +1201,16 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(firstThread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 1_234,
-          },
-          payload: {
-            threadId: "shared-provider-thread",
+        translatedEvents: [
+          {
+            type: "item/completed",
             item: { type: "agentMessage", text: "hello" },
+          } as never,
+          {
+            type: "thread/identity",
+            providerThreadId: "shared-provider-thread",
           },
-        },
+        ],
         shouldPersist: true,
         shouldBroadcast: false,
       });
@@ -3097,6 +3097,7 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
+        providerId: "codex",
         translatedEvents: [],
         shouldPersist: true,
         shouldBroadcast: true,
@@ -3112,6 +3113,7 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "turn/completed",
         normalizedMethod: "turn/completed",
+        providerId: "codex",
         translatedEvents: [],
         shouldPersist: true,
         shouldBroadcast: true,
@@ -3147,6 +3149,7 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
+        providerId: "codex",
         translatedEvents: [],
         shouldPersist: true,
         shouldBroadcast: true,

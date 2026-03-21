@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  decodeThreadEventData,
+  toRecord,
   type Thread,
 } from "@bb/core";
 import type { DbConnection } from "@bb/db";
@@ -450,7 +450,46 @@ describe("environment-daemon session orchestrator roundtrip", () => {
     sessionId: string;
     sequence: number;
     method: string;
+    text?: string;
   }): Promise<void> {
+    const turnId = `turn-${args.threadId}-${args.sequence}`;
+    const isTurnStarted = args.method === "turn/started";
+    const isTurnCompleted = args.method === "turn/completed" || args.method === "turn/end";
+    const isItemCompleted = args.method === "item/completed";
+    const isThreadStarted = args.method === "thread/started";
+    const translatedEvents: Array<Record<string, unknown>> = [];
+    if (isTurnStarted) {
+      translatedEvents.push({
+        type: "turn/started",
+        threadId: args.threadId,
+        turnId,
+        turn: { id: turnId, items: [], status: "inProgress", error: null },
+      });
+    } else if (isTurnCompleted) {
+      translatedEvents.push({
+        type: "turn/completed",
+        threadId: args.threadId,
+        turnId,
+        turn: { id: turnId, items: [], status: "completed", error: null },
+      });
+    } else if (isItemCompleted) {
+      translatedEvents.push({
+        type: "item/completed",
+        threadId: args.threadId,
+        turnId,
+        item: { type: "agentMessage", id: `assistant-${args.sequence}`, text: args.text ?? `response-${args.sequence}` },
+      });
+    } else if (isThreadStarted) {
+      translatedEvents.push({
+        type: "thread/started",
+        threadId: args.threadId,
+      });
+    } else {
+      translatedEvents.push({
+        type: args.method,
+        threadId: args.threadId,
+      });
+    }
     await sessionService.applyEventBatch({
       environmentId: resolveEnvironmentId(args.threadId),
       sessionId: args.sessionId,
@@ -463,7 +502,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId: args.threadId,
             method: args.method,
-            translatedEvents: [],
+            providerId: "codex",
+            normalizedMethod: args.method,
+            shouldPersist: true,
+            shouldBroadcast: true,
+            translatedEvents: translatedEvents as never,
+            ...(isTurnStarted ? { nextStatus: "active" as const, turnState: "active" as const, turnId } : {}),
+            ...(isTurnCompleted ? { nextStatus: "idle" as const, turnState: "idle" as const, turnId } : {}),
           },
         },
       ]),
@@ -562,12 +607,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       if (event.type !== "item/completed") {
         continue;
       }
-      const decoded = decodeThreadEventData(event.data);
-      if (decoded.item?.normalizedType !== "agentmessage") {
+      const data = toRecord(event.data);
+      const item = toRecord(data?.item);
+      if (item?.type !== "agentMessage") {
         continue;
       }
-      if (decoded.item.text.text) {
-        return decoded.item.text.text;
+      if (typeof item.text === "string" && item.text) {
+        return item.text;
       }
     }
     return undefined;
@@ -589,7 +635,16 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId,
             method: "turn/started",
-            translatedEvents: [],
+            providerId: "codex",
+            normalizedMethod: "turn/started",
+            shouldPersist: true,
+            shouldBroadcast: true,
+            nextStatus: "active" as const,
+            turnState: "active" as const,
+            turnId: "turn-1",
+            translatedEvents: [
+              { type: "turn/started", threadId, turnId: "turn-1", turn: { id: "turn-1", items: [], status: "inProgress", error: null } },
+            ] as never,
           },
         },
       ]),
@@ -612,7 +667,16 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId,
             method: "turn/completed",
-            translatedEvents: [],
+            providerId: "codex",
+            normalizedMethod: "turn/completed",
+            shouldPersist: true,
+            shouldBroadcast: true,
+            nextStatus: "idle" as const,
+            turnState: "idle" as const,
+            turnId: "turn-1",
+            translatedEvents: [
+              { type: "turn/completed", threadId, turnId: "turn-1", turn: { id: "turn-1", items: [], status: "completed", error: null } },
+            ] as never,
           },
         },
       ]),
@@ -654,10 +718,22 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       data: {},
     });
     events.create({
+      threadId: codexThreadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "shared-provider-thread" },
+    });
+    events.create({
       threadId: claudeThreadId,
       seq: 1,
       type: "thread/started",
       data: {},
+    });
+    events.create({
+      threadId: claudeThreadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "shared-provider-thread" },
     });
 
     const sequenceByThreadId = new Map<string, number>([
@@ -686,6 +762,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
         sessionId,
         sequence: itemSequence,
         method: "item/completed",
+        text: providerText,
       });
 
       const completedSequence = itemSequence + 1;
@@ -850,7 +927,16 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId,
             method: "turn/started",
-            translatedEvents: [],
+            providerId: "codex",
+            normalizedMethod: "turn/started",
+            shouldPersist: true,
+            shouldBroadcast: true,
+            nextStatus: "active" as const,
+            turnState: "active" as const,
+            turnId: "turn-1",
+            translatedEvents: [
+              { type: "turn/started", threadId, turnId: "turn-1", turn: { id: "turn-1", items: [], status: "inProgress", error: null } },
+            ] as never,
           },
         },
       ]),

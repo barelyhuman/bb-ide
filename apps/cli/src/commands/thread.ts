@@ -9,7 +9,6 @@ import {
   type ThreadWorkStatus,
   type TimelineFormat,
   type Project,
-  normalizeThreadEventType,
   formatTimelineAsText,
   formatEnvironmentDisplay,
 } from "@bb/core";
@@ -114,19 +113,18 @@ function buildSpawnEnvironmentSelection(args: {
 }
 
 function isLowSignalThreadStatusEventType(type: string): boolean {
-  const normalized = normalizeThreadEventType(type);
-  if (normalized.startsWith("client/")) return true;
+  if (type.startsWith("client/")) return true;
   if (
-    normalized === "turn/start" ||
-    normalized === "turn/started" ||
-    normalized === "turn/end" ||
-    normalized === "turn/completed"
+    type === "turn/start" ||
+    type === "turn/started" ||
+    type === "turn/end" ||
+    type === "turn/completed"
   ) {
     return true;
   }
-  if (normalized === "item/started") return true;
-  if (normalized.endsWith("/delta")) return true;
-  if (normalized === "thread/tokenusage/updated") return true;
+  if (type === "item/started") return true;
+  if (type.endsWith("/delta")) return true;
+  if (type === "thread/tokenUsage/updated") return true;
   return false;
 }
 
@@ -195,7 +193,7 @@ function parseThreadWaitTarget(opts: {
 
   return {
     kind: "event",
-    eventType: normalizeThreadEventType(opts.event ?? ""),
+    eventType: opts.event ?? "",
   };
 }
 
@@ -353,8 +351,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 afterSeq = events[events.length - 1].seq;
               }
               const matched = events.find(
-                (event) =>
-                  normalizeThreadEventType(event.type) === target.eventType,
+                (event) => event.type === target.eventType,
               );
               if (matched) {
                 if (outputJson(opts, { threadId, matched: true, target })) return;

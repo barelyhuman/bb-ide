@@ -1189,17 +1189,8 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
       seq: 1,
       type: "thread/started",
       data: {
-        __bb_provider_event: {
-          schema: "bb/provider-event-envelope",
-          version: 1,
-          providerId: "claude-code",
-          method: "thread/started",
-          observedAt: 1_000,
-        },
-        payload: {
-          threadId: thread.id,
-          providerThreadId: "claude-session-1",
-        },
+        threadId: thread.id,
+        providerThreadId: "claude-session-1",
       },
     });
     eventRepo.create({
@@ -1207,20 +1198,11 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
       seq: 2,
       type: "item/completed",
       data: {
-        __bb_provider_event: {
-          schema: "bb/provider-event-envelope",
-          version: 1,
-          providerId: "claude-code",
-          method: "item/completed",
-          observedAt: 1_100,
-        },
-        payload: {
-          threadId: thread.id,
-          turnId: "claude-turn-1",
-          item: {
-            type: "agentMessage",
-            text: "follow-up reply",
-          },
+        threadId: thread.id,
+        turnId: "claude-turn-1",
+        item: {
+          type: "agentMessage",
+          text: "follow-up reply",
         },
       },
     });

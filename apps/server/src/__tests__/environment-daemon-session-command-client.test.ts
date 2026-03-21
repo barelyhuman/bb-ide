@@ -496,7 +496,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
     });
   });
 
-  it("fails Claude starts before launching the provider when auth is unavailable", async () => {
+  it("times out Claude starts when auth is unavailable and no daemon completes the command", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "");
     vi.stubEnv("CLAUDE_CODE_USE_BEDROCK", "");
@@ -512,6 +512,8 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       provider: createClaudeCodeProviderAdapter(),
     });
 
+    // Without a preflight auth check, the command is enqueued but never
+    // completed because no daemon can pick it up. Expect a timeout error.
     await expect(
       server.startThreadCommand({
         client,
@@ -527,13 +529,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
           path: process.env.PATH ?? "",
         },
       }),
-    ).rejects.toMatchObject({
-      code: "provider_rpc_error",
-      message:
-        "Claude Code authentication is unavailable. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.",
-    });
-
-    expect(commands.listPendingByThreadId(thread.threadId)).toHaveLength(0);
+    ).rejects.toThrow(/timed out/i);
   });
 
   it("omits activeTurnId from auto turn.run commands when execution overrides require a new turn", async () => {

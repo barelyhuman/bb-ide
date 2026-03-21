@@ -46,6 +46,7 @@ export class ProviderSessionError extends Error {
 export interface ProviderSessionNotification {
   method: string;
   normalizedMethod: string;
+  providerId: string;
   translatedEvents: ThreadEvent[];
   shouldPersist: boolean;
   shouldBroadcast: boolean;
@@ -415,6 +416,7 @@ export class ProviderSessionController {
     this.opts.onNotification?.(threadId, {
       method,
       normalizedMethod,
+      providerId: this.opts.provider.id,
       translatedEvents,
       shouldPersist: event.shouldPersist ?? true,
       shouldBroadcast: event.shouldBroadcast ?? true,

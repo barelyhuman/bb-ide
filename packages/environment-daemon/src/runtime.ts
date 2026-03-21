@@ -843,7 +843,7 @@ export class EnvironmentDaemonRuntime {
       method: record.method === "sdk/message"
         ? (normalized?.normalizedMethod ?? "sdk/message")
         : record.method,
-      translatedEvents: normalized?.bbEvents ?? [],
+      translatedEvents: (normalized?.bbEvents ?? []).map(e => ({ ...e, threadId })),
       ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
       ...(normalized?.normalizedMethod
         ? { normalizedMethod: normalized.normalizedMethod }

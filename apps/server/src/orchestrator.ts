@@ -11,17 +11,13 @@ import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import {
   assertNever,
   DEFAULT_THREAD_PROVIDER_ID,
-  extractProviderThreadIdFromPersistedEventData,
-  extractTurnIdFromPersistedEventData,
   formatEnvironmentDisplayName,
   getStringField,
   isThreadProviderId,
-  resolveProviderEventMethod,
   buildThreadDetailRows,
   extractThreadContextWindowUsage,
   toRecord,
   toUIMessages,
-  unwrapProviderEventPayload,
   type AvailableModel,
   type EnvironmentCreationArgs,
   type EnvironmentDescriptor,
@@ -74,7 +70,6 @@ import {
   type ProviderThreadContext,
   type ProviderToolCallRequest,
   type ProviderToolCallResponse,
-  normalizeThreadEventType,
   outputFromThreadEvent,
   deriveThreadTitleFromInput,
 } from "@bb/core";
@@ -2739,7 +2734,7 @@ export class Orchestrator implements ThreadOrchestrator {
       }
       const hydratedEvent: ThreadEventRow = {
         ...allEvents[i],
-        data: unwrapProviderEventPayload(allEvents[i].data) as ThreadEventRow["data"],
+        data: allEvents[i].data,
       };
       const output = outputFromThreadEvent(hydratedEvent);
       if (output !== undefined) return output;
@@ -3334,6 +3329,7 @@ export class Orchestrator implements ThreadOrchestrator {
         this._handleAgentServerNotification(args.threadId, {
           method: event.method,
           normalizedMethod: event.normalizedMethod,
+          providerId: event.providerId ?? "",
           translatedEvents: event.translatedEvents ?? [],
           shouldPersist: event.shouldPersist !== false,
           shouldBroadcast: event.shouldBroadcast !== false,
@@ -4500,9 +4496,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
-      const normalizedProviderThreadId = extractProviderThreadIdFromPersistedEventData(
-        event.data,
-      );
+      const normalizedProviderThreadId = (event.data as Record<string, unknown>)?.providerThreadId as string | undefined;
       if (normalizedProviderThreadId) return normalizedProviderThreadId;
     }
     return undefined;
@@ -4513,7 +4507,7 @@ export class Orchestrator implements ThreadOrchestrator {
   ): string | undefined {
     const startedEvent = this.eventRepo.getLatestByType(threadId, "thread/started");
     if (!startedEvent) return undefined;
-    const payload = toRecord(unwrapProviderEventPayload(startedEvent.data) ?? startedEvent.data);
+    const payload = toRecord(startedEvent.data);
     return getStringField(toRecord(payload?.thread), "path") ?? undefined;
   }
 
@@ -4549,19 +4543,14 @@ export class Orchestrator implements ThreadOrchestrator {
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
-      const method = resolveProviderEventMethod(event.type, event.data);
-      const normalizedType = normalizeThreadEventType(method);
+      const normalizedType = event.type;
       const state = toTurnLifecycleState(normalizedType);
       if (state === "idle") return undefined;
       if (state === "active") {
-        return this._extractTurnIdFromEventData(event.data);
+        return (event.data as Record<string, unknown>)?.turnId as string | undefined;
       }
     }
     return undefined;
-  }
-
-  private _extractTurnIdFromEventData(data: unknown): string | undefined {
-    return extractTurnIdFromPersistedEventData(data);
   }
 
   private async _ensureProviderSession(
@@ -5151,7 +5140,7 @@ export class Orchestrator implements ThreadOrchestrator {
       event.translatedEvents.find((e): e is Extract<ThreadEvent, { type: "thread/identity" }> =>
         e.type === "thread/identity",
       )?.providerThreadId;
-    const providerId: string | undefined = undefined;
+    const providerId: string | undefined = event.providerId;
     const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
       ?.getByThreadId(threadId)
       ?.environmentId;
@@ -5956,10 +5945,9 @@ export class Orchestrator implements ThreadOrchestrator {
     childThreadId: string,
     event: ThreadEventRow,
   ): void {
-    const eventMethod = resolveProviderEventMethod(event.type, event.data);
     const childThread = this.threadRepo.getById(childThreadId);
     if (!childThread) return;
-    const normalizedType = normalizeThreadEventType(eventMethod);
+    const normalizedType = event.type;
     if (normalizedType !== "turn/completed" && normalizedType !== "turn/end") {
       return;
     }
@@ -5973,7 +5961,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (parentThread.archivedAt !== undefined) return;
     if (parentThread.projectId !== childThread.projectId) return;
 
-    const turnId = this._extractTurnIdFromEventData(event.data);
+    const turnId = (event.data as Record<string, unknown>)?.turnId as string | undefined;
     if (turnId) {
       const lastTurnId = this.lastNotifiedCompletionTurnIds.get(childThreadId);
       if (lastTurnId === turnId) return;
@@ -6461,8 +6449,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i -= 1) {
-      const method = resolveProviderEventMethod(events[i].type, events[i].data);
-      const normalizedType = normalizeThreadEventType(method);
+      const normalizedType = events[i].type;
       const state = toTurnLifecycleState(normalizedType);
       if (state) return state;
     }

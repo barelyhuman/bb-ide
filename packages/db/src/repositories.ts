@@ -34,10 +34,7 @@ import type {
 } from "@bb/core";
 import {
   DEFAULT_THREAD_PROVIDER_ID,
-  extractProviderThreadIdFromPersistedEventData,
-  extractTurnIdFromPersistedEventData,
   getStringField,
-  normalizeThreadEventType,
   promptInputSchema,
   toRecord,
 } from "@bb/core";
@@ -61,9 +58,10 @@ function deriveEventLookupFields(type: string, data: unknown): {
   isTurnLifecycle: boolean;
   isThreadIdentity: boolean;
 } {
-  const normType = normalizeThreadEventType(type);
-  const turnId = extractTurnIdFromPersistedEventData(data);
-  const providerThreadId = extractProviderThreadIdFromPersistedEventData(data);
+  const normType = type.toLowerCase().replaceAll(".", "/");
+  const record = toRecord(data);
+  const turnId = (typeof record?.turnId === "string" ? record.turnId : undefined) as string | undefined;
+  const providerThreadId = (typeof record?.providerThreadId === "string" ? record.providerThreadId : undefined) as string | undefined;
   const isTurnLifecycle =
     normType === "turn/start" ||
     normType === "turn/started" ||
