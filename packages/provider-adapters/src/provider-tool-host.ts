@@ -4,6 +4,7 @@ import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
 } from "@bb/core";
+import { providerToolCallResponseSchema } from "./provider-tool-call-contract.js";
 
 export interface ProviderToolDefinition extends ProviderDynamicTool {
   execute(args: {
@@ -124,7 +125,5 @@ function normalizeProviderToolResult(
 function isProviderToolCallResponse(
   value: unknown,
 ): value is ProviderToolCallResponse {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  return typeof record.success === "boolean" && Array.isArray(record.contentItems);
+  return providerToolCallResponseSchema.safeParse(value).success;
 }
