@@ -8,14 +8,35 @@ import type {
   ThreadRepository,
 } from "@bb/db";
 import { createEnvironmentRoutes } from "./environments.js";
-import { createEnvironmentDaemonRoutes } from "./environment-daemon.js";
+import { createEnvironmentDaemonRoutes, createEnvironmentDaemonDebugRoutes } from "./environment-daemon.js";
 import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
+import { bearerAuth } from "./internal-auth.js";
 import type { WSManager } from "../ws.js";
 import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import type { SystemHealthReport } from "@bb/core";
 import type { ThreadOrchestrator } from "../server-contracts.js";
+
+export interface InternalRouteDeps {
+  environmentDaemonSessionService: EnvironmentDaemonSessionService;
+  environmentRepo: EnvironmentRepository;
+  authToken?: string;
+}
+
+export function createInternalRoutes(deps: InternalRouteDeps) {
+  const app = new Hono();
+  if (deps.authToken) {
+    app.use("/*", bearerAuth(deps.authToken));
+  }
+  return app.route(
+    "/environments",
+    createEnvironmentDaemonRoutes({
+      environmentDaemonSessionService: deps.environmentDaemonSessionService,
+      environmentRepo: deps.environmentRepo,
+    }),
+  );
+}
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;
@@ -75,7 +96,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
     .route(
       "/environments",
       deps.environmentDaemonSessionService && deps.environmentRepo
-        ? createEnvironmentDaemonRoutes({
+        ? createEnvironmentDaemonDebugRoutes({
             environmentDaemonSessionService: deps.environmentDaemonSessionService,
             environmentRepo: deps.environmentRepo,
           })

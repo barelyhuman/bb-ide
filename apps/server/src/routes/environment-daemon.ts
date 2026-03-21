@@ -110,7 +110,7 @@ function environmentNotFoundError(environmentId: string): Error {
   return error;
 }
 
-export function createEnvironmentDaemonRoutes(opts: {
+export function createEnvironmentDaemonDebugRoutes(opts: {
   environmentDaemonSessionService: EnvironmentDaemonSessionService;
   environmentRepo: EnvironmentRepository;
 }) {
@@ -150,7 +150,16 @@ export function createEnvironmentDaemonRoutes(opts: {
       } catch (err) {
         return sendRouteError(c, err);
       }
-    })
+    });
+}
+
+export function createEnvironmentDaemonRoutes(opts: {
+  environmentDaemonSessionService: EnvironmentDaemonSessionService;
+  environmentRepo: EnvironmentRepository;
+}) {
+  const { environmentDaemonSessionService, environmentRepo } = opts;
+
+  return new Hono()
     .post(
       "/:id/env-daemon/session/open",
       zValidator("json", environmentDaemonSessionOpenPayloadSchema),

@@ -126,25 +126,6 @@ export type ApiSchema = {
   "/environments/:id/env-daemon/sessions": {
     $get: Endpoint<PathId, unknown>;
   };
-  "/environments/:id/env-daemon/session/open": {
-    $post: Endpoint<{ param: { id: string }; json: unknown }, unknown, 201>;
-  };
-  "/environments/:id/env-daemon/session/commands": {
-    $get: Endpoint<
-      PathId & {
-        query: {
-          sessionId: string;
-          afterCursor?: string;
-          limit?: string;
-          waitMs?: string;
-        };
-      },
-      unknown
-    >;
-  };
-  "/environments/:id/env-daemon/session/messages": {
-    $post: Endpoint<{ param: { id: string }; json: unknown }, unknown, 200 | 204>;
-  };
   "/threads": {
     $get: Endpoint<
       {

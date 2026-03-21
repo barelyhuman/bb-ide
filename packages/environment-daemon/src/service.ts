@@ -59,6 +59,7 @@ export interface EnvironmentDaemonServiceOptions {
 }
 
 const BB_ENV_DAEMON_AUTH_TOKEN = "BB_ENV_DAEMON_AUTH_TOKEN";
+const BB_ENV_DAEMON_SESSION_URL = "BB_ENV_DAEMON_SESSION_URL";
 const BB_SERVER_URL = "BB_SERVER_URL";
 const BB_ENV_DAEMON_CONTROL_BASE_URL =
   "BB_ENV_DAEMON_CONTROL_BASE_URL";
@@ -116,7 +117,7 @@ export function resolveEnvironmentDaemonServiceOptions(args: {
       projectId: args.env.BB_PROJECT_ID,
       environmentId: args.env.BB_ENVIRONMENT_ID,
       serverConnection: {
-        serverUrl: args.env[BB_SERVER_URL],
+        serverUrl: args.env[BB_ENV_DAEMON_SESSION_URL] || args.env[BB_SERVER_URL],
         authToken,
         projectId: args.env.BB_PROJECT_ID,
         environmentId: args.env.BB_ENVIRONMENT_ID,

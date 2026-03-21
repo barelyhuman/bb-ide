@@ -35,7 +35,7 @@ import { resolveEnvironmentIdForEnvironmentDaemonChannel } from "@bb/environment
 import { WSManager } from "./ws.js";
 import { Orchestrator } from "./orchestrator.js";
 import { listBuiltInProvisioningSystemInfos } from "./environment-provisioning-systems.js";
-import { createApiRoutes } from "./routes/index.js";
+import { createApiRoutes, createInternalRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
 import { isPerfDebugEnabled, logPerf } from "./perf.js";
@@ -162,10 +162,16 @@ export function createServer(deps: ServerDeps) {
       resolveEnvironmentId: resolveAttachedEnvironmentId,
     },
   );
+  const internalBaseUrl = deps.serverBaseUrl
+    ? deps.serverBaseUrl.replace(/\/api\/v1\/?$/, "/internal")
+    : undefined;
   const serverRuntimeEnv = {
     ...runtimeEnv,
     ...(deps.serverBaseUrl
       ? { BB_SERVER_URL: deps.serverBaseUrl }
+      : {}),
+    ...(internalBaseUrl
+      ? { BB_ENV_DAEMON_SESSION_URL: internalBaseUrl }
       : {}),
   };
   const environmentDaemonSessionOptions = {
@@ -302,6 +308,15 @@ export function createServer(deps: ServerDeps) {
     }),
     runtimeEnv: serverRuntimeEnv,
   });
+
+  if (environmentDaemonSessionService && deps.environmentRepo) {
+    const internalRoutes = createInternalRoutes({
+      environmentDaemonSessionService,
+      environmentRepo: deps.environmentRepo,
+      authToken: runtimeEnv.BB_ENV_DAEMON_AUTH_TOKEN?.trim() || undefined,
+    });
+    app.route("/internal", internalRoutes);
+  }
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);
 
