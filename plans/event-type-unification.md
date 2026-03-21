@@ -124,3 +124,10 @@ A decoder in the event repo converts `ThreadEventRow` → `ThreadEvent` by parsi
 - Type safety end-to-end: adapter → env-daemon → server → UI
 - No codex types leaked into `@bb/core`
 - One vocabulary for events across the entire codebase
+
+### Follow-up cleanup (after unification)
+
+- **Split `runtime-contracts.ts`** — currently a grab bag of `ThreadOrchestrator`, `SchedulerService`, provider types. Split into focused files: `thread-orchestrator.ts`, `scheduler.ts`, etc.
+- **Move `ProviderToolHost`** to its own package or into the server — it's server-side tool execution, not provider translation
+- **Move `LlmCompletionService`** to its own package — title/commit generation is a separate concern from provider adapters
+- **Remove stale codex generated types from `@bb/core`** — once `ThreadEventType` no longer references `CodexServerNotificationMethod`
