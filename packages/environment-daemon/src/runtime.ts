@@ -6,12 +6,11 @@ import path from "node:path";
 import {
   isThreadProviderId,
 } from "@bb/core";
+import type { ProviderToolCallRequest, ProviderToolCallResponse } from "@bb/core";
 import {
   createProviderAdapter,
   listAvailableProviderInfos,
   type ProviderAdapter,
-  type ProviderToolCallRequest,
-  type ProviderToolCallResponse,
 } from "@bb/provider-adapters";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

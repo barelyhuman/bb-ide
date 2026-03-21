@@ -2,7 +2,7 @@ import { z } from "zod";
 import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
-} from "./provider-adapter.js";
+} from "@bb/core";
 
 const providerToolCallRequestSchema = z.object({
   threadId: z.string().min(1),

@@ -12,7 +12,7 @@ import type {
 } from "./session-protocol.js";
 import { compareEnvironmentDaemonSessionCursors } from "./session-protocol.js";
 import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
-import type { ProviderToolCallRequest } from "@bb/provider-adapters";
+import type { ProviderToolCallRequest } from "@bb/core";
 
 export interface EnvironmentDaemonSessionSyncOptions {
   runtime: EnvironmentDaemonSessionRuntime;

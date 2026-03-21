@@ -1,7 +1,7 @@
 import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
-} from "@bb/provider-adapters";
+} from "@bb/core";
 import { z } from "zod";
 import type {
   EnvironmentDaemonCommand,

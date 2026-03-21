@@ -35,12 +35,11 @@ import type {
   BbProviderEventItem,
   BbProviderEventItemStatus,
   BbProviderEventTurnStatus,
-  ProviderAdapter,
   ProviderExecutionOptions,
   ProviderLaunchConfiguration,
-  ProviderRequest,
   ProviderThreadContext,
-} from "./provider-adapter.js";
+} from "@bb/core";
+import type { ProviderAdapter, ProviderRequest } from "./provider-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Codex-specific event and command types

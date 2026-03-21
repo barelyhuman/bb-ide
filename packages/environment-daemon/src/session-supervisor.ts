@@ -17,7 +17,7 @@ import type {
 } from "./session-protocol.js";
 import { ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
 import { getEnvironmentDaemonEnvironmentChannelId } from "./session-channels.js";
-import type { ProviderToolCallRequest } from "@bb/provider-adapters";
+import type { ProviderToolCallRequest } from "@bb/core";
 
 export interface EnvironmentDaemonSessionSupervisorOptions {
   environmentId: string;

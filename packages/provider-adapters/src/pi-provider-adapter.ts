@@ -38,11 +38,10 @@ import type {
   BbProviderEventItem,
   BbProviderEventTokenUsage,
   BbProviderEventTokenUsageBreakdown,
-  ProviderAdapter,
   ProviderLaunchConfiguration,
-  ProviderRequest,
   ProviderThreadContext,
-} from "./provider-adapter.js";
+} from "@bb/core";
+import type { ProviderAdapter, ProviderRequest } from "./provider-adapter.js";
 
 // ---------------------------------------------------------------------------
 // Pi event and command types

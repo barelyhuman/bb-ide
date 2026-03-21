@@ -1,47 +1,14 @@
 // ---------------------------------------------------------------------------
-// Contract types — what extension authors implement
+// Adapter interface and request types
 // ---------------------------------------------------------------------------
 
 export type {
   ProviderAdapter,
   ProviderRequest,
-  BbProviderEvent,
-  BbProviderEventItem,
-  BbProviderEventItemStatus,
-  BbProviderEventTurnStatus,
-  BbProviderEventFileChange,
-  BbProviderEventFileChangeKind,
-  BbProviderEventPlanStep,
-  BbProviderEventPlanStepStatus,
-  BbProviderEventUserContent,
-  BbProviderEventTokenUsage,
-  BbProviderEventTokenUsageBreakdown,
-  BbProviderEventWarningCategory,
-  ProviderExecutionOptions,
-  ProviderThreadContext,
-  ProviderDynamicTool,
-  ProviderToolCallRequest,
-  ProviderToolCallResponse,
-  ProviderToolCallOutputItem,
-  ProviderLaunchConfiguration,
-  ProviderLaunchFile,
-  ProviderLaunchFilePlacement,
 } from "./provider-adapter.js";
 
 // ---------------------------------------------------------------------------
-// Adapter helpers — standalone utilities (not on the ProviderAdapter interface)
-// ---------------------------------------------------------------------------
-
-// Standalone utilities — used by server consumers, not by adapters.
-// These will move to @bb/core once consumers are migrated.
-export {
-  deriveThreadTitleFromInput,
-  normalizeTitle,
-  outputFromEvent,
-} from "./adapter-helpers.js";
-
-// ---------------------------------------------------------------------------
-// Provider registry — lookup, registration, and default resolution
+// Provider registry
 // ---------------------------------------------------------------------------
 
 export type { CreateProviderAdapterOptions } from "./provider-registry.js";
@@ -73,13 +40,6 @@ export { ProviderToolHost } from "./provider-tool-host.js";
 // ---------------------------------------------------------------------------
 // LLM completion services
 // ---------------------------------------------------------------------------
-
-export type {
-  ProviderCommitMessageGenerator,
-  ProviderCommitMessageGeneratorArgs,
-  ProviderTitleGenerator,
-  ProviderTitleGeneratorArgs,
-} from "./provider-adapter.js";
 
 export type {
   LlmCompletionService,

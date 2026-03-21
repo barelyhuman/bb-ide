@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { z } from "zod";
-import type { ProviderLaunchConfiguration } from "./provider-adapter.js";
+import type { ProviderLaunchConfiguration } from "@bb/core";
 
 
 const codexAuthFileSchema = z.object({

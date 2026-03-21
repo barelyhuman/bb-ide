@@ -4,11 +4,10 @@ import type {
 import { assertNever, decodeThreadIdFromWireValue, getStringField, isThreadProviderId, toRecord } from "@bb/core";
 import type {
   BbProviderEvent,
-  ProviderAdapter,
   ProviderToolCallRequest,
   ProviderToolCallResponse,
-} from "@bb/provider-adapters";
-import { createProviderAdapter } from "@bb/provider-adapters";
+} from "@bb/core";
+import { createProviderAdapter, type ProviderAdapter } from "@bb/provider-adapters";
 
 // ---------------------------------------------------------------------------
 // BbProviderEvent → bb-owned policy

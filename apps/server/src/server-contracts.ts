@@ -19,8 +19,7 @@ import type {
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,
 } from "@bb/core";
-import type { PromptInput, Thread, ThreadEnvironmentStartReason, ThreadEvent, ThreadTurnInitiator, ThreadWorkStatus } from "@bb/core";
-import type { ProviderExecutionOptions } from "@bb/provider-adapters";
+import type { PromptInput, ProviderExecutionOptions, Thread, ThreadEnvironmentStartReason, ThreadEvent, ThreadTurnInitiator, ThreadWorkStatus } from "@bb/core";
 
 export interface EnvironmentProvisioningEvent {
   type: "env-setup";

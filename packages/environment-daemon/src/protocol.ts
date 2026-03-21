@@ -1,14 +1,12 @@
 import type {
   PromptInput,
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
   SpawnThreadRequest,
   Thread,
 } from "@bb/core";
 import { promptInputSchema } from "@bb/core";
-import type {
-  ProviderDynamicTool,
-  ProviderExecutionOptions,
-  ProviderThreadContext,
-} from "@bb/provider-adapters";
 import { z } from "zod";
 
 export type EnvironmentDaemonTransportKind = "http";

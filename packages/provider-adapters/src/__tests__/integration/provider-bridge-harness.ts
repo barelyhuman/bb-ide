@@ -11,7 +11,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
-import type { BbProviderEvent } from "../../provider-adapter.js";
+import type { BbProviderEvent } from "@bb/core";
 
 export interface BridgeMessage {
   jsonrpc: "2.0";
