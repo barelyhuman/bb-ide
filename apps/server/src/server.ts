@@ -20,13 +20,12 @@ import type {
   ServerRuntimeMode,
   SpawnThreadRequest,
 } from "@bb/core";
+import type { ProviderToolCallResponse } from "@bb/core";
 import {
   createCodexLlmCompletionService,
   createProviderAdapter,
   listAvailableProviderInfos,
   resolveDefaultProviderId,
-  type ProviderAdapter,
-  type ProviderToolCallResponse,
   type ProviderToolHost,
 } from "@bb/provider-adapters";
 import {
@@ -76,7 +75,9 @@ export interface ServerDeps {
   environmentDaemonSessionRepo: EnvironmentDaemonSessionRepository;
   environmentDaemonCursorRepo: EnvironmentDaemonCursorRepository;
   environmentDaemonCommandRepo: EnvironmentDaemonCommandRepository;
-  provider?: ProviderAdapter;
+  /** Provider adapter for the default provider. Used by e2e tests to inject a fake. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  provider?: any;
   runtimeEnv?: NodeJS.ProcessEnv;
   serverBaseUrl?: string;
   dbPath: string;

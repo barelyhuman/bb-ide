@@ -226,6 +226,11 @@ export type {
   BbProviderEventWarningCategory,
 } from "./provider-event.js";
 
+export {
+  deriveThreadTitleFromInput,
+  outputFromThreadEvent,
+} from "./provider-event-utils.js";
+
 export { toUIMessages } from "./to-ui-messages.js";
 export {
   formatTimelineAsText,

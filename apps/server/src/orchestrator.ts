@@ -70,19 +70,20 @@ import {
   type ThreadProvisioningProgressPhase,
   type ThreadEnvironmentStartReason,
   type ThreadProviderId,
+  type ProviderCapabilities,
+  type ProviderExecutionOptions,
+  type ProviderThreadContext,
+  type ProviderToolCallRequest,
+  type ProviderToolCallResponse,
+  normalizeThreadEventType,
+  outputFromThreadEvent,
+  deriveThreadTitleFromInput,
 } from "@bb/core";
 import { resolveBbPath } from "@bb/core/storage-paths";
 import { renderTemplate } from "@bb/templates";
-import type {
-  ProviderAdapter,
-  ProviderExecutionOptions,
-  ProviderThreadContext,
-  ProviderToolCallRequest,
-  ProviderToolCallResponse,
+import {
+  createProviderAdapter,
 } from "@bb/provider-adapters";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyProviderAdapter = ProviderAdapter<any, any>;
 import type {
   EnvironmentProvisioningEvent,
   SchedulerService,
@@ -126,7 +127,6 @@ import {
   type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
   type ProviderToolHost,
-  createProviderAdapter,
 } from "@bb/provider-adapters";
 import { WSManager } from "./ws.js";
 import {
@@ -704,9 +704,9 @@ export class Orchestrator implements ThreadOrchestrator {
     string,
     ProviderSessionController
   >();
-  private readonly providerAdapterByProviderId = new Map<
+  private readonly providerInfoByProviderId = new Map<
     string,
-    ProviderAdapter
+    { id: string; displayName: string; capabilities: ProviderCapabilities }
   >();
   private readonly defaultProviderId: string;
   private readonly providerCatalog: SystemProviderInfo[];
@@ -737,7 +737,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private projectRepo: ProjectRepository,
     private ws: WSManager,
     private llmCompletionService: LlmCompletionService,
-    agentServerOrProvider?: ProviderSessionController | AnyProviderAdapter,
+    agentServerOrProvider?: ProviderSessionController | { id: string; displayName: string; capabilities: ProviderCapabilities; listModels(): Promise<AvailableModel[]> },
     private runtimeEnv: NodeJS.ProcessEnv = process.env,
     private environmentRegistry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
     providerCatalog?: SystemProviderInfo[],
@@ -828,15 +828,20 @@ export class Orchestrator implements ThreadOrchestrator {
         ? undefined
         : agentServerOrProvider;
     if (agentServerOrProvider instanceof ProviderSessionController) {
-      const providerId = agentServerOrProvider.provider.id;
+      const providerId = agentServerOrProvider.providerId;
       this.defaultProviderId = providerId;
       this.agentServerByProviderId.set(providerId, agentServerOrProvider);
     } else {
       const providerAdapter = provider ?? createProviderAdapter();
       this.defaultProviderId = providerAdapter.id;
-      this.providerAdapterByProviderId.set(this.defaultProviderId, providerAdapter);
+      const providerInfo = {
+        id: providerAdapter.id,
+        displayName: providerAdapter.displayName,
+        capabilities: providerAdapter.capabilities,
+      };
+      this.providerInfoByProviderId.set(this.defaultProviderId, providerInfo);
       this.agentServerByProviderId.set(this.defaultProviderId, new ProviderSessionController({
-        provider: providerAdapter,
+        provider: providerInfo,
         ...(this.providerToolHost
           ? {
               resolveDynamicTools: () => this.providerToolHost?.listTools(),
@@ -1012,9 +1017,9 @@ export class Orchestrator implements ThreadOrchestrator {
       return existing;
     }
 
-    const provider = this._getProviderAdapterForProviderId(builtInProviderId);
+    const providerInfo = this._getProviderInfoForProviderId(builtInProviderId);
     const server = new ProviderSessionController({
-      provider,
+      provider: providerInfo,
       ...(this.providerToolHost
         ? {
             // Gate manager-only tools: only expose message_user for manager threads.
@@ -1035,15 +1040,20 @@ export class Orchestrator implements ThreadOrchestrator {
     return server;
   }
 
-  private _getProviderAdapterForProviderId(providerId: string): AnyProviderAdapter {
+  private _getProviderInfoForProviderId(providerId: string): { id: string; displayName: string; capabilities: ProviderCapabilities } {
     const builtInProviderId = this._requireBuiltInProviderId(providerId);
-    const existing = this.providerAdapterByProviderId.get(builtInProviderId);
+    const existing = this.providerInfoByProviderId.get(builtInProviderId);
     if (existing) {
       return existing;
     }
-    const provider = createProviderAdapter({ providerId: builtInProviderId });
-    this.providerAdapterByProviderId.set(builtInProviderId, provider);
-    return provider;
+    const adapter = createProviderAdapter({ providerId: builtInProviderId });
+    const info = {
+      id: adapter.id,
+      displayName: adapter.displayName,
+      capabilities: adapter.capabilities,
+    };
+    this.providerInfoByProviderId.set(builtInProviderId, info);
+    return info;
   }
 
   private _getAgentServerForThread(thread: Thread): ProviderSessionController {
@@ -2732,9 +2742,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ...allEvents[i],
         data: unwrapProviderEventPayload(allEvents[i].data) as ThreadEvent["data"],
       };
-      const output = this._getAgentServerForThreadIdOrDefault(threadId).outputFromEvent(
-        hydratedEvent,
-      );
+      const output = outputFromThreadEvent(hydratedEvent);
       if (output !== undefined) return output;
     }
     return undefined;
@@ -3210,7 +3218,7 @@ export class Orchestrator implements ThreadOrchestrator {
         : undefined;
       const models =
         envDaemonModels ??
-        await this._getProviderAdapterForProviderId(resolvedProviderId).listModels();
+        await createProviderAdapter({ providerId: resolvedProviderId }).listModels();
       this.cachedModelsByRequestKey.set(cacheKey, {
         value: models,
         expiresAt: Date.now() + MODEL_LIST_CACHE_TTL_MS,
@@ -4549,7 +4557,7 @@ export class Orchestrator implements ThreadOrchestrator {
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       const method = resolveProviderEventMethod(event.type, event.data);
-      const normalizedType = this._getAgentServerForThread(thread).normalizeEventType(method);
+      const normalizedType = normalizeThreadEventType(method);
       const state = toTurnLifecycleState(normalizedType);
       if (state === "idle") return undefined;
       if (state === "active") {
@@ -5957,9 +5965,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const eventMethod = resolveProviderEventMethod(event.type, event.data);
     const childThread = this.threadRepo.getById(childThreadId);
     if (!childThread) return;
-    const normalizedType = this._getAgentServerForThread(childThread).normalizeEventType(
-      eventMethod,
-    );
+    const normalizedType = normalizeThreadEventType(eventMethod);
     if (normalizedType !== "turn/completed" && normalizedType !== "turn/end") {
       return;
     }
@@ -6359,7 +6365,7 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!threadBeforeUpdate) return;
 
       const fallbackTitle =
-        this._getAgentServerForThread(threadBeforeUpdate).deriveThreadTitle(input) ??
+        deriveThreadTitleFromInput(input) ??
         this._derivePromptFallbackTitle(input);
       if (
         threadBeforeUpdate.title &&
@@ -6462,7 +6468,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const method = resolveProviderEventMethod(events[i].type, events[i].data);
-      const normalizedType = this._getAgentServerForThread(thread).normalizeEventType(method);
+      const normalizedType = normalizeThreadEventType(method);
       const state = toTurnLifecycleState(normalizedType);
       if (state) return state;
     }

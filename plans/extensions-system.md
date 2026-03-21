@@ -80,58 +80,91 @@ Extensions are auto-discovered from two locations:
 
 ### Provider Extensions
 
-A provider extension implements the full `ProviderAdapter` interface defined in `@bb/core` (`packages/core/src/runtime-contracts.ts`). The interface is process-oriented — each provider tells bb how to spawn its MCP bridge process and how to encode/decode the JSON-RPC messages:
+A provider extension implements the `ProviderAdapter` interface from `@bb/provider-adapters`. The interface is process-oriented — each provider tells bb how to spawn its bridge process and how to build/interpret the JSON-RPC messages. The `id` field is a plain `string`, so extension providers don't need to modify the built-in `ThreadProviderId` union.
+
+The package exports adapter helpers (`baseNotificationResult`, `withExecutionOptions`, `normalizeProviderEventType`, etc.) that handle common patterns, so a minimal provider can be ~40 lines:
 
 ```typescript
-import type { ProviderAdapter, ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
+import {
+  baseNotificationResult,
+  deriveThreadTitleFromInput,
+  normalizeProviderEventType,
+  registerProvider,
+  resolveBaseInstructions,
+  withExecutionOptions,
+  withThreadEnvironmentPolicy,
+  type ProviderAdapter,
+  type ProviderNotification,
+  type ProviderNotificationResult,
+} from "@bb/provider-adapters";
 
-const geminiAdapter: ProviderAdapter = {
-  id: "gemini" as any, // extension providers use string IDs outside the built-in union
-  displayName: "Gemini",
-  capabilities: { supportsRename: false, supportsServiceTier: false },
+function createGeminiAdapter(): ProviderAdapter {
+  return {
+    id: "gemini",
+    displayName: "Gemini",
+    capabilities: { supportsRename: false, supportsServiceTier: false },
+    processCommand: "npx",
+    processArgs: ["@google/gemini-mcp-bridge"],
+    clientInfo: { name: "bb", version: "1.0.0" },
 
-  // MCP bridge process
-  processCommand: "npx",
-  processArgs: ["@google/gemini-mcp-bridge"],
+    buildInitializeCommand(clientInfo) {
+      return { method: "initialize", params: { clientInfo } };
+    },
+    buildThreadStartCommand(req, context) {
+      return {
+        method: "thread/start",
+        params: withExecutionOptions(
+          withThreadEnvironmentPolicy(
+            { baseInstructions: resolveBaseInstructions(req.developerInstructions) },
+            context,
+          ),
+          req,
+        ),
+      };
+    },
+    buildThreadResumeCommand(providerThreadId, context, options) {
+      return {
+        method: "thread/resume",
+        params: withExecutionOptions(
+          { threadId: providerThreadId ?? context.threadId },
+          options,
+        ),
+      };
+    },
+    buildTurnStartCommand(threadId, providerThreadId, input, options) {
+      return {
+        method: "turn/start",
+        params: withExecutionOptions(
+          { threadId: providerThreadId ?? threadId, input },
+          options,
+        ),
+      };
+    },
+    interpretNotification(notification: ProviderNotification): ProviderNotificationResult {
+      const normalized = normalizeProviderEventType(notification.method);
+      let status;
+      if (normalized === "turn/started") status = "active" as const;
+      else if (normalized === "turn/completed") status = "idle" as const;
+      else if (normalized === "error") status = "error" as const;
+      return baseNotificationResult(notification.method, { status });
+    },
+    extractProviderThreadId(data) {
+      return typeof data.threadId === "string" ? data.threadId : undefined;
+    },
+    outputFromEvent: () => undefined,
+    listModels: async () => [],
+    deriveThreadTitle: (input) => deriveThreadTitleFromInput(input),
+    inactiveSessionErrorMessage: (id) => `No active Gemini session for thread ${id}`,
+  };
+}
 
-  // Client identity sent during initialization
-  clientInfo: { name: "bb", version: "1.0.0" },
-
-  // JSON-RPC method names
-  initializeMethod: "initialize",
-  threadStartMethod: "thread/start",
-  threadResumeMethod: "thread/resume",
-  turnStartMethod: "turn/start",
-
-  // Param builders
-  createInitializeParams(clientInfo) { return { clientInfo }; },
-  createThreadStartParams(req, context, dynamicTools) { /* ... */ },
-  createThreadResumeParams(providerThreadId, context, options, resumePath) { /* ... */ },
-  createTurnStartParams(providerThreadId, input, options) { /* ... */ },
-
-  // Event mapping
-  extractThreadIdFromResult(result) { /* ... */ },
-  extractThreadIdFromEventData(data) { /* ... */ },
-  normalizeEventType(type) { return type; },
-  shouldBroadcastForEvent(method) { return true; },
-  statusForEvent(method) { /* ... */ },
-  titleFromEvent(method, data) { return undefined; },
-  outputFromEvent(event) { return undefined; },
-
-  // Model listing
-  async listModels() { return []; },
-
-  // Utilities
-  deriveThreadTitle(input) { return undefined; },
-  inactiveSessionErrorMessage(threadId) {
-    return `No active Gemini session for thread ${threadId}`;
-  },
-};
+// Register via the extension API or directly:
+registerProvider("gemini", createGeminiAdapter);
 ```
 
-The `ProviderAdapter` is consumed by `ProviderSessionController` in `apps/server/src/provider-session-controller.ts`, which manages the child-process lifecycle, JSON-RPC framing, and event routing. Extension providers plug in at the same level as the built-in `createCodexProviderAdapter()`, `createClaudeCodeProviderAdapter()`, and `createPiProviderAdapter()` factory functions in `packages/provider-adapters/src/provider-registry.ts`.
+The `ProviderAdapter` is consumed by `ProviderSessionController` in `apps/server/src/provider-session-controller.ts`, which manages the child-process lifecycle, JSON-RPC framing, and event routing. Extension providers register via `registerProvider()` from `@bb/provider-adapters` and plug in at the same level as the built-in codex, claude-code, and pi providers.
 
-**Key design decision:** Extension providers implement the same `ProviderAdapter` interface as built-ins. This keeps the extension surface to one interface and gives extensions full capability parity. The `ProviderSessionController` does not need modification — it already accepts any `ProviderAdapter`.
+**Key design decision:** Extension providers implement the same `ProviderAdapter` interface as built-ins. The registry is dynamic (`registerProvider(id, factory)`), so extensions don't require changes to any built-in files. See `packages/provider-adapters/README.md` for the full contract documentation and implementation guide.
 
 ### Environment Extensions
 
@@ -360,8 +393,8 @@ In `apps/server/src/index.ts` (`main()`):
 
 ## Open Questions/Risks
 
-- **Provider interface complexity:** The `ProviderAdapter` interface has ~20 methods covering process spawning, JSON-RPC encoding, event normalization, and model listing. This is a large surface for extension authors. Consider whether a simplified wrapper/builder that fills in sensible defaults (e.g., standard `normalizeEventType`, `shouldBroadcastForEvent`) would reduce the barrier, while still allowing power users to implement the full interface.
-- **`ProviderAdapter.id` type widening:** Today `ProviderAdapter.id` is typed as `ThreadProviderId` (the closed union `"codex" | "claude-code" | "pi"`). Widening to `string` is necessary for extension providers but changes the contract for built-in code. The guard `isThreadProviderId()` should continue to discriminate built-in vs extension providers. Audit all `switch (provider.id)` sites to ensure they handle the `default` case (currently some throw on unknown IDs).
+- **Provider interface complexity:** RESOLVED. The `ProviderAdapter` interface was restructured to ~15 methods with shared helpers (`baseNotificationResult`, `withExecutionOptions`, etc.) that handle common patterns. A minimal provider is ~40 lines. See `packages/provider-adapters/README.md`.
+- **`ProviderAdapter.id` type widening:** RESOLVED. `ProviderAdapter.id` is now `string`. The `isThreadProviderId()` guard discriminates built-in vs extension providers. The provider registry is dynamic via `registerProvider()`.
 - **Per-thread provider resolution:** The current `createServer()` creates one `ProviderSessionController` bound to a single `ProviderAdapter` (the default provider). Multi-provider support (extension or otherwise) requires either a controller pool keyed by provider ID, or a factory that creates controllers on demand. This is the largest architectural change for provider extensions.
 - **Environment `IEnvironment` surface:** The `IEnvironment` interface has extensive requirements (git workspace operations, agent connection targets, spawn/run, promote/demote). Extension environments may only need a subset. Consider whether some methods can have no-op defaults or whether a base class / mixin simplifies implementation.
 - **TypeScript loading:** jiti is battle-tested (used by Nuxt, etc.) but adds a dependency. Alternative: require extensions to be pre-compiled JS. Recommendation: use jiti — the DX of writing raw TypeScript is worth it.

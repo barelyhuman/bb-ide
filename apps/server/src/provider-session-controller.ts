@@ -14,23 +14,18 @@ import {
   decodeThreadIdFromWireValue,
   extractTurnIdFromPersistedEventData,
   type PromptInput,
+  type ProviderCapabilities,
+  type ProviderDynamicTool,
+  type ProviderExecutionOptions,
+  type ProviderThreadContext,
+  type ProviderToolCallRequest,
+  type ProviderToolCallResponse,
   type SpawnThreadRequest,
   type Thread,
-  type ThreadEvent,
   type ThreadEventData,
   type ThreadEventType,
 } from "@bb/core";
-import type {
-  ProviderAdapter,
-  ProviderDynamicTool,
-  ProviderExecutionOptions,
-  ProviderThreadContext,
-  ProviderToolCallResponse,
-  ProviderToolHost,
-} from "@bb/provider-adapters";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyProviderAdapter = ProviderAdapter<any, any>;
+import type { ProviderToolHost } from "@bb/provider-adapters";
 
 export type ProviderSessionErrorCode =
   | "inactive_session"
@@ -62,12 +57,17 @@ export interface ProviderSessionNotification {
   title?: string;
   turnState?: "active" | "idle";
   turnId?: string;
-  /** Provider thread ID reported asynchronously (e.g. via thread/started). */
   providerThreadId?: string;
 }
 
+export interface ProviderInfo {
+  id: string;
+  displayName: string;
+  capabilities: ProviderCapabilities;
+}
+
 export interface ProviderSessionControllerOptions {
-  provider: AnyProviderAdapter;
+  provider: ProviderInfo;
   dynamicTools?: ProviderDynamicTool[];
   resolveDynamicTools?: (args: {
     request: SpawnThreadRequest;
@@ -79,25 +79,8 @@ export interface ProviderSessionControllerOptions {
   logger?: Pick<Console, "warn" | "error">;
 }
 
-interface ProviderRuntimeNotification {
-  method: string;
-  params?: unknown;
-}
-
 function toProviderEventType(method: string): ThreadEventType {
   return method as ThreadEventType;
-}
-
-function toTurnLifecycleState(
-  normalizedType: string,
-): "active" | "idle" | undefined {
-  if (normalizedType === "turn/started" || normalizedType === "turn/start") {
-    return "active";
-  }
-  if (normalizedType === "turn/completed" || normalizedType === "turn/end") {
-    return "idle";
-  }
-  return undefined;
 }
 
 function isMissingProviderThreadMessage(message: string): boolean {
@@ -116,8 +99,16 @@ export class ProviderSessionController {
 
   constructor(private readonly opts: ProviderSessionControllerOptions) {}
 
-  get provider(): AnyProviderAdapter {
-    return this.opts.provider;
+  get providerId(): string {
+    return this.opts.provider.id;
+  }
+
+  get providerDisplayName(): string {
+    return this.opts.provider.displayName;
+  }
+
+  get providerCapabilities(): ProviderCapabilities {
+    return this.opts.provider.capabilities;
   }
 
   normalizePromptInput(input: PromptInput[]): PromptInput[] {
@@ -146,20 +137,8 @@ export class ProviderSessionController {
     return normalized;
   }
 
-  deriveThreadTitle(input?: PromptInput[]): string | undefined {
-    return this.opts.provider.deriveThreadTitle(input);
-  }
-
   getInactiveSessionMessage(threadId: string): string {
-    return this.opts.provider.inactiveSessionErrorMessage(threadId);
-  }
-
-  normalizeEventType(method: string): string {
-    return this.opts.provider.interpretNotification({ method, params: {} }).normalizedMethod;
-  }
-
-  outputFromEvent(event: ThreadEvent): string | undefined {
-    return this.opts.provider.outputFromEvent(event);
+    return `Thread ${threadId} has no ${this.opts.provider.displayName} session`;
   }
 
   private extractProviderThreadIdFromResult(result: unknown): string | undefined {
@@ -183,10 +162,6 @@ export class ProviderSessionController {
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<{ providerThreadId?: string }> {
-    const preflightError = await this.opts.provider.preflightSessionStart?.();
-    if (preflightError) {
-      throw new ProviderSessionError("provider_rpc_error", preflightError);
-    }
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
@@ -219,10 +194,6 @@ export class ProviderSessionController {
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
     dynamicTools?: ProviderDynamicTool[];
   }): Promise<{ providerThreadId?: string }> {
-    const preflightError = await this.opts.provider.preflightSessionStart?.();
-    if (preflightError) {
-      throw new ProviderSessionError("provider_rpc_error", preflightError);
-    }
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
@@ -261,21 +232,11 @@ export class ProviderSessionController {
     );
     const requestedMode = args.mode ?? "auto";
     const activeTurnId = args.activeTurnId;
-    const steerSupported = Boolean(
-      this.opts.provider.buildTurnSteerCommand,
-    );
-    const canAutoSteer =
-      steerSupported &&
-      Boolean(activeTurnId) &&
-      !hasExecutionOverrides;
+    // The env-daemon resolves steer vs start — we just pass the requested mode.
+    // But we can still validate preconditions here.
+    const canAutoSteer = Boolean(activeTurnId) && !hasExecutionOverrides;
 
     if (requestedMode === "steer") {
-      if (!steerSupported) {
-        throw new ProviderSessionError(
-          "unsupported_operation",
-          `${this.opts.provider.displayName} does not support turn/steer`,
-        );
-      }
       if (!activeTurnId) {
         throw new ProviderSessionError("no_active_turn", "No active turn");
       }
@@ -319,7 +280,7 @@ export class ProviderSessionController {
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<void> {
-    if (!this.opts.provider.buildThreadNameSetCommand) return;
+    if (!this.opts.provider.capabilities.supportsRename) return;
     if (!args.providerThreadId) return;
 
     await this.ensureProviderRunningForCommand(
@@ -342,18 +303,6 @@ export class ProviderSessionController {
     method: string;
     params?: unknown;
   }): Promise<unknown> {
-    if (!this.opts.provider.decodeToolCallRequest) {
-      throw new ProviderSessionError(
-        "unsupported_operation",
-        `${this.opts.provider.displayName} does not support provider tool calls`,
-      );
-    }
-    if (!this.opts.provider.encodeToolCallResponse) {
-      throw new ProviderSessionError(
-        "unsupported_operation",
-        `${this.opts.provider.displayName} does not support provider tool call responses`,
-      );
-    }
     if (!this.opts.toolHost) {
       throw new ProviderSessionError(
         "unsupported_operation",
@@ -361,23 +310,49 @@ export class ProviderSessionController {
       );
     }
 
-    const call = this.opts.provider.decodeToolCallRequest({
-      requestId: args.requestId,
-      method: args.method,
-      params: (args.params ?? {}) as Record<string, unknown>,
-    });
-    if (!call) {
+    // The tool call request arrives already decoded from the env-daemon.
+    // Parse it from the params.
+    const params = (args.params ?? {}) as Record<string, unknown>;
+    const threadId = typeof params.threadId === "string" ? params.threadId : args.threadId;
+    const turnId = typeof params.turnId === "string" ? params.turnId : "";
+    const callId = typeof params.callId === "string" ? params.callId : "";
+    const tool = typeof params.tool === "string" ? params.tool : "";
+
+    if (!tool || !callId) {
       throw new ProviderSessionError(
         "unsupported_operation",
         `Unhandled provider request method ${args.method}`,
       );
     }
 
+    const call: ProviderToolCallRequest = {
+      requestId: args.requestId,
+      threadId,
+      turnId,
+      callId,
+      tool,
+      arguments: params.arguments,
+    };
+
     const response = await this.opts.toolHost.execute({
       call,
       context: args.context,
     });
-    return this.opts.provider.encodeToolCallResponse(response);
+
+    // Return the response as-is — the env-daemon encodes it for the bridge.
+    return {
+      contentItems: response.contentItems.map((item) => {
+        switch (item.type) {
+          case "inputText":
+            return { type: "inputText", text: item.text };
+          case "inputImage":
+            return { type: "inputImage", imageUrl: item.imageUrl };
+          default:
+            return assertNever(item);
+        }
+      }),
+      success: response.success,
+    };
   }
 
   async ingestReplayedEnvironmentDaemonEvents(args: {
@@ -413,10 +388,10 @@ export class ProviderSessionController {
     switch (event.type) {
       case "provider.event":
         if (event.method === "provider.stdout") return;
-        this.handleNotification(threadId, {
-          method: event.method,
-          params: event.payload,
-        });
+        // The env-daemon already translated the event and populated metadata
+        // fields (normalizedMethod, shouldPersist, shouldBroadcast, etc.).
+        // We read them directly instead of re-interpreting.
+        this.handleProviderEvent(threadId, event);
         return;
       case "provider.stderr":
         this.handleProviderStderrLine(threadId, event.line);
@@ -432,38 +407,33 @@ export class ProviderSessionController {
     }
   }
 
-  private handleNotification(
+  private handleProviderEvent(
     threadId: string,
-    msg: ProviderRuntimeNotification,
+    event: Extract<EnvironmentDaemonEventEnvelope["event"], { type: "provider.event" }>,
   ): void {
-    if (typeof msg.method !== "string") return;
-
-    const params = (msg.params ?? {}) as Record<string, unknown>;
-    const result = this.opts.provider.interpretNotification({
-      method: msg.method,
-      params,
-    });
-    const turnState =
-      toTurnLifecycleState(result.normalizedMethod) ??
-      (result.status === "error" ? "idle" : undefined);
-    const turnId = extractTurnIdFromPersistedEventData(msg.params);
+    const method = event.method;
+    const normalizedMethod = event.normalizedMethod ?? method;
+    const turnId = event.turnId ?? extractTurnIdFromPersistedEventData(event.payload);
+    const turnState = event.turnState ??
+      (normalizedMethod === "turn/started" ? "active" as const
+        : normalizedMethod === "turn/completed" ? "idle" as const
+        : undefined);
 
     this.opts.onNotification?.(threadId, {
-      method: msg.method,
-      normalizedMethod: result.normalizedMethod,
-      eventType: toProviderEventType(msg.method),
+      method,
+      normalizedMethod,
+      eventType: toProviderEventType(method),
       eventData: createProviderEventEnvelope({
         providerId: this.opts.provider.id,
-        method: msg.method,
-        payload: params,
+        method,
+        payload: event.payload as Record<string, unknown>,
       }),
-      shouldPersist: result.shouldPersist,
-      shouldBroadcast: result.shouldBroadcast,
-      nextStatus: result.status,
-      title: result.title,
+      shouldPersist: event.shouldPersist ?? true,
+      shouldBroadcast: event.shouldBroadcast ?? true,
+      nextStatus: event.nextStatus,
+      title: event.title,
       ...(turnState ? { turnState } : {}),
       ...(turnId ? { turnId } : {}),
-      ...(result.providerThreadId ? { providerThreadId: result.providerThreadId } : {}),
     });
   }
 

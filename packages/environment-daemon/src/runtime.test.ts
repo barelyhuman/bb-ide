@@ -1211,9 +1211,12 @@ describe("EnvironmentDaemonRuntime", () => {
         ...baseAdapter,
         id: providerId,
         displayName: providerId,
-        createInitializeParams: () => ({
-          clientInfo: { name: "bb", version: "0.0.1" },
-          providerMarker: providerId,
+        buildInitializeCommand: () => ({
+          method: "initialize",
+          params: {
+            clientInfo: { name: "bb", version: "0.0.1" },
+            providerMarker: providerId,
+          },
         }),
       }),
     });
