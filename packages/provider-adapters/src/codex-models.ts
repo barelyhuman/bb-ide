@@ -1,97 +1,62 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type {
-  AvailableModel,
-  ModelReasoningEffort,
-  ReasoningLevel,
-} from "@bb/core";
+import type { AvailableModel } from "@bb/core";
+import { z } from "zod";
+import { asRecord } from "./parse-utils.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
-const DEFAULT_REASONING_EFFORTS: ModelReasoningEffort[] = [
+const reasoningLevelSchema = z.enum(["low", "medium", "high", "xhigh"]);
+
+const reasoningEffortOptionSchema = z.object({
+  reasoningEffort: reasoningLevelSchema,
+  description: z.string(),
+}).passthrough();
+
+const DEFAULT_REASONING_EFFORTS: z.infer<typeof reasoningEffortOptionSchema>[] = [
   { reasoningEffort: "low", description: "Low reasoning effort" },
   { reasoningEffort: "medium", description: "Medium reasoning effort" },
   { reasoningEffort: "high", description: "High reasoning effort" },
   { reasoningEffort: "xhigh", description: "Extra high reasoning effort" },
 ];
 
-function isReasoningLevel(value: unknown): value is ReasoningLevel {
-  return (
-    value === "low" ||
-    value === "medium" ||
-    value === "high" ||
-    value === "xhigh"
-  );
-}
+const codexModelSchema = z.object({
+  id: z.string(),
+  model: z.string(),
+  displayName: z.string().optional(),
+  description: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  supportedReasoningEfforts: z.array(reasoningEffortOptionSchema).optional(),
+  defaultReasoningEffort: reasoningLevelSchema.optional(),
+}).passthrough();
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object") return null;
-  return value as Record<string, unknown>;
-}
+const codexModelListResponseSchema = z.object({
+  data: z.array(codexModelSchema),
+}).passthrough();
 
-function toReasoningEfforts(value: unknown): ModelReasoningEffort[] {
-  if (!Array.isArray(value)) return [];
-
-  const efforts: ModelReasoningEffort[] = [];
-  for (const item of value) {
-    const record = asRecord(item);
-    if (!record) continue;
-    if (!isReasoningLevel(record.reasoningEffort)) continue;
-
-    efforts.push({
-      reasoningEffort: record.reasoningEffort,
-      description:
-        typeof record.description === "string"
-          ? record.description
-          : `${record.reasoningEffort} reasoning effort`,
-    });
-  }
-
-  return efforts;
-}
-
-function toAvailableModel(value: unknown): AvailableModel | null {
-  const record = asRecord(value);
-  if (!record) return null;
-
-  const id = typeof record.id === "string" ? record.id : null;
-  const model = typeof record.model === "string" ? record.model : null;
-  if (!id || !model) return null;
-
-  const supportedReasoningEfforts = toReasoningEfforts(
-    record.supportedReasoningEfforts,
-  );
-  const normalizedEfforts =
-    supportedReasoningEfforts.length > 0
-      ? supportedReasoningEfforts
-      : DEFAULT_REASONING_EFFORTS;
-
-  const defaultReasoningEffort = isReasoningLevel(record.defaultReasoningEffort)
-    ? record.defaultReasoningEffort
-    : normalizedEfforts[0].reasoningEffort;
+function toAvailableModel(raw: z.infer<typeof codexModelSchema>): AvailableModel {
+  const efforts = raw.supportedReasoningEfforts?.length
+    ? raw.supportedReasoningEfforts
+    : DEFAULT_REASONING_EFFORTS;
 
   return {
-    id,
-    model,
-    displayName:
-      typeof record.displayName === "string" ? record.displayName : model,
-    description:
-      typeof record.description === "string" ? record.description : "",
-    supportedReasoningEfforts: normalizedEfforts,
-    defaultReasoningEffort,
-    isDefault: record.isDefault === true,
+    id: raw.id,
+    model: raw.model,
+    displayName: raw.displayName ?? raw.model,
+    description: raw.description ?? "",
+    supportedReasoningEfforts: efforts,
+    defaultReasoningEffort: raw.defaultReasoningEffort ?? efforts[0].reasoningEffort,
+    isDefault: raw.isDefault ?? false,
   };
 }
 
 function parseModelsResponse(result: unknown): AvailableModel[] {
-  const response = asRecord(result);
-  if (!response || !Array.isArray(response.data)) {
+  const parsed = codexModelListResponseSchema.safeParse(result);
+  if (!parsed.success) {
     throw new Error("Invalid response from codex model/list.");
   }
 
-  const models = response.data
-    .map((entry) => toAvailableModel(entry))
-    .filter((entry): entry is AvailableModel => entry !== null);
+  const models = parsed.data.data.map(toAvailableModel);
 
   if (models.length === 0) {
     throw new Error("Codex model/list returned no supported models.");

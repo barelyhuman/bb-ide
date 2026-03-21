@@ -2,11 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 
 const {
-  mockSubscribe,
-  mockPrompt,
-  mockDispose,
-  mockGetSessionStats,
-  mockGetContextUsage,
   mockGetActiveToolNames,
   mockSetActiveToolsByName,
   mockOpen,
@@ -38,11 +33,6 @@ const {
   }));
 
   return {
-    mockSubscribe,
-    mockPrompt,
-    mockDispose,
-    mockGetSessionStats,
-    mockGetContextUsage,
     mockGetActiveToolNames,
     mockSetActiveToolsByName,
     mockOpen,

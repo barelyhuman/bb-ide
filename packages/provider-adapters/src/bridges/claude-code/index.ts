@@ -1,1 +1,1 @@
-export { BRIDGE_METHODS } from "./bridge.js";
+export type { ClaudeCodeCommand } from "./bridge.js";

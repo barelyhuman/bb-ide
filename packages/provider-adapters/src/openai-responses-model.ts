@@ -1,5 +1,7 @@
 import { extractErrorMessage } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
+import { z } from "zod";
+import { asNonEmptyString } from "./parse-utils.js";
 
 const DEFAULT_API_KEY_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
@@ -23,36 +25,40 @@ interface ResolvedResponsesAuth {
   accountId?: string;
 }
 
-interface OpenAIResponsesErrorPayload {
-  error?: {
-    message?: unknown;
-  };
-  message?: unknown;
-}
+const openAIErrorPayloadSchema = z.object({
+  error: z.object({ message: z.unknown().optional() }).optional(),
+  message: z.unknown().optional(),
+}).passthrough();
 
 interface ParsedSseResponsePayload {
   text: string;
   responseId?: string;
 }
 
-interface DecodedOpenAIResponse {
-  id?: string;
-  text: string;
-}
+const openAIResponseContentPartSchema = z.object({
+  text: z.string().optional(),
+  output_text: z.string().optional(),
+}).passthrough();
 
-type DecodedSseEvent =
-  | {
-      type: "response.output_text.delta";
-      delta: string;
-    }
-  | {
-      type: "response.output_text.done";
-      text: string;
-    }
-  | {
-      type: "response.created" | "response.in_progress" | "response.completed";
-      response: DecodedOpenAIResponse;
-    };
+const openAIResponseSchema = z.object({
+  id: z.string().optional(),
+  output_text: z.union([z.string(), z.array(z.string())]).optional(),
+  output: z.array(z.object({
+    content: z.array(openAIResponseContentPartSchema).optional(),
+  }).passthrough()).optional(),
+}).passthrough();
+
+type DecodedOpenAIResponse = { id?: string; text: string };
+
+const sseEventSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("response.output_text.delta"), delta: z.string() }),
+  z.object({ type: z.literal("response.output_text.done"), text: z.string() }),
+  z.object({ type: z.literal("response.created"), response: openAIResponseSchema }),
+  z.object({ type: z.literal("response.in_progress"), response: openAIResponseSchema }),
+  z.object({ type: z.literal("response.completed"), response: openAIResponseSchema }),
+]);
+
+type DecodedSseEvent = z.infer<typeof sseEventSchema>;
 
 export interface GenerateOpenAIResponsesTextArgs {
   prompt: string;
@@ -77,21 +83,6 @@ interface OpenAIResponsesRequestBody {
   temperature?: number;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function asNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
 function normalizeBaseUrl(authMode: ResponsesAuthMode): string {
   const raw = process.env.OPENAI_BASE_URL?.trim();
   if (!raw) {
@@ -114,12 +105,14 @@ function parseUpstreamErrorMessage(rawBody: string): string | null {
 
   if (normalized.startsWith("{") || normalized.startsWith("[")) {
     try {
-      const parsed = JSON.parse(normalized) as OpenAIResponsesErrorPayload;
-      return (
-        extractErrorMessage(parsed.error?.message, ERROR_EXTRACT_OPTS) ??
-        extractErrorMessage(parsed.message, ERROR_EXTRACT_OPTS) ??
-        extractErrorMessage(parsed, ERROR_EXTRACT_OPTS)
-      );
+      const parsed = openAIErrorPayloadSchema.safeParse(JSON.parse(normalized));
+      if (parsed.success) {
+        return (
+          extractErrorMessage(parsed.data.error?.message, ERROR_EXTRACT_OPTS) ??
+          extractErrorMessage(parsed.data.message, ERROR_EXTRACT_OPTS) ??
+          extractErrorMessage(parsed.data, ERROR_EXTRACT_OPTS)
+        );
+      }
     } catch {
       return extractErrorMessage(normalized, ERROR_EXTRACT_OPTS);
     }
@@ -136,78 +129,37 @@ function isUnsupportedTemperatureError(message: string | null): boolean {
 }
 
 function decodeOpenAIResponse(value: unknown): DecodedOpenAIResponse | null {
-  const payload = asRecord(value);
-  if (!payload) return null;
+  const parsed = openAIResponseSchema.safeParse(value);
+  if (!parsed.success) return null;
 
-  const direct = payload.output_text;
-  if (typeof direct === "string") {
-    return {
-      id: asNonEmptyString(payload.id) ?? undefined,
-      text: direct,
-    };
+  const { id, output_text, output } = parsed.data;
+
+  if (typeof output_text === "string") {
+    return { id: asNonEmptyString(id) ?? undefined, text: output_text };
   }
 
-  if (Array.isArray(direct)) {
-    const fragments = direct
-      .map((entry) => (typeof entry === "string" ? entry : ""))
-      .filter((entry) => entry.length > 0);
-    if (fragments.length > 0) {
-      return {
-        id: asNonEmptyString(payload.id) ?? undefined,
-        text: fragments.join(""),
-      };
+  if (Array.isArray(output_text)) {
+    const joined = output_text.filter((s) => s.length > 0).join("");
+    if (joined) {
+      return { id: asNonEmptyString(id) ?? undefined, text: joined };
     }
   }
 
   const fragments: string[] = [];
-  for (const item of asArray(payload.output)) {
-    const outputItem = asRecord(item);
-    if (!outputItem) continue;
-
-    for (const part of asArray(outputItem.content)) {
-      const contentPart = asRecord(part);
-      if (!contentPart) continue;
-
-      const text =
-        asNonEmptyString(contentPart.text) ??
-        asNonEmptyString(contentPart.output_text);
-      if (text) {
-        fragments.push(text);
-      }
+  for (const item of output ?? []) {
+    for (const part of item.content ?? []) {
+      const text = asNonEmptyString(part.text) ?? asNonEmptyString(part.output_text);
+      if (text) fragments.push(text);
     }
   }
 
-  return {
-    id: asNonEmptyString(payload.id) ?? undefined,
-    text: fragments.join(""),
-  };
+  return { id: asNonEmptyString(id) ?? undefined, text: fragments.join("") };
 }
 
 function decodeSseEvent(value: unknown): DecodedSseEvent | null {
-  const eventRecord = asRecord(value);
-  if (!eventRecord) return null;
-
-  const type = asNonEmptyString(eventRecord.type);
-  if (!type) return null;
-
-  switch (type) {
-    case "response.output_text.delta": {
-      const delta = asNonEmptyString(eventRecord.delta);
-      return delta ? { type, delta } : null;
-    }
-    case "response.output_text.done": {
-      const text = asNonEmptyString(eventRecord.text);
-      return text ? { type, text } : null;
-    }
-    case "response.created":
-    case "response.in_progress":
-    case "response.completed": {
-      const response = decodeOpenAIResponse(eventRecord.response);
-      return response ? { type, response } : null;
-    }
-    default:
-      return null;
-  }
+  const parsed = sseEventSchema.safeParse(value);
+  if (!parsed.success) return null;
+  return parsed.data;
 }
 
 function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | null {
@@ -254,12 +206,16 @@ function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | nu
         break;
       case "response.created":
       case "response.in_progress":
-      case "response.completed":
-        responseId = event.response.id ?? responseId;
-        if (event.response.text) {
-          textFromCompleted = event.response.text;
+      case "response.completed": {
+        const decoded = decodeOpenAIResponse(event.response);
+        if (decoded) {
+          responseId = decoded.id ?? responseId;
+          if (decoded.text) {
+            textFromCompleted = decoded.text;
+          }
         }
         break;
+      }
       default:
         event satisfies never;
     }

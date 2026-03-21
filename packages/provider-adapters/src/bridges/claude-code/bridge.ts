@@ -1,20 +1,30 @@
 #!/usr/bin/env node
 
+/**
+ * Claude Code bridge process.
+ *
+ * Thin JSON-RPC shell that manages Claude Agent SDK sessions and forwards
+ * raw `SDKMessage` events to the parent process. The parent (env-daemon)
+ * passes these to the adapter's `translateEvent` for conversion to
+ * `BbProviderEvent[]`.
+ *
+ * The bridge does NOT translate events — it only:
+ * - Manages SDK session lifecycle (start, resume, stop, push input)
+ * - Forwards raw SDK messages as `{ method: "sdk/message", params: { threadId, message } }`
+ * - Forwards tool call requests to the parent and feeds responses back to the SDK
+ * - Emits `thread/identity` when the SDK session ID is captured
+ */
+
 import { createInterface } from "node:readline";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
 import {
-  decodeBridgeJsonRpcRequest,
   decodeBridgeJsonRpcResponse,
   decodeToolCallResponsePayload,
-} from "../shared/rpc-contract.js";
+  jsonRpcEnvelopeSchema,
+  type BridgeToolCallRequest,
+} from "../shared/bridge-tool-calls.js";
 import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
-import {
-  translateSdkMessage,
-  createTurnCounterState,
-  nextTurnId,
-  type TurnCounterState,
-} from "./event-translator.js";
-import type { BridgeNotification } from "../shared/bb-shapes.js";
 import {
   buildBridgeMcpServer,
   getAllowedToolNames,
@@ -23,20 +33,81 @@ import {
   type ToolCallForwarder,
 } from "./tool-proxy-mcp.js";
 
-export const BRIDGE_METHODS = [
-  "initialize",
-  "thread/start",
-  "thread/resume",
-  "turn/start",
-  "turn/steer",
-  "thread/stop",
-] as const;
+// ---------------------------------------------------------------------------
+// Command schema — defines what JSON-RPC requests this bridge accepts
+// ---------------------------------------------------------------------------
 
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id: string | number;
-  method: string;
-  params?: Record<string, unknown>;
+const claudeCodeCommandSchema = z.discriminatedUnion("method", [
+  z.object({
+    method: z.literal("initialize"),
+    params: z.object({
+      clientInfo: z.object({ name: z.string(), version: z.string() }),
+    }),
+  }),
+  z.object({
+    method: z.literal("thread/start"),
+    params: z.object({
+      threadId: z.string(),
+      baseInstructions: z.string(),
+      config: z.record(z.string(), z.unknown()).optional(),
+      model: z.string().optional(),
+      managerMode: z.boolean().optional(),
+      dynamicTools: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        inputSchema: z.unknown(),
+      })).optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal("thread/resume"),
+    params: z.object({
+      threadId: z.string(),
+      providerThreadId: z.string().nullable(),
+      config: z.record(z.string(), z.unknown()).optional(),
+      model: z.string().optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal("turn/start"),
+    params: z.object({
+      threadId: z.string(),
+      providerThreadId: z.string().nullable(),
+      input: z.array(z.unknown()),
+      model: z.string().optional(),
+      config: z.record(z.string(), z.unknown()).optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal("turn/steer"),
+    params: z.object({
+      threadId: z.string(),
+      providerThreadId: z.string().nullable(),
+      expectedTurnId: z.string(),
+      input: z.array(z.unknown()),
+    }),
+  }),
+  z.object({
+    method: z.literal("thread/stop"),
+    params: z.object({
+      threadId: z.string(),
+    }),
+  }),
+]);
+
+export type ClaudeCodeCommand = z.infer<typeof claudeCodeCommandSchema>;
+
+function decodeClaudeCodeJsonRpcRequest(raw: unknown): (ClaudeCodeCommand & { jsonrpc: "2.0"; id: string | number }) | null {
+  const envelope = jsonRpcEnvelopeSchema.safeParse(raw);
+  if (!envelope.success) return null;
+
+  const command = claudeCodeCommandSchema.safeParse({
+    method: envelope.data.method,
+    params: envelope.data.params ?? {},
+  });
+  if (!command.success) return null;
+
+  return { ...command.data, jsonrpc: "2.0", id: envelope.data.id };
 }
 
 interface JsonRpcResponse {
@@ -46,14 +117,26 @@ interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+/** JSON-RPC notification carrying a raw SDK message. */
+interface SdkMessageNotification {
+  jsonrpc: "2.0";
+  method: "sdk/message";
+  params: { threadId: string; message: SDKMessage };
+}
+
+/** JSON-RPC notification for bridge-originated events. */
+interface BridgeEventNotification {
+  jsonrpc: "2.0";
+  method: string;
+  params: Record<string, unknown>;
+}
+
 interface PendingToolCall {
   resolve: (value: { content: string; isError?: boolean }) => void;
 }
 
 interface ThreadSession {
   session: SdkSession;
-  turnId: string | undefined;
-  turnCounter: TurnCounterState;
   pendingToolCalls: Map<string | number, PendingToolCall>;
   providerThreadId?: string;
 }
@@ -68,7 +151,7 @@ const MANAGER_BUILTIN_TOOLS = [
   "LS",
 ] as const;
 
-function send(msg: JsonRpcResponse | BridgeNotification): void {
+function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
@@ -84,53 +167,34 @@ function sendError(
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
+function sendSdkMessage(threadId: string, message: SDKMessage): void {
+  send({
+    jsonrpc: "2.0",
+    method: "sdk/message",
+    params: { threadId, message },
+  });
+}
+
 function createOnSdkMessage(threadIdRef: { current: string }): (message: SDKMessage) => void {
   return (message: SDKMessage) => {
-    const threadSession = sessions.get(threadIdRef.current);
-    if (!threadSession) return;
-
-    const { notifications, turnId } = translateSdkMessage(
-      message,
-      threadIdRef.current,
-      threadSession.turnId,
-      threadSession.turnCounter,
-    );
-    threadSession.turnId = turnId;
-
-    for (const notification of notifications) {
-      send(notification);
-    }
+    if (!sessions.has(threadIdRef.current)) return;
+    sendSdkMessage(threadIdRef.current, message);
   };
 }
 
 function createOnSdkDone(threadIdRef: { current: string }): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
-
-    const threadSession = sessions.get(threadIdRef.current);
-    if (!threadSession) return;
+    if (!sessions.has(threadIdRef.current)) return;
 
     const message =
       error instanceof Error ? error.message : String(error);
 
-    if (threadSession.turnId) {
-      send({
-        jsonrpc: "2.0",
-        method: "turn/completed",
-        params: {
-          threadId: threadIdRef.current,
-          turnId: threadSession.turnId,
-          error: { message },
-        },
-      });
-      threadSession.turnId = undefined;
-    } else {
-      send({
-        jsonrpc: "2.0",
-        method: "error",
-        params: { threadId: threadIdRef.current, message },
-      });
-    }
+    send({
+      jsonrpc: "2.0",
+      method: "error",
+      params: { threadId: threadIdRef.current, message },
+    });
   };
 }
 
@@ -151,12 +215,12 @@ function createForwardToolCall(threadIdRef: { current: string }): ToolCallForwar
         method: "item/tool/call",
         params: {
           threadId: threadIdRef.current,
-          turnId: threadSession.turnId ?? "",
+          turnId: "",
           callId: `call-${requestId}`,
           tool: toolName,
           arguments: args,
         },
-      } as unknown as JsonRpcResponse);
+      });
     });
   };
 }
@@ -168,9 +232,8 @@ function findSessionByPendingToolCall(id: string | number): ThreadSession | unde
   return undefined;
 }
 
-function extractEnvOverrides(params: Record<string, unknown>): Record<string, string> {
+function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
   const envOverrides: Record<string, string> = {};
-  const config = params.config as Record<string, unknown> | undefined;
   if (config) {
     for (const [key, value] of Object.entries(config)) {
       if (
@@ -194,17 +257,12 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 }
 
 export function buildSessionOptions(
-  params: Record<string, unknown>,
+  params: { baseInstructions?: string; model?: string; managerMode?: boolean },
   env: NodeJS.ProcessEnv,
 ): SdkSessionOptions {
-  const systemPrompt =
-    typeof params.baseInstructions === "string"
-      ? params.baseInstructions
-      : "You are a helpful coding assistant.";
-  const model =
-    typeof params.model === "string" ? params.model : undefined;
-  const cwd =
-    typeof params.cwd === "string" ? params.cwd : process.cwd();
+  const systemPrompt = params.baseInstructions ?? "You are a helpful coding assistant.";
+  const model = params.model;
+  const cwd = process.cwd();
   const managerMode = params.managerMode === true;
 
   return {
@@ -216,109 +274,75 @@ export function buildSessionOptions(
   };
 }
 
-function applyDynamicTools(
-  sessionOptions: SdkSessionOptions,
-  params: Record<string, unknown>,
-  threadIdRef: { current: string },
-): void {
-  const dynamicTools = params.dynamicTools as
-    | DynamicToolDefinition[]
-    | undefined;
-  if (dynamicTools && dynamicTools.length > 0) {
-    const mcpServer = buildBridgeMcpServer(dynamicTools, createForwardToolCall(threadIdRef));
-    sessionOptions.mcpServers = {
-      [BRIDGE_MCP_SERVER_NAME]: mcpServer,
-    };
-    sessionOptions.allowedTools = getAllowedToolNames(dynamicTools);
-  }
-}
-
-function handleRequest(request: JsonRpcRequest): void {
-  const { id, method, params } = request;
-
-  switch (method) {
+function handleRequest(request: ClaudeCodeCommand & { id: string | number }): void {
+  switch (request.method) {
     case "initialize":
-      sendResult(id, { ok: true });
+      sendResult(request.id, { ok: true });
       break;
-
     case "thread/start":
-      handleThreadStart(id, params ?? {});
+      handleThreadStart(request.id, request.params);
       break;
-
     case "thread/resume":
-      handleThreadResume(id, params ?? {});
+      handleThreadResume(request.id, request.params);
       break;
-
     case "turn/start":
-      handleTurnStart(id, params ?? {});
+      handleTurnStart(request.id, request.params);
       break;
-
     case "turn/steer":
-      handleTurnSteer(id, params ?? {});
+      handleTurnSteer(request.id, request.params);
       break;
-
     case "thread/stop":
-      handleThreadStop(id, params ?? {});
+      handleThreadStop(request.id, request.params);
       break;
-
-    default:
-      sendError(id, -32601, `Method not found: ${method}`);
   }
 }
+
+type ThreadStartParams = Extract<ClaudeCodeCommand, { method: "thread/start" }>["params"];
+type ThreadResumeParams = Extract<ClaudeCodeCommand, { method: "thread/resume" }>["params"];
+type TurnStartParams = Extract<ClaudeCodeCommand, { method: "turn/start" }>["params"];
+type TurnSteerParams = Extract<ClaudeCodeCommand, { method: "turn/steer" }>["params"];
+type ThreadStopParams = Extract<ClaudeCodeCommand, { method: "thread/stop" }>["params"];
 
 function handleThreadStart(
   id: string | number,
-  params: Record<string, unknown>,
+  params: ThreadStartParams,
 ): void {
-  const routingThreadId =
-    typeof params.threadId === "string" ? params.threadId : undefined;
-  if (!routingThreadId) {
-    sendError(id, -32602, "Missing threadId");
-    return;
-  }
-  const threadIdRef = { current: routingThreadId };
+  const threadIdRef = { current: params.threadId };
 
-  // Stop existing session for this thread if any
   const existing = sessions.get(threadIdRef.current);
   if (existing) {
     existing.session.stop();
     sessions.delete(threadIdRef.current);
   }
 
-  const envOverrides = extractEnvOverrides(params);
+  const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv);
-  applyDynamicTools(sessionOptions, params, threadIdRef);
+  if (params.dynamicTools && params.dynamicTools.length > 0) {
+    const mcpServer = buildBridgeMcpServer(
+      params.dynamicTools as DynamicToolDefinition[],
+      createForwardToolCall(threadIdRef),
+    );
+    sessionOptions.mcpServers = { [BRIDGE_MCP_SERVER_NAME]: mcpServer };
+    sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools as DynamicToolDefinition[]);
+  }
 
-  const turnCounter = createTurnCounterState();
   const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
   session.start();
 
   const threadSession: ThreadSession = {
     session,
-    turnId: undefined,
-    turnCounter,
     pendingToolCalls: new Map(),
   };
   sessions.set(threadIdRef.current, threadSession);
 
-  const input = extractInputText(params.input);
-  if (input) {
-    session.pushInput(input);
-  }
-
-  // Return a temporary ID immediately. Once the SDK session ID is
-  // captured, re-key the session map and update the threadIdRef so
-  // subsequent events carry the real SDK session ID. The orchestrator
-  // picks up the real ID from persisted event data (same field it
-  // uses for Codex's conversationId).
   sendResult(id, { threadId: threadIdRef.current, providerThreadId: null });
 
   void session.waitForSessionId().then((sdkSessionId) => {
     threadSession.providerThreadId = sdkSessionId;
     send({
       jsonrpc: "2.0",
-      method: "thread/started",
+      method: "thread/identity",
       params: {
         threadId: threadIdRef.current,
         providerThreadId: sdkSessionId,
@@ -329,42 +353,27 @@ function handleThreadStart(
 
 function handleThreadResume(
   id: string | number,
-  params: Record<string, unknown>,
+  params: ThreadResumeParams,
 ): void {
-  const threadId =
-    typeof params.threadId === "string"
-      ? params.threadId
-      : undefined;
-  if (!threadId) {
-    sendError(id, -32602, "Missing threadId");
-    return;
-  }
-  const providerThreadId =
-    typeof params.providerThreadId === "string"
-      ? params.providerThreadId
-      : undefined;
+  const threadId = params.threadId;
+  const providerThreadId = params.providerThreadId ?? undefined;
 
-  // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
   if (existing) {
     existing.session.stop();
     sessions.delete(threadId);
   }
 
-  const envOverrides = extractEnvOverrides(params);
+  const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv);
   const threadIdRef = { current: threadId };
-  applyDynamicTools(sessionOptions, params, threadIdRef);
-  const turnCounter = createTurnCounterState();
   const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
 
   session.start(providerThreadId);
 
   const threadSession: ThreadSession = {
     session,
-    turnId: undefined,
-    turnCounter,
     pendingToolCalls: new Map(),
     ...(providerThreadId ? { providerThreadId } : {}),
   };
@@ -375,10 +384,9 @@ function handleThreadResume(
 
 function handleTurnStart(
   id: string | number,
-  params: Record<string, unknown>,
+  params: TurnStartParams,
 ): void {
-  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
-  const threadSession = threadId ? sessions.get(threadId) : undefined;
+  const threadSession = sessions.get(params.threadId);
   if (!threadSession) {
     sendError(id, -32000, "No active session");
     return;
@@ -391,15 +399,14 @@ function handleTurnStart(
   }
 
   threadSession.session.pushInput(input);
-  sendResult(id, { threadId });
+  sendResult(id, { threadId: params.threadId });
 }
 
 function handleTurnSteer(
   id: string | number,
-  params: Record<string, unknown>,
+  params: TurnSteerParams,
 ): void {
-  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
-  const threadSession = threadId ? sessions.get(threadId) : undefined;
+  const threadSession = sessions.get(params.threadId);
   if (!threadSession) {
     sendError(id, -32000, "No active session");
     return;
@@ -412,20 +419,17 @@ function handleTurnSteer(
   }
 
   threadSession.session.pushInput(input);
-  sendResult(id, { threadId });
+  sendResult(id, { threadId: params.threadId });
 }
 
 function handleThreadStop(
   id: string | number,
-  params: Record<string, unknown>,
+  params: ThreadStopParams,
 ): void {
-  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
-  if (threadId) {
-    const threadSession = sessions.get(threadId);
-    if (threadSession) {
-      threadSession.session.stop();
-      sessions.delete(threadId);
-    }
+  const threadSession = sessions.get(params.threadId);
+  if (threadSession) {
+    threadSession.session.stop();
+    sessions.delete(params.threadId);
   }
   sendResult(id, { ok: true });
 }
@@ -473,7 +477,7 @@ function handleLine(line: string): void {
     return;
   }
 
-  const request = decodeBridgeJsonRpcRequest(parsed);
+  const request = decodeClaudeCodeJsonRpcRequest(parsed);
   if (!request) return;
   handleRequest(request);
 }

@@ -12,7 +12,7 @@ const providerToolCallRequestSchema = z.object({
   arguments: z.unknown(),
 });
 
-const providerToolCallResponseSchema = z.object({
+export const providerToolCallResponseSchema = z.object({
   success: z.boolean(),
   contentItems: z.array(
     z.discriminatedUnion("type", [
@@ -28,16 +28,12 @@ const providerToolCallResponseSchema = z.object({
   ),
 });
 
-function normalizeMethod(value: string): string {
-  return value.toLowerCase().replaceAll(".", "/");
-}
-
 export function decodeProviderToolCallRequest(
   requestId: string | number,
   method: string,
   params: unknown,
 ): ProviderToolCallRequest | null {
-  if (normalizeMethod(method) !== "item/tool/call") {
+  if (method !== "item/tool/call") {
     return null;
   }
 
@@ -54,6 +50,6 @@ export function decodeProviderToolCallRequest(
 
 export function encodeProviderToolCallResponse(
   response: ProviderToolCallResponse,
-): Record<string, unknown> {
+): ProviderToolCallResponse {
   return providerToolCallResponseSchema.parse(response);
 }

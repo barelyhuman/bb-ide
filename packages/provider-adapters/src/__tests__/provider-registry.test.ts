@@ -6,29 +6,29 @@ import {
 } from "../provider-registry.js";
 
 describe("provider registry", () => {
-  it("creates codex provider with expected process command and args", () => {
+  it("creates codex provider with expected process config", () => {
     const provider = createProviderAdapter({ providerId: "codex" });
     expect(provider.id).toBe("codex");
-    expect(provider.processCommand).toBe("codex");
-    expect(provider.processArgs).toEqual(["app-server"]);
+    expect(provider.process.command).toBe("codex");
+    expect(provider.process.args).toEqual(["app-server"]);
   });
 
-  it("creates claude-code provider with expected process command and args", () => {
+  it("creates claude-code provider with expected process config", () => {
     const provider = createProviderAdapter({ providerId: "claude-code" });
     expect(provider.id).toBe("claude-code");
-    expect(provider.processCommand).toBe("node");
-    expect(provider.processArgs).toHaveLength(1);
-    expect(provider.processArgs[0]).toMatch(
+    expect(provider.process.command).toBe("node");
+    expect(provider.process.args).toHaveLength(1);
+    expect(provider.process.args[0]).toMatch(
       /provider-adapters\/(src|dist)\/bridges\/claude-code\/bridge\.js$/,
     );
   });
 
-  it("creates pi provider with expected process command and args", () => {
+  it("creates pi provider with expected process config", () => {
     const provider = createProviderAdapter({ providerId: "pi" });
     expect(provider.id).toBe("pi");
-    expect(provider.processCommand).toBe("node");
-    expect(provider.processArgs).toHaveLength(1);
-    expect(provider.processArgs[0]).toMatch(
+    expect(provider.process.command).toBe("node");
+    expect(provider.process.args).toHaveLength(1);
+    expect(provider.process.args[0]).toMatch(
       /provider-adapters\/(src|dist)\/bridges\/pi\/bridge\.js$/,
     );
   });

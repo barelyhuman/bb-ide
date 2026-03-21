@@ -2,16 +2,12 @@ import type { PromptInput } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
 import type { LlmThreadTitleGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
+import { asRecord } from "./parse-utils.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_PROMPT_CHARS = 1200;
 const MAX_THREAD_NAME_LENGTH = 38;
 const TITLE_MAX_OUTPUT_TOKENS = 120;
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
 
 function extractPromptText(input: PromptInput[]): string {
   const textParts: string[] = [];

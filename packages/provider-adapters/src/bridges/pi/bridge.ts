@@ -5,42 +5,94 @@ import { homedir } from "node:os";
 import { extname } from "node:path";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { z } from "zod";
 import {
-  decodeBridgeJsonRpcRequest,
   decodeBridgeJsonRpcResponse,
   decodeToolCallResponsePayload,
-} from "../shared/rpc-contract.js";
+  jsonRpcEnvelopeSchema,
+  type BridgeToolCallRequest,
+} from "../shared/bridge-tool-calls.js";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import { PiSdkSession, type PiSdkSessionOptions } from "./sdk-session.js";
-import {
-  translatePiEvent,
-  createTurnCounterState,
-  nextTurnId,
-  type PiTokenUsageSnapshot,
-  type TurnCounterState,
-} from "./event-translator.js";
-import type { BridgeNotification } from "../shared/bb-shapes.js";
 import {
   buildDynamicTools,
   type DynamicToolDefinition,
   type ToolCallForwarder,
 } from "./tool-proxy.js";
 
-export const BRIDGE_METHODS = [
-  "initialize",
-  "thread/start",
-  "thread/resume",
-  "turn/start",
-  "turn/steer",
-  "thread/stop",
-] as const;
+// ---------------------------------------------------------------------------
+// Command schema — defines what JSON-RPC requests this bridge accepts
+// ---------------------------------------------------------------------------
 
-interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id: string | number;
-  method: string;
-  params?: Record<string, unknown>;
+const piCommandSchema = z.discriminatedUnion("method", [
+  z.object({
+    method: z.literal("initialize"),
+    params: z.object({
+      clientInfo: z.object({ name: z.string(), version: z.string() }),
+    }),
+  }),
+  z.object({
+    method: z.literal("thread/start"),
+    params: z.object({
+      threadId: z.string().optional(),
+      baseInstructions: z.string().optional(),
+      config: z.record(z.string(), z.unknown()).optional(),
+      model: z.string().optional(),
+      input: z.array(z.unknown()).optional(),
+      dynamicTools: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        inputSchema: z.unknown(),
+      })).optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal("thread/resume"),
+    params: z.object({
+      threadId: z.string(),
+      sessionPath: z.string().optional(),
+      config: z.record(z.string(), z.unknown()).optional(),
+      model: z.string().optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal("turn/start"),
+    params: z.object({
+      threadId: z.string(),
+      input: z.array(z.unknown()),
+      model: z.string().optional(),
+    }),
+  }),
+  z.object({
+    method: z.literal("turn/steer"),
+    params: z.object({
+      threadId: z.string(),
+      expectedTurnId: z.string(),
+      input: z.array(z.unknown()),
+    }),
+  }),
+  z.object({
+    method: z.literal("thread/stop"),
+    params: z.object({
+      threadId: z.string(),
+    }),
+  }),
+]);
+
+export type PiCommand = z.infer<typeof piCommandSchema>;
+
+function decodePiJsonRpcRequest(raw: unknown): (PiCommand & { jsonrpc: "2.0"; id: string | number }) | null {
+  const envelope = jsonRpcEnvelopeSchema.safeParse(raw);
+  if (!envelope.success) return null;
+
+  const command = piCommandSchema.safeParse({
+    method: envelope.data.method,
+    params: envelope.data.params ?? {},
+  });
+  if (!command.success) return null;
+
+  return { ...command.data, jsonrpc: "2.0", id: envelope.data.id };
 }
 
 interface JsonRpcResponse {
@@ -50,21 +102,31 @@ interface JsonRpcResponse {
   error?: { code: number; message: string };
 }
 
+interface SdkEventNotification {
+  jsonrpc: "2.0";
+  method: "sdk/message";
+  params: { threadId: string; message: AgentSessionEvent };
+}
+
+interface BridgeEventNotification {
+  jsonrpc: "2.0";
+  method: string;
+  params: Record<string, unknown>;
+}
+
 interface PendingToolCall {
   resolve: (value: { content: string; isError?: boolean }) => void;
 }
 
 interface ThreadSession {
   session: PiSdkSession;
-  turnId: string | undefined;
-  turnCounter: TurnCounterState;
   pendingToolCalls: Map<string | number, PendingToolCall>;
 }
 
 const sessions = new Map<string, ThreadSession>();
 let toolCallRequestIdCounter = 0;
 
-function send(msg: JsonRpcResponse | BridgeNotification): void {
+function send(msg: JsonRpcResponse | SdkEventNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
@@ -78,65 +140,28 @@ function sendError(id: string | number, code: number, message: string): void {
 
 function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
   return (event: AgentSessionEvent) => {
-    const threadSession = sessions.get(threadId);
-    if (!threadSession) return;
-
-    const tokenUsageSnapshot: PiTokenUsageSnapshot | undefined =
-      event.type === "agent_end"
-        ? {
-            sessionStats: threadSession.session.getSessionStats(),
-            contextUsage: threadSession.session.getContextUsage(),
-          }
-        : undefined;
-
-    const { notifications, turnId } = translatePiEvent(
-      event,
-      threadId,
-      threadSession.turnId,
-      threadSession.turnCounter,
-      tokenUsageSnapshot,
-    );
-    threadSession.turnId = turnId;
-
-    for (const notification of notifications) {
-      send(notification);
-    }
+    if (!sessions.has(threadId)) return;
+    send({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: { threadId, message: event },
+    });
   };
 }
 
 function createOnSessionDone(threadId: string): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
-
-    const threadSession = sessions.get(threadId);
-    if (!threadSession) return;
+    if (!sessions.has(threadId)) return;
 
     const message =
       error instanceof Error ? error.message : String(error);
 
-    if (threadSession.turnId) {
-      // A turn was already in progress — close it normally so the
-      // orchestrator sees a complete lifecycle.
-      send({
-        jsonrpc: "2.0",
-        method: "turn/completed",
-        params: {
-          threadId,
-          turnId: threadSession.turnId,
-          error: { message },
-        },
-      });
-      threadSession.turnId = undefined;
-    } else {
-      // Fatal startup error before any turn lifecycle events.  Emit an
-      // error notification so the orchestrator can transition the thread
-      // to an error/provisioning_failed state instead of idle.
-      send({
-        jsonrpc: "2.0",
-        method: "error",
-        params: { threadId, message },
-      });
-    }
+    send({
+      jsonrpc: "2.0",
+      method: "error",
+      params: { threadId, message },
+    });
   };
 }
 
@@ -157,12 +182,12 @@ function createForwardToolCall(threadId: string): ToolCallForwarder {
         method: "item/tool/call",
         params: {
           threadId,
-          turnId: threadSession.turnId ?? "",
+          turnId: "",
           callId: `call-${requestId}`,
           tool: toolName,
           arguments: args,
         },
-      } as unknown as JsonRpcResponse);
+      });
     });
   };
 }
@@ -174,9 +199,8 @@ function findSessionByPendingToolCall(id: string | number): ThreadSession | unde
   return undefined;
 }
 
-function extractEnvOverrides(params: Record<string, unknown>): Record<string, string> {
+function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
   const envOverrides: Record<string, string> = {};
-  const config = params.config as Record<string, unknown> | undefined;
   if (config) {
     for (const [key, value] of Object.entries(config)) {
       if (
@@ -199,31 +223,26 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 }
 
 function buildSessionOptions(
-  params: Record<string, unknown>,
+  params: { model?: string; baseInstructions?: string; sessionPath?: string },
   env: NodeJS.ProcessEnv,
   threadId: string,
 ): PiSdkSessionOptions {
-  const model =
-    typeof params.model === "string" ? params.model : undefined;
-  const cwd =
-    typeof params.cwd === "string" ? params.cwd : process.cwd();
-  const sessionFilePath = resolvePiSessionFilePath(threadId, params);
-  const systemPrompt =
-    typeof params.baseInstructions === "string"
-      ? params.baseInstructions
-      : undefined;
+  const sessionFilePath = resolvePiSessionFilePath(threadId, params.sessionPath);
 
-  return { cwd, model, env, sessionFilePath, systemPrompt };
+  return {
+    cwd: process.cwd(),
+    model: params.model,
+    env,
+    sessionFilePath,
+    systemPrompt: params.baseInstructions,
+  };
 }
 
 function applyDynamicTools(
   sessionOptions: PiSdkSessionOptions,
-  params: Record<string, unknown>,
+  dynamicTools: DynamicToolDefinition[] | undefined,
   threadId: string,
 ): void {
-  const dynamicTools = params.dynamicTools as
-    | DynamicToolDefinition[]
-    | undefined;
   if (dynamicTools && dynamicTools.length > 0) {
     sessionOptions.customTools = buildDynamicTools(
       dynamicTools,
@@ -234,14 +253,10 @@ function applyDynamicTools(
 
 function resolvePiSessionFilePath(
   threadId: string,
-  params: Record<string, unknown>,
+  sessionPath?: string,
 ): string {
-  const explicitPath =
-    typeof params.sessionPath === "string" && params.sessionPath.trim().length > 0
-      ? params.sessionPath
-      : undefined;
-  if (explicitPath) {
-    return resolve(explicitPath);
+  if (sessionPath?.trim()) {
+    return resolve(sessionPath);
   }
 
   return join(
@@ -256,47 +271,40 @@ function sanitizeSessionKey(threadId: string): string {
   return threadId.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-function handleRequest(request: JsonRpcRequest): void {
-  const { id, method, params } = request;
-
-  switch (method) {
+function handleRequest(request: PiCommand & { id: string | number }): void {
+  switch (request.method) {
     case "initialize":
-      sendResult(id, { ok: true });
+      sendResult(request.id, { ok: true });
       break;
-
     case "thread/start":
-      void handleThreadStart(id, params ?? {});
+      void handleThreadStart(request.id, request.params);
       break;
-
     case "thread/resume":
-      void handleThreadResume(id, params ?? {});
+      void handleThreadResume(request.id, request.params);
       break;
-
     case "turn/start":
-      void handleTurnStart(id, params ?? {});
+      void handleTurnStart(request.id, request.params);
       break;
-
     case "turn/steer":
-      void handleTurnSteer(id, params ?? {});
+      void handleTurnSteer(request.id, request.params);
       break;
-
     case "thread/stop":
-      handleThreadStop(id, params ?? {});
+      handleThreadStop(request.id, request.params);
       break;
-
-    default:
-      sendError(id, -32601, `Method not found: ${method}`);
   }
 }
 
+type ThreadStartParams = Extract<PiCommand, { method: "thread/start" }>["params"];
+type ThreadResumeParams = Extract<PiCommand, { method: "thread/resume" }>["params"];
+type TurnStartParams = Extract<PiCommand, { method: "turn/start" }>["params"];
+type TurnSteerParams = Extract<PiCommand, { method: "turn/steer" }>["params"];
+type ThreadStopParams = Extract<PiCommand, { method: "thread/stop" }>["params"];
+
 async function handleThreadStart(
   id: string | number,
-  params: Record<string, unknown>,
+  params: ThreadStartParams,
 ): Promise<void> {
-  const threadId =
-    typeof params.threadId === "string"
-      ? params.threadId
-      : `pi-${Date.now()}`;
+  const threadId = params.threadId ?? `pi-${Date.now()}`;
 
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
@@ -305,41 +313,32 @@ async function handleThreadStart(
     sessions.delete(threadId);
   }
 
-  const envOverrides = extractEnvOverrides(params);
+  const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
-  applyDynamicTools(sessionOptions, params, threadId);
+  applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
-  const turnCounter = createTurnCounterState();
   const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
 
   const threadSession: ThreadSession = {
     session,
-    turnId: undefined,
-    turnCounter,
     pendingToolCalls: new Map(),
   };
   sessions.set(threadId, threadSession);
 
-  await session.start();
-
-  // Send the initial prompt
-  const { text: inputText, images: inputImages } = extractInput(params.input);
-  if (inputText) {
-    void session.prompt(inputText, inputImages.length > 0 ? inputImages : undefined);
-  }
-
   sendResult(id, { threadId });
+  send({
+    jsonrpc: "2.0",
+    method: "thread/identity",
+    params: { threadId, providerThreadId: threadId },
+  });
 }
 
 async function handleThreadResume(
   id: string | number,
-  params: Record<string, unknown>,
+  params: ThreadResumeParams,
 ): Promise<void> {
-  const threadId =
-    typeof params.threadId === "string"
-      ? params.threadId
-      : `pi-${Date.now()}`;
+  const threadId = params.threadId;
 
   // Stop existing session for this thread if any
   const existing = sessions.get(threadId);
@@ -348,18 +347,14 @@ async function handleThreadResume(
     sessions.delete(threadId);
   }
 
-  const envOverrides = extractEnvOverrides(params);
+  const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
-  applyDynamicTools(sessionOptions, params, threadId);
 
-  const turnCounter = createTurnCounterState();
   const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
 
   const threadSession: ThreadSession = {
     session,
-    turnId: undefined,
-    turnCounter,
     pendingToolCalls: new Map(),
   };
   sessions.set(threadId, threadSession);
@@ -371,10 +366,9 @@ async function handleThreadResume(
 
 async function handleTurnStart(
   id: string | number,
-  params: Record<string, unknown>,
+  params: TurnStartParams,
 ): Promise<void> {
-  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
-  const threadSession = threadId ? sessions.get(threadId) : undefined;
+  const threadSession = sessions.get(params.threadId);
   if (!threadSession) {
     sendError(id, -32000, "No active pi session");
     return;
@@ -387,15 +381,14 @@ async function handleTurnStart(
   }
 
   void threadSession.session.prompt(text, images.length > 0 ? images : undefined);
-  sendResult(id, { threadId });
+  sendResult(id, { threadId: params.threadId });
 }
 
 async function handleTurnSteer(
   id: string | number,
-  params: Record<string, unknown>,
+  params: TurnSteerParams,
 ): Promise<void> {
-  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
-  const threadSession = threadId ? sessions.get(threadId) : undefined;
+  const threadSession = sessions.get(params.threadId);
   if (!threadSession) {
     sendError(id, -32000, "No active pi session");
     return;
@@ -408,20 +401,17 @@ async function handleTurnSteer(
   }
 
   void threadSession.session.steer(text, images.length > 0 ? images : undefined);
-  sendResult(id, { threadId });
+  sendResult(id, { threadId: params.threadId });
 }
 
 function handleThreadStop(
   id: string | number,
-  params: Record<string, unknown>,
+  params: ThreadStopParams,
 ): void {
-  const threadId = typeof params.threadId === "string" ? params.threadId : undefined;
-  if (threadId) {
-    const threadSession = sessions.get(threadId);
-    if (threadSession) {
-      threadSession.session.stop();
-      sessions.delete(threadId);
-    }
+  const threadSession = sessions.get(params.threadId);
+  if (threadSession) {
+    threadSession.session.stop();
+    sessions.delete(params.threadId);
   }
   sendResult(id, { ok: true });
 }
@@ -507,7 +497,7 @@ function handleLine(line: string): void {
     return;
   }
 
-  const request = decodeBridgeJsonRpcRequest(parsed);
+  const request = decodePiJsonRpcRequest(parsed);
   if (!request) return;
   handleRequest(request);
 }

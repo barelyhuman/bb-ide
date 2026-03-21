@@ -4,7 +4,6 @@ import {
   type Options,
   type Query,
   type SDKMessage,
-  type SDKResultMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
@@ -180,14 +179,11 @@ export class SdkSession {
   }
 
   private captureSessionId(message: SDKMessage): void {
-    const maybeSessionId = (message as { session_id?: unknown }).session_id;
-    if (
-      typeof maybeSessionId === "string" &&
-      maybeSessionId.trim().length > 0
-    ) {
-      this.sessionId = maybeSessionId;
+    const { session_id } = message;
+    if (session_id.trim().length > 0) {
+      this.sessionId = session_id;
       if (this.sessionIdResolve) {
-        this.sessionIdResolve(maybeSessionId);
+        this.sessionIdResolve(session_id);
         this.sessionIdResolve = null;
       }
     }

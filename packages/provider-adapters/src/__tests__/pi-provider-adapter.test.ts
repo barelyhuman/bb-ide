@@ -1,11 +1,22 @@
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import {
   buildPiAvailableModels,
   createPiProviderAdapter,
 } from "../pi-provider-adapter.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES = resolve(__dirname, "__fixtures__/pi");
+
+function loadFixture(name: string): AgentSessionEvent {
+  return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8")) as AgentSessionEvent;
+}
 
 const ORIGINAL_HOME = process.env.HOME;
 
@@ -27,24 +38,19 @@ describe("pi provider adapter", () => {
     }
   });
 
+  // -- Identity & capabilities ---------------------------------------------
+
   it("has correct identity", () => {
     const adapter = createPiProviderAdapter();
     expect(adapter.id).toBe("pi");
     expect(adapter.displayName).toBe("Pi");
   });
 
-  it("normalizes event type tokens", () => {
+  it("has correct process config", () => {
     const adapter = createPiProviderAdapter();
-    expect(adapter.normalizeEventType("turn.started")).toBe("turn/started");
-    expect(adapter.normalizeEventType("TURN/COMPLETED")).toBe("turn/completed");
-  });
-
-  it("derives status transitions from turn lifecycle events", () => {
-    const adapter = createPiProviderAdapter();
-    expect(adapter.statusForEvent("turn/started", {})).toBe("active");
-    expect(adapter.statusForEvent("turn/completed", {})).toBe("idle");
-    expect(adapter.statusForEvent("item/completed", {})).toBeUndefined();
-    expect(adapter.statusForEvent("error", {})).toBe("error");
+    expect(adapter.process.command).toBe("node");
+    expect(adapter.process.args).toHaveLength(1);
+    expect(adapter.process.args[0]).toMatch(/bridge\.js$/);
   });
 
   it("advertises trimmed capabilities", () => {
@@ -54,6 +60,172 @@ describe("pi provider adapter", () => {
       supportsServiceTier: false,
     });
   });
+
+  // -- buildCommand --------------------------------------------------------
+
+  it("buildCommand thread/start includes threadId and baseInstructions", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      threadId: "t1",
+      req: { projectId: "p1", input: [{ type: "text", text: "hello" }] },
+      context: { projectId: "p1", threadId: "t1" },
+    });
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: { threadId: "t1" },
+    });
+    expect((cmd as { params: { baseInstructions?: string } }).params.baseInstructions).toBeTruthy();
+  });
+
+  it("buildCommand thread/resume routes to provider thread id", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/resume",
+      threadId: "bb-t1",
+      providerThreadId: "pi-session-1",
+      context: { projectId: "p1", threadId: "bb-t1" },
+    });
+    expect(cmd).toMatchObject({
+      method: "thread/resume",
+      params: { threadId: "pi-session-1" },
+    });
+  });
+
+  it("buildCommand turn/start includes input", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "turn/start",
+      threadId: "t1",
+      providerThreadId: "pi-1",
+      input: [{ type: "text", text: "do it" }],
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/start",
+      params: { threadId: "pi-1" },
+    });
+  });
+
+  it("buildCommand thread/name/set returns null (unsupported)", () => {
+    const adapter = createPiProviderAdapter();
+    expect(
+      adapter.buildCommand({
+        type: "thread/name/set",
+        threadId: "t1",
+        providerThreadId: "p1",
+        title: "hi",
+      }),
+    ).toBeNull();
+  });
+
+  // -- translateEvent: turn lifecycle --------------------------------------
+
+  it("translateEvent agent_start emits turn/started", () => {
+    const adapter = createPiProviderAdapter();
+    const events = adapter.translateEvent(loadFixture("agent-start.json"));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "turn/started", turnId: "turn-1" }),
+    );
+  });
+
+  it("translateEvent agent_end emits agentMessage + turn/completed", () => {
+    const adapter = createPiProviderAdapter();
+    // Start a turn first
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({ type: "agentMessage" }),
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/completed",
+        turnId: "turn-1",
+        status: "completed",
+      }),
+    );
+  });
+
+  // -- translateEvent: streaming -------------------------------------------
+
+  it("translateEvent message_update emits agentMessage delta", () => {
+    const adapter = createPiProviderAdapter();
+    // Start a turn first
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent(loadFixture("message-update-delta.json"));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/agentMessage/delta",
+        delta: expect.any(String),
+      }),
+    );
+  });
+
+  // -- translateEvent: tool calls ------------------------------------------
+
+  it("translateEvent tool_execution_start emits item/started", () => {
+    const adapter = createPiProviderAdapter();
+    // Start a turn first
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent(loadFixture("tool-execution-start-bash.json"));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tc_01a2b3c4d5e6f7g8h9i0j1k2",
+          status: "pending",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent tool_execution_end emits item/completed", () => {
+    const adapter = createPiProviderAdapter();
+    // Start a turn first
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent(loadFixture("tool-execution-end-bash.json"));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tc_01a2b3c4d5e6f7g8h9i0j1k2",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  // -- translateEvent: multiple turns --------------------------------------
+
+  it("translateEvent increments turn IDs across turns", () => {
+    const adapter = createPiProviderAdapter();
+
+    // Turn 1
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    // Turn 2
+    const events = adapter.translateEvent(loadFixture("agent-start.json"));
+
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "turn/started", turnId: "turn-2" }),
+    );
+  });
+
+  // -- Model catalog -------------------------------------------------------
 
   it("builds a dynamic model list from the Pi catalog", () => {
     const models = buildPiAvailableModels({
@@ -103,6 +275,8 @@ describe("pi provider adapter", () => {
       "anthropic/claude-sonnet-4-20250514",
     );
   });
+
+  // -- Launch configuration ------------------------------------------------
 
   it("materializes host pi auth and settings into the provider child", async () => {
     const agentDir = join(tempHomePath, ".pi", "agent");
