@@ -28,7 +28,7 @@ import type {
 import type {
   Thread,
   ThreadEnvironmentStartReason,
-  ThreadEvent,
+  ThreadEventRow,
   ThreadWorkStatus,
   ThreadTurnInitiator,
 } from "./types.js";
@@ -185,7 +185,7 @@ export interface ThreadOrchestrator {
     mergeBaseBranch?: string,
   ): Promise<ThreadWorkStatus | undefined>;
   getMergeBaseBranchesAsync(threadId: string): Promise<string[] | undefined>;
-  getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];
+  getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEventRow[];
   getTimeline(
     threadId: string,
     limit?: number,

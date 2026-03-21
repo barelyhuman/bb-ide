@@ -6,7 +6,7 @@ import type {
   ChangedMessage,
   Project,
   Thread,
-  ThreadEvent,
+  ThreadEventRow,
   ThreadQueuedMessage,
 } from "@bb/core";
 import type {
@@ -169,8 +169,8 @@ export async function waitForThreadStatus(
 export async function listThreadEvents(
   baseUrl: string,
   threadId: string,
-): Promise<ThreadEvent[]> {
-  return readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`);
+): Promise<ThreadEventRow[]> {
+  return readJson<ThreadEventRow[]>(`${baseUrl}/api/v1/threads/${threadId}/events`);
 }
 
 export async function getEnvironmentDaemonStatus(

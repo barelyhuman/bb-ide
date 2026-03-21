@@ -4,7 +4,7 @@
  * Maps between bb's ProviderAdapter contract and the Pi coding agent bridge
  * process. Uses the Pi AI SDK for model catalog and authentication. The adapter
  * owns event translation: it takes raw `AgentSessionEvent` from the Pi SDK
- * and produces `BbProviderEvent[]`.
+ * and produces `ThreadEvent[]`.
  */
 
 import { readFile } from "node:fs/promises";
@@ -34,10 +34,10 @@ import {
   encodeProviderToolCallResponse,
 } from "./provider-tool-call-contract.js";
 import type {
-  BbProviderEvent,
-  BbProviderEventItem,
-  BbProviderEventTokenUsage,
-  BbProviderEventTokenUsageBreakdown,
+  ThreadEvent,
+  ThreadEventItem,
+  ThreadEventTokenUsage,
+  ThreadEventTokenUsageBreakdown,
   ProviderLaunchConfiguration,
   ProviderThreadContext,
 } from "@bb/core";
@@ -343,9 +343,9 @@ export function createPiProviderAdapter(
 
     // -- Unified event translator ------------------------------------------
 
-    translateEvent(event: PiEvent): BbProviderEvent[] {
+    translateEvent(event: PiEvent): ThreadEvent[] {
       const threadId = "";
-      const events: BbProviderEvent[] = [];
+      const events: ThreadEvent[] = [];
 
       switch (event.type) {
         case "agent_start": {
@@ -499,12 +499,12 @@ function extractAssistantText(
 
 function extractPiTokenUsage(
   lastAssistant: PiAssistantMessage | undefined,
-): BbProviderEventTokenUsage | undefined {
+): ThreadEventTokenUsage | undefined {
   const last = toAssistantUsageBreakdown(lastAssistant);
 
   if (!last) return undefined;
 
-  const emptyBreakdown: BbProviderEventTokenUsageBreakdown = {
+  const emptyBreakdown: ThreadEventTokenUsageBreakdown = {
     totalTokens: 0,
     inputTokens: 0,
     cachedInputTokens: 0,
@@ -521,7 +521,7 @@ function extractPiTokenUsage(
 
 function toAssistantUsageBreakdown(
   lastAssistant: PiAssistantMessage | undefined,
-): BbProviderEventTokenUsageBreakdown | undefined {
+): ThreadEventTokenUsageBreakdown | undefined {
   const typedUsage = lastAssistant?.usage;
   if (!typedUsage) return undefined;
 
@@ -548,7 +548,7 @@ function toNonNegativeNumber(value: unknown): number {
 }
 
 // ---------------------------------------------------------------------------
-// Tool call → BbProviderEventItem translation
+// Tool call → ThreadEventItem translation
 // ---------------------------------------------------------------------------
 
 const BASH_TOOLS = new Set(["Bash", "bash"]);
@@ -559,7 +559,7 @@ function translateToolCallToItem(
   callId: string,
   toolName: string,
   args: unknown,
-): BbProviderEventItem {
+): ThreadEventItem {
   if (BASH_TOOLS.has(toolName)) {
     const parsed = bashArgsSchema.safeParse(args);
     return {
@@ -607,7 +607,7 @@ function translateToolResultToItem(
   toolName: string,
   content: unknown,
   isError: boolean,
-): BbProviderEventItem {
+): ThreadEventItem {
   const outputText = extractResultText(content);
   const status = isError ? "failed" as const : "completed" as const;
 

@@ -4,7 +4,7 @@
  */
 
 import type { PromptInput } from "./shared-types.js";
-import type { ThreadEvent } from "./types.js";
+import type { ThreadEventRow } from "./types.js";
 import { decodeThreadEventData } from "./thread-event-normalization.js";
 
 /**
@@ -30,7 +30,7 @@ export function deriveThreadTitleFromInput(
  * Extract agent message text from a persisted item/completed event.
  * Returns undefined if the event is not an agent message completion.
  */
-export function outputFromThreadEvent(event: ThreadEvent): string | undefined {
+export function outputFromThreadEvent(event: ThreadEventRow): string | undefined {
   const normalizedType = event.type.toLowerCase().replaceAll(".", "/");
   if (normalizedType !== "item/completed") return undefined;
   const decoded = decodeThreadEventData(event.data);

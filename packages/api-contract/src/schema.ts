@@ -29,7 +29,7 @@ import type {
   SystemStatus,
   TellThreadRequest,
   Thread,
-  ThreadEvent,
+  ThreadEventRow,
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
@@ -260,7 +260,7 @@ export type ApiSchema = {
     >;
   };
   "/threads/:id/events": {
-    $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEvent[]>;
+    $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
   "/threads/:id/output": {
     $get: Endpoint<PathId, { output: string | null }>;

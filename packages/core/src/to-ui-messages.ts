@@ -1,13 +1,8 @@
-import type { ThreadEvent } from "./types.js";
+import type { ThreadEventRow, ProvisioningTranscriptEntry } from "./types.js";
+import type { ThreadEvent, ThreadEventItemStatus, ThreadEventFileChange, ThreadEventPlanStepStatus } from "./provider-event.js";
 import { assertNever } from "./assert-never.js";
-import { getStringField, toRecord } from "./unknown-helpers.js";
-import {
-  decodeLooseTextContent,
-  decodeThreadEventData,
-  normalizeThreadEventType,
-  resolveProviderEventMethod,
-  unwrapProviderEventPayload,
-} from "./thread-event-normalization.js";
+import { getStringField } from "./unknown-helpers.js";
+import type { PromptInput } from "./shared-types.js";
 import type {
   ToUIMessagesOptions,
   UIAssistantReasoningMessage,
@@ -18,7 +13,6 @@ import type {
   UIFileEditMessage,
   UIMessage,
   UIOperationMessage,
-  UIProvisioningSetupMetadata,
   UIProvisioningSetupStatus,
   UIProvisioningTranscriptEntry,
   UIThreadOperationMetadata,
@@ -32,80 +26,60 @@ import type {
   UIUserMessage,
 } from "./ui-message.js";
 
-function toEventData(value: unknown): unknown {
-  return unwrapProviderEventPayload(value);
+
+
+/** Row metadata that travels alongside the decoded event. */
+interface EventMeta {
+  id: string;
+  seq: number;
+  createdAt: number;
 }
 
-function toEventRecord(value: unknown): Record<string, unknown> | null {
-  return toRecord(toEventData(value));
+/**
+ * Map legacy persisted event types to their canonical ThreadEvent type strings.
+ * These appear in older DB rows and test fixtures.
+ *
+ * Note: legacy `exec_command_begin/end/output_delta` are NOT mapped here
+ * because their data shapes differ from `item/started`/`item/completed` and
+ * are handled separately in parseExecLifecycleEvent.
+ */
+const LEGACY_TYPE_MAP: Record<string, string> = {
+  // Legacy aliases
+  "turn/end": "turn/completed",
+  "account/ratelimits/updated": "thread/tokenUsage/updated",
+  "item/reasoning/summarypartadded": "item/reasoning/summaryPartAdded",
+};
+
+/**
+ * Normalize a resolved event type string to its canonical form.
+ * Handles case-insensitive lookup for legacy types, and preserves
+ * canonical types as-is.
+ */
+function normalizeEventType(raw: string): string {
+  // Fast path: already a canonical type (exact match)
+  const directMapping = LEGACY_TYPE_MAP[raw];
+  if (directMapping) return directMapping;
+
+  // Try case-insensitive lookup for legacy types
+  const lower = raw.toLowerCase();
+  const lowerMapping = LEGACY_TYPE_MAP[lower];
+  if (lowerMapping) return lowerMapping;
+
+  return raw;
 }
 
-const EVENT_TYPE_CANDIDATES_CACHE_LIMIT = 256;
-const eventTypeCandidatesCache = new Map<string, Set<string>>();
-const normalizedExpectedTypeCache = new Map<string, string>();
-
-function getEventTypeCandidates(eventType: string): Set<string> {
-  const cached = eventTypeCandidatesCache.get(eventType);
-  if (cached) {
-    return cached;
-  }
-
-  const normalized = normalizeThreadEventType(eventType);
-  const candidates = new Set<string>([normalized]);
-
-  candidates.add(normalized.replaceAll("_", "/"));
-  candidates.add(normalized.replaceAll("/", "_"));
-
-  if (eventTypeCandidatesCache.size >= EVENT_TYPE_CANDIDATES_CACHE_LIMIT) {
-    eventTypeCandidatesCache.clear();
-  }
-  eventTypeCandidatesCache.set(eventType, candidates);
-  return candidates;
-}
-
-function eventTypeMatches(eventType: string, expected: string): boolean {
-  const candidates = getEventTypeCandidates(eventType);
-  const normalizedExpected =
-    normalizedExpectedTypeCache.get(expected) ?? normalizeThreadEventType(expected);
-  if (!normalizedExpectedTypeCache.has(expected)) {
-    normalizedExpectedTypeCache.set(expected, normalizedExpected);
-  }
-  return (
-    candidates.has(normalizedExpected) ||
-    candidates.has(normalizedExpected.replaceAll("_", "/")) ||
-    candidates.has(normalizedExpected.replaceAll("/", "_"))
-  );
-}
-
-function eventTypeMatchesAny(eventType: string, expected: string[]): boolean {
-  return expected.some((candidate) => eventTypeMatches(eventType, candidate));
-}
-
-function normalizeToken(value: string): string {
-  return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
-}
-
-function getNullableStringField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | null | undefined {
-  const value = record?.[key];
-  if (value === null) return null;
-  if (typeof value === "string") return value;
-  return undefined;
-}
-
-function getNumberField(
-  record: Record<string, unknown> | null,
-  key: string,
-): number | undefined {
-  const value = record?.[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return undefined;
+/**
+ * Decode a ThreadEventRow into a typed ThreadEvent + row metadata.
+ * The row data IS the translated event fields — no envelope unwrapping needed.
+ * Legacy event types are normalized to their canonical ThreadEvent types.
+ */
+function decodeRow(row: ThreadEventRow): { event: ThreadEvent; meta: EventMeta } {
+  const data = row.data as Record<string, unknown>;
+  const type = normalizeEventType(row.type);
+  return {
+    event: { type, threadId: row.threadId, ...data } as ThreadEvent,
+    meta: { id: row.id, seq: row.seq, createdAt: row.createdAt },
+  };
 }
 
 function getFirstStringField(
@@ -119,58 +93,7 @@ function getFirstStringField(
   return undefined;
 }
 
-function getFirstNumberField(
-  record: Record<string, unknown> | null,
-  keys: readonly string[],
-): number | undefined {
-  for (const key of keys) {
-    const value = getNumberField(record, key);
-    if (value !== undefined) return value;
-  }
-  return undefined;
-}
-
-function getStringArrayField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string[] {
-  const value = record?.[key];
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is string => {
-    return typeof entry === "string" && entry.length > 0;
-  });
-}
-
-function extractText(value: unknown): string {
-  return decodeLooseTextContent(value).text;
-}
-
-function getEventType(event: ThreadEvent): string {
-  const providerMethod = resolveProviderEventMethod(event.type, event.data);
-  return normalizeThreadEventType(providerMethod);
-}
-
-function getTurnId(data: unknown): string | undefined {
-  return decodeThreadEventData(data).turnId;
-}
-
-function getItemRecord(data: unknown): Record<string, unknown> | null {
-  return decodeThreadEventData(data).item?.raw ?? null;
-}
-
-function getItemTypeToken(data: unknown): string {
-  return decodeThreadEventData(data).item?.normalizedType ?? "";
-}
-
-function getItemId(data: unknown): string | undefined {
-  return decodeThreadEventData(data).itemId;
-}
-
-function getEventPayloadRecord(data: unknown): Record<string, unknown> | null {
-  return decodeThreadEventData(data).eventPayload;
-}
-
-function parsePromptInput(input: unknown): {
+function parsePromptInput(input: PromptInput[] | undefined): {
   text: string;
   webImages: number;
   localImages: number;
@@ -179,7 +102,7 @@ function parsePromptInput(input: unknown): {
   localImagePaths: string[];
   localFilePaths: string[];
 } | null {
-  if (!Array.isArray(input)) return null;
+  if (!Array.isArray(input) || input.length === 0) return null;
 
   const textParts: string[] = [];
   let webImages = 0;
@@ -189,37 +112,31 @@ function parsePromptInput(input: unknown): {
   const localImagePaths: string[] = [];
   const localFilePaths: string[] = [];
 
-  for (const entry of input) {
-    const part = toRecord(entry);
-    if (!part) continue;
-    const typeToken =
-      typeof part.type === "string" ? normalizeToken(part.type) : "";
-
-    if (typeToken === "text") {
-      if (typeof part.text === "string" && part.text.length > 0) {
-        textParts.push(part.text);
-      }
-      continue;
-    }
-    if (typeToken === "image") {
-      webImages += 1;
-      if (typeof part.url === "string" && part.url.length > 0) {
-        imageUrls.push(part.url);
-      }
-      continue;
-    }
-    if (typeToken === "localimage") {
-      localImages += 1;
-      if (typeof part.path === "string" && part.path.length > 0) {
-        localImagePaths.push(part.path);
-      }
-      continue;
-    }
-    if (typeToken === "localfile") {
-      localFiles += 1;
-      if (typeof part.path === "string" && part.path.length > 0) {
-        localFilePaths.push(part.path);
-      }
+  for (const part of input) {
+    switch (part.type) {
+      case "text":
+        if (part.text.length > 0) {
+          textParts.push(part.text);
+        }
+        break;
+      case "image":
+        webImages += 1;
+        if (part.url.length > 0) {
+          imageUrls.push(part.url);
+        }
+        break;
+      case "localImage":
+        localImages += 1;
+        if (part.path.length > 0) {
+          localImagePaths.push(part.path);
+        }
+        break;
+      case "localFile":
+        localFiles += 1;
+        if (part.path.length > 0) {
+          localFilePaths.push(part.path);
+        }
+        break;
     }
   }
 
@@ -236,23 +153,6 @@ function parsePromptInput(input: unknown): {
     imageUrls,
     localImagePaths,
     localFilePaths,
-  };
-}
-
-function toThreadOperationMetadata(
-  payload: Record<string, unknown> | null,
-): UIThreadOperationMetadata | null {
-  const operation = getStringField(payload, "operation");
-  if (!operation) return null;
-
-  const status = getStringField(payload, "status") ?? "unknown";
-  const operationId = getStringField(payload, "operationId");
-  const rawMetadata = toRecord(payload?.metadata);
-  return {
-    operation,
-    status,
-    ...(operationId ? { operationId } : {}),
-    ...(rawMetadata ? { metadata: rawMetadata } : {}),
   };
 }
 
@@ -443,98 +343,60 @@ function messageId(threadId: string, kind: string, key: string): string {
 }
 
 function parseUserFromItemEvent(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  meta: EventMeta,
 ): UIUserMessage | null {
-  if (!eventTypeMatchesAny(eventType, ["item/started", "item/completed"])) {
+  if (decoded.type !== "item/started" && decoded.type !== "item/completed") {
     return null;
   }
-  const decoded = decodeThreadEventData(event.data);
-  if (decoded.item?.normalizedType !== "usermessage") return null;
+  if (decoded.item.type !== "userMessage") return null;
 
-  const textParts: string[] = [];
-  let webImages = 0;
-  let localImages = 0;
-  let localFiles = 0;
-  const imageUrls: string[] = [];
-  const localImagePaths: string[] = [];
-  const localFilePaths: string[] = [];
+  const parsedContent = parsePromptInput(decoded.item.content as PromptInput[]);
+  if (!parsedContent) return null;
 
-  for (const part of decoded.item.content) {
-    switch (part.type) {
-      case "text":
-        textParts.push(part.text);
-        break;
-      case "image":
-        webImages += 1;
-        if (part.imageUrl) imageUrls.push(part.imageUrl);
-        break;
-      case "local_image":
-        localImages += 1;
-        if (part.path) localImagePaths.push(part.path);
-        break;
-      case "local_file":
-        localFiles += 1;
-        if (part.path) localFilePaths.push(part.path);
-        break;
-      case "unknown":
-        break;
-      default:
-        assertNever(part);
-    }
-  }
-
-  const text = textParts.join("");
-  if (!text && webImages === 0 && localImages === 0 && localFiles === 0) {
-    return null;
-  }
-
-  const turnId = decoded.turnId;
-  const itemId = decoded.itemId ?? `${event.seq}`;
+  const { turnId } = decoded;
+  const itemId = decoded.item.id ?? `${meta.seq}`;
 
   return {
     kind: "user",
-    id: messageId(event.threadId, "user", itemId),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
+    id: messageId(decoded.threadId, "user", itemId),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
-    text,
+    text: parsedContent.text,
     attachments: {
-      webImages,
-      localImages,
-      localFiles,
-      ...(imageUrls.length > 0 ? { imageUrls } : {}),
-      ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
-      ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
+      webImages: parsedContent.webImages,
+      localImages: parsedContent.localImages,
+      localFiles: parsedContent.localFiles,
+      ...(parsedContent.imageUrls.length > 0 ? { imageUrls: parsedContent.imageUrls } : {}),
+      ...(parsedContent.localImagePaths.length > 0 ? { localImagePaths: parsedContent.localImagePaths } : {}),
+      ...(parsedContent.localFilePaths.length > 0 ? { localFilePaths: parsedContent.localFilePaths } : {}),
     },
   };
 }
 
 function parseUserFromClientStart(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  meta: EventMeta,
   options?: ToUIMessagesOptions,
 ): UIUserMessage | null {
   if (
-    !eventTypeMatchesAny(eventType, [
-      "client/thread/start",
-      "client/turn/requested",
-      "client/turn/start",
-    ])
+    decoded.type !== "client/thread/start" &&
+    decoded.type !== "client/turn/requested" &&
+    decoded.type !== "client/turn/start"
   ) {
     return null;
   }
 
-  const payload = toEventRecord(event.data);
   if (
-    getStringField(payload, "initiator") === "system" &&
+    decoded.initiator === "system" &&
     !options?.includeInternalSystemMessages
   ) {
     return null;
   }
-  const parsedInput = parsePromptInput(payload?.input);
+  const parsedInput = parsePromptInput(decoded.input);
   if (!parsedInput) return null;
   if (!shouldRenderThreadStartInput(options?.threadStatus)) {
     return null;
@@ -542,11 +404,11 @@ function parseUserFromClientStart(
 
   return {
     kind: "user",
-    id: messageId(event.threadId, "user-seed", `${event.seq}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
+    id: messageId(decoded.threadId, "user-seed", `${meta.seq}`),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
     text: parsedInput.text,
     attachments: {
       webImages: parsedInput.webImages,
@@ -566,27 +428,25 @@ function parseUserFromClientStart(
 }
 
 function parseManagerUserMessage(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  meta: EventMeta,
 ): UIAssistantTextMessage | null {
-  if (!eventTypeMatches(eventType, "system/manager/user_message")) {
+  if (decoded.type !== "system/manager/user_message") {
     return null;
   }
 
-  const payload = toEventRecord(event.data);
-  const text = getStringField(payload, "text");
+  const { text, turnId } = decoded;
   if (!text) {
     return null;
   }
-  const turnId = getStringField(payload, "turnId");
 
   return {
     kind: "assistant-text",
-    id: messageId(event.threadId, "assistant", `manager:${event.seq}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
+    id: messageId(decoded.threadId, "assistant", `manager:${meta.seq}`),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
     text,
     status: "completed",
@@ -594,84 +454,63 @@ function parseManagerUserMessage(
 }
 
 function parseAssistantDeltaText(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
 ): string | null {
-  if (!eventTypeMatches(eventType, "item/agentmessage/delta")) {
+  if (decoded.type !== "item/agentMessage/delta") {
     return null;
   }
 
-  const params = toEventRecord(event.data);
-  const text = extractText(params?.delta ?? params?.text ?? params?.content);
-  return text.length > 0 ? text : null;
+  return decoded.delta.length > 0 ? decoded.delta : null;
 }
 
 function parseAssistantFinalText(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
 ): string | null {
-  if (
-    eventTypeMatches(eventType, "item/completed") &&
-    getItemTypeToken(event.data) === "agentmessage"
-  ) {
-    const text = decodeThreadEventData(event.data).item?.text.text ?? "";
-    return text.length > 0 ? text : null;
-  }
-
-  return null;
+  if (decoded.type !== "item/completed") return null;
+  if (decoded.item.type !== "agentMessage") return null;
+  return decoded.item.text.length > 0 ? decoded.item.text : null;
 }
 
 function parseReasoningDeltaText(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
 ): string | null {
-  if (!eventTypeMatchesAny(eventType, [
-    "item/reasoning/summarytextdelta",
-    "item/reasoning/textdelta",
-  ])) {
+  if (
+    decoded.type !== "item/reasoning/summaryTextDelta" &&
+    decoded.type !== "item/reasoning/textDelta"
+  ) {
     return null;
   }
 
-  const params = toEventRecord(event.data);
-  const text = extractText(params?.delta ?? params?.text ?? params?.content);
-  return text.length > 0 ? text : null;
+  return decoded.delta.length > 0 ? decoded.delta : null;
 }
 
 function parseReasoningFinalText(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
 ): string | null {
-  if (
-    eventTypeMatches(eventType, "item/completed") &&
-    getItemTypeToken(event.data) === "reasoning"
-  ) {
-    const item = decodeThreadEventData(event.data).item;
-    const text = item?.summaryText.text || item?.text.text || "";
-    return text.length > 0 ? text : null;
-  }
-
-  return null;
+  if (decoded.type !== "item/completed") return null;
+  if (decoded.item.type !== "reasoning") return null;
+  const summaryText = decoded.item.summary.join("");
+  const contentText = decoded.item.content.join("");
+  const text = summaryText || contentText;
+  return text.length > 0 ? text : null;
 }
 
-function toToolStatus(value: unknown): UIToolCallMessage["status"] | undefined {
-  if (typeof value !== "string") return undefined;
-  const token = normalizeToken(value);
-  if (
-    token.includes("declin") ||
-    token.includes("cancel") ||
-    token.includes("abort") ||
-    token.includes("interrupt")
-  ) {
-    return "interrupted";
+function itemStatusToToolStatus(status: ThreadEventItemStatus): UIToolCallMessage["status"] {
+  switch (status) {
+    case "pending": return "pending";
+    case "completed": return "completed";
+    case "failed": return "error";
+    case "interrupted": return "interrupted";
   }
-  if (token.includes("error") || token.includes("fail")) return "error";
-  if (token.includes("complete") || token.includes("success") || token === "done") {
-    return "completed";
+}
+
+function itemStatusToFileEditStatus(status: ThreadEventItemStatus): UIFileEditMessage["status"] {
+  switch (status) {
+    case "pending": return "pending";
+    case "completed": return "completed";
+    case "failed": return "error";
+    case "interrupted": return "interrupted";
   }
-  if (token.includes("progress") || token.includes("run") || token === "pending") {
-    return "pending";
-  }
-  return undefined;
 }
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
@@ -708,66 +547,6 @@ function extractShellCommandFromString(value: string): string | undefined {
   return unwrapQuotedShellArg(commandArg.trim());
 }
 
-function toProvisioningSetupStatus(
-  value: unknown,
-): UIProvisioningSetupStatus | undefined {
-  if (typeof value !== "string") return undefined;
-  const token = normalizeToken(value);
-  switch (token) {
-    case "started":
-      return "started";
-    case "running":
-    case "progress":
-    case "inprogress":
-      return "running";
-    case "completed":
-    case "complete":
-    case "success":
-      return "completed";
-    case "failed":
-    case "error":
-      return "failed";
-    default:
-      return undefined;
-  }
-}
-
-function toProvisioningProgressPhase(
-  value: unknown,
-): "prepare_environment" | "start_provider_session" | undefined {
-  if (typeof value !== "string") return undefined;
-  const token = normalizeToken(value);
-  switch (token) {
-    case "prepareenvironment":
-      return "prepare_environment";
-    case "startprovidersession":
-      return "start_provider_session";
-    default:
-      return undefined;
-  }
-}
-
-function toProvisioningProgressStatus(
-  value: unknown,
-): "started" | "completed" | "failed" | undefined {
-  if (typeof value !== "string") return undefined;
-  const token = normalizeToken(value);
-  switch (token) {
-    case "started":
-    case "running":
-    case "inprogress":
-      return "started";
-    case "completed":
-    case "complete":
-    case "success":
-      return "completed";
-    case "failed":
-    case "error":
-      return "failed";
-    default:
-      return undefined;
-  }
-}
 
 function provisioningProgressTitle(
   phase: "prepare_environment" | "start_provider_session" | undefined,
@@ -802,34 +581,23 @@ function provisioningProgressTitle(
 }
 
 function readProvisioningTranscript(
-  payload: Record<string, unknown> | null,
+  transcript: ProvisioningTranscriptEntry[] | undefined,
 ): UIProvisioningTranscriptEntry[] | undefined {
-  const transcript = payload?.transcript;
-  if (!Array.isArray(transcript)) return undefined;
+  if (!Array.isArray(transcript) || transcript.length === 0) return undefined;
 
-  const entries = transcript.flatMap((entry) => {
-    const record = toRecord(entry);
-    const key = getStringField(record, "key")?.trim();
-    const text = getStringField(record, "text")?.trim();
-    if (!key || !text) {
-      return [];
-    }
+  const entries: UIProvisioningTranscriptEntry[] = [];
+  for (const entry of transcript) {
+    const key = entry.key?.trim();
+    const text = entry.text?.trim();
+    if (!key || !text) continue;
 
-    const startedAtValue = record?.startedAt;
-    const startedAt =
-      typeof startedAtValue === "number" && Number.isFinite(startedAtValue)
-        ? startedAtValue
-        : undefined;
-    const metadata = toRecord(record?.metadata) ?? undefined;
-    return [
-      {
-        key,
-        text,
-        ...(startedAt !== undefined ? { startedAt } : {}),
-        ...(metadata ? { metadata } : {}),
-      },
-    ];
-  });
+    entries.push({
+      key,
+      text,
+      ...(entry.startedAt !== undefined ? { startedAt: entry.startedAt } : {}),
+      ...(entry.metadata ? { metadata: entry.metadata } : {}),
+    });
+  }
 
   return entries.length > 0 ? entries : undefined;
 }
@@ -842,144 +610,16 @@ function getProvisioningProgressFromTranscript(
 } {
   const progressEntry = transcript?.find((entry) => entry.key.startsWith("phase:"));
   if (!progressEntry) return {};
-  const metadata = progressEntry.metadata ?? null;
+  const metadata = progressEntry.metadata as Record<string, unknown> | undefined ?? null;
+  const phase = metadata?.phase;
+  const status = metadata?.status;
 
   return {
-    phase: toProvisioningProgressPhase(getStringField(metadata, "phase")),
-    status: toProvisioningProgressStatus(getStringField(metadata, "status")),
+    phase: phase === "prepare_environment" || phase === "start_provider_session" ? phase : undefined,
+    status: status === "started" || status === "completed" || status === "failed" ? status : undefined,
   };
 }
 
-function extractShellCommand(value: unknown): string | undefined {
-  if (typeof value === "string") return extractShellCommandFromString(value);
-
-  if (Array.isArray(value)) {
-    const parts = value.filter((entry): entry is string => typeof entry === "string");
-    if (parts.length === 0) return undefined;
-
-    if (
-      parts.length >= 3 &&
-      (parts[1] === "-lc" || parts[1] === "-c") &&
-      parts[0] &&
-      isKnownShellWrapper(parts[0])
-    ) {
-      return parts[2] || undefined;
-    }
-
-    return parts.join(" ");
-  }
-
-  return undefined;
-}
-
-function normalizeParsedIntentType(value: string | undefined): UIToolParsedIntent["type"] {
-  const token = normalizeToken(value ?? "");
-  if (token === "read") return "read";
-  if (token === "search") return "search";
-  if (token === "listfiles" || token === "listfile" || token === "ls") {
-    return "list_files";
-  }
-  return "unknown";
-}
-
-function toParsedIntent(
-  intent: Record<string, unknown>,
-  commandField: "cmd" | "command",
-): UIToolParsedIntent | null {
-  const type = normalizeParsedIntentType(getStringField(intent, "type"));
-  const command = getStringField(intent, commandField);
-  if (!command) return null;
-
-  if (type === "read") {
-    const name = getStringField(intent, "name");
-    if (!name) return null;
-    return {
-      type: "read",
-      cmd: command,
-      name,
-      path: getNullableStringField(intent, "path") ?? null,
-    };
-  }
-
-  if (type === "list_files") {
-    return {
-      type: "list_files",
-      cmd: command,
-      path: getNullableStringField(intent, "path") ?? null,
-    };
-  }
-
-  if (type === "search") {
-    return {
-      type: "search",
-      cmd: command,
-      query: getNullableStringField(intent, "query") ?? null,
-      path: getNullableStringField(intent, "path") ?? null,
-    };
-  }
-
-  return {
-    type: "unknown",
-    cmd: command,
-  };
-}
-
-function parseParsedIntentArray(
-  value: unknown,
-  commandField: "cmd" | "command",
-): UIToolParsedIntent[] {
-  if (!Array.isArray(value)) return [];
-
-  const intents: UIToolParsedIntent[] = [];
-  for (const entry of value) {
-    const record = toRecord(entry);
-    if (!record) continue;
-    const parsed = toParsedIntent(record, commandField);
-    if (parsed) intents.push(parsed);
-  }
-  return intents;
-}
-
-function parseParsedIntentsFromRecord(
-  record: Record<string, unknown> | null,
-): UIToolParsedIntent[] {
-  if (!record) return [];
-
-  const modernSnake = parseParsedIntentArray(record.parsed_cmd, "cmd");
-  if (modernSnake.length > 0) return modernSnake;
-
-  const modernCamel = parseParsedIntentArray(record.parsedCmd, "cmd");
-  if (modernCamel.length > 0) return modernCamel;
-
-  const legacyCamel = parseParsedIntentArray(record.commandActions, "command");
-  if (legacyCamel.length > 0) return legacyCamel;
-
-  return [];
-}
-
-function durationToMs(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, Math.round(value));
-  }
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return undefined;
-  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m)$/i);
-  if (!match) return undefined;
-  const amount = Number.parseFloat(match[1] ?? "");
-  const unit = (match[2] ?? "").toLowerCase();
-  if (!Number.isFinite(amount)) return undefined;
-  switch (unit) {
-    case "ms":
-      return Math.max(0, Math.round(amount));
-    case "s":
-      return Math.max(0, Math.round(amount * 1_000));
-    case "m":
-      return Math.max(0, Math.round(amount * 60_000));
-    default:
-      return undefined;
-  }
-}
 
 function durationToString(durationMs: number | undefined): string | undefined {
   if (durationMs === undefined) return undefined;
@@ -1009,37 +649,19 @@ function toExecDefaultStatus(kind: "begin" | "end"): UIToolCallMessage["status"]
 }
 
 function parseExecLifecycleEvent(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  _meta: EventMeta,
+  _originalEvent: ThreadEventRow,
 ): ExecLifecycleEvent | null {
-  if (eventTypeMatches(eventType, "item/commandexecution/outputdelta")) {
-    const payload = getEventPayloadRecord(event.data);
-    const callId = getFirstStringField(payload, ["itemId", "item_id", "call_id"]);
+  if (decoded.type === "item/commandExecution/outputDelta") {
+    const callId = decoded.itemId;
     if (!callId) return null;
-    const delta = getFirstStringField(payload, ["delta"]);
     return {
       kind: "output",
       call: {
         callId,
         parsedCmd: [],
-        output: delta,
-        status: "pending",
-      },
-      appendOutput: true,
-    };
-  }
-
-  if (eventTypeMatches(eventType, "exec_command_output_delta")) {
-    const payload = getEventPayloadRecord(event.data);
-    const callId = getFirstStringField(payload, ["call_id"]);
-    if (!callId) return null;
-    const delta = getFirstStringField(payload, ["delta"]);
-    return {
-      kind: "output",
-      call: {
-        callId,
-        parsedCmd: [],
-        output: delta,
+        output: decoded.delta,
         status: "pending",
       },
       appendOutput: true,
@@ -1047,84 +669,31 @@ function parseExecLifecycleEvent(
   }
 
   if (
-    eventTypeMatchesAny(eventType, ["item/started", "item/completed"]) &&
-    getItemTypeToken(event.data) === "commandexecution"
+    (decoded.type === "item/started" || decoded.type === "item/completed") &&
+    decoded.item.type === "commandExecution"
   ) {
-    const item = getItemRecord(event.data);
-    const callId = getFirstStringField(item, ["id"]);
+    const callId = decoded.item.id;
     if (!callId) return null;
 
-    const kind = eventTypeMatches(eventType, "item/started") ? "begin" : "end";
-    const exitCode = getFirstNumberField(item, ["exitCode", "exit_code"]);
+    const kind = decoded.type === "item/started" ? "begin" : "end";
+    const exitCode = decoded.item.exitCode;
     const status =
       exitCode !== undefined && exitCode !== 0
         ? "error"
-        : (toToolStatus(getFirstStringField(item, ["status"])) ??
+        : (itemStatusToToolStatus(decoded.item.status) ??
             toExecDefaultStatus(kind));
 
     return {
       kind,
       call: {
         callId,
-        command: extractShellCommand(item?.command),
-        cwd: getFirstStringField(item, ["cwd"]),
-        parsedCmd: parseParsedIntentsFromRecord(item),
-        source: getFirstStringField(item, ["source"]),
-        output: getFirstStringField(item, ["aggregatedOutput", "aggregated_output"]),
+        command: extractShellCommandFromString(decoded.item.command),
+        cwd: decoded.item.cwd,
+        parsedCmd: [],
+        output: decoded.item.aggregatedOutput,
         exitCode,
-        durationMs: durationToMs(
-          getFirstStringField(item, ["duration"]) ??
-            getFirstNumberField(item, ["durationMs"]),
-        ),
-        duration: durationToString(
-          durationToMs(
-            getFirstStringField(item, ["duration"]) ??
-              getFirstNumberField(item, ["durationMs"]),
-          ),
-        ),
-        status,
-      },
-    };
-  }
-
-  if (
-    eventTypeMatchesAny(eventType, ["exec_command_begin", "exec_command_end"])
-  ) {
-    const payload = getEventPayloadRecord(event.data);
-    const callId = getFirstStringField(payload, ["call_id"]);
-    if (!callId) return null;
-
-    const kind = eventTypeMatches(eventType, "exec_command_begin") ? "begin" : "end";
-    const exitCode = getFirstNumberField(payload, ["exit_code"]);
-    const status =
-      exitCode !== undefined && exitCode !== 0
-        ? "error"
-        : (toToolStatus(getFirstStringField(payload, ["status"])) ??
-            toExecDefaultStatus(kind));
-
-    return {
-      kind,
-      call: {
-        callId,
-        command: extractShellCommand(payload?.command),
-        cwd: getFirstStringField(payload, ["cwd"]),
-        parsedCmd: parseParsedIntentsFromRecord(payload),
-        source: getFirstStringField(payload, ["source"]),
-        output: getFirstStringField(payload, [
-          "formatted_output",
-          "aggregated_output",
-        ]),
-        exitCode,
-        durationMs: durationToMs(
-          getFirstStringField(payload, ["duration"]) ??
-            getFirstNumberField(payload, ["duration_ms"]),
-        ),
-        duration: durationToString(
-          durationToMs(
-            getFirstStringField(payload, ["duration"]) ??
-              getFirstNumberField(payload, ["duration_ms"]),
-          ),
-        ),
+        durationMs: decoded.item.durationMs,
+        duration: durationToString(decoded.item.durationMs),
         status,
       },
     };
@@ -1203,95 +772,45 @@ function formatToolCallCommand(toolName: string, args: Record<string, unknown> |
 }
 
 function parseToolCallLifecycleEvent(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  _meta: EventMeta,
+  _originalEvent: ThreadEventRow,
 ): ExecLifecycleEvent | null {
-  // Handle custom_tool_call / custom_tool_call_output item types
-  if (
-    eventTypeMatchesAny(eventType, ["item/started", "item/completed"])
-  ) {
-    const itemToken = getItemTypeToken(event.data);
-    const item = getItemRecord(event.data);
+  if (decoded.type === "item/started" || decoded.type === "item/completed") {
+    if (decoded.item.type !== "toolCall") return null;
 
-    // custom_tool_call (Codex or bridge-emitted)
-    if (itemToken === "customtoolcall") {
-      const callId = getFirstStringField(item, ["call_id", "id"]);
-      if (!callId) return null;
-      const toolName = getFirstStringField(item, ["name"]) ?? "tool";
-      let parsedArgs: Record<string, unknown> | null = null;
-      const inputStr = getFirstStringField(item, ["input"]);
-      if (inputStr) {
-        try { parsedArgs = JSON.parse(inputStr) as Record<string, unknown>; } catch { /* ignore */ }
-      }
-      if (!parsedArgs) {
-        parsedArgs = toRecord(item?.input) ?? toRecord(item?.arguments);
-      }
-
-      return {
-        kind: "begin",
-        call: {
-          callId,
-          toolName,
-          command: formatToolCallCommand(toolName, parsedArgs),
-          parsedCmd: toolNameToParsedIntents(toolName, parsedArgs),
-          status: "pending",
-        },
-      };
+    const callId = decoded.item.id;
+    if (!callId) return null;
+    const toolName = decoded.item.tool ?? "tool";
+    const serverPrefix = decoded.item.server ? `${decoded.item.server}:` : "";
+    const fullToolName = `${serverPrefix}${toolName}`;
+    let parsedArgs: Record<string, unknown> | null = null;
+    const rawArgs = decoded.item.arguments;
+    if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
+      parsedArgs = rawArgs as Record<string, unknown>;
     }
 
-    // custom_tool_call_output
-    if (itemToken === "customtoolcalloutput") {
-      const callId = getFirstStringField(item, ["call_id", "id"]);
-      if (!callId) return null;
-      const output = getFirstStringField(item, ["output"]);
-      return {
-        kind: "end",
-        call: {
-          callId,
-          parsedCmd: [],
-          output,
-          status: "completed",
-        },
-      };
-    }
+    const kind = decoded.type === "item/started" ? "begin" : "end";
+    const status = kind === "end"
+      ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
+      : "pending";
+    const result = decoded.item.result;
+    const output = typeof result === "string" ? result : (result !== undefined ? JSON.stringify(result) : undefined);
+    const errorField = decoded.item.error;
 
-    // function_call (Codex responses API)
-    if (itemToken === "functioncall") {
-      const callId = getFirstStringField(item, ["call_id", "id"]);
-      if (!callId) return null;
-      const toolName = getFirstStringField(item, ["name"]) ?? "tool";
-      let parsedArgs: Record<string, unknown> | null = null;
-      const argsStr = getFirstStringField(item, ["arguments"]);
-      if (argsStr) {
-        try { parsedArgs = JSON.parse(argsStr) as Record<string, unknown>; } catch { /* ignore */ }
-      }
-      return {
-        kind: "begin",
-        call: {
-          callId,
-          toolName,
-          command: formatToolCallCommand(toolName, parsedArgs),
-          parsedCmd: toolNameToParsedIntents(toolName, parsedArgs),
-          status: "pending",
-        },
-      };
-    }
-
-    // function_call_output
-    if (itemToken === "functioncalloutput") {
-      const callId = getFirstStringField(item, ["call_id", "id"]);
-      if (!callId) return null;
-      const output = getFirstStringField(item, ["output"]);
-      return {
-        kind: "end",
-        call: {
-          callId,
-          parsedCmd: [],
-          output,
-          status: "completed",
-        },
-      };
-    }
+    return {
+      kind,
+      call: {
+        callId,
+        toolName: fullToolName,
+        command: formatToolCallCommand(fullToolName, parsedArgs),
+        parsedCmd: toolNameToParsedIntents(fullToolName, parsedArgs),
+        output: kind === "end" ? (output ?? errorField) : undefined,
+        durationMs: decoded.item.durationMs,
+        duration: durationToString(decoded.item.durationMs),
+        status,
+      },
+    };
   }
 
   return null;
@@ -1304,103 +823,35 @@ interface WebSearchLifecycleEvent {
   action?: string;
 }
 
-function parseWebSearchAction(value: unknown): string | undefined {
-  if (typeof value === "string" && value.length > 0) return value;
-  const record = toRecord(value);
-  // Open provider/runtime set: preserve provider-defined action types.
-  return getStringField(record, "type");
-}
 
 function parseWebSearchLifecycleEvent(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
 ): WebSearchLifecycleEvent | null {
   if (
-    eventTypeMatchesAny(eventType, ["item/started", "item/completed"]) &&
-    getItemTypeToken(event.data) === "websearch"
+    (decoded.type === "item/started" || decoded.type === "item/completed") &&
+    decoded.item.type === "webSearch"
   ) {
-    const item = getItemRecord(event.data);
-    const callId = getFirstStringField(item, ["id"]);
+    const callId = decoded.item.id;
     if (!callId) return null;
 
     return {
-      kind: eventTypeMatches(eventType, "item/started") ? "begin" : "end",
+      kind: decoded.type === "item/started" ? "begin" : "end",
       callId,
-      query: getFirstStringField(item, ["query"]),
-      action: parseWebSearchAction(item?.action),
+      query: decoded.item.query,
+      action: decoded.item.action,
     };
   }
 
   return null;
 }
 
-function toFileEditStatus(value: unknown): UIFileEditMessage["status"] | undefined {
-  if (typeof value !== "string") return undefined;
-  const token = normalizeToken(value);
-  if (
-    token.includes("declin") ||
-    token.includes("cancel") ||
-    token.includes("abort") ||
-    token.includes("interrupt")
-  ) {
-    return "interrupted";
-  }
-  if (token.includes("error") || token.includes("fail")) return "error";
-  if (token.includes("complete") || token.includes("success")) return "completed";
-  if (token.includes("progress") || token.includes("pending")) return "pending";
-  return undefined;
-}
-
-function normalizeFileChangeKind(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const token = normalizeToken(value);
-  if (token.includes("add") || token.includes("create") || token.includes("new")) {
-    return "add";
-  }
-  if (token.includes("delete") || token.includes("remove")) {
-    return "delete";
-  }
-  if (
-    token.includes("update") ||
-    token.includes("edit") ||
-    token.includes("modify") ||
-    token.includes("rename") ||
-    token.includes("move")
-  ) {
-    return "update";
-  }
-  return undefined;
-}
-
-function parseFileChangesFromArray(changes: unknown): UIFileEditChange[] {
-  if (!Array.isArray(changes)) return [];
-  const parsed: UIFileEditChange[] = [];
-
-  for (const entry of changes) {
-    const change = toRecord(entry);
-    if (!change) continue;
-    const path = getStringField(change, "path");
-    if (!path) continue;
-
-    const kindRecord = toRecord(change.kind);
-    const kind =
-      normalizeFileChangeKind(getStringField(kindRecord, "type")) ??
-      normalizeFileChangeKind(getStringField(change, "type"));
-    parsed.push({
-      path,
-      kind,
-      movePath:
-        getStringField(kindRecord, "move_path") ??
-        getStringField(kindRecord, "movePath") ??
-        null,
-      diff:
-        getStringField(change, "diff") ??
-        getStringField(change, "unified_diff") ??
-        getStringField(change, "content"),
-    });
-  }
-
-  return parsed;
+function mapFileChanges(changes: ThreadEventFileChange[]): UIFileEditChange[] {
+  return changes.map((change) => ({
+    path: change.path,
+    kind: change.kind,
+    movePath: change.movePath ?? null,
+    diff: change.diff,
+  }));
 }
 
 interface FileEditPartial extends Partial<UIFileEditMessage> {
@@ -1409,43 +860,35 @@ interface FileEditPartial extends Partial<UIFileEditMessage> {
 }
 
 function parseFileEditFromItemEvent(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
 ): FileEditPartial | null {
-  if (eventTypeMatches(eventType, "item/filechange/outputdelta")) {
-    const payload = getEventPayloadRecord(event.data);
-    const callId = getFirstStringField(payload, ["itemId", "item_id"]);
+  if (decoded.type === "item/fileChange/outputDelta") {
+    const callId = decoded.itemId;
     if (!callId) return null;
 
-    const delta = getFirstStringField(payload, ["delta"]) ?? "";
     return {
       callId,
-      stdout: delta,
+      stdout: decoded.delta,
       appendStdout: true,
       status: "pending",
     };
   }
 
-  if (!eventTypeMatchesAny(eventType, ["item/started", "item/completed"])) {
+  if (decoded.type !== "item/started" && decoded.type !== "item/completed") {
     return null;
   }
-  if (getItemTypeToken(event.data) !== "filechange") return null;
+  if (decoded.item.type !== "fileChange") return null;
 
-  const item = getItemRecord(event.data);
-  const callId = getFirstStringField(item, ["id"]);
+  const callId = decoded.item.id;
   if (!callId) return null;
 
-  const defaultStatus = eventType === "item/completed" ? "completed" : "pending";
+  const defaultStatus = decoded.type === "item/completed" ? "completed" : "pending";
+  const changes = mapFileChanges(decoded.item.changes);
+
   return {
     callId,
-    changes: parseFileChangesFromArray(item?.changes),
-    stdout: getFirstStringField(item, [
-      "stdout",
-      "aggregatedOutput",
-      "aggregated_output",
-    ]),
-    stderr: getFirstStringField(item, ["stderr"]),
-    status: toFileEditStatus(getFirstStringField(item, ["status"])) ?? defaultStatus,
+    changes,
+    status: itemStatusToFileEditStatus(decoded.item.status) ?? defaultStatus,
   };
 }
 
@@ -1455,30 +898,32 @@ interface CompactionLifecycleEvent {
   detail?: string;
 }
 
-function getCompactionKey(event: ThreadEvent): string {
-  return getTurnId(event.data) ?? getItemId(event.data) ?? `seq-${event.seq}`;
+function getCompactionKey(decoded: ThreadEvent, meta: EventMeta): string {
+  const turnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
+  if (decoded.type === "item/started" || decoded.type === "item/completed") {
+    return turnId ?? decoded.item.id ?? `seq-${meta.seq}`;
+  }
+  return turnId ?? `seq-${meta.seq}`;
 }
 
 function parseCompactionLifecycleEvent(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  meta: EventMeta,
 ): CompactionLifecycleEvent | null {
   if (
-    eventTypeMatchesAny(eventType, ["item/started", "item/completed"]) &&
-    getItemTypeToken(event.data) === "contextcompaction"
+    (decoded.type === "item/started" || decoded.type === "item/completed") &&
+    decoded.item.type === "contextCompaction"
   ) {
     return {
-      key: getCompactionKey(event),
-      kind: eventTypeMatches(eventType, "item/started") ? "begin" : "end",
-      detail: extractText(event.data) || undefined,
+      key: getCompactionKey(decoded, meta),
+      kind: decoded.type === "item/started" ? "begin" : "end",
     };
   }
 
-  if (eventTypeMatches(eventType, "thread/compacted")) {
+  if (decoded.type === "thread/compacted") {
     return {
-      key: getCompactionKey(event),
+      key: getCompactionKey(decoded, meta),
       kind: "end",
-      detail: extractText(event.data) || undefined,
     };
   }
 
@@ -1486,34 +931,33 @@ function parseCompactionLifecycleEvent(
 }
 
 function parseOperationMessage(
-  event: ThreadEvent,
-  eventType: string,
+  decoded: ThreadEvent,
+  meta: EventMeta,
   options?: { includeOptionalOperations?: boolean },
 ): UIOperationMessage | null {
-  function formatPlanStepStatus(status: string): string {
-    switch (normalizeToken(status)) {
-      case "inprogress":
+  function formatPlanStepStatus(status: ThreadEventPlanStepStatus | undefined): string {
+    switch (status) {
+      case "active":
         return "In progress";
       case "pending":
         return "Pending";
       case "completed":
         return "Completed";
+      case "failed":
+        return "Failed";
       default:
-        // Open provider/runtime values: keep unknown statuses readable without dropping them.
-        return status;
+        return "";
     }
   }
 
-  if (eventTypeMatches(eventType, "turn/plan/updated")) {
-    const payload = toEventRecord(event.data);
-    const plan = Array.isArray(payload?.plan) ? payload.plan : [];
-    const explanation = getStringField(payload, "explanation");
-    const steps = plan
+  const eventType: string = decoded.type;
+  const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
+
+  if (decoded.type === "turn/plan/updated") {
+    const steps = decoded.plan
       .map((entry) => {
-        const step = toRecord(entry);
-        if (!step) return null;
-        const status = getStringField(step, "status");
-        const text = getStringField(step, "step");
+        const status = entry.status;
+        const text = entry.step;
         if (!text) return null;
         return status
           ? `• [${formatPlanStepStatus(status)}] ${text}`
@@ -1522,19 +966,19 @@ function parseOperationMessage(
       .filter((value): value is string => Boolean(value));
 
     const detail =
-      explanation && steps.length > 0
-        ? `${explanation}\n${steps.join("\n")}`
-        : explanation ?? (steps.length > 0 ? steps.join("\n") : undefined);
+      decoded.explanation && steps.length > 0
+        ? `${decoded.explanation}\n${steps.join("\n")}`
+        : decoded.explanation ?? (steps.length > 0 ? steps.join("\n") : undefined);
 
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `plan:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `plan:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: decoded.turnId,
       opType: "plan-updated",
       title: "Plan updated",
       detail,
@@ -1542,110 +986,72 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "item/mcptoolcall/progress")) {
-    const payload = toEventRecord(event.data);
-    const detail =
-      getStringField(payload, "message") ??
-      extractText(payload?.detail);
+  if (decoded.type === "item/mcpToolCall/progress") {
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `mcp-progress:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `mcp-progress:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: decoded.turnId,
       opType: "mcp-progress",
       title: "MCP tool progress",
-      detail: detail || undefined,
+      detail: decoded.message || undefined,
       status: "pending",
     };
   }
 
-  if (eventTypeMatchesAny(eventType, ["deprecationnotice", "deprecation_notice"])) {
-    const payload = toEventRecord(event.data);
-    const detail =
-      getStringField(payload, "summary") ??
-      getStringField(payload, "details") ??
-      extractText(payload);
-
+  if (decoded.type === "warning") {
+    const category = decoded.category ?? "general";
+    const detail = decoded.summary ?? decoded.details;
+    const isDeprecation = category === "deprecation";
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `deprecation:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
-      opType: "deprecation",
-      title: "Deprecation notice",
+      id: messageId(decoded.threadId, "op", `${isDeprecation ? "deprecation" : "warning"}:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
+      opType: isDeprecation ? "deprecation" : "warning",
+      title: isDeprecation ? "Deprecation notice" : category === "config" ? "Configuration warning" : "Warning",
       detail: detail || undefined,
       status: "completed",
     };
   }
 
-  if (
-    eventTypeMatchesAny(eventType, ["configwarning", "config_warning"]) ||
-    eventTypeMatchesAny(eventType, [
-      "windows/worldwritablewarning",
-      "windows_worldwritable_warning",
-    ])
-  ) {
-    const payload = toEventRecord(event.data);
-    const detail =
-      getStringField(payload, "summary") ??
-      getStringField(payload, "details") ??
-      extractText(payload);
-
+  if (decoded.type === "system/thread/interrupted") {
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `warning:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
-      opType: "warning",
-      title: "Configuration warning",
-      detail: detail || undefined,
-      status: "completed",
-    };
-  }
-
-  if (eventTypeMatches(eventType, "system/thread/interrupted")) {
-    const payload = toEventRecord(event.data);
-    return {
-      kind: "operation",
-      id: messageId(event.threadId, "op", `thread-interrupted:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `thread-interrupted:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "thread-interrupted",
       title: "Stopped by user",
-      detail: getStringField(payload, "message") || undefined,
+      detail: decoded.message || undefined,
       status: "interrupted",
     };
   }
 
-  if (eventTypeMatches(eventType, "system/provisioning/started")) {
-    const payload = toEventRecord(event.data);
-    const attachedEnvironmentId = getStringField(payload, "attachedEnvironmentId");
-    const transcript = readProvisioningTranscript(payload);
+  if (decoded.type === "system/provisioning/started") {
+    const { attachedEnvironmentId } = decoded;
+    const transcript = readProvisioningTranscript(decoded.transcript);
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `provisioning-started:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `provisioning-started:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "provisioning-started",
       title: "Provisioning started",
       status: "pending",
@@ -1659,25 +1065,22 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/provisioning/progress")) {
-    const payload = toEventRecord(event.data);
-    const transcript = readProvisioningTranscript(payload);
-    const phase =
-      toProvisioningProgressPhase(getStringField(payload, "phase")) ??
-      getProvisioningProgressFromTranscript(transcript).phase;
-    const status =
-      toProvisioningProgressStatus(getStringField(payload, "status")) ??
-      getProvisioningProgressFromTranscript(transcript).status;
+  if (decoded.type === "system/provisioning/progress") {
+    const transcript = readProvisioningTranscript(decoded.transcript);
+    const phase: "prepare_environment" | "start_provider_session" | undefined =
+      decoded.phase ?? getProvisioningProgressFromTranscript(transcript).phase;
+    const status: "started" | "completed" | "failed" | undefined =
+      decoded.status ?? getProvisioningProgressFromTranscript(transcript).status;
 
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `provisioning-progress:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `provisioning-progress:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "provisioning-progress",
       title: provisioningProgressTitle(phase, status),
       status: provisioningProgressOperationStatus(status),
@@ -1691,11 +1094,9 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/provisioning/env_setup")) {
-    const payload = toEventRecord(event.data);
-    const setupPayload = toRecord(payload?.setup);
-    const rawStatus = getStringField(setupPayload, "status");
-    const status = toProvisioningSetupStatus(rawStatus);
+  if (decoded.type === "system/provisioning/env_setup") {
+    const { setup, workspaceRoot } = decoded;
+    const status = setup.status as UIProvisioningSetupStatus | undefined;
     const title = (() => {
       switch (status) {
         case "started":
@@ -1707,37 +1108,31 @@ function parseOperationMessage(
         case "failed":
           return "Environment setup failed";
         default:
-          // Persisted payloads are open_external at read-time; tolerate unknown statuses.
           return "Environment setup update";
       }
     })();
-    const scriptPath = getStringField(setupPayload, "scriptPath");
-    const workspaceRoot = getStringField(payload, "workspaceRoot");
-    const timeoutMs = getNumberField(setupPayload, "timeoutMs");
-    const durationMs = getNumberField(setupPayload, "durationMs");
-    const output = getStringField(setupPayload, "output");
     const setupMetadata =
       status
         ? {
             status,
-            startedAt: event.createdAt,
-            ...(scriptPath ? { scriptPath } : {}),
-            ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-            ...(durationMs !== undefined ? { durationMs } : {}),
-            ...(output ? { output } : {}),
+            startedAt: meta.createdAt,
+            ...(setup.scriptPath ? { scriptPath: setup.scriptPath } : {}),
+            ...(setup.timeoutMs !== undefined ? { timeoutMs: setup.timeoutMs } : {}),
+            ...(setup.durationMs !== undefined ? { durationMs: setup.durationMs } : {}),
+            ...(setup.output ? { output: setup.output } : {}),
           }
         : undefined;
-    const transcript = readProvisioningTranscript(payload);
+    const transcript = readProvisioningTranscript(decoded.transcript);
 
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `provisioning-env-setup:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `provisioning-env-setup:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "provisioning-env-setup",
       title,
       status: provisioningSetupOperationStatus(status),
@@ -1753,25 +1148,24 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/thread-title/updated")) {
-    const payload = toEventRecord(event.data);
+  if (decoded.type === "system/thread-title/updated") {
     // Avoid duplicate rows when the underlying provider thread/name/updated
     // event is also present in the timeline.
-    if (eventTypeMatches(getStringField(payload, "providerMethod") ?? "", "thread/name/updated")) {
+    if ((decoded.providerMethod ?? "") === "thread/name/updated") {
       return null;
     }
-    const title = getStringField(payload, "title");
+    const { title } = decoded;
     if (!title) return null;
-    const previousTitle = getStringField(payload, "previousTitle");
+    const { previousTitle } = decoded;
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `thread-title-updated:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `thread-title-updated:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "thread-title-updated",
       title: "Title updated",
       detail: previousTitle
@@ -1781,49 +1175,50 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "thread/name/updated")) {
-    const payload = toEventRecord(event.data);
-    const title = getFirstStringField(payload, ["threadName", "thread_name"]);
-    if (!title) return null;
-    const previousTitle = getFirstStringField(payload, [
-      "previousThreadName",
-      "previous_thread_name",
-    ]);
+  if (decoded.type === "thread/name/updated") {
+    const { threadName } = decoded;
+    if (!threadName) return null;
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `thread-title-updated:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `thread-title-updated:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "thread-title-updated",
       title: "Title updated",
-      detail: previousTitle ? `${previousTitle} → ${title}` : title,
+      detail: threadName,
       status: "completed",
     };
   }
 
-  if (eventTypeMatches(eventType, "system/operation")) {
-    const payload = toEventRecord(event.data);
-    const threadOperation = toThreadOperationMetadata(payload);
+  if (decoded.type === "system/operation") {
+    const threadOperation: UIThreadOperationMetadata = {
+      operation: decoded.operation,
+      status: decoded.status,
+      ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
+      ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
+    };
     const title = threadOperationTitle(threadOperation);
 
+    // Extra runtime fields (e.g. "branch") may be spread into decoded by decodeRow
+    const extraBranch = (decoded as unknown as Record<string, unknown>).branch;
     const detailParts = [
-      getStringField(payload, "message"),
-      getStringField(payload, "branch") ? `Branch: ${getStringField(payload, "branch")}` : undefined,
+      decoded.message,
+      typeof extraBranch === "string" ? `Branch: ${extraBranch}` : undefined,
     ].filter((value): value is string => Boolean(value));
 
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `operation:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `operation:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "operation",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
@@ -1832,14 +1227,10 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/worktree/commit")) {
-    const payload = toEventRecord(event.data);
-    const status = getStringField(payload, "status");
+  if (decoded.type === "system/worktree/commit") {
+    const { status } = decoded;
     const title = status === "committed" ? "Committed changes" : "No commit created";
-    const commitMessage = getStringField(payload, "message");
-    const commitSha = getStringField(payload, "commitSha");
-    const commitSubject = getStringField(payload, "commitSubject");
-    const includeUnstaged = payload?.includeUnstaged;
+    const { message: commitMessage, commitSha, commitSubject, includeUnstaged } = decoded;
     const worktreeCommit: UIWorktreeCommitMetadata | undefined =
       status === "committed" || status === "noop"
         ? {
@@ -1856,13 +1247,13 @@ function parseOperationMessage(
     ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `worktree-commit:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `worktree-commit:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "worktree-commit",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
@@ -1871,15 +1262,9 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/worktree/squash_merge")) {
-    const payload = toEventRecord(event.data);
-    const status = getStringField(payload, "status");
-    const squashMessage = getStringField(payload, "message");
-    const commitSha = getStringField(payload, "commitSha");
-    const commitSubject = getStringField(payload, "commitSubject");
-    const mergeBaseBranch = getStringField(payload, "mergeBaseBranch");
-    const committed = payload?.committed;
-    const conflictFiles = payload?.conflictFiles;
+  if (decoded.type === "system/worktree/squash_merge") {
+    const { status } = decoded;
+    const { message: squashMessage, commitSha, commitSubject, mergeBaseBranch, committed, conflictFiles } = decoded;
     const normalizedConflictFiles = Array.isArray(conflictFiles)
       ? conflictFiles
           .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -1912,13 +1297,13 @@ function parseOperationMessage(
     ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `worktree-squash-merge:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `worktree-squash-merge:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "worktree-squash-merge",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
@@ -1927,22 +1312,21 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/provisioning/fallback")) {
-    const payload = toEventRecord(event.data);
-    const fallbackEnvironmentId = getStringField(payload, "fallbackEnvironmentId");
-    const transcript = readProvisioningTranscript(payload);
+  if (decoded.type === "system/provisioning/fallback") {
+    const { fallbackEnvironmentId, detail } = decoded;
+    const transcript = readProvisioningTranscript(decoded.transcript);
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `provisioning-fallback:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `provisioning-fallback:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "provisioning-fallback",
       title: "Provisioning fallback",
-      detail: getStringField(payload, "detail") || undefined,
+      detail: detail || undefined,
       status: "pending",
       provisioning:
         fallbackEnvironmentId || transcript
@@ -1953,20 +1337,18 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/provisioning/completed")) {
-    const payload = toEventRecord(event.data);
-    const attachedEnvironmentId = getStringField(payload, "attachedEnvironmentId");
-    const workspaceRoot = getStringField(payload, "workspaceRoot");
-    const transcript = readProvisioningTranscript(payload);
+  if (decoded.type === "system/provisioning/completed") {
+    const { attachedEnvironmentId, workspaceRoot } = decoded;
+    const transcript = readProvisioningTranscript(decoded.transcript);
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `provisioning-completed:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `provisioning-completed:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "provisioning-completed",
       title: "Provisioning ready",
       status: "completed",
@@ -1983,21 +1365,20 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/provisioning/cleanup_failed")) {
-    const payload = toEventRecord(event.data);
+  if (decoded.type === "system/provisioning/cleanup_failed") {
     const detailParts = [
-      getStringField(payload, "message"),
-      getStringField(payload, "detail"),
+      decoded.message,
+      decoded.detail,
     ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `provisioning-cleanup-failed:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `provisioning-cleanup-failed:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "provisioning-cleanup-failed",
       title: "Provisioning cleanup failed",
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
@@ -2005,120 +1386,130 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "thread/compacted")) {
+  if (decoded.type === "thread/compacted") {
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `compaction:${getCompactionKey(event)}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `compaction:${getCompactionKey(decoded, meta)}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      turnId: eventTurnId,
       opType: "compaction",
       title: "Context compacted",
-      detail: extractText(event.data) || undefined,
       status: "completed",
     };
   }
 
   if (
     options?.includeOptionalOperations &&
-    eventTypeMatches(eventType, "turn/diff/updated")
+    decoded.type === "turn/diff/updated"
   ) {
-    const params = toEventRecord(event.data);
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `turn-diff:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      turnId: getTurnId(event.data),
+      id: messageId(decoded.threadId, "op", `turn-diff:${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      turnId: decoded.turnId,
       opType: "turn-diff",
       title: "Turn diff updated",
-      detail: getStringField(params, "diff") ?? getStringField(params, "unifiedDiff"),
+      detail: decoded.diff,
     };
   }
 
   return null;
 }
 
-function parseErrorMessage(event: ThreadEvent, eventType: string): UIErrorMessage | null {
+function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): UIErrorMessage | null {
+  const eventType = decoded.type;
   if (!eventType.includes("error")) return null;
 
-  const payload = toEventRecord(event.data);
-  const error = toRecord(payload?.error);
-  const message =
-    getStringField(payload, "message") ??
-    getStringField(error, "message") ??
-    extractText(event.data);
-  const detail =
-    getStringField(payload, "detail") ??
-    getStringField(payload, "hint") ??
-    getStringField(error, "detail");
-  const formattedMessage =
-    detail && detail !== message ? `${message} - ${detail}` : message;
+  const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
 
-  return {
-    kind: "error",
-    id: messageId(event.threadId, "error", `${event.seq}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    turnId: getTurnId(event.data),
-    rawType: eventType,
-    message: formattedMessage || "Error event",
-  };
+  // Handle typed error and system/error events
+  if (decoded.type === "error") {
+    const { message, detail } = decoded;
+    const formattedMessage =
+      detail && detail !== message ? `${message} - ${detail}` : message;
+    return {
+      kind: "error",
+      id: messageId(decoded.threadId, "error", `${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      turnId: eventTurnId,
+      rawType: eventType,
+      message: formattedMessage || "Error event",
+    };
+  }
+
+  if (decoded.type === "system/error") {
+    const { message, detail } = decoded;
+    const formattedMessage =
+      detail && detail !== message ? `${message} - ${detail}` : message;
+    return {
+      kind: "error",
+      id: messageId(decoded.threadId, "error", `${meta.seq}`),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      turnId: eventTurnId,
+      rawType: eventType,
+      message: formattedMessage || "Error event",
+    };
+  }
+
+  // Fallback for unrecognized error event types (e.g., turn/completed with error status)
+  return null;
 }
 
 function isIgnoredNoiseType(eventType: string): boolean {
-  const ignored = [
-    "thread/started",
-    "account/ratelimits/updated",
-    "thread/tokenusage/updated",
-    "item/reasoning/summarypartadded",
-  ];
-
-  return ignored.some((type) => eventTypeMatches(eventType, type));
+  return (
+    eventType === "thread/started" ||
+    eventType === "thread/tokenUsage/updated" ||
+    eventType === "thread/identity" ||
+    eventType === "item/reasoning/summaryPartAdded"
+  );
 }
 
 function isDuplicateEventType(eventType: string): boolean {
-  const duplicates = [
-    "turn/started",
-    "turn/completed",
-    "item/commandexecution/outputdelta",
-    "item/filechange/outputdelta",
-    "turn/diff/updated",
-  ];
-
-  return duplicates.some((type) => eventTypeMatches(eventType, type));
+  return (
+    eventType === "turn/started" ||
+    eventType === "turn/completed" ||
+    eventType === "item/commandExecution/outputDelta" ||
+    eventType === "item/fileChange/outputDelta" ||
+    eventType === "turn/diff/updated"
+  );
 }
 
-function isIgnoredItemStartEvent(event: ThreadEvent, eventType: string): boolean {
-  if (!eventTypeMatches(eventType, "item/started")) return false;
-
-  const itemTypeToken = getItemTypeToken(event.data);
-  return itemTypeToken === "reasoning" || itemTypeToken === "agentmessage";
+function isIgnoredItemStartEvent(decoded: ThreadEvent): boolean {
+  if (decoded.type !== "item/started") return false;
+  return decoded.item.type === "reasoning" || decoded.item.type === "agentMessage";
 }
 
 function appendDebugEvent(
   out: UIMessage[],
-  event: ThreadEvent,
-  eventType: string,
+  originalEvent: ThreadEventRow,
+  decoded: ThreadEvent,
+  meta: EventMeta,
   reason: UIDebugRawEventMessage["reason"],
 ): void {
+  const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
   out.push({
     kind: "debug/raw-event",
-    id: messageId(event.threadId, "debug", `${event.seq}:${eventType}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    turnId: getTurnId(event.data),
-    rawType: eventType,
-    rawEvent: event,
+    id: messageId(decoded.threadId, "debug", `${meta.seq}:${decoded.type}`),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    turnId: eventTurnId,
+    rawType: decoded.type,
+    rawEvent: originalEvent,
     reason,
   });
 }
@@ -2217,12 +1608,14 @@ function chooseParsedIntents(
 function upsertRunningExecCall(
   existing: RunningExecCall | undefined,
   incoming: ExecCallPartial,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
 ): RunningExecCall {
   if (!existing) {
     return {
       callId: incoming.callId,
-      threadId: event.threadId,
+      threadId,
       toolName: incoming.toolName,
       command: incoming.command,
       cwd: incoming.cwd,
@@ -2233,11 +1626,11 @@ function upsertRunningExecCall(
       duration: incoming.duration,
       durationMs: incoming.durationMs,
       status: incoming.status ?? "pending",
-      turnId: getTurnId(event.data),
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
+      turnId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
     };
   }
 
@@ -2247,7 +1640,7 @@ function upsertRunningExecCall(
     (!existing.command || incoming.command.length > existing.command.length)
       ? incoming.command
       : existing.command;
-  existing.threadId = event.threadId;
+  existing.threadId = threadId;
   if (incoming.cwd && !existing.cwd) existing.cwd = incoming.cwd;
   existing.parsedCmd = chooseParsedIntents(existing.parsedCmd, incoming.parsedCmd);
   if (incoming.source && !existing.source) existing.source = incoming.source;
@@ -2263,11 +1656,10 @@ function upsertRunningExecCall(
     existing.durationMs = incoming.durationMs;
   }
   existing.status = mergeCallStatus(existing.status, incoming.status) ?? "pending";
-  existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
-  existing.createdAt = Math.max(existing.createdAt, event.createdAt);
-  if (!existing.turnId) {
-    const turnId = getTurnId(event.data);
-    if (turnId) existing.turnId = turnId;
+  existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
+  existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
+  if (!existing.turnId && turnId) {
+    existing.turnId = turnId;
   }
 
   return existing;
@@ -2449,11 +1841,13 @@ function createExploringMessage(
 
 function onExecBegin(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   incoming: ExecCallPartial,
 ): void {
   const existingRunning = state.toolActivity.runningCallsById.get(incoming.callId);
-  const call = upsertRunningExecCall(existingRunning, incoming, event);
+  const call = upsertRunningExecCall(existingRunning, incoming, meta, threadId, turnId);
   state.toolActivity.runningCallsById.set(call.callId, call);
 
   const existingInActive = findCallInActiveCell(state.toolActivity.activeCell, call.callId);
@@ -2499,7 +1893,7 @@ function onExecBegin(
 
 function onExecOutput(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
   incoming: ExecCallPartial,
   appendOutput?: boolean,
 ): void {
@@ -2510,8 +1904,8 @@ function onExecOutput(
     } else {
       mergeCallSummary(existingRunning, incoming, { appendOutput });
     }
-    existingRunning.sourceSeqEnd = Math.max(existingRunning.sourceSeqEnd, event.seq);
-    existingRunning.createdAt = Math.max(existingRunning.createdAt, event.createdAt);
+    existingRunning.sourceSeqEnd = Math.max(existingRunning.sourceSeqEnd, meta.seq);
+    existingRunning.createdAt = Math.max(existingRunning.createdAt, meta.createdAt);
   }
 
   const activeCall = findCallInActiveCell(state.toolActivity.activeCell, incoming.callId);
@@ -2520,20 +1914,20 @@ function onExecOutput(
     if (state.toolActivity.activeCell?.kind === "tool-exploring") {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
-        event.seq,
+        meta.seq,
       );
       state.toolActivity.activeCell.createdAt = Math.max(
         state.toolActivity.activeCell.createdAt,
-        event.createdAt,
+        meta.createdAt,
       );
     } else if (state.toolActivity.activeCell?.kind === "tool-call") {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
-        event.seq,
+        meta.seq,
       );
       state.toolActivity.activeCell.createdAt = Math.max(
         state.toolActivity.activeCell.createdAt,
-        event.createdAt,
+        meta.createdAt,
       );
     }
   }
@@ -2542,8 +1936,8 @@ function onExecOutput(
   if (!historyMatch) return;
 
   mergeCallSummary(historyMatch.call, incoming, { appendOutput });
-  historyMatch.cell.sourceSeqEnd = Math.max(historyMatch.cell.sourceSeqEnd, event.seq);
-  historyMatch.cell.createdAt = Math.max(historyMatch.cell.createdAt, event.createdAt);
+  historyMatch.cell.sourceSeqEnd = Math.max(historyMatch.cell.sourceSeqEnd, meta.seq);
+  historyMatch.cell.createdAt = Math.max(historyMatch.cell.createdAt, meta.createdAt);
 
   if (historyMatch.cell.kind === "tool-exploring") {
     syncExploringStatus(historyMatch.cell);
@@ -2556,11 +1950,13 @@ function onExecOutput(
 
 function onExecEnd(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   incoming: ExecCallPartial,
 ): void {
   const running = state.toolActivity.runningCallsById.get(incoming.callId);
-  const merged = upsertRunningExecCall(running, incoming, event);
+  const merged = upsertRunningExecCall(running, incoming, meta, threadId, turnId);
   state.toolActivity.runningCallsById.delete(incoming.callId);
 
   const active = state.toolActivity.activeCell;
@@ -2637,7 +2033,9 @@ function onExecEnd(
 
 function onWebSearchBegin(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   payload: WebSearchLifecycleEvent,
 ): void {
   if (state.toolActivity.finalizedWebSearchCallIds.has(payload.callId)) {
@@ -2646,23 +2044,22 @@ function onWebSearchBegin(
 
   const active = state.toolActivity.activeCell;
   if (active?.kind === "web-search" && active.callId === payload.callId) {
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, event.seq);
-    active.createdAt = Math.max(active.createdAt, event.createdAt);
+    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, meta.seq);
+    active.createdAt = Math.max(active.createdAt, meta.createdAt);
     if (payload.query) active.query = payload.query;
     if (payload.action) active.action = payload.action;
     return;
   }
 
   flushActiveToolCell(state);
-  const turnId = getTurnId(event.data);
   state.toolActivity.activeCell = {
     kind: "web-search",
-    id: messageId(event.threadId, "web-search", payload.callId),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    startedAt: event.createdAt,
+    id: messageId(threadId, "web-search", payload.callId),
+    threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
     callId: payload.callId,
     query: payload.query,
@@ -2673,7 +2070,9 @@ function onWebSearchBegin(
 
 function onWebSearchEnd(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   payload: WebSearchLifecycleEvent,
 ): void {
   if (state.toolActivity.finalizedWebSearchCallIds.has(payload.callId)) {
@@ -2682,8 +2081,8 @@ function onWebSearchEnd(
 
   const active = state.toolActivity.activeCell;
   if (active?.kind === "web-search" && active.callId === payload.callId) {
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, event.seq);
-    active.createdAt = Math.max(active.createdAt, event.createdAt);
+    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, meta.seq);
+    active.createdAt = Math.max(active.createdAt, meta.createdAt);
     if (payload.query) active.query = payload.query;
     if (payload.action) active.action = payload.action;
     active.status = "completed";
@@ -2694,15 +2093,14 @@ function onWebSearchEnd(
 
   flushActiveToolCell(state);
 
-  const turnId = getTurnId(event.data);
   state.messages.push({
     kind: "web-search",
-    id: messageId(event.threadId, "web-search", `${payload.callId}:${event.seq}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    startedAt: event.createdAt,
+    id: messageId(threadId, "web-search", `${payload.callId}:${meta.seq}`),
+    threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
     callId: payload.callId,
     query: payload.query,
@@ -2742,21 +2140,22 @@ function mergeFileChanges(
 
 function upsertFileEdit(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   partial: FileEditPartial,
 ): void {
   const existing = state.fileEditsByCallId.get(partial.callId);
-  const turnId = getTurnId(event.data);
 
   if (!existing) {
     const message: UIFileEditMessage = {
       kind: "file-edit",
-      id: messageId(event.threadId, "file-edit", partial.callId),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
+      id: messageId(threadId, "file-edit", partial.callId),
+      threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
       ...(turnId ? { turnId } : {}),
       callId: partial.callId,
       changes: partial.changes ?? [],
@@ -2769,8 +2168,8 @@ function upsertFileEdit(
     return;
   }
 
-  existing.sourceSeqEnd = event.seq;
-  existing.createdAt = event.createdAt;
+  existing.sourceSeqEnd = meta.seq;
+  existing.createdAt = meta.createdAt;
 
   if (!existing.turnId && turnId) existing.turnId = turnId;
 
@@ -2803,7 +2202,9 @@ function upsertFileEdit(
 
 function onCompactionBegin(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   payload: CompactionLifecycleEvent,
 ): void {
   if (state.finalizedCompactionKeys.has(payload.key)) {
@@ -2812,23 +2213,22 @@ function onCompactionBegin(
 
   const existing = state.openCompactionsByKey.get(payload.key);
   if (existing) {
-    existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
-    existing.createdAt = Math.max(existing.createdAt, event.createdAt);
+    existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
+    existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
     existing.status = "pending";
     existing.title = "Context compacting...";
     existing.detail = payload.detail ?? existing.detail;
     return;
   }
 
-  const turnId = getTurnId(event.data);
   const message: UIOperationMessage = {
     kind: "operation",
-    id: messageId(event.threadId, "op", `compaction:${payload.key}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    startedAt: event.createdAt,
+    id: messageId(threadId, "op", `compaction:${payload.key}`),
+    threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
     opType: "compaction",
     title: "Context compacting...",
@@ -2841,13 +2241,15 @@ function onCompactionBegin(
 
 function onCompactionEnd(
   state: ProjectionState,
-  event: ThreadEvent,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
   payload: CompactionLifecycleEvent,
 ): void {
   const existing = state.openCompactionsByKey.get(payload.key);
   if (existing) {
-    existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
-    existing.createdAt = Math.max(existing.createdAt, event.createdAt);
+    existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
+    existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
     existing.status = "completed";
     existing.title = "Context compacted";
     existing.detail = payload.detail ?? existing.detail;
@@ -2860,15 +2262,14 @@ function onCompactionEnd(
     return;
   }
 
-  const turnId = getTurnId(event.data);
   state.messages.push({
     kind: "operation",
-    id: messageId(event.threadId, "op", `compaction:${payload.key}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    startedAt: event.createdAt,
+    id: messageId(threadId, "op", `compaction:${payload.key}`),
+    threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
     opType: "compaction",
     title: "Context compacted",
@@ -2964,9 +2365,8 @@ function finalizeOperationMessage(
 
 function isTerminalAssistantFlushEvent(eventType: string): boolean {
   return (
-    eventTypeMatches(eventType, "system/thread/interrupted") ||
-    eventTypeMatches(eventType, "turn/completed") ||
-    eventTypeMatches(eventType, "turn/end")
+    eventType === "system/thread/interrupted" ||
+    eventType === "turn/completed"
   );
 }
 
@@ -3083,7 +2483,7 @@ function finalizePendingMessages(
 }
 
 export function toUIMessages(
-  events: ThreadEvent[] | undefined,
+  events: ThreadEventRow[] | undefined,
   options?: ToUIMessagesOptions,
 ): UIMessage[] {
   if (!events || events.length === 0) return [];
@@ -3107,35 +2507,32 @@ export function toUIMessages(
   const pendingProviderUserSignatureCounts = new Map<string, number>();
 
   for (const originalEvent of orderedEvents) {
-    const eventType = getEventType(originalEvent);
-    const event = originalEvent;
+    const { event: decoded, meta } = decodeRow(originalEvent);
+    const eventType = decoded.type;
 
-    if (eventTypeMatchesAny(eventType, ["turn/completed", "turn/end"])) {
+    if (eventType === "turn/completed") {
       pendingClientStartUserSignatureCounts.clear();
       pendingClientThreadStartUserSignatureCounts.clear();
       pendingClientRequestedUserSignatureCounts.clear();
       pendingProviderUserSignatureCounts.clear();
     }
 
-    const eventTurnId = getTurnId(event.data);
+    const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
 
     if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
       flushBufferedAssistantMessages(state);
     }
 
     if (
-      eventTypeMatchesAny(eventType, [
-        "client/thread/start",
-        "client/turn/requested",
-        "client/turn/start",
-      ])
+      decoded.type === "client/thread/start" ||
+      decoded.type === "client/turn/requested" ||
+      decoded.type === "client/turn/start"
     ) {
-      const startPayload = toEventRecord(event.data);
       if (
-        getStringField(startPayload, "initiator") === "system" &&
+        decoded.initiator === "system" &&
         !includeInternalSystemMessages
       ) {
-        const parsedInput = parsePromptInput(startPayload?.input);
+        const parsedInput = parsePromptInput(decoded.input);
         if (parsedInput && shouldRenderThreadStartInput(options?.threadStatus)) {
           const signature = userMessageSignature({
             text: parsedInput.text,
@@ -3143,10 +2540,10 @@ export function toUIMessages(
             localImages: parsedInput.localImages,
             localFiles: parsedInput.localFiles,
           });
-          const startSource = getStringField(startPayload, "source");
-          const isClientThreadStart = eventTypeMatches(eventType, "client/thread/start");
-          const isClientTurnRequested = eventTypeMatches(eventType, "client/turn/requested");
-          const isClientTurnStart = eventTypeMatches(eventType, "client/turn/start");
+          const startSource = decoded.source;
+          const isClientThreadStart = eventType === "client/thread/start";
+          const isClientTurnRequested = eventType === "client/turn/requested";
+          const isClientTurnStart = eventType === "client/turn/start";
           const pendingThreadStartCount =
             pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
           const pendingRequestedCount =
@@ -3192,8 +2589,8 @@ export function toUIMessages(
     }
 
     const userFromClientThreadStart = parseUserFromClientStart(
-      event,
-      eventType,
+      decoded,
+      meta,
       options,
     );
     if (userFromClientThreadStart) {
@@ -3203,11 +2600,10 @@ export function toUIMessages(
         localImages: userFromClientThreadStart.attachments?.localImages ?? 0,
         localFiles: userFromClientThreadStart.attachments?.localFiles ?? 0,
       });
-      const startPayload = toEventRecord(event.data);
-      const startSource = getStringField(startPayload, "source");
-      const isClientThreadStart = eventTypeMatches(eventType, "client/thread/start");
-      const isClientTurnRequested = eventTypeMatches(eventType, "client/turn/requested");
-      const isClientTurnStart = eventTypeMatches(eventType, "client/turn/start");
+      const startSource = (decoded.type === "client/thread/start" || decoded.type === "client/turn/requested" || decoded.type === "client/turn/start") ? decoded.source : undefined;
+      const isClientThreadStart = eventType === "client/thread/start";
+      const isClientTurnRequested = eventType === "client/turn/requested";
+      const isClientTurnStart = eventType === "client/turn/start";
       const pendingThreadStartCount =
         pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
       if (isClientTurnStart && startSource === "spawn" && pendingThreadStartCount > 0) {
@@ -3256,14 +2652,14 @@ export function toUIMessages(
       continue;
     }
 
-    const managerUserMessage = parseManagerUserMessage(event, eventType);
+    const managerUserMessage = parseManagerUserMessage(decoded, meta);
     if (managerUserMessage) {
       flushToolActivityBeforeNonToolMessage(state);
       state.messages.push(managerUserMessage);
       continue;
     }
 
-    const userMessage = parseUserFromItemEvent(event, eventType);
+    const userMessage = parseUserFromItemEvent(decoded, meta);
     if (userMessage) {
       const signature = userMessageSignature({
         text: userMessage.text,
@@ -3309,12 +2705,20 @@ export function toUIMessages(
       continue;
     }
 
+    // Extract itemId from decoded for delta/final event grouping
+    const decodedItemId = (decoded.type === "item/agentMessage/delta" ||
+      decoded.type === "item/reasoning/summaryTextDelta" ||
+      decoded.type === "item/reasoning/textDelta")
+      ? decoded.itemId
+      : (decoded.type === "item/completed" && (decoded.item.type === "agentMessage" || decoded.item.type === "reasoning"))
+        ? decoded.item.id
+        : undefined;
+
     const assistantDelta = options?.threadType === "manager"
       ? null
-      : parseAssistantDeltaText(event, eventType);
+      : parseAssistantDeltaText(decoded);
     if (assistantDelta) {
-      const itemId = getItemId(event.data);
-      const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      const turnKey = decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`;
       if (state.finalizedAssistantTurnKeys.has(turnKey)) {
         continue;
       }
@@ -3326,19 +2730,19 @@ export function toUIMessages(
       if (!existing) {
         existing = {
           kind: "assistant-text",
-          id: messageId(event.threadId, "assistant", turnKey),
-          threadId: event.threadId,
-          sourceSeqStart: event.seq,
-          sourceSeqEnd: event.seq,
-          createdAt: event.createdAt,
+          id: messageId(decoded.threadId, "assistant", turnKey),
+          threadId: decoded.threadId,
+          sourceSeqStart: meta.seq,
+          sourceSeqEnd: meta.seq,
+          createdAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           text: assistantDelta,
           status: "streaming",
         };
         state.openAssistantByTurn.set(turnKey, existing);
       } else {
-        existing.sourceSeqEnd = event.seq;
-        existing.createdAt = event.createdAt;
+        existing.sourceSeqEnd = meta.seq;
+        existing.createdAt = meta.createdAt;
         existing.text += assistantDelta;
       }
       continue;
@@ -3346,18 +2750,17 @@ export function toUIMessages(
 
     const assistantFinal = options?.threadType === "manager"
       ? null
-      : parseAssistantFinalText(event, eventType);
+      : parseAssistantFinalText(decoded);
     if (assistantFinal) {
-      const itemId = getItemId(event.data);
-      const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      const turnKey = decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`;
       if (state.finalizedAssistantTurnKeys.has(turnKey)) {
         continue;
       }
       const existing = state.openAssistantByTurn.get(turnKey);
 
       if (existing) {
-        existing.sourceSeqEnd = event.seq;
-        existing.createdAt = event.createdAt;
+        existing.sourceSeqEnd = meta.seq;
+        existing.createdAt = meta.createdAt;
         existing.text = assistantFinal;
         existing.status = "completed";
         state.openAssistantByTurn.delete(turnKey);
@@ -3368,11 +2771,11 @@ export function toUIMessages(
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push({
           kind: "assistant-text",
-          id: messageId(event.threadId, "assistant", `${turnKey}:${event.seq}`),
-          threadId: event.threadId,
-          sourceSeqStart: event.seq,
-          sourceSeqEnd: event.seq,
-          createdAt: event.createdAt,
+          id: messageId(decoded.threadId, "assistant", `${turnKey}:${meta.seq}`),
+          threadId: decoded.threadId,
+          sourceSeqStart: meta.seq,
+          sourceSeqEnd: meta.seq,
+          createdAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           text: assistantFinal,
           status: "completed",
@@ -3384,10 +2787,9 @@ export function toUIMessages(
 
     const reasoningDelta = options?.threadType === "manager"
       ? null
-      : parseReasoningDeltaText(event, eventType);
+      : parseReasoningDeltaText(decoded);
     if (reasoningDelta) {
-      const itemId = getItemId(event.data);
-      const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      const turnKey = decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`;
       if (state.finalizedReasoningTurnKeys.has(turnKey)) {
         continue;
       }
@@ -3396,11 +2798,11 @@ export function toUIMessages(
       if (!existing) {
         existing = {
           kind: "assistant-reasoning",
-          id: messageId(event.threadId, "reasoning", turnKey),
-          threadId: event.threadId,
-          sourceSeqStart: event.seq,
-          sourceSeqEnd: event.seq,
-          createdAt: event.createdAt,
+          id: messageId(decoded.threadId, "reasoning", turnKey),
+          threadId: decoded.threadId,
+          sourceSeqStart: meta.seq,
+          sourceSeqEnd: meta.seq,
+          createdAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           text: reasoningDelta,
           status: "streaming",
@@ -3409,8 +2811,8 @@ export function toUIMessages(
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push(existing);
       } else {
-        existing.sourceSeqEnd = event.seq;
-        existing.createdAt = event.createdAt;
+        existing.sourceSeqEnd = meta.seq;
+        existing.createdAt = meta.createdAt;
         existing.text += reasoningDelta;
       }
       continue;
@@ -3418,15 +2820,14 @@ export function toUIMessages(
 
     const reasoningFinal = options?.threadType === "manager"
       ? null
-      : parseReasoningFinalText(event, eventType);
+      : parseReasoningFinalText(decoded);
     if (reasoningFinal) {
-      const itemId = getItemId(event.data);
-      const turnKey = itemId ?? eventTurnId ?? `seq-${event.seq}`;
+      const turnKey = decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`;
       const existing = state.openReasoningByTurn.get(turnKey);
 
       if (existing) {
-        existing.sourceSeqEnd = event.seq;
-        existing.createdAt = event.createdAt;
+        existing.sourceSeqEnd = meta.seq;
+        existing.createdAt = meta.createdAt;
         existing.text = reasoningFinal;
         existing.status = "completed";
         state.openReasoningByTurn.delete(turnKey);
@@ -3435,11 +2836,11 @@ export function toUIMessages(
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push({
           kind: "assistant-reasoning",
-          id: messageId(event.threadId, "reasoning", `${turnKey}:${event.seq}`),
-          threadId: event.threadId,
-          sourceSeqStart: event.seq,
-          sourceSeqEnd: event.seq,
-          createdAt: event.createdAt,
+          id: messageId(decoded.threadId, "reasoning", `${turnKey}:${meta.seq}`),
+          threadId: decoded.threadId,
+          sourceSeqStart: meta.seq,
+          sourceSeqEnd: meta.seq,
+          createdAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           text: reasoningFinal,
           status: "completed",
@@ -3449,57 +2850,57 @@ export function toUIMessages(
       continue;
     }
 
-    const execEvent = parseExecLifecycleEvent(event, eventType);
+    const execEvent = parseExecLifecycleEvent(decoded, meta, originalEvent);
     if (execEvent) {
       if (execEvent.kind === "begin") {
-        onExecBegin(state, event, execEvent.call);
+        onExecBegin(state, meta, decoded.threadId, eventTurnId, execEvent.call);
       } else if (execEvent.kind === "output") {
-        onExecOutput(state, event, execEvent.call, execEvent.appendOutput);
+        onExecOutput(state, meta, execEvent.call, execEvent.appendOutput);
       } else {
-        onExecEnd(state, event, execEvent.call);
+        onExecEnd(state, meta, decoded.threadId, eventTurnId, execEvent.call);
       }
       continue;
     }
 
-    const toolCallEvent = parseToolCallLifecycleEvent(event, eventType);
+    const toolCallEvent = parseToolCallLifecycleEvent(decoded, meta, originalEvent);
     if (toolCallEvent) {
       if (toolCallEvent.kind === "begin") {
-        onExecBegin(state, event, toolCallEvent.call);
+        onExecBegin(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
       } else {
-        onExecEnd(state, event, toolCallEvent.call);
+        onExecEnd(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
       }
       continue;
     }
 
-    const webSearchEvent = parseWebSearchLifecycleEvent(event, eventType);
+    const webSearchEvent = parseWebSearchLifecycleEvent(decoded);
     if (webSearchEvent) {
       if (webSearchEvent.kind === "begin") {
-        onWebSearchBegin(state, event, webSearchEvent);
+        onWebSearchBegin(state, meta, decoded.threadId, eventTurnId, webSearchEvent);
       } else {
-        onWebSearchEnd(state, event, webSearchEvent);
+        onWebSearchEnd(state, meta, decoded.threadId, eventTurnId, webSearchEvent);
       }
       continue;
     }
 
-    const fileEdit = parseFileEditFromItemEvent(event, eventType);
+    const fileEdit = parseFileEditFromItemEvent(decoded);
     if (fileEdit) {
       flushToolActivityBeforeNonToolMessage(state);
-      upsertFileEdit(state, event, fileEdit);
+      upsertFileEdit(state, meta, decoded.threadId, eventTurnId, fileEdit);
       continue;
     }
 
-    const compactionEvent = parseCompactionLifecycleEvent(event, eventType);
+    const compactionEvent = parseCompactionLifecycleEvent(decoded, meta);
     if (compactionEvent) {
       flushToolActivityBeforeNonToolMessage(state);
       if (compactionEvent.kind === "begin") {
-        onCompactionBegin(state, event, compactionEvent);
+        onCompactionBegin(state, meta, decoded.threadId, eventTurnId, compactionEvent);
       } else {
-        onCompactionEnd(state, event, compactionEvent);
+        onCompactionEnd(state, meta, decoded.threadId, eventTurnId, compactionEvent);
       }
       continue;
     }
 
-    const operation = parseOperationMessage(event, eventType, {
+    const operation = parseOperationMessage(decoded, meta, {
       includeOptionalOperations: options?.includeOptionalOperations,
     });
     if (operation) {
@@ -3508,7 +2909,7 @@ export function toUIMessages(
       continue;
     }
 
-    const error = parseErrorMessage(event, eventType);
+    const error = parseErrorMessage(decoded, meta);
     if (error) {
       flushToolActivityBeforeNonToolMessage(state);
       state.messages.push(error);
@@ -3518,7 +2919,7 @@ export function toUIMessages(
     if (includeDebugRawEvents) {
       const debugReason = isDuplicateEventType(eventType)
         ? "duplicate-event"
-        : (isIgnoredNoiseType(eventType) || isIgnoredItemStartEvent(event, eventType))
+        : (isIgnoredNoiseType(eventType) || isIgnoredItemStartEvent(decoded))
           ? "ignored-noise"
           : "unhandled";
 
@@ -3530,7 +2931,8 @@ export function toUIMessages(
       appendDebugEvent(
         state.messages,
         originalEvent,
-        eventType,
+        decoded,
+        meta,
         debugReason,
       );
     }

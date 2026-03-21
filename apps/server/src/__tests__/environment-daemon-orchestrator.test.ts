@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Thread, ThreadEventDataForType } from "@bb/core";
+import type { Thread, ThreadEventDataByAppType, ThreadEventDataForType } from "@bb/core";
 import type * as environmentDaemon from "@bb/environment-daemon";
 import { getEnvironmentDaemonEnvironmentChannelId } from "@bb/environment-daemon";
 import type { EnvironmentService } from "../environment-service.js";
@@ -137,7 +137,7 @@ function makeRuntimeEnvironment(args: {
   };
 }
 
-function createEventData<TType extends keyof import("@bb/core").ThreadEventDataByType>(
+function createEventData<TType extends keyof ThreadEventDataByAppType>(
   data: ThreadEventDataForType<TType>,
 ): ThreadEventDataForType<TType> {
   return data;
@@ -260,7 +260,7 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
           createdAt: 1_000,
           updatedAt: 1_100,
         }),
-      } as unknown as import("../environment-daemon-command-dispatcher.js").EnvironmentDaemonCommandDispatcher,
+      } as unknown as EnvironmentDaemonCommandDispatcher,
       sessionService as never,
     );
 

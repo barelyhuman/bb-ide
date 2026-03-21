@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect } from "vitest";
-import type { Thread, ThreadEvent } from "@bb/core";
+import type { Thread, ThreadEventRow } from "@bb/core";
 import type { EnvironmentDaemonSessionDebugView } from "./environment-daemon-api.js";
 import {
   allocateLocalPort,
@@ -23,7 +23,7 @@ function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
 }
 
-function countCompletedTurns(events: ThreadEvent[]): number {
+function countCompletedTurns(events: ThreadEventRow[]): number {
   return events.filter((event) => {
     const normalized = normalizeEventType(event.type);
     return normalized === "turn/completed" || normalized === "turn/end";

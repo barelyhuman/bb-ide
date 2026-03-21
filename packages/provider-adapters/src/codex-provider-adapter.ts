@@ -31,10 +31,10 @@ import {
   encodeProviderToolCallResponse,
 } from "./provider-tool-call-contract.js";
 import type {
-  BbProviderEvent,
-  BbProviderEventItem,
-  BbProviderEventItemStatus,
-  BbProviderEventTurnStatus,
+  ThreadEvent,
+  ThreadEventItem,
+  ThreadEventItemStatus,
+  ThreadEventTurnStatus,
   PromptInput,
   ProviderExecutionOptions,
   ProviderLaunchConfiguration,
@@ -262,8 +262,8 @@ export function createCodexProviderAdapter(
 
     // -- Unified event translator ------------------------------------------
 
-    translateEvent(event: CodexEvent): BbProviderEvent[] {
-      const events: BbProviderEvent[] = [];
+    translateEvent(event: CodexEvent): ThreadEvent[] {
+      const events: ThreadEvent[] = [];
 
       switch (event.method) {
         // --- Turn lifecycle ---
@@ -459,13 +459,13 @@ export function createCodexProviderAdapter(
 }
 
 // ---------------------------------------------------------------------------
-// Codex → BbProviderEvent helpers
+// Codex → ThreadEvent helpers
 // ---------------------------------------------------------------------------
 
 type CodexThreadItem = Extract<CodexServerNotification, { method: "item/started" }>["params"]["item"];
 type CodexTurnStatus = Extract<CodexServerNotification, { method: "turn/completed" }>["params"]["turn"]["status"];
 
-function toTurnStatus(status: CodexTurnStatus): BbProviderEventTurnStatus {
+function toTurnStatus(status: CodexTurnStatus): ThreadEventTurnStatus {
   switch (status) {
     case "completed": return "completed";
     case "failed": return "failed";
@@ -474,7 +474,7 @@ function toTurnStatus(status: CodexTurnStatus): BbProviderEventTurnStatus {
   }
 }
 
-function toItemStatus(status: "inProgress" | "completed" | "failed" | "declined"): BbProviderEventItemStatus {
+function toItemStatus(status: "inProgress" | "completed" | "failed" | "declined"): ThreadEventItemStatus {
   switch (status) {
     case "inProgress": return "pending";
     case "completed": return "completed";
@@ -483,7 +483,7 @@ function toItemStatus(status: "inProgress" | "completed" | "failed" | "declined"
   }
 }
 
-function translateCodexItem(item: CodexThreadItem): BbProviderEventItem {
+function translateCodexItem(item: CodexThreadItem): ThreadEventItem {
   switch (item.type) {
     case "agentMessage":
       return { type: "agentMessage", id: item.id, text: item.text };

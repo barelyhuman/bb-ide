@@ -26,7 +26,7 @@ import type {
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,
-  ThreadEvent,
+  ThreadEventRow,
   ThreadEventData,
   ThreadEventType,
   ThreadExecutionOptions,
@@ -1155,7 +1155,7 @@ export class EventRepository {
     seq: number;
     type: ThreadEventType;
     data: ThreadEventData;
-  }, opts?: { connection?: DbExecutor }): ThreadEvent {
+  }, opts?: { connection?: DbExecutor }): ThreadEventRow {
     const db = opts?.connection ?? this.db;
     const now = Date.now();
     const lookupFields = deriveEventLookupFields(data.type, data.data);
@@ -1196,7 +1196,7 @@ export class EventRepository {
     afterSeq?: number,
     limit?: number,
     excludedTypes?: readonly string[],
-  ): ThreadEvent[] {
+  ): ThreadEventRow[] {
     const conditions = [eq(events.threadId, threadId)];
     if (afterSeq !== undefined) {
       conditions.push(gt(events.seq, afterSeq));
@@ -1239,7 +1239,7 @@ export class EventRepository {
     });
   }
 
-  getLatestByType(threadId: string, type: ThreadEventType): ThreadEvent | undefined {
+  getLatestByType(threadId: string, type: ThreadEventType): ThreadEventRow | undefined {
     const row = this.db
       .select()
       .from(events)

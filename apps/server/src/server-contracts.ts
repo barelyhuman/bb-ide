@@ -19,7 +19,7 @@ import type {
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,
 } from "@bb/core";
-import type { PromptInput, ProviderExecutionOptions, Thread, ThreadEnvironmentStartReason, ThreadEvent, ThreadTurnInitiator, ThreadWorkStatus } from "@bb/core";
+import type { PromptInput, ProviderExecutionOptions, Thread, ThreadEnvironmentStartReason, ThreadEventRow, ThreadTurnInitiator, ThreadWorkStatus } from "@bb/core";
 
 export interface EnvironmentProvisioningEvent {
   type: "env-setup";
@@ -98,7 +98,7 @@ export interface ThreadOrchestrator {
     mergeBaseBranch?: string,
   ): Promise<ThreadWorkStatus | undefined>;
   getMergeBaseBranchesAsync(threadId: string): Promise<string[] | undefined>;
-  getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];
+  getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEventRow[];
   getTimeline(
     threadId: string,
     limit?: number,

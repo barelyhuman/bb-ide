@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Project, Thread, ThreadEvent } from "@bb/core";
+import type { Project, Thread, ThreadEventRow } from "@bb/core";
 import {
   startServerE2eHarness,
   type ServerE2eHarness,
@@ -56,7 +56,7 @@ async function waitForThreadRoundTrip(
   wsUrl: string,
   threadId: string,
   timeoutMs: number = 20_000,
-): Promise<{ thread: Thread; events: ThreadEvent[]; reachedActive: boolean }> {
+): Promise<{ thread: Thread; events: ThreadEventRow[]; reachedActive: boolean }> {
   let reachedActive = false;
   return waitForThreadCondition({
     threadId,
@@ -65,7 +65,7 @@ async function waitForThreadRoundTrip(
     load: async () => {
       const [thread, events] = await Promise.all([
         readJson<Thread>(`${baseUrl}/api/v1/threads/${threadId}`),
-        readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
+        readJson<ThreadEventRow[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
       ]);
       if (thread.status === "active") {
         reachedActive = true;

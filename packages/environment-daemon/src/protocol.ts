@@ -5,6 +5,7 @@ import type {
   ProviderThreadContext,
   SpawnThreadRequest,
   Thread,
+  ThreadEvent,
 } from "@bb/core";
 import { promptInputSchema } from "@bb/core";
 import { z } from "zod";
@@ -203,7 +204,7 @@ export type EnvironmentDaemonEvent =
       type: "provider.event";
       threadId: string;
       method: string;
-      payload: unknown;
+      translatedEvents: ThreadEvent[];
       providerId?: string;
       normalizedMethod?: string;
       shouldPersist?: boolean;

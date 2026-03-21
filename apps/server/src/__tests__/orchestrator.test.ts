@@ -21,7 +21,7 @@ import {
   buildSquashMergeConflictFollowUpInstruction,
   type SystemEnvironmentInfo,
   type Thread,
-  type ThreadEvent,
+  type ThreadEventRow,
   type ThreadEventDataForType,
   type ThreadEventType,
   type ThreadEnvironmentStartReason,
@@ -3097,12 +3097,7 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: createItemCompletedData({
-          threadId: thread.id,
-          turnId: "turn-1",
-          item: createAgentMessageItem("SHOULD-NOT-LAND"),
-        }),
+        translatedEvents: [],
         shouldPersist: true,
         shouldBroadcast: true,
         turnId: "turn-1",
@@ -3117,8 +3112,7 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "turn/completed",
         normalizedMethod: "turn/completed",
-        eventType: "turn/completed",
-        eventData: createTurnCompletedData(thread.id, "turn-1"),
+        translatedEvents: [],
         shouldPersist: true,
         shouldBroadcast: true,
         nextStatus: "idle",
@@ -3153,11 +3147,7 @@ describe("Orchestrator", () => {
       )._handleAgentServerNotification(thread.id, {
         method: "item/completed",
         normalizedMethod: "item/completed",
-        eventType: "item/completed",
-        eventData: {
-          threadId: thread.id,
-          item: createAgentMessageItem("SHOULD-NOT-LAND"),
-        } as unknown as ThreadEventDataForType<"item/completed">,
+        translatedEvents: [],
         shouldPersist: true,
         shouldBroadcast: true,
       });

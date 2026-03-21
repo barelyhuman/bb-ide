@@ -1,6 +1,6 @@
 import type {
   AvailableModel,
-  BbProviderEvent,
+  ThreadEvent,
   PromptInput,
   ProviderCapabilities,
   ProviderDynamicTool,
@@ -84,7 +84,7 @@ export interface ProviderAdapter<
 
   buildCommand(request: ProviderRequest): TProviderCommand | null;
 
-  translateEvent(event: TProviderEvent): BbProviderEvent[];
+  translateEvent(event: TProviderEvent): ThreadEvent[];
 
   decodeToolCallRequest(args: {
     requestId: string | number;

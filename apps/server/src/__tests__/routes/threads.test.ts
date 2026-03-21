@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type {
   Thread,
-  ThreadEvent,
+  ThreadEventRow,
   ThreadWorkStatus,
 } from "@bb/core";
 import { createThreadRoutes } from "../../routes/threads.js";
@@ -47,12 +47,12 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
+type ThreadEventOverrides = Partial<Omit<ThreadEventRow, "type" | "data">> & {
   type?: string;
   data?: unknown;
 };
 
-function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
+function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEventRow {
   return {
     id: "evt-1",
     threadId: "thread-1",
@@ -61,7 +61,7 @@ function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
     data: { content: "result" },
     createdAt: 1000,
     ...overrides,
-  } as ThreadEvent;
+  } as ThreadEventRow;
 }
 
 function makeWorkStatus(): ThreadWorkStatus {

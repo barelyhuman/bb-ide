@@ -11,7 +11,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
-import type { BbProviderEvent } from "@bb/core";
+import type { ThreadEvent } from "@bb/core";
 
 export interface BridgeMessage {
   jsonrpc: "2.0";
@@ -40,7 +40,7 @@ export interface CollectedTurn {
  * The harness calls this for `sdk/message` notifications to expand them
  * into canonical notification methods for turn detection and assertions.
  */
-type BridgeEventTranslator = (sdkMessage: unknown) => BbProviderEvent[];
+type BridgeEventTranslator = (sdkMessage: unknown) => ThreadEvent[];
 
 export class BridgeTestHarness {
   private child: ChildProcess | null = null;

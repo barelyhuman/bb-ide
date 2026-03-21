@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  createProviderEventEnvelope,
   decodeThreadEventData,
   type Thread,
 } from "@bb/core";
@@ -451,7 +450,6 @@ describe("environment-daemon session orchestrator roundtrip", () => {
     sessionId: string;
     sequence: number;
     method: string;
-    payload: Record<string, unknown>;
   }): Promise<void> {
     await sessionService.applyEventBatch({
       environmentId: resolveEnvironmentId(args.threadId),
@@ -465,7 +463,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId: args.threadId,
             method: args.method,
-            payload: args.payload,
+            translatedEvents: [],
           },
         },
       ]),
@@ -591,7 +589,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId,
             method: "turn/started",
-            payload: { turnId: "turn-1" },
+            translatedEvents: [],
           },
         },
       ]),
@@ -614,7 +612,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId,
             method: "turn/completed",
-            payload: { turnId: "turn-1" },
+            translatedEvents: [],
           },
         },
       ]),
@@ -653,25 +651,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId: codexThreadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: { id: "shared-provider-thread" },
-        },
-      }),
+      data: {},
     });
     events.create({
       threadId: claudeThreadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "claude-code",
-        method: "thread/started",
-        payload: {
-          thread: { id: "shared-provider-thread" },
-        },
-      }),
+      data: {},
     });
 
     const sequenceByThreadId = new Map<string, number>([
@@ -691,7 +677,6 @@ describe("environment-daemon session orchestrator roundtrip", () => {
         sessionId,
         sequence: nextSequence,
         method: "turn/started",
-        payload: { turnId },
       });
 
       const itemSequence = nextSequence + 1;
@@ -701,12 +686,6 @@ describe("environment-daemon session orchestrator roundtrip", () => {
         sessionId,
         sequence: itemSequence,
         method: "item/completed",
-        payload: {
-          item: {
-            type: "agentMessage",
-            text: providerText,
-          },
-        },
       });
 
       const completedSequence = itemSequence + 1;
@@ -716,7 +695,6 @@ describe("environment-daemon session orchestrator roundtrip", () => {
         sessionId,
         sequence: completedSequence,
         method: "turn/completed",
-        payload: { turnId },
       });
     }
 
@@ -872,7 +850,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
             type: "provider.event",
             threadId,
             method: "turn/started",
-            payload: { turnId: "turn-1" },
+            translatedEvents: [],
           },
         },
       ]),
@@ -907,13 +885,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: { id: "provider-thread-1" },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     const updated = orchestrator.updateThread(threadId, { title: "Renamed Thread" });
@@ -1046,21 +1024,18 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 1,
       method: "thread/started",
-      payload: { thread: { id: "provider-thread-1" } },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 2,
       method: "turn/started",
-      payload: { turnId: "turn-1" },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 3,
       method: "turn/completed",
-      payload: { turnId: "turn-1" },
     });
 
     await vi.waitFor(() => {
@@ -1086,13 +1061,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: { id: "provider-thread-1" },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     const tellPromise = orchestrator.tell(threadId, {
@@ -1167,14 +1142,12 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 1,
       method: "turn/started",
-      payload: { turnId: "turn-2" },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 2,
       method: "turn/completed",
-      payload: { turnId: "turn-2" },
     });
 
     await tellPromise;
@@ -1207,13 +1180,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: { id: "provider-thread-1" },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     const tellPromise = orchestrator.tell(threadId, {
@@ -1288,14 +1261,12 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 1,
       method: "turn/started",
-      payload: { turnId: "turn-2" },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 2,
       method: "turn/completed",
-      payload: { turnId: "turn-2" },
     });
 
     await tellPromise;
@@ -1319,13 +1290,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: { id: "provider-thread-1" },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     const firstTell = orchestrator.tell(threadId, {
@@ -1373,14 +1344,12 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId: firstSessionId,
       sequence: 1,
       method: "turn/started",
-      payload: { turnId: "turn-1" },
     });
     await applyProviderEvent({
       threadId,
       sessionId: firstSessionId,
       sequence: 2,
       method: "turn/completed",
-      payload: { turnId: "turn-1" },
     });
     await firstTell;
 
@@ -1447,14 +1416,12 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId: secondSessionId,
       sequence: 1,
       method: "turn/started",
-      payload: { turnId: "turn-2" },
     });
     await applyProviderEvent({
       threadId,
       sessionId: secondSessionId,
       sequence: 2,
       method: "turn/completed",
-      payload: { turnId: "turn-2" },
     });
     await secondTell;
     expect(threads.getById(threadId)?.status).toBe("idle");
@@ -1473,16 +1440,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: {
-            id: "provider-thread-1",
-            path: "/tmp/codex-rollout-1.jsonl",
-          },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     const tellPromise = orchestrator.tell(threadId, {
@@ -1535,7 +1499,6 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 1,
       method: "turn/started",
-      payload: { turnId: "turn-1" },
     });
     await vi.waitFor(() => {
       expect(threads.getById(threadId)?.status).toBe("active");
@@ -1549,16 +1512,12 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 2,
       method: "item/completed",
-      payload: {
-        item: { type: "agentMessage", id: "assistant-1", text: "SHOULD-NOT-LAND" },
-      },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 3,
       method: "turn/completed",
-      payload: { turnId: "turn-1" },
     });
 
     await tellPromise;
@@ -1616,24 +1575,18 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 4,
       method: "turn/started",
-      payload: { turnId: "turn-2" },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 5,
       method: "item/completed",
-      payload: {
-        turnId: "turn-2",
-        item: { type: "agentMessage", id: "assistant-2", text: "AFTER-STOP-OK" },
-      },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 6,
       method: "turn/completed",
-      payload: { turnId: "turn-2" },
     });
     await recoveryTell;
 
@@ -1648,16 +1601,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: {
-            id: "provider-thread-1",
-            path: "/tmp/codex-rollout-1.jsonl",
-          },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     const tellPromise = orchestrator.tell(threadId, {
@@ -1776,14 +1726,12 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       sessionId,
       sequence: 1,
       method: "turn/started",
-      payload: { turnId: "turn-2" },
     });
     await applyProviderEvent({
       threadId,
       sessionId,
       sequence: 2,
       method: "turn/completed",
-      payload: { turnId: "turn-2" },
     });
     await tellPromise;
 
@@ -1816,13 +1764,13 @@ describe("environment-daemon session orchestrator roundtrip", () => {
       threadId,
       seq: 1,
       type: "thread/started",
-      data: createProviderEventEnvelope({
-        providerId: "codex",
-        method: "thread/started",
-        payload: {
-          thread: { id: "provider-thread-1" },
-        },
-      }),
+      data: {},
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "thread/identity",
+      data: { providerThreadId: "provider-thread-1" },
     });
 
     await expect(

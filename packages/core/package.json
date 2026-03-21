@@ -20,8 +20,7 @@
     "dev": "tsc --watch --preserveWatchOutput",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.config.ts",
-    "gen:codex-event-types": "node ./scripts/generate-codex-event-types.mjs"
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@bb/templates": "workspace:*",

@@ -1,9 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { expect } from "vitest";
 import {
-  createProviderEventEnvelope,
   type Thread,
-  type ThreadEvent,
+  type ThreadEventRow,
   type ThreadQueuedMessage,
 } from "@bb/core";
 import { ENVIRONMENT_DAEMON_SESSION_PROTOCOL } from "@bb/environment-daemon";
@@ -41,7 +40,7 @@ function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
 }
 
-function countCompletedTurns(events: ThreadEvent[]): number {
+function countCompletedTurns(events: ThreadEventRow[]): number {
   return events.filter((event) => {
     const normalized = normalizeEventType(event.type);
     return normalized === "turn/completed" || normalized === "turn/end";
@@ -461,11 +460,12 @@ async function postStaleEventBatch(args: {
                 sequence: 999,
                 eventId: args.eventId,
                 emittedAt: Date.now(),
-                event: createProviderEventEnvelope({
-                  providerId: "codex",
+                event: {
+                  type: "provider.event",
+                  threadId: args.channelId,
                   method: "turn/completed",
-                  payload: { turnId: "stale-turn" },
-                }),
+                  translatedEvents: [],
+                },
               },
             ],
           },

@@ -1,5 +1,5 @@
 import type { ThreadContextWindowUsage } from "./api-types.js";
-import type { ThreadEvent } from "./types.js";
+import type { ThreadEventRow } from "./types.js";
 import {
   resolveProviderEventMethod,
   unwrapProviderEventPayload,
@@ -25,7 +25,7 @@ function toPositiveNumber(value: unknown): number | undefined {
   return value;
 }
 
-function decodeContextWindowSignal(event: ThreadEvent): ThreadContextWindowSignal | null {
+function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSignal | null {
   const eventMethod = resolveProviderEventMethod(event.type, event.data);
   const payload = toRecord(unwrapProviderEventPayload(event.data));
   if (!payload) return null;
@@ -52,7 +52,7 @@ function decodeContextWindowSignal(event: ThreadEvent): ThreadContextWindowSigna
 }
 
 export function extractThreadContextWindowUsage(
-  events: readonly ThreadEvent[],
+  events: readonly ThreadEventRow[],
 ): ThreadContextWindowUsage | null {
   let totalTokens: number | undefined;
   let modelContextWindow: number | undefined;

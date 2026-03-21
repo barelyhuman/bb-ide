@@ -6,7 +6,7 @@
  * Thin JSON-RPC shell that manages Claude Agent SDK sessions and forwards
  * raw `SDKMessage` events to the parent process. The parent (env-daemon)
  * passes these to the adapter's `translateEvent` for conversion to
- * `BbProviderEvent[]`.
+ * `ThreadEvent[]`.
  *
  * The bridge does NOT translate events — it only:
  * - Manages SDK session lifecycle (start, resume, stop, push input)

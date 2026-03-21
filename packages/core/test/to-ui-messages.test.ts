@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { toUIMessages } from "../src/to-ui-messages.js";
 import { buildThreadDetailRows } from "../src/thread-detail-rows.js";
-import type { ThreadEvent } from "../src/types.js";
+import type { ThreadEventRow } from "../src/types.js";
 import type { UIMessage } from "../src/ui-message.js";
 
 function fixturePath(name: string): string {
@@ -12,8 +12,8 @@ function fixturePath(name: string): string {
   return path.join(__dirname, "__fixtures__", name);
 }
 
-function loadFixture(name: string): ThreadEvent[] {
-  return JSON.parse(readFileSync(fixturePath(name), "utf8")) as ThreadEvent[];
+function loadFixture(name: string): ThreadEventRow[] {
+  return JSON.parse(readFileSync(fixturePath(name), "utf8")) as ThreadEventRow[];
 }
 
 function unique<T>(values: T[]): T[] {
@@ -32,29 +32,19 @@ function assertMonotonicSourceSeq(messages: UIMessage[]): void {
 }
 
 describe("toUIMessages replay coverage", () => {
-  it("projects provider-envelope payloads with the same output as raw events", () => {
-    const events: ThreadEvent[] = [
+  it("projects flat event data with the same output as raw events", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
         type: "item/completed",
         data: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 1,
-          },
-          payload: {
-            threadId: "thread-1",
-            turnId: "turn-1",
-            item: {
-              type: "agentMessage",
-              id: "assistant-1",
-              text: "Envelope output",
-            },
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Flat output",
           },
         },
         createdAt: 1,
@@ -65,35 +55,24 @@ describe("toUIMessages replay coverage", () => {
     expect(projected).toHaveLength(1);
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
-      expect(projected[0].text).toBe("Envelope output");
+      expect(projected[0].text).toBe("Flat output");
       expect(projected[0].turnId).toBe("turn-1");
     }
   });
 
   it("deduplicates repeated completed assistant final messages for the same item id", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
         type: "item/completed",
         data: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 1,
-          },
-          payload: {
-            threadId: "provider-thread-1",
-            turnId: "turn-1",
-            item: {
-              type: "agentMessage",
-              id: "assistant-1",
-              text: "Hello",
-              phase: "final_answer",
-            },
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Hello",
           },
         },
         createdAt: 1,
@@ -104,22 +83,11 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
-          __bb_provider_event: {
-            schema: "bb/provider-event-envelope",
-            version: 1,
-            providerId: "codex",
-            method: "item/completed",
-            observedAt: 2,
-          },
-          payload: {
-            threadId: "provider-thread-1",
-            turnId: "turn-1",
-            item: {
-              type: "agentMessage",
-              id: "assistant-1",
-              text: "Hello",
-              phase: "final_answer",
-            },
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Hello",
           },
         },
         createdAt: 2,
@@ -173,7 +141,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("marks incomplete tools as interrupted when thread is not active", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -184,7 +152,8 @@ describe("toUIMessages replay coverage", () => {
             type: "commandExecution",
             id: "call-1",
             command: "/bin/zsh -lc 'ls plans'",
-            status: "inProgress",
+            cwd: "/repo",
+            status: "pending",
           },
           turnId: "turn-1",
         },
@@ -205,20 +174,21 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("strips shell wrappers from string-form exec command lifecycle events", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "exec_command_begin",
+        type: "item/started",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: '/bin/bash -lc "npm test -- --runInBand"',
-          cwd: "/repo",
-          parsed_cmd: [{ type: "unknown", cmd: "npm test -- --runInBand" }],
-          source: "agent",
-          status: "pending",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: '/bin/bash -lc "npm test -- --runInBand"',
+            cwd: "/repo",
+            status: "pending",
+          },
         },
         createdAt: 1,
       },
@@ -226,17 +196,18 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "exec_command_end",
+        type: "item/completed",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: '/bin/bash -lc "npm test -- --runInBand"',
-          cwd: "/repo",
-          parsed_cmd: [{ type: "unknown", cmd: "npm test -- --runInBand" }],
-          source: "agent",
-          aggregated_output: "ok",
-          exit_code: 0,
-          status: "completed",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: '/bin/bash -lc "npm test -- --runInBand"',
+            cwd: "/repo",
+            aggregatedOutput: "ok",
+            exitCode: 0,
+            status: "completed",
+          },
         },
         createdAt: 2,
       },
@@ -254,7 +225,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("updates flushed pending tool calls in place without appending duplicate interrupted rows", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -265,7 +236,8 @@ describe("toUIMessages replay coverage", () => {
             type: "commandExecution",
             id: "call-1",
             command: "/bin/zsh -lc 'git rebase --continue'",
-            status: "inProgress",
+            cwd: "/repo",
+            status: "pending",
           },
           turnId: "turn-1",
         },
@@ -312,7 +284,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps in-progress tools pending for active threads", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -323,7 +295,8 @@ describe("toUIMessages replay coverage", () => {
             type: "commandExecution",
             id: "call-1",
             command: "/bin/zsh -lc 'ls plans'",
-            status: "inProgress",
+            cwd: "/repo",
+            status: "pending",
           },
           turnId: "turn-1",
         },
@@ -342,7 +315,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps provisioning operations pending while thread provisioning is still in progress", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -359,10 +332,12 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/env_setup",
         data: {
-          status: "running",
+          setup: {
+            status: "running",
+            scriptPath: ".bb-env-setup.sh",
+          },
           workspaceRoot: "/tmp/worktree",
-          scriptPath: ".bb-env-setup.sh",
-          detail: "+ pnpm install",
+          transcript: [],
         },
         createdAt: 2,
       },
@@ -389,7 +364,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("finalizes streaming assistant and reasoning messages when thread is idle", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -443,7 +418,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps assistant text buffered while reasoning continues streaming on active threads", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -488,7 +463,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("renders completed assistant text immediately even while the thread is active", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -519,7 +494,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("flushes buffered assistant text when the turn completes even if thread status is still active", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -557,7 +532,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("flushes buffered assistant text before interruption markers on idle threads", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -600,7 +575,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("ignores trailing assistant deltas that arrive after completion", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -644,7 +619,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("ignores trailing reasoning deltas that arrive after completion", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -656,7 +631,8 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "reasoning",
             id: "rs-1",
-            text: "Final reasoning",
+            summary: ["Final reasoning"],
+            content: [],
           },
         },
         createdAt: 1,
@@ -688,7 +664,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("coalesces command output deltas and completion state", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -698,9 +674,9 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "commandExecution",
             id: "call-1",
-            command: ["/bin/zsh", "-lc", "ls plans"],
+            command: "/bin/zsh -lc 'ls plans'",
             cwd: "/repo",
-            status: "inProgress",
+            status: "pending",
           },
           turnId: "turn-1",
         },
@@ -741,7 +717,8 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "commandExecution",
             id: "call-1",
-            command: ["/bin/zsh", "-lc", "ls plans"],
+            command: "/bin/zsh -lc 'ls plans'",
+            cwd: "/repo",
             aggregatedOutput: "first\nsecond\n",
             exitCode: 0,
             status: "completed",
@@ -764,27 +741,22 @@ describe("toUIMessages replay coverage", () => {
     expect(tool?.output).toContain("second");
   });
 
-  it("coalesces consecutive exploring exec calls into one exploring cell", () => {
-    const events: ThreadEvent[] = [
+  it("coalesces consecutive exploring toolCall calls into one exploring cell", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "exec_command_begin",
+        type: "item/started",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "cat README.md"],
-          cwd: "/repo",
-          parsed_cmd: [
-            {
-              type: "read",
-              cmd: "cat README.md",
-              name: "README.md",
-              path: "/repo/README.md",
-            },
-          ],
-          source: "agent",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "call-1",
+            tool: "Read",
+            arguments: { file_path: "/repo/README.md" },
+            status: "pending",
+          },
         },
         createdAt: 1,
       },
@@ -792,27 +764,17 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "exec_command_end",
+        type: "item/completed",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "cat README.md"],
-          cwd: "/repo",
-          parsed_cmd: [
-            {
-              type: "read",
-              cmd: "cat README.md",
-              name: "README.md",
-              path: "/repo/README.md",
-            },
-          ],
-          source: "agent",
-          stdout: "",
-          stderr: "",
-          aggregated_output: "README",
-          exit_code: 0,
-          duration: "10ms",
-          formatted_output: "README",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "call-1",
+            tool: "Read",
+            arguments: { file_path: "/repo/README.md" },
+            result: "README",
+            status: "completed",
+          },
         },
         createdAt: 2,
       },
@@ -820,21 +782,16 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "exec_command_begin",
+        type: "item/started",
         data: {
-          call_id: "call-2",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "cat package.json"],
-          cwd: "/repo",
-          parsed_cmd: [
-            {
-              type: "read",
-              cmd: "cat package.json",
-              name: "package.json",
-              path: "/repo/package.json",
-            },
-          ],
-          source: "agent",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "call-2",
+            tool: "Read",
+            arguments: { file_path: "/repo/package.json" },
+            status: "pending",
+          },
         },
         createdAt: 3,
       },
@@ -842,27 +799,17 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-4",
         threadId: "thread-1",
         seq: 4,
-        type: "exec_command_end",
+        type: "item/completed",
         data: {
-          call_id: "call-2",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "cat package.json"],
-          cwd: "/repo",
-          parsed_cmd: [
-            {
-              type: "read",
-              cmd: "cat package.json",
-              name: "package.json",
-              path: "/repo/package.json",
-            },
-          ],
-          source: "agent",
-          stdout: "",
-          stderr: "",
-          aggregated_output: "{}",
-          exit_code: 0,
-          duration: "8ms",
-          formatted_output: "{}",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "call-2",
+            tool: "Read",
+            arguments: { file_path: "/repo/package.json" },
+            result: "{}",
+            status: "completed",
+          },
         },
         createdAt: 4,
       },
@@ -880,27 +827,21 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("updates a flushed exploring cell when completion arrives later", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "exec_command_begin",
+        type: "item/started",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "cat README.md"],
-          cwd: "/repo",
-          parsed_cmd: [
-            {
-              type: "read",
-              cmd: "cat README.md",
-              name: "README.md",
-              path: "/repo/README.md",
-            },
-          ],
-          source: "agent",
-          status: "pending",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "call-1",
+            tool: "Read",
+            arguments: { file_path: "/repo/README.md" },
+            status: "pending",
+          },
         },
         createdAt: 1,
       },
@@ -920,25 +861,17 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "exec_command_end",
+        type: "item/completed",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "cat README.md"],
-          cwd: "/repo",
-          parsed_cmd: [
-            {
-              type: "read",
-              cmd: "cat README.md",
-              name: "README.md",
-              path: "/repo/README.md",
-            },
-          ],
-          source: "agent",
-          aggregated_output: "README",
-          exit_code: 0,
-          duration: "10ms",
-          status: "completed",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "call-1",
+            tool: "Read",
+            arguments: { file_path: "/repo/README.md" },
+            result: "README",
+            status: "completed",
+          },
         },
         createdAt: 3,
       },
@@ -960,20 +893,21 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("updates a flushed tool-call cell when completion arrives later", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "exec_command_begin",
+        type: "item/started",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "pnpm test"],
-          cwd: "/repo",
-          parsed_cmd: [{ type: "unknown", cmd: "pnpm test" }],
-          source: "agent",
-          status: "pending",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'pnpm test'",
+            cwd: "/repo",
+            status: "pending",
+          },
         },
         createdAt: 1,
       },
@@ -992,18 +926,18 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "exec_command_end",
+        type: "item/completed",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "pnpm test"],
-          cwd: "/repo",
-          parsed_cmd: [{ type: "unknown", cmd: "pnpm test" }],
-          source: "agent",
-          aggregated_output: "ok",
-          exit_code: 0,
-          duration: "23ms",
-          status: "completed",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'pnpm test'",
+            cwd: "/repo",
+            aggregatedOutput: "ok",
+            exitCode: 0,
+            status: "completed",
+          },
         },
         createdAt: 3,
       },
@@ -1023,19 +957,21 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("flushes completed non-exploring exec cells before assistant text", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "exec_command_begin",
+        type: "item/started",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "npm test"],
-          cwd: "/repo",
-          parsed_cmd: [{ type: "unknown", cmd: "npm test" }],
-          source: "agent",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'npm test'",
+            cwd: "/repo",
+            status: "pending",
+          },
         },
         createdAt: 1,
       },
@@ -1043,20 +979,18 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "exec_command_end",
+        type: "item/completed",
         data: {
-          call_id: "call-1",
-          turn_id: "turn-1",
-          command: ["/bin/zsh", "-lc", "npm test"],
-          cwd: "/repo",
-          parsed_cmd: [{ type: "unknown", cmd: "npm test" }],
-          source: "agent",
-          stdout: "",
-          stderr: "",
-          aggregated_output: "ok",
-          exit_code: 0,
-          duration: "123ms",
-          formatted_output: "ok",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'npm test'",
+            cwd: "/repo",
+            aggregatedOutput: "ok",
+            exitCode: 0,
+            status: "completed",
+          },
         },
         createdAt: 2,
       },
@@ -1086,7 +1020,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects item web search lifecycle as dedicated web-search cells", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1131,7 +1065,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("preserves unknown provider web-search action types", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1142,7 +1076,7 @@ describe("toUIMessages replay coverage", () => {
             type: "webSearch",
             id: "web-2",
             query: "new runtime action",
-            action: { type: "providerCustomAction" },
+            action: "providerCustomAction",
           },
         },
         createdAt: 1,
@@ -1160,7 +1094,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("merges file-change lifecycle with output delta details", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1170,11 +1104,11 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "fileChange",
             id: "call-edit-1",
-            status: "inProgress",
+            status: "pending",
             changes: [
               {
                 path: "/repo/src/a.ts",
-                kind: { type: "update", move_path: null },
+                kind: "update",
                 diff: "@@ -1 +1 @@",
               },
             ],
@@ -1209,7 +1143,7 @@ describe("toUIMessages replay coverage", () => {
             changes: [
               {
                 path: "/repo/src/a.ts",
-                kind: { type: "update", move_path: null },
+                kind: "update",
                 diff: "@@ -1 +1,2 @@",
               },
             ],
@@ -1233,8 +1167,8 @@ describe("toUIMessages replay coverage", () => {
     expect(fileEdit?.stdout).toContain("patched");
   });
 
-  it("maps declined command executions to interrupted status", () => {
-    const events: ThreadEvent[] = [
+  it("maps interrupted command executions to interrupted status", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1244,8 +1178,9 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "commandExecution",
             id: "call-declined-1",
-            status: "declined",
+            status: "interrupted",
             command: "/bin/zsh -lc 'rm -rf /tmp/nope'",
+            cwd: "/repo",
           },
           turnId: "turn-1",
         },
@@ -1263,8 +1198,8 @@ describe("toUIMessages replay coverage", () => {
     expect(tool?.status).toBe("interrupted");
   });
 
-  it("maps declined file changes to interrupted status", () => {
-    const events: ThreadEvent[] = [
+  it("maps interrupted file changes to interrupted status", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1274,11 +1209,11 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "fileChange",
             id: "file-declined-1",
-            status: "declined",
+            status: "interrupted",
             changes: [
               {
                 path: "/repo/src/example.ts",
-                kind: { type: "update", move_path: null },
+                kind: "update",
                 diff: "@@ -1 +1 @@",
               },
             ],
@@ -1300,7 +1235,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("preserves add/delete file-change kinds from item completion events", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1314,12 +1249,12 @@ describe("toUIMessages replay coverage", () => {
             changes: [
               {
                 path: "/repo/src/new-file.ts",
-                kind: { type: "add", move_path: null },
+                kind: "add",
                 diff: "export const created = true;\n",
               },
               {
                 path: "/repo/src/old-file.ts",
-                kind: { type: "delete", move_path: null },
+                kind: "delete",
                 diff: "export const removed = true;\n",
               },
             ],
@@ -1347,7 +1282,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects turn plan updates as operation rows", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1359,7 +1294,7 @@ describe("toUIMessages replay coverage", () => {
           explanation: "Plan is now clearer",
           plan: [
             { step: "Inspect project", status: "completed" },
-            { step: "Apply fix", status: "inProgress" },
+            { step: "Apply fix", status: "active" },
           ],
         },
         createdAt: 1,
@@ -1382,7 +1317,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("treats raw reasoning text deltas as reasoning stream updates", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1411,13 +1346,14 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects deprecation and config warnings as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "deprecationNotice",
+        type: "warning",
         data: {
+          category: "deprecation",
           summary: "Legacy API will be removed",
           details: "Use v2 APIs instead",
         },
@@ -1427,8 +1363,9 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "configWarning",
+        type: "warning",
         data: {
+          category: "config",
           summary: "Unknown config key",
           details: "Remove 'legacyFlag'",
         },
@@ -1449,7 +1386,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects system thread title updates as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1480,7 +1417,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects provider thread name updates as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1509,7 +1446,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("deduplicates provider + system title update pairs", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1550,7 +1487,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps in-progress compaction items pending for active threads", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1580,7 +1517,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("coalesces compaction lifecycle events into a single completed operation", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1636,7 +1573,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects legacy compaction events as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1688,7 +1625,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects provisioning env setup events as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1769,7 +1706,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects provisioning progress events as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1836,7 +1773,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects primary-checkout lifecycle events with stable metadata", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1894,7 +1831,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("captures checkout sha on provisioning branch transcript entries", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1938,7 +1875,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects thread operation lifecycle events as operations", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1992,7 +1929,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("wraps unknown events in debug mode and drops them otherwise", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2017,7 +1954,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("classifies duplicate-event types but does not emit debug rows for them", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2041,7 +1978,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("drops turn/task lifecycle duplicates in debug mode", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2093,7 +2030,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("drops structural item/started noise in debug mode", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2123,7 +2060,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("drops reasoning section markers in debug mode", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2144,7 +2081,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps assistant-side items from earlier and later assistant responses", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2190,7 +2127,8 @@ describe("toUIMessages replay coverage", () => {
           item: {
             type: "reasoning",
             id: "reasoning-2",
-            summary: "More thinking",
+            summary: ["More thinking"],
+            content: [],
           },
         },
         createdAt: 3,
@@ -2276,7 +2214,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("renders initial client thread input while provisioning has failed", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2313,7 +2251,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects start-first provisioning failure timelines into user + provisioning + error rows", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2419,7 +2357,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("renders provider-start provisioning failures as failed instead of interrupted", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2487,7 +2425,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("renders initial client thread input while idle when no user item events exist", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2522,7 +2460,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("renders follow-up client turn input while active when no user item events exist yet", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2557,7 +2495,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps append-only tell request/start pairs as a single rendered user message", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2593,7 +2531,7 @@ describe("toUIMessages replay coverage", () => {
           turnId: "turn-1",
           item: {
             id: "item-user-1",
-            type: "user_message",
+            type: "userMessage",
             content: [{ type: "text", text: "Please keep going until the roadmap is done" }],
           },
         },
@@ -2632,7 +2570,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps the client thread input and suppresses a matching later user item event", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2660,7 +2598,7 @@ describe("toUIMessages replay coverage", () => {
           turnId: "turn-1",
           item: {
             id: "item-user-1",
-            type: "user_message",
+            type: "userMessage",
             content: [{ type: "text", text: "Fix duplicate user messages" }],
           },
         },
@@ -2682,7 +2620,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("deduplicates matching spawn thread/turn start inputs before provider user items arrive", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2735,7 +2673,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps start-first ordering by showing one client input before provisioning when matching spawn/user item events appear later", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2801,7 +2739,7 @@ describe("toUIMessages replay coverage", () => {
           turnId: "turn-1",
           item: {
             id: "item-user-1",
-            type: "user_message",
+            type: "userMessage",
             content: [{ type: "text", text: "Keep ordering sane" }],
           },
         },
@@ -2833,7 +2771,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects docker provisioning rows from structured events without string details", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2900,7 +2838,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("keeps non-duplicated initial client thread input alongside later user items", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2928,7 +2866,7 @@ describe("toUIMessages replay coverage", () => {
           turnId: "turn-2",
           item: {
             id: "item-user-2",
-            type: "user_message",
+            type: "userMessage",
             content: [{ type: "text", text: "sanity retry" }],
           },
         },
@@ -2950,7 +2888,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("preserves user attachment paths and urls from client start input", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -2991,7 +2929,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("ignores legacy codex/event user_message rows", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3021,7 +2959,7 @@ describe("toUIMessages replay coverage", () => {
         data: {
           id: "turn-1",
           msg: {
-            type: "user_message",
+            type: "userMessage",
             message: "Check screenshot",
             images: [],
             local_images: ["/tmp/shot.png"],
@@ -3045,7 +2983,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("deduplicates provider userMessage image data URL in favor of client start localImage", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3076,7 +3014,7 @@ describe("toUIMessages replay coverage", () => {
           turnId: "turn-1",
           item: {
             id: "item-user-1",
-            type: "user_message",
+            type: "userMessage",
             content: [
               { type: "text", text: "why is the theme selector not all the way to the right?" },
               { type: "image", url: "data:image/png;base64,abc" },
@@ -3101,7 +3039,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("formats system error messages with detail", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3321,9 +3259,9 @@ describe("toUIMessages replay coverage", () => {
   });
 });
 
-describe("toolCall projection for bridge and Codex custom/function calls", () => {
-  it("projects custom_tool_call start + custom_tool_call_output end into tool-call message", () => {
-    const events: ThreadEvent[] = [
+describe("toolCall projection for bridge and Codex tool calls", () => {
+  it("projects toolCall start + completed end into tool-call message", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3332,10 +3270,11 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call",
-            call_id: "call-1",
-            name: "my_tool",
-            input: JSON.stringify({ message: "hello" }),
+            type: "toolCall",
+            id: "call-1",
+            tool: "my_tool",
+            arguments: { message: "hello" },
+            status: "pending",
           },
         },
         createdAt: 1,
@@ -3348,9 +3287,12 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call_output",
-            call_id: "call-1",
-            output: "world",
+            type: "toolCall",
+            id: "call-1",
+            tool: "my_tool",
+            arguments: { message: "hello" },
+            result: "world",
+            status: "completed",
           },
         },
         createdAt: 2,
@@ -3369,7 +3311,7 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
   });
 
   it("projects bridge Read tool as exploring message", () => {
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3378,10 +3320,11 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call",
-            call_id: "call-read-1",
-            name: "Read",
-            input: JSON.stringify({ file_path: "/src/main.ts" }),
+            type: "toolCall",
+            id: "call-read-1",
+            tool: "Read",
+            arguments: { file_path: "/src/main.ts" },
+            status: "pending",
           },
         },
         createdAt: 1,
@@ -3394,9 +3337,12 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call_output",
-            call_id: "call-read-1",
-            output: "file contents",
+            type: "toolCall",
+            id: "call-read-1",
+            tool: "Read",
+            arguments: { file_path: "/src/main.ts" },
+            result: "file contents",
+            status: "completed",
           },
         },
         createdAt: 2,
@@ -3409,10 +3355,11 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call",
-            call_id: "call-grep-1",
-            name: "Grep",
-            input: JSON.stringify({ pattern: "TODO", path: "/src" }),
+            type: "toolCall",
+            id: "call-grep-1",
+            tool: "Grep",
+            arguments: { pattern: "TODO", path: "/src" },
+            status: "pending",
           },
         },
         createdAt: 3,
@@ -3425,9 +3372,12 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call_output",
-            call_id: "call-grep-1",
-            output: "found matches",
+            type: "toolCall",
+            id: "call-grep-1",
+            tool: "Grep",
+            arguments: { pattern: "TODO", path: "/src" },
+            result: "found matches",
+            status: "completed",
           },
         },
         createdAt: 4,
@@ -3446,7 +3396,7 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
   it("projects bridge Bash tool via commandExecution (not custom_tool_call)", () => {
     // When bridges emit Bash as commandExecution, it should go through
     // the exec lifecycle path directly
-    const events: ThreadEvent[] = [
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3459,7 +3409,7 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
             id: "call-bash-1",
             command: "ls -la",
             cwd: "/tmp",
-            status: "running",
+            status: "pending",
           },
         },
         createdAt: 1,
@@ -3474,6 +3424,8 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
           item: {
             type: "commandExecution",
             id: "call-bash-1",
+            command: "ls -la",
+            cwd: "/tmp",
             aggregatedOutput: "total 8\ndrwxr-xr-x",
             exitCode: 0,
             status: "completed",
@@ -3493,8 +3445,8 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
     }
   });
 
-  it("projects function_call and function_call_output into tool-call message", () => {
-    const events: ThreadEvent[] = [
+  it("projects toolCall with result into tool-call message", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3503,10 +3455,11 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "function_call",
-            call_id: "fc-1",
-            name: "get_weather",
-            arguments: JSON.stringify({ city: "London" }),
+            type: "toolCall",
+            id: "fc-1",
+            tool: "get_weather",
+            arguments: { city: "London" },
+            status: "pending",
           },
         },
         createdAt: 1,
@@ -3519,9 +3472,12 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "function_call_output",
-            call_id: "fc-1",
-            output: "Sunny, 22C",
+            type: "toolCall",
+            id: "fc-1",
+            tool: "get_weather",
+            arguments: { city: "London" },
+            result: "Sunny, 22C",
+            status: "completed",
           },
         },
         createdAt: 2,
@@ -3538,8 +3494,8 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
     }
   });
 
-  it("interleaves commandExecution and custom_tool_call correctly", () => {
-    const events: ThreadEvent[] = [
+  it("interleaves commandExecution and toolCall correctly", () => {
+    const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3551,7 +3507,8 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
             type: "commandExecution",
             id: "exec-1",
             command: "npm test",
-            status: "running",
+            cwd: "/repo",
+            status: "pending",
           },
         },
         createdAt: 1,
@@ -3566,6 +3523,8 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
           item: {
             type: "commandExecution",
             id: "exec-1",
+            command: "npm test",
+            cwd: "/repo",
             aggregatedOutput: "All tests passed",
             exitCode: 0,
             status: "completed",
@@ -3581,10 +3540,11 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call",
-            call_id: "ct-1",
-            name: "deploy",
-            input: JSON.stringify({ env: "staging" }),
+            type: "toolCall",
+            id: "ct-1",
+            tool: "deploy",
+            arguments: { env: "staging" },
+            status: "pending",
           },
         },
         createdAt: 3,
@@ -3597,9 +3557,12 @@ describe("toolCall projection for bridge and Codex custom/function calls", () =>
         data: {
           turnId: "turn-1",
           item: {
-            type: "custom_tool_call_output",
-            call_id: "ct-1",
-            output: "deployed",
+            type: "toolCall",
+            id: "ct-1",
+            tool: "deploy",
+            arguments: { env: "staging" },
+            result: "deployed",
+            status: "completed",
           },
         },
         createdAt: 4,

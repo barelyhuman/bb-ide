@@ -110,7 +110,7 @@ describe("EnvironmentDaemonRuntime", () => {
       type: "provider.event",
       threadId: "thread-1",
       method: "turn.started",
-      payload: {},
+      translatedEvents: [],
     });
     expect(runtime.getQuiescenceSnapshot()).toEqual({
       hasObservedWork: true,
@@ -123,7 +123,7 @@ describe("EnvironmentDaemonRuntime", () => {
       type: "provider.event",
       threadId: "thread-1",
       method: "turn.completed",
-      payload: {},
+      translatedEvents: [],
     });
     expect(runtime.getQuiescenceSnapshot()).toEqual({
       hasObservedWork: true,

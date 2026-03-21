@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { type ComponentType, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { formatEnvironmentDisplayName } from "@bb/core";
 import type {
   AvailableModel,
@@ -44,7 +44,7 @@ interface PromptOption<T extends string> {
   value: T;
   label: string;
   tone?: "default" | "warning";
-  icon?: import("react").ComponentType<{ className?: string }>;
+  icon?: ComponentType<{ className?: string }>;
 }
 
 interface PromptModelReasoningStorageKeys {

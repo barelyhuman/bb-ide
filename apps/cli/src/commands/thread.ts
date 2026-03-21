@@ -2,7 +2,7 @@ import { Command } from "commander";
 import {
   type SpawnThreadRequest,
   type Thread,
-  type ThreadEvent,
+  type ThreadEventRow,
   type ThreadGitDiffResponse,
   type ThreadStatus,
   type ThreadTimelineResponse,
@@ -343,7 +343,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 throw new ThreadWaitUnreachableError(unreachableReason);
               }
             } else {
-              const events = await unwrap<ThreadEvent[]>(
+              const events = await unwrap<ThreadEventRow[]>(
                 client.api.v1.threads[":id"].events.$get({
                   param: { id: threadId },
                   query: afterSeq !== undefined ? { afterSeq: String(afterSeq) } : {},
@@ -627,7 +627,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       const events =
         recentEvents === undefined
           ? []
-          : await unwrap<ThreadEvent[]>(
+          : await unwrap<ThreadEventRow[]>(
               client.api.v1.threads[":id"].events.$get({
                 param: { id: threadId },
                 query: {},
@@ -1020,7 +1020,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             ? "json"
             : ((opts.format ?? "minimal") as TimelineFormat);
 
-          const events = await unwrap<ThreadEvent[]>(
+          const events = await unwrap<ThreadEventRow[]>(
             client.api.v1.threads[":id"].events.$get({
               param: { id: threadId },
               query: {},
@@ -1176,7 +1176,7 @@ function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void 
   console.log("");
 }
 
-function printEvent(event: ThreadEvent): void {
+function printEvent(event: ThreadEventRow): void {
   const time = new Date(event.createdAt).toLocaleTimeString();
   const data = typeof event.data === "string" ? event.data : JSON.stringify(event.data, null, 2);
 
@@ -1194,13 +1194,13 @@ interface ThreadStatusPayload {
     requestedCount: number;
     eventMode: ThreadStatusEventMode;
     includeLowSignal: boolean;
-    events: ThreadEvent[];
+    events: ThreadEventRow[];
   };
 }
 
 function buildThreadStatusPayload(
   thread: Thread,
-  events: ThreadEvent[],
+  events: ThreadEventRow[],
   opts?: {
     recentEvents?: number;
     eventMode: ThreadStatusEventMode;

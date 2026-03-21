@@ -6,7 +6,7 @@ import path from "node:path";
 import {
   isThreadProviderId,
 } from "@bb/core";
-import type { ProviderToolCallRequest, ProviderToolCallResponse } from "@bb/core";
+import type { AvailableModel, ProviderToolCallRequest, ProviderToolCallResponse, SystemProviderInfo, ThreadProviderId } from "@bb/core";
 import {
   createProviderAdapter,
   listAvailableProviderInfos,
@@ -70,7 +70,7 @@ export interface EnvironmentDaemonRuntimeOptions {
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
-  createProviderAdapter?: (providerId: import("@bb/core").ThreadProviderId) => AnyProviderAdapter;
+  createProviderAdapter?: (providerId: ThreadProviderId) => AnyProviderAdapter;
   listAvailableProviderInfos?: typeof listAvailableProviderInfos;
 }
 
@@ -773,7 +773,7 @@ export class EnvironmentDaemonRuntime {
         type: "provider.event",
         threadId,
         method: "provider.stdout",
-        payload: { line },
+        translatedEvents: [],
       };
     }
 
@@ -786,7 +786,7 @@ export class EnvironmentDaemonRuntime {
         type: "provider.event",
         threadId,
         method: "provider.stdout",
-        payload: { line },
+        translatedEvents: [],
       };
     }
 
@@ -800,7 +800,7 @@ export class EnvironmentDaemonRuntime {
         type: "provider.event",
         threadId,
         method: "provider.stdout",
-        payload: { line },
+        translatedEvents: [],
       };
     }
 
@@ -843,7 +843,7 @@ export class EnvironmentDaemonRuntime {
       method: record.method === "sdk/message"
         ? (normalized?.normalizedMethod ?? "sdk/message")
         : record.method,
-      payload,
+      translatedEvents: normalized?.bbEvents ?? [],
       ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
       ...(normalized?.normalizedMethod
         ? { normalizedMethod: normalized.normalizedMethod }
@@ -1091,7 +1091,7 @@ export class EnvironmentDaemonRuntime {
 
   private async listProviderModels(
     providerId?: string,
-  ): Promise<import("@bb/core").AvailableModel[]> {
+  ): Promise<AvailableModel[]> {
     if (!providerId) {
       throw new Error("Provider id is required to list provider models");
     }
@@ -1102,7 +1102,7 @@ export class EnvironmentDaemonRuntime {
     return provider.listModels();
   }
 
-  private listProviderCatalog(): import("@bb/core").SystemProviderInfo[] {
+  private listProviderCatalog(): SystemProviderInfo[] {
     return (this.opts.listAvailableProviderInfos ?? listAvailableProviderInfos)().map((provider) => ({
       ...provider,
       capabilities: { ...provider.capabilities },

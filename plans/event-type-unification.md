@@ -109,25 +109,30 @@ A decoder in the event repo converts `ThreadEventRow` → `ThreadEvent` by parsi
 
 ### Migration path
 
-1. Rename current `ThreadEvent` → `ThreadEventRow` (the DB row shape)
-2. Rename `BbProviderEvent` → `ThreadEvent` (the typed union)
-3. Rename `BbProviderEventItem` → `ThreadEventItem`, etc.
-4. Add client/system events to the `ThreadEvent` union
-5. Add a decoder in the event repo that converts `ThreadEventRow` → `ThreadEvent`
-6. Update `to-ui-messages.ts` to consume `ThreadEvent` directly
-7. Remove `CodexServerNotificationMethod` from the row type definition
-8. Drop the `ProviderEventEnvelope` indirection for new events
+1. ~~Rename current `ThreadEvent` → `ThreadEventRow` (the DB row shape)~~ ✅
+2. ~~Rename `BbProviderEvent` → `ThreadEvent` (the typed union)~~ ✅
+3. ~~Rename `BbProviderEventItem` → `ThreadEventItem`, etc.~~ ✅
+4. ~~Add client/system events to the `ThreadEvent` union~~ ✅
+5. ~~Store translated events directly~~ ✅ — env-daemon sends `translatedEvents: ThreadEvent[]` via protocol; server stores the translated data instead of `ProviderEventEnvelope`
+6. Update `to-ui-messages.ts` to consume `ThreadEvent` directly — **TODO**
+7. ~~Remove `CodexServerNotificationMethod` from the row type definition~~ ✅ — `ThreadEventType` is now `ThreadEvent["type"]`, derived from the union
+8. ~~Drop the `ProviderEventEnvelope` indirection for new events~~ ✅
+9. ~~Remove generated codex types from `@bb/core`~~ ✅ — deleted `packages/core/src/generated/codex-app-server/`
 
 ### What this unblocks
 
-- `to-ui-messages.ts` becomes a simple `switch (event.type)` — no defensive parsing
-- Type safety end-to-end: adapter → env-daemon → server → UI
-- No codex types leaked into `@bb/core`
-- One vocabulary for events across the entire codebase
+- `to-ui-messages.ts` can become a simple `switch (event.type)` — no defensive parsing
+- Type safety end-to-end: adapter → env-daemon → server → UI ✅
+- No codex types leaked into `@bb/core` ✅
+- One vocabulary for events across the entire codebase ✅
+
+### Remaining work
+
+- **Rewrite `to-ui-messages.ts`** — currently 3500 lines of defensive parsing. With typed `ThreadEvent`, add a `decodeThreadEventRow` step and switch on `event.type` with typed field access. This is the main payoff of the unification.
+- **Remove dead normalization code** — `ProviderEventEnvelope`, `createProviderEventEnvelope`, `decodeThreadEventData`, `resolveProviderEventMethod`, `unwrapProviderEventPayload` in `thread-event-normalization.ts` are dead for new events.
 
 ### Follow-up cleanup (after unification)
 
 - **Split `runtime-contracts.ts`** — currently a grab bag of `ThreadOrchestrator`, `SchedulerService`, provider types. Split into focused files: `thread-orchestrator.ts`, `scheduler.ts`, etc.
 - **Move `ProviderToolHost`** to its own package or into the server — it's server-side tool execution, not provider translation
 - **Move `LlmCompletionService`** to its own package — title/commit generation is a separate concern from provider adapters
-- **Remove stale codex generated types from `@bb/core`** — once `ThreadEventType` no longer references `CodexServerNotificationMethod`

@@ -1,6 +1,6 @@
 import { expect } from "vitest";
-import type { Project, Thread, ThreadEvent } from "@bb/core";
-import { isProviderEventEnvelope, DEFAULT_THREAD_PROVIDER_ID } from "@bb/core";
+import type { Project, Thread, ThreadEventRow } from "@bb/core";
+import { DEFAULT_THREAD_PROVIDER_ID } from "@bb/core";
 import {
   runCliCommand,
   startServerE2eHarness,
@@ -39,7 +39,7 @@ async function waitForThreadRoundTrip(
   wsUrl: string,
   threadId: string,
   timeoutMs: number = 8_000,
-): Promise<{ thread: Thread; events: ThreadEvent[]; reachedActive: boolean }> {
+): Promise<{ thread: Thread; events: ThreadEventRow[]; reachedActive: boolean }> {
   let reachedActive = false;
   return waitForThreadCondition({
     threadId,
@@ -48,7 +48,7 @@ async function waitForThreadRoundTrip(
     load: async () => {
       const [thread, events] = await Promise.all([
         readJson<Thread>(`${baseUrl}/api/v1/threads/${threadId}`),
-        readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
+        readJson<ThreadEventRow[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
       ]);
       if (thread.status === "active") {
         reachedActive = true;
@@ -123,17 +123,8 @@ export async function runThreadSpawnRoundtripScenario(): Promise<void> {
       eventTypes.indexOf("turn/completed"),
     );
 
-    // Verify that provider events carry the expected providerId
-    const expectedProviderId = resolveExpectedProviderId();
-    const providerEventEnvelopes = events
-      .filter((event) => isProviderEventEnvelope(event.data))
-      .map((event) => (event.data as { __bb_provider_event: { providerId: string } }).__bb_provider_event);
-    expect(providerEventEnvelopes.length).toBeGreaterThan(0);
-    for (const envelope of providerEventEnvelopes) {
-      expect(envelope.providerId).toBe(expectedProviderId);
-    }
-
     // Thread record itself should have the correct providerId
+    const expectedProviderId = resolveExpectedProviderId();
     expect(thread.providerId).toBe(expectedProviderId);
   } finally {
     await harness.cleanup();

@@ -1,7 +1,7 @@
 import type {
   ProvisioningTranscriptEntry,
   Thread,
-  ThreadEvent,
+  ThreadEventRow,
 } from "./types.js";
 
 export type UIMessageStatus =
@@ -211,7 +211,7 @@ export interface UIErrorMessage extends UIMessageBase {
 export interface UIDebugRawEventMessage extends UIMessageBase {
   kind: "debug/raw-event";
   rawType: string;
-  rawEvent: ThreadEvent;
+  rawEvent: ThreadEventRow;
   reason: "ignored-noise" | "duplicate-event" | "unhandled";
 }
 

@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { Thread, ThreadEvent } from "@bb/core";
+import type { Thread, ThreadEventRow } from "@bb/core";
 import {
   createProject,
   readJson,
@@ -19,7 +19,7 @@ function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
 }
 
-function measureTurnProgress(events: ThreadEvent[]): TurnProgressCounts {
+function measureTurnProgress(events: ThreadEventRow[]): TurnProgressCounts {
   let clientTurnStarts = 0;
   let completedTurns = 0;
 
@@ -80,7 +80,7 @@ async function waitForIdleAfterTurnProgress(
   timeoutMs: number = 20_000,
 ): Promise<{
   thread: Thread;
-  events: ThreadEvent[];
+  events: ThreadEventRow[];
   counts: TurnProgressCounts;
 }> {
   return waitForThreadCondition({
@@ -90,7 +90,7 @@ async function waitForIdleAfterTurnProgress(
     load: async () => {
       const [thread, events] = await Promise.all([
         readJson<Thread>(`${baseUrl}/api/v1/threads/${threadId}`),
-        readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
+        readJson<ThreadEventRow[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
       ]);
       return {
         thread,

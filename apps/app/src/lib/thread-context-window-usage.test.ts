@@ -1,6 +1,5 @@
 import {
-  createProviderEventEnvelope,
-  type ThreadEvent,
+  type ThreadEventRow,
 } from "@bb/core";
 import { describe, expect, it } from "vitest";
 import {
@@ -19,25 +18,19 @@ const EMPTY_TOKEN_BREAKDOWN = {
 
 function buildProviderEvent({
   seq,
-  method,
   type = "thread/tokenUsage/updated",
   payload,
 }: {
   seq: number;
-  method: string;
-  type?: ThreadEvent["type"];
-  payload: unknown;
-}): ThreadEvent {
+  type?: ThreadEventRow["type"];
+  payload: Record<string, unknown>;
+}): ThreadEventRow {
   return {
     id: `event-${seq}`,
     threadId: "thread-1",
     seq,
     type,
-    data: createProviderEventEnvelope({
-      providerId: "codex",
-      method,
-      payload,
-    }),
+    data: payload,
     createdAt: seq,
   };
 }
@@ -47,7 +40,6 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "thread/tokenUsage/updated",
         payload: {
           threadId: "provider-thread",
           turnId: "turn-1",
@@ -66,7 +58,6 @@ describe("thread context window usage helpers", () => {
       }),
       buildProviderEvent({
         seq: 2,
-        method: "thread/tokenUsage/updated",
         payload: {
           threadId: "provider-thread",
           turnId: "turn-2",
@@ -95,7 +86,6 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "thread/tokenUsage/updated",
         payload: {
           threadId: "provider-thread",
           turnId: "turn-1",
@@ -121,7 +111,6 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "thread/tokenUsage/updated",
         payload: {
           threadId: "provider-thread",
           turnId: "turn-9",
@@ -150,7 +139,6 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "thread/tokenUsage/updated",
         payload: {
           threadId: "provider-thread",
           turnId: "turn-1",
@@ -176,7 +164,6 @@ describe("thread context window usage helpers", () => {
     const usage = extractThreadContextWindowUsage([
       buildProviderEvent({
         seq: 1,
-        method: "codex/event/token_count",
         payload: {
           id: "turn-legacy",
           msg: {

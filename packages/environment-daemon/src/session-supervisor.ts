@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { EnvironmentDaemonCommandAck } from "./protocol.js";
+import type { EnvironmentDaemonCommand, EnvironmentDaemonCommandAck } from "./protocol.js";
 import { type EnvironmentDaemonRuntime } from "./runtime.js";
 import { isEnvironmentDaemonSessionInactiveError } from "./session-http-client.js";
 import type { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
@@ -57,7 +57,7 @@ function isAbortError(error: unknown): error is Error {
 function toCommandEnvelope(args: {
   threadId: string;
   commandId: string;
-  command: import("./protocol.js").EnvironmentDaemonCommand;
+  command: EnvironmentDaemonCommand;
   sentAt: number;
 }) {
   return {

@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { Thread, ThreadEvent } from "@bb/core";
+import type { Thread, ThreadEventRow } from "@bb/core";
 import {
   archiveThread,
   createProject,
@@ -23,7 +23,7 @@ function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
 }
 
-function measureTurnProgress(events: ThreadEvent[]): TurnProgressCounts {
+function measureTurnProgress(events: ThreadEventRow[]): TurnProgressCounts {
   let clientTurnStarts = 0;
   let completedTurns = 0;
 
@@ -44,7 +44,7 @@ function measureTurnProgress(events: ThreadEvent[]): TurnProgressCounts {
   };
 }
 
-function latestCompletedAgentText(events: ThreadEvent[]): string | undefined {
+function latestCompletedAgentText(events: ThreadEventRow[]): string | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (normalizeEventType(event.type) !== "item/completed") {
@@ -85,7 +85,7 @@ async function waitForIdleAfterTurnProgress(args: {
   timeoutMs: number;
 }): Promise<{
   thread: Thread;
-  events: ThreadEvent[];
+  events: ThreadEventRow[];
   counts: TurnProgressCounts;
 }> {
   return waitForThreadCondition({

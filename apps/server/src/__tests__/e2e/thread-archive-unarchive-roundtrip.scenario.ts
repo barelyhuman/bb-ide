@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { Thread, ThreadEvent } from "@bb/core";
+import type { Thread, ThreadEventRow } from "@bb/core";
 import {
   createProject,
   createThread,
@@ -18,7 +18,7 @@ function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
 }
 
-function countCompletedTurns(events: ThreadEvent[]): number {
+function countCompletedTurns(events: ThreadEventRow[]): number {
   return events.filter((event) => {
     const normalizedType = normalizeEventType(event.type);
     return normalizedType === "turn/completed" || normalizedType === "turn/end";

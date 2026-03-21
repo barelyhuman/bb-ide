@@ -4,7 +4,7 @@
  * Maps between bb's ProviderAdapter contract and the Claude Code SDK bridge
  * process. The bridge communicates via JSON-RPC over stdin/stdout. The adapter
  * owns event translation: it takes raw `SDKMessage` from the Claude Agent SDK
- * and produces `BbProviderEvent[]`.
+ * and produces `ThreadEvent[]`.
  */
 
 import { resolve, dirname } from "node:path";
@@ -31,10 +31,10 @@ import {
   webSearchArgsSchema,
 } from "./tool-arg-schemas.js";
 import type {
-  BbProviderEvent,
-  BbProviderEventItem,
-  BbProviderEventTokenUsage,
-  BbProviderEventTokenUsageBreakdown,
+  ThreadEvent,
+  ThreadEventItem,
+  ThreadEventTokenUsage,
+  ThreadEventTokenUsageBreakdown,
   ProviderLaunchConfiguration,
   ProviderThreadContext,
 } from "@bb/core";
@@ -367,12 +367,12 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Unified event translator ------------------------------------------
 
-    translateEvent(message: ClaudeCodeEvent): BbProviderEvent[] {
+    translateEvent(message: ClaudeCodeEvent): ThreadEvent[] {
       // threadId is not available from SDKMessage — the bridge/env-daemon
       // supplies it from the session context. We use "" here; the caller
       // overrides it.
       const threadId = "";
-      const events: BbProviderEvent[] = [];
+      const events: ThreadEvent[] = [];
 
       switch (message.type) {
         case "system":
@@ -589,7 +589,7 @@ function extractToolResults(
   return results;
 }
 
-function extractTokenUsage(message: SDKResultMessage): BbProviderEventTokenUsage | undefined {
+function extractTokenUsage(message: SDKResultMessage): ThreadEventTokenUsage | undefined {
   const parsed = sdkUsageSchema.safeParse(message.usage);
   const total = parsed.success ? toTokenUsageBreakdown(parsed.data) : undefined;
   const modelContextWindow = extractModelContextWindow(message.modelUsage);
@@ -598,7 +598,7 @@ function extractTokenUsage(message: SDKResultMessage): BbProviderEventTokenUsage
     return undefined;
   }
 
-  const emptyBreakdown: BbProviderEventTokenUsageBreakdown = {
+  const emptyBreakdown: ThreadEventTokenUsageBreakdown = {
     totalTokens: 0,
     inputTokens: 0,
     cachedInputTokens: 0,
@@ -615,7 +615,7 @@ function extractTokenUsage(message: SDKResultMessage): BbProviderEventTokenUsage
 
 function toTokenUsageBreakdown(
   usage: z.infer<typeof sdkUsageSchema>,
-): BbProviderEventTokenUsageBreakdown {
+): ThreadEventTokenUsageBreakdown {
   const inputTokens = toNonNegativeNumber(usage.input_tokens);
   const outputTokens = toNonNegativeNumber(usage.output_tokens);
   const cacheReadTokens = toNonNegativeNumber(usage.cache_read_input_tokens);
@@ -661,7 +661,7 @@ function toPositiveNumber(value: unknown): number | null {
 }
 
 // ---------------------------------------------------------------------------
-// Tool call → BbProviderEventItem translation
+// Tool call → ThreadEventItem translation
 // ---------------------------------------------------------------------------
 
 const BASH_TOOLS = new Set(["Bash", "bash"]);
@@ -672,7 +672,7 @@ function translateToolCallToItem(
   callId: string,
   toolName: string,
   args: unknown,
-): BbProviderEventItem {
+): ThreadEventItem {
   if (BASH_TOOLS.has(toolName)) {
     const parsed = bashArgsSchema.safeParse(args);
     return {
@@ -719,7 +719,7 @@ function translateToolResultToItem(
   callId: string,
   toolName: string | undefined,
   content: unknown,
-): BbProviderEventItem {
+): ThreadEventItem {
   const outputText = extractResultText(content);
 
   if (toolName && BASH_TOOLS.has(toolName)) {

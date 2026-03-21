@@ -10,9 +10,7 @@ import {
 } from "@bb/environment-daemon";
 import {
   assertNever,
-  createProviderEventEnvelope,
   decodeThreadIdFromWireValue,
-  extractTurnIdFromPersistedEventData,
   type PromptInput,
   type ProviderCapabilities,
   type ProviderDynamicTool,
@@ -22,8 +20,7 @@ import {
   type ProviderToolCallResponse,
   type SpawnThreadRequest,
   type Thread,
-  type ThreadEventData,
-  type ThreadEventType,
+  type ThreadEvent,
 } from "@bb/core";
 import type { ProviderToolHost } from "@bb/provider-adapters";
 
@@ -49,8 +46,7 @@ export class ProviderSessionError extends Error {
 export interface ProviderSessionNotification {
   method: string;
   normalizedMethod: string;
-  eventType: ThreadEventType;
-  eventData: ThreadEventData;
+  translatedEvents: ThreadEvent[];
   shouldPersist: boolean;
   shouldBroadcast: boolean;
   nextStatus?: Thread["status"];
@@ -77,10 +73,6 @@ export interface ProviderSessionControllerOptions {
   onNotification?: (threadId: string, event: ProviderSessionNotification) => void;
   onProviderStderrLine?: (threadId: string, line: string) => void;
   logger?: Pick<Console, "warn" | "error">;
-}
-
-function toProviderEventType(method: string): ThreadEventType {
-  return method as ThreadEventType;
 }
 
 function isMissingProviderThreadMessage(message: string): boolean {
@@ -413,7 +405,8 @@ export class ProviderSessionController {
   ): void {
     const method = event.method;
     const normalizedMethod = event.normalizedMethod ?? method;
-    const turnId = event.turnId ?? extractTurnIdFromPersistedEventData(event.payload);
+    const translatedEvents = event.translatedEvents ?? [];
+    const turnId = event.turnId;
     const turnState = event.turnState ??
       (normalizedMethod === "turn/started" ? "active" as const
         : normalizedMethod === "turn/completed" ? "idle" as const
@@ -422,12 +415,7 @@ export class ProviderSessionController {
     this.opts.onNotification?.(threadId, {
       method,
       normalizedMethod,
-      eventType: toProviderEventType(method),
-      eventData: createProviderEventEnvelope({
-        providerId: this.opts.provider.id,
-        method,
-        payload: event.payload as Record<string, unknown>,
-      }),
+      translatedEvents,
       shouldPersist: event.shouldPersist ?? true,
       shouldBroadcast: event.shouldBroadcast ?? true,
       nextStatus: event.nextStatus,

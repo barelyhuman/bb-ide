@@ -3,21 +3,21 @@ import type {
 } from "@bb/core";
 import { assertNever, decodeThreadIdFromWireValue, getStringField, isThreadProviderId, toRecord } from "@bb/core";
 import type {
-  BbProviderEvent,
+  ThreadEvent,
   ProviderToolCallRequest,
   ProviderToolCallResponse,
 } from "@bb/core";
 import { createProviderAdapter, type ProviderAdapter } from "@bb/provider-adapters";
 
 // ---------------------------------------------------------------------------
-// BbProviderEvent → bb-owned policy
+// ThreadEvent → bb-owned policy
 //
 // These functions derive persist/broadcast/status policy from the canonical
-// event type. The adapter translates SDK events into BbProviderEvent, and
+// event type. The adapter translates SDK events into ThreadEvent, and
 // bb decides what to do with them.
 // ---------------------------------------------------------------------------
 
-function shouldPersistEvent(event: BbProviderEvent): boolean {
+function shouldPersistEvent(event: ThreadEvent): boolean {
   switch (event.type) {
     case "item/agentMessage/delta":
     case "item/commandExecution/outputDelta":
@@ -34,7 +34,7 @@ function shouldPersistEvent(event: BbProviderEvent): boolean {
   }
 }
 
-function shouldBroadcastEvent(event: BbProviderEvent): boolean {
+function shouldBroadcastEvent(event: ThreadEvent): boolean {
   switch (event.type) {
     case "item/agentMessage/delta":
     case "item/reasoning/summaryTextDelta":
@@ -45,7 +45,7 @@ function shouldBroadcastEvent(event: BbProviderEvent): boolean {
   }
 }
 
-function statusFromEvent(event: BbProviderEvent): Thread["status"] | undefined {
+function statusFromEvent(event: ThreadEvent): Thread["status"] | undefined {
   switch (event.type) {
     case "turn/started":
       return "active";
@@ -58,7 +58,7 @@ function statusFromEvent(event: BbProviderEvent): Thread["status"] | undefined {
   }
 }
 
-function turnStateFromEvent(event: BbProviderEvent): "active" | "idle" | undefined {
+function turnStateFromEvent(event: ThreadEvent): "active" | "idle" | undefined {
   switch (event.type) {
     case "turn/started":
       return "active";
@@ -69,17 +69,17 @@ function turnStateFromEvent(event: BbProviderEvent): "active" | "idle" | undefin
   }
 }
 
-function titleFromEvent(event: BbProviderEvent): string | undefined {
+function titleFromEvent(event: ThreadEvent): string | undefined {
   if (event.type === "thread/name/updated") return event.threadName;
   return undefined;
 }
 
-function turnIdFromEvent(event: BbProviderEvent): string | undefined {
+function turnIdFromEvent(event: ThreadEvent): string | undefined {
   if ("turnId" in event && typeof event.turnId === "string") return event.turnId;
   return undefined;
 }
 
-function providerThreadIdFromEvent(event: BbProviderEvent): string | undefined {
+function providerThreadIdFromEvent(event: ThreadEvent): string | undefined {
   if (event.type === "thread/identity") return event.providerThreadId;
   return undefined;
 }
@@ -90,7 +90,7 @@ function providerThreadIdFromEvent(event: BbProviderEvent): string | undefined {
 
 export interface NormalizedEnvironmentDaemonProviderEvent {
   providerId: string;
-  bbEvents: BbProviderEvent[];
+  bbEvents: ThreadEvent[];
   /** First event's type as a canonical method string. */
   normalizedMethod: string;
   shouldPersist: boolean;

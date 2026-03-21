@@ -1,45 +1,62 @@
 /**
- * BbProviderEvent — the canonical inbound event type.
+ * ThreadEvent — the canonical event type for everything that happens on a thread.
  *
- * A closed, discriminated union of every event that flows from providers into
- * bb. Each adapter's `translateEvent` maps its native events into
- * `BbProviderEvent[]`. Downstream code (to-ui-messages, persist, broadcast,
- * env-daemon) works with `BbProviderEvent` directly.
+ * A closed, discriminated union covering provider events (from adapters),
+ * client events (user actions), and system events (bb server lifecycle).
+ * Every event has a `type` discriminant, `threadId`, and typed fields.
  *
- * See plans/bb-event-design.md for the full design rationale.
+ * Provider adapters translate native events into `ThreadEvent[]`.
+ * The server creates client/system events directly as `ThreadEvent`.
  */
+
+import type {
+  ClientOutboundStartEventData,
+  SystemErrorEventData,
+  SystemManagerUserMessageEventData,
+  SystemThreadInterruptedEventData,
+  SystemThreadTitleUpdatedEventData,
+  SystemOperationEventData,
+  SystemWorktreeCommitEventData,
+  SystemWorktreeSquashMergeEventData,
+  SystemProvisioningStartedEventData,
+  SystemProvisioningProgressEventData,
+  SystemProvisioningEnvSetupEventData,
+  SystemProvisioningFallbackEventData,
+  SystemProvisioningCompletedEventData,
+  SystemProvisioningCleanupFailedEventData,
+} from "./types.js";
 
 // --- Supporting types ---
 
-export type BbProviderEventItemStatus = "pending" | "completed" | "failed" | "interrupted";
+export type ThreadEventItemStatus = "pending" | "completed" | "failed" | "interrupted";
 
-export type BbProviderEventTurnStatus = "completed" | "failed" | "interrupted";
+export type ThreadEventTurnStatus = "completed" | "failed" | "interrupted";
 
-export type BbProviderEventFileChangeKind = "add" | "delete" | "update";
+export type ThreadEventFileChangeKind = "add" | "delete" | "update";
 
-export interface BbProviderEventFileChange {
+export interface ThreadEventFileChange {
   path: string;
-  kind: BbProviderEventFileChangeKind;
+  kind: ThreadEventFileChangeKind;
   /** Target path for renames/moves. Only present when kind is "update". */
   movePath?: string;
   /** Unified diff content. */
   diff?: string;
 }
 
-export type BbProviderEventPlanStepStatus = "pending" | "active" | "completed" | "failed";
+export type ThreadEventPlanStepStatus = "pending" | "active" | "completed" | "failed";
 
-export interface BbProviderEventPlanStep {
+export interface ThreadEventPlanStep {
   step: string;
-  status?: BbProviderEventPlanStepStatus;
+  status?: ThreadEventPlanStepStatus;
 }
 
-export type BbProviderEventUserContent =
+export type ThreadEventUserContent =
   | { type: "text"; text: string }
   | { type: "image"; url: string }
   | { type: "localImage"; path: string }
   | { type: "localFile"; path: string };
 
-export interface BbProviderEventTokenUsageBreakdown {
+export interface ThreadEventTokenUsageBreakdown {
   totalTokens: number;
   inputTokens: number;
   cachedInputTokens: number;
@@ -47,25 +64,25 @@ export interface BbProviderEventTokenUsageBreakdown {
   reasoningOutputTokens: number;
 }
 
-export interface BbProviderEventTokenUsage {
-  total: BbProviderEventTokenUsageBreakdown;
-  last: BbProviderEventTokenUsageBreakdown;
+export interface ThreadEventTokenUsage {
+  total: ThreadEventTokenUsageBreakdown;
+  last: ThreadEventTokenUsageBreakdown;
   modelContextWindow: number | null;
 }
 
-export type BbProviderEventWarningCategory = "deprecation" | "config" | "general";
+export type ThreadEventWarningCategory = "deprecation" | "config" | "general";
 
 // --- Item types ---
 
-export type BbProviderEventItem =
-  | { type: "userMessage"; id: string; content: BbProviderEventUserContent[] }
+export type ThreadEventItem =
+  | { type: "userMessage"; id: string; content: ThreadEventUserContent[] }
   | { type: "agentMessage"; id: string; text: string }
   | {
       type: "commandExecution";
       id: string;
       command: string;
       cwd: string;
-      status: BbProviderEventItemStatus;
+      status: ThreadEventItemStatus;
       aggregatedOutput?: string;
       exitCode?: number;
       durationMs?: number;
@@ -73,8 +90,8 @@ export type BbProviderEventItem =
   | {
       type: "fileChange";
       id: string;
-      changes: BbProviderEventFileChange[];
-      status: BbProviderEventItemStatus;
+      changes: ThreadEventFileChange[];
+      status: ThreadEventItemStatus;
     }
   | { type: "webSearch"; id: string; query: string; action?: string }
   | {
@@ -83,7 +100,7 @@ export type BbProviderEventItem =
       server?: string;
       tool: string;
       arguments?: unknown;
-      status: BbProviderEventItemStatus;
+      status: ThreadEventItemStatus;
       result?: unknown;
       error?: string;
       durationMs?: number;
@@ -94,14 +111,14 @@ export type BbProviderEventItem =
 
 // --- Event union ---
 
-export type BbProviderEvent =
+export type ThreadEvent =
   // Turn lifecycle
   | { type: "turn/started"; threadId: string; turnId: string }
   | {
       type: "turn/completed";
       threadId: string;
       turnId: string;
-      status: BbProviderEventTurnStatus;
+      status: ThreadEventTurnStatus;
       error?: { message: string };
     }
 
@@ -112,8 +129,8 @@ export type BbProviderEvent =
   | { type: "thread/compacted"; threadId: string }
 
   // Items
-  | { type: "item/started"; threadId: string; turnId: string; item: BbProviderEventItem }
-  | { type: "item/completed"; threadId: string; turnId: string; item: BbProviderEventItem }
+  | { type: "item/started"; threadId: string; turnId: string; item: ThreadEventItem }
+  | { type: "item/completed"; threadId: string; turnId: string; item: ThreadEventItem }
 
   // Streaming deltas
   | { type: "item/agentMessage/delta"; threadId: string; turnId: string; itemId?: string; delta: string }
@@ -125,14 +142,37 @@ export type BbProviderEvent =
   | { type: "item/mcpToolCall/progress"; threadId: string; turnId: string; itemId: string; message?: string }
 
   // Token usage
-  | { type: "thread/tokenUsage/updated"; threadId: string; turnId: string; tokenUsage: BbProviderEventTokenUsage }
+  | { type: "thread/tokenUsage/updated"; threadId: string; turnId: string; tokenUsage: ThreadEventTokenUsage }
 
   // Plan/diff
-  | { type: "turn/plan/updated"; threadId: string; turnId: string; plan: BbProviderEventPlanStep[]; explanation?: string }
+  | { type: "turn/plan/updated"; threadId: string; turnId: string; plan: ThreadEventPlanStep[]; explanation?: string }
   | { type: "turn/diff/updated"; threadId: string; turnId: string; diff?: string }
 
   // Errors
   | { type: "error"; threadId: string; turnId?: string; message: string; detail?: string; willRetry?: boolean }
 
   // Warnings
-  | { type: "warning"; threadId: string; category: BbProviderEventWarningCategory; summary?: string; details?: string };
+  | { type: "warning"; threadId: string; category: ThreadEventWarningCategory; summary?: string; details?: string }
+
+  // Client events (user actions)
+  | ({ type: "client/thread/start"; threadId: string } & ClientOutboundStartEventData)
+  | ({ type: "client/turn/requested"; threadId: string } & ClientOutboundStartEventData)
+  | ({ type: "client/turn/start"; threadId: string } & ClientOutboundStartEventData)
+
+  // System events (bb server lifecycle)
+  | ({ type: "system/error"; threadId: string } & SystemErrorEventData)
+  | ({ type: "system/manager/user_message"; threadId: string } & SystemManagerUserMessageEventData)
+  | ({ type: "system/thread/interrupted"; threadId: string } & SystemThreadInterruptedEventData)
+  | ({ type: "system/thread-title/updated"; threadId: string } & SystemThreadTitleUpdatedEventData)
+  | ({ type: "system/operation"; threadId: string } & SystemOperationEventData)
+  | ({ type: "system/worktree/commit"; threadId: string } & SystemWorktreeCommitEventData)
+  | ({ type: "system/worktree/squash_merge"; threadId: string } & SystemWorktreeSquashMergeEventData)
+  | ({ type: "system/provisioning/started"; threadId: string } & SystemProvisioningStartedEventData)
+  | ({ type: "system/provisioning/progress"; threadId: string } & SystemProvisioningProgressEventData)
+  | ({ type: "system/provisioning/env_setup"; threadId: string } & SystemProvisioningEnvSetupEventData)
+  | ({ type: "system/provisioning/fallback"; threadId: string } & SystemProvisioningFallbackEventData)
+  | ({ type: "system/provisioning/completed"; threadId: string } & SystemProvisioningCompletedEventData)
+  | ({ type: "system/provisioning/cleanup_failed"; threadId: string } & SystemProvisioningCleanupFailedEventData);
+
+/** Union of all valid ThreadEvent type discriminants. */
+export type ThreadEventType = ThreadEvent["type"];

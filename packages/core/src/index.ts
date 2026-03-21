@@ -23,16 +23,14 @@ export type {
   EnvironmentCapability,
   PersistedEnvironmentRecord,
   ThreadTurnInitiator,
-  ThreadEventType,
-  ThreadEventDataByType,
+  ThreadEventDataByAppType,
   ThreadEventData,
   ThreadEventDataForType,
-  PersistedThreadEventDataForType,
   PersistedThreadEventData,
   ProviderEventEnvelopeMetadata,
   ProviderEventEnvelope,
   ThreadEventOfType,
-  ThreadEvent,
+  ThreadEventRow,
 } from "./types.js";
 export type { ThreadProviderId } from "./thread-provider.js";
 export {
@@ -41,15 +39,6 @@ export {
   isThreadProviderId,
 } from "./thread-provider.js";
 
-export type {
-  ServerNotification,
-  EventMsg,
-  CodexServerNotificationMethod,
-  CodexServerNotificationForMethod,
-  CodexServerNotificationParamsByMethod,
-  CodexEventMessageType,
-  CodexEventMessageForType,
-} from "./generated/codex-app-server/index.js";
 
 export type {
   RealtimeEntity,
@@ -212,18 +201,19 @@ export type {
 } from "./runtime-contracts.js";
 
 export type {
-  BbProviderEvent,
-  BbProviderEventItem,
-  BbProviderEventItemStatus,
-  BbProviderEventTurnStatus,
-  BbProviderEventFileChange,
-  BbProviderEventFileChangeKind,
-  BbProviderEventPlanStep,
-  BbProviderEventPlanStepStatus,
-  BbProviderEventUserContent,
-  BbProviderEventTokenUsage,
-  BbProviderEventTokenUsageBreakdown,
-  BbProviderEventWarningCategory,
+  ThreadEvent,
+  ThreadEventType,
+  ThreadEventItem,
+  ThreadEventItemStatus,
+  ThreadEventTurnStatus,
+  ThreadEventFileChange,
+  ThreadEventFileChangeKind,
+  ThreadEventPlanStep,
+  ThreadEventPlanStepStatus,
+  ThreadEventUserContent,
+  ThreadEventTokenUsage,
+  ThreadEventTokenUsageBreakdown,
+  ThreadEventWarningCategory,
 } from "./provider-event.js";
 
 export {

@@ -1,8 +1,4 @@
 import type {
-  CodexServerNotificationMethod,
-  CodexServerNotificationParamsByMethod,
-} from "./generated/codex-app-server/index.js";
-import type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
@@ -354,14 +350,12 @@ export interface SystemManagerUserMessageEventData {
   turnId?: string;
 }
 
-export type ThreadEventType = CodexServerNotificationMethod | AppThreadEventType;
-
 export interface TurnLifecycleEventData {
   turnId?: string;
   input?: PromptInput[];
 }
 
-export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
+export type ThreadEventDataByAppType = {
   "client/thread/start": ClientOutboundStartEventData;
   "client/turn/requested": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
@@ -381,31 +375,24 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
 };
 
 export type ThreadEventData =
-  | ThreadEventDataByType[ThreadEventType]
-  | ProviderEventEnvelope;
+  | ThreadEventDataByAppType[AppThreadEventType]
+  | Record<string, unknown>;
 
-export type ThreadEventDataForType<TType extends ThreadEventType> =
-  ThreadEventDataByType[TType];
-
-export type PersistedThreadEventDataForType<TType extends ThreadEventType> =
+export type ThreadEventDataForType<TType extends string> =
   TType extends AppThreadEventType
-    ? ThreadEventDataForType<TType>
-    : ThreadEventDataForType<TType> | ProviderEventEnvelope;
+    ? ThreadEventDataByAppType[TType]
+    : Record<string, unknown>;
 
-export type PersistedThreadEventData = PersistedThreadEventDataForType<ThreadEventType>;
+export type PersistedThreadEventData = ThreadEventData;
 
-// Event (streaming log from codex)
-export interface ThreadEvent<
-  TType extends ThreadEventType = ThreadEventType,
-> {
+// ThreadEventRow — the hydrated DB row shape (not the app-level typed event)
+export interface ThreadEventRow<TType extends string = string> {
   id: string;
   threadId: string;
   seq: number;
   type: TType;
-  data: PersistedThreadEventDataForType<TType>;
+  data: ThreadEventDataForType<TType>;
   createdAt: number;
 }
 
-export type ThreadEventOfType<TType extends ThreadEventType> = ThreadEvent<
-  TType
->;
+export type ThreadEventOfType<TType extends string> = ThreadEventRow<TType>;

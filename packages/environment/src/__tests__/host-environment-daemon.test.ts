@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -66,7 +67,7 @@ describe("host environment-daemon helper", () => {
     const spawnProcess = vi.fn(() => ({
       pid: 4321,
       unref: vi.fn(),
-    })) as unknown as typeof import("node:child_process").spawn;
+    })) as unknown as typeof spawn;
 
     const ensureArgs = {
       workspaceRootPath: workspaceRoot,
@@ -132,7 +133,7 @@ describe("host environment-daemon helper", () => {
         },
       },
       {
-        spawnProcess: spawnProcess as unknown as typeof import("node:child_process").spawn,
+        spawnProcess: spawnProcess as unknown as typeof spawn,
         pingAgent: async () => true,
         waitForAgent: async () => {
           throw new Error("should not launch a new agent");
@@ -181,7 +182,7 @@ describe("host environment-daemon helper", () => {
         spawnProcess: vi.fn(() => ({
           pid: 4321,
           unref: vi.fn(),
-        })) as unknown as typeof import("node:child_process").spawn,
+        })) as unknown as typeof spawn,
         waitForAgent: async () => {},
         isProcessAlive: () => true,
         killProcess: vi.fn(),
@@ -197,7 +198,7 @@ describe("host environment-daemon helper", () => {
         runtimeEnv: { BB_ROOT: bbRoot },
       },
       {
-        spawnProcess: vi.fn() as unknown as typeof import("node:child_process").spawn,
+        spawnProcess: vi.fn() as unknown as typeof spawn,
         waitForAgent: async () => {
           throw new Error("should not relaunch");
         },
@@ -218,7 +219,7 @@ describe("host environment-daemon helper", () => {
     const spawnProcess = vi.fn(() => ({
       pid: 4321,
       unref: vi.fn(),
-    })) as unknown as typeof import("node:child_process").spawn;
+    })) as unknown as typeof spawn;
 
     await ensureManagedHostEnvironmentDaemon(
       {
@@ -266,7 +267,7 @@ describe("host environment-daemon helper", () => {
     const spawnProcess = vi.fn(() => ({
       pid: 4321,
       unref: vi.fn(),
-    })) as unknown as typeof import("node:child_process").spawn;
+    })) as unknown as typeof spawn;
 
     await ensureManagedHostEnvironmentDaemon(
       {
@@ -305,7 +306,7 @@ describe("host environment-daemon helper", () => {
     const spawnProcess = vi.fn(() => ({
       pid: 4321,
       unref: vi.fn(),
-    })) as unknown as typeof import("node:child_process").spawn;
+    })) as unknown as typeof spawn;
 
     const first = await ensureManagedHostEnvironmentDaemon(
       {
@@ -371,7 +372,7 @@ describe("host environment-daemon helper", () => {
         spawnProcess: vi.fn(() => ({
           pid: 4321,
           unref: vi.fn(),
-        })) as unknown as typeof import("node:child_process").spawn,
+        })) as unknown as typeof spawn,
         waitForAgent: async () => {},
       },
     );
