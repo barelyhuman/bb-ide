@@ -263,6 +263,25 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/core-ui:
+    dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@bb/templates':
+        specifier: workspace:*
+        version: link:../templates
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/db:
     dependencies:
       '@bb/core':
