@@ -39,7 +39,7 @@ function resolveDefaultProviderId(): string;
 interface AgentRuntimeOptions {
   /** Working directory for provider processes */
   workspacePath: string;
-  /** Environment variables passed to provider processes */
+  /** Environment variables passed to ALL provider processes (BB_SERVER_URL, PATH, etc.) */
   env?: Record<string, string>;
   /** Called when a provider emits a translated event */
   onEvent: (event: ThreadEvent) => void;
@@ -61,7 +61,12 @@ function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime;
 interface AgentRuntime {
   /**
    * Ensure a provider process is running.
-   * Idempotent — won't spawn a duplicate.
+   * Idempotent — won't spawn a duplicate for the same provider.
+   *
+   * If a provider requires per-thread process isolation (e.g., Pi),
+   * the runtime spawns separate processes per thread automatically
+   * based on the adapter's capabilities. The caller doesn't need
+   * to know about this — just pass forThreadId.
    */
   ensureProvider(args: {
     providerId: string;
@@ -179,11 +184,22 @@ interface ProviderAdapter {
   capabilities: ProviderCapabilities;
 
   /**
+   * Whether this provider needs a separate process per thread.
+   * Pi needs this because the bridge mutates process.env globally.
+   * Most providers return false (one process handles all threads).
+   */
+  requiresThreadIsolation: boolean;
+
+  /**
    * How to launch this provider's process.
    * Async — may write temp auth files, resolve API keys, etc.
    * Return tempFiles so the runtime can clean them up on shutdown.
+   *
+   * When requiresThreadIsolation is true, called once per thread.
+   * The threadId is passed so the adapter can include thread-specific
+   * env vars if needed.
    */
-  resolveLaunch(): Promise<ProviderLaunch>;
+  resolveLaunch(threadId?: string): Promise<ProviderLaunch>;
 
   /** Translate a runtime command into the provider's JSON-RPC wire format.
    *  Returns null if the provider doesn't support this command
@@ -208,6 +224,7 @@ interface ProviderLaunch {
   /** Temp files created for this launch. Cleaned up on shutdown. */
   tempFiles?: string[];
 }
+
 
 /** A JSON-RPC 2.0 message */
 interface JsonRpcMessage {
@@ -314,7 +331,9 @@ steerTurn({ threadId, expectedTurnId, input })
 | `decodeToolCallRequest({ requestId, method, params })` | `decodeToolCallRequest(JsonRpcMessage)` | Takes raw JSON-RPC message instead of pre-parsed fields. Runtime no longer strips `id` before calling adapter. |
 | No `thread/stop` command | `AdapterCommand` has `thread/stop` | New — current code stops threads by killing the process. Gives providers a chance to clean up gracefully. |
 | `thread/resume` has no `dynamicTools` | `thread/resume` gains `dynamicTools` | New — current `ProviderRequest` already has `resumePath` on `thread/resume`, but `dynamicTools` was only on `thread/start`. |
-| `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch()` | Current adapter has both a static `process` property AND an optional async `resolveLaunchConfiguration`. New design collapses to one async method that returns the full launch config. |
+| `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch(threadId?)` | Current adapter has both a static `process` property AND an optional async `resolveLaunchConfiguration`. New design collapses to one async method. Takes optional threadId for per-thread isolation. |
+| `EnvironmentDaemonProviderSpec.launchCommand/launchArgs` | Dropped | Launch wrappers (Docker exec, etc.) are not supported. If Docker support is needed, the env-daemon handles it at a higher level (different workspacePath/env), not by wrapping the provider command. |
+| Single child per provider assumed | `requiresThreadIsolation` flag | Pi needs per-thread process isolation. The adapter declares this; the runtime handles spawning/routing internally. |
 
 ### What else stays internal
 
@@ -329,8 +348,11 @@ steerTurn({ threadId, expectedTurnId, input })
 ```
 createAgentRuntime(options)
   │
-  ├── ensureProvider({ providerId: "codex" })
-  │     ├── adapter.resolveLaunch() → { command, args, env, tempFiles }
+  ├── ensureProvider({ providerId: "codex", forThreadId: "t1" })
+  │     ├── checks adapter.requiresThreadIsolation
+  │     │     false → reuse existing process for this providerId
+  │     │     true  → spawn per-thread process
+  │     ├── adapter.resolveLaunch(threadId?) → { command, args, env, tempFiles }
   │     ├── spawns child process, registers exit handler
   │     └── adapter.buildCommand({ type: "initialize" }) → JSON-RPC → child
   │
