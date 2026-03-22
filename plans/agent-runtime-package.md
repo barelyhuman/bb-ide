@@ -182,23 +182,8 @@ interface ProviderAdapter {
   displayName: string;
   capabilities: ProviderCapabilities;
 
-  /**
-   * Whether this provider needs a separate process per thread.
-   * Pi needs this because the bridge mutates process.env globally.
-   * Most providers return false (one process handles all threads).
-   */
-  requiresThreadIsolation: boolean;
-
-  /**
-   * How to launch this provider's process.
-   * Returns the command, args, and any provider-specific env vars.
-   * Auth is the caller's responsibility — passed via AgentRuntimeOptions.env.
-   *
-   * When requiresThreadIsolation is true, called once per thread.
-   * The threadId is passed so the adapter can include thread-specific
-   * env vars if needed.
-   */
-  resolveLaunch(threadId?: string): ProviderLaunch;
+  /** The command and args to spawn this provider's process */
+  process: { command: string; args: string[] };
 
   /** Translate a runtime command into the provider's JSON-RPC wire format.
    *  Returns null if the provider doesn't support this command
@@ -216,12 +201,6 @@ interface ProviderAdapter {
   listModels(): Promise<AvailableModel[]>;
 }
 
-interface ProviderLaunch {
-  command: string;
-  args: string[];
-  /** Provider-specific env vars (not auth — auth comes from AgentRuntimeOptions.env) */
-  env?: Record<string, string>;
-}
 
 
 /** A JSON-RPC 2.0 message */
@@ -320,7 +299,7 @@ steerTurn({ threadId, expectedTurnId, input })
 | Current | New | Reason |
 |---------|-----|--------|
 | `ProviderRequest` with `SpawnThreadRequest`, `ProviderThreadContext` | `AdapterCommand` with flat fields | Adapter shouldn't know caller-layer types. Runtime decomposes. |
-| `process: { command, args }` + `resolveLaunchConfiguration(context)` | `resolveLaunch(threadId?)` | Collapses two properties into one synchronous method. No auth resolution — auth is the caller's responsibility via env vars. |
+| `process: { command, args }` + `resolveLaunchConfiguration(context)` | `process: { command, args }` | Static property stays. `resolveLaunchConfiguration` deleted — auth is the caller's responsibility via env vars. |
 | `preflightSessionStart()` | Deleted | Never called in production. Auth errors should surface at thread start. |
 | `encodeToolCallResponse()` | Deleted | All providers accept `{ contentItems, success }` as JSON-RPC result. Add back if a provider ever needs custom encoding. |
 | `TProviderEvent`, `TProviderCommand` generics | None | Wire types are internal to each adapter file. `translateEvent` takes `unknown`, `buildCommand` returns `JsonRpcMessage`. |
@@ -328,9 +307,9 @@ steerTurn({ threadId, expectedTurnId, input })
 | `decodeToolCallRequest({ requestId, method, params })` | `decodeToolCallRequest(JsonRpcMessage)` | Takes raw JSON-RPC message instead of pre-parsed fields. Runtime no longer strips `id` before calling adapter. |
 | No `thread/stop` command | `AdapterCommand` has `thread/stop` | New — current code stops threads by killing the process. Gives providers a chance to clean up gracefully. |
 | `thread/resume` has no `dynamicTools` | `thread/resume` gains `dynamicTools` | New — current `ProviderRequest` already has `resumePath` on `thread/resume`, but `dynamicTools` was only on `thread/start`. |
-| `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch(threadId?)` | Collapses both into one synchronous method. Takes optional threadId for per-thread isolation. |
-| `EnvironmentDaemonProviderSpec.launchCommand/launchArgs` | Dropped | Launch wrappers (Docker exec, etc.) are not supported. If Docker support is needed, the env-daemon handles it at a higher level (different workspacePath/env), not by wrapping the provider command. |
-| Single child per provider assumed | `requiresThreadIsolation` flag | Pi needs per-thread process isolation. The adapter declares this; the runtime handles spawning/routing internally. |
+| `process` + `resolveLaunchConfiguration` coexist | `process` only | `resolveLaunchConfiguration` deleted. Auth is caller's responsibility. |
+| `EnvironmentDaemonProviderSpec.launchCommand/launchArgs` | Dropped | Launch wrappers not supported. Docker is an env-daemon concern, not a provider concern. |
+| Per-thread process isolation (Pi workaround) | Dropped | Was a workaround in daemon runtime, not an adapter concern. Handle inside Pi adapter if still needed. |
 
 ### What else stays internal
 
@@ -344,11 +323,8 @@ steerTurn({ threadId, expectedTurnId, input })
 ```
 createAgentRuntime(options)
   │
-  ├── ensureProvider({ providerId: "codex", forThreadId: "t1" })
-  │     ├── checks adapter.requiresThreadIsolation
-  │     │     false → reuse existing process for this providerId
-  │     │     true  → spawn per-thread process
-  │     ├── adapter.resolveLaunch(threadId?) → { command, args, env }
+  ├── ensureProvider({ providerId: "codex" })
+  │     ├── adapter.process → { command, args }
   │     ├── spawns child process, registers exit handler
   │     └── adapter.buildCommand({ type: "initialize" }) → JSON-RPC → child
   │
