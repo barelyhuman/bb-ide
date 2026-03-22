@@ -13,7 +13,7 @@ import type {
   SystemThreadTitleUpdatedEventData,
   SystemWorktreeCommitEventData,
   SystemWorktreeSquashMergeEventData,
-} from "./types.js";
+} from "./thread-events.js";
 
 export type ThreadEventItemStatus =
   | "pending"
