@@ -69,8 +69,9 @@ ThreadEvent, ThreadEventType, ThreadEventItem, ThreadEventRow
 // Execution vocabulary
 PromptInput, ReasoningLevel, SandboxMode, ServiceTier
 
-// Provider vocabulary
-ThreadProviderId, ProviderCapabilities, AvailableModel,
+// Provider vocabulary (provider ID is just string — the set of
+// available providers is an agent-runtime concern, not domain)
+ProviderCapabilities, AvailableModel,
 ToolCallRequest, ToolCallResponse, DynamicTool
 
 // Utilities
