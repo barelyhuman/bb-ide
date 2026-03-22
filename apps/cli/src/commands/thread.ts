@@ -121,7 +121,6 @@ function isLowSignalThreadStatusEventType(type: string): boolean {
   if (
     type === "turn/start" ||
     type === "turn/started" ||
-    type === "turn/end" ||
     type === "turn/completed"
   ) {
     return true;

@@ -39,49 +39,10 @@ interface EventMeta {
   createdAt: number;
 }
 
-/**
- * Map legacy persisted event types to their canonical ThreadEvent type strings.
- * These appear in older DB rows and test fixtures.
- *
- * Note: legacy `exec_command_begin/end/output_delta` are NOT mapped here
- * because their data shapes differ from `item/started`/`item/completed` and
- * are handled separately in parseExecLifecycleEvent.
- */
-const LEGACY_TYPE_MAP: Record<string, string> = {
-  // Legacy aliases
-  "turn/end": "turn/completed",
-  "account/ratelimits/updated": "thread/tokenUsage/updated",
-  "item/reasoning/summarypartadded": "item/reasoning/summaryPartAdded",
-};
-
-/**
- * Normalize a resolved event type string to its canonical form.
- * Handles case-insensitive lookup for legacy types, and preserves
- * canonical types as-is.
- */
-function normalizeEventType(raw: string): string {
-  // Fast path: already a canonical type (exact match)
-  const directMapping = LEGACY_TYPE_MAP[raw];
-  if (directMapping) return directMapping;
-
-  // Try case-insensitive lookup for legacy types
-  const lower = raw.toLowerCase();
-  const lowerMapping = LEGACY_TYPE_MAP[lower];
-  if (lowerMapping) return lowerMapping;
-
-  return raw;
-}
-
-/**
- * Decode a ThreadEventRow into a typed ThreadEvent + row metadata.
- * The row data IS the translated event fields — no envelope unwrapping needed.
- * Legacy event types are normalized to their canonical ThreadEvent types.
- */
 function decodeRow(row: ThreadEventRow): { event: ThreadEvent; meta: EventMeta } {
   const data = row.data as Record<string, unknown>;
-  const type = normalizeEventType(row.type);
   return {
-    event: { type, threadId: row.threadId, ...data } as ThreadEvent,
+    event: { type: row.type, threadId: row.threadId, ...data } as ThreadEvent,
     meta: { id: row.id, seq: row.seq, createdAt: row.createdAt },
   };
 }
