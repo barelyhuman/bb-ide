@@ -1,5 +1,6 @@
 import { Command } from "commander";
-import type { SystemHealthReport, Thread } from "@bb/core";
+import type { Thread } from "@bb/domain";
+import type { SystemHealthReport } from "@bb/server-contract";
 import { createClient, unwrap } from "../client.js";
 import { getErrorMessage, outputJson } from "./helpers.js";
 

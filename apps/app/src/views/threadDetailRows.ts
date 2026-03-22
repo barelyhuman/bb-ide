@@ -4,4 +4,4 @@ export {
   type ThreadDetailMessageRow,
   type ThreadDetailToolGroupRow,
   type ThreadDetailRow,
-} from "@bb/core";
+} from "@bb/core-ui";

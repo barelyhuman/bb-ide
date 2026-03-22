@@ -1,4 +1,5 @@
-import type { AvailableModel, SystemProviderInfo } from "@bb/core";
+import type { AvailableModel } from "@bb/domain";
+import type { SystemProviderInfo } from "@bb/server-contract";
 
 export const MANAGER_DEFAULT_PROVIDER_ID = "claude-code";
 export const MANAGER_DEFAULT_MODEL = "claude-opus-4-6";

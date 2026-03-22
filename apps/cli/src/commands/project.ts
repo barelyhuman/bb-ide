@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type Project } from "@bb/core";
+import { type Project } from "@bb/domain";
 import { createClient, unwrap } from "../client.js";
 import {
   confirmDestructiveAction,

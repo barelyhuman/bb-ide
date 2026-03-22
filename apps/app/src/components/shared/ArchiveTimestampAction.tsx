@@ -1,4 +1,4 @@
-import type { ThreadType } from "@bb/core";
+import type { ThreadType } from "@bb/domain";
 import { ArchiveRestore, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { threadTypeLabel } from "@/lib/thread-title";

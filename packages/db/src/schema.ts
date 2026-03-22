@@ -22,7 +22,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { ThreadEventType } from "@bb/core";
+import type { ThreadEventType } from "@bb/domain";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),

@@ -1,5 +1,5 @@
 import { CollapsibleHeader, ExpandablePanel, EventCodeBlock } from "@bb/ui-core";
-import type { UIErrorMessage } from "@bb/core";
+import type { UIErrorMessage } from "@bb/core-ui";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
   useLatestInitialExpanded,

@@ -1,4 +1,4 @@
-import type { OpenPathTarget } from "@bb/core";
+import type { OpenPathTarget } from "@bb/server-contract";
 
 const OPEN_PATH_PREFERENCES_STORAGE_KEY = "bb.open-path.preferences";
 

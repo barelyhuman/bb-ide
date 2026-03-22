@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AvailableModel, SystemProviderInfo } from "@bb/core";
+import type { AvailableModel } from "@bb/domain";
+import type { SystemProviderInfo } from "@bb/server-contract";
 import {
   resolvePreferredManagerModel,
   resolvePreferredManagerProviderId,

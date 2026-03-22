@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { UIFileEditMessage } from "@bb/core";
+import type { UIFileEditMessage } from "@bb/core-ui";
 import {
   CollapsibleHeader,
   ExpandablePanel,

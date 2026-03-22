@@ -1,7 +1,7 @@
 import {
   assertNever,
   type UIMessage,
-} from "@bb/core";
+} from "@bb/core-ui";
 import type { ThreadDetailRow } from "./threadDetailRows";
 
 function isProvisioningActivityOperation(

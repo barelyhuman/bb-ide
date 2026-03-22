@@ -10,6 +10,10 @@ export { formatEnvironmentDisplay } from "./environment-display.js";
 export type { EnvironmentDisplayInfo } from "./environment-display.js";
 
 export { formatTimelineAsText } from "./format-timeline-text.js";
+export type {
+  FormatTimelineOptions,
+  TimelineFormat,
+} from "./format-timeline-text.js";
 
 export {
   deriveThreadTitleFromInput,

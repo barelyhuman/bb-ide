@@ -1,5 +1,6 @@
 import { Command } from "commander";
-import type { AvailableModel, SystemProviderInfo } from "@bb/core";
+import type { AvailableModel } from "@bb/domain";
+import type { SystemProviderInfo } from "@bb/server-contract";
 import { createClient, unwrap } from "../client.js";
 import { getErrorMessage, outputJson } from "./helpers.js";
 

@@ -2,9 +2,9 @@ import { useEffect, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   assertNever,
-  type Thread,
-  type ThreadChangeKind,
-} from "@bb/core";
+} from "@bb/core-ui";
+import type { Thread } from "@bb/domain";
+import type { ThreadChangeKind } from "@bb/server-contract";
 import { wsManager } from "../lib/ws";
 
 const INVALIDATION_DEBOUNCE_MS = 250;

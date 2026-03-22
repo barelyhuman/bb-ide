@@ -1,4 +1,4 @@
-import { assertNever } from "@bb/core";
+import { assertNever } from "@bb/core-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing" | "error";

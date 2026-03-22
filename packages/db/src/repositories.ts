@@ -12,6 +12,7 @@ import {
   notInArray,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { promptInputSchema } from "@bb/domain";
 import type {
   EnvironmentDescriptor,
   EnvironmentProperties,
@@ -30,13 +31,7 @@ import type {
   ThreadEventData,
   ThreadEventType,
   ThreadExecutionOptions,
-} from "@bb/core";
-import {
-  DEFAULT_THREAD_PROVIDER_ID,
-  getStringField,
-  promptInputSchema,
-  toRecord,
-} from "@bb/core";
+} from "@bb/domain";
 import type { DbConnection } from "./connection.js";
 
 type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
@@ -49,6 +44,23 @@ import {
   events,
 } from "./schema.js";
 import { createProjectId, createThreadId } from "./ids.js";
+
+const DEFAULT_THREAD_PROVIDER_ID = "codex";
+
+function toRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function getStringField(
+  value: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const candidate = value?.[key];
+  return typeof candidate === "string" ? candidate : undefined;
+}
 
 function deriveEventLookupFields(type: string, data: unknown): {
   normType: string;

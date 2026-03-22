@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadWorkStatus } from "@bb/core";
+import type { ThreadWorkStatus } from "@bb/domain";
 import {
   getThreadGitStatusDisplay,
   threadWorkStatusDescription,

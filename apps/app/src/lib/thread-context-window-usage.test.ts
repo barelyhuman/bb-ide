@@ -1,6 +1,6 @@
 import {
   type ThreadEventRow,
-} from "@bb/core";
+} from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   calculateContextWindowUsagePercent,

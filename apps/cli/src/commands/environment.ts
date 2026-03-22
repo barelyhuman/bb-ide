@@ -2,8 +2,8 @@ import { Command } from "commander";
 import type {
   CommitEnvironmentOperationResponse,
   SquashMergeEnvironmentOperationResponse,
-  Thread,
-} from "@bb/core";
+} from "@bb/server-contract";
+import type { Thread } from "@bb/domain";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, resolveThreadId } from "../context-env.js";
 import {

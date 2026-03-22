@@ -7,7 +7,7 @@ import {
   type UIOperationMessage,
   type UIProvisioningMetadata,
   type UIProvisioningTranscriptEntry,
-} from "@bb/core";
+} from "@bb/core-ui";
 import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,

@@ -1,4 +1,4 @@
-import { type ThreadWorkStatus } from "@bb/core";
+import { type ThreadWorkStatus } from "@bb/domain";
 import {
   Popover,
   PopoverContent,

@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { type ThreadDetailRow, type UIMessage } from "@bb/core";
+import { type ThreadDetailRow, type UIMessage } from "@bb/core-ui";
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@bb/ui-core";
 import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 

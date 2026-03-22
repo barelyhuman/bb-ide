@@ -20,12 +20,18 @@ importers:
 
   apps/app:
     dependencies:
-      '@bb/api-contract':
+      '@bb/core-ui':
         specifier: workspace:*
-        version: link:../../packages/api-contract
-      '@bb/core':
+        version: link:../../packages/core-ui
+      '@bb/domain':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/domain
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../../packages/server-contract
+      '@bb/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       '@bb/ui-core':
         specifier: workspace:*
         version: link:../../packages/ui-core
@@ -138,15 +144,18 @@ importers:
 
   apps/cli:
     dependencies:
-      '@bb/api-contract':
+      '@bb/core-ui':
         specifier: workspace:*
-        version: link:../../packages/api-contract
-      '@bb/core':
+        version: link:../../packages/core-ui
+      '@bb/domain':
         specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/domain
       '@bb/environment-daemon':
         specifier: workspace:*
         version: link:../../packages/environment-daemon
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../../packages/server-contract
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
@@ -284,9 +293,9 @@ importers:
 
   packages/db:
     dependencies:
-      '@bb/core':
+      '@bb/domain':
         specifier: workspace:*
-        version: link:../core
+        version: link:../domain
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0

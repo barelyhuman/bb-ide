@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { assertNever, type PromptInput, type ThreadType, type ThreadWorkStatus } from "@bb/core";
+import { assertNever } from "@bb/core-ui";
+import type { PromptInput, ThreadType, ThreadWorkStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { Button } from "@/components/ui/button";

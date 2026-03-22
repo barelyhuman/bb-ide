@@ -14,8 +14,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@bb/api-contract": "workspace:*",
-    "@bb/core": "workspace:*",
+    "@bb/core-ui": "workspace:*",
+    "@bb/domain": "workspace:*",
+    "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
     "@bb/environment-daemon": "workspace:*",
     "commander": "^13.0.0",

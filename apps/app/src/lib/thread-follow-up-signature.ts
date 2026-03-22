@@ -1,4 +1,5 @@
-import type { PromptInput, ThreadDetailRow, UIUserMessage } from "@bb/core"
+import type { PromptInput } from "@bb/domain"
+import type { ThreadDetailRow, UIUserMessage } from "@bb/core-ui"
 
 interface FollowUpAttachmentsSignature {
   webImages: number

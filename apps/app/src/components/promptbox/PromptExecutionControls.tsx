@@ -1,4 +1,4 @@
-import type { ReasoningLevel, SandboxMode, ServiceTier } from "@bb/core";
+import type { ReasoningLevel, SandboxMode, ServiceTier } from "@bb/domain";
 import { formatModelLabel } from "@/hooks/usePromptModelReasoning";
 import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
 import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";

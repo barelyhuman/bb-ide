@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type Thread } from "@bb/core";
+import { type Thread } from "@bb/domain";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
 import {

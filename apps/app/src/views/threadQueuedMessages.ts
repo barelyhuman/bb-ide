@@ -1,8 +1,8 @@
 import {
-  toRecord,
   type PromptInput,
   type ThreadQueuedMessage,
-} from "@bb/core";
+} from "@bb/domain";
+import { toRecord } from "@bb/core-ui";
 import { type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;

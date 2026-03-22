@@ -1,4 +1,5 @@
-import type { PromptInput, UploadedPromptAttachment } from "@bb/core";
+import type { PromptInput } from "@bb/domain";
+import type { UploadedPromptAttachment } from "@bb/server-contract";
 
 export type PromptDraftAttachment = UploadedPromptAttachment;
 

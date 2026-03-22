@@ -1,4 +1,4 @@
-import { createApiClient } from "@bb/api-contract";
+import { createApiClient } from "@bb/server-contract";
 
 const BASE_URL = typeof window === "undefined"
   ? "http://localhost"

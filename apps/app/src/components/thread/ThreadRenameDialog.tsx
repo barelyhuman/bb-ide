@@ -1,4 +1,4 @@
-import type { ThreadType } from "@bb/core"
+import type { ThreadType } from "@bb/domain"
 import { useId, useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import {

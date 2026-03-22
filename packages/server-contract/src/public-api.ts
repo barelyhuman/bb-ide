@@ -964,3 +964,14 @@ export type PublicApiRoutes = Hono<{}, PublicApiSchema, "/">;
 export function createPublicApiClient(baseUrl: string) {
   return hc<PublicApiRoutes>(`${baseUrl}/api/v1`);
 }
+
+export function createApiClient(baseUrl: string) {
+  const apiClient = createPublicApiClient(baseUrl);
+  return {
+    api: {
+      v1: apiClient,
+    },
+  };
+}
+
+export type ApiClient = ReturnType<typeof createApiClient>;

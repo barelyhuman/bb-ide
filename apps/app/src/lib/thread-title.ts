@@ -1,4 +1,4 @@
-import type { Thread, ThreadType } from "@bb/core"
+import type { Thread, ThreadType } from "@bb/domain"
 
 export function getThreadDisplayTitle(thread: Pick<Thread, "id" | "title" | "titleFallback">): string {
   if (thread.title && thread.title.trim().length > 0) return thread.title

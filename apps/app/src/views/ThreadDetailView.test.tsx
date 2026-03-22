@@ -2,7 +2,8 @@ import { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { Thread, ThreadTimelineResponse, ThreadWorkStatus } from "@bb/core";
+import type { Thread, ThreadWorkStatus } from "@bb/domain";
+import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { buildFollowUpSignatureFromInput, buildFollowUpSignatureFromRow } from "@/lib/thread-follow-up-signature";
 import { ThreadDetailView } from "./ThreadDetailView";
 

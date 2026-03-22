@@ -1,4 +1,4 @@
-import type { Thread } from "@bb/core"
+import type { Thread } from "@bb/domain"
 import { AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {

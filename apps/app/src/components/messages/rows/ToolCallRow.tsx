@@ -1,5 +1,5 @@
 import { ExpandablePanel } from "@bb/ui-core";
-import type { UIToolCallMessage } from "@bb/core";
+import type { UIToolCallMessage } from "@bb/core-ui";
 import {
   EventTitle,
   formatSummaryDuration,

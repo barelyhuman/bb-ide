@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UIMessage } from "@bb/core";
+import type { UIMessage } from "@bb/core-ui";
 import type { ThreadDetailRow } from "./threadDetailRows";
 import {
   findLatestActivityMessageId,

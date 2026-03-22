@@ -1,4 +1,4 @@
-import type { ThreadWorkStatus } from "@bb/core";
+import type { ThreadWorkStatus } from "@bb/domain";
 
 type ChangeCounts = {
   changedFiles: number;

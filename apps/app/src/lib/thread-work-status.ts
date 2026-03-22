@@ -1,4 +1,5 @@
-import { assertNever, type ThreadWorkStatus } from "@bb/core";
+import { assertNever } from "@bb/core-ui";
+import type { ThreadWorkStatus } from "@bb/domain";
 import type { StatusPillVariant } from "@bb/ui-core";
 import {
   formatDirtyWorkspaceLabel,

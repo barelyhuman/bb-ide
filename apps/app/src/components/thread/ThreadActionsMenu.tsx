@@ -1,4 +1,4 @@
-import type { ThreadType } from "@bb/core"
+import type { ThreadType } from "@bb/domain"
 import { MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,

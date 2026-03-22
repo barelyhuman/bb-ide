@@ -1,7 +1,7 @@
 import {
   extractThreadContextWindowUsage as extractThreadContextWindowUsageFromEvents,
-  type ThreadContextWindowUsage,
-} from "@bb/core";
+} from "@bb/core-ui";
+import type { ThreadContextWindowUsage } from "@bb/domain";
 
 export type { ThreadContextWindowUsage };
 

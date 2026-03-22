@@ -1,4 +1,4 @@
-import type { EnvironmentCapabilities } from "@bb/core";
+import type { EnvironmentCapabilities } from "@bb/domain";
 
 export function supportsPrimaryCheckoutMetadata(
   capabilities?: Pick<

@@ -1,4 +1,4 @@
-import type { EnvironmentCapabilities } from "@bb/core"
+import type { EnvironmentCapabilities } from "@bb/domain"
 import { Container, Laptop } from "lucide-react"
 import { describe, expect, it } from "vitest"
 import { getEnvironmentIconInfo } from "./environment-icon"

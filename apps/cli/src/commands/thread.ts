@@ -1,17 +1,21 @@
 import { Command } from "commander";
 import {
-  type SpawnThreadRequest,
   type Thread,
   type ThreadEventRow,
-  type ThreadGitDiffResponse,
   type ThreadStatus,
-  type ThreadTimelineResponse,
   type ThreadWorkStatus,
-  type TimelineFormat,
   type Project,
-  formatTimelineAsText,
+} from "@bb/domain";
+import {
   formatEnvironmentDisplay,
-} from "@bb/core";
+  formatTimelineAsText,
+  type TimelineFormat,
+} from "@bb/core-ui";
+import type {
+  SpawnThreadRequest,
+  ThreadGitDiffResponse,
+  ThreadTimelineResponse,
+} from "@bb/server-contract";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
 import {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import type { Thread } from "@bb/core"
+import type { Thread } from "@bb/domain"
 import {
   AlertTriangle,
   ChevronDown,

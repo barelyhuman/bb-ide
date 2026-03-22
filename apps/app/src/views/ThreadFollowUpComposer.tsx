@@ -5,7 +5,7 @@ import {
   type SandboxMode,
   type ServiceTier,
   type ThreadQueuedMessage,
-} from "@bb/core";
+} from "@bb/domain";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import {
   PromptOptionDisplay,

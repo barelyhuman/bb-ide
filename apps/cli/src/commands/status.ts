@@ -1,5 +1,9 @@
 import { Command } from "commander";
-import { type Project, type Thread, formatEnvironmentDisplay, type EnvironmentDisplayInfo } from "@bb/core";
+import type { Project, Thread } from "@bb/domain";
+import {
+  formatEnvironmentDisplay,
+  type EnvironmentDisplayInfo,
+} from "@bb/core-ui";
 import { resolveContextSnapshot } from "../context-env.js";
 import { createClient, unwrap } from "../client.js";
 import { outputJson } from "./helpers.js";

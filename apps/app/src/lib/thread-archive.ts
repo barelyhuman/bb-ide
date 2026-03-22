@@ -1,9 +1,11 @@
 import {
   assertNever,
-  type EnvironmentRecord,
-  type SystemEnvironmentInfo,
-  type ThreadWorkStatus,
-} from "@bb/core"
+} from "@bb/core-ui"
+import type {
+  EnvironmentRecord,
+  ThreadWorkStatus,
+} from "@bb/domain"
+import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { HttpError } from "./api"
 
 type ArchiveEnvironmentShape =

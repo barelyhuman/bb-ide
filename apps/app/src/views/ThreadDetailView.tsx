@@ -62,11 +62,9 @@ import {
   buildCommitFailureFollowUpInstruction,
   buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
-  type EnvironmentOperationFailureDetails,
-  type PromptInput,
-  type ServiceTier,
-  type Thread,
-} from "@bb/core";
+} from "@/lib/thread-operation-prompts";
+import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
+import type { EnvironmentOperationFailureDetails } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError, openThreadPathInEditor } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";

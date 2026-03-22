@@ -9,13 +9,16 @@ import {
   sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { assertNever } from "@bb/core";
 import type { DbConnection } from "./connection.js";
 import {
   environmentDaemonCommands,
   environmentDaemonCursors,
   environmentDaemonSessions,
 } from "./schema.js";
+
+function assertNever(value: never): never {
+  throw new Error(`Unexpected value: ${String(value)}`);
+}
 
 export type EnvironmentDaemonSessionStatus =
   | "active"

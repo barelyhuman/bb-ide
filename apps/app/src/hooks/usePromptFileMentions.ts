@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PromptMentionSuggestion } from "@bb/core";
+import type { PromptMentionSuggestion } from "@bb/server-contract";
 import { useProjectFileSuggestions, useThreads } from "./useApi";
 
 const FILE_MENTION_DEBOUNCE_MS = 120;

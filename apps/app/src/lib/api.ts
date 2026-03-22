@@ -1,23 +1,31 @@
 import {
   extractErrorMessage,
   toRecord,
-} from "@bb/core";
+} from "@bb/core-ui";
 import type {
+  EnvironmentRecord,
+  Project,
+  Thread,
+  ThreadType,
+  ThreadExecutionOptions,
+  ThreadQueuedMessage,
+  ThreadWorkStatus,
   AvailableModel,
+  ReasoningLevel,
+} from "@bb/domain";
+import type {
   CommitOperationOptions,
   CreateProjectRequest,
-  ReasoningLevel,
+  EnqueueThreadMessageRequest,
   EnvironmentOperationResponse,
-  EnvironmentRecord,
   OpenPathTarget,
   OpenThreadPathRequest,
   PrimaryCheckoutStatus,
-  Project,
   ProjectFileSuggestion,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
-  SquashMergeOperationOptions,
   SpawnThreadRequest,
+  SquashMergeOperationOptions,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   SystemRestartAcceptedResponse,
@@ -29,20 +37,14 @@ import type {
   SystemShutdownRequest,
   SystemStatus,
   TellThreadRequest,
-  Thread,
-  ThreadType,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
-  ThreadQueuedMessage,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
-  ThreadWorkStatus,
   UpdateProjectRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
-  EnqueueThreadMessageRequest,
-} from "@bb/core";
+} from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-client";
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;

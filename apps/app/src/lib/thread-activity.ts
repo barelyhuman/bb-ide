@@ -1,4 +1,5 @@
-import { assertNever, type Thread, type ThreadStatus } from "@bb/core"
+import { assertNever } from "@bb/core-ui"
+import type { Thread, ThreadStatus } from "@bb/domain"
 
 export interface ThreadActivitySummary {
   running: number

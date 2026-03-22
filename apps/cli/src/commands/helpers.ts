@@ -2,7 +2,7 @@ import { createInterface } from "node:readline/promises";
 import type {
   CommitEnvironmentOperationResponse,
   SquashMergeEnvironmentOperationResponse,
-} from "@bb/core";
+} from "@bb/server-contract";
 
 /**
  * Print data as formatted JSON and return true, or return false if --json was not requested.

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type {
-  SystemEnvironmentInfo,
   ThreadWorkStatus,
-} from "@bb/core"
+} from "@bb/domain"
+import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { HttpError } from "./api"
 import {
   isArchiveForceRequiredError,

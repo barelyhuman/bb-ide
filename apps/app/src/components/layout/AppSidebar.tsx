@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "@bb/core"
+import type { ThreadStatus } from "@bb/domain"
 import { cn } from "@/lib/utils"
 import { Link, useLocation } from "react-router-dom"
 import { Moon, Settings, Sun } from "lucide-react"

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type {
   Thread,
+  ThreadWorkStatus,
+} from "@bb/domain";
+import type {
   ThreadGitDiffResponse,
   ThreadTimelineResponse,
-  ThreadWorkStatus,
-} from "@bb/core";
+} from "@bb/server-contract";
 import {
   appendOptimisticUserRowToTimeline,
   buildOptimisticUserThreadRow,

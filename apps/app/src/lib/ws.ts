@@ -3,7 +3,7 @@ import type {
   ChangedMessage,
   RealtimeEntity,
   ServerMessage,
-} from "@bb/core";
+} from "@bb/server-contract";
 
 export type ChangeCallback = (message: ChangedMessage) => void;
 export type ConnectedCallback = (event: { reconnected: boolean }) => void;

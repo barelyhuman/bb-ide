@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from "react";
-import type { ReasoningLevel, Thread } from "@bb/core";
+import type { ReasoningLevel, Thread } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import {
   Dialog,

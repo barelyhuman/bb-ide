@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "@bb/core";
+import type { ThreadStatus } from "@bb/domain";
 import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 import { formatSnakeCaseLabel } from "@/lib/formatting";
 

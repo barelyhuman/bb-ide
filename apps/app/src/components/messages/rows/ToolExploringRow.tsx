@@ -4,7 +4,7 @@ import {
   assertNever,
   type UIToolExploringMessage,
   type UIToolParsedIntent,
-} from "@bb/core";
+} from "@bb/core-ui";
 import {
   ExpandableDetailScrollArea,
   EventTitle,

@@ -1,5 +1,5 @@
 import { type ReactNode, type RefObject } from "react";
-import { type ThreadDetailRow, type UIMessage } from "@bb/core";
+import { type ThreadDetailRow, type UIMessage } from "@bb/core-ui";
 import {
   ConversationEmptyState,
   ConversationTimeline,

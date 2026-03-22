@@ -10,6 +10,7 @@ export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
 export type { ApiError, DomainErrorCode } from "./errors.js";
 
 export {
+  createApiClient,
   createPublicApiClient,
   commitEnvironmentOperationResponseSchema,
   commitFailureEnvironmentOperationDetailsSchema,
@@ -75,6 +76,7 @@ export {
   uploadedPromptAttachmentSchema,
 } from "./public-api.js";
 export type {
+  ApiClient,
   CommitEnvironmentOperationResponse,
   CommitFailureEnvironmentOperationDetails,
   CommitOperationOptions,

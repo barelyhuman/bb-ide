@@ -1,12 +1,12 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { formatEnvironmentDisplayName } from "@bb/core";
+import { formatEnvironmentDisplayName } from "@bb/core-ui";
 import type {
   AvailableModel,
   ReasoningLevel,
   SandboxMode,
   ServiceTier,
-  SystemEnvironmentInfo,
-} from "@bb/core";
+} from "@bb/domain";
+import type { SystemEnvironmentInfo } from "@bb/server-contract";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import {

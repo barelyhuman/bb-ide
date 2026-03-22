@@ -1,6 +1,6 @@
 import {
   type UIOperationMessage,
-} from "@bb/core";
+} from "@bb/core-ui";
 
 function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolean {
   if (message.status !== "pending") return false;

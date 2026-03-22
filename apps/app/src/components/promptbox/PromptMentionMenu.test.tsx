@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PromptMentionSuggestion } from "@bb/core";
+import type { PromptMentionSuggestion } from "@bb/server-contract";
 import { PromptMentionMenu } from "./PromptMentionMenu";
 
 describe("PromptMentionMenu", () => {

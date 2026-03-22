@@ -10,7 +10,7 @@ import {
   UserRoundPlus,
   X,
 } from "lucide-react"
-import type { Thread } from "@bb/core"
+import type { Thread } from "@bb/domain"
 import {
   SidebarProvider,
   SidebarInset,

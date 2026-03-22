@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { Thread } from "@bb/core";
+import type { Thread } from "@bb/domain";
 
 const readlineState = vi.hoisted(() => ({
   question: vi.fn(),
