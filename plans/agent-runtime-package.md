@@ -8,7 +8,8 @@ Replaces `packages/provider-adapters` (absorbed) and the provider management cod
 
 ## Dependencies
 
-- `@bb/domain` — shared types (`ThreadEvent`, `PromptInput`, `ProviderToolCallRequest`, etc.)
+- `@bb/domain` — shared types (`ThreadEvent`, `PromptInput`, `ToolCallRequest`, etc.)
+- `@bb/templates` — markdown templates (used by provider adapters for base instructions)
 
 No other workspace dependencies. No `zod`, no `hono`.
 
@@ -161,6 +162,7 @@ interface ProviderLaunch {
 }
 
 interface JsonRpcRequest {
+  id: string | number;
   method: string;
   params?: unknown;
 }
