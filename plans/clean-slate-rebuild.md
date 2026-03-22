@@ -315,15 +315,15 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 - `packages/api-contract/` entirely
 - Repository layer from `packages/db` (`repositories.ts`, `environment-daemon-repositories.ts`, `test/`)
 
-### Step 6 (later): Rebuild
+### Step 6: NOT part of this plan
 
-Build order matters — each layer depends on the one above:
+Rebuilding the server, env-daemon, agent-runtime, logger, and env packages is a separate effort. This plan ends at Step 5. For reference, the rebuild order would be:
 
-1. `packages/logger`, `packages/env` — foundation, no ordering constraint
-2. `packages/agent-runtime` from provider-adapters — see `plans/agent-runtime-package.md`
-3. Environment daemon runtime (depends on `agent-runtime`, `server-contract`, `env-daemon-contract`)
-4. `apps/server` from contracts (depends on everything above)
-5. Clean up `core-ui` shim — move view logic to proper homes
+1. `packages/logger`, `packages/env`
+2. `packages/agent-runtime` — see `plans/agent-runtime-package.md`
+3. Environment daemon runtime
+4. `apps/server`
+5. Clean up `core-ui` shim
 
 ---
 
@@ -409,7 +409,7 @@ provider-adapters will break. It stays broken until Step 6 when it's absorbed in
 
 ## Scope
 
-This plan covers Steps 1-5 (create new packages, delete old ones). Step 6 (rebuild) is a separate effort.
+This plan covers Steps 1-5 only: create contract packages, migrate view utilities, delete old code. Rebuilding services is a separate plan.
 
 **In scope:**
 - Create `domain`, `server-contract`, `env-daemon-contract`, `core-ui`
