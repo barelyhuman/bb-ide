@@ -78,6 +78,9 @@ AppThreadEventType, ThreadEventDataByAppType,
 PromptInput (+ promptInputSchema), ReasoningLevel, SandboxMode, ServiceTier
 
 // Provider vocabulary
+// Provider ID is `string` — not a closed union. The set of available
+// providers is discovered via agent-runtime, not hardcoded in domain.
+// ThreadProviderId, THREAD_PROVIDER_IDS, isThreadProviderId are deleted.
 ProviderCapabilities, AvailableModel,
 ToolCallRequest, ToolCallResponse, DynamicTool
 
@@ -239,7 +242,9 @@ export function createDaemonControlClient(baseUrl: string, authToken: string) {
 
 Temporary shim so `apps/app` and `apps/cli` keep working. Cleanup target.
 
-**Dependencies:** `@bb/domain`, `@bb/server-contract` (for request/response types the view layer references)
+**Dependencies:** `@bb/domain`
+
+Note: if any view utility needs API request/response types (e.g. `buildCommitFailureFollowUpInstruction` referencing operation option types), those types should be pulled into domain or the utility should move to the consumer that owns those types. `core-ui` should NOT depend on `server-contract` — that would couple view formatting to the API surface.
 
 **Contains (moved from `packages/core/src/`):**
 - `toUIMessages()`, `UIMessage` types
@@ -296,8 +301,58 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 - `apps/server` from contracts
 - Environment daemon runtime (uses `@bb/agent-runtime`)
 - `packages/agent-runtime` from provider-adapters — see `plans/agent-runtime-package.md`
-- `packages/logger`, `packages/env`
+- `packages/logger` — structured logging primitive (see below)
+- `packages/env` — declarative env var definitions (see below)
 - Clean up `core-ui` shim
+
+---
+
+## `packages/logger` (Step 6)
+
+Structured logging designed for debuggability. Created during rebuild, not during the contract setup phase.
+
+**Dependencies:** None.
+
+**Interface:**
+```typescript
+interface Logger {
+  trace(message: string, data?: Record<string, unknown>): void;
+  debug(message: string, data?: Record<string, unknown>): void;
+  info(message: string, data?: Record<string, unknown>): void;
+  warn(message: string, data?: Record<string, unknown>): void;
+  error(message: string, data?: Record<string, unknown>): void;
+  child(context: Record<string, unknown>): Logger;
+}
+```
+
+**Key properties:**
+- Structured JSON entries with timestamp, level, component, correlationId
+- Correlation IDs flow across server ↔ daemon ↔ provider boundaries
+- Pluggable transports (console, file, rotating file)
+- Child loggers with inherited context (`logger.child({ threadId, sessionId })`)
+- Zero dependencies — thin interface over structured output
+
+---
+
+## `packages/env` (Step 6)
+
+Declarative env var definitions with validation and defaults. Uses something like envsafe. Created during rebuild.
+
+**Dependencies:** None (or envsafe).
+
+**Usage:**
+```typescript
+export const serverEnv = defineEnv({
+  BB_SERVER_PORT: { type: "number", default: 3334 },
+  BB_ROOT: { type: "string", default: "~/.bb" },
+  BB_RUNTIME_MODE: { type: "enum", values: ["development", "production"], default: "production" },
+  BB_ENV_DAEMON_AUTH_TOKEN: { type: "string", required: true },
+  BB_ENV_DAEMON_SESSION_URL: { type: "string", optional: true },
+});
+
+// Typed, validated at startup — no process.env.FOO?.trim() scattered through code
+const port = serverEnv.BB_SERVER_PORT; // number
+```
 
 ---
 

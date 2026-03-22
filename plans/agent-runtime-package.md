@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Manages agent provider processes (codex, claude-code, pi) and exposes a clean session interface. Handles process spawning, stdio framing, JSON-RPC dispatch, event translation, tool call routing, and shutdown. Consumers say "start a thread, run a turn, give me events" — they never touch processes, adapters, or wire formats.
+Manages agent provider processes (codex, claude-code, pi) and exposes a clean session interface. Handles process spawning, stdio framing, JSON-RPC dispatch, event translation, tool call routing, crash detection, and shutdown. Consumers say "start a thread, run a turn, give me events" — they never touch processes, adapters, or wire formats.
 
 Replaces `packages/provider-adapters` (absorbed) and the provider management code in `packages/environment-daemon/src/runtime.ts` (absorbed).
 
@@ -19,7 +19,7 @@ No other workspace dependencies. No `zod`, no `hono`.
 // --- Discovery ---
 
 interface ProviderInfo {
-  id: string;
+  id: string;  // provider ID is an open string, not a closed union
   displayName: string;
   capabilities: ProviderCapabilities;
   available: boolean;
@@ -44,6 +44,8 @@ interface AgentRuntimeOptions {
   onToolCall: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   /** Called on provider stderr lines (for logging/debugging) */
   onStderr?: (line: string, threadId?: string) => void;
+  /** Called when a provider process exits unexpectedly */
+  onProcessExit?: (info: { providerId: string; threadIds: string[]; code: number | null; signal: string | null }) => void;
 }
 
 function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime;
@@ -60,13 +62,15 @@ interface AgentRuntime {
 
   /**
    * Start a new thread. Returns the provider-assigned thread ID.
+   * projectId is used by the runtime to set up env vars (BB_PROJECT_ID)
+   * and resolve workspace context — it is NOT passed to the adapter.
    */
   startThread(args: {
     threadId: string;
     projectId: string;
     providerId?: string;
     input?: PromptInput[];
-    options?: ExecutionOptions;
+    options?: ThreadExecutionOptions;
     dynamicTools?: DynamicTool[];
   }): Promise<{ providerThreadId: string }>;
 
@@ -77,7 +81,7 @@ interface AgentRuntime {
     threadId: string;
     providerThreadId?: string;
     providerId?: string;
-    options?: ExecutionOptions;
+    options?: ThreadExecutionOptions;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
   }): Promise<{ providerThreadId?: string }>;
@@ -88,7 +92,16 @@ interface AgentRuntime {
   runTurn(args: {
     threadId: string;
     input: PromptInput[];
-    options?: ExecutionOptions;
+    options?: ThreadExecutionOptions;
+  }): Promise<void>;
+
+  /**
+   * Steer an active turn with additional input.
+   */
+  steerTurn(args: {
+    threadId: string;
+    expectedTurnId: string;
+    input: PromptInput[];
   }): Promise<void>;
 
   /**
@@ -110,7 +123,8 @@ interface AgentRuntime {
   listModels(args: { providerId: string }): Promise<AvailableModel[]>;
 
   /**
-   * Shut down all provider processes.
+   * Shut down all provider processes. Cleans up any temp files
+   * created during launch (auth files, etc.).
    */
   shutdown(): Promise<void>;
 }
@@ -120,14 +134,15 @@ interface AgentRuntime {
 
 All from `@bb/domain`:
 
-- `ThreadEvent` — the canonical event type. This is what `onEvent` receives. Already has `threadId`, `type`, and all event data.
+- `ThreadEvent` — the canonical event type. This is what `onEvent` receives.
 - `PromptInput` — user input (text, image, file mention)
-- `ExecutionOptions` — model, service tier, reasoning level, sandbox mode
+- `ThreadExecutionOptions` — model, service tier, reasoning level, sandbox mode. Same type used by server and daemon — no alias, no rename.
 - `DynamicTool` — dynamically registered tool definition
 - `AvailableModel` — model metadata
 - `ProviderCapabilities` — what the provider supports
 - `ToolCallRequest` — tool invocation from provider (requestId, threadId, turnId, callId, tool, arguments)
 - `ToolCallResponse` — tool result back to provider (contentItems, success)
+- `ReasoningLevel`, `SandboxMode`, `ServiceTier` — used in `ThreadExecutionOptions`, properly typed enums (not strings)
 
 ## Internal: Provider Adapter Interface
 
@@ -139,17 +154,21 @@ interface ProviderAdapter {
   displayName: string;
   capabilities: ProviderCapabilities;
 
-  /** How to launch this provider's process */
+  /**
+   * How to launch this provider's process.
+   * Async — may need to resolve auth files, write temp configs, etc.
+   * The runtime tracks files created here and cleans them up on shutdown.
+   */
   resolveLaunch(): Promise<ProviderLaunch>;
 
   /** Translate a runtime command into the provider's JSON-RPC wire format */
-  buildCommand(command: AdapterCommand): JsonRpcRequest | null;
+  buildCommand(command: AdapterCommand): JsonRpcMessage | null;
 
   /** Translate a raw provider event into canonical ThreadEvents */
   translateEvent(event: unknown): ThreadEvent[];
 
   /** Decode a provider's tool call request into a canonical ToolCallRequest */
-  decodeToolCallRequest(request: JsonRpcRequest): ToolCallRequest | null;
+  decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null;
 
   /** List available models */
   listModels(): Promise<AvailableModel[]>;
@@ -159,10 +178,14 @@ interface ProviderLaunch {
   command: string;
   args: string[];
   env?: Record<string, string>;
+  /** Temp files created for this launch (auth configs, etc.). Cleaned up on shutdown. */
+  tempFiles?: string[];
 }
 
-interface JsonRpcRequest {
-  id: string | number;
+/** A JSON-RPC 2.0 message (request or notification) */
+interface JsonRpcMessage {
+  jsonrpc: "2.0";
+  id?: string | number;  // present for requests, absent for notifications
   method: string;
   params?: unknown;
 }
@@ -172,29 +195,65 @@ interface JsonRpcRequest {
 
 Replaces the old `ProviderRequest`. Stripped of caller-layer types (`SpawnThreadRequest`, `ProviderThreadContext`). The runtime decomposes caller args into the flat fields the adapter actually needs.
 
+Uses domain enum types (`ReasoningLevel`, `SandboxMode`, `ServiceTier`) — not degraded to plain strings.
+
 ```typescript
 type AdapterCommand =
   | { type: "initialize" }
   | { type: "thread/start"; threadId: string; input?: PromptInput[];
-      options?: AdapterExecutionOptions; dynamicTools?: DynamicTool[] }
+      options?: AdapterOptions; dynamicTools?: DynamicTool[] }
   | { type: "thread/resume"; threadId: string; providerThreadId?: string;
-      options?: AdapterExecutionOptions }
+      options?: AdapterOptions; resumePath?: string; dynamicTools?: DynamicTool[] }
   | { type: "turn/start"; threadId: string; providerThreadId?: string;
-      input: PromptInput[]; options?: AdapterExecutionOptions }
+      input: PromptInput[]; options?: AdapterOptions }
   | { type: "turn/steer"; threadId: string; providerThreadId?: string;
       expectedTurnId: string; input: PromptInput[] }
   | { type: "thread/stop"; threadId: string }
   | { type: "thread/name/set"; threadId: string; providerThreadId?: string;
       title: string };
 
-interface AdapterExecutionOptions {
+/** Subset of ThreadExecutionOptions that adapters use to build commands. */
+interface AdapterOptions {
   model?: string;
-  serviceTier?: string;
-  reasoningLevel?: string;
-  sandboxMode?: string;
+  serviceTier?: ServiceTier;
+  reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
   instructions?: string;
   envVars?: Record<string, string>;
 }
+```
+
+### How the runtime decomposes public API calls into AdapterCommands
+
+```
+startThread({ threadId, projectId, input, options, dynamicTools })
+  → runtime sets up BB_PROJECT_ID, BB_THREAD_ID env vars
+  → adapter.buildCommand({
+      type: "thread/start",
+      threadId,
+      input,
+      options: { model: options.model, sandboxMode: options.sandboxMode, instructions: ..., envVars: { BB_PROJECT_ID, BB_THREAD_ID } },
+      dynamicTools,
+    })
+
+resumeThread({ threadId, providerThreadId, options, resumePath, dynamicTools })
+  → adapter.buildCommand({
+      type: "thread/resume",
+      threadId,
+      providerThreadId,
+      options: { ... },
+      resumePath,
+      dynamicTools,
+    })
+
+steerTurn({ threadId, expectedTurnId, input })
+  → adapter.buildCommand({
+      type: "turn/steer",
+      threadId,
+      providerThreadId: runtime.lookupProviderThreadId(threadId),
+      expectedTurnId,
+      input,
+    })
 ```
 
 ### Changes from current `ProviderAdapter`
@@ -206,8 +265,9 @@ interface AdapterExecutionOptions {
 | `resolveLaunchConfiguration(context)` | `resolveLaunch()` (no args) | Adapter resolves its own launch config. Thread context is a runtime concern. |
 | `preflightSessionStart()` | Deleted | Never called in production. Auth errors should surface at thread start. |
 | `encodeToolCallResponse()` | Deleted | Identity in practice. If encoding is needed, handle in `decodeToolCallRequest`. |
-| `TProviderEvent`, `TProviderCommand` generics | None | Wire types are internal to each adapter file. No need to leak into interface. `translateEvent` takes `unknown`, `buildCommand` returns `JsonRpcRequest`. |
-| `buildCommand` returns `TProviderCommand` | Returns `JsonRpcRequest \| null` | Generic JSON-RPC — all providers use this format. |
+| `TProviderEvent`, `TProviderCommand` generics | None | Wire types are internal to each adapter file. No need to leak into interface. `translateEvent` takes `unknown`, `buildCommand` returns `JsonRpcMessage`. |
+| `buildCommand` returns `TProviderCommand` | Returns `JsonRpcMessage \| null` | JSON-RPC 2.0 — all providers use this format. |
+| `AdapterExecutionOptions` all strings | `AdapterOptions` uses domain enums | `ServiceTier`, `ReasoningLevel`, `SandboxMode` are proper types, not degraded strings. |
 
 ### What else stays internal
 
@@ -215,6 +275,7 @@ interface AdapterExecutionOptions {
 - **Process management** — spawning, stdio buffering, JSON-RPC framing, timeouts, crash detection
 - **Thread-to-process routing** — mapping thread IDs to child processes, provider thread ID extraction
 - **Provider initialization** — the `initialize` handshake with the provider process
+- **Temp file cleanup** — files created by `resolveLaunch()` are tracked and removed on `shutdown()`
 
 ## Lifecycle
 
@@ -222,14 +283,13 @@ interface AdapterExecutionOptions {
 createAgentRuntime(options)
   │
   ├── ensureProvider({ providerId: "codex" })
-  │     ├── adapter.resolveLaunch() → { command, args, env }
+  │     ├── adapter.resolveLaunch() → { command, args, env, tempFiles }
   │     ├── spawns child process
   │     └── adapter.buildCommand({ type: "initialize" }) → JSON-RPC → child
   │
   ├── startThread({ threadId, projectId, input, options })
   │     ├── ensures provider running
-  │     ├── runtime decomposes args into AdapterCommand:
-  │     │     { type: "thread/start", threadId, input, options: { model, sandboxMode, instructions } }
+  │     ├── runtime decomposes args into AdapterCommand
   │     ├── adapter.buildCommand(command) → JSON-RPC
   │     ├── sends to child stdin, waits for response
   │     ├── extracts providerThreadId from result
@@ -239,47 +299,59 @@ createAgentRuntime(options)
   │     ├── adapter.buildCommand({ type: "turn/start", ... }) → JSON-RPC
   │     └── sends to child, provider starts streaming events
   │
+  ├── steerTurn({ threadId, expectedTurnId, input })
+  │     ├── adapter.buildCommand({ type: "turn/steer", ... }) → JSON-RPC
+  │     └── sends to child
+  │
   ├── [provider emits events via stdout]
   │     ├── runtime parses JSON lines
   │     ├── adapter.translateEvent(raw) → ThreadEvent[]
   │     └── calls options.onEvent(event) for each
   │
   ├── [provider requests tool call via JSON-RPC]
-  │     ├── adapter.decodeToolCallRequest({ method, params })
+  │     ├── adapter.decodeToolCallRequest({ jsonrpc, id, method, params })
   │     ├── calls options.onToolCall(request)
-  │     └── sends JSON-RPC response back to provider
+  │     └── sends JSON-RPC response { jsonrpc: "2.0", id, result } back to provider
+  │
+  ├── [provider process exits unexpectedly]
+  │     └── calls options.onProcessExit({ providerId, threadIds, code, signal })
   │
   ├── stopThread({ threadId })
   │
   └── shutdown()
-        └── SIGTERM all children, wait, SIGKILL if needed
+        ├── SIGTERM all children, wait, SIGKILL if needed
+        └── clean up tempFiles from resolveLaunch()
 ```
 
 ## Testing
 
-Integration tests test the public API, not adapters:
+Integration tests test the public API, not adapters.
+
+**For CI (no real provider binaries):** Use a fake provider process — a small script that speaks JSON-RPC over stdio, responds to `initialize` and `thread/start`, emits events. The existing `fake-codex.ts` test helper is a good starting point.
 
 ```typescript
-// Good: test the contract
-const events: ThreadEvent[] = [];
 const runtime = createAgentRuntime({
   workspacePath: tmpDir,
   onEvent: (event) => events.push(event),
   onToolCall: async (req) => ({ contentItems: [{ type: "inputText", text: "done" }], success: true }),
+  onProcessExit: (info) => exitEvents.push(info),
 });
-await runtime.ensureProvider({ providerId: "codex" });
+
+// Use a fake provider that the test registers
+await runtime.ensureProvider({ providerId: "fake" });
+
 const { providerThreadId } = await runtime.startThread({
   threadId: "t1",
   projectId: "p1",
   input: [{ type: "text", text: "hello" }],
 });
 expect(providerThreadId).toBeDefined();
-// wait for events...
 expect(events.some(e => e.type === "turn/started")).toBe(true);
+
 await runtime.shutdown();
 ```
 
-No custom test harness that replicates what the runtime does. The tests exercise the real code path.
+**For real provider integration tests:** Run with real codex/claude-code binaries. These tests are slower and require auth — gated behind an env flag, not part of default CI.
 
 ## Migration from `packages/provider-adapters`
 
@@ -287,7 +359,7 @@ No custom test harness that replicates what the runtime does. The tests exercise
 |---------|-----|
 | `createProviderAdapter()` | Internal — adapters are implementation details |
 | `ProviderAdapter<TEvent, TCommand>` | Internal — not exported |
-| `ProviderRequest` | Internal — not exported |
+| `ProviderRequest` | Internal `AdapterCommand` — not exported |
 | `listAvailableProviderInfos()` | `listAvailableProviders()` |
 | `resolveDefaultProviderId()` | `resolveDefaultProviderId()` (same) |
 | `LlmCompletionService` / `createCodexLlmCompletionService` | Deleted — use `@pi/ai` directly |
@@ -306,7 +378,7 @@ The following code from `runtime.ts` moves INTO `@bb/agent-runtime`:
 - Tool call handling (`handleProviderServerRequest`)
 - Thread-to-process mapping (`threadIdToChild`, `childToProviderId`)
 - Provider initialization (`buildInitializeRequest`, `providerInitializedPids`)
-- Shutdown (`stopProviderChild`, `stopSingleChild`)
+- Shutdown and crash detection (`stopProviderChild`, `stopSingleChild`, exit handlers)
 
 What stays in env-daemon (NOT absorbed):
 - Session protocol (open, heartbeat, events, commands) — moves to `server-contract`
