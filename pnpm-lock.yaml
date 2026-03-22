@@ -150,9 +150,6 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@bb/environment-daemon':
-        specifier: workspace:*
-        version: link:../../packages/environment-daemon
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../../packages/server-contract
@@ -176,101 +173,7 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  apps/server:
-    dependencies:
-      '@bb/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@bb/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@bb/env-daemon-contract':
-        specifier: workspace:*
-        version: link:../../packages/env-daemon-contract
-      '@bb/environment':
-        specifier: workspace:*
-        version: link:../../packages/environment
-      '@bb/environment-daemon':
-        specifier: workspace:*
-        version: link:../../packages/environment-daemon
-      '@bb/provider-adapters':
-        specifier: workspace:*
-        version: link:../../packages/provider-adapters
-      '@bb/templates':
-        specifier: workspace:*
-        version: link:../../packages/templates
-      '@hono/node-server':
-        specifier: ^1.13.0
-        version: 1.19.9(hono@4.11.9)
-      '@hono/node-ws':
-        specifier: ^1.1.0
-        version: 1.3.0(@hono/node-server@1.19.9(hono@4.11.9))(hono@4.11.9)
-      '@hono/zod-validator':
-        specifier: ^0.4.0
-        version: 0.4.3(hono@4.11.9)(zod@3.25.76)
-      dotenv:
-        specifier: ^17.3.1
-        version: 17.3.1
-      hono:
-        specifier: ^4.7.0
-        version: 4.11.9
-      xstate:
-        specifier: ^5.20.2
-        version: 5.27.0
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../../packages/tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      '@types/ws':
-        specifier: ^8.5.0
-        version: 8.18.1
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  packages/api-contract:
-    dependencies:
-      '@bb/core':
-        specifier: workspace:*
-        version: link:../core
-      hono:
-        specifier: ^4.7.0
-        version: 4.11.9
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  packages/core:
-    dependencies:
-      '@bb/templates':
-        specifier: workspace:*
-        version: link:../templates
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
+  apps/server: {}
 
   packages/core-ui:
     dependencies:
@@ -354,62 +257,6 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/environment:
-    dependencies:
-      '@bb/core':
-        specifier: workspace:*
-        version: link:../core
-      '@bb/environment-daemon':
-        specifier: workspace:*
-        version: link:../environment-daemon
-      '@bb/templates':
-        specifier: workspace:*
-        version: link:../templates
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.0
-        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
-
-  packages/environment-daemon:
-    dependencies:
-      '@bb/core':
-        specifier: workspace:*
-        version: link:../core
-      '@bb/env-daemon-contract':
-        specifier: workspace:*
-        version: link:../env-daemon-contract
-      '@bb/provider-adapters':
-        specifier: workspace:*
-        version: link:../provider-adapters
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      esbuild:
-        specifier: ^0.25.11
-        version: 0.25.12
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.0
-        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
-
   packages/provider-adapters:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -418,9 +265,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.73.0
         version: 0.73.0(zod@4.3.6)
-      '@bb/core':
+      '@bb/domain':
         specifier: workspace:*
-        version: link:../core
+        version: link:../domain
       '@bb/templates':
         specifier: workspace:*
         version: link:../templates
@@ -1406,25 +1253,6 @@ packages:
     peerDependenciesMeta:
       '@modelcontextprotocol/sdk':
         optional: true
-
-  '@hono/node-server@1.19.9':
-    resolution: {integrity: sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
-
-  '@hono/node-ws@1.3.0':
-    resolution: {integrity: sha512-ju25YbbvLuXdqBCmLZLqnNYu1nbHIQjoyUqA8ApZOeL1k4skuiTcw5SW77/5SUYo2Xi2NVBJoVlfQurnKEp03Q==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      '@hono/node-server': ^1.19.2
-      hono: ^4.6.0
-
-  '@hono/zod-validator@0.4.3':
-    resolution: {integrity: sha512-xIgMYXDyJ4Hj6ekm9T9Y27s080Nl9NXHcJkOvkXPhubOLj8hZkOL8pDnnXfvCf5xEE8Q4oMFenQUZZREUY2gqQ==}
-    peerDependencies:
-      hono: '>=3.9.0'
-      zod: ^3.19.1
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -2621,9 +2449,6 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
-
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
 
@@ -2970,10 +2795,6 @@ packages:
   diff@8.0.3:
     resolution: {integrity: sha512-qejHi7bcSD4hQAZE0tNAawRK1ZtafHDmMTMkrrIGgSLl7hTnQHmKCeB45xAcbfTqK2zowkM3j3bHt/4b/ARbYQ==}
     engines: {node: '>=0.3.1'}
-
-  dotenv@17.3.1:
-    resolution: {integrity: sha512-IO8C/dzEb6O3F9/twg6ZLXz164a2fhTnEWb95H23Dm4OuN+92NmEAlTrupP9VW6Jm3sO26tQlqyvyi4CsnY9GA==}
-    engines: {node: '>=12'}
 
   drizzle-kit@0.30.6:
     resolution: {integrity: sha512-U4wWit0fyZuGuP7iNmRleQyK2V8wCuv57vf5l3MnG4z4fzNTjY/U13M8owyQ5RavqvqxBifWORaR3wIUzlN64g==}
@@ -4661,9 +4482,6 @@ packages:
       utf-8-validate:
         optional: true
 
-  xstate@5.27.0:
-    resolution: {integrity: sha512-ILzEhrLTbTyh3kP19IgLBX/sOSfejnDXrxcftuXS9QaY6mc8QuHXcl3GqUIAaAXM/09/ozHFn0nGFlQj+r9tCg==}
-
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
     engines: {node: '>=10'}
@@ -5605,24 +5423,6 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
-
-  '@hono/node-server@1.19.9(hono@4.11.9)':
-    dependencies:
-      hono: 4.11.9
-
-  '@hono/node-ws@1.3.0(@hono/node-server@1.19.9(hono@4.11.9))(hono@4.11.9)':
-    dependencies:
-      '@hono/node-server': 1.19.9(hono@4.11.9)
-      hono: 4.11.9
-      ws: 8.19.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@hono/zod-validator@0.4.3(hono@4.11.9)(zod@3.25.76)':
-    dependencies:
-      hono: 4.11.9
-      zod: 3.25.76
 
   '@humanfs/core@0.19.1': {}
 
@@ -6887,10 +6687,6 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
-  '@types/ws@8.18.1':
-    dependencies:
-      '@types/node': 22.19.10
-
   '@types/yauzl@2.10.3':
     dependencies:
       '@types/node': 22.19.10
@@ -7229,8 +7025,6 @@ snapshots:
       dequal: 2.0.3
 
   diff@8.0.3: {}
-
-  dotenv@17.3.1: {}
 
   drizzle-kit@0.30.6:
     dependencies:
@@ -8922,6 +8716,7 @@ snapshots:
       get-tsconfig: 4.13.6
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   tunnel-agent@0.6.0:
     dependencies:
@@ -9146,8 +8941,6 @@ snapshots:
   wrappy@1.0.2: {}
 
   ws@8.19.0: {}
-
-  xstate@5.27.0: {}
 
   y18n@5.0.8: {}
 

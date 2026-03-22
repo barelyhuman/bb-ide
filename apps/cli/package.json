@@ -18,7 +18,6 @@
     "@bb/domain": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
-    "@bb/environment-daemon": "workspace:*",
     "commander": "^13.0.0",
     "hono": "^4.7.0"
   },
