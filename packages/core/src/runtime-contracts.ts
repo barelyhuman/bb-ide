@@ -59,7 +59,7 @@ export interface ProviderToolCallRequest {
   turnId: string;
   callId: string;
   tool: string;
-  arguments: unknown;
+  arguments?: unknown;
 }
 
 export type ProviderToolCallOutputItem =

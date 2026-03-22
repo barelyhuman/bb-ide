@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
+import type { z } from "zod";
 import {
   ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
+  environmentDaemonSessionCommandBatchMessageSchema,
+  environmentDaemonSessionEventAckMessageSchema,
+  environmentDaemonSessionProviderResponseMessageSchema,
+  environmentDaemonSessionWelcomeMessageSchema,
   type EnvironmentDaemonSessionClientMessage,
   type EnvironmentDaemonSessionCommandAckPayload,
   type EnvironmentDaemonSessionCommandBatchMessage,
@@ -95,11 +100,12 @@ export class EnvironmentDaemonSessionClient {
   openSession(
     payload: EnvironmentDaemonSessionOpenPayload,
   ): Promise<EnvironmentDaemonSessionWelcomeMessage> {
-    return this.postJson(
+    return this.postJsonValidated(
       `/environments/${this.environmentId}/env-daemon/session/open`,
       payload,
       201,
-    ) as Promise<EnvironmentDaemonSessionWelcomeMessage>;
+      environmentDaemonSessionWelcomeMessageSchema,
+    );
   }
 
   async heartbeat(
@@ -113,19 +119,20 @@ export class EnvironmentDaemonSessionClient {
     });
   }
 
-  pushEvents(args: {
+  async pushEvents(args: {
     sessionId: string;
     payload: EnvironmentDaemonSessionEventBatchPayload;
   }): Promise<EnvironmentDaemonSessionEventAckMessage> {
-    return this.postClientMessage({
+    const raw = await this.postClientMessage({
       type: "event_batch",
       sessionId: args.sessionId,
       payload: args.payload,
       responseStatus: 200,
-    }) as Promise<EnvironmentDaemonSessionEventAckMessage>;
+    });
+    return environmentDaemonSessionEventAckMessageSchema.parse(raw);
   }
 
-  pullCommands<TCommand = Record<string, unknown>>(args: {
+  async pullCommands<TCommand = Record<string, unknown>>(args: {
     sessionId: string;
     afterCursor?: number;
     limit?: number;
@@ -142,11 +149,13 @@ export class EnvironmentDaemonSessionClient {
     if (Number.isFinite(args.waitMs) && (args.waitMs ?? 0) >= 0) {
       search.set("waitMs", String(Math.floor(args.waitMs ?? 0)));
     }
-    return this.getJson(
+    const raw = await this.getJsonValidated(
       `/environments/${this.environmentId}/env-daemon/session/commands?${search.toString()}`,
       200,
+      environmentDaemonSessionCommandBatchMessageSchema,
       { signal: args.signal },
-    ) as Promise<EnvironmentDaemonSessionCommandBatchMessage<TCommand>>;
+    );
+    return raw as EnvironmentDaemonSessionCommandBatchMessage<TCommand>;
   }
 
   async acknowledgeCommands(
@@ -171,16 +180,17 @@ export class EnvironmentDaemonSessionClient {
     });
   }
 
-  sendProviderRequest(args: {
+  async sendProviderRequest(args: {
     sessionId: string;
     payload: EnvironmentDaemonSessionProviderRequestPayload;
   }): Promise<EnvironmentDaemonSessionProviderResponseMessage> {
-    return this.postClientMessage({
+    const raw = await this.postClientMessage({
       type: "provider_request",
       sessionId: args.sessionId,
       payload: args.payload,
       responseStatus: 200,
-    }) as Promise<EnvironmentDaemonSessionProviderResponseMessage>;
+    });
+    return environmentDaemonSessionProviderResponseMessageSchema.parse(raw);
   }
 
   async closeSession(
@@ -257,6 +267,26 @@ export class EnvironmentDaemonSessionClient {
       body: JSON.stringify(body),
     });
     return this.requireJson(response, expectedStatus);
+  }
+
+  private async postJsonValidated<T>(
+    path: string,
+    body: unknown,
+    expectedStatus: number,
+    schema: z.ZodType<T>,
+  ): Promise<T> {
+    const raw = await this.postJson(path, body, expectedStatus);
+    return schema.parse(raw);
+  }
+
+  private async getJsonValidated<T>(
+    path: string,
+    expectedStatus: number,
+    schema: z.ZodType<T>,
+    options?: { signal?: AbortSignal },
+  ): Promise<T> {
+    const raw = await this.getJson(path, expectedStatus, options);
+    return schema.parse(raw);
   }
 
   private async postNoContent(path: string, body: unknown): Promise<void> {

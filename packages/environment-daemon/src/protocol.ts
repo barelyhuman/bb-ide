@@ -244,7 +244,7 @@ export type EnvironmentDaemonEvent =
     };
 
 export interface EnvironmentDaemonEventEnvelope<
-  TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
+  TEvent = EnvironmentDaemonEvent,
 > {
   protocolVersion: typeof ENVIRONMENT_DAEMON_PROTOCOL_VERSION;
   sequence: number;

@@ -6,15 +6,7 @@ import {
   environmentDaemonSessionClientMessageSchema,
   environmentDaemonSessionOpenPayloadSchema,
 } from "@bb/env-daemon-contract";
-import type {
-  EnvironmentDaemonSessionClientMessage,
-  EnvironmentDaemonSessionCommandAckPayload,
-  EnvironmentDaemonSessionCommandResultPayload,
-  EnvironmentDaemonSessionEventBatchPayload,
-  EnvironmentDaemonSessionHeartbeatPayload,
-  EnvironmentDaemonSessionOpenPayload,
-  EnvironmentDaemonSessionProviderRequestPayload,
-} from "@bb/environment-daemon";
+import type { EnvironmentDaemonSessionEventBatchPayload } from "@bb/environment-daemon";
 import { invalidRequestError, projectNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
@@ -168,7 +160,7 @@ export function createEnvironmentDaemonRoutes(opts: {
           if (!environment) {
             return sendRouteError(c, environmentNotFoundError(environmentId));
           }
-          const body = c.req.valid("json") as EnvironmentDaemonSessionOpenPayload;
+          const body = c.req.valid("json");
           const opened = environmentDaemonSessionService.openSession({
             environmentId,
             payload: body,
@@ -219,19 +211,18 @@ export function createEnvironmentDaemonRoutes(opts: {
           if (!environment) {
             return sendRouteError(c, environmentNotFoundError(environmentId));
           }
-          const body = c.req.valid("json") as Exclude<
-            EnvironmentDaemonSessionClientMessage,
-            { type: "session_open" }
-          >;
+          const body = c.req.valid("json");
           switch (body.type) {
             case "heartbeat":
               environmentDaemonSessionService.recordHeartbeat({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentDaemonSessionHeartbeatPayload,
+                payload: body.payload,
               });
               return c.body(null, 204);
             case "event_batch": {
+              // Wire events are Record<string, unknown>; the daemon validates event
+              // structure before sending, so we trust the shape here.
               const response = await environmentDaemonSessionService.applyEventBatch({
                 environmentId,
                 sessionId: body.sessionId,
@@ -243,21 +234,21 @@ export function createEnvironmentDaemonRoutes(opts: {
               environmentDaemonSessionService.recordCommandAck({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentDaemonSessionCommandAckPayload,
+                payload: body.payload,
               });
               return c.body(null, 204);
             case "command_result":
               environmentDaemonSessionService.recordCommandResult({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentDaemonSessionCommandResultPayload,
+                payload: body.payload,
               });
               return c.body(null, 204);
             case "provider_request": {
               const response = await environmentDaemonSessionService.handleProviderRequest({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentDaemonSessionProviderRequestPayload,
+                payload: body.payload,
               });
               return c.json(response);
             }
@@ -265,9 +256,14 @@ export function createEnvironmentDaemonRoutes(opts: {
               environmentDaemonSessionService.closeSession({
                 environmentId,
                 sessionId: body.sessionId,
-                reason: (body.payload as { reason: "daemon_shutdown" | "server_shutdown" | "migration" | "internal_error" }).reason,
+                reason: body.payload.reason,
               });
               return c.body(null, 204);
+            case "session_open":
+              return sendRouteError(
+                c,
+                invalidRequestError("session_open is not accepted on the messages endpoint"),
+              );
             default:
               assertNever(body);
           }

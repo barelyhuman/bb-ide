@@ -45,21 +45,14 @@ export type EnvironmentDaemonSessionCloseReason =
   | "migration"
   | "internal_error";
 
-export interface EnvironmentDaemonSessionCursor {
-  generation: number;
-  sequence: number;
-}
+// EnvironmentDaemonSessionCursor is derived from its schema below.
 
 export interface EnvironmentDaemonSessionCursorExclusive {
   generation: number;
   sequenceExclusive: number;
 }
 
-export interface EnvironmentDaemonSessionChannelBootstrap {
-  channelId: string;
-  generation: number;
-  lastServerAcked?: EnvironmentDaemonSessionCursor;
-}
+// EnvironmentDaemonSessionChannelBootstrap is derived from its schema below.
 
 export interface EnvironmentDaemonSessionControlEndpoint {
   baseUrl: string;
@@ -78,10 +71,7 @@ export interface EnvironmentDaemonSessionProviderMetadata {
   runtimeVersion?: string;
 }
 
-export interface EnvironmentDaemonSessionCapabilities {
-  commands: EnvironmentDaemonSessionCapabilityCommand[];
-  features: EnvironmentDaemonSessionCapabilityFeature[];
-}
+// EnvironmentDaemonSessionCapabilities is derived from its schema below.
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -92,16 +82,28 @@ export const environmentDaemonSessionCursorSchema = z.object({
   sequence: z.number().int().min(0),
 });
 
+export type EnvironmentDaemonSessionCursor = z.infer<
+  typeof environmentDaemonSessionCursorSchema
+>;
+
 export const environmentDaemonSessionChannelBootstrapSchema = z.object({
   channelId: z.string().min(1),
   generation: z.number().int().min(0),
   lastServerAcked: environmentDaemonSessionCursorSchema.optional(),
 });
 
+export type EnvironmentDaemonSessionChannelBootstrap = z.infer<
+  typeof environmentDaemonSessionChannelBootstrapSchema
+>;
+
 export const environmentDaemonSessionCapabilitiesSchema = z.object({
   commands: z.array(z.enum(ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS)).min(1),
   features: z.array(z.enum(ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES)),
 });
+
+export type EnvironmentDaemonSessionCapabilities = z.infer<
+  typeof environmentDaemonSessionCapabilitiesSchema
+>;
 
 export const environmentDaemonSessionOpenPayloadSchema = z.object({
   environmentDaemonId: z.string().min(1),
@@ -127,30 +129,16 @@ export const environmentDaemonSessionOpenPayloadSchema = z.object({
   channels: z.array(environmentDaemonSessionChannelBootstrapSchema),
 });
 
-
-export interface EnvironmentDaemonSessionOpenPayload {
-  environmentDaemonId: string;
-  environmentDaemonInstanceId: string;
-  supportedProtocolVersions: number[];
-  capabilities?: EnvironmentDaemonSessionCapabilities;
-  worker?: EnvironmentDaemonSessionWorkerMetadata;
-  providers?: EnvironmentDaemonSessionProviderMetadata[];
-  controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
-  channels: EnvironmentDaemonSessionChannelBootstrap[];
-}
+export type EnvironmentDaemonSessionOpenPayload = z.infer<
+  typeof environmentDaemonSessionOpenPayloadSchema
+>;
 
 export interface EnvironmentDaemonSessionWelcomeChannel {
   channelId: string;
   applyFrom: EnvironmentDaemonSessionCursorExclusive;
 }
 
-export interface EnvironmentDaemonSessionWelcomePayload {
-  leaseTtlMs: number;
-  heartbeatIntervalMs: number;
-  protocolVersion: EnvironmentDaemonSessionProtocolVersion;
-  selectedCapabilities?: EnvironmentDaemonSessionCapabilities;
-  channels: EnvironmentDaemonSessionWelcomeChannel[];
-}
+// EnvironmentDaemonSessionWelcomePayload is derived from its schema below.
 
 const environmentDaemonSessionCursorExclusiveSchema = z.object({
   generation: z.number().int().min(0),
@@ -167,6 +155,10 @@ export const environmentDaemonSessionWelcomePayloadSchema = z.object({
     applyFrom: environmentDaemonSessionCursorExclusiveSchema,
   })),
 });
+
+export type EnvironmentDaemonSessionWelcomePayload = z.infer<
+  typeof environmentDaemonSessionWelcomePayloadSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Capability negotiation helpers
@@ -289,11 +281,7 @@ export interface EnvironmentDaemonSessionHeartbeatChannel {
   lastAcked?: EnvironmentDaemonSessionCursor;
 }
 
-export interface EnvironmentDaemonSessionHeartbeatPayload {
-  environmentDaemonObservedAt: number;
-  outboxDepth: number;
-  channels: EnvironmentDaemonSessionHeartbeatChannel[];
-}
+// EnvironmentDaemonSessionHeartbeatPayload is derived from its schema below.
 
 export const environmentDaemonSessionHeartbeatPayloadSchema = z.object({
   environmentDaemonObservedAt: z.number().int().nonnegative(),
@@ -304,6 +292,10 @@ export const environmentDaemonSessionHeartbeatPayloadSchema = z.object({
     lastAcked: environmentDaemonSessionCursorSchema.optional(),
   })),
 });
+
+export type EnvironmentDaemonSessionHeartbeatPayload = z.infer<
+  typeof environmentDaemonSessionHeartbeatPayloadSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Event batch
@@ -359,9 +351,7 @@ export interface EnvironmentDaemonSessionEventAckChannel {
   ackedThrough: EnvironmentDaemonSessionCursor;
 }
 
-export interface EnvironmentDaemonSessionEventAckPayload {
-  channels: EnvironmentDaemonSessionEventAckChannel[];
-}
+// EnvironmentDaemonSessionEventAckPayload is derived from its schema below.
 
 export const environmentDaemonSessionEventAckPayloadSchema = z.object({
   channels: z.array(z.object({
@@ -369,6 +359,10 @@ export const environmentDaemonSessionEventAckPayloadSchema = z.object({
     ackedThrough: environmentDaemonSessionCursorSchema,
   })).min(1),
 });
+
+export type EnvironmentDaemonSessionEventAckPayload = z.infer<
+  typeof environmentDaemonSessionEventAckPayloadSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Command batch
@@ -414,9 +408,7 @@ export interface EnvironmentDaemonSessionCommandAckItem {
   state: EnvironmentDaemonSessionCommandAckState;
 }
 
-export interface EnvironmentDaemonSessionCommandAckPayload {
-  commands: EnvironmentDaemonSessionCommandAckItem[];
-}
+// EnvironmentDaemonSessionCommandAckPayload is derived from its schema below.
 
 export const environmentDaemonSessionCommandAckPayloadSchema = z.object({
   commands: z.array(z.object({
@@ -425,6 +417,10 @@ export const environmentDaemonSessionCommandAckPayloadSchema = z.object({
     state: z.enum(["received", "duplicate"]),
   })).min(1),
 });
+
+export type EnvironmentDaemonSessionCommandAckPayload = z.infer<
+  typeof environmentDaemonSessionCommandAckPayloadSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Command result
@@ -435,14 +431,7 @@ export type EnvironmentDaemonSessionCommandResultState =
   | "completed"
   | "failed";
 
-export interface EnvironmentDaemonSessionCommandResultPayload {
-  commandId: string;
-  channelId: string;
-  state: EnvironmentDaemonSessionCommandResultState;
-  result?: unknown;
-  errorCode?: string;
-  errorMessage?: string;
-}
+// EnvironmentDaemonSessionCommandResultPayload is derived from its schema below.
 
 export const environmentDaemonSessionCommandResultPayloadSchema = z.object({
   commandId: z.string().min(1),
@@ -470,6 +459,10 @@ export const environmentDaemonSessionCommandResultPayloadSchema = z.object({
     });
   }
 });
+
+export type EnvironmentDaemonSessionCommandResultPayload = z.infer<
+  typeof environmentDaemonSessionCommandResultPayloadSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Provider request / response
@@ -536,9 +529,7 @@ export const environmentDaemonSessionProviderResponsePayloadSchema = z.object({
 // Session close / replaced
 // ---------------------------------------------------------------------------
 
-export interface EnvironmentDaemonSessionClosePayload {
-  reason: EnvironmentDaemonSessionCloseReason;
-}
+// EnvironmentDaemonSessionClosePayload is derived from its schema below.
 
 const environmentDaemonSessionClientCloseReasonSchema = z.enum([
   "daemon_shutdown",
@@ -558,13 +549,17 @@ export const environmentDaemonSessionClosePayloadSchema = z.object({
   ]),
 });
 
-export interface EnvironmentDaemonSessionReplacedPayload {
-  reason: "newer_session";
-}
+export type EnvironmentDaemonSessionClosePayload = z.infer<
+  typeof environmentDaemonSessionClosePayloadSchema
+>;
 
 export const environmentDaemonSessionReplacedPayloadSchema = z.object({
   reason: z.literal("newer_session"),
 });
+
+export type EnvironmentDaemonSessionReplacedPayload = z.infer<
+  typeof environmentDaemonSessionReplacedPayloadSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Message envelope types
@@ -729,6 +724,34 @@ export const environmentDaemonSessionClientMessageSchema = z.discriminatedUnion(
     }),
   }),
 ]);
+
+// ---------------------------------------------------------------------------
+// Server response message schemas (for client-side response validation)
+// ---------------------------------------------------------------------------
+
+export const environmentDaemonSessionWelcomeMessageSchema =
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("session_welcome"),
+    payload: environmentDaemonSessionWelcomePayloadSchema,
+  });
+
+export const environmentDaemonSessionEventAckMessageSchema =
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("event_ack"),
+    payload: environmentDaemonSessionEventAckPayloadSchema,
+  });
+
+export const environmentDaemonSessionCommandBatchMessageSchema =
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("command_batch"),
+    payload: environmentDaemonSessionCommandBatchPayloadSchema,
+  });
+
+export const environmentDaemonSessionProviderResponseMessageSchema =
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("provider_response"),
+    payload: environmentDaemonSessionProviderResponsePayloadSchema,
+  });
 
 // ---------------------------------------------------------------------------
 // Type guards and cursor utilities

@@ -17,14 +17,16 @@ import {
   type EnvironmentDaemonSessionCommandBatchMessage,
   type EnvironmentDaemonSessionCommandResultPayload,
   type EnvironmentDaemonSessionEventAckMessage,
-  type EnvironmentDaemonSessionEventBatchPayload,
   type EnvironmentDaemonSessionHeartbeatPayload,
   type EnvironmentDaemonSessionOpenPayload,
-  type EnvironmentDaemonSessionProviderRequestPayload,
   type EnvironmentDaemonSessionProviderResponseMessage,
   type EnvironmentDaemonSessionWelcomeMessage,
   type EnvironmentDaemonStatusSnapshot,
+  type EnvironmentDaemonSessionEventBatchPayload,
 } from "@bb/environment-daemon";
+import type {
+  EnvironmentDaemonSessionProviderRequestPayload,
+} from "@bb/env-daemon-contract";
 import type { EnvironmentDaemonCommandDispatcher } from "./environment-daemon-command-dispatcher.js";
 import type { EnvironmentDaemonEventApplier } from "./environment-daemon-event-applier.js";
 import { inactiveSessionError, invalidRequestError } from "./domain-errors.js";
