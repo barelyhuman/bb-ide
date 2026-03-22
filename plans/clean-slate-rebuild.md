@@ -450,5 +450,4 @@ This plan covers Steps 1-5 (create new packages, delete old ones). Step 6 (rebui
 
 ## Open Questions
 
-- **`LlmCompletionService` replacement**: Title generation and commit message generation currently depend on `LlmCompletionService` in provider-adapters. Plan says "use `@pi/ai` directly." Where does this code live after the rebuild? In the server? In a new utility package?
-- **Daemon HTTP server rewrite**: The daemon currently uses raw `node:http`, not Hono. The `hc()` client works as a caller, but the daemon implementation needs Hono for route-type compile-time safety. Is this part of Step 3 or deferred to Step 6?
+None. Implementation concerns (how the server/daemon use the contracts) are deferred to Step 6.
