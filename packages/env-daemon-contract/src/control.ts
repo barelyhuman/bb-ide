@@ -119,13 +119,23 @@ export type DaemonShutdownResponse = z.infer<
   typeof daemonShutdownResponseSchema
 >;
 
+/**
+ * Daemon control: daemon-implemented endpoints called by the server.
+ *
+ * These are the reverse direction from the session polling API. The server
+ * calls the daemon's HTTP server using the control endpoint advertised during
+ * session open.
+ */
 export type DaemonControlSchema = {
+  /** Returns the daemon's current delivery and queue health snapshot. */
   "/control/status": {
     $post: Endpoint<EmptyInput, DaemonStatusSnapshot>;
   };
+  /** Triggers an asynchronous session re-sync with the server. */
   "/control/session-sync": {
     $post: Endpoint<EmptyInput, DaemonSessionSyncResponse, 202>;
   };
+  /** Requests a graceful asynchronous daemon shutdown. */
   "/control/shutdown": {
     $post: Endpoint<EmptyInput, DaemonShutdownResponse, 202>;
   };

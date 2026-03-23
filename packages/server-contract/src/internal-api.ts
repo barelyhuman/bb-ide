@@ -1,15 +1,15 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
-import type { EmptyInput, Endpoint, PathId } from "./common.js";
-import type { EnvironmentDaemonCommand } from "./environment-daemon-commands.js";
 import type {
+  EnvironmentDaemonCommand,
   EnvironmentDaemonSessionClientMessage,
   EnvironmentDaemonSessionCommandBatchMessage,
   EnvironmentDaemonSessionEventAckMessage,
   EnvironmentDaemonSessionOpenPayload,
-  EnvironmentDaemonSessionProviderResponseMessage,
+  EnvironmentDaemonSessionToolCallResponseMessage,
   EnvironmentDaemonSessionWelcomeMessage,
-} from "./session-protocol.js";
+} from "@bb/env-daemon-contract";
+import type { EmptyInput, Endpoint, PathId } from "./common.js";
 
 type InternalSessionCommandsQuery = {
   sessionId: string;
@@ -23,18 +23,27 @@ type InternalSessionMessageWithAck = Extract<
   { type: "event_batch" }
 >;
 
-type InternalSessionMessageWithProviderResponse = Extract<
+type InternalSessionMessageWithToolCallResponse = Extract<
   EnvironmentDaemonSessionClientMessage,
-  { type: "provider_request" }
+  { type: "tool_call_request" }
 >;
 
 type InternalSessionMessageWithoutBody =
   Exclude<
     EnvironmentDaemonSessionClientMessage,
-    InternalSessionMessageWithAck | InternalSessionMessageWithProviderResponse
+    InternalSessionMessageWithAck | InternalSessionMessageWithToolCallResponse
   >;
 
+/**
+ * Internal API: server-implemented endpoints called by the env-daemon over HTTP.
+ *
+ * The daemon uses a polling loop:
+ * 1. Open a session.
+ * 2. Long-poll for commands.
+ * 3. Push events, tool-call requests, and command results back to the server.
+ */
 export type InternalApiSchema = {
+  /** Opens a new daemon session and returns lease and cursor bootstrap data. */
   "/environments/:id/env-daemon/session/open": {
     $post: Endpoint<
       PathId & { json: EnvironmentDaemonSessionOpenPayload },
@@ -42,6 +51,7 @@ export type InternalApiSchema = {
       201
     >;
   };
+  /** Long-polls for queued daemon commands for the active session. */
   "/environments/:id/env-daemon/session/commands": {
     $get:
       | Endpoint<
@@ -51,6 +61,7 @@ export type InternalApiSchema = {
         >
       | Endpoint<PathId & { query: InternalSessionCommandsQuery }, undefined, 204>;
   };
+  /** Accepts daemon-originated events, tool-call requests, and command results. */
   "/environments/:id/env-daemon/session/messages": {
     $post:
       | Endpoint<
@@ -59,8 +70,8 @@ export type InternalApiSchema = {
           200
         >
       | Endpoint<
-          PathId & { json: InternalSessionMessageWithProviderResponse },
-          EnvironmentDaemonSessionProviderResponseMessage,
+          PathId & { json: InternalSessionMessageWithToolCallResponse },
+          EnvironmentDaemonSessionToolCallResponseMessage,
           200
         >
       | Endpoint<PathId & { json: InternalSessionMessageWithoutBody }, undefined, 204>;

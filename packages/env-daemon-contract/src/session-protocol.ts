@@ -6,10 +6,13 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 import {
-  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  ENVIRONMENT_DAEMON_COMMAND_TYPES,
+  environmentDaemonCommandResultSchemaByType,
   environmentDaemonCommandSchema,
+  environmentDaemonCommandTypeSchema,
   environmentDaemonEventSchema,
   type EnvironmentDaemonCommand,
+  type EnvironmentDaemonCommandType,
   type EnvironmentDaemonEvent,
 } from "./environment-daemon-commands.js";
 
@@ -22,20 +25,10 @@ export const ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS = [
 export type EnvironmentDaemonSessionProtocolVersion =
   (typeof ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number];
 
-export const ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS = [
-  "provider.ensure",
-  "thread.start",
-  "thread.resume",
-  "thread.stop",
-  "turn.run",
-  "thread.rename",
-  "provider.list_models",
-  "provider.list_catalog",
-  "workspace.status",
-  "workspace.diff",
-] as const;
+export const ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS =
+  ENVIRONMENT_DAEMON_COMMAND_TYPES;
 export type EnvironmentDaemonSessionCapabilityCommand =
-  (typeof ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS)[number];
+  EnvironmentDaemonCommandType;
 
 export const ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES = [
   "worker_metadata",
@@ -415,75 +408,156 @@ export type EnvironmentDaemonSessionCommandResultState =
   | "completed"
   | "failed";
 
-export const environmentDaemonSessionCommandResultPayloadSchema = z
+const commandResultPayloadBaseSchema = z.object({
+  commandId: z.string().min(1),
+  channelId: z.string().min(1),
+  commandType: environmentDaemonCommandTypeSchema,
+});
+
+const commandResultStartedPayloadSchema = commandResultPayloadBaseSchema.extend({
+  state: z.literal("started"),
+});
+
+const commandResultFailedPayloadSchema = commandResultPayloadBaseSchema.extend({
+  state: z.literal("failed"),
+  errorCode: z.string().min(1),
+  errorMessage: z.string().min(1),
+});
+
+const commandResultCompletedThreadStartPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("thread.start"),
+    result: environmentDaemonCommandResultSchemaByType["thread.start"],
+  });
+
+const commandResultCompletedThreadResumePayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("thread.resume"),
+    result: environmentDaemonCommandResultSchemaByType["thread.resume"],
+  });
+
+const commandResultCompletedTurnRunPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("turn.run"),
+    result: environmentDaemonCommandResultSchemaByType["turn.run"],
+  });
+
+const commandResultCompletedTurnSteerPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("turn.steer"),
+    result: environmentDaemonCommandResultSchemaByType["turn.steer"],
+  });
+
+const commandResultCompletedThreadStopPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("thread.stop"),
+    result: environmentDaemonCommandResultSchemaByType["thread.stop"],
+  });
+
+const commandResultCompletedThreadRenamePayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("thread.rename"),
+    result: environmentDaemonCommandResultSchemaByType["thread.rename"],
+  });
+
+const commandResultCompletedProviderListModelsPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("provider.list_models"),
+    result: environmentDaemonCommandResultSchemaByType["provider.list_models"],
+  });
+
+const commandResultCompletedWorkspaceStatusPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("workspace.status"),
+    result: environmentDaemonCommandResultSchemaByType["workspace.status"],
+  });
+
+const commandResultCompletedWorkspaceDiffPayloadSchema =
+  commandResultPayloadBaseSchema.extend({
+    state: z.literal("completed"),
+    commandType: z.literal("workspace.diff"),
+    result: environmentDaemonCommandResultSchemaByType["workspace.diff"],
+  });
+
+export const environmentDaemonSessionCommandResultPayloadSchema = z.union([
+  commandResultStartedPayloadSchema,
+  commandResultFailedPayloadSchema,
+  commandResultCompletedThreadStartPayloadSchema,
+  commandResultCompletedThreadResumePayloadSchema,
+  commandResultCompletedTurnRunPayloadSchema,
+  commandResultCompletedTurnSteerPayloadSchema,
+  commandResultCompletedThreadStopPayloadSchema,
+  commandResultCompletedThreadRenamePayloadSchema,
+  commandResultCompletedProviderListModelsPayloadSchema,
+  commandResultCompletedWorkspaceStatusPayloadSchema,
+  commandResultCompletedWorkspaceDiffPayloadSchema,
+]);
+export type EnvironmentDaemonSessionCommandResultPayload = z.infer<
+  typeof environmentDaemonSessionCommandResultPayloadSchema
+>;
+
+export interface EnvironmentDaemonSessionToolCallRequestPayload {
+  channelId: string;
+  request: ToolCallRequest;
+}
+
+export const environmentDaemonSessionToolCallRequestPayloadSchema = z.object({
+  channelId: z.string().min(1),
+  request: toolCallRequestSchema,
+});
+
+export interface EnvironmentDaemonSessionToolCallResponsePayload {
+  channelId: string;
+  requestId: ToolCallRequest["requestId"];
+  ok: boolean;
+  response?: ToolCallResponse;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export const environmentDaemonSessionToolCallResponsePayloadSchema = z
   .object({
-    commandId: z.string().min(1),
     channelId: z.string().min(1),
-    state: z.enum(["started", "completed", "failed"]),
-    result: z.unknown().optional(),
+    requestId: z.union([z.string().min(1), z.number()]),
+    ok: z.boolean(),
+    response: toolCallResponseSchema.optional(),
     errorCode: z.string().min(1).optional(),
     errorMessage: z.string().min(1).optional(),
   })
   .superRefine((payload, ctx) => {
-    if (payload.state !== "failed") {
+    if (payload.ok) {
+      if (!payload.response) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Successful tool call responses must include response",
+          path: ["response"],
+        });
+      }
       return;
     }
     if (!payload.errorCode) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Failed command results must include errorCode",
+        message: "Failed tool call responses must include errorCode",
         path: ["errorCode"],
       });
     }
     if (!payload.errorMessage) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Failed command results must include errorMessage",
+        message: "Failed tool call responses must include errorMessage",
         path: ["errorMessage"],
       });
     }
   });
-export type EnvironmentDaemonSessionCommandResultPayload = z.infer<
-  typeof environmentDaemonSessionCommandResultPayloadSchema
->;
-
-export interface EnvironmentDaemonSessionProviderRequestPayload {
-  requestId: string | number;
-  method: string;
-  params?: unknown;
-  providerId?: string;
-  normalizedMethod?: string;
-  toolCall?: ToolCallRequest;
-  channelId?: string;
-}
-
-export const environmentDaemonSessionProviderRequestPayloadSchema = z.object({
-  requestId: z.union([z.string().min(1), z.number()]),
-  method: z.string().min(1),
-  params: z.unknown().optional(),
-  providerId: z.string().min(1).optional(),
-  normalizedMethod: z.string().min(1).optional(),
-  toolCall: toolCallRequestSchema.optional(),
-  channelId: z.string().min(1).optional(),
-});
-
-export interface EnvironmentDaemonSessionProviderResponsePayload {
-  requestId: string | number;
-  ok: boolean;
-  result?: unknown;
-  toolCallResponse?: ToolCallResponse;
-  errorCode?: string;
-  errorMessage?: string;
-}
-
-export const environmentDaemonSessionProviderResponsePayloadSchema = z.object({
-  requestId: z.union([z.string().min(1), z.number()]),
-  ok: z.boolean(),
-  result: z.unknown().optional(),
-  toolCallResponse: toolCallResponseSchema.optional(),
-  errorCode: z.string().min(1).optional(),
-  errorMessage: z.string().min(1).optional(),
-});
 
 const environmentDaemonSessionClientCloseReasonSchema = z.enum([
   "daemon_shutdown",
@@ -574,16 +648,16 @@ export interface EnvironmentDaemonSessionCommandResultMessage
   payload: EnvironmentDaemonSessionCommandResultPayload;
 }
 
-export interface EnvironmentDaemonSessionProviderRequestMessage
+export interface EnvironmentDaemonSessionToolCallRequestMessage
   extends EnvironmentDaemonSessionBoundMessageBase {
-  type: "provider_request";
-  payload: EnvironmentDaemonSessionProviderRequestPayload;
+  type: "tool_call_request";
+  payload: EnvironmentDaemonSessionToolCallRequestPayload;
 }
 
-export interface EnvironmentDaemonSessionProviderResponseMessage
+export interface EnvironmentDaemonSessionToolCallResponseMessage
   extends EnvironmentDaemonSessionBoundMessageBase {
-  type: "provider_response";
-  payload: EnvironmentDaemonSessionProviderResponsePayload;
+  type: "tool_call_response";
+  payload: EnvironmentDaemonSessionToolCallResponsePayload;
 }
 
 export interface EnvironmentDaemonSessionCloseMessage
@@ -604,7 +678,7 @@ export type EnvironmentDaemonSessionClientMessage =
   | EnvironmentDaemonSessionEventBatchMessage
   | EnvironmentDaemonSessionCommandAckMessage
   | EnvironmentDaemonSessionCommandResultMessage
-  | EnvironmentDaemonSessionProviderRequestMessage
+  | EnvironmentDaemonSessionToolCallRequestMessage
   | EnvironmentDaemonSessionCloseMessage;
 
 export type EnvironmentDaemonSessionSessionControlMessage =
@@ -615,7 +689,7 @@ export type EnvironmentDaemonSessionServerMessage =
   | EnvironmentDaemonSessionWelcomeMessage
   | EnvironmentDaemonSessionEventAckMessage
   | EnvironmentDaemonSessionCommandBatchMessage
-  | EnvironmentDaemonSessionProviderResponseMessage
+  | EnvironmentDaemonSessionToolCallResponseMessage
   | EnvironmentDaemonSessionSessionControlMessage;
 
 export type EnvironmentDaemonSessionMessage =
@@ -659,8 +733,8 @@ export const environmentDaemonSessionClientMessageSchema =
       payload: environmentDaemonSessionCommandResultPayloadSchema,
     }),
     environmentDaemonSessionBoundMessageSchema.extend({
-      type: z.literal("provider_request"),
-      payload: environmentDaemonSessionProviderRequestPayloadSchema,
+      type: z.literal("tool_call_request"),
+      payload: environmentDaemonSessionToolCallRequestPayloadSchema,
     }),
     environmentDaemonSessionBoundMessageSchema.extend({
       type: z.literal("session_close"),
@@ -688,10 +762,10 @@ export const environmentDaemonSessionCommandBatchMessageSchema =
     payload: environmentDaemonSessionCommandBatchPayloadSchema,
   });
 
-export const environmentDaemonSessionProviderResponseMessageSchema =
+export const environmentDaemonSessionToolCallResponseMessageSchema =
   environmentDaemonSessionBoundMessageSchema.extend({
-    type: z.literal("provider_response"),
-    payload: environmentDaemonSessionProviderResponsePayloadSchema,
+    type: z.literal("tool_call_response"),
+    payload: environmentDaemonSessionToolCallResponsePayloadSchema,
   });
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -766,8 +840,8 @@ export function isEnvironmentDaemonSessionMessage(
     case "command_batch":
     case "command_ack":
     case "command_result":
-    case "provider_request":
-    case "provider_response":
+    case "tool_call_request":
+    case "tool_call_response":
     case "session_close":
     case "session_replaced":
       return typeof value.sessionId === "string" && value.sessionId.length > 0;
@@ -788,7 +862,7 @@ export function isEnvironmentDaemonSessionClientMessage(
     case "event_batch":
     case "command_ack":
     case "command_result":
-    case "provider_request":
+    case "tool_call_request":
     case "session_close":
       return true;
     default:
@@ -806,7 +880,7 @@ export function isEnvironmentDaemonSessionServerMessage(
     case "session_welcome":
     case "event_ack":
     case "command_batch":
-    case "provider_response":
+    case "tool_call_response":
     case "session_close":
     case "session_replaced":
       return true;
