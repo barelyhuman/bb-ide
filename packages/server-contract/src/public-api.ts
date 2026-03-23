@@ -63,9 +63,9 @@ export type PublicApiSchema = {
     $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, Project>;
     $delete: Endpoint<PathProjectId, { ok: true }>;
   };
-  /** Spawns a new manager thread for this project. Managers supervise child
-   *  threads and have a dedicated inspectable workspace surfaced through the
-   *  manager-workspace endpoints. */
+  /** Spawns a new manager thread for this project. A manager is a supervisory
+   *  thread (type: "manager") that can coordinate sub-threads and has its own
+   *  inspectable workspace via the manager-workspace endpoints. */
   "/projects/:id/manager": {
     $post: Endpoint<
       PathProjectId & {
@@ -112,9 +112,10 @@ export type PublicApiSchema = {
       | Endpoint<PathId, EnvironmentRecord, 200>
       | Endpoint<PathId, ApiError, 404>;
   };
-  /** Performs a git or environment lifecycle operation for the environment.
-   *  Supported operations include primary-checkout promotion/demotion,
-   *  commit creation, and squash-merge flows. */
+  /** Performs a git or environment lifecycle operation. Operations are a
+   *  discriminated union: "promote_primary" / "demote_primary" (swap which thread
+   *  owns the primary checkout), "commit" (create a git commit), or
+   *  "squash_merge" (squash-merge the thread's branch). */
   "/environments/:id/operations": {
     $post:
       | Endpoint<
@@ -156,37 +157,42 @@ export type PublicApiSchema = {
     $patch: Endpoint<PathId & { json: UpdateThreadRequest }, Thread>;
     $delete: Endpoint<PathId, { ok: true }>;
   };
-  /** Opens a file or directory from the thread workspace in the user's editor.
-   *  The request path is relative to the workspace root and can include editor
-   *  and target preferences. */
+  /** Opens a file or directory from the thread's workspace in the user's
+   *  editor. Accepts a path relative to the workspace root, a target type
+   *  (file/directory), and an optional editor preference
+   *  (vscode/cursor/zed/windsurf/system_default). */
   "/threads/:id/open-path": {
     $post: Endpoint<PathId & { json: OpenThreadPathRequest }, { ok: true }>;
   };
   "/threads/:id/default-execution-options": {
     $get: Endpoint<PathId, ThreadExecutionOptions | null>;
   };
-  /** Lists files in a manager thread's internal workspace. Manager threads keep
-   *  a separate working area for their own state outside the primary checkout. */
+  /** Lists files in a manager thread's internal workspace. Manager threads have
+   *  a dedicated workspace for their own working state, separate from the
+   *  project's primary checkout. */
   "/threads/:id/manager-workspace/files": {
     $get: Endpoint<PathId, { files: Array<{ path: string; size: number }> }>;
   };
-  /** Returns the content of a single file from a manager thread's internal
-   *  workspace. */
+  /** Returns the content of a single file from a manager thread's workspace. */
   "/threads/:id/manager-workspace/file": {
     $get: Endpoint<PathId & { query: { path: string } }, { path: string; content: string }>;
   };
-  /** Sends a prompt to a thread. Mode controls whether the server starts a new
-   *  turn or steers the currently active turn when one exists. */
+  /** Sends a prompt message to an active thread. This is the primary way to
+   *  interact with a running thread — mode controls whether to start a new turn
+   *  ("start"/"auto") or steer the current one ("steer"). Only meaningful when
+   *  the thread has an active session. */
   "/threads/:id/tell": {
     $post: Endpoint<PathId & { json: TellThreadRequest }, { ok: true }>;
   };
-  /** Queues a prompt for later delivery while the thread is busy. The queued
-   *  message can be sent later through the companion /send route. */
+  /** Enqueues a message for later delivery. Used when composing a message while
+   *  the thread is busy — the message is stored in the thread's queuedMessages
+   *  array and can be sent later via the /send endpoint. */
   "/threads/:id/queue": {
     $post: Endpoint<PathId & { json: EnqueueThreadMessageRequest }, ThreadQueuedMessage, 201>;
   };
-  /** Sends a previously queued message. Mode controls whether delivery starts a
-   *  new turn or steers an already-running turn. */
+  /** Sends a previously queued message to the thread. Mode controls turn
+   *  behavior: "auto" starts a new turn, "steer-if-active" steers only if a
+   *  turn is already running, "steer" always steers. */
   "/threads/:id/queue/:queuedMessageId/send": {
     $post: Endpoint<
       PathThreadAndQueued & { json: SendQueuedThreadMessageRequest },
@@ -214,12 +220,13 @@ export type PublicApiSchema = {
   "/threads/:id/work-status": {
     $get: Endpoint<PathId & { query?: { mergeBaseBranch?: string } }, ThreadWorkStatus | null>;
   };
-  /** Returns candidate merge-base branches for git diff comparisons. */
+  /** Returns candidate git branch names for merge-base diff comparisons. Used by
+   *  the diff UI to let the user choose which branch to compare against. */
   "/threads/:id/merge-base-branches": {
     $get: Endpoint<PathId, string[]>;
   };
-  /** Returns the primary-checkout ownership metadata for the thread's project,
-   *  including which environment is currently active in the editor. */
+  /** Returns which thread/environment is the "primary checkout" for the project —
+   *  the active working branch whose workspace is synced to the user's editor. */
   "/threads/:id/primary-status": {
     $get: Endpoint<PathId, PrimaryCheckoutStatus>;
   };
@@ -235,8 +242,9 @@ export type PublicApiSchema = {
       ThreadTimelineResponse
     >;
   };
-  /** Lazily loads detailed tool call and tool response messages for a specific
-   *  collapsed tool group within a turn. */
+  /** Lazily loads detailed tool call/response messages for a specific turn within
+   *  a thread. A "tool group" is a collapsed sequence of tool calls within a
+   *  turn, identified by the turn ID and source event sequence range. */
   "/threads/:id/tool-group-messages": {
     $get: Endpoint<
       PathId & {
@@ -266,7 +274,7 @@ export type PublicApiSchema = {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
   /** Returns the thread's final output string, or null if the thread has not
-   *  produced a terminal output yet. */
+   *  produced output. */
   "/threads/:id/output": {
     $get: Endpoint<PathId, { output: string | null }>;
   };
@@ -304,13 +312,14 @@ export type PublicApiSchema = {
       | Endpoint<{ json: SystemRestartRequest }, SystemRestartAcceptedResponse, 200>
       | Endpoint<{ json: SystemRestartRequest }, SystemShutdownBlockedResponse, 409>;
   };
-  /** Opens the OS-native folder picker and returns the selected absolute path,
-   *  or null when the user cancels the dialog. */
+  /** Opens the OS native folder-picker dialog and returns the selected absolute
+   *  path, or null if the user cancels. Used when creating a new project to
+   *  select the project root directory. */
   "/system/pick-folder": {
     $post: Endpoint<EmptyInput, { path: string | null }>;
   };
-  /** Opens an absolute file or directory path in the user's editor, with the
-   *  same editor preference options as the thread-scoped open-path route. */
+  /** Opens an absolute file or directory path in the user's editor. Same editor
+   *  options as the thread-scoped variant but not bound to a workspace. */
   "/system/open-path": {
     $post: Endpoint<{ json: OpenPathRequest }, { ok: true }>;
   };
