@@ -938,8 +938,7 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        workspaceRoot: "/Users/michael/Projects/bb",
-        transcript: [{ key: "environment", text: "environment: Direct" }],
+        transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
       },
     };
 
@@ -949,15 +948,14 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
-  it("renders workspace from structured provisioning details without setup status", () => {
+  it("renders provisioning details from transcript entries", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
-        transcript: [{ key: "environment", text: "environment: Worktree" }],
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
       },
     };
 
@@ -974,11 +972,10 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "worktree", text: "creating worktree" },
-          { key: "branch", text: "checked out branch bb/thread-123 (abcdef1)" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "worktree", text: "creating worktree", status: "completed" },
+          { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
         ],
       },
     };
@@ -995,11 +992,10 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "worktree", text: "creating worktree" },
-          { key: "branch", text: "checked out branch bb/thread-123 (abcdef1)" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "worktree", text: "creating worktree", status: "completed" },
+          { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
         ],
       },
     };
@@ -1015,7 +1011,7 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        transcript: [{ key: "environment", text: "environment: Direct" }],
+        transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
       },
     };
 
@@ -1032,10 +1028,9 @@ describe("ConversationEntry", () => {
       title: "Provisioned environment",
       detail: "bootstrap note: used cached dependencies",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "fallback", text: "fallback: fallback because worktree bootstrap was unavailable" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "fallback", text: "fallback: fallback because worktree bootstrap was unavailable", status: "completed" },
         ],
       },
     };
@@ -1046,22 +1041,16 @@ describe("ConversationEntry", () => {
     expect(html).toContain("bootstrap note: used cached dependencies");
   });
 
-  it("does not show additional details when setup info is fully structured", () => {
+  it("does not show additional details when transcript is fully structured", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
-        setup: {
-          status: "completed",
-          scriptPath: ".bb-env-setup.sh",
-          durationMs: 10200,
-        },
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "setup", text: "ran .bb-env-setup.sh in 10s" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "setup", text: "ran .bb-env-setup.sh in 10s", status: "completed" },
         ],
       },
     };
@@ -1072,24 +1061,17 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Additional details");
   });
 
-  it("renders provisioning metadata and setup output in a structured layout", () => {
+  it("renders provisioning metadata with failed setup transcript entry", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
-        setup: {
-          status: "failed",
-          scriptPath: ".bb-env-setup.sh",
-          timeoutMs: 600000,
-          durationMs: 5988,
-          output: "@bb/server:build: ERROR: command failed",
-        },
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "setup", text: "setup script failed: .bb-env-setup.sh in 6s" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "setup", text: "setup script failed: .bb-env-setup.sh in 6s", status: "failed" },
+          { type: "output", key: "setup-output", text: "@bb/server:build: ERROR: command failed" },
         ],
       },
     };
@@ -1101,52 +1083,39 @@ describe("ConversationEntry", () => {
     expect(html).toContain("@bb/server:build: ERROR: command failed");
   });
 
-  it("renders streamed provisioning output with the terminal-style command block", () => {
+  it("renders streamed provisioning output as transcript entries", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
-        setup: {
-          status: "running",
-          scriptPath: ".bb-env-setup.sh",
-          timeoutMs: 600000,
-          output: "+ pnpm install\nDone in 3.2s",
-        },
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "setup", text: "running .bb-env-setup.sh" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
+          { type: "output", key: "setup-out-1", text: "+ pnpm install" },
+          { type: "output", key: "setup-out-2", text: "Done in 3.2s" },
         ],
       },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("running .bb-env-setup.sh");
-    expect(html).toContain("$ bash -x ./.bb-env-setup.sh");
     expect(html).toContain("+ pnpm install");
     expect(html).toContain("Done in 3.2s");
   });
 
-  it("shows timeout in setup time when setup timed out", () => {
+  it("shows timeout info in transcript when setup timed out", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning environment",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
-        setup: {
-          status: "failed",
-          scriptPath: ".bb-env-setup.sh",
-          timeoutMs: 600000,
-          durationMs: 600000,
-          output: ".bb-env-setup.sh timed out after 10 minutes",
-        },
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "setup", text: "setup script failed: .bb-env-setup.sh in 600s" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "setup", text: "setup script failed: .bb-env-setup.sh in 600s", status: "failed" },
+          { type: "output", key: "timeout-output", text: ".bb-env-setup.sh timed out after 10 minutes" },
         ],
       },
     };
@@ -1165,7 +1134,7 @@ describe("ConversationEntry", () => {
       createdAt: 15_000,
       status: "pending",
       provisioning: {
-        transcript: [{ key: "environment", text: "environment: Worktree" }],
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
       },
     };
 
@@ -1193,15 +1162,10 @@ describe("ConversationEntry", () => {
       createdAt: 15_000,
       status: "pending",
       provisioning: {
-        setup: {
-          status: "running",
-          startedAt: 11000,
-          scriptPath: ".bb-env-setup.sh",
-        },
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "phase:start_provider_session", text: "starting provider session", startedAt: 1000 },
-          { key: "setup", text: "running .bb-env-setup.sh", startedAt: 11000 },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "phase:start_provider_session", text: "starting provider session", status: "started" },
+          { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
         ],
       },
     };
@@ -1215,9 +1179,8 @@ describe("ConversationEntry", () => {
       );
       expect(html).toContain("Provisioning");
       expect(html).toContain("Worktree");
-      expect(html).not.toContain("prepared environment in 1s");
-      expect(html).toContain("starting provider session (15s)");
-      expect(html).toContain("running .bb-env-setup.sh (5s)");
+      expect(html).toContain("starting provider session");
+      expect(html).toContain("running .bb-env-setup.sh");
       expect(html).toContain("animate-shine");
       expect(html).not.toContain("provisioning took");
     } finally {
@@ -1233,16 +1196,11 @@ describe("ConversationEntry", () => {
       title: "Provisioning environment",
       status: "completed",
       provisioning: {
-        setup: {
-          status: "completed",
-          scriptPath: ".bb-env-setup.sh",
-          durationMs: 5_000,
-        },
         transcript: [
-          { key: "environment", text: "environment: Worktree" },
-          { key: "worktree", text: "creating worktree" },
-          { key: "setup", text: "ran .bb-env-setup.sh in 5s" },
-          { key: "phase:start_provider_session", text: "started provider session in 2s" },
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "worktree", text: "creating worktree", status: "completed" },
+          { type: "step", key: "setup", text: "ran .bb-env-setup.sh in 5s", status: "completed" },
+          { type: "step", key: "phase:start_provider_session", text: "started provider session in 2s", status: "completed" },
         ],
       },
     };
@@ -1263,14 +1221,7 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Environment setup completed",
       provisioning: {
-        workspaceRoot: "/tmp/worktree",
-        setup: {
-          status: "completed",
-          scriptPath: ".bb-env-setup.sh",
-          timeoutMs: 600000,
-          durationMs: 5988,
-        },
-        transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 6s" }],
+        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh in 6s", status: "completed" }],
       },
     };
 
@@ -1335,92 +1286,6 @@ describe("ConversationEntry", () => {
     expect(html).toContain(">Promoting<");
     expect(html).toContain("primary checkout");
     expect(html).toContain("animate-shine");
-  });
-
-  it("renders worktree commit summaries without commit hash until expanded", () => {
-    const message: UIMessage = {
-      ...baseMessage(),
-      kind: "operation",
-      opType: "worktree-commit",
-      title: "Committed changes",
-      detail: "feat: improve prompt handling • abcdef1234567890",
-      worktreeCommit: {
-        status: "committed",
-        message: "Committed changes",
-        commitSha: "abcdef1234567890",
-        commitSubject: "feat: improve prompt handling",
-      },
-    };
-
-    const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(collapsedHtml).toContain("Committed");
-    expect(collapsedHtml).toContain("changes");
-    expect(collapsedHtml).toContain("aria-hidden=\"true\"");
-    expect(collapsedHtml).toContain("lucide-chevron-right");
-
-    const expandedHtml = renderToStaticMarkup(
-      <ConversationEntry message={message} initialExpanded />,
-    );
-    expect(expandedHtml).toContain("[abcdef1] feat: improve prompt handling");
-    expect(expandedHtml).not.toContain("abcdef1234567890");
-  });
-
-  it("renders squash merge summaries as 'Squash merged into <em>branch</em>'", () => {
-    const message: UIMessage = {
-      ...baseMessage(),
-      kind: "operation",
-      opType: "worktree-squash-merge",
-      title: "Squash merged",
-      detail: "Squash merged into main",
-    };
-
-    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Squash merged into");
-    expect(html).toContain("<em");
-    expect(html).toContain("main");
-    expect(html).toContain("lucide-chevron-right");
-  });
-
-  it("renders squash merge expansions like commit details when commit metadata is available", () => {
-    const message: UIMessage = {
-      ...baseMessage(),
-      kind: "operation",
-      opType: "worktree-squash-merge",
-      title: "Squash merged",
-      detail: "Squash merged into main",
-      worktreeSquashMerge: {
-        status: "merged",
-        message: "Squash-merged into main",
-        commitSha: "abcdef1234567890",
-        commitSubject: "feat: improve prompt handling",
-      },
-    };
-
-    const html = renderToStaticMarkup(
-      <ConversationEntry message={message} initialExpanded />,
-    );
-    expect(html).toContain("[abcdef1] feat: improve prompt handling");
-    expect(html).not.toContain("Squash-merged into main</div>");
-  });
-
-  it("caps squash merge detail expansions by default", () => {
-    const message: UIMessage = {
-      ...baseMessage(),
-      kind: "operation",
-      opType: "worktree-squash-merge",
-      title: "Squash merge failed",
-      status: "error",
-      detail: "conflict in src/a.ts\nconflict in src/b.ts\nconflict in src/c.ts",
-      worktreeSquashMerge: {
-        status: "conflict",
-        message: "Squash merge failed",
-      },
-    };
-
-    const html = renderToStaticMarkup(
-      <ConversationEntry message={message} initialExpanded />,
-    );
-    expect(html).toContain("max-h-[220px] overflow-auto mt-0.5 space-y-0.5");
   });
 
   it("renders merged operations as expandable rows with prompt details", () => {

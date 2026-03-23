@@ -45,94 +45,14 @@ function primaryCheckoutOperation(
 
 function provisioningOperation(
   seq: number,
-  opType:
-    | "provisioning-started"
-    | "provisioning-progress"
-    | "provisioning-env-setup"
-    | "provisioning-completed",
   title: string,
+  status: "pending" | "completed" | "error" | "interrupted",
   detail?: string,
   options?: {
-    environmentDisplayName?: string;
-    workspaceRoot?: string;
-    branchName?: string;
-    fallbackReason?: string;
-    phases?: {
-      prepare_environment?: {
-        status: "started" | "completed" | "failed";
-        startedAt?: number;
-        durationMs?: number;
-      };
-      start_provider_session?: {
-        status: "started" | "completed" | "failed";
-        startedAt?: number;
-        durationMs?: number;
-      };
-    };
-    setup?: {
-      status: "started" | "running" | "completed" | "failed";
-      startedAt?: number;
-      scriptPath?: string;
-      timeoutMs?: number;
-      durationMs?: number;
-      output?: string;
-    };
+    environmentId?: string;
     transcript?: UIProvisioningTranscriptEntry[];
   },
 ): Extract<UIMessage, { kind: "operation" }> {
-  const transcript = [
-    ...(options?.environmentDisplayName
-      ? [{ key: "environment", text: `environment: ${options.environmentDisplayName}` }]
-      : []),
-    ...(options?.branchName
-      ? [{ key: "branch", text: `checked out branch ${options.branchName}` }]
-      : []),
-    ...(options?.setup?.scriptPath
-      ? [{
-          key: "setup",
-          text:
-            options.setup.status === "completed"
-              ? `ran ${options.setup.scriptPath}`
-              : options.setup.status === "failed"
-                ? `setup script failed: ${options.setup.scriptPath}`
-                : `running ${options.setup.scriptPath}`,
-          ...(options.setup.startedAt !== undefined
-            ? { startedAt: options.setup.startedAt }
-            : {}),
-        }]
-      : []),
-    ...(options?.phases?.start_provider_session
-      ? [{
-          key: "phase:start_provider_session",
-          text:
-            options.phases.start_provider_session.status === "completed"
-              ? "started provider session"
-              : options.phases.start_provider_session.status === "failed"
-                ? "provider session start failed"
-                : "starting provider session",
-          ...(options.phases.start_provider_session.startedAt !== undefined
-            ? { startedAt: options.phases.start_provider_session.startedAt }
-            : {}),
-        }]
-      : []),
-    ...(options?.fallbackReason
-      ? [{ key: "fallback", text: `fallback: ${options.fallbackReason}` }]
-      : []),
-    ...(options?.transcript
-      ? options.transcript.map((entry) => structuredClone(entry))
-      : []),
-  ].reduce<UIProvisioningTranscriptEntry[]>((entries, entry) => {
-    const existingIndex = entries.findIndex(
-      (existingEntry) => existingEntry.key === entry.key,
-    );
-    if (existingIndex === -1) {
-      entries.push(entry);
-      return entries;
-    }
-    entries[existingIndex] = entry;
-    return entries;
-  }, []);
-
   return {
     kind: "operation",
     id: `provisioning-${seq}`,
@@ -140,19 +60,15 @@ function provisioningOperation(
     sourceSeqStart: seq,
     sourceSeqEnd: seq,
     createdAt: seq,
-    opType,
+    opType: "provisioning",
     title,
-    ...((options?.environmentDisplayName ||
-    options?.workspaceRoot ||
-    options?.fallbackReason ||
-    options?.phases ||
-    options?.setup ||
-    transcript.length > 0)
+    status,
+    ...((options?.environmentId ||
+    (options?.transcript && options.transcript.length > 0))
       ? {
           provisioning: {
-            ...(options?.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
-            ...(options?.setup ? { setup: { ...options.setup } } : {}),
-            ...(transcript.length > 0 ? { transcript } : {}),
+            ...(options?.environmentId ? { environmentId: options.environmentId } : {}),
+            ...((options?.transcript && options.transcript.length > 0) ? { transcript: options.transcript } : {}),
           },
         }
       : {}),
@@ -222,24 +138,6 @@ function threadOperationIntent(
   };
 }
 
-function worktreeOperation(
-  seq: number,
-  opType: "worktree-commit" | "worktree-squash-merge",
-  title: string,
-  detail?: string,
-): Extract<UIMessage, { kind: "operation" }> {
-  return {
-    kind: "operation",
-    id: `worktree-operation-${seq}`,
-    threadId: "thread-1",
-    sourceSeqStart: seq,
-    sourceSeqEnd: seq,
-    createdAt: seq,
-    opType,
-    title,
-    ...(detail ? { detail } : {}),
-  };
-}
 
 function getOperationRows(messages: UIMessage[]): Array<Extract<UIMessage, { kind: "operation" }>> {
   return buildThreadDetailRows(messages)
@@ -506,61 +404,36 @@ describe("buildThreadDetailRows reconnect error collapsing", () => {
 });
 
 describe("buildThreadDetailRows provisioning operation collapsing", () => {
-  it("collapses provisioning start/env setup/completed updates into one operation row", () => {
+  it("collapses multiple provisioning events into one operation row", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Worktree" },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.ts",
-            timeoutMs: 600000,
-          },
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-env-setup",
-        "Environment setup completed",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "completed",
-            scriptPath: ".bb-env-setup.ts",
-            timeoutMs: 600000,
-            durationMs: 3074,
-          },
-        },
-      ),
-      provisioningOperation(
-        4,
-        "provisioning-completed",
-        "Provisioning ready",
-        undefined,
-        { environmentDisplayName: "Worktree", workspaceRoot: "/tmp/worktree" },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.ts", status: "started" }],
+      }),
+      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.ts in 3s", status: "completed" }],
+      }),
+      provisioningOperation(4, "Provisioning ready", "completed", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned environment");
-    expect(rows[0]?.provisioning?.transcript?.[0]?.text).toBe("environment: Worktree");
-    expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
-    expect(rows[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
-    expect(rows[0]?.provisioning?.setup?.timeoutMs).toBe(600000);
-    expect(rows[0]?.provisioning?.setup?.durationMs).toBe(3074);
+    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "environment");
+    expect(envEntry).toBeDefined();
+    if (envEntry?.type === "step") {
+      expect(envEntry.text).toBe("environment: Worktree");
+    }
+    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
+    expect(setupEntry).toBeDefined();
+    if (setupEntry?.type === "step") {
+      expect(setupEntry.text).toBe("ran .bb-env-setup.ts in 3s");
+      expect(setupEntry.status).toBe("completed");
+    }
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(4);
     expect(rows[0]?.detail).toBeUndefined();
@@ -568,187 +441,93 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
   it("keeps completed provisioning rows fully structured", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Direct" },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-completed",
-        "Provisioning ready",
-        undefined,
-        { environmentDisplayName: "Direct" },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
+      }),
+      provisioningOperation(2, "Provisioning ready", "completed", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned environment");
-    expect(rows[0]?.provisioning?.transcript?.[0]?.text).toBe("environment: Direct");
+    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "environment");
+    expect(envEntry).toBeDefined();
+    if (envEntry?.type === "step") {
+      expect(envEntry.text).toBe("environment: Direct");
+    }
     expect(rows[0]?.detail).toBeUndefined();
   });
 
   it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {
     const startedRows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Worktree" },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+      }),
     ]);
     const mergedRows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Worktree" },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-          },
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-env-setup",
-        "Environment setup running",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "running",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            output: "+ pnpm install",
-          },
-        },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      }),
+      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      }),
     ]);
 
     expect(startedRows[0]?.id).toBe("provisioning-1");
     expect(startedRows[0]?.opType).toBe("provisioning");
-    expect(startedRows[0]?.title).toBe("Provisioning environment");
+    expect(startedRows[0]?.title).toBe("Provisioning started");
     expect(mergedRows[0]?.id).toBe("provisioning-1");
   });
 
-  it("preserves streamed env-setup output when collapsing provisioning rows", () => {
+  it("preserves transcript entries when collapsing provisioning rows", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Worktree" },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-          },
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-env-setup",
-        "Environment setup running",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "running",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            output: "+ pnpm install",
-          },
-        },
-      ),
-      provisioningOperation(
-        4,
-        "provisioning-env-setup",
-        "Environment setup running",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "running",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            output: "Done in 3.2s",
-          },
-        },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      }),
+      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "output", key: "setup-out-1", text: "+ pnpm install" }],
+      }),
+      provisioningOperation(4, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "output", key: "setup-out-2", text: "Done in 3.2s" }],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioning environment");
-    expect(rows[0]?.provisioning?.transcript?.[0]?.text).toBe("environment: Worktree");
-    expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
-    expect(rows[0]?.provisioning?.setup?.status).toBe("running");
-    expect(rows[0]?.provisioning?.setup?.output).toBe("+ pnpm install\nDone in 3.2s");
+    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "environment");
+    expect(envEntry).toBeDefined();
+    if (envEntry?.type === "step") {
+      expect(envEntry.text).toBe("environment: Worktree");
+    }
+    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
+    expect(setupEntry).toBeDefined();
+    expect(setupEntry?.text).toBe("running .bb-env-setup.sh");
+    const outputEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.type === "output");
+    expect(outputEntries).toHaveLength(2);
     expect(rows[0]?.detail).toBeUndefined();
   });
 
-  it("preserves provisioning phase timing when collapsing provisioning rows", () => {
+  it("preserves provisioning transcript when collapsing provisioning rows", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Direct Workspace" },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-progress",
-        "Environment prepared",
-        undefined,
-        {
-          phases: {
-            prepare_environment: {
-              status: "completed",
-              startedAt: 2,
-              durationMs: 1200,
-            },
-          },
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-progress",
-        "Starting provider session",
-        undefined,
-        {
-          phases: {
-            start_provider_session: {
-              status: "started",
-              startedAt: 3,
-            },
-          },
-        },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "environment", text: "environment: Direct Workspace", status: "completed" },
+        ],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "session", text: "starting provider session", status: "started" },
+        ],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
@@ -756,88 +535,46 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.title).toBe("Provisioning environment");
     expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
       "environment",
-      "phase:start_provider_session",
+      "session",
     ]);
-    expect(rows[0]?.provisioning?.transcript?.[1]?.startedAt).toBe(3);
   });
 
   it("keeps one provisioning row when user interruption lands mid-provisioning", () => {
     const rows = buildThreadDetailRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        { environmentDisplayName: "Direct Workspace" },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-progress",
-        "Environment prepared",
-        undefined,
-        {
-          phases: {
-            prepare_environment: {
-              status: "completed",
-              startedAt: 2,
-              durationMs: 1200,
-            },
-          },
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-progress",
-        "Starting provider session",
-        undefined,
-        {
-          phases: {
-            start_provider_session: {
-              status: "started",
-              startedAt: 3,
-            },
-          },
-        },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "environment", text: "environment: Direct Workspace", status: "completed" },
+        ],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "session", text: "starting provider session", status: "started" },
+        ],
+      }),
       {
         kind: "operation",
-        id: "op-4",
+        id: "op-3",
         threadId: "thread-1",
-        sourceSeqStart: 4,
-        sourceSeqEnd: 4,
-        createdAt: 4,
-        startedAt: 4,
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        startedAt: 3,
         opType: "thread-interrupted",
         title: "Stopped by user",
         status: "interrupted",
       },
+      provisioningOperation(4, "Provisioning failed", "error", undefined, {
+        transcript: [
+          { type: "step", key: "session", text: "provider session start failed", status: "failed" },
+        ],
+      }),
       {
-        kind: "operation",
-        id: "provisioning-5",
+        kind: "error",
+        id: "error-5",
         threadId: "thread-1",
         sourceSeqStart: 5,
         sourceSeqEnd: 5,
         createdAt: 5,
-        opType: "provisioning-progress",
-        title: "Provider session start failed",
-        status: "error",
-        provisioning: {
-          transcript: [
-            {
-              key: "phase:start_provider_session",
-              text: "provider session start failed",
-              startedAt: 3,
-            },
-          ],
-        },
-      },
-      {
-        kind: "error",
-        id: "error-6",
-        threadId: "thread-1",
-        sourceSeqStart: 6,
-        sourceSeqEnd: 6,
-        createdAt: 6,
         rawType: "system/error",
         message: "Thread provisioning failed",
       },
@@ -849,7 +586,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
       expect(rows[0].message.opType).toBe("provisioning");
       expect(rows[0].message.title).toBe("Provisioning environment failed");
       expect(rows[0].message.sourceSeqStart).toBe(1);
-      expect(rows[0].message.sourceSeqEnd).toBe(5);
+      expect(rows[0].message.sourceSeqEnd).toBe(4);
     }
     expect(rows[1]?.message.kind).toBe("operation");
     if (rows[1]?.message.kind === "operation") {
@@ -860,56 +597,23 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
   it("preserves ordered provisioning transcript items when collapsing rows", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-started",
-        "Provisioning started",
-        undefined,
-        {
-          environmentDisplayName: "Worktree",
-          transcript: [
-            { key: "environment", text: "environment: Worktree" },
-            { key: "worktree", text: "creating worktree" },
-          ],
-        },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          branchName: "feature/test",
-          setup: {
-            status: "started",
-            startedAt: 2,
-            scriptPath: ".bb-env-setup.sh",
-          },
-          transcript: [
-            { key: "branch", text: "checked out branch feature/test (abcdef1)" },
-            { key: "setup", text: "running .bb-env-setup.sh", startedAt: 2 },
-          ],
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-progress",
-        "Provider session started",
-        undefined,
-        {
-          phases: {
-            start_provider_session: {
-              status: "completed",
-              startedAt: 3,
-              durationMs: 2000,
-            },
-          },
-          transcript: [
-            { key: "phase:start_provider_session", text: "started provider session in 2s" },
-          ],
-        },
-      ),
+      provisioningOperation(1, "Provisioning started", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "worktree", text: "creating worktree", status: "completed" },
+        ],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "branch", text: "checked out branch feature/test (abcdef1)", status: "completed" },
+          { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
+        ],
+      }),
+      provisioningOperation(3, "Provisioning environment", "pending", undefined, {
+        transcript: [
+          { type: "step", key: "session", text: "started provider session in 2s", status: "completed" },
+        ],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
@@ -919,177 +623,56 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
       "worktree",
       "branch",
       "setup",
-      "phase:start_provider_session",
+      "session",
     ]);
-    expect(rows[0]?.provisioning?.transcript?.[3]).toMatchObject({
-      key: "setup",
-      text: "running .bb-env-setup.sh",
-      startedAt: 2,
-    });
-    expect(rows[0]?.provisioning?.transcript?.[4]).toMatchObject({
-      key: "phase:start_provider_session",
-      text: "started provider session in 2s",
-    });
-    expect(rows[0]?.provisioning?.transcript?.[2]).toMatchObject({
-      key: "branch",
-      text: "checked out branch feature/test (abcdef1)",
-    });
   });
 
-  it("keeps the earliest transcript startedAt when later updates replace the same key", () => {
+  it("merges transcript entries with the same key", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          setup: {
-            status: "started",
-            startedAt: 10,
-            scriptPath: ".bb-env-setup.sh",
-          },
-          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 }],
-        },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup running",
-        undefined,
-        {
-          setup: {
-            status: "running",
-            startedAt: 25,
-            scriptPath: ".bb-env-setup.sh",
-            output: "+ pnpm install",
-          },
-          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 25 }],
-        },
-      ),
-      provisioningOperation(
-        3,
-        "provisioning-progress",
-        "Starting provider session",
-        undefined,
-        {
-          phases: {
-            start_provider_session: {
-              status: "started",
-              startedAt: 30,
-            },
-          },
-          transcript: [{ key: "phase:start_provider_session", text: "starting provider session", startedAt: 30 }],
-        },
-      ),
-      provisioningOperation(
-        4,
-        "provisioning-progress",
-        "Starting provider session",
-        undefined,
-        {
-          phases: {
-            start_provider_session: {
-              status: "started",
-              startedAt: 45,
-            },
-          },
-          transcript: [{ key: "phase:start_provider_session", text: "starting provider session", startedAt: 45 }],
-        },
-      ),
+      provisioningOperation(1, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      }),
+      provisioningOperation(2, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
+      }),
+      provisioningOperation(3, "Provisioning ready", "completed", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh", status: "completed" }],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.provisioning?.transcript).toEqual([
-      { key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 },
-      { key: "phase:start_provider_session", text: "starting provider session", startedAt: 30 },
-    ]);
+    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
+    expect(setupEntry).toBeDefined();
+    if (setupEntry?.type === "step") {
+      expect(setupEntry.text).toBe("ran .bb-env-setup.sh");
+      expect(setupEntry.status).toBe("completed");
+    }
   });
 
-  it("clears transcript startedAt when a replacement entry changes text and omits it", () => {
+  it("collapses two provisioning updates into a single completed row", () => {
     const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          setup: {
-            status: "started",
-            startedAt: 10,
-            scriptPath: ".bb-env-setup.sh",
-          },
-          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 }],
-        },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup completed",
-        undefined,
-        {
-          setup: {
-            status: "completed",
-            durationMs: 5_000,
-            scriptPath: ".bb-env-setup.sh",
-          },
-          transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 5s" }],
-        },
-      ),
-    ]);
-
-    expect(rows[0]?.provisioning?.transcript).toEqual([
-      { key: "setup", text: "ran .bb-env-setup.sh in 5s" },
-    ]);
-  });
-
-  it("collapses env-setup-only updates without looking stuck in provisioning", () => {
-    const rows = getOperationRows([
-      provisioningOperation(
-        1,
-        "provisioning-env-setup",
-        "Environment setup started",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.ts",
-            timeoutMs: 600000,
-          },
-        },
-      ),
-      provisioningOperation(
-        2,
-        "provisioning-env-setup",
-        "Environment setup completed",
-        undefined,
-        {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "completed",
-            scriptPath: ".bb-env-setup.ts",
-            timeoutMs: 600000,
-            durationMs: 3074,
-          },
-        },
-      ),
+      provisioningOperation(1, "Provisioning environment", "pending", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.ts", status: "started" }],
+      }),
+      provisioningOperation(2, "Provisioning ready", "completed", undefined, {
+        transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.ts in 3s", status: "completed" }],
+      }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Environment setup completed");
+    expect(rows[0]?.title).toBe("Provisioned environment");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
-    expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
-    expect(rows[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
-    expect(rows[0]?.provisioning?.setup?.durationMs).toBe(3074);
+    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
+    expect(setupEntry?.text).toBe("ran .bb-env-setup.ts in 3s");
+    expect(setupEntry?.status).toBe("completed");
     expect(rows[0]?.detail).toBeUndefined();
   });
 });
 
 describe("buildThreadDetailRows squash merge operation collapsing", () => {
-  it("prefers the canonical worktree squash outcome over duplicate lifecycle updates", () => {
+  it("collapses squash merge lifecycle updates into a single row", () => {
     const rows = getOperationRows([
       threadOperationIntent(
         1,
@@ -1106,26 +689,20 @@ describe("buildThreadDetailRows squash merge operation collapsing", () => {
         "Squash merging changes",
         "Running squash-merge operation",
       ),
-      worktreeOperation(
-        4,
-        "worktree-squash-merge",
-        "Squash merged",
-        "Squash merged into main",
-      ),
       threadOperationIntent(
-        5,
+        4,
         "Squash merge completed",
         "Squash merged into main",
       ),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("worktree-squash-merge");
-    expect(rows[0]?.title).toBe("Squash merged");
+    expect(rows[0]?.opType).toBe("operation");
+    expect(rows[0]?.title).toBe("Squash merge completed");
     expect(rows[0]?.detail).toContain("Squash merged into main");
   });
 
-  it("keeps in-progress squash lifecycle visible when no final worktree outcome exists yet", () => {
+  it("keeps in-progress squash lifecycle visible when no final outcome exists yet", () => {
     const rows = getOperationRows([
       threadOperationIntent(
         1,
@@ -1162,7 +739,7 @@ describe("buildThreadDetailRows squash merge operation collapsing", () => {
 });
 
 describe("buildThreadDetailRows commit operation collapsing", () => {
-  it("prefers the canonical worktree commit outcome over duplicate lifecycle updates", () => {
+  it("collapses commit lifecycle updates into a single row", () => {
     const rows = getOperationRows([
       threadOperationIntent(
         1,
@@ -1179,26 +756,20 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
         "Committing changes",
         "Running commit operation",
       ),
-      worktreeOperation(
-        4,
-        "worktree-commit",
-        "Committed changes",
-        "Committed changes",
-      ),
       threadOperationIntent(
-        5,
+        4,
         "Commit completed",
         "Committed changes",
       ),
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("worktree-commit");
-    expect(rows[0]?.title).toBe("Committed changes");
+    expect(rows[0]?.opType).toBe("operation");
+    expect(rows[0]?.title).toBe("Commit completed");
     expect(rows[0]?.detail).toContain("Committed changes");
   });
 
-  it("collapses in-flight commit lifecycle updates when no canonical outcome exists yet", () => {
+  it("collapses in-flight commit lifecycle updates when no terminal outcome exists yet", () => {
     const rows = getOperationRows([
       threadOperationIntent(
         1,
@@ -1288,7 +859,7 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
     expect(rows[1]?.title).toBe("Commit completed");
   });
 
-  it("keeps earlier completed lifecycle rows when a later operation has the canonical outcome", () => {
+  it("keeps earlier completed lifecycle rows when a later operation has a separate id", () => {
     const rows = getOperationRows([
       threadOperationIntent(
         1,
@@ -1310,14 +881,8 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
           operationId: "op-2",
         },
       ),
-      worktreeOperation(
-        3,
-        "worktree-commit",
-        "Committed changes",
-        "Committed changes from op-2",
-      ),
       threadOperationIntent(
-        4,
+        3,
         "Commit completed",
         "Committed changes from op-2",
         {
@@ -1332,7 +897,8 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
     expect(rows[0]?.opType).toBe("operation");
     expect(rows[0]?.title).toBe("Commit completed");
     expect(rows[0]?.detail).toContain("op-1");
-    expect(rows[1]?.opType).toBe("worktree-commit");
+    expect(rows[1]?.opType).toBe("operation");
+    expect(rows[1]?.title).toBe("Commit completed");
     expect(rows[1]?.detail).toContain("op-2");
   });
 });

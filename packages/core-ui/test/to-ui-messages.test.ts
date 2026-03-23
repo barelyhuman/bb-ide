@@ -327,9 +327,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning/started",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Worktree" }],
+          status: "started",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
         },
         createdAt: 1,
       },
@@ -337,14 +339,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning/env_setup",
+        type: "system/provisioning",
         data: {
-          setup: {
-            status: "running",
-            scriptPath: ".bb-env-setup.sh",
-          },
-          workspaceRoot: "/tmp/worktree",
-          transcript: [],
+          status: "in_progress",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
         },
         createdAt: 2,
       },
@@ -1631,21 +1630,17 @@ describe("toUIMessages replay coverage", () => {
     expect(op?.status).toBe("interrupted");
   });
 
-  it("projects provisioning env setup events as operations", () => {
+  it("projects provisioning events as operations", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning/env_setup",
+        type: "system/provisioning",
         data: {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-          },
-          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 1 }],
+          status: "started",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
         },
         createdAt: 1,
       },
@@ -1653,16 +1648,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning/env_setup",
+        type: "system/provisioning",
         data: {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "running",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            output: "pnpm install",
-          },
-          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 2 }],
+          status: "in_progress",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
         },
         createdAt: 2,
       },
@@ -1670,15 +1660,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning/env_setup",
+        type: "system/provisioning",
         data: {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "completed",
-            scriptPath: ".bb-env-setup.sh",
-            durationMs: 125,
-          },
-          transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 125ms" }],
+          status: "completed",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "setup", text: "ran .bb-env-setup.sh", status: "completed" }],
         },
         createdAt: 3,
       },
@@ -1693,60 +1679,27 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(ops).toHaveLength(3);
-    expect(ops[0]?.opType).toBe("provisioning-env-setup");
-    expect(ops[0]?.title).toBe("Environment setup started");
-    expect(ops[0]?.detail).toBeUndefined();
-    expect(ops[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
-    expect(ops[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.sh");
-    expect(ops[0]?.provisioning?.setup?.timeoutMs).toBe(600000);
-    expect(ops[0]?.provisioning?.setup?.startedAt).toBe(1);
-    expect(ops[1]?.opType).toBe("provisioning-env-setup");
-    expect(ops[1]?.title).toBe("Environment setup running");
-    expect(ops[1]?.detail).toBeUndefined();
-    expect(ops[1]?.provisioning?.setup?.output).toBe("pnpm install");
-    expect(ops[1]?.provisioning?.setup?.startedAt).toBe(2);
-    expect(ops[2]?.opType).toBe("provisioning-env-setup");
-    expect(ops[2]?.title).toBe("Environment setup completed");
-    expect(ops[2]?.detail).toBeUndefined();
-    expect(ops[2]?.provisioning?.setup?.durationMs).toBe(125);
-    expect(ops[2]?.provisioning?.setup?.startedAt).toBe(3);
+    expect(ops[0]?.opType).toBe("provisioning");
+    expect(ops[0]?.title).toBe("Provisioning started");
+    expect(ops[1]?.opType).toBe("provisioning");
+    expect(ops[1]?.title).toBe("Provisioning environment");
+    expect(ops[2]?.opType).toBe("provisioning");
+    expect(ops[2]?.title).toBe("Provisioning ready");
   });
 
-  it("projects provisioning progress events as operations", () => {
+  it("projects provisioning in_progress events as pending operations", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning/progress",
+        type: "system/provisioning",
         data: {
-          phase: "prepare_environment",
-          status: "completed",
-          durationMs: 1200,
+          status: "in_progress",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "session", text: "starting provider session", status: "started" }],
         },
         createdAt: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "system/provisioning/progress",
-        data: {
-          phase: "start_provider_session",
-          status: "started",
-          transcript: [
-            {
-              key: "phase:start_provider_session",
-              text: "starting provider session",
-              startedAt: 2,
-              metadata: {
-                phase: "start_provider_session",
-                status: "started",
-              },
-            },
-          ],
-        },
-        createdAt: 2,
       },
     ];
 
@@ -1758,25 +1711,10 @@ describe("toUIMessages replay coverage", () => {
         message.kind === "operation",
     );
 
-    expect(ops).toHaveLength(2);
-    expect(ops[0]?.opType).toBe("provisioning-progress");
-    expect(ops[0]?.title).toBe("Environment prepared");
-    expect(ops[0]?.status).toBe("completed");
-    expect(ops[0]?.provisioning?.transcript).toBeUndefined();
-    expect(ops[1]?.opType).toBe("provisioning-progress");
-    expect(ops[1]?.title).toBe("Starting provider session");
-    expect(ops[1]?.status).toBe("pending");
-    expect(ops[1]?.provisioning?.transcript).toEqual([
-      {
-        key: "phase:start_provider_session",
-        text: "starting provider session",
-        startedAt: 2,
-        metadata: {
-          phase: "start_provider_session",
-          status: "started",
-        },
-      },
-    ]);
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.opType).toBe("provisioning");
+    expect(ops[0]?.title).toBe("Provisioning environment");
+    expect(ops[0]?.status).toBe("pending");
   });
 
   it("projects primary-checkout lifecycle events with stable metadata", () => {
@@ -1836,22 +1774,19 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[1]?.detail).toContain("Branch: feat/example");
   });
 
-  it("captures checkout sha on provisioning branch transcript entries", () => {
+  it("captures provisioning transcript entries from the new single event type", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/provisioning/env_setup",
+        type: "system/provisioning",
         data: {
-          workspaceRoot: "/tmp/worktree",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-          },
-          transcript: [
-            { key: "branch", text: "checked out branch bb/thread-123 (abcdef1)" },
-            { key: "setup", text: "running .bb-env-setup.sh", startedAt: 1 },
+          status: "in_progress",
+          environmentId: "env-1",
+          entries: [
+            { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
+            { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
           ],
         },
         createdAt: 1,
@@ -1866,17 +1801,10 @@ describe("toUIMessages replay coverage", () => {
         message.kind === "operation",
     );
 
-    expect(op?.opType).toBe("provisioning-env-setup");
+    expect(op?.opType).toBe("provisioning");
     expect(op?.provisioning?.transcript).toEqual([
-      {
-        key: "branch",
-        text: "checked out branch bb/thread-123 (abcdef1)",
-      },
-      {
-        key: "setup",
-        text: "running .bb-env-setup.sh",
-        startedAt: 1,
-      },
+      { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
+      { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
     ]);
   });
 
@@ -2280,9 +2208,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning/started",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Worktree" }],
+          status: "started",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
         },
         createdAt: 2,
       },
@@ -2290,14 +2220,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning/env_setup",
+        type: "system/provisioning",
         data: {
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-          },
-          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 3 }],
+          status: "failed",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "setup", text: "setup script failed: .bb-env-setup.sh", status: "failed" }],
         },
         createdAt: 3,
       },
@@ -2305,30 +2232,13 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-4",
         threadId: "thread-1",
         seq: 4,
-        type: "system/provisioning/env_setup",
-        data: {
-          setup: {
-            status: "failed",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            durationMs: 1593,
-            output: "pnpm build failed",
-          },
-          transcript: [{ key: "setup", text: "setup script failed: .bb-env-setup.sh in 1.6s" }],
-        },
-        createdAt: 4,
-      },
-      {
-        id: "evt-5",
-        threadId: "thread-1",
-        seq: 5,
         type: "system/error",
         data: {
           code: "thread_provisioning_failed",
           message: "Thread provisioning failed for project proj-1",
           detail: "pnpm build failed",
         },
-        createdAt: 5,
+        createdAt: 4,
       },
     ];
 
@@ -2352,7 +2262,7 @@ describe("toUIMessages replay coverage", () => {
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
       expect(messageRows[1].message.opType).toBe("provisioning");
-      expect(messageRows[1].message.title).toBe("Environment setup failed");
+      expect(messageRows[1].message.title).toBe("Provisioning environment failed");
     }
 
     expect(messageRows[2]?.message.kind).toBe("error");
@@ -2386,9 +2296,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning/started",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Direct" }],
+          status: "started",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
         },
         createdAt: 2,
       },
@@ -2421,7 +2333,7 @@ describe("toUIMessages replay coverage", () => {
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
       expect(messageRows[1].message.opType).toBe("provisioning");
-      expect(messageRows[1].message.title).toBe("Provisioning environment failed");
+      expect(messageRows[1].message.title).toBe("Provisioning failed");
     }
 
     expect(messageRows[2]?.message.kind).toBe("error");
@@ -2702,9 +2614,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning/started",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Worktree" }],
+          status: "started",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
         },
         createdAt: 2,
       },
@@ -2712,9 +2626,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning/completed",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Worktree" }],
+          status: "completed",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
         },
         createdAt: 3,
       },
@@ -2800,9 +2716,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/provisioning/started",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Docker Sandbox" }],
+          status: "started",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Docker Sandbox", status: "completed" }],
         },
         createdAt: 2,
       },
@@ -2810,9 +2728,11 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-3",
         threadId: "thread-1",
         seq: 3,
-        type: "system/provisioning/completed",
+        type: "system/provisioning",
         data: {
-          transcript: [{ key: "environment", text: "environment: Docker Sandbox" }],
+          status: "completed",
+          environmentId: "env-1",
+          entries: [{ type: "step", key: "environment", text: "environment: Docker Sandbox", status: "completed" }],
         },
         createdAt: 3,
       },

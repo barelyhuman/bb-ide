@@ -6,12 +6,6 @@ function isProvisioningActivityOperation(
 ): boolean {
   switch (message.opType) {
     case "provisioning":
-    case "provisioning-started":
-    case "provisioning-progress":
-    case "provisioning-env-setup":
-    case "provisioning-fallback":
-    case "provisioning-completed":
-    case "provisioning-cleanup-failed":
       return true;
     default:
       // opType is stringly/open_external at the UI boundary; unknown values are intentionally not highlighted.

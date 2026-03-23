@@ -7,9 +7,7 @@ import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import { mergeProvisioningOperations } from "./provisioning-helpers.js";
 import {
-  enrichWorktreeSquashMergeMessages,
   mergeThreadOperationMessages,
-  mergeThreadOperationOutcomeMessages,
 } from "./thread-operation-helpers.js";
 
 type CollapsibleTurnMessage = UIMessage;
@@ -325,14 +323,8 @@ export function buildThreadDetailRows(
   const threadOperationMergedMessages = mergeThreadOperationMessages(
     provisioningMergedMessages,
   );
-  const operationOutcomeMergedMessages = mergeThreadOperationOutcomeMessages(
-    threadOperationMergedMessages,
-  );
-  const worktreeOutcomeEnrichedMessages = enrichWorktreeSquashMergeMessages(
-    operationOutcomeMergedMessages,
-  );
   const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
-    worktreeOutcomeEnrichedMessages,
+    threadOperationMergedMessages,
   );
   const mergedMessages = mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();

@@ -1,9 +1,6 @@
 import { z } from "zod";
 import type { Thread } from "./thread.js";
-import type {
-  ProvisioningTranscriptEntry,
-  ThreadEventRow,
-} from "./thread-events.js";
+import type { ThreadEventRow } from "./thread-events.js";
 
 export const uiMessageStatusValues = [
   "streaming",
@@ -147,55 +144,18 @@ export interface UIThreadOperationMetadata {
   metadata?: Record<string, unknown>;
 }
 
-export const uiProvisioningSetupStatusValues = [
-  "started",
-  "running",
-  "completed",
-  "failed",
-] as const;
-export const uiProvisioningSetupStatusSchema = z.enum(
-  uiProvisioningSetupStatusValues,
-);
-export type UIProvisioningSetupStatus = z.infer<
-  typeof uiProvisioningSetupStatusSchema
->;
-
-export interface UIProvisioningSetupMetadata {
-  status: UIProvisioningSetupStatus;
+export interface UIProvisioningTranscriptEntry {
+  type: "step" | "output";
+  key: string;
+  text: string;
   startedAt?: number;
-  scriptPath?: string;
-  timeoutMs?: number;
-  durationMs?: number;
-  output?: string;
+  status?: "started" | "completed" | "failed";
+  metadata?: Record<string, unknown>;
 }
-
-export type UIProvisioningTranscriptEntry = ProvisioningTranscriptEntry;
 
 export interface UIProvisioningMetadata {
-  attachedEnvironmentId?: string;
-  workspaceRoot?: string;
-  setup?: UIProvisioningSetupMetadata;
+  environmentId?: string;
   transcript?: UIProvisioningTranscriptEntry[];
-}
-
-export interface UIWorktreeCommitMetadata {
-  status: "committed" | "noop";
-  message?: string;
-  commitSha?: string;
-  commitSubject?: string;
-  includeUnstaged?: boolean;
-}
-
-export interface UIWorktreeSquashMergeMetadata {
-  status: "merged" | "noop" | "conflict";
-  message?: string;
-  committed?: boolean;
-  commitSha?: string;
-  commitSubject?: string;
-  mergeBaseBranch?: string;
-  conflictFiles?: string[];
-  prepCommitMessage?: string;
-  prepCommitSha?: string;
 }
 
 export interface UIOperationMessage extends UIMessageBase {
@@ -209,8 +169,6 @@ export interface UIOperationMessage extends UIMessageBase {
   >;
   provisioning?: UIProvisioningMetadata;
   threadOperation?: UIThreadOperationMetadata;
-  worktreeCommit?: UIWorktreeCommitMetadata;
-  worktreeSquashMerge?: UIWorktreeSquashMergeMetadata;
 }
 
 export interface UIErrorMessage extends UIMessageBase {

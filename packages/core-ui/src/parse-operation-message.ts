@@ -1,21 +1,15 @@
 import type { ThreadEvent, ThreadEventPlanStepStatus } from "@bb/domain";
-import { assertNever } from "./assert-never.js";
 import { getCompactionKey } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { capitalize, messageId } from "./format-helpers.js";
 import {
-  getProvisioningProgressFromTranscript,
-  provisioningProgressTitle,
   readProvisioningTranscript,
 } from "./provisioning-helpers.js";
 import type {
   ToUIMessagesOptions,
   UIOperationMessage,
-  UIProvisioningSetupStatus,
   UIThreadOperationMetadata,
-  UIWorktreeCommitMetadata,
-  UIWorktreeSquashMergeMetadata,
 } from "@bb/domain";
 
 export function threadOperationTitle(meta: UIThreadOperationMetadata | null): string {
@@ -116,36 +110,19 @@ export function threadOperationStatus(
   }
 }
 
-function provisioningSetupOperationStatus(
-  status: UIProvisioningSetupStatus | undefined,
+function provisioningOperationStatus(
+  status: "started" | "in_progress" | "completed" | "failed",
 ): UIOperationMessage["status"] {
-  if (!status) return undefined;
   switch (status) {
     case "started":
-    case "running":
+    case "in_progress":
       return "pending";
     case "completed":
       return "completed";
     case "failed":
       return "error";
     default:
-      return assertNever(status);
-  }
-}
-
-function provisioningProgressOperationStatus(
-  status: "started" | "completed" | "failed" | undefined,
-): UIOperationMessage["status"] {
-  if (!status) return undefined;
-  switch (status) {
-    case "started":
       return "pending";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "error";
-    default:
-      return assertNever(status);
   }
 }
 
@@ -249,84 +226,32 @@ export function parseOperationMessage(
     });
   }
 
-  if (decoded.type === "system/provisioning/started") {
-    const { attachedEnvironmentId } = decoded;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    return op(decoded, meta, "provisioning-started", {
-      turnId: eventTurnId,
-      opType: "provisioning-started",
-      title: "Provisioning started",
-      status: "pending",
-      provisioning:
-        attachedEnvironmentId || transcript
-          ? {
-              ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
-              ...(transcript ? { transcript } : {}),
-            }
-          : undefined,
-    });
-  }
-
-  if (decoded.type === "system/provisioning/progress") {
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    const phase: "prepare_environment" | "start_provider_session" | undefined =
-      decoded.phase ?? getProvisioningProgressFromTranscript(transcript).phase;
-    const status: "started" | "completed" | "failed" | undefined =
-      decoded.status ?? getProvisioningProgressFromTranscript(transcript).status;
-
-    return op(decoded, meta, "provisioning-progress", {
-      turnId: eventTurnId,
-      opType: "provisioning-progress",
-      title: provisioningProgressTitle(phase, status),
-      status: provisioningProgressOperationStatus(status),
-      ...(transcript ? { provisioning: { transcript } } : {}),
-    });
-  }
-
-  if (decoded.type === "system/provisioning/env_setup") {
-    const { setup, workspaceRoot } = decoded;
-    const status = setup.status;
+  if (decoded.type === "system/provisioning") {
+    const { status, environmentId } = decoded;
+    const transcript = readProvisioningTranscript(decoded.entries);
     const title = (() => {
       switch (status) {
         case "started":
-          return "Environment setup started";
-        case "running":
-          return "Environment setup running";
+          return "Provisioning started";
+        case "in_progress":
+          return "Provisioning environment";
         case "completed":
-          return "Environment setup completed";
+          return "Provisioning ready";
         case "failed":
-          return "Environment setup failed";
+          return "Provisioning failed";
         default:
-          return "Environment setup update";
+          return "Provisioning";
       }
     })();
-    const setupMetadata =
-      status
-        ? {
-            status,
-            startedAt: meta.createdAt,
-            ...(setup.scriptPath ? { scriptPath: setup.scriptPath } : {}),
-            ...(setup.timeoutMs !== undefined ? { timeoutMs: setup.timeoutMs } : {}),
-            ...(setup.durationMs !== undefined ? { durationMs: setup.durationMs } : {}),
-            ...(setup.output ? { output: setup.output } : {}),
-          }
-        : undefined;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-
-    return op(decoded, meta, "provisioning-env-setup", {
+    return op(decoded, meta, "provisioning", {
       turnId: eventTurnId,
-      opType: "provisioning-env-setup",
+      opType: "provisioning",
       title,
-      status: provisioningSetupOperationStatus(status),
-      ...(status && setupMetadata
-        ? {
-            provisioning: {
-              ...(workspaceRoot ? { workspaceRoot } : {}),
-              setup: setupMetadata,
-              ...(transcript ? { transcript } : {}),
-            },
-          }
-        : {}),
+      status: provisioningOperationStatus(status),
+      provisioning: {
+        ...(environmentId ? { environmentId } : {}),
+        ...(transcript ? { transcript } : {}),
+      },
     });
   }
 
@@ -385,126 +310,6 @@ export function parseOperationMessage(
     });
   }
 
-  if (decoded.type === "system/worktree/commit") {
-    const { status } = decoded;
-    const title = status === "committed" ? "Committed changes" : "No commit created";
-    const { message: commitMessage, commitSha, commitSubject, includeUnstaged } = decoded;
-    const worktreeCommit: UIWorktreeCommitMetadata | undefined =
-      status === "committed" || status === "noop"
-        ? {
-            status,
-            ...(commitMessage ? { message: commitMessage } : {}),
-            ...(commitSha ? { commitSha } : {}),
-            ...(commitSubject ? { commitSubject } : {}),
-            ...(typeof includeUnstaged === "boolean" ? { includeUnstaged } : {}),
-          }
-        : undefined;
-    const detailParts = [
-      commitSubject ?? commitMessage,
-      commitSha,
-    ].filter((value): value is string => Boolean(value));
-    return op(decoded, meta, "worktree-commit", {
-      turnId: eventTurnId,
-      opType: "worktree-commit",
-      title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: "completed",
-      ...(worktreeCommit ? { worktreeCommit } : {}),
-    });
-  }
-
-  if (decoded.type === "system/worktree/squash_merge") {
-    const { status } = decoded;
-    const { message: squashMessage, commitSha, commitSubject, mergeBaseBranch, committed, conflictFiles } = decoded;
-    const normalizedConflictFiles = Array.isArray(conflictFiles)
-      ? conflictFiles
-          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          .slice(0, 8)
-      : [];
-    const worktreeSquashMerge: UIWorktreeSquashMergeMetadata | undefined =
-      status === "merged" || status === "noop" || status === "conflict"
-        ? {
-            status,
-            ...(squashMessage ? { message: squashMessage } : {}),
-            ...(typeof committed === "boolean" ? { committed } : {}),
-            ...(commitSha ? { commitSha } : {}),
-            ...(commitSubject ? { commitSubject } : {}),
-            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-            ...(normalizedConflictFiles.length > 0
-              ? { conflictFiles: normalizedConflictFiles }
-              : {}),
-          }
-        : undefined;
-    const title = status === "merged"
-      ? "Squash merged"
-      : status === "conflict"
-        ? "Squash merge has conflicts"
-        : "No squash merge performed";
-    const detailParts = [
-      squashMessage,
-      ...(normalizedConflictFiles.length > 0
-        ? [`Conflicts: ${normalizedConflictFiles.join(", ")}`]
-        : []),
-    ].filter((value): value is string => Boolean(value));
-    return op(decoded, meta, "worktree-squash-merge", {
-      turnId: eventTurnId,
-      opType: "worktree-squash-merge",
-      title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: status === "conflict" ? "error" : "completed",
-      ...(worktreeSquashMerge ? { worktreeSquashMerge } : {}),
-    });
-  }
-
-  if (decoded.type === "system/provisioning/fallback") {
-    const { fallbackEnvironmentId, detail } = decoded;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    return op(decoded, meta, "provisioning-fallback", {
-      turnId: eventTurnId,
-      opType: "provisioning-fallback",
-      title: "Provisioning fallback",
-      detail: detail || undefined,
-      status: "pending",
-      provisioning:
-        fallbackEnvironmentId || transcript
-          ? { ...(transcript ? { transcript } : {}) }
-          : undefined,
-    });
-  }
-
-  if (decoded.type === "system/provisioning/completed") {
-    const { attachedEnvironmentId, workspaceRoot } = decoded;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    return op(decoded, meta, "provisioning-completed", {
-      turnId: eventTurnId,
-      opType: "provisioning-completed",
-      title: "Provisioning ready",
-      status: "completed",
-      provisioning:
-        attachedEnvironmentId || workspaceRoot || transcript
-          ? {
-              ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
-              ...(workspaceRoot ? { workspaceRoot } : {}),
-              ...(transcript ? { transcript } : {}),
-            }
-          : undefined,
-    });
-  }
-
-  if (decoded.type === "system/provisioning/cleanup_failed") {
-    const detailParts = [
-      decoded.message,
-      decoded.detail,
-    ].filter((value): value is string => Boolean(value));
-    return op(decoded, meta, "provisioning-cleanup-failed", {
-      turnId: eventTurnId,
-      opType: "provisioning-cleanup-failed",
-      title: "Provisioning cleanup failed",
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: "error",
-    });
-  }
-
   if (decoded.type === "thread/compacted") {
     return {
       ...op(decoded, meta, `compaction`, {
@@ -552,15 +357,8 @@ export function interruptOperationMessage(message: UIOperationMessage): void {
           message.title = "Operation interrupted";
           return;
       }
-    case "provisioning-started":
-    case "provisioning-fallback":
+    case "provisioning":
       message.title = "Provisioning interrupted";
-      return;
-    case "provisioning-progress":
-      message.title = "Provisioning interrupted";
-      return;
-    case "provisioning-env-setup":
-      message.title = "Environment setup interrupted";
       return;
     case "mcp-progress":
       message.title = "MCP tool progress interrupted";
@@ -581,32 +379,9 @@ export function finalizeOperationMessage(
 
   if (options?.threadStatus === "provisioning_failed") {
     switch (message.opType) {
-      case "provisioning-started":
-      case "provisioning-fallback":
+      case "provisioning":
         message.status = "error";
         message.title = "Provisioning failed";
-        return;
-      case "provisioning-progress":
-        message.status = "error";
-        if (
-          getProvisioningProgressFromTranscript(message.provisioning?.transcript).phase ===
-          "prepare_environment"
-        ) {
-          message.title = "Environment preparation failed";
-          return;
-        }
-        if (
-          getProvisioningProgressFromTranscript(message.provisioning?.transcript).phase ===
-          "start_provider_session"
-        ) {
-          message.title = "Provider session start failed";
-          return;
-        }
-        message.title = "Provisioning failed";
-        return;
-      case "provisioning-env-setup":
-        message.status = "error";
-        message.title = "Environment setup failed";
         return;
       default:
         break;

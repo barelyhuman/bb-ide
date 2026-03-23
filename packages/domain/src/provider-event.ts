@@ -4,16 +4,9 @@ import {
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
-  systemProvisioningCleanupFailedEventDataSchema,
-  systemProvisioningCompletedEventDataSchema,
-  systemProvisioningEnvSetupEventDataSchema,
-  systemProvisioningFallbackEventDataSchema,
-  systemProvisioningProgressEventDataSchema,
-  systemProvisioningStartedEventDataSchema,
+  systemProvisioningEventDataSchema,
   systemThreadInterruptedEventDataSchema,
   systemThreadTitleUpdatedEventDataSchema,
-  systemWorktreeCommitEventDataSchema,
-  systemWorktreeSquashMergeEventDataSchema,
 } from "./thread-events.js";
 
 export const threadEventItemStatusSchema = z.enum([
@@ -318,7 +311,7 @@ export type ProviderThreadEvent = z.infer<typeof providerThreadEventSchema>;
  * Events originating from the server/system layer (not from a provider process).
  * These do NOT carry `providerThreadId`.
  */
-export const systemThreadEventSchema = z.discriminatedUnion("type", [
+export const systemThreadEventSchema = z.union([
   z.object({
     type: z.literal("client/thread/start"),
     threadId: z.string(),
@@ -352,37 +345,9 @@ export const systemThreadEventSchema = z.discriminatedUnion("type", [
     threadId: z.string(),
   }).merge(systemOperationEventDataSchema),
   z.object({
-    type: z.literal("system/worktree/commit"),
+    type: z.literal("system/provisioning"),
     threadId: z.string(),
-  }).merge(systemWorktreeCommitEventDataSchema),
-  z.object({
-    type: z.literal("system/worktree/squash_merge"),
-    threadId: z.string(),
-  }).merge(systemWorktreeSquashMergeEventDataSchema),
-  z.object({
-    type: z.literal("system/provisioning/started"),
-    threadId: z.string(),
-  }).merge(systemProvisioningStartedEventDataSchema),
-  z.object({
-    type: z.literal("system/provisioning/progress"),
-    threadId: z.string(),
-  }).merge(systemProvisioningProgressEventDataSchema),
-  z.object({
-    type: z.literal("system/provisioning/env_setup"),
-    threadId: z.string(),
-  }).merge(systemProvisioningEnvSetupEventDataSchema),
-  z.object({
-    type: z.literal("system/provisioning/fallback"),
-    threadId: z.string(),
-  }).merge(systemProvisioningFallbackEventDataSchema),
-  z.object({
-    type: z.literal("system/provisioning/completed"),
-    threadId: z.string(),
-  }).merge(systemProvisioningCompletedEventDataSchema),
-  z.object({
-    type: z.literal("system/provisioning/cleanup_failed"),
-    threadId: z.string(),
-  }).merge(systemProvisioningCleanupFailedEventDataSchema),
+  }).merge(systemProvisioningEventDataSchema),
 ]);
 export type SystemThreadEvent = z.infer<typeof systemThreadEventSchema>;
 

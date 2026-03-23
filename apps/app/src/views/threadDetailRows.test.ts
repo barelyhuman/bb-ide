@@ -500,51 +500,36 @@ describe("buildThreadDetailRows", () => {
   it("merges consecutive provisioning operations into a single row", () => {
     const messages: UIMessage[] = [
       {
-        ...baseMessage("provisioning-started-1", 1),
+        ...baseMessage("provisioning-1", 1),
         kind: "operation",
-        opType: "provisioning-started",
+        opType: "provisioning",
         title: "Provisioning started",
+        status: "pending",
         provisioning: {
-          transcript: [{ key: "environment", text: "environment: Direct" }],
+          transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
         },
       },
       {
-        ...baseMessage("provisioning-env-setup-1", 2),
+        ...baseMessage("provisioning-2", 2),
         kind: "operation",
-        opType: "provisioning-env-setup",
-        title: "Environment setup started",
+        opType: "provisioning",
+        title: "Provisioning environment",
+        status: "pending",
         provisioning: {
-          workspaceRoot: "/Users/michael/Projects/bb",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.ts",
-            timeoutMs: 600000,
-          },
+          transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.ts", status: "started" }],
         },
       },
       {
-        ...baseMessage("provisioning-env-setup-2", 3),
+        ...baseMessage("provisioning-3", 3),
         kind: "operation",
-        opType: "provisioning-env-setup",
-        title: "Environment setup completed",
-        provisioning: {
-          workspaceRoot: "/Users/michael/Projects/bb",
-          setup: {
-            status: "completed",
-            scriptPath: ".bb-env-setup.ts",
-            timeoutMs: 600000,
-            durationMs: 3074,
-          },
-        },
-      },
-      {
-        ...baseMessage("provisioning-completed-1", 4),
-        kind: "operation",
-        opType: "provisioning-completed",
+        opType: "provisioning",
         title: "Provisioning ready",
+        status: "completed",
         provisioning: {
-          workspaceRoot: "/Users/michael/Projects/bb",
-          transcript: [{ key: "environment", text: "environment: Direct" }],
+          transcript: [
+            { type: "step", key: "environment", text: "environment: Direct", status: "completed" },
+            { type: "step", key: "setup", text: "ran .bb-env-setup.ts", status: "completed" },
+          ],
         },
       },
     ];
@@ -557,10 +542,7 @@ describe("buildThreadDetailRows", () => {
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("provisioning");
     expect(rows[0].message.title).toBe("Provisioned environment");
-    expect(rows[0].message.provisioning?.workspaceRoot).toBe("/Users/michael/Projects/bb");
-    expect(rows[0].message.provisioning?.transcript?.[0]?.text).toBe("environment: Direct");
-    expect(rows[0].message.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
-    expect(rows[0].message.provisioning?.setup?.durationMs).toBe(3074);
+    expect(rows[0].message.provisioning?.transcript?.[0]).toMatchObject({ type: "step", key: "environment", text: "environment: Direct" });
     expect(rows[0].message.detail).toBeUndefined();
   });
 
@@ -600,44 +582,36 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.sourceSeqEnd).toBe(3);
   });
 
-  it("keeps streamed provisioning output on the merged provisioning row", () => {
+  it("keeps streamed provisioning transcript on the merged provisioning row", () => {
     const messages: UIMessage[] = [
       {
-        ...baseMessage("provisioning-started-1", 1),
+        ...baseMessage("provisioning-1", 1),
         kind: "operation",
-        opType: "provisioning-started",
+        opType: "provisioning",
         title: "Provisioning started",
+        status: "pending",
         provisioning: {
-          transcript: [{ key: "environment", text: "environment: Direct" }],
+          transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
         },
       },
       {
-        ...baseMessage("provisioning-env-setup-1", 2),
+        ...baseMessage("provisioning-2", 2),
         kind: "operation",
-        opType: "provisioning-env-setup",
-        title: "Environment setup started",
+        opType: "provisioning",
+        title: "Provisioning environment",
+        status: "pending",
         provisioning: {
-          workspaceRoot: "/Users/michael/Projects/bb",
-          setup: {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-          },
+          transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
         },
       },
       {
-        ...baseMessage("provisioning-env-setup-2", 3),
+        ...baseMessage("provisioning-3", 3),
         kind: "operation",
-        opType: "provisioning-env-setup",
-        title: "Environment setup running",
+        opType: "provisioning",
+        title: "Provisioning environment",
+        status: "pending",
         provisioning: {
-          workspaceRoot: "/Users/michael/Projects/bb",
-          setup: {
-            status: "running",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            output: "+ pnpm install",
-          },
+          transcript: [{ type: "output", key: "setup-out-1", text: "+ pnpm install" }],
         },
       },
     ];
@@ -649,8 +623,10 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("provisioning");
-    expect(rows[0].message.provisioning?.setup?.status).toBe("running");
-    expect(rows[0].message.provisioning?.setup?.output).toBe("+ pnpm install");
+    const setupEntry = rows[0].message.provisioning?.transcript?.find((e) => e.key === "setup");
+    expect(setupEntry?.text).toBe("running .bb-env-setup.sh");
+    const outputEntry = rows[0].message.provisioning?.transcript?.find((e) => e.type === "output");
+    expect(outputEntry?.text).toBe("+ pnpm install");
   });
 
   it("merges squash operation intent request/prompt/lifecycle into one row", () => {
@@ -700,7 +676,7 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain(promptText);
   });
 
-  it("prefers a single canonical squash merge row when lifecycle and worktree outcomes overlap", () => {
+  it("collapses squash merge lifecycle updates into a single row", () => {
     const messages: UIMessage[] = [
       {
         ...baseMessage("squash-requested-1", 1),
@@ -725,14 +701,7 @@ describe("buildThreadDetailRows", () => {
         },
       },
       {
-        ...baseMessage("squash-worktree-1", 3),
-        kind: "operation",
-        opType: "worktree-squash-merge",
-        title: "Squash merged",
-        detail: "Squash merged into main",
-      },
-      {
-        ...baseMessage("squash-completed-1", 4),
+        ...baseMessage("squash-completed-1", 3),
         kind: "operation",
         opType: "operation",
         title: "Squash merge completed",
@@ -750,12 +719,12 @@ describe("buildThreadDetailRows", () => {
     if (rows[0]?.kind !== "message") return;
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
-    expect(rows[0].message.opType).toBe("worktree-squash-merge");
-    expect(rows[0].message.title).toBe("Squash merged");
+    expect(rows[0].message.opType).toBe("operation");
+    expect(rows[0].message.title).toBe("Squash merge completed");
     expect(rows[0].message.detail).toContain("Squash merged into main");
   });
 
-  it("prefers a single canonical commit row when lifecycle and worktree outcomes overlap", () => {
+  it("collapses commit lifecycle updates into a single row", () => {
     const messages: UIMessage[] = [
       {
         ...baseMessage("commit-running-1", 1),
@@ -769,14 +738,7 @@ describe("buildThreadDetailRows", () => {
         },
       },
       {
-        ...baseMessage("commit-worktree-1", 2),
-        kind: "operation",
-        opType: "worktree-commit",
-        title: "Committed changes",
-        detail: "Committed changes",
-      },
-      {
-        ...baseMessage("commit-completed-1", 3),
+        ...baseMessage("commit-completed-1", 2),
         kind: "operation",
         opType: "operation",
         title: "Commit completed",
@@ -794,12 +756,12 @@ describe("buildThreadDetailRows", () => {
     if (rows[0]?.kind !== "message") return;
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
-    expect(rows[0].message.opType).toBe("worktree-commit");
-    expect(rows[0].message.title).toBe("Committed changes");
+    expect(rows[0].message.opType).toBe("operation");
+    expect(rows[0].message.title).toBe("Commit completed");
     expect(rows[0].message.detail).toContain("Committed changes");
   });
 
-  it("collapses in-flight commit lifecycle updates when no worktree outcome exists yet", () => {
+  it("collapses in-flight commit lifecycle updates when no terminal outcome exists yet", () => {
     const messages: UIMessage[] = [
       {
         ...baseMessage("commit-running-1", 1),

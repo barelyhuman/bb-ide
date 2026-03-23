@@ -10,13 +10,11 @@ import {
   ExpandableDetailScrollArea,
   EventTitle,
   formatCompactDuration,
-  formatElapsedSince,
   getEventHeaderToneClass,
   getStaticEventToneClass,
-  useLiveNow,
 } from "./shared";
 import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
-import { TerminalOutputBlock } from "./TerminalOutputBlock";
+
 
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
@@ -26,35 +24,10 @@ function splitNonEmptyLines(value: string | undefined): string[] {
     .filter((line) => line.length > 0);
 }
 
-function formatProvisioningSetupCommand(scriptPath: string | undefined): string | undefined {
-  const value = scriptPath?.trim();
-  if (!value) return undefined;
-  if (
-    value.startsWith("./") ||
-    value.startsWith("~/") ||
-    value.startsWith("/") ||
-    /^[A-Za-z]:[\\/]/.test(value)
-  ) {
-    return `bash -x ${value}`;
-  }
-  return `bash -x ./${value}`;
-}
-
-function formatProvisioningRunningSuffix(
-  startedAt: number | undefined,
-  now: number | undefined,
-): string {
-  if (startedAt === undefined || now === undefined || now < startedAt) {
-    return "";
-  }
-  return ` (${formatElapsedSince(startedAt, now)})`;
-}
-
 function formatProvisioningTranscriptEntry(
   entry: UIProvisioningTranscriptEntry,
-  now?: number,
 ): string | undefined {
-  return `${entry.text}${formatProvisioningRunningSuffix(entry.startedAt, now)}`;
+  return entry.text;
 }
 
 function extractPromptSections(detailText: string | undefined): {
@@ -75,41 +48,6 @@ function extractPromptSections(detailText: string | undefined): {
     ...(operationDetailText ? { operationDetailText } : {}),
     ...(promptText ? { promptText } : {}),
   };
-}
-
-function extractMergeTargetBranch(message: UIOperationMessage): string | undefined {
-  const mergeBaseBranch = message.worktreeSquashMerge?.mergeBaseBranch?.trim();
-  if (mergeBaseBranch) return mergeBaseBranch;
-
-  const candidates = [message.worktreeSquashMerge?.message, message.detail];
-  for (const candidate of candidates) {
-    const match = candidate?.match(/\b(?:into|to)\s+[`'"]?([A-Za-z0-9._/-]+)[`'"]?/i);
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-
-  return undefined;
-}
-
-function formatCommitDetailLine({
-  commitSha,
-  commitMessage,
-}: {
-  commitSha?: string;
-  commitMessage?: string;
-}): string | undefined {
-  const normalizedSha = commitSha?.trim();
-  const normalizedMessage = commitMessage?.trim();
-  const shortSha = normalizedSha?.slice(0, 7);
-
-  if (shortSha && normalizedMessage) {
-    return `[${shortSha}] ${normalizedMessage}`;
-  }
-  if (shortSha) {
-    return `[${shortSha}]`;
-  }
-  return normalizedMessage;
 }
 
 function isShimmeringOperationStatus(status: string): boolean {
@@ -258,27 +196,19 @@ function buildProvisioningSummary(
 
 function buildProvisioningTranscript(
   message: UIOperationMessage,
-  now?: number,
 ): {
   lines: string[];
-  outputText?: string;
-  outputCommand?: string;
 } {
   const provisioning = message.provisioning;
-  const setup = provisioning?.setup;
   const transcriptLines = provisioning?.transcript
-    ?.map((entry) => formatProvisioningTranscriptEntry(entry, now))
+    ?.map((entry) => formatProvisioningTranscriptEntry(entry))
     .filter((line): line is string => Boolean(line));
   const lines = transcriptLines && transcriptLines.length > 0 ? transcriptLines : [];
   if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
     lines.push(`provisioning took ${formatCompactDuration(message.createdAt - message.startedAt)}`);
   }
 
-  return {
-    lines,
-    ...(setup?.output?.trim() ? { outputText: setup.output.trim() } : {}),
-    ...(setup?.scriptPath ? { outputCommand: formatProvisioningSetupCommand(setup.scriptPath) } : {}),
-  };
+  return { lines };
 }
 
 function capitalizeFirst(value: string): string {
@@ -412,8 +342,6 @@ export function OperationRow({
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const tone = getOperationTone(message);
-  const liveNow = useLiveNow(isExpanded && message.opType === "provisioning" && message.status === "pending");
-
   if (message.opType === "plan-updated") {
     const detailLines = splitNonEmptyLines(message.detail);
     const summaryContent = buildGenericSummary(message.title);
@@ -434,11 +362,11 @@ export function OperationRow({
 
   if (message.opType === "provisioning") {
     const summaryContent = buildProvisioningSummary(message, tone);
-    const { lines, outputText, outputCommand } = buildProvisioningTranscript(message, liveNow);
+    const { lines } = buildProvisioningTranscript(message);
     const additionalDetailLines = splitNonEmptyLines(message.detail).filter(
       (line) => !lines.includes(line),
     );
-    const hasDetails = lines.length > 0 || additionalDetailLines.length > 0 || Boolean(outputText);
+    const hasDetails = lines.length > 0 || additionalDetailLines.length > 0;
 
     if (!hasDetails) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
@@ -453,13 +381,6 @@ export function OperationRow({
       >
         <div className="mt-0.5 space-y-2">
           <OperationDetailLines lines={lines} />
-          {outputText ? (
-            <TerminalOutputBlock
-              command={outputCommand}
-              outputText={outputText}
-              isExpanded={isExpanded}
-            />
-          ) : null}
           {additionalDetailLines.length > 0 ? (
             <OperationDetailLines lines={additionalDetailLines} />
           ) : null}
@@ -492,89 +413,6 @@ export function OperationRow({
             </EventCodeBlock>
           ) : null}
         </div>
-      </ExpandableOperationRow>
-    );
-  }
-
-  if (message.opType === "worktree-commit") {
-    const detailLinesFromMessage = splitNonEmptyLines(message.detail);
-    const commitSha =
-      message.worktreeCommit?.commitSha?.trim() ??
-      detailLinesFromMessage.find((line) => /^[0-9a-f]{7,40}$/i.test(line));
-    const commitMessage =
-      message.worktreeCommit?.commitSubject?.trim() ??
-      message.worktreeCommit?.message?.trim() ??
-      detailLinesFromMessage.find((line) => line !== commitSha);
-    const summaryContent = message.title === "Committed changes"
-      ? <EventTitle prefix="Committed" detail="changes" tone={tone} />
-      : buildGenericSummary(message.title);
-    const detailLines = [
-      formatCommitDetailLine({ commitSha, commitMessage }),
-    ].filter((value): value is string => Boolean(value));
-
-    if (detailLines.length === 0) {
-      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
-    }
-
-    return (
-      <ExpandableOperationRow
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        summaryContent={summaryContent}
-        tone={tone}
-      >
-        <OperationDetailLines lines={detailLines} />
-      </ExpandableOperationRow>
-    );
-  }
-
-  if (message.opType === "worktree-squash-merge") {
-    const mergeTargetBranch = extractMergeTargetBranch(message);
-    const isConflict = message.worktreeSquashMerge?.status === "conflict" || message.status === "error";
-    const squashCommitLine = !isConflict
-      ? formatCommitDetailLine({
-          commitSha: message.worktreeSquashMerge?.commitSha?.trim(),
-          commitMessage:
-            message.worktreeSquashMerge?.commitSubject?.trim() ??
-            message.worktreeSquashMerge?.message?.trim(),
-        })
-      : undefined;
-    const summaryContent = isConflict
-      ? buildGenericSummary(
-          <EventTitle prefix="Squash merge" emphasis="failed" tone={tone} />,
-        )
-      : mergeTargetBranch
-        ? <EventTitle prefix="Squash merged into" emphasis={mergeTargetBranch} tone={tone} emphasisAs="em" />
-        : buildGenericSummary(message.title);
-    const detailLines = [
-      squashCommitLine,
-      ...(message.worktreeSquashMerge?.conflictFiles?.length
-        ? [`Conflicts: ${message.worktreeSquashMerge.conflictFiles.join(", ")}`]
-        : []),
-      message.worktreeSquashMerge?.prepCommitMessage
-        ? `Commit: ${message.worktreeSquashMerge.prepCommitMessage}`
-        : undefined,
-      message.worktreeSquashMerge?.prepCommitSha
-        ? `Hash: ${message.worktreeSquashMerge.prepCommitSha}`
-        : undefined,
-      ...splitNonEmptyLines(message.detail).filter((line) =>
-        line !== message.worktreeSquashMerge?.message &&
-        line !== squashCommitLine
-      ),
-    ].filter((value): value is string => Boolean(value));
-
-    if (detailLines.length === 0) {
-      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
-    }
-
-    return (
-      <ExpandableOperationRow
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        summaryContent={summaryContent}
-        tone={tone}
-      >
-        <OperationDetailLines lines={detailLines} />
       </ExpandableOperationRow>
     );
   }
