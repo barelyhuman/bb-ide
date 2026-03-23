@@ -112,7 +112,7 @@ packages/config/src/
   cli.ts              -- BB_SERVER_URL
 ```
 
-**Exports:** `@bb/config/server`, `@bb/config/host-daemon`, `@bb/config/cli`
+**Exports:** `@bb/config/common`, `@bb/config/server`, `@bb/config/host-daemon`, `@bb/config/cli`
 
 **Validation:**
 - [ ] Package typechecks
@@ -152,7 +152,7 @@ Full list of changes in `plans/architecture.md` sections "Data Model", "Type Ren
 
 **Validation:**
 - [ ] Package typechecks
-- [ ] Downstream breakage expected (server-contract, env-daemon-contract, core-ui, db)
+- [ ] Downstream breakage expected (server-contract, host-daemon-contract, core-ui, db)
 
 ### 1d. Rewrite `@bb/db` (after 1c)
 
@@ -161,7 +161,7 @@ Full list of changes in `plans/architecture.md` sections "Data Model", "Type Ren
 ```
 hosts, projects, project_sources, environments (with isGitRepo, branchName, provisionerState),
 threads, events, queued_thread_messages,
-host_daemon_sessions, host_daemon_commands, host_daemon_cursors
+host_daemon_sessions, host_daemon_commands (with retryCount integer default 0), host_daemon_cursors
 ```
 
 **Validation:**
@@ -181,11 +181,11 @@ Update imports for domain renames. Update provisioning helpers for new event mod
 
 ## Phase 2: Contracts
 
-**2b must complete before 2a** (server-contract imports from env-daemon-contract).
+**2b must complete before 2a** (server-contract imports from host-daemon-contract).
 
 ### 2b. Rewrite `@bb/host-daemon-contract` (first)
 
-Rename from `env-daemon-contract`. Simplified session protocol. 17 commands including workspace operations (`workspace.status`, `workspace.diff`, `workspace.commit`, `workspace.squash_merge`, `workspace.reset`, `workspace.checkpoint`, `workspace.export`, `workspace.import`).
+Rename from `env-daemon-contract`. Simplified session protocol. 18 commands including workspace operations (`workspace.status`, `workspace.diff`, `workspace.commit`, `workspace.squash_merge`, `workspace.reset`, `workspace.checkpoint`, `workspace.export`, `workspace.import`, `workspace.reattach`).
 
 See `plans/architecture.md` "Host-Daemon Protocol" for full spec.
 
@@ -359,7 +359,7 @@ apps/host-daemon/src/
 - [ ] Events buffered, posted, acked events discarded
 - [ ] Reports active provider sessions on reconnect for state reconciliation
 
-### 4c. Command routing + AgentRuntime (after 3d — needs server internal API)
+### 4c. Command routing + AgentRuntime (after 5e — needs server internal API)
 
 ```
 apps/host-daemon/src/
@@ -388,6 +388,7 @@ workspace.reset      → workspace.reset()
 workspace.checkpoint → workspace.checkpoint()
 workspace.export     → exportWorkspace(workspace)
 workspace.import     → importWorkspace(primary, exportData)
+workspace.reattach   → workspace.checkoutBranch(branch)
 ```
 
 Environment commands dispatch to provisioning functions:

@@ -120,13 +120,13 @@ Auth: `BB_SECRET_TOKEN` env var, sent as `Authorization: Bearer` on HTTP and as 
 
 Server queues commands in DB, sends `{ type: "commands-available" }` over WS. Daemon fetches via `GET /internal/session/commands?afterCursor={N}`. Reports results via `POST /internal/session/command-result`.
 
-**Delivery semantics: at-least-once.** Daemon persists cursor to disk after fetching, before executing. If daemon crashes after fetch but before execution, it replays from the persisted cursor on restart. All commands must be idempotent:
+**Delivery semantics: at-least-once.** Daemon persists cursor to disk after reporting command results, not after fetching. This ensures at-least-once delivery — if the daemon crashes after fetch but before reporting, it re-fetches the same commands on restart. All commands must be idempotent:
 - `thread.start` — checks if a provider process already exists for this thread before spawning
 - `environment.provision` — checks if the target path already exists before creating
 - `environment.destroy` — no-op if path doesn't exist
 - All others are naturally idempotent (sending input, querying status)
 
-17 command types:
+18 command types:
 ```
 // Thread/provider
 thread.start, thread.resume, turn.run, turn.steer, thread.stop, thread.rename,
@@ -137,7 +137,7 @@ environment.provision, environment.destroy
 
 // Workspace (git repos only)
 workspace.status, workspace.diff, workspace.commit, workspace.squash_merge,
-workspace.export, workspace.import, workspace.reset, workspace.checkpoint
+workspace.export, workspace.import, workspace.reattach, workspace.reset, workspace.checkpoint
 ```
 
 Each command batch item includes `environmentId` (nullable for `provider.list_models`) so the daemon can route to the correct `AgentRuntime` instance.
@@ -179,7 +179,7 @@ Daemon-driven, server never nudges. On WS drop:
 ### Resilience invariants
 
 - **Event ingestion is idempotent** on `(threadId, sequence)`. Server silently accepts already-seen events.
-- **Command cursor persisted to disk.** Daemon writes to `$BB_DATA_DIR/command-cursor` after each fetch (atomic write: write to temp, rename). On restart, reads from disk.
+- **Command cursor persisted to disk.** Daemon writes to `$BB_DATA_DIR/command-cursor` after reporting command results (atomic write: write to temp, rename). On restart, reads from disk and re-fetches from that cursor.
 - **Command TTL.** Server tracks commands that were fetched but never got a `command-result`. Standard commands: 60s timeout. `environment.provision`: 5 minute timeout. Abandoned commands re-queue once, then error the thread.
 - **Protocol version mismatch** → 400 rejection with supported versions.
 - **File locking.** Daemon acquires an exclusive lock on `$BB_DATA_DIR/daemon.lock` at startup. If lock is held, another daemon instance is running — the new instance waits or exits.
@@ -385,7 +385,7 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 | `@bb/agent-runtime` | Provider adapters, registry, runtime | @bb/domain, @bb/templates |
 | `@bb/templates` | Prompt templates | gray-matter, handlebars |
 | `@bb/core-ui` | View transforms (toUIMessages, formatTimeline, detail rows) | @bb/domain, @bb/templates |
-| `@bb/workspace` | Provisioning (worktree, clone), git operations (status, diff, commit, merge, promote), setup scripts | — (no workspace deps, uses git CLI) |
+| `@bb/workspace` | Provisioning (worktree, clone), git operations (status, diff, commit, merge, promote), setup scripts | @bb/domain |
 | `@bb/ui-core` | Shared React components | react |
 | `@bb/tsconfig` | Shared TS config | — |
 | `apps/server` | Server implementation | @bb/domain, @bb/config, @bb/logger, @bb/db, @bb/server-contract, @bb/host-daemon-contract |

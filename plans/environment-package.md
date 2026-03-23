@@ -64,18 +64,21 @@ export function createWorktree(args: {
   sourcePath: string;       // project source path (where .git lives)
   targetPath: string;       // where to create the worktree
   branchName: string;       // branch to create
+  onProgress?: (entry: ProvisioningTranscriptEntry) => void;
 }): Promise<{ path: string }>;
 
 export function createClone(args: {
   sourcePath: string;       // URL or local path to clone from
   targetPath: string;       // where to clone into
   branchName: string;       // branch to create after clone
+  onProgress?: (entry: ProvisioningTranscriptEntry) => void;
 }): Promise<{ path: string }>;
 
 export function runSetupScript(args: {
   workspacePath: string;
   scriptName?: string;      // default: ".bb-env-setup.sh"
   timeoutMs?: number;       // default: 5 minutes
+  onProgress?: (entry: ProvisioningTranscriptEntry) => void;
 }): Promise<{ ran: boolean; exitCode?: number; output?: string }>;
 
 export function removeWorktree(args: {
