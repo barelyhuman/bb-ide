@@ -10,6 +10,7 @@
     "sourceMap": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
+    "noUnusedLocals": true,
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src"

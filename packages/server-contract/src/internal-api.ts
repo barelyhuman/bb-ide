@@ -9,7 +9,7 @@ import type {
   EnvironmentDaemonSessionToolCallResponseMessage,
   EnvironmentDaemonSessionWelcomeMessage,
 } from "@bb/env-daemon-contract";
-import type { EmptyInput, Endpoint, PathId } from "./common.js";
+import type { Endpoint, PathId } from "./common.js";
 
 type InternalSessionCommandsQuery = {
   sessionId: string;

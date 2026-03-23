@@ -23,9 +23,6 @@ export interface FormatTimelineOptions {
 function dim(text: string, color: boolean): string {
   return color ? `\x1b[2m${text}\x1b[22m` : text;
 }
-function bold(text: string, color: boolean): string {
-  return color ? `\x1b[1m${text}\x1b[22m` : text;
-}
 function cyan(text: string, color: boolean): string {
   return color ? `\x1b[36m${text}\x1b[39m` : text;
 }

@@ -8,7 +8,6 @@ import {
   resolveProjectIdWithLabel,
   printContextLabel,
 } from "./helpers.js";
-import { requireProjectId } from "../context-env.js";
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
   const project = program.command("project").description("Inspect and manage projects");

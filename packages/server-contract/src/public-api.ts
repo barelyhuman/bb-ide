@@ -15,7 +15,6 @@ import type {
 import type { EmptyInput, Endpoint, PathId, PathProjectId, PathThreadAndQueued } from "./common.js";
 import type {
   CreateProjectRequest,
-  DemotePrimaryCheckoutResponse,
   EnqueueThreadMessageRequest,
   EnvironmentOperationApiError,
   EnvironmentOperationRequest,
@@ -24,8 +23,6 @@ import type {
   OpenThreadPathRequest,
   PrimaryCheckoutStatus,
   ProjectFileSuggestion,
-  PromotePrimaryCheckoutResponse,
-  PromptMentionSuggestion,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
   SpawnThreadRequest,

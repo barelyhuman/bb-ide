@@ -1,5 +1,4 @@
 import type {
-  ThreadDetailMessageRow,
   ThreadDetailRow,
   ThreadDetailToolGroupRow,
   UIMessage,

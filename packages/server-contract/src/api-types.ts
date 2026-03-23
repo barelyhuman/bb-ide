@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  availableModelSchema,
   environmentCapabilitiesSchema,
   environmentDescriptorSchema,
   promptInputSchema,
@@ -14,11 +13,9 @@ import {
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
   threadContextWindowUsageSchema,
-  threadEventRowSchema,
   threadQueuedMessageSchema,
   threadStatusSchema,
   threadTypeSchema,
-  threadWorkStatusSchema,
   uiMessageSchema,
   type ThreadGitDiffCommitSummary,
   type ThreadGitDiffMode,

@@ -25,14 +25,11 @@ import {
   outputJson,
   resolveThreadIdOrSelf,
   resolveThreadIdWithLabel,
-  resolveProjectIdWithLabel,
   printContextLabel,
 } from "./helpers.js";
 import {
-  resolveEnvironmentId,
   requireProjectId,
-  requireThreadId,
-  resolveProjectId,
+  resolveEnvironmentId,
   resolveThreadId,
 } from "../context-env.js";
 
