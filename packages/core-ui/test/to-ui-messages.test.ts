@@ -3,7 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
+import { decodeRow } from "../src/event-decode.js";
 import { toUIMessages } from "../src/to-ui-messages.js";
+import type { ThreadEventWithMeta } from "../src/to-ui-messages.js";
 import { buildThreadDetailRows } from "../src/thread-detail-rows.js";
 import type { UIMessage } from "../src/ui-message.js";
 
@@ -14,6 +16,11 @@ function fixturePath(name: string): string {
 
 function loadFixture(name: string): ThreadEventRow[] {
   return JSON.parse(readFileSync(fixturePath(name), "utf8")) as ThreadEventRow[];
+}
+
+/** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toUIMessages. */
+function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
+  return rows.map((row) => decodeRow(row));
 }
 
 function unique<T>(values: T[]): T[] {
@@ -51,7 +58,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     expect(projected).toHaveLength(1);
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
@@ -94,7 +101,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const assistantMessages = projected.filter(
       (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -108,10 +115,10 @@ describe("toUIMessages replay coverage", () => {
     const events = loadFixture("thread-JQh4-pAyGlgHLACZ8AXY2-events.json");
     expect(events.length).toBeGreaterThan(500);
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const projectedAgain = toUIMessages(events);
+    const projectedAgain = toUIMessages(fromRows(events));
 
     expect(projected.length).toBeGreaterThan(0);
     expect(projected.map((message) => message.id)).toEqual(
@@ -161,7 +168,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const tool = projected.find(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
         message.kind === "tool-call",
@@ -213,7 +220,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const tool = projected.find(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
         message.kind === "tool-call",
@@ -271,7 +278,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const tools = projected.filter(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
         message.kind === "tool-call" && message.callId === "call-1",
@@ -304,7 +311,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
     const tool = projected.find(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
         message.kind === "tool-call",
@@ -343,7 +350,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "provisioning" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "provisioning" });
     const rows = buildThreadDetailRows(projected, {
       includeToolGroupMessages: false,
     });
@@ -393,7 +400,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const assistant = projected.find(
       (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -447,7 +454,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
     const assistant = projected.find(
       (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -482,7 +489,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
 
     const assistant = projected.find(
       (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
@@ -521,7 +528,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
     const assistant = projected.find(
       (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -560,7 +567,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
 
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
@@ -607,7 +614,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const assistants = projected.filter(
       (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -652,7 +659,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const reasoning = projected.filter(
       (message): message is Extract<UIMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
@@ -729,7 +736,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const tool = projected.find(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
         message.kind === "tool-call",
@@ -815,7 +822,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const exploringRows = projected.filter(
       (message): message is Extract<UIMessage, { kind: "tool-exploring" }> =>
         message.kind === "tool-exploring",
@@ -877,7 +884,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
 
     const exploringRows = projected.filter(
       (message): message is Extract<UIMessage, { kind: "tool-exploring" }> =>
@@ -943,7 +950,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
 
     const toolCalls = projected.filter(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
@@ -1012,7 +1019,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     expect(projected.map((message) => message.kind)).toEqual([
       "tool-call",
       "assistant-text",
@@ -1053,7 +1060,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const search = projected.find(
       (message): message is Extract<UIMessage, { kind: "web-search" }> =>
         message.kind === "web-search",
@@ -1083,7 +1090,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const search = projected.find(
       (message): message is Extract<UIMessage, { kind: "web-search" }> =>
         message.kind === "web-search",
@@ -1154,7 +1161,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const fileEdit = projected.find(
       (message): message is Extract<UIMessage, { kind: "file-edit" }> =>
         message.kind === "file-edit",
@@ -1188,7 +1195,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const tool = projected.find(
       (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
         message.kind === "tool-call",
@@ -1224,7 +1231,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const fileEdit = projected.find(
       (message): message is Extract<UIMessage, { kind: "file-edit" }> =>
         message.kind === "file-edit",
@@ -1265,7 +1272,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const fileEdit = projected.find(
       (message): message is Extract<UIMessage, { kind: "file-edit" }> =>
         message.kind === "file-edit",
@@ -1301,7 +1308,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const op = projected.find(
@@ -1334,7 +1341,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
     const reasoning = projected.find(
       (message): message is Extract<UIMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
@@ -1373,7 +1380,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const ops = projected.filter(
@@ -1402,7 +1409,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const op = projected.find(
@@ -1431,7 +1438,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const op = projected.find(
@@ -1473,7 +1480,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const ops = projected.filter(
@@ -1504,7 +1511,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "active" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "active" });
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1559,7 +1566,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(fromRows(events));
     const ops = projected.filter(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1587,7 +1594,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const op = projected.find(
@@ -1601,7 +1608,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("projects thread interruption events as interrupted operations", () => {
-    const projected = toUIMessages([
+    const projected = toUIMessages(fromRows([
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -1612,7 +1619,7 @@ describe("toUIMessages replay coverage", () => {
         },
         createdAt: 1,
       },
-    ]);
+    ]));
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1677,7 +1684,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const ops = projected.filter(
@@ -1743,7 +1750,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "provisioning",
     });
     const ops = projected.filter(
@@ -1796,14 +1803,13 @@ describe("toUIMessages replay coverage", () => {
           operation: "primary_checkout",
           status: "completed",
           message: "Primary checkout now reflects this thread worktree",
-          branch: "feat/example",
-          metadata: { action: "promote" },
+          metadata: { action: "promote", branch: "feat/example" },
         },
         createdAt: 2,
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const ops = projected.filter(
@@ -1825,7 +1831,7 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[1]?.threadOperation).toEqual({
       operation: "primary_checkout",
       status: "completed",
-      metadata: { action: "promote" },
+      metadata: { action: "promote", branch: "feat/example" },
     });
     expect(ops[1]?.detail).toContain("Branch: feat/example");
   });
@@ -1852,7 +1858,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "provisioning",
     });
     const op = projected.find(
@@ -1903,7 +1909,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const ops = projected.filter(
@@ -1942,9 +1948,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    expect(toUIMessages(events)).toEqual([]);
+    expect(toUIMessages(fromRows(events))).toEqual([]);
 
-    const withDebug = toUIMessages(events, { includeDebugRawEvents: true });
+    const withDebug = toUIMessages(fromRows(events), { includeDebugRawEvents: true });
     expect(withDebug).toHaveLength(1);
     expect(withDebug[0]?.kind).toBe("debug/raw-event");
     if (withDebug[0]?.kind === "debug/raw-event") {
@@ -1973,7 +1979,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const withDebug = toUIMessages(events, { includeDebugRawEvents: true });
+    const withDebug = toUIMessages(fromRows(events), { includeDebugRawEvents: true });
     expect(withDebug).toEqual([]);
   });
 
@@ -2025,7 +2031,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const withDebug = toUIMessages(events, { includeDebugRawEvents: true });
+    const withDebug = toUIMessages(fromRows(events), { includeDebugRawEvents: true });
     expect(withDebug).toEqual([]);
   });
 
@@ -2055,7 +2061,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const withDebug = toUIMessages(events, { includeDebugRawEvents: true });
+    const withDebug = toUIMessages(fromRows(events), { includeDebugRawEvents: true });
     expect(withDebug).toEqual([]);
   });
 
@@ -2076,7 +2082,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const withDebug = toUIMessages(events, { includeDebugRawEvents: true });
+    const withDebug = toUIMessages(fromRows(events), { includeDebugRawEvents: true });
     expect(withDebug).toEqual([]);
   });
 
@@ -2169,7 +2175,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(fromRows(events));
 
     expect(
       projected.some(
@@ -2237,7 +2243,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "provisioning_failed",
     });
 
@@ -2326,7 +2332,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "provisioning_failed",
     });
     const rows = buildThreadDetailRows(projected, {
@@ -2400,7 +2406,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "provisioning_failed",
     });
     const rows = buildThreadDetailRows(projected, {
@@ -2446,7 +2452,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
 
@@ -2481,7 +2487,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
 
@@ -2557,7 +2563,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const userMessages = projected.filter(
@@ -2606,7 +2612,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
     const userMessages = projected.filter(
@@ -2659,7 +2665,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const userMessages = projected.filter(
@@ -2747,7 +2753,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
     const rows = buildThreadDetailRows(projected, {
@@ -2812,7 +2818,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
     const rows = buildThreadDetailRows(projected, {
@@ -2874,7 +2880,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
     const userMessages = projected.filter(
@@ -2914,7 +2920,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
     const user = projected.find(
@@ -2970,7 +2976,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "idle",
     });
     const users = projected.filter(
@@ -3025,7 +3031,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "active",
     });
     const users = projected.filter(
@@ -3055,7 +3061,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events, {
+    const projected = toUIMessages(fromRows(events), {
       threadStatus: "provisioning_failed",
     });
     const error = projected.find(
@@ -3069,7 +3075,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("does not render system-initiated client start input as a user message", () => {
-    const projected = toUIMessages([
+    const projected = toUIMessages(fromRows([
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3088,13 +3094,13 @@ describe("toUIMessages replay coverage", () => {
         },
         createdAt: 1,
       },
-    ], { threadStatus: "idle" });
+    ]), { threadStatus: "idle" });
 
     expect(projected).toEqual([]);
   });
 
   it("projects manager user messages and suppresses raw assistant text for manager threads", () => {
-    const projected = toUIMessages([
+    const projected = toUIMessages(fromRows([
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3122,7 +3128,7 @@ describe("toUIMessages replay coverage", () => {
         },
         createdAt: 2,
       },
-    ], {
+    ]), {
       threadStatus: "idle",
       threadType: "manager",
     });
@@ -3136,7 +3142,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("suppresses internal [bb system] user messages from provider items", () => {
-    const projected = toUIMessages([
+    const projected = toUIMessages(fromRows([
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3182,7 +3188,7 @@ describe("toUIMessages replay coverage", () => {
         },
         createdAt: 2,
       },
-    ], {
+    ]), {
       threadStatus: "idle",
       threadType: "manager",
     });
@@ -3195,7 +3201,7 @@ describe("toUIMessages replay coverage", () => {
   });
 
   it("includes internal [bb system] messages when internal system messages are enabled", () => {
-    const projected = toUIMessages([
+    const projected = toUIMessages(fromRows([
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -3241,7 +3247,7 @@ describe("toUIMessages replay coverage", () => {
         },
         createdAt: 3,
       },
-    ], {
+    ]), {
       threadStatus: "idle",
       threadType: "manager",
       includeInternalSystemMessages: true,
@@ -3299,7 +3305,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const toolCalls = projected.filter((m) => m.kind === "tool-call");
     expect(toolCalls).toHaveLength(1);
     const tc = toolCalls[0];
@@ -3384,7 +3390,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     // Read and Grep should be grouped into a single exploring message
     const exploring = projected.filter((m) => m.kind === "tool-exploring");
     expect(exploring.length).toBeGreaterThanOrEqual(1);
@@ -3435,7 +3441,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const toolCalls = projected.filter((m) => m.kind === "tool-call");
     expect(toolCalls).toHaveLength(1);
     if (toolCalls[0]?.kind === "tool-call") {
@@ -3484,7 +3490,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const toolCalls = projected.filter((m) => m.kind === "tool-call");
     expect(toolCalls).toHaveLength(1);
     if (toolCalls[0]?.kind === "tool-call") {
@@ -3569,7 +3575,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
       },
     ];
 
-    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const projected = toUIMessages(fromRows(events), { threadStatus: "idle" });
     const toolMessages = projected.filter(
       (m) => m.kind === "tool-call" || m.kind === "tool-exploring",
     );

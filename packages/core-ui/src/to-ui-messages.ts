@@ -1,1483 +1,50 @@
-import type {
-  ProvisioningTranscriptEntry,
-  PromptInput,
-  ThreadEvent,
-  ThreadEventFileChange,
-  ThreadEventItemStatus,
-  ThreadEventPlanStepStatus,
-  ThreadEventRow,
-} from "@bb/domain";
-import { assertNever } from "./assert-never.js";
-import { getStringField } from "./unknown-helpers.js";
+import type { ThreadEvent } from "@bb/domain";
+import type { CompactionLifecycleEvent } from "./compaction-lifecycle.js";
+import { parseCompactionLifecycleEvent } from "./compaction-lifecycle.js";
+import { getEventTurnId } from "./event-decode.js";
+import type { EventMeta } from "./event-decode.js";
+import { messageId } from "./format-helpers.js";
+import type { ExecCallPartial } from "./exec-lifecycle.js";
+import { parseExecLifecycleEvent, parseToolCallLifecycleEvent } from "./exec-lifecycle.js";
+import type { FileEditPartial } from "./file-edit-parsing.js";
+import { parseFileEditFromItemEvent } from "./file-edit-parsing.js";
+import type { WebSearchLifecycleEvent } from "./web-search-lifecycle.js";
+import { parseWebSearchLifecycleEvent } from "./web-search-lifecycle.js";
+import { isExploringCall } from "./tool-call-parsing.js";
+import { parseOperationMessage, finalizeOperationMessage } from "./parse-operation-message.js";
+import { parseErrorMessage, isIgnoredNoiseType, isDuplicateEventType, isIgnoredItemStartEvent, appendDebugEvent } from "./parse-error-message.js";
+import {
+  parsePromptInput,
+  userMessageSignature,
+  shouldRenderThreadStartInput,
+  shouldPreservePendingMessages,
+  parseUserFromItemEvent,
+  parseUserFromClientStart,
+  parseManagerUserMessage,
+} from "./user-message-parsing.js";
+import {
+  parseAssistantDeltaText,
+  parseAssistantFinalText,
+  parseReasoningDeltaText,
+  parseReasoningFinalText,
+  isTerminalAssistantFlushEvent,
+} from "./assistant-buffering.js";
 import type {
   ToUIMessagesOptions,
   UIAssistantReasoningMessage,
   UIAssistantTextMessage,
-  UIDebugRawEventMessage,
-  UIErrorMessage,
   UIFileEditChange,
   UIFileEditMessage,
   UIMessage,
   UIOperationMessage,
-  UIProvisioningSetupStatus,
-  UIProvisioningTranscriptEntry,
-  UIThreadOperationMetadata,
   UIToolCallMessage,
   UIToolCallSummary,
   UIToolExploringMessage,
   UIToolParsedIntent,
   UIWebSearchMessage,
-  UIWorktreeCommitMetadata,
-  UIWorktreeSquashMergeMetadata,
-  UIUserMessage,
 } from "./ui-message.js";
 
-/** Row metadata that travels alongside the decoded event. */
-interface EventMeta {
-  id: string;
-  seq: number;
-  createdAt: number;
-}
-
-function decodeRow(row: ThreadEventRow): { event: ThreadEvent; meta: EventMeta } {
-  const data = row.data as Record<string, unknown>;
-  return {
-    event: { type: row.type, threadId: row.threadId, ...data } as ThreadEvent,
-    meta: { id: row.id, seq: row.seq, createdAt: row.createdAt },
-  };
-}
-
-function getFirstStringField(
-  record: Record<string, unknown> | null,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = getStringField(record, key);
-    if (value) return value;
-  }
-  return undefined;
-}
-
-function parsePromptInput(input: PromptInput[] | undefined): {
-  text: string;
-  webImages: number;
-  localImages: number;
-  localFiles: number;
-  imageUrls: string[];
-  localImagePaths: string[];
-  localFilePaths: string[];
-} | null {
-  if (!Array.isArray(input) || input.length === 0) return null;
-
-  const textParts: string[] = [];
-  let webImages = 0;
-  let localImages = 0;
-  let localFiles = 0;
-  const imageUrls: string[] = [];
-  const localImagePaths: string[] = [];
-  const localFilePaths: string[] = [];
-
-  for (const part of input) {
-    switch (part.type) {
-      case "text":
-        if (part.text.length > 0) {
-          textParts.push(part.text);
-        }
-        break;
-      case "image":
-        webImages += 1;
-        if (part.url.length > 0) {
-          imageUrls.push(part.url);
-        }
-        break;
-      case "localImage":
-        localImages += 1;
-        if (part.path.length > 0) {
-          localImagePaths.push(part.path);
-        }
-        break;
-      case "localFile":
-        localFiles += 1;
-        if (part.path.length > 0) {
-          localFilePaths.push(part.path);
-        }
-        break;
-    }
-  }
-
-  const text = textParts.join("");
-  if (!text && webImages === 0 && localImages === 0 && localFiles === 0) {
-    return null;
-  }
-
-  return {
-    text,
-    webImages,
-    localImages,
-    localFiles,
-    imageUrls,
-    localImagePaths,
-    localFilePaths,
-  };
-}
-
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function threadOperationTitle(meta: UIThreadOperationMetadata | null): string {
-  if (!meta) return "Operation update";
-
-  const { operation, status, metadata } = meta;
-
-  switch (operation) {
-    case "commit":
-      switch (status) {
-        case "running":
-          return "Committing changes";
-        case "completed":
-          return "Changes committed";
-        case "failed":
-          return "Commit failed";
-        case "requested":
-          return "Commit requested";
-        case "queued":
-          return "Commit queued";
-        case "noop":
-          return "No commit needed";
-        default:
-          return `Commit ${status}`;
-      }
-    case "squash_merge":
-      switch (status) {
-        case "running":
-          return "Squash merging";
-        case "completed":
-          return "Squash merged";
-        case "failed":
-          return "Squash merge failed";
-        case "requested":
-          return "Squash merge requested";
-        case "queued":
-          return "Squash merge queued";
-        case "noop":
-          return "No squash merge needed";
-        default:
-          return `Squash merge ${status}`;
-      }
-    case "primary_checkout": {
-      const action = typeof metadata?.action === "string" ? metadata.action : undefined;
-      const verb = action === "demote" ? "Demoting from" : "Promoting to";
-      const past = action === "demote" ? "Demoted from" : "Promoted to";
-      switch (status) {
-        case "started":
-        case "running":
-          return `${verb} primary checkout`;
-        case "completed":
-          return `${past} primary checkout`;
-        case "failed":
-          return `Primary checkout ${action ?? "update"} failed`;
-        case "noop":
-          return `Primary checkout already ${action === "demote" ? "demoted" : "promoted"}`;
-        default:
-          return `Primary checkout ${status}`;
-      }
-    }
-    case "ownership_change": {
-      const action = typeof metadata?.action === "string" ? metadata.action : undefined;
-      switch (status) {
-        case "completed":
-          return action === "release"
-            ? "Thread management transferred"
-            : "Thread assigned to manager";
-        case "failed":
-          return "Ownership change failed";
-        default:
-          return `Ownership change ${status}`;
-      }
-    }
-    default:
-      // open_external: unknown operations get a generic label.
-      return `${capitalize(operation.replace(/_/g, " "))} ${status}`;
-  }
-}
-
-function threadOperationStatus(
-  meta: UIThreadOperationMetadata | null,
-): UIOperationMessage["status"] {
-  if (!meta) return undefined;
-  switch (meta.status) {
-    case "requested":
-    case "queued":
-    case "running":
-    case "started":
-      return "pending";
-    case "completed":
-    case "noop":
-      return "completed";
-    case "failed":
-      return "error";
-    default:
-      // open_external: unknown statuses treated as pending.
-      return "pending";
-  }
-}
-
-function provisioningSetupOperationStatus(
-  status: UIProvisioningSetupStatus | undefined,
-): UIOperationMessage["status"] {
-  if (!status) return undefined;
-  switch (status) {
-    case "started":
-    case "running":
-      return "pending";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "error";
-    default:
-      return assertNever(status);
-  }
-}
-
-function provisioningProgressOperationStatus(
-  status: "started" | "completed" | "failed" | undefined,
-): UIOperationMessage["status"] {
-  if (!status) return undefined;
-  switch (status) {
-    case "started":
-      return "pending";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "error";
-    default:
-      return assertNever(status);
-  }
-}
-
-function userMessageSignature(value: {
-  text: string;
-  webImages: number;
-  localImages: number;
-  localFiles: number;
-}): string {
-  const totalImages = value.webImages + value.localImages;
-  return `${value.text}\u0000${totalImages}\u0000${value.localFiles}`;
-}
-
-function shouldRenderThreadStartInput(
-  threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
-): boolean {
-  if (!threadStatus) return false;
-  switch (threadStatus) {
-    case "created":
-    case "provisioning":
-    case "provisioned":
-    case "provisioning_failed":
-    case "error":
-    case "idle":
-    case "active":
-      return true;
-    default:
-      return assertNever(threadStatus);
-  }
-}
-
-function shouldPreservePendingMessages(
-  threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
-): boolean {
-  if (!threadStatus) return false;
-  switch (threadStatus) {
-    case "provisioning":
-    case "provisioned":
-    case "active":
-      return true;
-    case "created":
-    case "provisioning_failed":
-    case "error":
-    case "idle":
-      return false;
-    default:
-      return assertNever(threadStatus);
-  }
-}
-
-function messageId(threadId: string, kind: string, key: string): string {
-  return `${threadId}:${kind}:${key}`;
-}
-
-function parseUserFromItemEvent(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-): UIUserMessage | null {
-  if (decoded.type !== "item/started" && decoded.type !== "item/completed") {
-    return null;
-  }
-  if (decoded.item.type !== "userMessage") return null;
-
-  const parsedContent = parsePromptInput(decoded.item.content as PromptInput[]);
-  if (!parsedContent) return null;
-
-  const { turnId } = decoded;
-  const itemId = decoded.item.id ?? `${meta.seq}`;
-
-  return {
-    kind: "user",
-    id: messageId(decoded.threadId, "user", itemId),
-    threadId: decoded.threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
-    text: parsedContent.text,
-    attachments: {
-      webImages: parsedContent.webImages,
-      localImages: parsedContent.localImages,
-      localFiles: parsedContent.localFiles,
-      ...(parsedContent.imageUrls.length > 0 ? { imageUrls: parsedContent.imageUrls } : {}),
-      ...(parsedContent.localImagePaths.length > 0 ? { localImagePaths: parsedContent.localImagePaths } : {}),
-      ...(parsedContent.localFilePaths.length > 0 ? { localFilePaths: parsedContent.localFilePaths } : {}),
-    },
-  };
-}
-
-function parseUserFromClientStart(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-  options?: ToUIMessagesOptions,
-): UIUserMessage | null {
-  if (
-    decoded.type !== "client/thread/start" &&
-    decoded.type !== "client/turn/requested" &&
-    decoded.type !== "client/turn/start"
-  ) {
-    return null;
-  }
-
-  if (
-    decoded.initiator === "system" &&
-    !options?.includeInternalSystemMessages
-  ) {
-    return null;
-  }
-  const parsedInput = parsePromptInput(decoded.input);
-  if (!parsedInput) return null;
-  if (!shouldRenderThreadStartInput(options?.threadStatus)) {
-    return null;
-  }
-
-  return {
-    kind: "user",
-    id: messageId(decoded.threadId, "user-seed", `${meta.seq}`),
-    threadId: decoded.threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    text: parsedInput.text,
-    attachments: {
-      webImages: parsedInput.webImages,
-      localImages: parsedInput.localImages,
-      localFiles: parsedInput.localFiles,
-      ...(parsedInput.imageUrls.length > 0
-        ? { imageUrls: parsedInput.imageUrls }
-        : {}),
-      ...(parsedInput.localImagePaths.length > 0
-        ? { localImagePaths: parsedInput.localImagePaths }
-        : {}),
-      ...(parsedInput.localFilePaths.length > 0
-        ? { localFilePaths: parsedInput.localFilePaths }
-        : {}),
-    },
-  };
-}
-
-function parseManagerUserMessage(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-): UIAssistantTextMessage | null {
-  if (decoded.type !== "system/manager/user_message") {
-    return null;
-  }
-
-  const { text, turnId } = decoded;
-  if (!text) {
-    return null;
-  }
-
-  return {
-    kind: "assistant-text",
-    id: messageId(decoded.threadId, "assistant", `manager:${meta.seq}`),
-    threadId: decoded.threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
-    text,
-    status: "completed",
-  };
-}
-
-function parseAssistantDeltaText(
-  decoded: ThreadEvent,
-): string | null {
-  if (decoded.type !== "item/agentMessage/delta") {
-    return null;
-  }
-
-  return decoded.delta.length > 0 ? decoded.delta : null;
-}
-
-function parseAssistantFinalText(
-  decoded: ThreadEvent,
-): string | null {
-  if (decoded.type !== "item/completed") return null;
-  if (decoded.item.type !== "agentMessage") return null;
-  return decoded.item.text.length > 0 ? decoded.item.text : null;
-}
-
-function parseReasoningDeltaText(
-  decoded: ThreadEvent,
-): string | null {
-  if (
-    decoded.type !== "item/reasoning/summaryTextDelta" &&
-    decoded.type !== "item/reasoning/textDelta"
-  ) {
-    return null;
-  }
-
-  return decoded.delta.length > 0 ? decoded.delta : null;
-}
-
-function parseReasoningFinalText(
-  decoded: ThreadEvent,
-): string | null {
-  if (decoded.type !== "item/completed") return null;
-  if (decoded.item.type !== "reasoning") return null;
-  const summaryText = decoded.item.summary.join("");
-  const contentText = decoded.item.content.join("");
-  const text = summaryText || contentText;
-  return text.length > 0 ? text : null;
-}
-
-function itemStatusToToolStatus(status: ThreadEventItemStatus): UIToolCallMessage["status"] {
-  switch (status) {
-    case "pending": return "pending";
-    case "completed": return "completed";
-    case "failed": return "error";
-    case "interrupted": return "interrupted";
-  }
-}
-
-function itemStatusToFileEditStatus(status: ThreadEventItemStatus): UIFileEditMessage["status"] {
-  switch (status) {
-    case "pending": return "pending";
-    case "completed": return "completed";
-    case "failed": return "error";
-    case "interrupted": return "interrupted";
-  }
-}
-
-const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
-
-function unwrapQuotedShellArg(value: string): string {
-  if (value.length < 2) return value;
-  const quote = value[0];
-  if ((quote !== "'" && quote !== '"') || value[value.length - 1] !== quote) {
-    return value;
-  }
-  return value.slice(1, -1);
-}
-
-function isKnownShellWrapper(value: string): boolean {
-  const shellName = value.split("/").pop() ?? value;
-  // Shell wrapper names are open_external runtime values; unknown shells intentionally
-  // preserve the original command payload for display.
-  return SHELL_WRAPPER_NAMES.has(shellName);
-}
-
-function extractShellCommandFromString(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return undefined;
-
-  const match = /^(\S+)\s+(-lc|-c)\s+([\s\S]+)$/.exec(trimmed);
-  if (!match) return trimmed;
-
-  const shellProgram = match[1];
-  const commandArg = match[3];
-  if (!shellProgram || !commandArg || !isKnownShellWrapper(shellProgram)) {
-    return trimmed;
-  }
-
-  return unwrapQuotedShellArg(commandArg.trim());
-}
-
-
-function provisioningProgressTitle(
-  phase: "prepare_environment" | "start_provider_session" | undefined,
-  status: "started" | "completed" | "failed" | undefined,
-): string {
-  switch (phase) {
-    case "prepare_environment":
-      switch (status) {
-        case "started":
-          return "Preparing environment";
-        case "completed":
-          return "Environment prepared";
-        case "failed":
-          return "Environment preparation failed";
-        default:
-          return "Provisioning progress";
-      }
-    case "start_provider_session":
-      switch (status) {
-        case "started":
-          return "Starting provider session";
-        case "completed":
-          return "Provider session started";
-        case "failed":
-          return "Provider session start failed";
-        default:
-          return "Provisioning progress";
-      }
-    default:
-      return "Provisioning progress";
-  }
-}
-
-function readProvisioningTranscript(
-  transcript: ProvisioningTranscriptEntry[] | undefined,
-): UIProvisioningTranscriptEntry[] | undefined {
-  if (!Array.isArray(transcript) || transcript.length === 0) return undefined;
-
-  const entries: UIProvisioningTranscriptEntry[] = [];
-  for (const entry of transcript) {
-    const key = entry.key?.trim();
-    const text = entry.text?.trim();
-    if (!key || !text) continue;
-
-    entries.push({
-      key,
-      text,
-      ...(entry.startedAt !== undefined ? { startedAt: entry.startedAt } : {}),
-      ...(entry.metadata ? { metadata: entry.metadata } : {}),
-    });
-  }
-
-  return entries.length > 0 ? entries : undefined;
-}
-
-function getProvisioningProgressFromTranscript(
-  transcript: UIProvisioningTranscriptEntry[] | undefined,
-): {
-  phase?: "prepare_environment" | "start_provider_session";
-  status?: "started" | "completed" | "failed";
-} {
-  const progressEntry = transcript?.find((entry) => entry.key.startsWith("phase:"));
-  if (!progressEntry) return {};
-  const metadata = progressEntry.metadata as Record<string, unknown> | undefined ?? null;
-  const phase = metadata?.phase;
-  const status = metadata?.status;
-
-  return {
-    phase: phase === "prepare_environment" || phase === "start_provider_session" ? phase : undefined,
-    status: status === "started" || status === "completed" || status === "failed" ? status : undefined,
-  };
-}
-
-
-function durationToString(durationMs: number | undefined): string | undefined {
-  if (durationMs === undefined) return undefined;
-  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
-  const seconds = durationMs / 1_000;
-  if (seconds < 60) return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
-interface ExecCallPartial extends Partial<UIToolCallSummary> {
-  callId: string;
-  toolName?: string;
-  parsedCmd: UIToolParsedIntent[];
-}
-
-interface ExecLifecycleEvent {
-  kind: "begin" | "end" | "output";
-  call: ExecCallPartial;
-  appendOutput?: boolean;
-}
-
-function toExecDefaultStatus(kind: "begin" | "end"): UIToolCallMessage["status"] {
-  if (kind === "begin") return "pending";
-  return "completed";
-}
-
-function parseExecLifecycleEvent(
-  decoded: ThreadEvent,
-  _meta: EventMeta,
-  _originalEvent: ThreadEventRow,
-): ExecLifecycleEvent | null {
-  if (decoded.type === "item/commandExecution/outputDelta") {
-    const callId = decoded.itemId;
-    if (!callId) return null;
-    return {
-      kind: "output",
-      call: {
-        callId,
-        parsedCmd: [],
-        output: decoded.delta,
-        status: "pending",
-      },
-      appendOutput: true,
-    };
-  }
-
-  if (
-    (decoded.type === "item/started" || decoded.type === "item/completed") &&
-    decoded.item.type === "commandExecution"
-  ) {
-    const callId = decoded.item.id;
-    if (!callId) return null;
-
-    const kind = decoded.type === "item/started" ? "begin" : "end";
-    const exitCode = decoded.item.exitCode;
-    const status =
-      exitCode !== undefined && exitCode !== 0
-        ? "error"
-        : (itemStatusToToolStatus(decoded.item.status) ??
-            toExecDefaultStatus(kind));
-
-    return {
-      kind,
-      call: {
-        callId,
-        command: extractShellCommandFromString(decoded.item.command),
-        cwd: decoded.item.cwd,
-        parsedCmd: [],
-        output: decoded.item.aggregatedOutput,
-        exitCode,
-        durationMs: decoded.item.durationMs,
-        duration: durationToString(decoded.item.durationMs),
-        status,
-      },
-    };
-  }
-
-  return null;
-}
-
-// --- Generic tool call projection (bridge + Codex custom/function calls) ---
-
-// Maps well-known tool names to exploring intents for grouping
-function toolNameToParsedIntents(
-  toolName: string,
-  args: Record<string, unknown> | null,
-): UIToolParsedIntent[] {
-  const name = toolName;
-  switch (name) {
-    case "Read":
-    case "read": {
-      const path = getFirstStringField(args, ["file_path", "file", "path"]) ?? "";
-      return [{ type: "read", cmd: `${name} ${path}`.trim(), name, path: path || null }];
-    }
-    case "Glob":
-    case "glob":
-    case "ls":
-    case "find": {
-      const path = getFirstStringField(args, ["pattern", "path"]) ?? "";
-      return [{ type: "list_files", cmd: `${name} ${path}`.trim(), path: path || null }];
-    }
-    case "Grep":
-    case "grep": {
-      const query = getFirstStringField(args, ["pattern", "query"]) ?? "";
-      const path = getFirstStringField(args, ["path"]) ?? "";
-      return [{ type: "search", cmd: `${name} '${query}'${path ? ` in ${path}` : ""}`.trim(), query: query || null, path: path || null }];
-    }
-    default:
-      return [];
-  }
-}
-
-function formatToolCallCommand(toolName: string, args: Record<string, unknown> | null): string {
-  if (!args) return toolName;
-  switch (toolName) {
-    case "Read":
-    case "read":
-      return `${toolName} ${getFirstStringField(args, ["file_path", "file", "path"]) ?? ""}`.trim();
-    case "Glob":
-    case "glob":
-      return `${toolName} ${getFirstStringField(args, ["pattern"]) ?? ""}`.trim();
-    case "Grep":
-    case "grep": {
-      const pattern = getFirstStringField(args, ["pattern", "query"]) ?? "";
-      const path = getFirstStringField(args, ["path"]);
-      return `${toolName} '${pattern}'${path ? ` in ${path}` : ""}`;
-    }
-    case "Bash":
-    case "bash":
-      return getFirstStringField(args, ["command"]) ?? toolName;
-    case "Edit":
-    case "Write":
-    case "edit":
-    case "write":
-      return `${toolName} ${getFirstStringField(args, ["file_path", "path"]) ?? ""}`.trim();
-    default: {
-      // Compact display for custom tools
-      const entries = Object.entries(args).filter(([, v]) => v !== undefined);
-      if (entries.length === 0) return toolName;
-      const compact = entries.map(([k, v]) => {
-        const vs = typeof v === "string" ? v : JSON.stringify(v);
-        const display = vs.length > 40 ? `${vs.slice(0, 37)}...` : vs;
-        return `${k}: ${display}`;
-      }).join(", ");
-      return `${toolName} { ${compact} }`;
-    }
-  }
-}
-
-function parseToolCallLifecycleEvent(
-  decoded: ThreadEvent,
-  _meta: EventMeta,
-  _originalEvent: ThreadEventRow,
-): ExecLifecycleEvent | null {
-  if (decoded.type === "item/started" || decoded.type === "item/completed") {
-    if (decoded.item.type !== "toolCall") return null;
-
-    const callId = decoded.item.id;
-    if (!callId) return null;
-    const toolName = decoded.item.tool ?? "tool";
-    const serverPrefix = decoded.item.server ? `${decoded.item.server}:` : "";
-    const fullToolName = `${serverPrefix}${toolName}`;
-    let parsedArgs: Record<string, unknown> | null = null;
-    const rawArgs = decoded.item.arguments;
-    if (rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
-      parsedArgs = rawArgs as Record<string, unknown>;
-    }
-
-    const kind = decoded.type === "item/started" ? "begin" : "end";
-    const status = kind === "end"
-      ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
-      : "pending";
-    const result = decoded.item.result;
-    const output = typeof result === "string" ? result : (result !== undefined ? JSON.stringify(result) : undefined);
-    const errorField = decoded.item.error;
-
-    return {
-      kind,
-      call: {
-        callId,
-        toolName: fullToolName,
-        command: formatToolCallCommand(fullToolName, parsedArgs),
-        parsedCmd: toolNameToParsedIntents(fullToolName, parsedArgs),
-        output: kind === "end" ? (output ?? errorField) : undefined,
-        durationMs: decoded.item.durationMs,
-        duration: durationToString(decoded.item.durationMs),
-        status,
-      },
-    };
-  }
-
-  return null;
-}
-
-interface WebSearchLifecycleEvent {
-  kind: "begin" | "end";
-  callId: string;
-  query?: string;
-  action?: string;
-}
-
-
-function parseWebSearchLifecycleEvent(
-  decoded: ThreadEvent,
-): WebSearchLifecycleEvent | null {
-  if (
-    (decoded.type === "item/started" || decoded.type === "item/completed") &&
-    decoded.item.type === "webSearch"
-  ) {
-    const callId = decoded.item.id;
-    if (!callId) return null;
-
-    return {
-      kind: decoded.type === "item/started" ? "begin" : "end",
-      callId,
-      query: decoded.item.query,
-      action: decoded.item.action,
-    };
-  }
-
-  return null;
-}
-
-function mapFileChanges(changes: ThreadEventFileChange[]): UIFileEditChange[] {
-  return changes.map((change) => ({
-    path: change.path,
-    kind: change.kind,
-    movePath: change.movePath ?? null,
-    diff: change.diff,
-  }));
-}
-
-interface FileEditPartial extends Partial<UIFileEditMessage> {
-  callId: string;
-  appendStdout?: boolean;
-}
-
-function parseFileEditFromItemEvent(
-  decoded: ThreadEvent,
-): FileEditPartial | null {
-  if (decoded.type === "item/fileChange/outputDelta") {
-    const callId = decoded.itemId;
-    if (!callId) return null;
-
-    return {
-      callId,
-      stdout: decoded.delta,
-      appendStdout: true,
-      status: "pending",
-    };
-  }
-
-  if (decoded.type !== "item/started" && decoded.type !== "item/completed") {
-    return null;
-  }
-  if (decoded.item.type !== "fileChange") return null;
-
-  const callId = decoded.item.id;
-  if (!callId) return null;
-
-  const defaultStatus = decoded.type === "item/completed" ? "completed" : "pending";
-  const changes = mapFileChanges(decoded.item.changes);
-
-  return {
-    callId,
-    changes,
-    status: itemStatusToFileEditStatus(decoded.item.status) ?? defaultStatus,
-  };
-}
-
-interface CompactionLifecycleEvent {
-  key: string;
-  kind: "begin" | "end";
-  detail?: string;
-}
-
-function getCompactionKey(decoded: ThreadEvent, meta: EventMeta): string {
-  const turnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
-  if (decoded.type === "item/started" || decoded.type === "item/completed") {
-    return turnId ?? decoded.item.id ?? `seq-${meta.seq}`;
-  }
-  return turnId ?? `seq-${meta.seq}`;
-}
-
-function parseCompactionLifecycleEvent(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-): CompactionLifecycleEvent | null {
-  if (
-    (decoded.type === "item/started" || decoded.type === "item/completed") &&
-    decoded.item.type === "contextCompaction"
-  ) {
-    return {
-      key: getCompactionKey(decoded, meta),
-      kind: decoded.type === "item/started" ? "begin" : "end",
-    };
-  }
-
-  if (decoded.type === "thread/compacted") {
-    return {
-      key: getCompactionKey(decoded, meta),
-      kind: "end",
-    };
-  }
-
-  return null;
-}
-
-function parseOperationMessage(
-  decoded: ThreadEvent,
-  meta: EventMeta,
-  options?: { includeOptionalOperations?: boolean },
-): UIOperationMessage | null {
-  function formatPlanStepStatus(status: ThreadEventPlanStepStatus | undefined): string {
-    switch (status) {
-      case "active":
-        return "In progress";
-      case "pending":
-        return "Pending";
-      case "completed":
-        return "Completed";
-      case "failed":
-        return "Failed";
-      default:
-        return "";
-    }
-  }
-
-  const eventType: string = decoded.type;
-  const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
-
-  if (decoded.type === "turn/plan/updated") {
-    const steps = decoded.plan
-      .map((entry) => {
-        const status = entry.status;
-        const text = entry.step;
-        if (!text) return null;
-        return status
-          ? `• [${formatPlanStepStatus(status)}] ${text}`
-          : `• ${text}`;
-      })
-      .filter((value): value is string => Boolean(value));
-
-    const detail =
-      decoded.explanation && steps.length > 0
-        ? `${decoded.explanation}\n${steps.join("\n")}`
-        : decoded.explanation ?? (steps.length > 0 ? steps.join("\n") : undefined);
-
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `plan:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: decoded.turnId,
-      opType: "plan-updated",
-      title: "Plan updated",
-      detail,
-      status: "completed",
-    };
-  }
-
-  if (decoded.type === "item/mcpToolCall/progress") {
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `mcp-progress:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: decoded.turnId,
-      opType: "mcp-progress",
-      title: "MCP tool progress",
-      detail: decoded.message || undefined,
-      status: "pending",
-    };
-  }
-
-  if (decoded.type === "warning") {
-    const category = decoded.category ?? "general";
-    const detail = decoded.summary ?? decoded.details;
-    const isDeprecation = category === "deprecation";
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `${isDeprecation ? "deprecation" : "warning"}:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: isDeprecation ? "deprecation" : "warning",
-      title: isDeprecation ? "Deprecation notice" : category === "config" ? "Configuration warning" : "Warning",
-      detail: detail || undefined,
-      status: "completed",
-    };
-  }
-
-  if (decoded.type === "system/thread/interrupted") {
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `thread-interrupted:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "thread-interrupted",
-      title: "Stopped by user",
-      detail: decoded.message || undefined,
-      status: "interrupted",
-    };
-  }
-
-  if (decoded.type === "system/provisioning/started") {
-    const { attachedEnvironmentId } = decoded;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `provisioning-started:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "provisioning-started",
-      title: "Provisioning started",
-      status: "pending",
-      provisioning:
-        attachedEnvironmentId || transcript
-          ? {
-              ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
-              ...(transcript ? { transcript } : {}),
-            }
-          : undefined,
-    };
-  }
-
-  if (decoded.type === "system/provisioning/progress") {
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    const phase: "prepare_environment" | "start_provider_session" | undefined =
-      decoded.phase ?? getProvisioningProgressFromTranscript(transcript).phase;
-    const status: "started" | "completed" | "failed" | undefined =
-      decoded.status ?? getProvisioningProgressFromTranscript(transcript).status;
-
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `provisioning-progress:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "provisioning-progress",
-      title: provisioningProgressTitle(phase, status),
-      status: provisioningProgressOperationStatus(status),
-      ...(transcript
-        ? {
-            provisioning: {
-              transcript,
-            },
-          }
-        : {}),
-    };
-  }
-
-  if (decoded.type === "system/provisioning/env_setup") {
-    const { setup, workspaceRoot } = decoded;
-    const status = setup.status as UIProvisioningSetupStatus | undefined;
-    const title = (() => {
-      switch (status) {
-        case "started":
-          return "Environment setup started";
-        case "running":
-          return "Environment setup running";
-        case "completed":
-          return "Environment setup completed";
-        case "failed":
-          return "Environment setup failed";
-        default:
-          return "Environment setup update";
-      }
-    })();
-    const setupMetadata =
-      status
-        ? {
-            status,
-            startedAt: meta.createdAt,
-            ...(setup.scriptPath ? { scriptPath: setup.scriptPath } : {}),
-            ...(setup.timeoutMs !== undefined ? { timeoutMs: setup.timeoutMs } : {}),
-            ...(setup.durationMs !== undefined ? { durationMs: setup.durationMs } : {}),
-            ...(setup.output ? { output: setup.output } : {}),
-          }
-        : undefined;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `provisioning-env-setup:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "provisioning-env-setup",
-      title,
-      status: provisioningSetupOperationStatus(status),
-      ...(status && setupMetadata
-        ? {
-            provisioning: {
-              ...(workspaceRoot ? { workspaceRoot } : {}),
-              setup: setupMetadata,
-              ...(transcript ? { transcript } : {}),
-            },
-          }
-        : {}),
-    };
-  }
-
-  if (decoded.type === "system/thread-title/updated") {
-    // Avoid duplicate rows when the underlying provider thread/name/updated
-    // event is also present in the timeline.
-    if ((decoded.providerMethod ?? "") === "thread/name/updated") {
-      return null;
-    }
-    const { title } = decoded;
-    if (!title) return null;
-    const { previousTitle } = decoded;
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `thread-title-updated:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "thread-title-updated",
-      title: "Title updated",
-      detail: previousTitle
-        ? `${previousTitle} → ${title}`
-        : title,
-      status: "completed",
-    };
-  }
-
-  if (decoded.type === "thread/name/updated") {
-    const { threadName } = decoded;
-    if (!threadName) return null;
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `thread-title-updated:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "thread-title-updated",
-      title: "Title updated",
-      detail: threadName,
-      status: "completed",
-    };
-  }
-
-  if (decoded.type === "system/operation") {
-    const threadOperation: UIThreadOperationMetadata = {
-      operation: decoded.operation,
-      status: decoded.status,
-      ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
-      ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
-    };
-    const title = threadOperationTitle(threadOperation);
-
-    // Extra runtime fields (e.g. "branch") may be spread into decoded by decodeRow
-    const extraBranch = (decoded as unknown as Record<string, unknown>).branch;
-    const detailParts = [
-      decoded.message,
-      typeof extraBranch === "string" ? `Branch: ${extraBranch}` : undefined,
-    ].filter((value): value is string => Boolean(value));
-
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `operation:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "operation",
-      title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: threadOperationStatus(threadOperation),
-      ...(threadOperation ? { threadOperation } : {}),
-    };
-  }
-
-  if (decoded.type === "system/worktree/commit") {
-    const { status } = decoded;
-    const title = status === "committed" ? "Committed changes" : "No commit created";
-    const { message: commitMessage, commitSha, commitSubject, includeUnstaged } = decoded;
-    const worktreeCommit: UIWorktreeCommitMetadata | undefined =
-      status === "committed" || status === "noop"
-        ? {
-            status,
-            ...(commitMessage ? { message: commitMessage } : {}),
-            ...(commitSha ? { commitSha } : {}),
-            ...(commitSubject ? { commitSubject } : {}),
-            ...(typeof includeUnstaged === "boolean" ? { includeUnstaged } : {}),
-          }
-        : undefined;
-    const detailParts = [
-      commitSubject ?? commitMessage,
-      commitSha,
-    ].filter((value): value is string => Boolean(value));
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `worktree-commit:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "worktree-commit",
-      title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: "completed",
-      ...(worktreeCommit ? { worktreeCommit } : {}),
-    };
-  }
-
-  if (decoded.type === "system/worktree/squash_merge") {
-    const { status } = decoded;
-    const { message: squashMessage, commitSha, commitSubject, mergeBaseBranch, committed, conflictFiles } = decoded;
-    const normalizedConflictFiles = Array.isArray(conflictFiles)
-      ? conflictFiles
-          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          .slice(0, 8)
-      : [];
-    const worktreeSquashMerge: UIWorktreeSquashMergeMetadata | undefined =
-      status === "merged" || status === "noop" || status === "conflict"
-        ? {
-            status,
-            ...(squashMessage ? { message: squashMessage } : {}),
-            ...(typeof committed === "boolean" ? { committed } : {}),
-            ...(commitSha ? { commitSha } : {}),
-            ...(commitSubject ? { commitSubject } : {}),
-            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-            ...(normalizedConflictFiles.length > 0
-              ? { conflictFiles: normalizedConflictFiles }
-              : {}),
-          }
-        : undefined;
-    const title = status === "merged"
-      ? "Squash merged"
-      : status === "conflict"
-        ? "Squash merge has conflicts"
-        : "No squash merge performed";
-    const detailParts = [
-      squashMessage,
-      ...(normalizedConflictFiles.length > 0
-        ? [`Conflicts: ${normalizedConflictFiles.join(", ")}`]
-        : []),
-    ].filter((value): value is string => Boolean(value));
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `worktree-squash-merge:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "worktree-squash-merge",
-      title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: status === "conflict" ? "error" : "completed",
-      ...(worktreeSquashMerge ? { worktreeSquashMerge } : {}),
-    };
-  }
-
-  if (decoded.type === "system/provisioning/fallback") {
-    const { fallbackEnvironmentId, detail } = decoded;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `provisioning-fallback:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "provisioning-fallback",
-      title: "Provisioning fallback",
-      detail: detail || undefined,
-      status: "pending",
-      provisioning:
-        fallbackEnvironmentId || transcript
-          ? {
-              ...(transcript ? { transcript } : {}),
-            }
-          : undefined,
-    };
-  }
-
-  if (decoded.type === "system/provisioning/completed") {
-    const { attachedEnvironmentId, workspaceRoot } = decoded;
-    const transcript = readProvisioningTranscript(decoded.transcript);
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `provisioning-completed:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "provisioning-completed",
-      title: "Provisioning ready",
-      status: "completed",
-      provisioning:
-        attachedEnvironmentId ||
-        workspaceRoot ||
-        transcript
-          ? {
-              ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
-              ...(workspaceRoot ? { workspaceRoot } : {}),
-              ...(transcript ? { transcript } : {}),
-            }
-          : undefined,
-    };
-  }
-
-  if (decoded.type === "system/provisioning/cleanup_failed") {
-    const detailParts = [
-      decoded.message,
-      decoded.detail,
-    ].filter((value): value is string => Boolean(value));
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `provisioning-cleanup-failed:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "provisioning-cleanup-failed",
-      title: "Provisioning cleanup failed",
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: "error",
-    };
-  }
-
-  if (decoded.type === "thread/compacted") {
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `compaction:${getCompactionKey(decoded, meta)}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      startedAt: meta.createdAt,
-      turnId: eventTurnId,
-      opType: "compaction",
-      title: "Context compacted",
-      status: "completed",
-    };
-  }
-
-  if (
-    options?.includeOptionalOperations &&
-    decoded.type === "turn/diff/updated"
-  ) {
-    return {
-      kind: "operation",
-      id: messageId(decoded.threadId, "op", `turn-diff:${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      turnId: decoded.turnId,
-      opType: "turn-diff",
-      title: "Turn diff updated",
-      detail: decoded.diff,
-    };
-  }
-
-  return null;
-}
-
-function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): UIErrorMessage | null {
-  const eventType = decoded.type;
-  if (!eventType.includes("error")) return null;
-
-  const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
-
-  // Handle typed error and system/error events
-  if (decoded.type === "error") {
-    const { message, detail } = decoded;
-    const formattedMessage =
-      detail && detail !== message ? `${message} - ${detail}` : message;
-    return {
-      kind: "error",
-      id: messageId(decoded.threadId, "error", `${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      turnId: eventTurnId,
-      rawType: eventType,
-      message: formattedMessage || "Error event",
-    };
-  }
-
-  if (decoded.type === "system/error") {
-    const { message, detail } = decoded;
-    const formattedMessage =
-      detail && detail !== message ? `${message} - ${detail}` : message;
-    return {
-      kind: "error",
-      id: messageId(decoded.threadId, "error", `${meta.seq}`),
-      threadId: decoded.threadId,
-      sourceSeqStart: meta.seq,
-      sourceSeqEnd: meta.seq,
-      createdAt: meta.createdAt,
-      turnId: eventTurnId,
-      rawType: eventType,
-      message: formattedMessage || "Error event",
-    };
-  }
-
-  // Fallback for unrecognized error event types (e.g., turn/completed with error status)
-  return null;
-}
-
-function isIgnoredNoiseType(eventType: string): boolean {
-  return (
-    eventType === "thread/started" ||
-    eventType === "thread/tokenUsage/updated" ||
-    eventType === "thread/identity" ||
-    eventType === "item/reasoning/summaryPartAdded"
-  );
-}
-
-function isDuplicateEventType(eventType: string): boolean {
-  return (
-    eventType === "turn/started" ||
-    eventType === "turn/completed" ||
-    eventType === "item/commandExecution/outputDelta" ||
-    eventType === "item/fileChange/outputDelta" ||
-    eventType === "turn/diff/updated"
-  );
-}
-
-function isIgnoredItemStartEvent(decoded: ThreadEvent): boolean {
-  if (decoded.type !== "item/started") return false;
-  return decoded.item.type === "reasoning" || decoded.item.type === "agentMessage";
-}
-
-function appendDebugEvent(
-  out: UIMessage[],
-  originalEvent: ThreadEventRow,
-  decoded: ThreadEvent,
-  meta: EventMeta,
-  reason: UIDebugRawEventMessage["reason"],
-): void {
-  const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
-  out.push({
-    kind: "debug/raw-event",
-    id: messageId(decoded.threadId, "debug", `${meta.seq}:${decoded.type}`),
-    threadId: decoded.threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    turnId: eventTurnId,
-    rawType: decoded.type,
-    rawEvent: originalEvent,
-    reason,
-  });
-}
+// --- Projection state machine ---
 
 interface ProjectionState {
   messages: UIMessage[];
@@ -1599,33 +166,38 @@ function upsertRunningExecCall(
     };
   }
 
+  // Merge strategy per field:
+  //   "keep first"  — set once from the first event that provides it
+  //   "keep longest" — begin events carry partial info, end events carry full info
+  //   "keep latest"  — terminal state from the last event wins
+
+  // keep first
   if (incoming.toolName && !existing.toolName) existing.toolName = incoming.toolName;
-  existing.command =
-    incoming.command &&
-    (!existing.command || incoming.command.length > existing.command.length)
-      ? incoming.command
-      : existing.command;
-  existing.threadId = threadId;
   if (incoming.cwd && !existing.cwd) existing.cwd = incoming.cwd;
-  existing.parsedCmd = chooseParsedIntents(existing.parsedCmd, incoming.parsedCmd);
   if (incoming.source && !existing.source) existing.source = incoming.source;
-  if (incoming.output && incoming.output.length > 0) {
-    existing.output =
-      !existing.output || incoming.output.length >= existing.output.length
-        ? incoming.output
-        : existing.output;
-  }
-  if (incoming.exitCode !== undefined) existing.exitCode = incoming.exitCode;
   if (incoming.duration && !existing.duration) existing.duration = incoming.duration;
   if (incoming.durationMs !== undefined && existing.durationMs === undefined) {
     existing.durationMs = incoming.durationMs;
   }
+  if (!existing.turnId && turnId) existing.turnId = turnId;
+
+  // keep longest (begin has partial, end has full)
+  if (incoming.command && (!existing.command || incoming.command.length > existing.command.length)) {
+    existing.command = incoming.command;
+  }
+  if (incoming.output && incoming.output.length > 0) {
+    if (!existing.output || incoming.output.length >= existing.output.length) {
+      existing.output = incoming.output;
+    }
+  }
+
+  // keep latest
+  existing.threadId = threadId;
+  existing.parsedCmd = chooseParsedIntents(existing.parsedCmd, incoming.parsedCmd);
+  if (incoming.exitCode !== undefined) existing.exitCode = incoming.exitCode;
   existing.status = mergeCallStatus(existing.status, incoming.status) ?? "pending";
   existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
   existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
-  if (!existing.turnId && turnId) {
-    existing.turnId = turnId;
-  }
 
   return existing;
 }
@@ -1638,22 +210,9 @@ function appendExecOutputDelta(
   call.output = `${call.output ?? ""}${delta}`;
 }
 
-function isExploringIntent(intent: UIToolParsedIntent): boolean {
-  return (
-    intent.type === "read" ||
-    intent.type === "list_files" ||
-    intent.type === "search"
-  );
-}
-
-function isExploringCall(call: Pick<UIToolCallSummary, "parsedCmd">): boolean {
-  if (call.parsedCmd.length === 0) return false;
-  return call.parsedCmd.every((intent) => isExploringIntent(intent));
-}
-
 function areExploringCallsCompatible(
-  a: Pick<RunningExecCall, "turnId" | "source">,
-  b: Pick<RunningExecCall, "turnId" | "source">,
+  a: { turnId?: string; source?: string },
+  b: { turnId?: string; source?: string },
 ): boolean {
   const sameTurn = a.turnId === b.turnId;
   const sameSource = (a.source ?? "agent") === (b.source ?? "agent");
@@ -1837,7 +396,7 @@ function onExecBegin(
 
   if (exploring && active?.kind === "tool-exploring") {
     const lastCall = active.calls[active.calls.length - 1];
-    if (lastCall && areExploringCallsCompatible(lastCall as RunningExecCall, call)) {
+    if (lastCall && areExploringCallsCompatible(lastCall, call)) {
       active.calls.push(call);
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, call.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, call.createdAt);
@@ -2244,97 +803,6 @@ function onCompactionEnd(
   state.finalizedCompactionKeys.add(payload.key);
 }
 
-function interruptOperationMessage(message: UIOperationMessage): void {
-  if (message.status !== "pending") return;
-  message.status = "interrupted";
-
-  switch (message.opType) {
-    case "operation":
-      switch (message.threadOperation?.operation) {
-        case "commit":
-          message.title = "Commit interrupted";
-          return;
-        case "squash_merge":
-          message.title = "Squash merge interrupted";
-          return;
-        case "primary_checkout":
-          message.title = "Primary checkout interrupted";
-          return;
-        default:
-          message.title = "Operation interrupted";
-          return;
-      }
-    case "provisioning-started":
-    case "provisioning-fallback":
-      message.title = "Provisioning interrupted";
-      return;
-    case "provisioning-progress":
-      message.title = "Provisioning interrupted";
-      return;
-    case "provisioning-env-setup":
-      message.title = "Environment setup interrupted";
-      return;
-    case "mcp-progress":
-      message.title = "MCP tool progress interrupted";
-      return;
-    case "compaction":
-      message.title = "Context compaction interrupted";
-      return;
-    default:
-      return;
-  }
-}
-
-function finalizeOperationMessage(
-  message: UIOperationMessage,
-  options: ToUIMessagesOptions | undefined,
-): void {
-  if (message.status !== "pending") return;
-
-  if (options?.threadStatus === "provisioning_failed") {
-    switch (message.opType) {
-      case "provisioning-started":
-      case "provisioning-fallback":
-        message.status = "error";
-        message.title = "Provisioning failed";
-        return;
-      case "provisioning-progress":
-        message.status = "error";
-        if (
-          getProvisioningProgressFromTranscript(message.provisioning?.transcript).phase ===
-          "prepare_environment"
-        ) {
-          message.title = "Environment preparation failed";
-          return;
-        }
-        if (
-          getProvisioningProgressFromTranscript(message.provisioning?.transcript).phase ===
-          "start_provider_session"
-        ) {
-          message.title = "Provider session start failed";
-          return;
-        }
-        message.title = "Provisioning failed";
-        return;
-      case "provisioning-env-setup":
-        message.status = "error";
-        message.title = "Environment setup failed";
-        return;
-      default:
-        break;
-    }
-  }
-
-  interruptOperationMessage(message);
-}
-
-function isTerminalAssistantFlushEvent(eventType: string): boolean {
-  return (
-    eventType === "system/thread/interrupted" ||
-    eventType === "turn/completed"
-  );
-}
-
 function flushBufferedAssistantMessages(state: ProjectionState): void {
   if (state.openAssistantByTurn.size === 0) {
     return;
@@ -2447,8 +915,16 @@ function finalizePendingMessages(
   flushActiveToolCell(state);
 }
 
+// --- Main entry point ---
+
+/** A typed thread event paired with its row metadata. */
+export interface ThreadEventWithMeta {
+  event: ThreadEvent;
+  meta: EventMeta;
+}
+
 export function toUIMessages(
-  events: ThreadEventRow[] | undefined,
+  events: ThreadEventWithMeta[] | undefined,
   options?: ToUIMessagesOptions,
 ): UIMessage[] {
   if (!events || events.length === 0) return [];
@@ -2460,19 +936,20 @@ export function toUIMessages(
 
   let areEventsOrdered = true;
   for (let index = 1; index < events.length; index += 1) {
-    if (events[index - 1].seq > events[index].seq) {
+    if (events[index - 1].meta.seq > events[index].meta.seq) {
       areEventsOrdered = false;
       break;
     }
   }
-  const orderedEvents = areEventsOrdered ? events : [...events].sort((a, b) => a.seq - b.seq);
+  const orderedEvents = areEventsOrdered
+    ? events
+    : [...events].sort((a, b) => a.meta.seq - b.meta.seq);
   const pendingClientStartUserSignatureCounts = new Map<string, number>();
   const pendingClientThreadStartUserSignatureCounts = new Map<string, number>();
   const pendingClientRequestedUserSignatureCounts = new Map<string, number>();
   const pendingProviderUserSignatureCounts = new Map<string, number>();
 
-  for (const originalEvent of orderedEvents) {
-    const { event: decoded, meta } = decodeRow(originalEvent);
+  for (const { event: decoded, meta } of orderedEvents) {
     const eventType = decoded.type;
 
     if (eventType === "turn/completed") {
@@ -2482,7 +959,7 @@ export function toUIMessages(
       pendingProviderUserSignatureCounts.clear();
     }
 
-    const eventTurnId = "turnId" in decoded ? (decoded as { turnId?: string }).turnId : undefined;
+    const eventTurnId = getEventTurnId(decoded);
 
     if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
       flushBufferedAssistantMessages(state);
@@ -2815,7 +1292,7 @@ export function toUIMessages(
       continue;
     }
 
-    const execEvent = parseExecLifecycleEvent(decoded, meta, originalEvent);
+    const execEvent = parseExecLifecycleEvent(decoded, meta);
     if (execEvent) {
       if (execEvent.kind === "begin") {
         onExecBegin(state, meta, decoded.threadId, eventTurnId, execEvent.call);
@@ -2827,7 +1304,7 @@ export function toUIMessages(
       continue;
     }
 
-    const toolCallEvent = parseToolCallLifecycleEvent(decoded, meta, originalEvent);
+    const toolCallEvent = parseToolCallLifecycleEvent(decoded, meta);
     if (toolCallEvent) {
       if (toolCallEvent.kind === "begin") {
         onExecBegin(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
@@ -2895,7 +1372,6 @@ export function toUIMessages(
       flushToolActivityBeforeNonToolMessage(state);
       appendDebugEvent(
         state.messages,
-        originalEvent,
         decoded,
         meta,
         debugReason,

@@ -32,7 +32,11 @@ export type {
   ThreadDetailToolGroupRow,
 } from "./thread-detail-rows.js";
 
+export { decodeRow } from "./event-decode.js";
+export type { EventMeta } from "./event-decode.js";
+
 export { toUIMessages } from "./to-ui-messages.js";
+export type { ThreadEventWithMeta } from "./to-ui-messages.js";
 export type {
   ToUIMessagesOptions,
   UIAssistantReasoningMessage,
