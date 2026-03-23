@@ -2,39 +2,35 @@ import { runGit, WorkspaceError } from "./git.js";
 import { Workspace } from "./workspace.js";
 
 export interface WorkspaceExport {
-  type: "branch";
   branch: string;
   remote?: string;
 }
 
 export interface ImportResult {
   previousBranch?: string;
-  stashRef: string | null;
+  stashRef?: string | null;
 }
 
 export async function exportWorkspace(
   workspace: Workspace,
-  options?: { pushToRemote?: string },
+  pushToRemote?: string,
 ): Promise<WorkspaceExport> {
   const branch = await workspace.currentBranch;
   if (!branch) {
     throw new WorkspaceError("Cannot export a detached workspace");
   }
 
-  if (options?.pushToRemote) {
-    await runGit(["push", options.pushToRemote, branch], { cwd: workspace.path });
+  if (pushToRemote) {
+    await workspace.fetch({ remote: pushToRemote });
+    await runGit(["push", pushToRemote, branch], { cwd: workspace.path });
     return {
-      type: "branch",
       branch,
-      remote: options.pushToRemote,
+      remote: pushToRemote,
     };
   }
 
   await workspace.detachHead();
-  return {
-    type: "branch",
-    branch,
-  };
+  return { branch };
 }
 
 export async function importWorkspace(
@@ -48,12 +44,15 @@ export async function importWorkspace(
     });
   }
 
-  const stashRef = await primary.stash("bb-promote");
   const previousBranch = await primary.currentBranch;
+  if (previousBranch === exportData.branch) {
+    return { previousBranch };
+  }
+
+  const stashRef = await primary.stash("bb-promote");
   await primary.checkoutBranch(exportData.branch);
 
-  return {
-    previousBranch,
-    stashRef,
-  };
+  return stashRef
+    ? { previousBranch, stashRef }
+    : { previousBranch };
 }

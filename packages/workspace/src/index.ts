@@ -23,11 +23,11 @@ export {
 export {
   exportWorkspace,
   importWorkspace,
-} from "./transfer.js";
+} from "./promote.js";
 export type {
   ImportResult,
   WorkspaceExport,
-} from "./transfer.js";
+} from "./promote.js";
 
 export {
   WorkspaceError,

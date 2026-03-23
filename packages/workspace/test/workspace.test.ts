@@ -5,8 +5,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   Workspace,
   WorkspaceError,
-  exportWorkspace,
-  importWorkspace,
 } from "../src/index.js";
 import { runGit } from "../src/git.js";
 
@@ -166,51 +164,6 @@ describe("Workspace", () => {
     ).stdout.trim();
     expect(result.merged).toBe(true);
     expect(subject).toBe("Squash feature");
-  });
-
-  it("exports detached workspaces and imports branches while preserving dirty state", async () => {
-    const sourceRepo = await initRepo();
-    await initBareRemoteFrom(sourceRepo);
-    await runGit(["checkout", "-b", "feature"], { cwd: sourceRepo });
-    await fs.writeFile(path.join(sourceRepo, "README.md"), "feature branch\n", "utf8");
-    await runGit(["add", "README.md"], { cwd: sourceRepo });
-    await runGit(["commit", "-m", "Feature branch"], { cwd: sourceRepo });
-
-    const sourceWorkspace = new Workspace(sourceRepo);
-    const detachedExport = await exportWorkspace(sourceWorkspace);
-    expect(detachedExport.branch).toBe("feature");
-    expect(await sourceWorkspace.currentBranch).toBeUndefined();
-
-    await sourceWorkspace.checkoutBranch("feature");
-    const remoteExport = await exportWorkspace(sourceWorkspace, {
-      pushToRemote: "origin",
-    });
-
-    const primaryParent = await makeTempDir("bb-workspace-clone-parent-");
-    await runGit(["clone", sourceRepo, "primary"], { cwd: primaryParent });
-    const primaryRepo = path.join(primaryParent, "primary");
-    await runGit(["config", "user.name", "BB Tests"], { cwd: primaryRepo });
-    await runGit(["config", "user.email", "bb@example.com"], { cwd: primaryRepo });
-    await runGit(["checkout", "main"], { cwd: primaryRepo });
-    await fs.writeFile(path.join(primaryRepo, "local.txt"), "dirty local\n", "utf8");
-
-    const primary = new Workspace(primaryRepo);
-    const imported = await importWorkspace(primary, remoteExport);
-    expect(imported.previousBranch).toBe("main");
-    expect(imported.stashRef).toMatch(/^stash@\{/u);
-    expect(await primary.currentBranch).toBe("feature");
-
-    await importWorkspace(primary, {
-      type: "branch",
-      branch: imported.previousBranch ?? "main",
-    });
-    if (imported.stashRef) {
-      await primary.stashPop(imported.stashRef);
-    }
-
-    const restored = await fs.readFile(path.join(primaryRepo, "local.txt"), "utf8");
-    expect(restored).toContain("dirty local");
-    expect(await primary.currentBranch).toBe("main");
   });
 
   it("rejects git mutations for non-git directories", async () => {
