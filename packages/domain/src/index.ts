@@ -163,3 +163,51 @@ export type {
   ThreadEventUserContent,
   ThreadEventWarningCategory,
 } from "./provider-event.js";
+
+export {
+  threadDetailMessageRowSchema,
+  threadDetailRowSchema,
+  threadDetailToolGroupRowSchema,
+  threadDetailToolGroupStatusSchema,
+  threadDetailToolGroupStatusValues,
+} from "./thread-detail-rows.js";
+export type {
+  ThreadDetailMessageRow,
+  ThreadDetailRow,
+  ThreadDetailToolGroupRow,
+  ThreadDetailToolGroupStatus,
+} from "./thread-detail-rows.js";
+
+export {
+  uiMessageSchema,
+  uiMessageStatusSchema,
+  uiMessageStatusValues,
+  uiProvisioningSetupStatusSchema,
+  uiProvisioningSetupStatusValues,
+} from "./ui-message.js";
+export type {
+  ToUIMessagesOptions,
+  UIAssistantReasoningMessage,
+  UIAssistantTextMessage,
+  UIDebugRawEventMessage,
+  UIErrorMessage,
+  UIFileEditChange,
+  UIFileEditMessage,
+  UIMessage,
+  UIMessageBase,
+  UIMessageStatus,
+  UIOperationMessage,
+  UIProvisioningMetadata,
+  UIProvisioningSetupMetadata,
+  UIProvisioningSetupStatus,
+  UIProvisioningTranscriptEntry,
+  UIThreadOperationMetadata,
+  UIToolCallMessage,
+  UIToolCallSummary,
+  UIToolExploringMessage,
+  UIToolParsedIntent,
+  UIUserMessage,
+  UIWebSearchMessage,
+  UIWorktreeCommitMetadata,
+  UIWorktreeSquashMergeMetadata,
+} from "./ui-message.js";

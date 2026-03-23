@@ -1,3 +1,9 @@
+import type {
+  ThreadDetailMessageRow,
+  ThreadDetailRow,
+  ThreadDetailToolGroupRow,
+  UIMessage,
+} from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import { mergeProvisioningOperations } from "./provisioning-helpers.js";
@@ -6,33 +12,13 @@ import {
   mergeThreadOperationMessages,
   mergeThreadOperationOutcomeMessages,
 } from "./thread-operation-helpers.js";
-import type {
-  UIMessage,
-} from "./ui-message.js";
+export type {
+  ThreadDetailMessageRow,
+  ThreadDetailRow,
+  ThreadDetailToolGroupRow,
+} from "@bb/domain";
 
 type CollapsibleTurnMessage = UIMessage;
-
-export interface ThreadDetailMessageRow {
-  kind: "message";
-  id: string;
-  message: UIMessage;
-}
-
-export interface ThreadDetailToolGroupRow {
-  kind: "tool-group";
-  id: string;
-  turnId: string;
-  summaryCount: number;
-  sourceSeqStart: number;
-  sourceSeqEnd: number;
-  startedAt: number;
-  createdAt: number;
-  durationMs?: number;
-  status: "pending" | "completed" | "error" | "interrupted";
-  messages: CollapsibleTurnMessage[];
-}
-
-export type ThreadDetailRow = ThreadDetailMessageRow | ThreadDetailToolGroupRow;
 
 export interface BuildThreadDetailRowsOptions {
   includeToolGroupMessages?: boolean;

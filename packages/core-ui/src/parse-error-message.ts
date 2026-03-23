@@ -56,6 +56,7 @@ export function appendDebugEvent(
   meta: EventMeta,
   reason: UIDebugRawEventMessage["reason"],
 ): void {
+  const { type, threadId, ...data } = decoded;
   out.push({
     kind: "debug/raw-event",
     id: messageId(decoded.threadId, "debug", `${meta.seq}:${decoded.type}`),
@@ -65,7 +66,14 @@ export function appendDebugEvent(
     createdAt: meta.createdAt,
     turnId: getEventTurnId(decoded),
     rawType: decoded.type,
-    rawEvent: decoded,
+    rawEvent: {
+      id: meta.id,
+      threadId,
+      seq: meta.seq,
+      type,
+      data,
+      createdAt: meta.createdAt,
+    },
     reason,
   });
 }

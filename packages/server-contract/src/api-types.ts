@@ -1,18 +1,21 @@
 import { z } from "zod";
 import {
   availableModelSchema,
+  environmentCapabilitiesSchema,
   environmentDescriptorSchema,
   promptInputSchema,
   providerCapabilitiesSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
+  threadDetailRowSchema,
   threadContextWindowUsageSchema,
   threadEventRowSchema,
   threadQueuedMessageSchema,
   threadStatusSchema,
   threadTypeSchema,
   threadWorkStatusSchema,
+  uiMessageSchema,
 } from "@bb/domain";
 
 export const environmentCreationArgsSchema = z.object({
@@ -631,6 +634,7 @@ export type SystemProviderInfo = z.infer<typeof systemProviderInfoSchema>;
 export const systemEnvironmentInfoSchema = z.object({
   id: z.string(),
   displayName: z.string(),
+  capabilities: environmentCapabilitiesSchema,
 });
 export type SystemEnvironmentInfo = z.infer<
   typeof systemEnvironmentInfoSchema
@@ -647,14 +651,14 @@ export type ThreadToolGroupMessagesRequest = z.infer<
 >;
 
 export const threadToolGroupMessagesResponseSchema = z.object({
-  messages: z.array(z.unknown()),
+  messages: z.array(uiMessageSchema),
 });
 export type ThreadToolGroupMessagesResponse = z.infer<
   typeof threadToolGroupMessagesResponseSchema
 >;
 
 export const threadTimelineResponseSchema = z.object({
-  rows: z.array(z.unknown()),
+  rows: z.array(threadDetailRowSchema),
   contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
 });
 export type ThreadTimelineResponse = z.infer<
