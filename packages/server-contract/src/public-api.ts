@@ -1,6 +1,5 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
-import { z } from "zod";
 import type {
   AvailableModel,
   EnvironmentRecord,
@@ -17,6 +16,8 @@ import type {
   CreateProjectRequest,
   DemotePrimaryCheckoutResponse,
   EnqueueThreadMessageRequest,
+  EnvironmentDaemonSessionListResponse,
+  EnvironmentOperationApiError,
   EnvironmentOperationRequest,
   EnvironmentOperationResponse,
   OpenPathRequest,
@@ -38,6 +39,7 @@ import type {
   SystemShutdownBlockedResponse,
   SystemShutdownRequest,
   SystemStatus,
+  SystemVoiceTranscriptionResponse,
   TellThreadRequest,
   ThreadGitDiffResponse,
   ThreadTimelineResponse,
@@ -46,13 +48,10 @@ import type {
   UpdateThreadRequest,
   UploadedPromptAttachment,
 } from "./api-types.js";
+import type { ApiError } from "./errors.js";
 
 // Re-export all schemas and types from api-types
 export * from "./api-types.js";
-
-const environmentOperationNotAvailableSchema = z.object({
-  error: z.string(),
-});
 
 export type PublicApiSchema = {
   "/projects": {
@@ -64,6 +63,9 @@ export type PublicApiSchema = {
     $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, Project>;
     $delete: Endpoint<PathProjectId, { ok: true }>;
   };
+  /** Spawns a new manager thread for this project. Managers supervise child
+   *  threads and have a dedicated inspectable workspace surfaced through the
+   *  manager-workspace endpoints. */
   "/projects/:id/manager": {
     $post: Endpoint<
       PathProjectId & {
@@ -106,20 +108,33 @@ export type PublicApiSchema = {
     $get: Endpoint<{ query?: { projectId?: string } }, EnvironmentRecord[]>;
   };
   "/environments/:id": {
-    $get: Endpoint<PathId, EnvironmentRecord | null, 200 | 404>;
+    $get:
+      | Endpoint<PathId, EnvironmentRecord, 200>
+      | Endpoint<PathId, ApiError, 404>;
   };
+  /** Performs a git or environment lifecycle operation for the environment.
+   *  Supported operations include primary-checkout promotion/demotion,
+   *  commit creation, and squash-merge flows. */
   "/environments/:id/operations": {
-    $post: Endpoint<
-      PathId & { json: EnvironmentOperationRequest },
-      EnvironmentOperationResponse | z.infer<typeof environmentOperationNotAvailableSchema> | null,
-      200 | 404
-    >;
-  };
-  "/environments/:id/env-daemon/status": {
-    $get: Endpoint<PathId, unknown>;
+    $post:
+      | Endpoint<
+          PathId & { json: EnvironmentOperationRequest },
+          EnvironmentOperationResponse,
+          200
+        >
+      | Endpoint<
+          PathId & { json: EnvironmentOperationRequest },
+          EnvironmentOperationApiError,
+          409
+        >
+      | Endpoint<
+          PathId & { json: EnvironmentOperationRequest },
+          ApiError,
+          404
+        >;
   };
   "/environments/:id/env-daemon/sessions": {
-    $get: Endpoint<PathId, unknown>;
+    $get: Endpoint<PathId, EnvironmentDaemonSessionListResponse>;
   };
   "/threads": {
     $get: Endpoint<
@@ -141,30 +156,37 @@ export type PublicApiSchema = {
     $patch: Endpoint<PathId & { json: UpdateThreadRequest }, Thread>;
     $delete: Endpoint<PathId, { ok: true }>;
   };
+  /** Opens a file or directory from the thread workspace in the user's editor.
+   *  The request path is relative to the workspace root and can include editor
+   *  and target preferences. */
   "/threads/:id/open-path": {
     $post: Endpoint<PathId & { json: OpenThreadPathRequest }, { ok: true }>;
   };
   "/threads/:id/default-execution-options": {
     $get: Endpoint<PathId, ThreadExecutionOptions | null>;
   };
+  /** Lists files in a manager thread's internal workspace. Manager threads keep
+   *  a separate working area for their own state outside the primary checkout. */
   "/threads/:id/manager-workspace/files": {
     $get: Endpoint<PathId, { files: Array<{ path: string; size: number }> }>;
   };
+  /** Returns the content of a single file from a manager thread's internal
+   *  workspace. */
   "/threads/:id/manager-workspace/file": {
     $get: Endpoint<PathId & { query: { path: string } }, { path: string; content: string }>;
   };
-  "/threads/:id/env-daemon/status": {
-    $get: Endpoint<PathId, unknown>;
-  };
-  "/threads/:id/env-daemon/sessions": {
-    $get: Endpoint<PathId, unknown>;
-  };
+  /** Sends a prompt to a thread. Mode controls whether the server starts a new
+   *  turn or steers the currently active turn when one exists. */
   "/threads/:id/tell": {
     $post: Endpoint<PathId & { json: TellThreadRequest }, { ok: true }>;
   };
+  /** Queues a prompt for later delivery while the thread is busy. The queued
+   *  message can be sent later through the companion /send route. */
   "/threads/:id/queue": {
     $post: Endpoint<PathId & { json: EnqueueThreadMessageRequest }, ThreadQueuedMessage, 201>;
   };
+  /** Sends a previously queued message. Mode controls whether delivery starts a
+   *  new turn or steers an already-running turn. */
   "/threads/:id/queue/:queuedMessageId/send": {
     $post: Endpoint<
       PathThreadAndQueued & { json: SendQueuedThreadMessageRequest },
@@ -192,9 +214,12 @@ export type PublicApiSchema = {
   "/threads/:id/work-status": {
     $get: Endpoint<PathId & { query?: { mergeBaseBranch?: string } }, ThreadWorkStatus | null>;
   };
+  /** Returns candidate merge-base branches for git diff comparisons. */
   "/threads/:id/merge-base-branches": {
     $get: Endpoint<PathId, string[]>;
   };
+  /** Returns the primary-checkout ownership metadata for the thread's project,
+   *  including which environment is currently active in the editor. */
   "/threads/:id/primary-status": {
     $get: Endpoint<PathId, PrimaryCheckoutStatus>;
   };
@@ -210,6 +235,8 @@ export type PublicApiSchema = {
       ThreadTimelineResponse
     >;
   };
+  /** Lazily loads detailed tool call and tool response messages for a specific
+   *  collapsed tool group within a turn. */
   "/threads/:id/tool-group-messages": {
     $get: Endpoint<
       PathId & {
@@ -238,6 +265,8 @@ export type PublicApiSchema = {
   "/threads/:id/events": {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
+  /** Returns the thread's final output string, or null if the thread has not
+   *  produced a terminal output yet. */
   "/threads/:id/output": {
     $get: Endpoint<PathId, { output: string | null }>;
   };
@@ -275,14 +304,18 @@ export type PublicApiSchema = {
       | Endpoint<{ json: SystemRestartRequest }, SystemRestartAcceptedResponse, 200>
       | Endpoint<{ json: SystemRestartRequest }, SystemShutdownBlockedResponse, 409>;
   };
+  /** Opens the OS-native folder picker and returns the selected absolute path,
+   *  or null when the user cancels the dialog. */
   "/system/pick-folder": {
     $post: Endpoint<EmptyInput, { path: string | null }>;
   };
+  /** Opens an absolute file or directory path in the user's editor, with the
+   *  same editor preference options as the thread-scoped open-path route. */
   "/system/open-path": {
     $post: Endpoint<{ json: OpenPathRequest }, { ok: true }>;
   };
   "/system/voice-transcription": {
-    $post: Endpoint<{ form: Record<string, string | Blob> }, unknown>;
+    $post: Endpoint<{ form: Record<string, string | Blob> }, SystemVoiceTranscriptionResponse>;
   };
 };
 

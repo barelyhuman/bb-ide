@@ -16,9 +16,8 @@ export const domainErrorCodeSchema = z.enum([
 export type DomainErrorCode = z.infer<typeof domainErrorCodeSchema>;
 
 export const apiErrorSchema = z.object({
-  code: domainErrorCodeSchema,
+  code: z.string().min(1),
   message: z.string(),
   retryable: z.boolean().optional(),
-  details: z.unknown().optional(),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;

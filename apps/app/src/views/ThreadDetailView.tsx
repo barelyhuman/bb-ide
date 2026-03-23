@@ -64,7 +64,10 @@ import {
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
 import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
-import type { EnvironmentOperationFailureDetails } from "@bb/server-contract";
+import type {
+  EnvironmentOperationApiError,
+  EnvironmentOperationFailureDetails,
+} from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError, openThreadPathInEditor } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
@@ -101,30 +104,30 @@ function toEnvironmentOperationFailureDetails(error: unknown): EnvironmentOperat
   if (!(error instanceof HttpError) || typeof error.body !== "object" || error.body === null) {
     return undefined;
   }
-  const body = error.body as { details?: unknown };
-  if (typeof body.details !== "object" || body.details === null) {
+  const details = (error.body as Partial<EnvironmentOperationApiError>).details;
+  if (typeof details !== "object" || details === null) {
     return undefined;
   }
-  const details = body.details as Partial<EnvironmentOperationFailureDetails>;
-  switch (details.kind) {
+  const typedDetails = details as Partial<EnvironmentOperationFailureDetails>;
+  switch (typedDetails.kind) {
     case "commit_failed":
-      return details.operation === "commit" &&
-          details.request !== undefined &&
-          typeof details.errorMessage === "string"
-        ? details as EnvironmentOperationFailureDetails
+      return typedDetails.operation === "commit" &&
+          typedDetails.request !== undefined &&
+          typeof typedDetails.errorMessage === "string"
+        ? typedDetails as EnvironmentOperationFailureDetails
         : undefined;
     case "squash_merge_conflict":
-      return details.operation === "squash_merge" &&
-          details.request !== undefined &&
-          Array.isArray(details.conflictFiles)
-        ? details as EnvironmentOperationFailureDetails
+      return typedDetails.operation === "squash_merge" &&
+          typedDetails.request !== undefined &&
+          Array.isArray(typedDetails.conflictFiles)
+        ? typedDetails as EnvironmentOperationFailureDetails
         : undefined;
     case "squash_merge_commit_failed":
-      return details.operation === "squash_merge" &&
-          details.request !== undefined &&
-          typeof details.errorMessage === "string" &&
-          (details.stage === "prep_commit" || details.stage === "squash_commit")
-        ? details as EnvironmentOperationFailureDetails
+      return typedDetails.operation === "squash_merge" &&
+          typedDetails.request !== undefined &&
+          typeof typedDetails.errorMessage === "string" &&
+          (typedDetails.stage === "prep_commit" || typedDetails.stage === "squash_commit")
+        ? typedDetails as EnvironmentOperationFailureDetails
         : undefined;
     default:
       return undefined;

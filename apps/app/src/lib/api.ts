@@ -36,6 +36,7 @@ import type {
   SystemShutdownBlockingThread,
   SystemShutdownRequest,
   SystemStatus,
+  SystemVoiceTranscriptionResponse,
   TellThreadRequest,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
@@ -286,9 +287,9 @@ export async function transcribeVoiceInput(
   file: File,
   prompt?: string,
   signal?: AbortSignal,
-): Promise<{ text: string }> {
+): Promise<SystemVoiceTranscriptionResponse> {
   const trimmedPrompt = prompt?.trim();
-  return postMultipart<{ text: string }>(
+  return postMultipart<SystemVoiceTranscriptionResponse>(
     apiClient.system["voice-transcription"].$url(),
     file,
     signal,

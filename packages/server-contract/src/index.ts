@@ -4,6 +4,7 @@ export type {
   PathId,
   PathProjectId,
   PathThreadAndQueued,
+  Untyped,
 } from "./common.js";
 
 export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
@@ -18,6 +19,9 @@ export {
   createProjectRequestSchema,
   demotePrimaryCheckoutResponseSchema,
   enqueueThreadMessageRequestSchema,
+  environmentDaemonSessionDebugViewSchema,
+  environmentDaemonSessionListResponseSchema,
+  environmentOperationApiErrorSchema,
   environmentCreationArgsSchema,
   environmentOperationFailureDetailsSchema,
   environmentOperationRequestSchema,
@@ -60,6 +64,7 @@ export {
   systemShutdownBlockingThreadSchema,
   systemShutdownRequestSchema,
   systemStatusSchema,
+  systemVoiceTranscriptionResponseSchema,
   tellThreadModeSchema,
   tellThreadRequestSchema,
   threadGitDiffCommitSummarySchema,
@@ -82,6 +87,9 @@ export type {
   CommitOperationOptions,
   CreateProjectRequest,
   DemotePrimaryCheckoutResponse,
+  EnvironmentDaemonSessionDebugView,
+  EnvironmentDaemonSessionListResponse,
+  EnvironmentOperationApiError,
   EnqueueThreadMessageRequest,
   EnvironmentCreationArgs,
   EnvironmentOperationFailureDetails,
@@ -127,6 +135,7 @@ export type {
   SystemShutdownBlockingThread,
   SystemShutdownRequest,
   SystemStatus,
+  SystemVoiceTranscriptionResponse,
   TellThreadMode,
   TellThreadRequest,
   ThreadGitDiffCommitSummary,

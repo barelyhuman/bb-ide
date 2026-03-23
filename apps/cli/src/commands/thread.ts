@@ -12,6 +12,7 @@ import {
   type TimelineFormat,
 } from "@bb/core-ui";
 import type {
+  EnvironmentDaemonSessionListResponse,
   SpawnThreadRequest,
   ThreadGitDiffResponse,
   ThreadTimelineResponse,
@@ -39,33 +40,6 @@ type ThreadStatusEventMode = "summary" | "raw";
 type ThreadWaitTarget =
   | { kind: "status"; status: ThreadStatus }
   | { kind: "event"; eventType: string };
-
-interface ThreadSessionsPayload {
-  environmentId: string;
-  sessions: ThreadSessionDebugView[];
-}
-
-interface ThreadSessionDebugView {
-  id: string;
-  environmentId: string;
-  environmentDaemonId: string;
-  environmentDaemonInstanceId: string;
-  protocolVersion: number;
-  status: "active" | "expired" | "closed" | "replaced";
-  leaseExpiresAt: number;
-  lastHeartbeatAt?: number;
-  closedAt?: number;
-  closeReason?:
-    | "daemon_shutdown"
-    | "server_shutdown"
-    | "lease_expired"
-    | "newer_session"
-    | "migration"
-    | "internal_error";
-  controlBaseUrl?: string;
-  createdAt: number;
-  updatedAt: number;
-}
 
 const THREAD_WAIT_EXIT_CODE_TIMEOUT = 2;
 const THREAD_WAIT_EXIT_CODE_INVALID_REQUEST = 3;
@@ -570,7 +544,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           console.error("Thread has no attached environment");
           process.exit(1);
         }
-        const response = await unwrap<ThreadSessionsPayload>(
+        const response = await unwrap<EnvironmentDaemonSessionListResponse>(
           client.api.v1.environments[":id"]["env-daemon"].sessions.$get({
             param: { id: environmentId },
           }),
@@ -1271,7 +1245,7 @@ function printThreadStatus(payload: ThreadStatusPayload, projectRootPath?: strin
   }
 }
 
-function printThreadSessions(payload: ThreadSessionsPayload): void {
+function printThreadSessions(payload: EnvironmentDaemonSessionListResponse): void {
   console.log(`Environment ${payload.environmentId} env-daemon sessions`);
   if (payload.sessions.length === 0) {
     console.log("No sessions found");

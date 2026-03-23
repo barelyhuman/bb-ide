@@ -1,4 +1,4 @@
-export type { EmptyInput, Endpoint } from "./common.js";
+export type { EmptyInput, Endpoint, Untyped } from "./common.js";
 
 export {
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
