@@ -1,6 +1,6 @@
 import type { PromptInput, ThreadEvent, ThreadEventUserContent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { ToUIMessagesOptions, UIAssistantTextMessage, UIUserMessage } from "@bb/domain";
+import type { ToViewMessagesOptions, ViewAssistantTextMessage, ViewUserMessage } from "@bb/domain";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
 
@@ -79,7 +79,7 @@ export function userMessageSignature(value: {
 }
 
 export function shouldRenderThreadStartInput(
-  threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
+  threadStatus: ToViewMessagesOptions["threadStatus"] | undefined,
 ): boolean {
   if (!threadStatus) return false;
   switch (threadStatus) {
@@ -97,7 +97,7 @@ export function shouldRenderThreadStartInput(
 }
 
 export function shouldPreservePendingMessages(
-  threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
+  threadStatus: ToViewMessagesOptions["threadStatus"] | undefined,
 ): boolean {
   if (!threadStatus) return false;
   switch (threadStatus) {
@@ -115,7 +115,7 @@ export function shouldPreservePendingMessages(
   }
 }
 
-function buildAttachments(parsed: NonNullable<ReturnType<typeof parsePromptInput>>): UIUserMessage["attachments"] {
+function buildAttachments(parsed: NonNullable<ReturnType<typeof parsePromptInput>>): ViewUserMessage["attachments"] {
   return {
     webImages: parsed.webImages,
     localImages: parsed.localImages,
@@ -129,7 +129,7 @@ function buildAttachments(parsed: NonNullable<ReturnType<typeof parsePromptInput
 export function parseUserFromItemEvent(
   decoded: ThreadEvent,
   meta: EventMeta,
-): UIUserMessage | null {
+): ViewUserMessage | null {
   if (decoded.type !== "item/started" && decoded.type !== "item/completed") {
     return null;
   }
@@ -157,8 +157,8 @@ export function parseUserFromItemEvent(
 export function parseUserFromClientStart(
   decoded: ThreadEvent,
   meta: EventMeta,
-  options?: ToUIMessagesOptions,
-): UIUserMessage | null {
+  options?: ToViewMessagesOptions,
+): ViewUserMessage | null {
   if (
     decoded.type !== "client/thread/start" &&
     decoded.type !== "client/turn/requested" &&
@@ -194,7 +194,7 @@ export function parseUserFromClientStart(
 export function parseManagerUserMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
-): UIAssistantTextMessage | null {
+): ViewAssistantTextMessage | null {
   if (decoded.type !== "system/manager/user_message") {
     return null;
   }

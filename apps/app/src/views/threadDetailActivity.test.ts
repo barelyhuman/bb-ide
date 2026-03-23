@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadDetailRow, UIMessage } from "@bb/domain";
+import type { TimelineRow, ViewMessage } from "@bb/domain";
 import {
   findLatestActivityMessageId,
   findLatestActivityRowId,
@@ -9,7 +9,7 @@ import {
 function baseMessage(
   id: string,
   sourceSeq: number,
-): Pick<UIMessage, "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"> {
+): Pick<ViewMessage, "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"> {
   return {
     id,
     threadId: "thread-1",
@@ -21,7 +21,7 @@ function baseMessage(
 
 describe("threadDetailActivity", () => {
   it("does not highlight latest activity when there is a trailing non-activity row", () => {
-    const rows: ThreadDetailRow[] = [
+    const rows: TimelineRow[] = [
       {
         kind: "tool-group",
         id: "group-1",
@@ -53,7 +53,7 @@ describe("threadDetailActivity", () => {
   });
 
   it("highlights latest activity when it is the trailing row", () => {
-    const rows: ThreadDetailRow[] = [
+    const rows: TimelineRow[] = [
       {
         kind: "message",
         id: "assistant-1",
@@ -85,7 +85,7 @@ describe("threadDetailActivity", () => {
   });
 
   it("returns only the latest activity message id within a group", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("exploring-1", 1),
         kind: "tool-exploring",
@@ -116,7 +116,7 @@ describe("threadDetailActivity", () => {
   });
 
   it("treats error rows as activity and highlights when trailing", () => {
-    const rows: ThreadDetailRow[] = [
+    const rows: TimelineRow[] = [
       {
         kind: "message",
         id: "user-1",
@@ -144,7 +144,7 @@ describe("threadDetailActivity", () => {
   });
 
   it("returns latest error message id when it is the final activity", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("tool-1", 1),
         kind: "tool-call",
@@ -166,7 +166,7 @@ describe("threadDetailActivity", () => {
   });
 
   it("treats trailing provisioning rows as latest activity", () => {
-    const rows: ThreadDetailRow[] = [
+    const rows: TimelineRow[] = [
       {
         kind: "message",
         id: "assistant-1",
@@ -198,7 +198,7 @@ describe("threadDetailActivity", () => {
   });
 
   it("returns the latest provisioning operation message id within a group", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("tool-1", 1),
         kind: "tool-call",

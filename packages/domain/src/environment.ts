@@ -87,10 +87,6 @@ export const environmentSchema = z.object({
 });
 export type Environment = z.infer<typeof environmentSchema>;
 
-// Compatibility alias while apps/cli still consume the old name.
-export const environmentRecordSchema = environmentSchema;
-export type EnvironmentRecord = Environment;
-
 export const environmentCapabilitiesSchema = z.object({
   host_filesystem: z.boolean(),
   isolated_workspace: z.boolean(),

@@ -1,53 +1,92 @@
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { readCliConfig } from "../src/cli.js";
-import { readCommonConfig } from "../src/common.js";
-import { readHostDaemonConfig } from "../src/host-daemon.js";
-import { readServerConfig } from "../src/server.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-describe("readCommonConfig", () => {
-  it("defaults BB_DATA_DIR to ~/.bb and derives log paths from it", () => {
-    const config = readCommonConfig({});
+async function importFresh<TModule>(modulePath: string): Promise<TModule> {
+  vi.resetModules();
+  return import(modulePath) as Promise<TModule>;
+}
 
-    expect(config.dataDir).toBe(path.join(os.homedir(), ".bb"));
-    expect(config.logsDir).toBe(path.join(os.homedir(), ".bb", "logs"));
-    expect(config.logLevel).toBe("debug");
-    expect(config.secretToken).toBe("bb-dev-secret-token");
-  });
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
-  it("requires BB_SECRET_TOKEN in production", () => {
-    expect(() => readCommonConfig({ BB_RUNTIME_MODE: "production" })).toThrow(
-      /BB_SECRET_TOKEN/u,
+describe("commonConfig", () => {
+  it("defaults BB_DATA_DIR to ~/.bb and uses raw env names", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_DATA_DIR", undefined);
+    vi.stubEnv("BB_LOG_LEVEL", undefined);
+    vi.stubEnv("BB_SECRET_TOKEN", undefined);
+
+    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
+      "../src/common.js",
     );
+
+    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb"));
+    expect(commonConfig.BB_LOG_LEVEL).toBe("debug");
+    expect(commonConfig.BB_SECRET_TOKEN).toBe("dev-secret");
   });
 
-  it("accepts the legacy BB_ROOT override during migration", () => {
-    const config = readCommonConfig({ BB_ROOT: "/tmp/bb-root" });
+  it("does not support the legacy BB_ROOT migration path", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_ROOT", "/tmp/bb-root");
+    vi.stubEnv("BB_DATA_DIR", undefined);
 
-    expect(config.dataDir).toBe("/tmp/bb-root");
-    expect(config.logsDir).toBe("/tmp/bb-root/logs");
+    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
+      "../src/common.js",
+    );
+
+    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb"));
+  });
+
+  it("does not enforce BB_SECRET_TOKEN in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_SECRET_TOKEN", "");
+
+    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
+      "../src/common.js",
+    );
+
+    expect(commonConfig.BB_SECRET_TOKEN).toBe("");
   });
 });
 
 describe("consumer-specific config", () => {
-  it("builds server defaults from the shared data directory", () => {
-    const config = readServerConfig({ BB_DATA_DIR: "/tmp/bb-data" });
+  it("builds server defaults from the shared data directory", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
+    vi.stubEnv("BB_SERVER_PORT", undefined);
+    vi.stubEnv("BB_DATABASE_URL", undefined);
+    vi.stubEnv("BB_E2B_API_KEY", undefined);
+    vi.stubEnv("BB_E2B_TEMPLATE", undefined);
 
-    expect(config.port).toBe(3334);
-    expect(config.databaseUrl).toBe("/tmp/bb-data/server.sqlite");
-    expect(config.e2bApiKey).toBeUndefined();
+    const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
+      "../src/server.js",
+    );
+
+    expect(serverConfig.BB_SERVER_PORT).toBe(3000);
+    expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
+    expect(serverConfig.BB_E2B_API_KEY).toBe("");
+    expect(serverConfig.BB_E2B_TEMPLATE).toBe("");
   });
 
-  it("requires a valid server URL for the daemon and CLI", () => {
-    expect(readHostDaemonConfig({ BB_SERVER_URL: "http://localhost:9999" }).serverUrl).toBe(
-      "http://localhost:9999",
+  it("requires a valid server URL for the daemon and CLI", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
+
+    const { hostDaemonConfig } = await importFresh<typeof import("../src/host-daemon.js")>(
+      "../src/host-daemon.js",
     );
-    expect(readCliConfig({ BB_SERVER_URL: "http://localhost:9999" }).serverUrl).toBe(
-      "http://localhost:9999",
+    const { cliConfig } = await importFresh<typeof import("../src/cli.js")>(
+      "../src/cli.js",
     );
-    expect(() => readCliConfig({ BB_SERVER_URL: "not-a-url" })).toThrow(
-      /BB_SERVER_URL/u,
-    );
+
+    expect(hostDaemonConfig.BB_SERVER_URL).toBe("http://localhost:9999");
+    expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:9999");
+
+    vi.stubEnv("BB_SERVER_URL", "not-a-url");
+    await expect(
+      importFresh<typeof import("../src/cli.js")>("../src/cli.js"),
+    ).rejects.toThrow(/BB_SERVER_URL/u);
   });
 });

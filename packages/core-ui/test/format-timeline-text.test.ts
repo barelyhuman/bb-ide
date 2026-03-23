@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { formatTimelineAsText } from "../src/format-timeline-text.js";
-import type { UIMessage } from "@bb/domain";
+import type { ViewMessage } from "@bb/domain";
 
 describe("formatTimelineAsText", () => {
   it("renders user + assistant + tool-call in minimal mode", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         kind: "user",
         id: "u1",
@@ -51,7 +51,7 @@ describe("formatTimelineAsText", () => {
   });
 
   it("collapses exploring calls in minimal mode", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         kind: "tool-exploring",
         id: "exp1",
@@ -93,7 +93,7 @@ describe("formatTimelineAsText", () => {
   });
 
   it("renders file edit with path", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         kind: "file-edit",
         id: "fe1",
@@ -119,7 +119,7 @@ describe("formatTimelineAsText", () => {
   });
 
   it("renders errors", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         kind: "error",
         id: "e1",
@@ -138,7 +138,7 @@ describe("formatTimelineAsText", () => {
   });
 
   it("hides reasoning in minimal, shows in verbose", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         kind: "assistant-reasoning",
         id: "r1",

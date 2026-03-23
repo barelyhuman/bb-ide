@@ -1,14 +1,14 @@
 import type {
-  UIMessage,
-  UIUserMessage,
-  UIAssistantTextMessage,
-  UIAssistantReasoningMessage,
-  UIToolCallMessage,
-  UIToolExploringMessage,
-  UIFileEditMessage,
-  UIWebSearchMessage,
-  UIOperationMessage,
-  UIErrorMessage,
+  ViewMessage,
+  ViewUserMessage,
+  ViewAssistantTextMessage,
+  ViewAssistantReasoningMessage,
+  ViewToolCallMessage,
+  ViewToolExploringMessage,
+  ViewFileEditMessage,
+  ViewWebSearchMessage,
+  ViewOperationMessage,
+  ViewErrorMessage,
 } from "@bb/domain";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
@@ -62,7 +62,7 @@ function statusBadge(status: string, color: boolean): string {
   }
 }
 
-function formatUser(msg: UIUserMessage, _verbose: boolean, color: boolean): string {
+function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator("User", color));
   lines.push(msg.text);
@@ -75,14 +75,14 @@ function formatUser(msg: UIUserMessage, _verbose: boolean, color: boolean): stri
   return lines.join("\n");
 }
 
-function formatAssistantText(msg: UIAssistantTextMessage, _verbose: boolean, color: boolean): string {
+function formatAssistantText(msg: ViewAssistantTextMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator("Assistant", color));
   lines.push(msg.text);
   return lines.join("\n");
 }
 
-function formatReasoning(msg: UIAssistantReasoningMessage, verbose: boolean, color: boolean): string {
+function formatReasoning(msg: ViewAssistantReasoningMessage, verbose: boolean, color: boolean): string {
   if (!verbose) return "";
   const lines: string[] = [];
   lines.push(separator("Reasoning", color));
@@ -90,7 +90,7 @@ function formatReasoning(msg: UIAssistantReasoningMessage, verbose: boolean, col
   return lines.join("\n");
 }
 
-function formatToolCall(msg: UIToolCallMessage, verbose: boolean, color: boolean): string {
+function formatToolCall(msg: ViewToolCallMessage, verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   const name = msg.toolName ?? "exec_command";
@@ -113,7 +113,7 @@ function formatToolCall(msg: UIToolCallMessage, verbose: boolean, color: boolean
   return lines.join("\n");
 }
 
-function formatExploring(msg: UIToolExploringMessage, verbose: boolean, color: boolean): string {
+function formatExploring(msg: ViewToolExploringMessage, verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   lines.push(separator(`Exploring (${msg.calls.length} call${msg.calls.length === 1 ? "" : "s"})`, color));
@@ -130,7 +130,7 @@ function formatExploring(msg: UIToolExploringMessage, verbose: boolean, color: b
   return lines.join("\n");
 }
 
-function formatFileEdit(msg: UIFileEditMessage, verbose: boolean, color: boolean): string {
+function formatFileEdit(msg: ViewFileEditMessage, verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   lines.push(separator("File Edit", color));
@@ -148,7 +148,7 @@ function formatFileEdit(msg: UIFileEditMessage, verbose: boolean, color: boolean
   return lines.join("\n");
 }
 
-function formatWebSearch(msg: UIWebSearchMessage, _verbose: boolean, color: boolean): string {
+function formatWebSearch(msg: ViewWebSearchMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   lines.push(separator("Web Search", color));
@@ -157,7 +157,7 @@ function formatWebSearch(msg: UIWebSearchMessage, _verbose: boolean, color: bool
   return lines.join("\n");
 }
 
-function formatOperation(msg: UIOperationMessage, _verbose: boolean, color: boolean): string {
+function formatOperation(msg: ViewOperationMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator(`Operation: ${msg.title}`, color));
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
@@ -165,14 +165,14 @@ function formatOperation(msg: UIOperationMessage, _verbose: boolean, color: bool
   return lines.join("\n");
 }
 
-function formatError(msg: UIErrorMessage, _verbose: boolean, color: boolean): string {
+function formatError(msg: ViewErrorMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator("Error", color));
   lines.push(red(`  ${msg.message}`, color));
   return lines.join("\n");
 }
 
-function formatMessage(msg: UIMessage, verbose: boolean, color: boolean): string {
+function formatMessage(msg: ViewMessage, verbose: boolean, color: boolean): string {
   switch (msg.kind) {
     case "user":
       return formatUser(msg, verbose, color);
@@ -201,13 +201,13 @@ function formatMessage(msg: UIMessage, verbose: boolean, color: boolean): string
 }
 
 /**
- * Format an array of UIMessages as human-readable terminal text.
+ * Format an array of ViewMessages as human-readable terminal text.
  *
  * - `minimal`: Compact view — exploring collapsed, tool output truncated, reasoning hidden
  * - `verbose`: Full view — all output shown, reasoning included, diffs expanded
  */
 export function formatTimelineAsText(
-  messages: UIMessage[],
+  messages: ViewMessage[],
   options?: { verbose?: boolean; color?: boolean },
 ): string {
   const verbose = options?.verbose ?? false;

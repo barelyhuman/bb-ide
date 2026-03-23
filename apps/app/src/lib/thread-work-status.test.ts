@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadWorkStatus } from "@bb/domain";
+import type { WorkspaceStatus } from "@bb/domain";
 import {
   getThreadGitStatusDisplay,
   threadWorkStatusDescription,
@@ -7,7 +7,7 @@ import {
   threadWorktreeCleanLabel,
 } from "./thread-work-status";
 
-function makeStatus(state: ThreadWorkStatus["state"]): ThreadWorkStatus {
+function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
   return {
     state,
     changedFiles: 0,

@@ -5,7 +5,7 @@ import {
   type ThreadEventRow,
   type ThreadGitDiffResponse,
   type ThreadStatus,
-  type ThreadWorkStatus,
+  type WorkspaceStatus,
   type Project,
 } from "@bb/domain";
 import {
@@ -611,9 +611,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         includeLowSignal,
       });
 
-      let workStatus: ThreadWorkStatus | null | undefined;
+      let workStatus: WorkspaceStatus | null | undefined;
       if (opts.workStatus) {
-        workStatus = await unwrap<ThreadWorkStatus | null>(
+        workStatus = await unwrap<WorkspaceStatus | null>(
           client.api.v1.threads[":id"]["work-status"].$get({
             param: { id: threadId },
             query: {},

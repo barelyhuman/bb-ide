@@ -4,7 +4,7 @@ import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
 } from "@bb/ui-core";
-import type { UIAssistantReasoningMessage } from "@bb/domain";
+import type { ViewAssistantReasoningMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
@@ -36,7 +36,7 @@ function isReasoningExpandable(reasoning: string, title: string): boolean {
   return normalizedReasoning !== normalizedTitle;
 }
 
-export function ReasoningRow({ message }: { message: UIAssistantReasoningMessage }) {
+export function ReasoningRow({ message }: { message: ViewAssistantReasoningMessage }) {
   const isStreaming = message.status === "streaming";
   const [isExpanded, setIsExpanded] = useState(isStreaming);
   const title = useMemo(() => getReasoningTitle(message.text), [message.text]);

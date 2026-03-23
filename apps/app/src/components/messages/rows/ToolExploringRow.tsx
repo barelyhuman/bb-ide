@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ExpandablePanel } from "@bb/ui-core";
 import { assertNever } from "@bb/core-ui";
-import type { UIToolExploringMessage, UIToolParsedIntent } from "@bb/domain";
+import type { ViewToolExploringMessage, ViewToolParsedIntent } from "@bb/domain";
 import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import {
   ExpandableDetailScrollArea,
@@ -11,21 +11,21 @@ import {
   useStickyBottomAutoScroll,
 } from "./shared";
 
-function isReadOnlyIntent(intent: UIToolParsedIntent): boolean {
+function isReadOnlyIntent(intent: ViewToolParsedIntent): boolean {
   return intent.type === "read";
 }
 
-function isReadOnlyCall(call: UIToolExploringMessage["calls"][number]): boolean {
+function isReadOnlyCall(call: ViewToolExploringMessage["calls"][number]): boolean {
   return call.parsedCmd.length > 0 && call.parsedCmd.every((intent) => isReadOnlyIntent(intent));
 }
 
-function formatSearchDetail(intent: Extract<UIToolParsedIntent, { type: "search" }>): string {
+function formatSearchDetail(intent: Extract<ViewToolParsedIntent, { type: "search" }>): string {
   if (intent.query && intent.path) return `${intent.query} in ${intent.path}`;
   if (intent.query) return intent.query;
   return intent.cmd;
 }
 
-function formatExploringIntentLine(intent: UIToolParsedIntent): string {
+function formatExploringIntentLine(intent: ViewToolParsedIntent): string {
   switch (intent.type) {
     case "read":
       return `Read ${intent.name}`;
@@ -40,7 +40,7 @@ function formatExploringIntentLine(intent: UIToolParsedIntent): string {
   }
 }
 
-function buildExploringDetailLines(calls: UIToolExploringMessage["calls"]): string[] {
+function buildExploringDetailLines(calls: ViewToolExploringMessage["calls"]): string[] {
   const detailLines: string[] = [];
   let index = 0;
 
@@ -84,7 +84,7 @@ function buildExploringDetailLines(calls: UIToolExploringMessage["calls"]): stri
   return detailLines;
 }
 
-function summarizeExploringCounts(calls: UIToolExploringMessage["calls"]): {
+function summarizeExploringCounts(calls: ViewToolExploringMessage["calls"]): {
   filesRead: number;
   searches: number;
   lists: number;
@@ -143,7 +143,7 @@ export function ToolExploringRow({
   initialExpanded = false,
   preferOngoingLabels = false,
 }: {
-  message: UIToolExploringMessage;
+  message: ViewToolExploringMessage;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;
 }) {

@@ -1,4 +1,4 @@
-import type { PromptInput, ThreadDetailRow, UIUserMessage } from "@bb/domain"
+import type { PromptInput, TimelineRow, ViewUserMessage } from "@bb/domain"
 
 interface FollowUpAttachmentsSignature {
   webImages: number
@@ -106,12 +106,12 @@ export function buildFollowUpSignatureFromInput(input: PromptInput[]): string {
 }
 
 function getUserMessageAttachmentsSignature(
-  message: UIUserMessage,
+  message: ViewUserMessage,
 ): FollowUpAttachmentsSignature | null {
   return normalizeFollowUpAttachmentsSignature(message.attachments)
 }
 
-export function buildFollowUpSignatureFromRow(row: ThreadDetailRow): string | null {
+export function buildFollowUpSignatureFromRow(row: TimelineRow): string | null {
   if (row.kind !== "message" || row.message.kind !== "user") {
     return null
   }

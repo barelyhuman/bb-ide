@@ -43,7 +43,6 @@ export {
   environmentLocationSchema,
   environmentLocationValues,
   environmentPropertiesSchema,
-  environmentRecordSchema,
   environmentStatusSchema,
   environmentStatusValues,
   environmentWorkspaceKindSchema,
@@ -57,7 +56,6 @@ export type {
   EnvironmentDescriptor,
   EnvironmentLocation,
   EnvironmentProperties,
-  EnvironmentRecord,
   EnvironmentStatus,
   EnvironmentWorkspaceKind,
   PersistedEnvironmentRecord,
@@ -65,20 +63,15 @@ export type {
 
 export {
   projectSchema,
-} from "./project.js";
-export type {
-  Project,
-} from "./project.js";
-
-export {
   projectSourceSchema,
   projectSourceTypeSchema,
   projectSourceTypeValues,
-} from "./project-source.js";
+} from "./project.js";
 export type {
+  Project,
   ProjectSource,
   ProjectSourceType,
-} from "./project-source.js";
+} from "./project.js";
 
 export {
   hostSchema,
@@ -94,18 +87,6 @@ export type {
 } from "./host.js";
 
 export {
-  workspaceFileChangeSchema,
-  workspaceStateSchema,
-  workspaceStateValues,
-  workspaceStatusSchema,
-} from "./workspace.js";
-export type {
-  WorkspaceFileChange,
-  WorkspaceState,
-  WorkspaceStatus,
-} from "./workspace.js";
-
-export {
   threadBuiltInActionIdSchema,
   threadBuiltInActionIdValues,
   threadBuiltInActionSchema,
@@ -113,16 +94,17 @@ export {
   threadPrimaryCheckoutStateSchema,
   threadProvisioningReadinessSchema,
   threadProvisioningReadinessValues,
+  threadProvisioningStateSchema,
   threadQueuedMessageSchema,
   threadSchema,
   threadStatusSchema,
   threadStatusValues,
   threadTypeSchema,
   threadTypeValues,
-  threadWorkFileChangeSchema,
-  threadWorkStateSchema,
-  threadWorkStateValues,
-  threadWorkStatusSchema,
+  workspaceFileChangeSchema,
+  workspaceStateSchema,
+  workspaceStateValues,
+  workspaceStatusSchema,
 } from "./thread.js";
 export type {
   Thread,
@@ -135,9 +117,9 @@ export type {
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,
-  ThreadWorkFileChange,
-  ThreadWorkState,
-  ThreadWorkStatus,
+  WorkspaceFileChange,
+  WorkspaceState,
+  WorkspaceStatus,
 } from "./thread.js";
 
 export {
@@ -242,66 +224,24 @@ export type {
 } from "./provider-event.js";
 
 export {
-  threadDetailMessageRowSchema,
-  threadDetailRowSchema,
-  threadDetailToolGroupRowSchema,
-  threadDetailToolGroupStatusSchema,
-  threadDetailToolGroupStatusValues,
-} from "./thread-detail-rows.js";
-export type {
-  ThreadDetailMessageRow,
-  ThreadDetailRow,
-  ThreadDetailToolGroupRow,
-  ThreadDetailToolGroupStatus,
-} from "./thread-detail-rows.js";
-
-export {
   timelineMessageRowSchema,
   timelineRowSchema,
   timelineToolGroupRowSchema,
   timelineToolGroupStatusSchema,
   timelineToolGroupStatusValues,
-} from "./timeline.js";
+} from "./thread-detail-rows.js";
 export type {
   TimelineMessageRow,
   TimelineRow,
   TimelineToolGroupRow,
   TimelineToolGroupStatus,
-} from "./timeline.js";
-
-export {
-  uiMessageSchema,
-  uiMessageStatusSchema,
-  uiMessageStatusValues,
-} from "./ui-message.js";
-export type {
-  ToUIMessagesOptions,
-  UIAssistantReasoningMessage,
-  UIAssistantTextMessage,
-  UIDebugRawEventMessage,
-  UIErrorMessage,
-  UIFileEditChange,
-  UIFileEditMessage,
-  UIMessage,
-  UIMessageBase,
-  UIMessageStatus,
-  UIOperationMessage,
-  UIProvisioningMetadata,
-  UIProvisioningTranscriptEntry,
-  UIThreadOperationMetadata,
-  UIToolCallMessage,
-  UIToolCallSummary,
-  UIToolExploringMessage,
-  UIToolParsedIntent,
-  UIUserMessage,
-  UIWebSearchMessage,
-} from "./ui-message.js";
+} from "./thread-detail-rows.js";
 
 export {
   viewMessageSchema,
   viewMessageStatusSchema,
   viewMessageStatusValues,
-} from "./view.js";
+} from "./ui-message.js";
 export type {
   ToViewMessagesOptions,
   ViewAssistantReasoningMessage,
@@ -323,4 +263,4 @@ export type {
   ViewToolParsedIntent,
   ViewUserMessage,
   ViewWebSearchMessage,
-} from "./view.js";
+} from "./ui-message.js";

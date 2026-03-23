@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { UIMessage } from "@bb/domain";
+import type { ViewMessage } from "@bb/domain";
 import { ConversationEntry } from "./ConversationEntry";
 
 function baseMessage(): Pick<
-  UIMessage,
+  ViewMessage,
   "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"
 > {
   return {
@@ -18,7 +18,7 @@ function baseMessage(): Pick<
 
 describe("ConversationEntry", () => {
   it("renders assistant text directly without response collapsing UI", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "assistant-text",
       text: "Here is the full assistant response",
@@ -31,7 +31,7 @@ describe("ConversationEntry", () => {
   });
 
   it("does not render a streaming dot for streaming assistant text", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "assistant-text",
       text: "Partial assistant response",
@@ -45,7 +45,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders user image attachment thumbnails when paths are available", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "user",
       text: "Please review this screenshot",
@@ -68,7 +68,7 @@ describe("ConversationEntry", () => {
   });
 
   it("does not render a copy button for attachment-only user messages", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "user",
       text: "   ",
@@ -86,7 +86,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders user local image thumbnails through server attachment endpoint when projectId is provided", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "user",
       text: "",
@@ -107,7 +107,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders non-expandable reasoning when expanded content matches title", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "assistant-reasoning",
       text: "**Identifying React presence**",
@@ -123,7 +123,7 @@ describe("ConversationEntry", () => {
   });
 
   it("keeps reasoning expandable when details extend beyond title", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "assistant-reasoning",
       text: "**Identifying React presence**\\nLooking for package hints.",
@@ -137,7 +137,7 @@ describe("ConversationEntry", () => {
   });
 
   it("caps expanded reasoning details in a scroll container", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "assistant-reasoning",
       text: "**Identifying React presence**\nLooking for package hints.",
@@ -151,7 +151,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders collapsed tool-call summary as 'Ran <command>'", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -171,7 +171,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders interrupted tool-call summary as 'Declined <command>'", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -187,7 +187,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders failed exec_command rows without destructive red styling", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -205,7 +205,7 @@ describe("ConversationEntry", () => {
   });
 
   it("does not shimmer failed exec_command rows when ongoing labels are preferred", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -223,7 +223,7 @@ describe("ConversationEntry", () => {
   });
 
   it("keeps completed tool activity summaries stable when expanded", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -246,7 +246,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders ANSI-colored tool output instead of raw escape codes", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -263,7 +263,7 @@ describe("ConversationEntry", () => {
   });
 
   it("keeps tool output on a single line and scrollable instead of wrapping", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -281,7 +281,7 @@ describe("ConversationEntry", () => {
 
   it("clamps expanded tool-call command lines to two lines", () => {
     const longCommand = "python -c \"print('this is a very long command that should wrap across more than two lines in the UI display')\" --flag-one --flag-two --flag-three --flag-four";
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-call",
       toolName: "exec_command",
@@ -297,7 +297,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders exploring rows with collapsed count summary", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
       status: "completed",
@@ -365,7 +365,7 @@ describe("ConversationEntry", () => {
   });
 
   it("includes list intent counts in exploring summary", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
       status: "completed",
@@ -402,7 +402,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders pending exploring rows with a trailing ellipsis", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
       status: "pending",
@@ -431,7 +431,7 @@ describe("ConversationEntry", () => {
   });
 
   it("caps expanded exploring details in a scroll container", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
       status: "pending",
@@ -470,13 +470,13 @@ describe("ConversationEntry", () => {
   });
 
   it("renders web-search rows with pending/completed labels", () => {
-    const pending: UIMessage = {
+    const pending: ViewMessage = {
       ...baseMessage(),
       kind: "web-search",
       callId: "web-1",
       status: "pending",
     };
-    const completed: UIMessage = {
+    const completed: ViewMessage = {
       ...baseMessage(),
       kind: "web-search",
       callId: "web-2",
@@ -494,7 +494,7 @@ describe("ConversationEntry", () => {
   });
 
   it("prefers ongoing labels for the latest completed exploring row", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
       status: "completed",
@@ -526,7 +526,7 @@ describe("ConversationEntry", () => {
   });
 
   it("prefers ongoing labels for the latest completed web search row", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "web-search",
       callId: "web-1",
@@ -544,7 +544,7 @@ describe("ConversationEntry", () => {
   });
 
   it("uses exploring count summary for latest exploring presentation", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "tool-exploring",
       status: "completed",
@@ -574,7 +574,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders file-edit summary as 'Edited <filename>'", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-1",
@@ -595,7 +595,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders pending file-edit summaries with shimmer feedback", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-pending-1",
@@ -615,7 +615,7 @@ describe("ConversationEntry", () => {
   });
 
   it("uses unique files for collapsed '+N more' file-edit summaries", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-dedupe",
@@ -640,7 +640,7 @@ describe("ConversationEntry", () => {
   });
 
   it("shows up to 3 filenames in aggregated file-edit summaries", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-multi-name-summary",
@@ -674,7 +674,7 @@ describe("ConversationEntry", () => {
   });
 
   it("auto-expands only the latest diff while aggregated activity is active", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-active-auto-expand",
@@ -705,7 +705,7 @@ describe("ConversationEntry", () => {
   });
 
   it("keeps the latest aggregated file diff expanded when the row is expanded", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-inactive-collapsed",
@@ -729,7 +729,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders file-add summary as 'Created <filename>'", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-2",
@@ -749,7 +749,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders file-delete summary as 'Deleted <filename>'", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-3",
@@ -769,7 +769,7 @@ describe("ConversationEntry", () => {
   });
 
   it("counts created-file stats from plain content diffs", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-plain-add",
@@ -789,7 +789,7 @@ describe("ConversationEntry", () => {
   });
 
   it("counts deleted-file stats from plain content diffs", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-plain-del",
@@ -809,7 +809,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders rename details for moved files", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-4",
@@ -831,7 +831,7 @@ describe("ConversationEntry", () => {
   });
 
   it("hides directory paths in expanded file-edit rows", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "file-edit",
       callId: "edit-absolute-path",
@@ -851,7 +851,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders collapsed error rows with normalized provisioning title", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "error",
       rawType: "system/error",
@@ -867,7 +867,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders multiline provisioning errors in a preformatted block", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "error",
       rawType: "system/error",
@@ -885,7 +885,7 @@ describe("ConversationEntry", () => {
   });
 
   it("splits provisioning error bullet details onto separate lines", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "error",
       rawType: "system/error",
@@ -901,7 +901,7 @@ describe("ConversationEntry", () => {
   });
 
   it("splits provisioning error bullet details with literal newlines from events", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "error",
       rawType: "system/error",
@@ -917,7 +917,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders non-expandable error rows when no details are available", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "error",
       rawType: "system/error",
@@ -932,7 +932,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders merged provisioning operations with explored-style summary", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -949,7 +949,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders provisioning details from transcript entries", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -966,7 +966,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders checked out branch details for worktree provisioning", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -986,7 +986,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders transcript branch lines with their captured sha", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1005,7 +1005,7 @@ describe("ConversationEntry", () => {
   });
 
   it("does not show additional details when provisioning only has structured fields", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1021,7 +1021,7 @@ describe("ConversationEntry", () => {
   });
 
   it("shows unstructured provisioning details under additional details", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1042,7 +1042,7 @@ describe("ConversationEntry", () => {
   });
 
   it("does not show additional details when transcript is fully structured", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1062,7 +1062,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders provisioning metadata with failed setup transcript entry", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1084,7 +1084,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders streamed provisioning output as transcript entries", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1106,7 +1106,7 @@ describe("ConversationEntry", () => {
   });
 
   it("shows timeout info in transcript when setup timed out", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1125,7 +1125,7 @@ describe("ConversationEntry", () => {
   });
 
   it("omits prepare-environment transcript lines from provisioning rows", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1153,7 +1153,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders in-progress provisioning summaries without terminal duration copy", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1189,7 +1189,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders provider session progress after setup details in provisioning transcripts", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1215,7 +1215,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders setup-only provisioning summaries as completed when env setup finished", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
@@ -1233,7 +1233,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders completed primary-checkout operation titles", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "operation",
@@ -1251,7 +1251,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders completed primary-checkout demote operations", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "operation",
@@ -1269,7 +1269,7 @@ describe("ConversationEntry", () => {
   });
 
   it("keeps in-progress primary-checkout operation titles with shimmer", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "operation",
@@ -1292,7 +1292,7 @@ describe("ConversationEntry", () => {
     const promptText =
       "Please squash-merge the changes in this thread workspace.\n" +
       "Please use the default merge-base branch reported by git.";
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "operation",
@@ -1319,7 +1319,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders running operation summaries with shimmer feedback", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "operation",
@@ -1339,7 +1339,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders mcp progress operations with shimmer feedback", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "mcp-progress",
@@ -1354,7 +1354,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders plan-updated operations as expandable rows", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "operation",
       opType: "plan-updated",
@@ -1368,7 +1368,7 @@ describe("ConversationEntry", () => {
   });
 
   it("expands latest error rows with concise missing-folder recovery text", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "error",
       rawType: "system/error",
@@ -1390,7 +1390,7 @@ describe("ConversationEntry", () => {
   });
 
   it("renders debug raw event rows when provided by projector", () => {
-    const message: UIMessage = {
+    const message: ViewMessage = {
       ...baseMessage(),
       kind: "debug/raw-event",
       rawType: "account/updated",

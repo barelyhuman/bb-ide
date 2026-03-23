@@ -7,12 +7,12 @@ import {
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
-  threadDetailRowSchema,
+  timelineRowSchema,
   threadContextWindowUsageSchema,
   threadQueuedMessageSchema,
   threadStatusSchema,
   threadTypeSchema,
-  uiMessageSchema,
+  viewMessageSchema,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 
@@ -705,7 +705,7 @@ export const timelineToolDetailsRequestSchema = threadToolGroupMessagesRequestSc
 export type TimelineToolDetailsRequest = ThreadToolGroupMessagesRequest;
 
 export const threadToolGroupMessagesResponseSchema = z.object({
-  messages: z.array(uiMessageSchema),
+  messages: z.array(viewMessageSchema),
 });
 export type ThreadToolGroupMessagesResponse = z.infer<
   typeof threadToolGroupMessagesResponseSchema
@@ -715,7 +715,7 @@ export const timelineToolDetailsResponseSchema =
 export type TimelineToolDetailsResponse = ThreadToolGroupMessagesResponse;
 
 export const threadTimelineResponseSchema = z.object({
-  rows: z.array(threadDetailRowSchema),
+  rows: z.array(timelineRowSchema),
   contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
 });
 export type ThreadTimelineResponse = z.infer<

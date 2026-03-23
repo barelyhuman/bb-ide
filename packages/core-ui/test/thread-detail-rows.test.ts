@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { buildThreadDetailRows, type ThreadDetailRow } from "../src/thread-detail-rows.js";
-import type { UIMessage, UIProvisioningTranscriptEntry } from "@bb/domain";
+import { buildTimelineRows, type TimelineRow } from "../src/thread-detail-rows.js";
+import type { ViewMessage, ViewProvisioningTranscriptEntry } from "@bb/domain";
 
 function primaryCheckoutOperation(
   seq: number,
   title: string,
   detail?: string,
-): Extract<UIMessage, { kind: "operation" }> {
+): Extract<ViewMessage, { kind: "operation" }> {
   const threadOperation = (() => {
     switch (title) {
       case "Promoting primary checkout":
@@ -50,9 +50,9 @@ function provisioningOperation(
   detail?: string,
   options?: {
     environmentId?: string;
-    transcript?: UIProvisioningTranscriptEntry[];
+    transcript?: ViewProvisioningTranscriptEntry[];
   },
-): Extract<UIMessage, { kind: "operation" }> {
+): Extract<ViewMessage, { kind: "operation" }> {
   return {
     kind: "operation",
     id: `provisioning-${seq}`,
@@ -85,7 +85,7 @@ function threadOperationIntent(
     phase?: "requested" | "queued" | "running" | "completed" | "failed" | "update";
     operationId?: string;
   },
-): Extract<UIMessage, { kind: "operation" }> {
+): Extract<ViewMessage, { kind: "operation" }> {
   const inferredThreadOperation = (() => {
     switch (title) {
       case "Commit requested":
@@ -139,16 +139,16 @@ function threadOperationIntent(
 }
 
 
-function getOperationRows(messages: UIMessage[]): Array<Extract<UIMessage, { kind: "operation" }>> {
-  return buildThreadDetailRows(messages)
-    .filter((row): row is Extract<ThreadDetailRow, { kind: "message" }> =>
+function getOperationRows(messages: ViewMessage[]): Array<Extract<ViewMessage, { kind: "operation" }>> {
+  return buildTimelineRows(messages)
+    .filter((row): row is Extract<TimelineRow, { kind: "message" }> =>
       row.kind === "message" && row.message.kind === "operation")
     .map((row) => row.message);
 }
 
-describe("buildThreadDetailRows primary-checkout (operation) collapsing", () => {
+describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
   it("does not collapse earlier assistant messages into a tool group", () => {
-    const rows = buildThreadDetailRows([
+    const rows = buildTimelineRows([
       {
         kind: "user",
         id: "user-1",
@@ -300,9 +300,9 @@ describe("buildThreadDetailRows primary-checkout (operation) collapsing", () => 
   });
 });
 
-describe("buildThreadDetailRows reconnect error collapsing", () => {
+describe("buildTimelineRows reconnect error collapsing", () => {
   it("collapses consecutive reconnect retry errors into the latest row", () => {
-    const rows = buildThreadDetailRows([
+    const rows = buildTimelineRows([
       {
         kind: "error",
         id: "error-1",
@@ -351,7 +351,7 @@ describe("buildThreadDetailRows reconnect error collapsing", () => {
   });
 
   it("does not collapse reconnect errors across breaks or retry budgets", () => {
-    const rows = buildThreadDetailRows([
+    const rows = buildTimelineRows([
       {
         kind: "error",
         id: "error-1",
@@ -403,7 +403,7 @@ describe("buildThreadDetailRows reconnect error collapsing", () => {
   });
 });
 
-describe("buildThreadDetailRows provisioning operation collapsing", () => {
+describe("buildTimelineRows provisioning operation collapsing", () => {
   it("collapses multiple provisioning events into one operation row", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
@@ -540,7 +540,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
   });
 
   it("keeps one provisioning row when user interruption lands mid-provisioning", () => {
-    const rows = buildThreadDetailRows([
+    const rows = buildTimelineRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
         transcript: [
           { type: "step", key: "environment", text: "environment: Direct Workspace", status: "completed" },
@@ -578,7 +578,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         rawType: "system/error",
         message: "Thread provisioning failed",
       },
-    ]).filter((row): row is Extract<ThreadDetailRow, { kind: "message" }> => row.kind === "message");
+    ]).filter((row): row is Extract<TimelineRow, { kind: "message" }> => row.kind === "message");
 
     expect(rows).toHaveLength(3);
     expect(rows[0]?.message.kind).toBe("operation");
@@ -671,7 +671,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
   });
 });
 
-describe("buildThreadDetailRows squash merge operation collapsing", () => {
+describe("buildTimelineRows squash merge operation collapsing", () => {
   it("collapses squash merge lifecycle updates into a single row", () => {
     const rows = getOperationRows([
       threadOperationIntent(
@@ -738,7 +738,7 @@ describe("buildThreadDetailRows squash merge operation collapsing", () => {
   });
 });
 
-describe("buildThreadDetailRows commit operation collapsing", () => {
+describe("buildTimelineRows commit operation collapsing", () => {
   it("collapses commit lifecycle updates into a single row", () => {
     const rows = getOperationRows([
       threadOperationIntent(

@@ -1,8 +1,8 @@
 import { assertNever } from "@bb/core-ui";
-import type { ThreadDetailRow, UIMessage } from "@bb/domain";
+import type { TimelineRow, ViewMessage } from "@bb/domain";
 
 function isProvisioningActivityOperation(
-  message: Extract<UIMessage, { kind: "operation" }>,
+  message: Extract<ViewMessage, { kind: "operation" }>,
 ): boolean {
   switch (message.opType) {
     case "provisioning":
@@ -13,7 +13,7 @@ function isProvisioningActivityOperation(
   }
 }
 
-export function isActivityMessage(message: UIMessage): boolean {
+export function isActivityMessage(message: ViewMessage): boolean {
   return (
     message.kind === "tool-call" ||
     message.kind === "file-edit" ||
@@ -24,12 +24,12 @@ export function isActivityMessage(message: UIMessage): boolean {
   );
 }
 
-export function isActivityRow(row: ThreadDetailRow): boolean {
+export function isActivityRow(row: TimelineRow): boolean {
   if (row.kind === "tool-group") return true;
   return isActivityMessage(row.message);
 }
 
-function shouldPreferOngoingLabelsForMessage(message: UIMessage): boolean {
+function shouldPreferOngoingLabelsForMessage(message: ViewMessage): boolean {
   switch (message.kind) {
     case "tool-call":
     case "tool-exploring":
@@ -48,7 +48,7 @@ function shouldPreferOngoingLabelsForMessage(message: UIMessage): boolean {
   }
 }
 
-export function findLatestActivityRowId(rows: ThreadDetailRow[]): string | null {
+export function findLatestActivityRowId(rows: TimelineRow[]): string | null {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
     if (!row) continue;
@@ -58,7 +58,7 @@ export function findLatestActivityRowId(rows: ThreadDetailRow[]): string | null 
 }
 
 export function shouldHighlightLatestActivity(
-  rows: ThreadDetailRow[],
+  rows: TimelineRow[],
   latestActivityRowId: string | null,
 ): boolean {
   if (!latestActivityRowId) return false;
@@ -67,7 +67,7 @@ export function shouldHighlightLatestActivity(
 }
 
 export function shouldPreferOngoingLabelsForRow(
-  row: ThreadDetailRow,
+  row: TimelineRow,
   latestActivityRowId: string | null,
 ): boolean {
   if (row.id !== latestActivityRowId) return false;
@@ -89,7 +89,7 @@ export function shouldPreferOngoingLabelsForRow(
   }
 }
 
-export function findLatestActivityMessageId(messages: UIMessage[]): string | null {
+export function findLatestActivityMessageId(messages: ViewMessage[]): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message) continue;

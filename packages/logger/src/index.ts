@@ -1,36 +1,21 @@
-import path from "node:path";
-import pino, { multistream, type Logger } from "pino";
-import pinoPretty from "pino-pretty";
-import { commonConfig, type LogLevel } from "@bb/config/common";
-import {
-  serializeErrorWithCauses,
-  type SerializedError,
-} from "./error-serializer.js";
-import { RotatingFileStream } from "./rotating-file-stream.js";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import pino from "pino";
+import type { Logger } from "pino";
+import { commonConfig } from "@bb/config/common";
 
-const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
-const DEFAULT_MAX_FILES = 5;
+export type { Logger };
+
+const LOG_DIR = join(commonConfig.BB_DATA_DIR, "logs");
+mkdirSync(LOG_DIR, { recursive: true });
+
+const LOG_FORMAT =
+  process.env.BB_LOG_FORMAT ??
+  (process.env.NODE_ENV === "production" ? "json" : "pretty");
 
 export interface CreateLoggerOptions {
   component: string;
-  dataDir?: string;
-  level?: LogLevel;
-  pretty?: boolean;
-  prettyDestination?: NodeJS.WritableStream;
-  maxBytes?: number;
-  maxFiles?: number;
   base?: Record<string, unknown>;
-}
-
-export type BBLogger = Logger;
-
-function shouldPrettyPrint(pretty: boolean | undefined): boolean {
-  if (typeof pretty === "boolean") {
-    return pretty;
-  }
-
-  const runtimeMode = process.env.BB_RUNTIME_MODE ?? process.env.NODE_ENV;
-  return runtimeMode !== "production";
 }
 
 function sanitizeComponentName(component: string): string {
@@ -42,61 +27,47 @@ function sanitizeComponentName(component: string): string {
   return trimmed.replace(/[^a-zA-Z0-9._-]+/gu, "-");
 }
 
-export function getLogFilePath(args: {
-  dataDir: string;
-  component: string;
-}): string {
-  return path.join(
-    args.dataDir,
-    "logs",
-    `${sanitizeComponentName(args.component)}.log`,
-  );
-}
-
-export function createLogger(options: CreateLoggerOptions): BBLogger {
+export function createLogger(options: CreateLoggerOptions): Logger {
   const component = sanitizeComponentName(options.component);
-  const fileStream = new RotatingFileStream({
-    filePath: getLogFilePath({
-      dataDir: options.dataDir ?? commonConfig.dataDir,
-      component,
-    }),
-    maxBytes: options.maxBytes ?? DEFAULT_MAX_BYTES,
-    maxFiles: options.maxFiles ?? DEFAULT_MAX_FILES,
-  });
-
-  const streams: Array<{ stream: NodeJS.WritableStream }> = [
-    { stream: fileStream },
+  const targets: pino.TransportTargetOptions[] = [
+    {
+      target: "pino-roll",
+      options: {
+        file: join(LOG_DIR, `${component}.log`),
+        frequency: "daily",
+        limit: { count: 5 },
+        size: "10m",
+      },
+      level: commonConfig.BB_LOG_LEVEL,
+    },
   ];
 
-  if (shouldPrettyPrint(options.pretty)) {
-    streams.push({
-      stream: pinoPretty({
-        colorize: false,
-        destination: options.prettyDestination ?? process.stdout,
+  if (LOG_FORMAT === "pretty") {
+    targets.push({
+      target: "pino-pretty",
+      options: {
+        colorize: true,
         ignore: "pid,hostname",
-        translateTime: "SYS:standard",
-      }),
+        translateTime: "HH:MM:ss.l",
+      },
+      level: commonConfig.BB_LOG_LEVEL,
     });
   }
 
+  const transport = pino.transport({ targets });
+
   return pino(
     {
-      level: options.level ?? commonConfig.logLevel,
+      level: commonConfig.BB_LOG_LEVEL,
       base: {
         component,
         ...(options.base ?? {}),
       },
       serializers: {
-        err: serializeErrorWithCauses,
-        error: serializeErrorWithCauses,
+        err: pino.stdSerializers.errWithCause,
+        error: pino.stdSerializers.errWithCause,
       },
     },
-    multistream(streams),
+    transport,
   );
 }
-
-export {
-  RotatingFileStream,
-  serializeErrorWithCauses,
-};
-export type { SerializedError };

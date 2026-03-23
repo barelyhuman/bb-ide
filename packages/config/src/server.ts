@@ -1,34 +1,27 @@
-import path from "node:path";
 import { envsafe, port, str } from "envsafe";
-import { commonConfig, readCommonConfig, type CommonConfig } from "./common.js";
-
-export interface ServerConfig extends CommonConfig {
-  port: number;
-  databaseUrl: string;
-  e2bApiKey?: string;
-}
-
-export function readServerConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
-  const common = readCommonConfig(env);
-  const parsed = envsafe(
-    {
-      BB_SERVER_PORT: port({ default: 3334 }),
-      BB_DATABASE_URL: str({
-        default: path.join(common.dataDir, "server.sqlite"),
-      }),
-      BB_E2B_API_KEY: str({ allowEmpty: true, default: "" }),
-    },
-    { env },
-  );
-
-  return {
-    ...common,
-    port: parsed.BB_SERVER_PORT,
-    databaseUrl: parsed.BB_DATABASE_URL,
-    e2bApiKey: parsed.BB_E2B_API_KEY || undefined,
-  };
-}
-
-export const serverConfig = readServerConfig();
+import { join } from "node:path";
+import { commonConfig } from "./common.js";
 
 export { commonConfig };
+
+export const serverConfig = envsafe({
+  BB_SERVER_PORT: port({
+    desc: "HTTP port for the server",
+    default: 3000,
+    devDefault: 3000,
+  }),
+  BB_DATABASE_URL: str({
+    desc: "SQLite database path. Defaults to $BB_DATA_DIR/bb.db",
+    default: join(commonConfig.BB_DATA_DIR, "bb.db"),
+  }),
+  BB_E2B_API_KEY: str({
+    desc: "E2B API key for ephemeral sandbox provisioning (optional)",
+    default: "",
+    allowEmpty: true,
+  }),
+  BB_E2B_TEMPLATE: str({
+    desc: "E2B sandbox template ID (optional)",
+    default: "",
+    allowEmpty: true,
+  }),
+});

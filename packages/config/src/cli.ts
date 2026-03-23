@@ -1,25 +1,12 @@
 import { envsafe, url } from "envsafe";
-import { commonConfig, readCommonConfig, type CommonConfig } from "./common.js";
-
-export interface CliConfig extends CommonConfig {
-  serverUrl: string;
-}
-
-export function readCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig {
-  const common = readCommonConfig(env);
-  const parsed = envsafe(
-    {
-      BB_SERVER_URL: url({ default: "http://localhost:3334" }),
-    },
-    { env },
-  );
-
-  return {
-    ...common,
-    serverUrl: parsed.BB_SERVER_URL,
-  };
-}
-
-export const cliConfig = readCliConfig();
+import { commonConfig } from "./common.js";
 
 export { commonConfig };
+
+export const cliConfig = envsafe({
+  BB_SERVER_URL: url({
+    desc: "URL of the bb server",
+    default: "http://localhost:3000",
+    devDefault: "http://localhost:3000",
+  }),
+});

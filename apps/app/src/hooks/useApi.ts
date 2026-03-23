@@ -6,17 +6,17 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
-  EnvironmentRecord,
+  Environment,
   PromptInput,
   Project,
   ReasoningLevel,
   Thread,
-  ThreadDetailRow,
+  TimelineRow,
   AvailableModel,
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
-  ThreadWorkStatus,
+  WorkspaceStatus,
   ThreadQueuedMessage,
   ThreadType,
 } from "@bb/domain";
@@ -85,10 +85,10 @@ function resolveThreadScopedPlaceholder<TData>(
 }
 
 export function resolveThreadWorkStatusPlaceholder(
-  previousData: ThreadWorkStatus | null | undefined,
+  previousData: WorkspaceStatus | null | undefined,
   previousQueryKey: QueryKey | undefined,
   nextThreadId: string,
-): ThreadWorkStatus | null | undefined {
+): WorkspaceStatus | null | undefined {
   return resolveThreadScopedPlaceholder(
     previousData,
     previousQueryKey,
@@ -229,7 +229,7 @@ export function buildOptimisticUserThreadRow(
   threadId: string,
   input: PromptInput[],
   createdAt: number,
-): ThreadDetailRow {
+): TimelineRow {
   const id = `optimistic-user-${createdAt}`;
   return {
     kind: "message",
@@ -494,7 +494,7 @@ export function useProjectFileSuggestions(
 }
 
 export function useProjectWorkspaceStatus(projectId: string | undefined) {
-  return useQuery<ThreadWorkStatus>({
+  return useQuery<WorkspaceStatus>({
     queryKey: ["projectWorkspaceStatus", projectId],
     queryFn: () => api.getProjectWorkspaceStatus(projectId ?? ""),
     enabled: Boolean(projectId),
@@ -591,7 +591,7 @@ export function useThreadWorkStatus(
   mergeBaseBranch?: string,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<ThreadWorkStatus | null>({
+  return useQuery<WorkspaceStatus | null>({
     queryKey: [THREAD_WORK_STATUS_QUERY_KEY, id, mergeBaseBranch ?? null],
     queryFn: () => api.getThreadWorkStatus(id, mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
@@ -745,7 +745,7 @@ export function useSystemEnvironments() {
 }
 
 export function useEnvironments(projectId?: string) {
-  return useQuery<EnvironmentRecord[]>({
+  return useQuery<Environment[]>({
     queryKey: ["environments", projectId ?? ""],
     queryFn: () => api.listEnvironments(projectId),
     staleTime: 30_000,

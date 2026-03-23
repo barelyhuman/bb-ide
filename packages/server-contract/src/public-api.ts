@@ -3,7 +3,7 @@ import { hc } from "hono/client";
 import type { EnvironmentDaemonSessionListResponse } from "@bb/env-daemon-contract";
 import type {
   AvailableModel,
-  EnvironmentRecord,
+  Environment,
   Project,
   Thread,
   ThreadEventRow,
@@ -11,7 +11,7 @@ import type {
   ThreadQueuedMessage,
   ThreadGitDiffResponse,
   ThreadType,
-  ThreadWorkStatus,
+  WorkspaceStatus,
 } from "@bb/domain";
 import type {
   EmptyInput,
@@ -110,10 +110,10 @@ export type PublicApiSchema = {
     >;
   };
   "/projects/:id/workspace-status": {
-    $get: Endpoint<PathProjectId, ThreadWorkStatus>;
+    $get: Endpoint<PathProjectId, WorkspaceStatus>;
   };
   "/projects/:id/work-status": {
-    $get: Endpoint<PathProjectId, ThreadWorkStatus>;
+    $get: Endpoint<PathProjectId, WorkspaceStatus>;
   };
   "/projects/:id/attachments": {
     $post: Endpoint<
@@ -131,11 +131,11 @@ export type PublicApiSchema = {
     >;
   };
   "/environments": {
-    $get: Endpoint<{ query?: { projectId?: string } }, EnvironmentRecord[]>;
+    $get: Endpoint<{ query?: { projectId?: string } }, Environment[]>;
   };
   "/environments/:id": {
     $get:
-      | Endpoint<PathId, EnvironmentRecord, 200>
+      | Endpoint<PathId, Environment, 200>
       | Endpoint<PathId, ApiError, 404>;
   };
   /** Performs a git or environment lifecycle operation. Operations are a
@@ -273,7 +273,7 @@ export type PublicApiSchema = {
     $post: Endpoint<PathId, Thread>;
   };
   "/threads/:id/work-status": {
-    $get: Endpoint<PathId & { query?: { mergeBaseBranch?: string } }, ThreadWorkStatus | null>;
+    $get: Endpoint<PathId & { query?: { mergeBaseBranch?: string } }, WorkspaceStatus | null>;
   };
   /** Returns candidate git branch names for merge-base diff comparisons. Used by
    *  the diff UI to let the user choose which branch to compare against. */

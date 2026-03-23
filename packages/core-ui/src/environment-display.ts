@@ -1,10 +1,10 @@
 import type { Environment } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
-  /** Human-readable label: "Primary", "Worktree", "Docker", etc. */
+  /** Human-readable label: "Primary", "Worktree", "Local", etc. */
   label: string;
   /** The environment kind for programmatic use */
-  kind: "primary" | "worktree" | "docker" | "local" | "unknown";
+  kind: "primary" | "worktree" | "local" | "unknown";
   /** The environment ID (for use with --environment flag) */
   id: string;
   /** The filesystem path, if available */
@@ -14,62 +14,48 @@ export interface EnvironmentDisplayInfo {
 }
 
 /**
- * Produce a structured display object for an environment record.
- *
- * The label logic mirrors the UI's `formatThreadEnvironmentLabel()` in
- * `ThreadDetailView.tsx` so that CLI and UI show consistent terminology.
+ * Produce a structured display object for an environment.
  */
 export function formatEnvironmentDisplay(
   environment: Environment,
   projectRootPath?: string,
 ): EnvironmentDisplayInfo {
-  const descriptorPath = environment.path ?? environment.descriptor?.path;
-  const properties = environment.properties;
+  const envPath = environment.path;
 
   // Determine kind + label
   const isPrimary =
     projectRootPath !== undefined &&
-    descriptorPath !== undefined &&
-    normalizePath(descriptorPath) === normalizePath(projectRootPath);
+    envPath !== undefined &&
+    normalizePath(envPath) === normalizePath(projectRootPath);
 
   if (isPrimary) {
     return {
       label: "Direct",
       kind: "primary",
       id: environment.id,
-      path: descriptorPath,
+      path: envPath,
       managed: environment.managed,
     };
   }
 
-  if (properties?.location === "docker") {
-    return {
-      label: "Docker",
-      kind: "docker",
-      id: environment.id,
-      path: descriptorPath,
-      managed: environment.managed,
-    };
-  }
-
-  if (properties?.workspaceKind === "worktree") {
-    const suffix = formatRelativePath(descriptorPath, projectRootPath);
+  if (environment.managed && environment.provisionerId === "worktree") {
+    const suffix = formatRelativePath(envPath, projectRootPath);
     const label = suffix ? `Worktree (${suffix})` : "Worktree";
     return {
       label,
       kind: "worktree",
       id: environment.id,
-      path: descriptorPath,
+      path: envPath,
       managed: environment.managed,
     };
   }
 
-  if (properties?.location === "localhost") {
+  if (envPath) {
     return {
       label: "Local",
       kind: "local",
       id: environment.id,
-      path: descriptorPath,
+      path: envPath,
       managed: environment.managed,
     };
   }
@@ -78,7 +64,7 @@ export function formatEnvironmentDisplay(
     label: "Unknown",
     kind: "unknown",
     id: environment.id,
-    path: descriptorPath,
+    path: envPath,
     managed: environment.managed,
   };
 }

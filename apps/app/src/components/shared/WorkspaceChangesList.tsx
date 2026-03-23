@@ -1,4 +1,4 @@
-import type { ThreadWorkStatus } from "@bb/domain";
+import type { WorkspaceStatus } from "@bb/domain";
 import { openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
@@ -11,11 +11,11 @@ export function WorkspaceChangesList({
   emptyMessage = "No changed files detected.",
   onFileClick,
 }: {
-  files: ThreadWorkStatus["files"];
+  files: WorkspaceStatus["files"];
   threadId?: string;
   maxHeightClassName?: string;
   emptyMessage?: string;
-  onFileClick?: (file: NonNullable<ThreadWorkStatus["files"]>[number]) => void;
+  onFileClick?: (file: NonNullable<WorkspaceStatus["files"]>[number]) => void;
 }) {
   if (!files || files.length === 0) {
     return (

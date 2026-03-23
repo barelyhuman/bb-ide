@@ -30,18 +30,18 @@ import {
   isTerminalAssistantFlushEvent,
 } from "./assistant-buffering.js";
 import type {
-  ToUIMessagesOptions,
-  UIAssistantReasoningMessage,
-  UIAssistantTextMessage,
-  UIFileEditChange,
-  UIFileEditMessage,
-  UIOperationMessage,
-  UIToolCallMessage,
-  UIToolCallSummary,
-  UIToolExploringMessage,
-  UIToolParsedIntent,
-  UIWebSearchMessage,
+  ToViewMessagesOptions,
+  ViewAssistantReasoningMessage,
+  ViewAssistantTextMessage,
+  ViewFileEditChange,
+  ViewFileEditMessage,
   ViewMessage,
+  ViewOperationMessage,
+  ViewToolCallMessage,
+  ViewToolCallSummary,
+  ViewToolExploringMessage,
+  ViewToolParsedIntent,
+  ViewWebSearchMessage,
 } from "@bb/domain";
 
 // --- Projection state machine ---
@@ -49,13 +49,13 @@ import type {
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
-  openAssistantByTurn: Map<string, UIAssistantTextMessage>;
+  openAssistantByTurn: Map<string, ViewAssistantTextMessage>;
   finalizedAssistantTurnKeys: Set<string>;
-  openReasoningByTurn: Map<string, UIAssistantReasoningMessage>;
+  openReasoningByTurn: Map<string, ViewAssistantReasoningMessage>;
   finalizedReasoningTurnKeys: Set<string>;
-  openCompactionsByKey: Map<string, UIOperationMessage>;
+  openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
-  fileEditsByCallId: Map<string, UIFileEditMessage>;
+  fileEditsByCallId: Map<string, ViewFileEditMessage>;
   toolActivity: ToolActivityState;
 }
 
@@ -80,7 +80,7 @@ function createProjectionState(): ProjectionState {
   };
 }
 
-interface RunningExecCall extends UIToolCallSummary {
+interface RunningExecCall extends ViewToolCallSummary {
   threadId: string;
   toolName?: string;
   turnId?: string;
@@ -92,14 +92,14 @@ interface RunningExecCall extends UIToolCallSummary {
 
 interface ToolActivityState {
   runningCallsById: Map<string, RunningExecCall>;
-  activeCell: UIToolExploringMessage | UIToolCallMessage | UIWebSearchMessage | null;
-  historyCells: Array<UIToolExploringMessage | UIToolCallMessage | UIWebSearchMessage>;
+  activeCell: ViewToolExploringMessage | ViewToolCallMessage | ViewWebSearchMessage | null;
+  historyCells: Array<ViewToolExploringMessage | ViewToolCallMessage | ViewWebSearchMessage>;
   finalizedExecCallIds: Set<string>;
   finalizedWebSearchCallIds: Set<string>;
 }
 
 function getCallStatusRank(
-  status: UIToolCallMessage["status"] | undefined,
+  status: ViewToolCallMessage["status"] | undefined,
 ): number {
   if (!status) return 0;
   if (status === "pending") return 1;
@@ -110,9 +110,9 @@ function getCallStatusRank(
 }
 
 function mergeCallStatus(
-  current: UIToolCallMessage["status"] | undefined,
-  incoming: UIToolCallMessage["status"] | undefined,
-): UIToolCallMessage["status"] | undefined {
+  current: ViewToolCallMessage["status"] | undefined,
+  incoming: ViewToolCallMessage["status"] | undefined,
+): ViewToolCallMessage["status"] | undefined {
   if (!incoming) return current;
   if (!current) return incoming;
   return getCallStatusRank(incoming) >= getCallStatusRank(current)
@@ -120,14 +120,14 @@ function mergeCallStatus(
     : current;
 }
 
-function hasSemanticIntent(intents: UIToolParsedIntent[]): boolean {
+function hasSemanticIntent(intents: ViewToolParsedIntent[]): boolean {
   return intents.some((intent) => intent.type !== "unknown");
 }
 
 function chooseParsedIntents(
-  existing: UIToolParsedIntent[],
-  incoming: UIToolParsedIntent[],
-): UIToolParsedIntent[] {
+  existing: ViewToolParsedIntent[],
+  incoming: ViewToolParsedIntent[],
+): ViewToolParsedIntent[] {
   if (incoming.length === 0) return existing;
   if (existing.length === 0) return incoming;
   if (!hasSemanticIntent(existing) && hasSemanticIntent(incoming)) {
@@ -219,7 +219,7 @@ function areExploringCallsCompatible(
   return sameTurn && sameSource;
 }
 
-function syncExploringStatus(cell: UIToolExploringMessage): void {
+function syncExploringStatus(cell: ViewToolExploringMessage): void {
   cell.status = cell.calls.some((call) => call.status === "pending")
     ? "pending"
     : "completed";
@@ -228,7 +228,7 @@ function syncExploringStatus(cell: UIToolExploringMessage): void {
 function findCallInActiveCell(
   activeCell: ToolActivityState["activeCell"],
   callId: string,
-): UIToolCallSummary | UIToolCallMessage | null {
+): ViewToolCallSummary | ViewToolCallMessage | null {
   if (!activeCell) return null;
   if (activeCell.kind === "tool-call" && activeCell.callId === callId) {
     return activeCell;
@@ -242,8 +242,8 @@ function findCallInHistoryCells(
   callId: string,
 ):
   | {
-      cell: UIToolExploringMessage | UIToolCallMessage;
-      call: UIToolCallSummary | UIToolCallMessage;
+      cell: ViewToolExploringMessage | ViewToolCallMessage;
+      call: ViewToolCallSummary | ViewToolCallMessage;
     }
   | null {
   for (let index = state.toolActivity.historyCells.length - 1; index >= 0; index -= 1) {
@@ -263,7 +263,7 @@ function findCallInHistoryCells(
 }
 
 function mergeCallSummary(
-  target: UIToolCallSummary | UIToolCallMessage,
+  target: ViewToolCallSummary | ViewToolCallMessage,
   incoming: ExecCallPartial,
   {
     appendOutput,
@@ -318,7 +318,7 @@ function flushToolActivityBeforeNonToolMessage(state: ProjectionState): void {
 
 function createToolCallMessage(
   call: RunningExecCall,
-): UIToolCallMessage {
+): ViewToolCallMessage {
   return {
     kind: "tool-call",
     id: messageId(call.threadId, "tool", call.callId),
@@ -344,7 +344,7 @@ function createToolCallMessage(
 
 function createExploringMessage(
   call: RunningExecCall,
-): UIToolExploringMessage {
+): ViewToolExploringMessage {
   return {
     kind: "tool-exploring",
     id: messageId(
@@ -635,10 +635,10 @@ function onWebSearchEnd(
 }
 
 function mergeFileChanges(
-  existing: UIFileEditChange[],
-  incoming: UIFileEditChange[],
-): UIFileEditChange[] {
-  const byPath = new Map<string, UIFileEditChange>();
+  existing: ViewFileEditChange[],
+  incoming: ViewFileEditChange[],
+): ViewFileEditChange[] {
+  const byPath = new Map<string, ViewFileEditChange>();
 
   for (const change of existing) {
     byPath.set(change.path, { ...change });
@@ -672,7 +672,7 @@ function upsertFileEdit(
   const existing = state.fileEditsByCallId.get(partial.callId);
 
   if (!existing) {
-    const message: UIFileEditMessage = {
+    const message: ViewFileEditMessage = {
       kind: "file-edit",
       id: messageId(threadId, "file-edit", partial.callId),
       threadId,
@@ -745,7 +745,7 @@ function onCompactionBegin(
     return;
   }
 
-  const message: UIOperationMessage = {
+  const message: ViewOperationMessage = {
     kind: "operation",
     id: messageId(threadId, "op", `compaction:${payload.key}`),
     threadId,
@@ -828,7 +828,7 @@ function flushBufferedAssistantMessages(state: ProjectionState): void {
 
 function finalizePendingMessages(
   state: ProjectionState,
-  options: ToUIMessagesOptions | undefined,
+  options: ToViewMessagesOptions | undefined,
 ): void {
   const shouldPreservePending = shouldPreservePendingMessages(options?.threadStatus);
   const shouldFinalizeBufferedAssistants =
@@ -923,9 +923,9 @@ export interface ThreadEventWithMeta {
   meta: EventMeta;
 }
 
-export function toUIMessages(
+export function toViewMessages(
   events: ThreadEventWithMeta[] | undefined,
-  options?: ToUIMessagesOptions,
+  options?: ToViewMessagesOptions,
 ): ViewMessage[] {
   if (!events || events.length === 0) return [];
 
@@ -1382,5 +1382,3 @@ export function toUIMessages(
   finalizePendingMessages(state, options);
   return state.messages;
 }
-
-export const toViewMessages = toUIMessages;

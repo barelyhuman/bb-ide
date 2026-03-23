@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   Thread,
   ThreadGitDiffResponse,
-  ThreadWorkStatus,
+  WorkspaceStatus,
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
@@ -16,7 +16,7 @@ import {
   resolveThreadWorkStatusPlaceholder,
 } from "./useApi";
 
-function makeStatus(state: ThreadWorkStatus["state"]): ThreadWorkStatus {
+function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
   return {
     state,
     changedFiles: 0,

@@ -1,4 +1,4 @@
-import type { UIWebSearchMessage } from "@bb/domain";
+import type { ViewWebSearchMessage } from "@bb/domain";
 import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "@bb/ui-core";
 import { EventTitle } from "./shared";
 
@@ -6,7 +6,7 @@ export function WebSearchRow({
   message,
   preferOngoingLabels = false,
 }: {
-  message: UIWebSearchMessage;
+  message: ViewWebSearchMessage;
   preferOngoingLabels?: boolean;
 }) {
   const isSearching = message.status === "pending" || preferOngoingLabels;

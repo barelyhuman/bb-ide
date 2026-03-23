@@ -3,7 +3,7 @@ import {
   toRecord,
 } from "@bb/core-ui";
 import type {
-  EnvironmentRecord,
+  Environment,
   Project,
   Thread,
   ThreadType,
@@ -11,7 +11,7 @@ import type {
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
   ThreadQueuedMessage,
-  ThreadWorkStatus,
+  WorkspaceStatus,
   AvailableModel,
   ReasoningLevel,
 } from "@bb/domain";
@@ -277,8 +277,8 @@ export async function uploadPromptAttachment(
   );
 }
 
-export async function getProjectWorkspaceStatus(projectId: string): Promise<ThreadWorkStatus> {
-  return request<ThreadWorkStatus>(
+export async function getProjectWorkspaceStatus(projectId: string): Promise<WorkspaceStatus> {
+  return request<WorkspaceStatus>(
     apiClient.projects[":id"]["workspace-status"].$get({ param: { id: projectId } }),
   );
 }
@@ -480,8 +480,8 @@ export async function markThreadUnread(id: string): Promise<Thread> {
 export async function getThreadWorkStatus(
   id: string,
   mergeBaseBranch?: string,
-): Promise<ThreadWorkStatus | null> {
-  return request<ThreadWorkStatus | null>(
+): Promise<WorkspaceStatus | null> {
+  return request<WorkspaceStatus | null>(
     apiClient.threads[":id"]["work-status"].$get({
       param: { id },
       query: {
@@ -616,8 +616,8 @@ export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]>
   return request<SystemEnvironmentInfo[]>(apiClient.system.environments.$get());
 }
 
-export async function listEnvironments(projectId?: string): Promise<EnvironmentRecord[]> {
-  return request<EnvironmentRecord[]>(
+export async function listEnvironments(projectId?: string): Promise<Environment[]> {
+  return request<Environment[]>(
     apiClient.environments.$get({
       query: {
         ...(projectId ? { projectId } : {}),

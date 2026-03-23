@@ -12,11 +12,9 @@ import {
 
 type CollapsibleTurnMessage = ViewMessage;
 
-export interface BuildThreadDetailRowsOptions {
+export interface BuildTimelineRowsOptions {
   includeToolGroupMessages?: boolean;
 }
-
-export type BuildTimelineRowsOptions = BuildThreadDetailRowsOptions;
 
 function isCollapsibleTurnMessage(message: ViewMessage): message is CollapsibleTurnMessage {
   if (
@@ -313,9 +311,9 @@ function getToolGroupStatus(messages: CollapsibleTurnMessage[]): TimelineToolGro
   );
 }
 
-export function buildThreadDetailRows(
+export function buildTimelineRows(
   messages: ViewMessage[],
-  options?: BuildThreadDetailRowsOptions,
+  options?: BuildTimelineRowsOptions,
 ): TimelineRow[] {
   // Timeline guardrail: keep one canonical row per user-visible operation whenever possible.
   // If new lifecycle/outcome events are added, update these collapse passes so thread timelines
@@ -426,11 +424,4 @@ export function buildThreadDetailRows(
   }
 
   return rows;
-}
-
-export function buildTimelineRows(
-  messages: ViewMessage[],
-  options?: BuildTimelineRowsOptions,
-): TimelineRow[] {
-  return buildThreadDetailRows(messages, options);
 }

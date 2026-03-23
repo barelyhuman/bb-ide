@@ -1,6 +1,6 @@
-import type { UIOperationMessage } from "@bb/domain";
+import type { ViewOperationMessage } from "@bb/domain";
 
-function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolean {
+function shouldShimmerProvisioningOperation(message: ViewOperationMessage): boolean {
   if (message.status !== "pending") return false;
   switch (message.title) {
     case "Environment setup completed":
@@ -12,7 +12,7 @@ function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolea
   }
 }
 
-function shouldShimmerOperation(message: UIOperationMessage): boolean {
+function shouldShimmerOperation(message: ViewOperationMessage): boolean {
   if (message.threadOperation) {
     const status = message.threadOperation.status;
     return status === "requested" || status === "queued" || status === "running" || status === "started";
@@ -32,7 +32,7 @@ function shouldShimmerOperation(message: UIOperationMessage): boolean {
   }
 }
 
-export function shouldShimmerOperationTitle(message: UIOperationMessage): boolean {
+export function shouldShimmerOperationTitle(message: ViewOperationMessage): boolean {
   switch (message.opType) {
     case "mcp-progress":
       return true;

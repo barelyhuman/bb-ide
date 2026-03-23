@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { UIMessage } from "@bb/domain";
-import { buildThreadDetailRows } from "@bb/core-ui";
+import type { ViewMessage } from "@bb/domain";
+import { buildTimelineRows } from "@bb/core-ui";
 
 function baseMessage(
   id: string,
   sourceSeq: number,
-): Pick<UIMessage, "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"> {
+): Pick<ViewMessage, "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"> {
   return {
     id,
     threadId: "thread-1",
@@ -15,9 +15,9 @@ function baseMessage(
   };
 }
 
-describe("buildThreadDetailRows", () => {
+describe("buildTimelineRows", () => {
   it("collapses tool activity before the final assistant message in a turn", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("user-1", 1),
         kind: "user",
@@ -84,7 +84,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
 
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
@@ -109,7 +109,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("does not collapse rows when a turn has no assistant message", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("user-1", 1),
         kind: "user",
@@ -146,12 +146,12 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
   });
 
   it("collapses each turn independently", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("exploring-1", 1),
         kind: "tool-exploring",
@@ -197,14 +197,14 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     const groupedRows = rows.filter((row) => row.kind === "tool-group");
     expect(groupedRows).toHaveLength(2);
     expect(groupedRows.map((row) => row.turnId)).toEqual(["turn-1", "turn-2"]);
   });
 
   it("does not merge exploring messages across non-exploring entries", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("exploring-1", 1),
         kind: "tool-exploring",
@@ -264,7 +264,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     const group = rows.find((row) => row.kind === "tool-group");
     expect(group).toBeDefined();
     if (!group || group.kind !== "tool-group") return;
@@ -278,7 +278,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("merges consecutive exploring rows even when they are not in a tool-group", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("assistant-1", 1),
         kind: "assistant-text",
@@ -330,7 +330,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(2);
     expect(rows[0]?.kind).toBe("message");
     expect(rows[1]?.kind).toBe("message");
@@ -341,7 +341,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("merges consecutive file-edit rows and preserves inline diff entries", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("assistant-1", 1),
         kind: "assistant-text",
@@ -379,7 +379,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(2);
     expect(rows[0]?.kind).toBe("message");
     expect(rows[1]?.kind).toBe("message");
@@ -394,7 +394,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("merges consecutive file-edit rows inside tool groups", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("user-1", 1),
         kind: "user",
@@ -438,7 +438,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
 
     const group = rows.find((row) => row.kind === "tool-group");
@@ -452,7 +452,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("splits tool groups around assistant messages within the same turn", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("tool-1", 1),
         kind: "tool-call",
@@ -487,7 +487,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
 
     expect(rows.map((row) => row.kind)).toEqual([
       "tool-group",
@@ -498,7 +498,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("merges consecutive provisioning operations into a single row", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("provisioning-1", 1),
         kind: "operation",
@@ -534,7 +534,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -547,7 +547,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("merges consecutive reconnect retry errors into a single row", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("error-1", 1),
         kind: "error",
@@ -571,7 +571,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -583,7 +583,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("keeps streamed provisioning transcript on the merged provisioning row", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("provisioning-1", 1),
         kind: "operation",
@@ -616,7 +616,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -633,7 +633,7 @@ describe("buildThreadDetailRows", () => {
     const promptText =
       "Please squash-merge the changes in this thread workspace.\n" +
       "Please use the default merge-base branch reported by git.";
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("squash-requested-1", 1),
         kind: "operation",
@@ -663,7 +663,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -677,7 +677,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("collapses squash merge lifecycle updates into a single row", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("squash-requested-1", 1),
         kind: "operation",
@@ -713,7 +713,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -725,7 +725,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("collapses commit lifecycle updates into a single row", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("commit-running-1", 1),
         kind: "operation",
@@ -750,7 +750,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -762,7 +762,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("collapses in-flight commit lifecycle updates when no terminal outcome exists yet", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("commit-running-1", 1),
         kind: "operation",
@@ -787,7 +787,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -801,7 +801,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("does not merge commit lifecycle updates across different operation ids", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("commit-running-1", 1),
         kind: "operation",
@@ -828,7 +828,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows).toHaveLength(2);
     expect(rows[0]?.kind).toBe("message");
     if (rows[0]?.kind !== "message") return;
@@ -844,7 +844,7 @@ describe("buildThreadDetailRows", () => {
   });
 
   it("keeps compaction and thread title updates visible outside tool groups", () => {
-    const messages: UIMessage[] = [
+    const messages: ViewMessage[] = [
       {
         ...baseMessage("user-1", 1),
         kind: "user",
@@ -890,7 +890,7 @@ describe("buildThreadDetailRows", () => {
       },
     ];
 
-    const rows = buildThreadDetailRows(messages);
+    const rows = buildTimelineRows(messages);
     expect(rows.map((row) => row.kind)).toEqual([
       "message",
       "tool-group",

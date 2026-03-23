@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type {
-  ThreadWorkStatus,
+  WorkspaceStatus,
 } from "@bb/domain"
 import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { HttpError } from "./api"
@@ -9,7 +9,7 @@ import {
   requiresArchiveConfirmation,
 } from "./thread-archive"
 
-function makeStatus(state: ThreadWorkStatus["state"]): ThreadWorkStatus {
+function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
   return {
     state,
     changedFiles: 0,

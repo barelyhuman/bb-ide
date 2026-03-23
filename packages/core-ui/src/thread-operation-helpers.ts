@@ -168,3 +168,4 @@ export function mergeThreadOperationMessages(messages: ViewMessage[]): ViewMessa
 
   return merged;
 }
+

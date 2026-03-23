@@ -1,5 +1,5 @@
 import { CollapsibleHeader, ExpandablePanel, EventCodeBlock } from "@bb/ui-core";
-import type { UIErrorMessage } from "@bb/domain";
+import type { ViewErrorMessage } from "@bb/domain";
 import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
@@ -40,7 +40,7 @@ function normalizeErrorDetailForDisplay(title: string, detail?: string): string 
   return normalizeErrorMessageText(normalized).trim();
 }
 
-function parseErrorDisplay(message: UIErrorMessage): {
+function parseErrorDisplay(message: ViewErrorMessage): {
   title: string;
   detail?: string;
   hint?: string;
@@ -93,7 +93,7 @@ export function ErrorRow({
   message,
   initialExpanded = false,
 }: {
-  message: UIErrorMessage;
+  message: ViewErrorMessage;
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);

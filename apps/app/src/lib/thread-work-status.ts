@@ -1,5 +1,5 @@
 import { assertNever } from "@bb/core-ui";
-import type { ThreadWorkStatus } from "@bb/domain";
+import type { WorkspaceStatus } from "@bb/domain";
 import type { StatusPillVariant } from "@bb/ui-core";
 import {
   formatDirtyWorkspaceLabel,
@@ -7,7 +7,7 @@ import {
 } from "@/lib/workspace-change-summary";
 
 export function threadWorktreeCleanLabel(
-  status: ThreadWorkStatus | undefined,
+  status: WorkspaceStatus | undefined,
 ): string {
   if (!status) {
     return "Clean";
@@ -24,7 +24,7 @@ export function threadWorktreeCleanLabel(
 }
 
 export function threadWorkStatusLabel(
-  status: ThreadWorkStatus | undefined,
+  status: WorkspaceStatus | undefined,
   options?: { cleanLabel?: string },
 ): string {
   if (!status) return "Unknown";
@@ -61,7 +61,7 @@ export interface ThreadGitStatusDisplay {
 }
 
 function formatComparisonSummary(
-  status: ThreadWorkStatus,
+  status: WorkspaceStatus,
   mergeBaseBranch?: string,
 ): string | null {
   const { aheadCount, behindCount } = status;
@@ -92,7 +92,7 @@ function joinStatusSummary(parts: Array<string | null>): string {
 }
 
 export function getThreadGitStatusDisplay(
-  status: ThreadWorkStatus | undefined,
+  status: WorkspaceStatus | undefined,
   options?: {
     mergeBaseBranch?: string;
     showBranchComparison?: boolean;
@@ -192,7 +192,7 @@ export function getThreadGitStatusDisplay(
 }
 
 export function threadWorkStatusDescription(
-  status: ThreadWorkStatus | undefined,
+  status: WorkspaceStatus | undefined,
 ): string {
   if (!status) {
     return "Workspace status is unavailable.";
@@ -236,7 +236,7 @@ export function threadWorkStatusDescription(
 }
 
 export function threadWorkStatusVariant(
-  status: ThreadWorkStatus | undefined,
+  status: WorkspaceStatus | undefined,
   options?: { isArchivedThread?: boolean },
 ): StatusPillVariant {
   if (!status) return "outline";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { PromptInput, ThreadDetailRow } from "@bb/domain"
+import type { PromptInput, TimelineRow } from "@bb/domain"
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,
@@ -15,7 +15,7 @@ function makeUserRow(args: {
     localImagePaths?: string[]
     localFilePaths?: string[]
   }
-}): ThreadDetailRow {
+}): TimelineRow {
   return {
     kind: "message",
     id: "user-1",

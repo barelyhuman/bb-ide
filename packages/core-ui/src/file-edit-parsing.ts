@@ -1,8 +1,8 @@
 import type { ThreadEvent, ThreadEventFileChange } from "@bb/domain";
 import { itemStatusToFileEditStatus } from "./exec-lifecycle.js";
-import type { UIFileEditChange, UIFileEditMessage } from "@bb/domain";
+import type { ViewFileEditChange, ViewFileEditMessage } from "@bb/domain";
 
-export function mapFileChanges(changes: ThreadEventFileChange[]): UIFileEditChange[] {
+export function mapFileChanges(changes: ThreadEventFileChange[]): ViewFileEditChange[] {
   return changes.map((change) => ({
     path: change.path,
     kind: change.kind,
@@ -11,7 +11,7 @@ export function mapFileChanges(changes: ThreadEventFileChange[]): UIFileEditChan
   }));
 }
 
-export interface FileEditPartial extends Partial<UIFileEditMessage> {
+export interface FileEditPartial extends Partial<ViewFileEditMessage> {
   callId: string;
   appendStdout?: boolean;
 }

@@ -1,5 +1,5 @@
 import { ExpandablePanel } from "@bb/ui-core";
-import type { UIToolCallMessage } from "@bb/domain";
+import type { ViewToolCallMessage } from "@bb/domain";
 import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import {
   EventTitle,
@@ -8,7 +8,7 @@ import {
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
 
-function getToolCallTone(message: UIToolCallMessage): "default" | "destructive" {
+function getToolCallTone(message: ViewToolCallMessage): "default" | "destructive" {
   // Shell command rows are common, and failed commands should read like regular
   // command history rather than error alerts. Keep destructive tone for any future
   // non-shell tool rows that may still need stronger emphasis.
@@ -21,7 +21,7 @@ export function ToolCallRow({
   initialExpanded = false,
   preferOngoingLabels = false,
 }: {
-  message: UIToolCallMessage;
+  message: ViewToolCallMessage;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;
 }) {
