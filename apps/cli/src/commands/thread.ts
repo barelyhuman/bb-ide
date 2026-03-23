@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import type { EnvironmentDaemonSessionListResponse } from "@bb/env-daemon-contract";
 import {
   type Thread,
   type ThreadEventRow,
@@ -12,7 +13,6 @@ import {
   type TimelineFormat,
 } from "@bb/core-ui";
 import type {
-  EnvironmentDaemonSessionListResponse,
   SpawnThreadRequest,
   ThreadGitDiffResponse,
   ThreadTimelineResponse,

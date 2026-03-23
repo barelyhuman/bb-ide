@@ -13,6 +13,8 @@ export {
   environmentDaemonProviderFileSchema,
   environmentDaemonProviderLaunchWrapperSchema,
   environmentDaemonProviderSpecSchema,
+  environmentDaemonSessionDebugViewSchema,
+  environmentDaemonSessionListResponseSchema,
   environmentDaemonServerConnectionConfigSchema,
 } from "./control.js";
 export type {
@@ -28,6 +30,8 @@ export type {
   EnvironmentDaemonProviderFilePlacement,
   EnvironmentDaemonProviderLaunchWrapper,
   EnvironmentDaemonProviderSpec,
+  EnvironmentDaemonSessionDebugView,
+  EnvironmentDaemonSessionListResponse,
   EnvironmentDaemonServerConnectionConfig,
 } from "./control.js";
 

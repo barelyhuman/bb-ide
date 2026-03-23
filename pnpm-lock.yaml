@@ -150,6 +150,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@bb/env-daemon-contract':
+        specifier: workspace:*
+        version: link:../../packages/env-daemon-contract
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../../packages/server-contract

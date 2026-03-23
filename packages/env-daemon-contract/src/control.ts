@@ -119,6 +119,42 @@ export type DaemonShutdownResponse = z.infer<
   typeof daemonShutdownResponseSchema
 >;
 
+export const environmentDaemonSessionDebugViewSchema = z.object({
+  id: z.string(),
+  environmentId: z.string(),
+  environmentDaemonId: z.string(),
+  environmentDaemonInstanceId: z.string(),
+  protocolVersion: z.number(),
+  status: z.enum(["active", "expired", "closed", "replaced"]),
+  leaseExpiresAt: z.number(),
+  lastHeartbeatAt: z.number().optional(),
+  closedAt: z.number().optional(),
+  closeReason: z
+    .enum([
+      "daemon_shutdown",
+      "server_shutdown",
+      "lease_expired",
+      "newer_session",
+      "migration",
+      "internal_error",
+    ])
+    .optional(),
+  controlBaseUrl: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type EnvironmentDaemonSessionDebugView = z.infer<
+  typeof environmentDaemonSessionDebugViewSchema
+>;
+
+export const environmentDaemonSessionListResponseSchema = z.object({
+  environmentId: z.string(),
+  sessions: z.array(environmentDaemonSessionDebugViewSchema),
+});
+export type EnvironmentDaemonSessionListResponse = z.infer<
+  typeof environmentDaemonSessionListResponseSchema
+>;
+
 /**
  * Daemon control: daemon-implemented endpoints called by the server.
  *

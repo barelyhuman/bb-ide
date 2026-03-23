@@ -424,85 +424,45 @@ const commandResultFailedPayloadSchema = commandResultPayloadBaseSchema.extend({
   errorMessage: z.string().min(1),
 });
 
-const commandResultCompletedThreadStartPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("thread.start"),
-    result: environmentDaemonCommandResultSchemaByType["thread.start"],
-  });
+type EnvironmentDaemonCompletedCommandResultPayloadByType = {
+  [K in EnvironmentDaemonCommandType]: {
+    commandId: string;
+    channelId: string;
+    state: "completed";
+    commandType: K;
+    result: z.infer<(typeof environmentDaemonCommandResultSchemaByType)[K]>;
+  };
+};
 
-const commandResultCompletedThreadResumePayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("thread.resume"),
-    result: environmentDaemonCommandResultSchemaByType["thread.resume"],
-  });
+type EnvironmentDaemonCompletedCommandResultPayload =
+  EnvironmentDaemonCompletedCommandResultPayloadByType[EnvironmentDaemonCommandType];
 
-const commandResultCompletedTurnRunPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("turn.run"),
-    result: environmentDaemonCommandResultSchemaByType["turn.run"],
-  });
+export type EnvironmentDaemonSessionCommandResultPayload =
+  | z.infer<typeof commandResultStartedPayloadSchema>
+  | z.infer<typeof commandResultFailedPayloadSchema>
+  | EnvironmentDaemonCompletedCommandResultPayload;
 
-const commandResultCompletedTurnSteerPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
+function createCompletedCommandResultPayloadSchema<
+  TType extends EnvironmentDaemonCommandType,
+>(commandType: TType) {
+  return commandResultPayloadBaseSchema.extend({
     state: z.literal("completed"),
-    commandType: z.literal("turn.steer"),
-    result: environmentDaemonCommandResultSchemaByType["turn.steer"],
+    commandType: z.literal(commandType),
+    result: environmentDaemonCommandResultSchemaByType[commandType],
   });
+}
 
-const commandResultCompletedThreadStopPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("thread.stop"),
-    result: environmentDaemonCommandResultSchemaByType["thread.stop"],
-  });
+const completedCommandResultPayloadSchemas =
+  ENVIRONMENT_DAEMON_COMMAND_TYPES.map((commandType) =>
+    createCompletedCommandResultPayloadSchema(commandType),
+  ) as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]];
 
-const commandResultCompletedThreadRenamePayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("thread.rename"),
-    result: environmentDaemonCommandResultSchemaByType["thread.rename"],
-  });
-
-const commandResultCompletedProviderListModelsPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("provider.list_models"),
-    result: environmentDaemonCommandResultSchemaByType["provider.list_models"],
-  });
-
-const commandResultCompletedWorkspaceStatusPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("workspace.status"),
-    result: environmentDaemonCommandResultSchemaByType["workspace.status"],
-  });
-
-const commandResultCompletedWorkspaceDiffPayloadSchema =
-  commandResultPayloadBaseSchema.extend({
-    state: z.literal("completed"),
-    commandType: z.literal("workspace.diff"),
-    result: environmentDaemonCommandResultSchemaByType["workspace.diff"],
-  });
-
-export const environmentDaemonSessionCommandResultPayloadSchema = z.union([
-  commandResultStartedPayloadSchema,
-  commandResultFailedPayloadSchema,
-  commandResultCompletedThreadStartPayloadSchema,
-  commandResultCompletedThreadResumePayloadSchema,
-  commandResultCompletedTurnRunPayloadSchema,
-  commandResultCompletedTurnSteerPayloadSchema,
-  commandResultCompletedThreadStopPayloadSchema,
-  commandResultCompletedThreadRenamePayloadSchema,
-  commandResultCompletedProviderListModelsPayloadSchema,
-  commandResultCompletedWorkspaceStatusPayloadSchema,
-  commandResultCompletedWorkspaceDiffPayloadSchema,
-]);
-export type EnvironmentDaemonSessionCommandResultPayload = z.infer<
-  typeof environmentDaemonSessionCommandResultPayloadSchema
->;
+export const environmentDaemonSessionCommandResultPayloadSchema: z.ZodType<EnvironmentDaemonSessionCommandResultPayload> =
+  z.union([
+    commandResultStartedPayloadSchema,
+    commandResultFailedPayloadSchema,
+    ...completedCommandResultPayloadSchemas,
+  ]);
 
 export interface EnvironmentDaemonSessionToolCallRequestPayload {
   channelId: string;

@@ -246,23 +246,4 @@ export interface ToUIMessagesOptions {
   threadType?: Thread["type"];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-
-export const uiMessageSchema = z.custom<UIMessage>((value) => {
-  if (!isRecord(value)) {
-    return false;
-  }
-  return (
-    typeof value.kind === "string" &&
-    typeof value.id === "string" &&
-    typeof value.threadId === "string" &&
-    typeof value.sourceSeqStart === "number" &&
-    Number.isFinite(value.sourceSeqStart) &&
-    typeof value.sourceSeqEnd === "number" &&
-    Number.isFinite(value.sourceSeqEnd) &&
-    typeof value.createdAt === "number" &&
-    Number.isFinite(value.createdAt)
-  );
-}, "Expected UI message");
+export const uiMessageSchema = z.custom<UIMessage>();

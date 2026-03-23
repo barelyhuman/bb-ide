@@ -101,6 +101,19 @@ export type {
 } from "./thread.js";
 
 export {
+  threadGitDiffCommitSummarySchema,
+  threadGitDiffModeSchema,
+  threadGitDiffResponseSchema,
+  threadGitDiffSelectionSchema,
+} from "./thread-git-diff.js";
+export type {
+  ThreadGitDiffCommitSummary,
+  ThreadGitDiffMode,
+  ThreadGitDiffResponse,
+  ThreadGitDiffSelection,
+} from "./thread-git-diff.js";
+
+export {
   appThreadEventTypeSchema,
   appThreadEventTypeValues,
   threadEnvironmentStartReasonSchema,

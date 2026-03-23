@@ -2,9 +2,17 @@ import {
   availableModelSchema,
   dynamicToolSchema,
   promptInputSchema,
+  threadGitDiffCommitSummarySchema,
+  threadGitDiffModeSchema,
+  threadGitDiffResponseSchema,
+  threadGitDiffSelectionSchema,
   threadExecutionOptionsSchema,
   threadStatusSchema,
   threadWorkStatusSchema,
+  type ThreadGitDiffCommitSummary,
+  type ThreadGitDiffMode,
+  type ThreadGitDiffResponse,
+  type ThreadGitDiffSelection,
   type ThreadEvent,
 } from "@bb/domain";
 import { z } from "zod";
@@ -33,52 +41,22 @@ export type EnvironmentDaemonThreadStartOptions = z.infer<
   typeof environmentDaemonThreadStartOptionsSchema
 >;
 
-export const environmentDaemonThreadGitDiffCommitSummarySchema = z.object({
-  sha: z.string(),
-  shortSha: z.string(),
-  subject: z.string(),
-  authorName: z.string().optional(),
-  authoredAt: z.number().optional(),
-});
-export type EnvironmentDaemonThreadGitDiffCommitSummary = z.infer<
-  typeof environmentDaemonThreadGitDiffCommitSummarySchema
->;
+export const environmentDaemonThreadGitDiffCommitSummarySchema =
+  threadGitDiffCommitSummarySchema;
+export type EnvironmentDaemonThreadGitDiffCommitSummary =
+  ThreadGitDiffCommitSummary;
 
 export const environmentDaemonThreadGitDiffSelectionSchema =
-  z.discriminatedUnion("type", [
-    z.object({
-      type: z.literal("combined"),
-    }),
-    z.object({
-      type: z.literal("commit"),
-      sha: z.string(),
-    }),
-  ]);
-export type EnvironmentDaemonThreadGitDiffSelection = z.infer<
-  typeof environmentDaemonThreadGitDiffSelectionSchema
->;
+  threadGitDiffSelectionSchema;
+export type EnvironmentDaemonThreadGitDiffSelection =
+  ThreadGitDiffSelection;
 
-export const environmentDaemonThreadGitDiffModeSchema = z.enum([
-  "local_uncommitted",
-  "worktree_commits",
-]);
-export type EnvironmentDaemonThreadGitDiffMode = z.infer<
-  typeof environmentDaemonThreadGitDiffModeSchema
->;
+export const environmentDaemonThreadGitDiffModeSchema = threadGitDiffModeSchema;
+export type EnvironmentDaemonThreadGitDiffMode = ThreadGitDiffMode;
 
-export const environmentDaemonThreadGitDiffResponseSchema = z.object({
-  mode: environmentDaemonThreadGitDiffModeSchema,
-  currentBranch: z.string().optional(),
-  mergeBaseBranch: z.string().optional(),
-  mergeBaseRef: z.string().optional(),
-  commits: z.array(environmentDaemonThreadGitDiffCommitSummarySchema),
-  selection: environmentDaemonThreadGitDiffSelectionSchema,
-  diff: z.string(),
-  truncated: z.boolean(),
-});
-export type EnvironmentDaemonThreadGitDiffResponse = z.infer<
-  typeof environmentDaemonThreadGitDiffResponseSchema
->;
+export const environmentDaemonThreadGitDiffResponseSchema =
+  threadGitDiffResponseSchema;
+export type EnvironmentDaemonThreadGitDiffResponse = ThreadGitDiffResponse;
 
 export const ENVIRONMENT_DAEMON_COMMAND_TYPES = [
   "thread.start",

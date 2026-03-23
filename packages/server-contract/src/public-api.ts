@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
+import type { EnvironmentDaemonSessionListResponse } from "@bb/env-daemon-contract";
 import type {
   AvailableModel,
   EnvironmentRecord,
@@ -16,7 +17,6 @@ import type {
   CreateProjectRequest,
   DemotePrimaryCheckoutResponse,
   EnqueueThreadMessageRequest,
-  EnvironmentDaemonSessionListResponse,
   EnvironmentOperationApiError,
   EnvironmentOperationRequest,
   EnvironmentOperationResponse,
