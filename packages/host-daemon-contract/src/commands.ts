@@ -1,9 +1,7 @@
 import {
   availableModelSchema,
   dynamicToolSchema,
-  hostTypeSchema,
   promptInputSchema,
-  threadEventSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
@@ -11,7 +9,7 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 1 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 2 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -246,7 +244,7 @@ export type HostDaemonCommandResult<
 export const hostDaemonCommandMetaSchema = z.object({
   commandId: z.string().min(1),
   cursor: z.number().int().nonnegative(),
-  environmentId: z.string().min(1).optional(),
+  environmentId: z.string().min(1).nullable().optional(),
   threadId: z.string().min(1).optional(),
   createdAt: z.number().int().nonnegative(),
 });
@@ -260,69 +258,7 @@ export type HostDaemonCommandEnvelope = z.infer<
   typeof hostDaemonCommandEnvelopeSchema
 >;
 
-export const hostDaemonEventEnvelopeSchema = z.object({
-  id: z.string().min(1),
-  environmentId: z.string().min(1),
-  threadId: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  createdAt: z.number().int().nonnegative(),
-  event: threadEventSchema,
-});
-export type HostDaemonEventEnvelope = z.infer<
-  typeof hostDaemonEventEnvelopeSchema
->;
-
-export const hostDaemonActiveThreadSchema = z.object({
-  environmentId: z.string().min(1),
-  threadId: z.string().min(1),
-  providerThreadId: z.string().min(1),
-});
-export type HostDaemonActiveThread = z.infer<typeof hostDaemonActiveThreadSchema>;
-
-export const hostDaemonSessionOpenRequestSchema = z.object({
-  hostId: z.string().min(1),
-  instanceId: z.string().min(1),
-  hostName: z.string().min(1),
-  hostType: hostTypeSchema,
-  protocolVersion: z.literal(HOST_DAEMON_PROTOCOL_VERSION),
-  activeThreads: z.array(hostDaemonActiveThreadSchema).optional(),
-});
-export type HostDaemonSessionOpenRequest = z.infer<
-  typeof hostDaemonSessionOpenRequestSchema
->;
-
-export const hostDaemonSessionOpenResponseSchema = z.object({
-  sessionId: z.string().min(1),
-  heartbeatIntervalMs: z.number().int().positive(),
-  leaseTimeoutMs: z.number().int().positive(),
-});
-export type HostDaemonSessionOpenResponse = z.infer<
-  typeof hostDaemonSessionOpenResponseSchema
->;
-
-export const hostDaemonHeartbeatRequestSchema = z.object({
-  sessionId: z.string().min(1),
-  bufferDepth: z.number().int().nonnegative(),
-  lastCommandCursor: z.number().int().nonnegative().optional(),
-});
-export type HostDaemonHeartbeatRequest = z.infer<
-  typeof hostDaemonHeartbeatRequestSchema
->;
-
-export const hostDaemonHeartbeatResponseSchema = z.object({
-  ok: z.literal(true),
-});
-export type HostDaemonHeartbeatResponse = z.infer<
-  typeof hostDaemonHeartbeatResponseSchema
->;
-
-export const hostDaemonCommandBatchSchema = z.object({
-  commands: z.array(hostDaemonCommandEnvelopeSchema),
-});
-export type HostDaemonCommandBatch = z.infer<typeof hostDaemonCommandBatchSchema>;
-
 export const hostDaemonCommandResultReportSchema = z.object({
-  sessionId: z.string().min(1),
   commandId: z.string().min(1),
   cursor: z.number().int().nonnegative(),
   type: hostDaemonCommandTypeSchema,
@@ -334,24 +270,4 @@ export const hostDaemonCommandResultReportSchema = z.object({
 });
 export type HostDaemonCommandResultReport = z.infer<
   typeof hostDaemonCommandResultReportSchema
->;
-
-export const hostDaemonEventBatchRequestSchema = z.object({
-  sessionId: z.string().min(1),
-  events: z.array(hostDaemonEventEnvelopeSchema),
-});
-export type HostDaemonEventBatchRequest = z.infer<
-  typeof hostDaemonEventBatchRequestSchema
->;
-
-export const hostDaemonEventBatchResponseSchema = z.object({
-  highWaterMarks: z.array(
-    z.object({
-      threadId: z.string().min(1),
-      sequence: z.number().int().nonnegative(),
-    }),
-  ),
-});
-export type HostDaemonEventBatchResponse = z.infer<
-  typeof hostDaemonEventBatchResponseSchema
 >;

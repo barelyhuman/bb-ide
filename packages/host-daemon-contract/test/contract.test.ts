@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   createHostDaemonClient,
+  hostDaemonCommandResultSchemaByType,
   hostDaemonCommandSchema,
+  hostDaemonDaemonWsMessageSchema,
   hostDaemonEventBatchRequestSchema,
+  hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
 } from "../src/index.js";
@@ -35,22 +38,22 @@ describe("host-daemon command schemas", () => {
     });
   });
 
-  it("rejects invalid command payloads", () => {
-    expect(() =>
-      hostDaemonCommandSchema.parse({
-        type: "workspace.commit",
-        message: "",
+  it("keeps typed per-command result schemas", () => {
+    expect(
+      hostDaemonCommandResultSchemaByType["workspace.import"].parse({
+        previousBranch: "feature/demo",
+        stashRef: "stash@{0}",
       }),
-    ).toThrow();
+    ).toMatchObject({
+      previousBranch: "feature/demo",
+      stashRef: "stash@{0}",
+    });
 
     expect(() =>
-      hostDaemonCommandSchema.parse({
-        type: "environment.provision",
-        projectId: "proj_123",
-        strategy: "clone",
-        targetPath: "/tmp/project/.bb/env",
+      hostDaemonCommandResultSchemaByType["workspace.commit"].parse({
+        commitSha: "",
       }),
-    ).not.toThrow();
+    ).toThrow();
   });
 });
 
@@ -62,7 +65,7 @@ describe("host-daemon session schemas", () => {
         instanceId: "instance_1",
         hostName: "Michael's MacBook",
         hostType: "persistent",
-        protocolVersion: 1,
+        protocolVersion: 2,
         activeThreads: [
           {
             environmentId: "env_123",
@@ -88,7 +91,6 @@ describe("host-daemon session schemas", () => {
 
     expect(
       hostDaemonEventBatchRequestSchema.parse({
-        sessionId: "session_123",
         events: [
           {
             id: "evt_1",
@@ -105,16 +107,55 @@ describe("host-daemon session schemas", () => {
         ],
       }),
     ).toMatchObject({
-      sessionId: "session_123",
+      events: [
+        {
+          id: "evt_1",
+        },
+      ],
+    });
+  });
+
+  it("restricts websocket messages to notifications and heartbeats", () => {
+    expect(
+      hostDaemonServerWsMessageSchema.parse({
+        type: "commands-available",
+      }),
+    ).toEqual({ type: "commands-available" });
+
+    expect(
+      hostDaemonServerWsMessageSchema.parse({
+        type: "session-close",
+        reason: "replaced",
+      }),
+    ).toMatchObject({
+      type: "session-close",
+      reason: "replaced",
+    });
+
+    expect(
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "heartbeat",
+        payload: {
+          bufferDepth: 3,
+          lastCommandCursor: 12,
+        },
+      }),
+    ).toMatchObject({
+      type: "heartbeat",
     });
   });
 
   it("builds an internal client rooted at /internal", () => {
-    const client = createHostDaemonClient("http://localhost:3334", "secret");
+    const client = createHostDaemonClient("http://localhost:3334", "secret", {
+      sessionId: "session_123",
+    });
 
     expect(client.session.open.$url().pathname).toBe("/internal/session/open");
     expect(client.session.commands.$url().pathname).toBe(
       "/internal/session/commands",
+    );
+    expect(client.session["command-result"].$url().pathname).toBe(
+      "/internal/session/command-result",
     );
   });
 });
