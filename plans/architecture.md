@@ -1,6 +1,6 @@
 # bb Architecture
 
-Reference document for the bb system architecture, data model, and feature set. See `plans/rebuild.md` for the phased implementation plan.
+Reference document for the bb system architecture, data model, and protocol specs. See `plans/rebuild.md` for the phased implementation plan.
 
 ---
 
@@ -16,12 +16,43 @@ App/CLI  <--HTTP-->  Server (cloud)  <--HTTP-->  Host-daemon (per machine)
 | Component | Where | Lifecycle | Role |
 |---|---|---|---|
 | **Server** | Cloud (or local for dev) | Always on, stateless (DB is the state) | HTTP API, DB, WebSocket hub, routes commands to hosts |
-| **Host-daemon** | On each machine | Long-lived, started by CLI/app or as a service | Registers host, provisions environments, runs provider processes, does git operations, relays events to server |
+| **Host-daemon** | On each machine | Long-lived, started by CLI/app or as a service | Registers host, provisions workspaces, runs provider processes, does git operations, relays events to server |
 | **App / CLI** | User's machine | Ephemeral | Pure clients, talk only to server |
 
-The host-daemon manages everything on the machine: one `AgentRuntime` instance per environment (from `@bb/agent-runtime`), provider processes (one per active thread), git workspace operations, and environment provisioning. No separate env worker processes.
-
 All connections use the same pattern: **HTTP for data, WebSocket for notifications only.** WS never carries payloads — just change hints so clients know to refetch. WS notifications are fired automatically by the server's data mutation layer, not by route handlers.
+
+---
+
+## Thread Creation: Host × Workspace
+
+When a user creates a thread, two orthogonal decisions are made:
+
+### Which host?
+
+| Host type | What happens | Who provisions |
+|---|---|---|
+| **Persistent** (user's machine) | Verify daemon is connected | No provisioning — daemon is already running |
+| **Ephemeral** (E2B / cloud sandbox) | Provision sandbox, start daemon inside | **Server** — calls cloud provider API directly |
+
+### Where on that host?
+
+| Workspace strategy | What happens | Managed? | Who provisions |
+|---|---|---|---|
+| **Existing path** | Point at any directory. No provisioning. | No | **Server** — creates env record with `status: ready` |
+| **Worktree** | Create git worktree + branch, run setup script | Yes | **Host-daemon** — via `environment.provision` command |
+| **Clone** | Clone repo, create branch, run setup script | Yes | **Host-daemon** — via `environment.provision` command |
+
+Workspace provisioning happens *on* the host. Host provisioning (for ephemeral hosts) happens *before* workspace provisioning — the server must get a running daemon before it can send workspace commands to it.
+
+### Lifecycle
+
+| Phase | Persistent host | Ephemeral host |
+|---|---|---|
+| **Startup** | Verify daemon connected | Provision sandbox → start daemon inside → daemon connects |
+| **Idle** (no active threads) | Nothing | Possibly suspend to save cost (server-initiated) |
+| **Cleanup** (all threads archived) | Destroy managed workspaces only | Destroy managed workspaces + destroy host |
+
+Host suspension and resume are **server-side orchestration** — the daemon doesn't know or care. From the daemon's perspective, it starts up, connects, and works. Whether it's on a laptop or inside E2B is invisible to it.
 
 ---
 
@@ -54,8 +85,16 @@ hosts: id, name, type, provider, externalId, lastSeenAt, timestamps
 - `id` is stable, generated once per machine, persisted at `$BB_DATA_DIR/host-id`
 - `name` is auto-populated from the OS (e.g., `scutil --get ComputerName` on macOS), user can rename
 - `type`: `persistent` (user's machine) or `ephemeral` (cloud sandbox like E2B), NOT NULL (set explicitly at registration)
+- `provider` — text, nullable. For ephemeral hosts: "e2b", "codespaces", etc. NULL for persistent.
+- `externalId` — text, nullable. Provider-specific identifier for ephemeral hosts.
 - `lastSeenAt` — integer (epoch ms), NOT NULL. Index: `hosts(lastSeenAt)`
-- Auto-registered when a host-daemon connects to the server
+- Persistent hosts: auto-registered when a host-daemon connects to the server
+- Ephemeral hosts: created by the server when provisioning a cloud sandbox
+
+**Host status is derived, not persisted.** The `hosts` table has no `status` column. The server derives status at query time:
+- `connected` — active session with current heartbeat
+- `disconnected` — no active session or lease expired
+- `suspended` — server-initiated pause (ephemeral hosts only, v2)
 
 ### Threads
 
@@ -76,7 +115,17 @@ threads: id, projectId, environmentId, providerId, type, title, status,
 
 **Ownership:** Threads are managed by the user (unparented) or by another thread (`parentThreadId`). This is a handoff primitive — user → manager or manager → user. When a managed thread reaches a terminal state (idle, error), its manager is notified.
 
-**Statuses:** Exactly 5 values: `created`, `provisioning`, `idle`, `active`, `error`. Flow: `created → provisioning → idle ↔ active → error`. Provisioning failures set status to `error` with a distinguishing error code. Do not add intermediate statuses like `provisioned` or `provisioning_failed` — the environment's status and error codes carry that detail.
+**Statuses:** Exactly 5 values: `created`, `provisioning`, `idle`, `active`, `error`. Transitions enforced by a central `transitionThreadStatus` function with an explicit allowed-transitions table:
+
+```
+created → provisioning, idle
+provisioning → idle, error
+idle → active, error
+active → idle, error
+error → active, idle
+```
+
+Do not add intermediate statuses like `provisioned` or `provisioning_failed` — the environment's status and error codes carry that detail.
 
 **Features:**
 - Archive/unarchive — inbox model. Unarchived = active work. Archived = done.
@@ -105,16 +154,6 @@ environments: id, projectId, hostId, path, managed, isGitRepo, provisionerId, pr
 **Environment statuses:** `provisioning → ready → error | destroying`
 
 Multiple threads can share one environment. Managed environments (created by the system) are cleaned up only when zero non-archived threads reference them. Unmanaged environments (user-provided paths) are never cleaned up by the system.
-
-**Creation strategies:**
-
-| Strategy | What happens | Managed? | Handled by |
-|---|---|---|---|
-| **Existing path** | Point at any path on a host. No provisioning. | No | **Server** — creates env record directly with `status: ready` |
-| **Managed worktree** | System creates worktree + branch, runs setup script. | Yes | **Host-daemon** — via `environment.provision` command |
-| **E2B sandbox** | Creates ephemeral cloud sandbox, clones repo, starts host-daemon inside. | Yes | **Server** — calls E2B API directly (stubbed in v1) |
-
-Provisioners run where they need access: managed worktree needs the host filesystem (runs on daemon), E2B needs an API key (runs on server), existing path needs nothing (server creates the DB record). The `environment.provision` command is only for daemon-side provisioners.
 
 **Actions (environment-scoped, extensible later):** commit, squash merge, promote to primary checkout (single atomic daemon command), demote back to default branch. Future: run workflow, open PR.
 
@@ -234,6 +273,8 @@ Each command carries `environmentId` and `threadId` inside its own payload (not 
 
 **Provisioning timeout:** `environment.provision` has a configurable timeout (default: 5 minutes, much longer than the generic 60s command TTL) because large repo checkouts and setup scripts can be slow. Other commands use the standard 60s TTL.
 
+**Cursor advancement:** The daemon may execute multiple commands concurrently (workspace commands serialize per-environment, but commands for different environments or provider commands run in parallel). The cursor must advance contiguously — if commands 5, 6, 7 are fetched and 7 completes first, the cursor stays at 4 until 5 and 6 also complete. This prevents gaps that would cause missed commands on restart.
+
 ### Events (daemon → server)
 
 Daemon posts batches via `POST /internal/session/events`. Each event carries `environmentId`, `threadId`, `sequence`. Server acks with per-thread high-water marks.
@@ -271,7 +312,7 @@ Daemon-driven, server never nudges. On WS drop:
 - **Event ingestion is idempotent** on `(threadId, sequence)`. Server silently accepts already-seen events.
 - **Command cursor persisted to disk.** Daemon writes to `$BB_DATA_DIR/command-cursor` after reporting command results (atomic write: write to temp, rename). On restart, reads from disk and re-fetches from that cursor.
 - **Command result delivery with retry.** After executing a command, the daemon POSTs the result to the server with retry (exponential backoff). The cursor is advanced only after successful POST. If the daemon crashes mid-retry, the cursor wasn't advanced — the command is re-fetched and re-executed on restart. Commands are idempotent.
-- **Command TTL.** Server tracks commands that were fetched but never got a `command-result`. Standard commands: 60s timeout. `environment.provision`: 5 minute timeout. Abandoned commands re-queue once, then error the thread.
+- **Command TTL.** Server tracks commands that were fetched but never got a `command-result`. Standard commands: 60s timeout. `environment.provision`: 5 minute timeout. Abandoned commands re-queue once (retryCount 0 → 1), then error the thread (retryCount 1 → error).
 - **Protocol version mismatch** → 400 rejection with supported versions.
 - **File locking.** Daemon acquires an exclusive lock on `$BB_DATA_DIR/daemon.lock` at startup. If lock is held, another daemon instance is running — the new instance waits or exits.
 
@@ -304,7 +345,7 @@ For existing environments: skip provisioning, just queue `thread.start`.
 - If provisioner fails (e.g., setup script errors), the provisioner's `provision()` method is responsible for rolling back partial state (deleting the worktree it created). The provisioner owns its own cleanup on failure.
 - If daemon crashes mid-provisioning, the command TTL expires and the server marks the thread as `error`. The partially-created worktree is cleaned up when the environment record is deleted (triggers `environment.destroy`, which the provisioner handles idempotently).
 - `environment.provision` is idempotent — provisioner checks if the target path already exists. If it does and is valid, it reports success. If it exists but is invalid (partial state), it cleans up and re-provisions.
-- **Errored environment cleanup:** When a thread errors due to provisioning failure, the environment is also marked as `error`. The managed environment cleanup rule applies: when zero non-archived threads reference a managed environment, the server queues `environment.destroy`. For errored environments with no threads (e.g., user deletes the thread), the server should also clean up. The lease expiry sweep or a dedicated errored-environment sweep handles this — query for managed environments in `error` status with zero referencing threads, queue `environment.destroy`. This prevents leaked worktrees on disk.
+- **Errored environment cleanup:** When a thread errors due to provisioning failure, the environment is also marked as `error`. The managed environment cleanup rule applies: when zero non-archived threads reference a managed environment, the server queues `environment.destroy`. For errored environments with no threads (e.g., user deletes the thread), the server should also clean up. A dedicated sweep handles this — query for managed environments in `error` status with zero referencing threads, queue `environment.destroy`. This prevents leaked worktrees on disk.
 
 ### Command flow examples
 
@@ -321,7 +362,7 @@ Server → if error: marks environment as error, thread as error
 App → POST /threads { provisionerId: "worktree", hostId }
 Server → creates environment record (status: provisioning), creates thread (status: provisioning)
 Server → queues environment.provision command with { mode: "worktree", sourcePath, targetPath, branchName }
-Daemon → calls createWorktree() + runSetupScript() from @bb/workspace
+Daemon → calls provisionWorkspace() from @bb/workspace
 Daemon → reports command-result with { path, isGitRepo: true }
 Server → updates environment (status: ready, path), transitions thread to idle
 Server → queues thread.start if pending input
@@ -349,8 +390,8 @@ Daemon → returns { ok: true }
 **Demote (same host, single command):**
 ```
 App → POST /environments/:id/actions { type: "demote" }
-Server → resolves source env path + primary path + project's default branch
-Server → queues workspace.demote command { environmentId, primaryPath, defaultBranch }
+Server → resolves source env path + primary path + project's default branch + env branch name
+Server → queues workspace.demote command { environmentId, primaryPath, defaultBranch, envBranch }
 Daemon → checks primary clean, checks out default branch, reattaches source to its branch
 Daemon → returns { ok: true }
 ```
@@ -427,21 +468,51 @@ One `AgentRuntime` instance per environment (since `workspacePath` is per-enviro
 
 Server detects daemon death via WS drop + lease timeout (no heartbeat). Marks host disconnected.
 
-**Host statuses:**
+**Host status transitions:**
 ```
-Host statuses:
-  connected — daemon has active session, heartbeat is current
-  disconnected — WS dropped + lease timeout exceeded (any host)
-  suspended — cloud host intentionally paused to save cost (server-initiated)
-
-Transitions:
-  connected → disconnected (heartbeat timeout — unintentional, e.g., crash, laptop sleep)
-  connected → suspended (server suspends cloud host on idle)
-  disconnected → connected (daemon reconnects)
-  suspended → connected (server resumes cloud host on command)
+connected → disconnected (heartbeat timeout — unintentional, e.g., crash, laptop sleep)
+connected → suspended (server suspends ephemeral host on idle)
+disconnected → connected (daemon reconnects)
+suspended → connected (server resumes ephemeral host on command)
 ```
 
-**Host status is derived, not persisted.** The `hosts` table has no `status` column. The server derives status at query time by checking whether the host has an active, non-expired session. `connected` = active session with current heartbeat. `disconnected` = no active session or lease expired. `suspended` = server-initiated pause (cloud hosts only, v2). API responses for hosts include the computed `status` field — the server's data layer adds it at query time, not stored in the `Host` domain type.
+### Managed environment cleanup
+
+When a thread is archived or deleted, the server checks: does this managed environment have zero non-archived threads referencing it? If so, queue `environment.destroy`. A sweep also runs periodically to catch any managed environments in `error` status with zero referencing threads.
+
+### Ephemeral host cleanup
+
+When zero environments remain on an ephemeral host (all destroyed), the server calls the cloud provider API to destroy the host. The host record is kept in the DB (with `disconnected` status) for audit.
+
+---
+
+## Server Data Layer
+
+The server's data mutation functions live in `@bb/db` and take a `DbNotifier` interface for broadcasting change notifications:
+
+```typescript
+// Defined in @bb/db
+interface DbNotifier {
+  notifyThread(threadId: string, changes: string[]): void;
+  notifyProject(projectId: string, changes: string[]): void;
+  notifySystem(changes: string[]): void;
+}
+```
+
+The server's `NotificationHub` implements `DbNotifier`. CLI tools and tests pass a no-op implementation. This keeps notifications automatic (callers can't forget to notify) while keeping `@bb/db` independent of any WS framework.
+
+Change kind literals (`"status-changed"`, `"events-appended"`, etc.) are defined in `@bb/domain` so both `@bb/db` and `@bb/server-contract` can reference them.
+
+### Thread status transitions
+
+Thread status transitions are enforced by a `transitionThreadStatus` function in `@bb/db` with an explicit allowed-transitions map. Any attempt to make an invalid transition throws. Route handlers call `transitionThreadStatus`, never raw status updates. This prevents inconsistent states across the codebase.
+
+### Sweeps
+
+The server runs periodic sweeps:
+- **Command TTL sweep** (~30s): fetched commands past TTL → re-queue once (retryCount 0→1), then error (retryCount 1→error). Different TTLs: 60s standard, 5 min for `environment.provision`.
+- **Lease expiry sweep** (~10s): expired sessions → close session, disconnect host, error active threads.
+- **Managed environment sweep**: managed environments with zero non-archived threads → queue `environment.destroy`.
 
 ---
 
@@ -453,8 +524,8 @@ Transitions:
 |---|---|---|
 | Common | `@bb/config/common` | `BB_DATA_DIR`, `BB_LOG_LEVEL`, `BB_SECRET_TOKEN` |
 | Server | `@bb/config/server` | `BB_SERVER_PORT`, `BB_DATABASE_URL`, `BB_E2B_API_KEY` (optional), `BB_E2B_TEMPLATE` (optional) |
-| Host-daemon | `@bb/config/host-daemon` | `BB_SERVER_URL` |
-| CLI | `@bb/config/cli` | `BB_SERVER_URL` |
+| Host-daemon | `@bb/config/host-daemon` | `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT` |
+| CLI | `@bb/config/cli` | `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT` |
 
 `BB_DATA_DIR` is used by both server and host-daemon. Server: `bb.db`, `logs/server.log`. Host-daemon: `host-id`, `command-cursor`, `daemon.lock`, `logs/host-daemon.log`.
 
@@ -464,7 +535,7 @@ Config sources: env vars and `.env` files. `~/.bb/config.json` deferred (easy to
 
 ## Logger
 
-**Package: `@bb/logger`** — wraps `pino` with per-component log files and built-in rotation. Replaces the old custom rotating JSON line writer (deleted in clean-slate). Less code, better features.
+**Package: `@bb/logger`** — wraps `pino` with per-component log files and built-in rotation.
 
 ```
 $BB_DATA_DIR/logs/
@@ -474,28 +545,12 @@ $BB_DATA_DIR/logs/
 **API:**
 ```typescript
 import { createLogger } from "@bb/logger";
-
-// Root logger — writes to file + optionally stdout
 const log = createLogger({ component: "server" });
-
-// Child logger — inherits file destination, adds context fields
 const threadLog = log.child({ threadId: "thr_abc123" });
-threadLog.info("turn started");  // includes { component: "server", threadId: "thr_abc123" }
+threadLog.info("turn started");
 ```
 
-**Features:**
-- Structured JSON to files (one JSON object per line, greppable)
-- `pino-pretty` for dev terminal output (controlled by `BB_LOG_FORMAT=json|pretty`)
-- Size-based rotation via `pino-roll` (configurable max size + file count, defaults: 10MB / 5 files)
-- Child loggers with inherited context (threadId, environmentId, hostId, etc.)
-- Standard log levels: `trace`, `debug`, `info`, `warn`, `error`, `fatal`
-- Error serialization with stack traces (pino handles this natively, including `.cause` chains)
-
-**What it does NOT have** (not needed for v1):
-- Async context propagation / trace IDs (was in an unmerged branch, never shipped)
-- HTTP request logging middleware (add later if needed)
-- Console interception (the old system hijacked console.log — fragile, unnecessary with pino)
-- Performance monitoring hooks (add later if needed)
+**Features:** structured JSON to files, `pino-pretty` for dev, size-based rotation via `pino-roll` (10MB/5 files), child loggers with inherited context, error serialization with `.cause` chains.
 
 **Dependencies:** `pino`, `pino-roll`, `pino-pretty` (dev). Minimal surface.
 
@@ -503,20 +558,32 @@ threadLog.info("turn started");  // includes { component: "server", threadId: "t
 
 ## Instance Isolation
 
-All state lives under `BB_DATA_DIR` (default: `~/.bb`). Concurrent isolated instances via different `BB_DATA_DIR` + `BB_SERVER_PORT`:
+All state lives under `BB_DATA_DIR` (default: `~/.bb`). A standalone bb instance requires three ports:
+
+| Port | Default | Used by |
+|---|---|---|
+| `BB_SERVER_PORT` | 3000 | Server HTTP + WS |
+| `BB_HOST_DAEMON_PORT` | 3001 | Host-daemon local API (for app/CLI) |
+
+Concurrent isolated instances use different `BB_DATA_DIR` + ports:
 
 ```bash
-BB_DATA_DIR=/tmp/bb-test-1 BB_SERVER_PORT=3001 bb start
-BB_DATA_DIR=/tmp/bb-test-2 BB_SERVER_PORT=3002 bb start
+# Instance 1
+BB_DATA_DIR=~/.bb BB_SERVER_PORT=3000 BB_HOST_DAEMON_PORT=3001 bb start
+
+# Instance 2
+BB_DATA_DIR=/tmp/bb-test BB_SERVER_PORT=3100 BB_HOST_DAEMON_PORT=3101 bb start
 ```
 
 Each gets its own DB, logs, host identity. Tests use temp dirs + in-memory SQLite.
+
+**Port binding is strict.** If the configured port is already in use, the server or daemon exits with a clear error. No fallback to a different port — this would silently break the app/CLI connection and cause confusing failures. The port is part of the instance's identity.
 
 ---
 
 ## Real-time / WebSocket (App/CLI)
 
-Subscribe/unsubscribe per entity, server pushes change-kind arrays. Notification-only — client refetches via HTTP.
+Subscribe/unsubscribe per entity, server pushes change-kind arrays. Notification-only — client refetches via HTTP. Server uses `@hono/node-ws` for WebSocket support.
 
 | Entity | Change kinds |
 |---|---|
@@ -524,15 +591,34 @@ Subscribe/unsubscribe per entity, server pushes change-kind arrays. Notification
 | **System** (global) | host-connected, host-disconnected, environment-created, environment-deleted |
 | **Project** (by ID) | sources-changed, threads-changed |
 
+Client and daemon WebSocket connections are handled by separate protocol handlers (different auth, different message schemas, different lifecycle).
+
 ---
+
+## Host-Daemon Local API
+
+The daemon exposes a small HTTP API on `BB_HOST_DAEMON_PORT` (bound to `127.0.0.1`) for operations that must run on the local machine. The app and CLI call this directly — not through the server.
+
+```
+GET  /host-id        → { hostId: string }
+POST /open           → { path: string }                     // open file/dir in editor
+GET  /status         → { connected: boolean, serverUrl: string }
+POST /restart        → (dev only) triggers graceful restart
+```
+
+**Why not through the server?** These operations are inherently local — opening a file in VS Code, checking daemon connectivity. They must work even if the server is unreachable. They must be instant (no round-trip through a remote server).
+
+**Auth:** None. Bound to `127.0.0.1` only — not accessible from the network.
+
+**Ephemeral hosts don't have a local API.** The app only calls this for persistent hosts on the same machine. For threads running on ephemeral hosts, local operations (open-in-editor, etc.) are disabled with clear UI states.
+
+**Contract:** Defined in a small contract package or as part of `@bb/host-daemon-contract` (separate from the server-facing internal protocol).
 
 ## System / Operational
 
-**Client-side (app/CLI handles directly):** pick-folder (native dialog), open-path (open in editor). Disabled with clear error states for threads on remote hosts.
-
-**Host status in UI:** connection status (connected/disconnected/reconnecting), manual restart button.
-
 **Server-side:** shutdown with blocking thread detection, voice transcription, file attachment upload.
+
+**Host status in UI:** derived from daemon local API (`GET /status`) for the local host, and from server session state for remote/ephemeral hosts.
 
 ---
 
@@ -546,19 +632,20 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 
 | Package | Purpose | Dependencies |
 |---|---|---|
-| `@bb/domain` | Entity types, event types, Zod schemas | zod |
+| `@bb/domain` | Entity types, event types, change kinds, Zod schemas | zod |
 | `@bb/config` | Typed env var config, scoped exports | envsafe |
 | `@bb/logger` | Structured logging, rotation, per-component files | pino, pino-roll, @bb/config |
-| `@bb/db` | Schema, migrations, connection, IDs | @bb/domain, drizzle, better-sqlite3 |
+| `@bb/db` | Schema, migrations, connection, IDs, data functions, `DbNotifier` interface | @bb/domain, drizzle, better-sqlite3 |
 | `@bb/server-contract` | Public + internal API routes, WS protocol, error types, hc() clients | @bb/domain, zod, hono |
 | `@bb/host-daemon-contract` | Commands, events, session protocol, hc() client | @bb/domain, zod, hono |
 | `@bb/agent-runtime` | Provider adapters, registry, runtime | @bb/domain, @bb/templates |
 | `@bb/templates` | Prompt templates | gray-matter, handlebars |
 | `@bb/core-ui` | View transforms (toViewMessages, formatTimeline, detail rows) | @bb/domain, @bb/templates |
-| `@bb/workspace` | Provisioning (worktree, clone), git operations (status, diff, commit, merge, promote), setup scripts | @bb/domain |
+| `@bb/workspace` | `provisionWorkspace() → IWorkspace`, Workspace class (git ops), provisioning (worktree, clone), setup scripts, promote/demote | @bb/domain |
+| `@bb/sandbox-host` | `provisionHost() → ISandboxHost`, E2B sandbox lifecycle (provision, suspend, resume, destroy), daemon bootstrap | @bb/domain, E2B SDK |
 | `@bb/ui-core` | Shared React components | react |
 | `@bb/tsconfig` | Shared TS config | — |
-| `apps/server` | Server implementation | @bb/domain, @bb/config, @bb/logger, @bb/db, @bb/server-contract, @bb/host-daemon-contract |
+| `apps/server` | Server implementation | @bb/domain, @bb/config, @bb/logger, @bb/db, @bb/server-contract, @bb/host-daemon-contract, @bb/sandbox-host |
 | `apps/host-daemon` | Host-daemon implementation | @bb/domain, @bb/config, @bb/logger, @bb/host-daemon-contract, @bb/agent-runtime, @bb/workspace |
 | `apps/app` | Electron/web app | @bb/domain, @bb/core-ui, @bb/ui-core, @bb/server-contract |
 | `apps/cli` | CLI | @bb/domain, @bb/core-ui, @bb/server-contract |
@@ -567,15 +654,15 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 
 | Code | Location |
 |---|---|
-| `Workspace` class, provisioning functions | `@bb/workspace` |
-| Promote/demote commands | `apps/host-daemon` (single atomic command via `@bb/workspace`) |
-| E2B sandbox create/suspend/resume/destroy | `apps/server` (stubbed in v1) |
+| `provisionWorkspace() → IWorkspace`, git ops, provisioning, promote/demote | `@bb/workspace` |
+| `provisionHost() → ISandboxHost`, E2B lifecycle, daemon bootstrap | `@bb/sandbox-host` |
 | Host registration, identity, heartbeat | `apps/host-daemon` |
 | Command routing, AgentRuntime management | `apps/host-daemon` |
-| Environment DB records, thread lifecycle, command queuing | `apps/server` |
+| Data functions, thread status transitions, sweeps | `@bb/db` |
+| Route handlers, command queuing | `apps/server` |
 | Workspace types (WorkspaceStatus, DiffResult, etc.) | `@bb/domain` |
 
-The server never imports `@bb/workspace`. It sends commands to daemons. The daemon imports `@bb/workspace` and uses it when processing commands.
+The server imports `@bb/sandbox-host` for ephemeral host lifecycle. The daemon imports `@bb/workspace` for workspace operations. The server never imports `@bb/workspace` — it sends commands to daemons. The daemon never imports `@bb/sandbox-host` — it doesn't know what kind of host it's running on.
 
 ---
 
@@ -703,6 +790,18 @@ Define typed result schemas per command type (a record mapping command type to i
 Use typed event envelopes (reuse `threadEventSchema` from `@bb/domain`) rather than untyped `z.record()` payloads.
 
 Event ack format: `Record<string, number>` (threadId → high-water mark), not an array of objects.
+
+---
+
+## Stubs and Not-Implemented Boundaries
+
+| Feature | Where it's stubbed | What the stub does |
+|---|---|---|
+| **GitHub repo source** | `project_sources.type = "github_repo"` | Server rejects with 400 "not implemented" |
+| **E2B provisioner** | `apps/server` | Host strategy returns "not available" unless `BB_E2B_API_KEY` is set |
+| **Ephemeral hosts** | `hosts.type = "ephemeral"` | Server rejects creating ephemeral hosts |
+| **Multi-machine** | `project_sources` with different `hostId` | Only one host in v1, data model is ready |
+| **Remote host open-path** | `apps/app` | Disabled state with clear message |
 
 ---
 
