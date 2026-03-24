@@ -31,6 +31,7 @@ import type {
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
+  SystemConfigResponse,
   SystemProviderInfo,
   SystemShutdownAcceptedResponse,
   SystemShutdownBlockedResponse,
@@ -237,6 +238,9 @@ export type PublicApiSchema = {
     >;
   };
 
+  "/system/config": {
+    $get: Endpoint<EmptyInput, SystemConfigResponse>;
+  };
   "/system/models": {
     $get: Endpoint<
       { query?: { providerId?: string; environmentId?: string } },

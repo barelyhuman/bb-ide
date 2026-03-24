@@ -285,6 +285,11 @@ export const projectResponseSchema = projectSchema.extend({
 });
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
+export const systemConfigResponseSchema = z.object({
+  hostDaemonPort: z.number().nullable(),
+});
+export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
+
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env
 });

@@ -20,7 +20,7 @@ import type {
   CreateProjectRequest,
   CreateDraftRequest,
   EnvironmentActionResponse,
-  OpenThreadPathRequest,
+  EnvironmentStatusResponse,
   ProjectFileSuggestion,
   SendDraftRequest,
   SendDraftResponse,
@@ -39,7 +39,7 @@ import type {
   UpdateThreadRequest,
   UploadedPromptAttachment,
 } from "@bb/server-contract";
-import { apiClient, toRelativeUrl } from "./api-client";
+import { apiClient, toRelativeUrl } from "./api-server";
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -270,11 +270,6 @@ export async function uploadPromptAttachment(
   );
 }
 
-export async function getProjectWorkspaceStatus(projectId: string): Promise<WorkspaceStatus> {
-  return request<WorkspaceStatus>(
-    apiClient.projects[":id"]["work-status"].$get({ param: { id: projectId } }),
-  );
-}
 
 export async function transcribeVoiceInput(
   file: File,
@@ -290,21 +285,7 @@ export async function transcribeVoiceInput(
   );
 }
 
-export async function pickProjectFolder(): Promise<{ path: string | null }> {
-  return request<{ path: string | null }>(apiClient.system["pick-folder"].$post({}));
-}
 
-export async function openThreadPathInEditor(
-  threadId: string,
-  req: OpenThreadPathRequest,
-): Promise<void> {
-  await request<unknown>(
-    apiClient.threads[":id"]["open-path"].$post({
-      param: { id: threadId },
-      json: req,
-    }),
-  );
-}
 
 export async function createThread(req: CreateThreadRequest): Promise<Thread> {
   return request<Thread>(apiClient.threads.$post({ json: req }));
@@ -316,7 +297,6 @@ export async function listThreads(
     type?: ThreadType;
     parentThreadId?: string;
     archived?: boolean;
-    includeWorkStatus?: boolean;
   },
   signal?: AbortSignal,
 ): Promise<Thread[]> {
@@ -328,9 +308,6 @@ export async function listThreads(
         ...(filters?.parentThreadId ? { parentThreadId: filters.parentThreadId } : {}),
         ...(filters?.archived !== undefined
           ? { archived: String(filters.archived) as "true" | "false" }
-          : {}),
-        ...(filters?.includeWorkStatus !== undefined
-          ? { includeWorkStatus: String(filters.includeWorkStatus) as "true" | "false" }
           : {}),
       },
     }, requestOptions(signal)),
@@ -350,7 +327,7 @@ export async function listThreadManagerWorkspaceFiles(
   id: string,
 ): Promise<{ files: ManagerWorkspaceFileEntry[] }> {
   return request<{ files: ManagerWorkspaceFileEntry[] }>(
-    apiClient.threads[":id"]["manager-workspace"].files.$get({ param: { id } }),
+    apiClient.threads[":id"].workspace.files.$get({ param: { id } }),
   );
 }
 
@@ -359,7 +336,7 @@ export async function getThreadManagerWorkspaceFile(
   path: string,
 ): Promise<{ path: string; content: string }> {
   return request<{ path: string; content: string }>(
-    apiClient.threads[":id"]["manager-workspace"].file.$get({
+    apiClient.threads[":id"].workspace.file.$get({
       param: { id },
       query: { path },
     }),
@@ -450,18 +427,19 @@ export async function markThreadUnread(id: string): Promise<Thread> {
   return request<Thread>(apiClient.threads[":id"].unread.$post({ param: { id } }));
 }
 
-export async function getThreadWorkStatus(
-  id: string,
+export async function getEnvironmentWorkStatus(
+  environmentId: string,
   mergeBaseBranch?: string,
 ): Promise<WorkspaceStatus | null> {
-  return request<WorkspaceStatus | null>(
-    apiClient.threads[":id"]["work-status"].$get({
-      param: { id },
+  const res = await request<EnvironmentStatusResponse>(
+    apiClient.environments[":id"].status.$get({
+      param: { id: environmentId },
       query: {
         ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
       },
     }),
   );
+  return res.workspace;
 }
 
 export async function getThreadDiffBranches(id: string): Promise<string[]> {
