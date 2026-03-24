@@ -56,3 +56,4 @@ output.txt
 
 # turborepo
 .turbo
+.claude/
