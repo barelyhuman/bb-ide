@@ -8,6 +8,7 @@ import type {
   ProjectSource,
   Thread,
   ThreadEventRow,
+  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
   ThreadType,
@@ -40,6 +41,7 @@ import type {
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
+  WorkspaceFile,
 } from "./api-types.js";
 import type { ApiError } from "./errors.js";
 
@@ -115,7 +117,7 @@ export type PublicApiSchema = {
           projectId?: string;
           type?: ThreadType;
           parentThreadId?: string;
-          includeArchived?: "true" | "false";
+          archived?: "true" | "false";
         };
       },
       Thread[]
@@ -204,6 +206,21 @@ export type PublicApiSchema = {
   "/threads/:id/events": {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
+  "/threads/:id/default-execution-options": {
+    $get: Endpoint<PathId, ThreadExecutionOptions | null>;
+  };
+  "/threads/:id/workspace/files": {
+    $get: Endpoint<
+      PathId & { query?: { query?: string; limit?: string } },
+      WorkspaceFile[]
+    >;
+  };
+  "/threads/:id/workspace/file": {
+    $get: Endpoint<
+      PathId & { query: { path: string } },
+      { path: string; content: string }
+    >;
+  };
 
   "/system/models": {
     $get: Endpoint<
@@ -213,6 +230,9 @@ export type PublicApiSchema = {
   };
   "/system/providers": {
     $get: Endpoint<{ query?: { environmentId?: string } }, SystemProviderInfo[]>;
+  };
+  "/system/providers/:id": {
+    $get: Endpoint<PathId, SystemProviderInfo>;
   };
   "/system/shutdown": {
     $post:

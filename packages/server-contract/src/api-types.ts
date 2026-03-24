@@ -270,6 +270,12 @@ export const systemVoiceTranscriptionResponseSchema = z.object({
 });
 export type SystemVoiceTranscriptionResponse = z.infer<typeof systemVoiceTranscriptionResponseSchema>;
 
+export const workspaceFileSchema = z.object({
+  path: z.string(),
+  name: z.string(),
+});
+export type WorkspaceFile = z.infer<typeof workspaceFileSchema>;
+
 export const environmentPrimaryStatusResponseSchema = z.object({
   isPromoted: z.boolean(),
   currentBranch: z.string().optional(),

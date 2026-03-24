@@ -39,6 +39,7 @@ export {
   timelineToolDetailsResponseSchema,
   updateProjectRequestSchema,
   updateThreadRequestSchema,
+  workspaceFileSchema,
 } from "./api-types.js";
 export type {
   CommitActionResponse,
@@ -69,6 +70,7 @@ export type {
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
+  WorkspaceFile,
 } from "./api-types.js";
 
 export { createApiClient, createPublicApiClient } from "./public-api.js";
