@@ -101,7 +101,7 @@ hosts: id, name, type, provider, externalId, lastSeenAt, timestamps
 Threads are where work gets done.
 
 ```
-threads: id, projectId, environmentId, providerId, type, title, status,
+threads: id, projectId, environmentId, providerId, type, title, titleFallback, status,
          mergeBaseBranch, parentThreadId, archivedAt, lastReadAt, timestamps
 ```
 
@@ -678,6 +678,11 @@ Taking this opportunity to clean up route naming for clarity and consistency.
 - `/system/environments` — replaced by hosts + provisioners
 - `/system/provider` (singular) — redundant with `/system/providers`
 - `/environments/:id/env-daemon/sessions` — replaced by host-scoped sessions
+- `/projects/:id/sources` — sources inlined in project response
+- `/projects/:id/work-status` — workspace status moved to `/environments/:id/status`
+- `/threads/:id/work-status` — workspace status moved to `/environments/:id/status`
+- `/threads/:id/primary-status` — promoted state dropped from API
+- `/environments/:id/primary-status` — replaced by `/environments/:id/status`
 
 ### Routes to rename
 
@@ -687,12 +692,10 @@ Taking this opportunity to clean up route naming for clarity and consistency.
 | `/threads/:id/queue` | `/threads/:id/drafts` | "queue" sounds like a job system, "drafts" matches the UX |
 | `/threads/:id/queue/:queuedMessageId/send` | `/threads/:id/drafts/:draftId/send` | follows from above |
 | `/threads/:id/queue/:queuedMessageId` | `/threads/:id/drafts/:draftId` | follows from above |
-| `/projects/:id/workspace-status` | `/projects/:id/work-status` | consistency with thread work-status |
 | `/projects/:id/manager` | `/projects/:id/managers` | plural, POST to collection |
 | `/threads/:id/tool-group-messages` | `/threads/:id/timeline/tool-details` | sub-resource of timeline |
 | `/threads/:id/git-diff` | `/threads/:id/diff` | shorter, clear enough |
 | `/threads/:id/merge-base-branches` | `/threads/:id/diff/branches` | sub-resource of diff |
-| `/threads/:id/primary-status` | `/environments/:id/primary-status` | environment concern, not thread |
 | `/environments/:id/operations` | `/environments/:id/actions` | matches "environment actions" terminology |
 
 ---

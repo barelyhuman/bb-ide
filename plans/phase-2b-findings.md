@@ -17,29 +17,35 @@
 - Project response now includes sources (no separate route)
 - Workspace status moved to `GET /environments/:id/status`
 - `isPromoted` dropped from API
+- `provisioned` / `provisioning_failed` removed from switch statements
+- `titleFallback` added back to domain type
 
-## Remaining: 143 type errors
+## Remaining: ~120 type errors
 
-### Mechanical fixes (~35 errors)
+### Needs hostId atom + source rework (~12 errors)
 
-| Issue | Errors | Fix |
+The app needs a `localHostIdAtom` (jotai) populated from daemon `GET /host-id` on startup. `null` when no local daemon.
+
+| Issue | Errors | What needs to happen |
 |---|---|---|
-| `provisioned` / `provisioning_failed` in switch statements | 10 | Remove those cases (statuses no longer exist) |
-| `titleFallback` references | 8 | Update function signatures to not expect this field |
-| `rootPath` on Project | 4 | Use `project.sources` from `ProjectResponse` |
-| `workStatus` on Thread | 2 | Remove — now on `GET /environments/:id/status` |
-| `queuedMessages` on Thread | 2 | Separate fetch, not inlined on Thread |
-| `ThreadStatusShape` mismatches | 6 | Update to match new Thread type shape |
-| Various `undefined` vs `null` | ~3 | Fix nullable field access |
+| `project.rootPath` references | 8 | Use `project.sources.find(s => s.hostId === localHostId)?.path` |
+| `useQuickCreateProject` passes `rootPath` | 1 | Pass `{ hostId, sourcePath }` from source lookup |
+| "Change/repair project path" in ProjectList | 2 | Update/add project source, not `rootPath` on project |
+| `rootPathExists` check | 1 | Keep stub for now — needs daemon local API to check |
+
+Environment creation args should NOT include the path — just `{ hostId, provisioningType }`. Server resolves the source path from project_sources.
 
 ### Needs code rework (~44 errors)
 
 | Issue | Errors | What needs to happen |
 |---|---|---|
-| `attachedEnvironment` on Thread | 14 | App fetches environment separately via `GET /environments/:environmentId`. Thread only has `environmentId`. |
-| `primaryCheckout` on Thread | 6 | App derives promoted state by comparing environment `branchName` with primary source branch. No API field. |
+| `attachedEnvironment` on Thread | 14 | Fetch environment separately via `GET /environments/:environmentId`. Thread only has `environmentId`. |
+| `primaryCheckout` on Thread | 6 | Derive from environment branchName vs primary source branch. No API field. |
 | `Environment.properties` (old shape) | 8 | Update to use new Environment fields (`path`, `hostId`, `managed`, `isGitRepo`, `branchName`, `status`) |
 | `SystemEnvironmentInfo` | 6 | Replace with `/environments` + `/hosts` queries |
+| `workStatus` on Thread | 2 | Fetch from `GET /environments/:id/status` |
+| `queuedMessages` on Thread | 2 | Separate fetch, not inlined on Thread |
+| `ThreadStatusShape` mismatches | 6 | Update helper types to match new Thread shape |
 
 ### Needs decision (~10 errors)
 
