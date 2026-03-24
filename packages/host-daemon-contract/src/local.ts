@@ -17,6 +17,11 @@ export const openRequestSchema = z.object({
 });
 export type OpenRequest = z.infer<typeof openRequestSchema>;
 
+export const pickFolderResponseSchema = z.object({
+  path: z.string().nullable(),
+});
+export type PickFolderResponse = z.infer<typeof pickFolderResponseSchema>;
+
 export const statusResponseSchema = z.object({
   connected: z.boolean(),
   serverUrl: z.string(),
@@ -33,6 +38,9 @@ export type HostDaemonLocalSchema = {
   };
   "/open": {
     $post: Endpoint<{ json: OpenRequest }, Record<string, never>>;
+  };
+  "/pick-folder": {
+    $post: Endpoint<EmptyInput, PickFolderResponse>;
   };
   "/status": {
     $get: Endpoint<EmptyInput, StatusResponse>;

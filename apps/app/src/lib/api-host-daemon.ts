@@ -28,3 +28,23 @@ export async function fetchHostId(port: number): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Open a path in the user's default editor via the host daemon.
+ */
+export async function openPath(port: number, path: string): Promise<void> {
+  const daemon = getHostDaemonClient(port);
+  await daemon.open.$post({ json: { path } });
+}
+
+/**
+ * Open a native folder picker dialog via the host daemon.
+ * Returns the selected path, or null if cancelled.
+ */
+export async function pickFolder(port: number): Promise<string | null> {
+  const daemon = getHostDaemonClient(port);
+  const res = await daemon["pick-folder"].$post({});
+  if (!res.ok) return null;
+  const body = (await res.json()) as { path: string | null };
+  return body.path;
+}
