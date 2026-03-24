@@ -6,7 +6,6 @@ import {
   ChevronRight,
   MoreHorizontal,
   PencilLine,
-  Settings,
   UserRoundPlus,
   X,
 } from "lucide-react"
@@ -159,14 +158,6 @@ function AppHeader({
             >
               <Archive className="size-4" />
             </Link>
-            <Link
-              to={`/projects/${projectMatch[1]}/settings`}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Project settings"
-              title="Project settings"
-            >
-              <Settings className="size-4" />
-            </Link>
           </div>
         ) : null}
         {showProjectMenuButton ? (
@@ -228,12 +219,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     /^\/projects\/([^/]+)\/threads\/([^/]+)(?:\/|$)/
   )
   const projectArchivedMatch = location.pathname.match(/^\/projects\/([^/]+)\/archived(?:\/|$)/)
-  const projectSettingsMatch = location.pathname.match(/^\/projects\/([^/]+)\/settings(?:\/|$)/)
   const threadMatch = projectThreadMatch
   const showHeader = location.pathname !== "/" && !threadMatch
   const showFloatingSidebarTrigger = location.pathname === "/"
   const isProjectMainView = Boolean(
-    projectMatch && !threadMatch && !projectSettingsMatch && !projectArchivedMatch
+    projectMatch && !threadMatch && !projectArchivedMatch
   )
   const threadId = projectThreadMatch?.[2] ?? ""
 
@@ -258,19 +248,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
         subtitle: undefined,
       }
-    : projectSettingsMatch
-      ? {
-          title: "",
-          subtitle: undefined,
-          breadcrumbs: [
-            { label: "Projects" },
-            {
-              label: projectLabel ?? projectSettingsMatch[1],
-              to: `/projects/${projectSettingsMatch[1]}`,
-            },
-            { label: "Settings" },
-          ],
-        }
     : projectArchivedMatch
       ? {
           title: "",
@@ -294,9 +271,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const documentTitle = (() => {
     if (threadMatch) {
       return threadDisplayTitle
-    }
-    if (projectSettingsMatch) {
-      return `${projectLabel ?? projectSettingsMatch[1]} · Settings`
     }
     if (projectArchivedMatch) {
       return `${projectLabel ?? projectArchivedMatch[1]} · Archived`

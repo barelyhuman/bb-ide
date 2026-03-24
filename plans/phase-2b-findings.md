@@ -108,7 +108,7 @@ The `Thread`, `Project`, and `Environment` types in `@bb/domain` have changed sh
 | Missing field | Used by | Notes |
 |---|---|---|
 | `rootPath` | `ProjectMainView.tsx` | Not in new Project type; path lives on Source/Environment |
-| `projectInstructions` | `ProjectSettingsView.tsx` | Not in new Project type |
+| `projectInstructions` | `ProjectSettingsView.tsx` | Resolved: view deleted |
 
 ### `Environment` type
 
