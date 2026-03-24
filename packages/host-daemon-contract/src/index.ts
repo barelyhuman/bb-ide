@@ -6,7 +6,6 @@ export {
   environmentDestroyCommandSchema,
   environmentProvisionCommandSchema,
   hostDaemonCommandEnvelopeSchema,
-  hostDaemonCommandMetaSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandResultSchemaByType,
   hostDaemonCommandSchema,
@@ -32,7 +31,6 @@ export {
 export type {
   HostDaemonCommand,
   HostDaemonCommandEnvelope,
-  HostDaemonCommandMeta,
   HostDaemonCommandResult,
   HostDaemonCommandResultByType,
   HostDaemonCommandResultReport,
@@ -41,7 +39,6 @@ export type {
 } from "./commands.js";
 
 export {
-  HOST_DAEMON_SESSION_ID_HEADER,
   createHostDaemonClient,
   hostDaemonActiveThreadSchema,
   hostDaemonCommandBatchSchema,
@@ -54,6 +51,8 @@ export {
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
+  hostDaemonToolCallRequestSchema,
+  hostDaemonToolCallResponseSchema,
 } from "./session.js";
 export type {
   HostDaemonActiveThread,
@@ -69,4 +68,6 @@ export type {
   HostDaemonServerWsMessage,
   HostDaemonSessionOpenRequest,
   HostDaemonSessionOpenResponse,
+  HostDaemonToolCallRequest,
+  HostDaemonToolCallResponse,
 } from "./session.js";

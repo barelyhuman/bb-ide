@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   createHostDaemonClient,
+  hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultSchemaByType,
+  hostDaemonCommandsQuerySchema,
   hostDaemonCommandSchema,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonEventBatchRequestSchema,
+  hostDaemonEventBatchResponseSchema,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
@@ -15,6 +18,8 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonCommandSchema.parse({
         type: "workspace.commit",
+        environmentId: "env_123",
+        threadId: "thr_123",
         message: "Checkpoint work",
         includeUnstaged: true,
       }),
@@ -26,6 +31,8 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
+        environmentId: "env_123",
+        threadId: "thr_123",
         projectId: "proj_123",
         strategy: "worktree",
         sourcePath: "/tmp/project",
@@ -35,6 +42,22 @@ describe("host-daemon command schemas", () => {
     ).toMatchObject({
       type: "environment.provision",
       strategy: "worktree",
+    });
+
+    expect(
+      hostDaemonCommandEnvelopeSchema.parse({
+        id: "hcmd_123",
+        cursor: 7,
+        command: {
+          type: "workspace.commit",
+          environmentId: "env_123",
+          threadId: "thr_123",
+          message: "Checkpoint work",
+        },
+      }),
+    ).toMatchObject({
+      id: "hcmd_123",
+      cursor: 7,
     });
   });
 
@@ -80,6 +103,15 @@ describe("host-daemon session schemas", () => {
     });
 
     expect(
+      hostDaemonCommandsQuerySchema.parse({
+        sessionId: "session_123",
+        afterCursor: "12",
+      }),
+    ).toMatchObject({
+      sessionId: "session_123",
+    });
+
+    expect(
       hostDaemonSessionOpenResponseSchema.parse({
         sessionId: "session_123",
         heartbeatIntervalMs: 5_000,
@@ -91,6 +123,7 @@ describe("host-daemon session schemas", () => {
 
     expect(
       hostDaemonEventBatchRequestSchema.parse({
+        sessionId: "session_123",
         events: [
           {
             id: "evt_1",
@@ -107,11 +140,24 @@ describe("host-daemon session schemas", () => {
         ],
       }),
     ).toMatchObject({
+      sessionId: "session_123",
       events: [
         {
           id: "evt_1",
         },
       ],
+    });
+
+    expect(
+      hostDaemonEventBatchResponseSchema.parse({
+        threadHighWaterMarks: {
+          thr_123: 42,
+        },
+      }),
+    ).toEqual({
+      threadHighWaterMarks: {
+        thr_123: 42,
+      },
     });
   });
 
@@ -135,10 +181,8 @@ describe("host-daemon session schemas", () => {
     expect(
       hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
-        payload: {
-          bufferDepth: 3,
-          lastCommandCursor: 12,
-        },
+        bufferDepth: 3,
+        lastCommandCursor: 12,
       }),
     ).toMatchObject({
       type: "heartbeat",
@@ -146,9 +190,7 @@ describe("host-daemon session schemas", () => {
   });
 
   it("builds an internal client rooted at /internal", () => {
-    const client = createHostDaemonClient("http://localhost:3334", "secret", {
-      sessionId: "session_123",
-    });
+    const client = createHostDaemonClient("http://localhost:3334", "secret");
 
     expect(client.session.open.$url().pathname).toBe("/internal/session/open");
     expect(client.session.commands.$url().pathname).toBe(
