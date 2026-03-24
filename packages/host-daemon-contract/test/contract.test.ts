@@ -65,11 +65,9 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonCommandResultSchemaByType["workspace.import"].parse({
         previousBranch: "feature/demo",
-        stashRef: "stash@{0}",
       }),
     ).toMatchObject({
       previousBranch: "feature/demo",
-      stashRef: "stash@{0}",
     });
 
     expect(() =>

@@ -1,4 +1,4 @@
-import { runGit, WorkspaceError } from "./git.js";
+import { hasUncommittedChanges, runGit, WorkspaceError } from "./git.js";
 import { Workspace } from "./workspace.js";
 
 export interface WorkspaceExport {
@@ -8,7 +8,19 @@ export interface WorkspaceExport {
 
 export interface ImportResult {
   previousBranch?: string;
-  stashRef?: string | null;
+}
+
+async function assertWorkspaceClean(
+  workspace: Workspace,
+  action: "export" | "import",
+): Promise<void> {
+  if (!(await hasUncommittedChanges(workspace.path))) {
+    return;
+  }
+
+  throw new WorkspaceError(
+    `Cannot ${action} a workspace with uncommitted changes`,
+  );
 }
 
 export async function exportWorkspace(
@@ -19,6 +31,8 @@ export async function exportWorkspace(
   if (!branch) {
     throw new WorkspaceError("Cannot export a detached workspace");
   }
+
+  await assertWorkspaceClean(workspace, "export");
 
   if (pushToRemote) {
     await workspace.fetch({ remote: pushToRemote });
@@ -37,6 +51,8 @@ export async function importWorkspace(
   primary: Workspace,
   exportData: WorkspaceExport,
 ): Promise<ImportResult> {
+  await assertWorkspaceClean(primary, "import");
+
   if (exportData.remote) {
     await primary.fetch({
       remote: exportData.remote,
@@ -49,10 +65,7 @@ export async function importWorkspace(
     return { previousBranch };
   }
 
-  const stashRef = await primary.stash("bb-promote");
   await primary.checkoutBranch(exportData.branch);
 
-  return stashRef
-    ? { previousBranch, stashRef }
-    : { previousBranch };
+  return { previousBranch };
 }

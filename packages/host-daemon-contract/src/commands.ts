@@ -231,7 +231,6 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.import": z.object({
     previousBranch: z.string().min(1).optional(),
-    stashRef: z.string().nullable().optional(),
   }),
   "workspace.reattach": z.object({}),
 } as const satisfies Record<HostDaemonCommandType, z.ZodTypeAny>;

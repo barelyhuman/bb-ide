@@ -8,7 +8,7 @@ import {
   exportWorkspace,
   importWorkspace,
 } from "../src/index.js";
-import { runGit } from "../src/git.js";
+import { runGit, WorkspaceError } from "../src/git.js";
 
 const tempDirs: string[] = [];
 
@@ -56,14 +56,6 @@ async function createPrimaryAndWorktree(): Promise<{
   await runGit(["add", "."], { cwd: worktreePath });
   await runGit(["commit", "-m", "Feature work"], { cwd: worktreePath });
   return { primaryRepo, worktreePath };
-}
-
-async function listStashes(repoPath: string): Promise<string[]> {
-  const result = await runGit(["stash", "list"], { cwd: repoPath });
-  return result.stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
 }
 
 afterEach(async () => {
@@ -120,8 +112,6 @@ describe("importWorkspace", () => {
     const result = await importWorkspace(primary, exportData);
 
     expect(result.previousBranch).toBe("main");
-    expect(result.stashRef).toBeUndefined();
-    expect(await listStashes(primaryRepo)).toEqual([]);
   });
 
   it("is idempotent when already on the target branch", async () => {
@@ -149,7 +139,22 @@ describe("importWorkspace", () => {
     expect(await primary.currentBranch).toBe(originalBranch);
   });
 
-  it("stashes dirty primary changes before switching branches", async () => {
+  it("fails to export when the source workspace has uncommitted changes", async () => {
+    const { worktreePath } = await createPrimaryAndWorktree();
+    await fs.writeFile(path.join(worktreePath, "feature.txt"), "dirty export\n", "utf8");
+
+    const workspace = new Workspace(worktreePath);
+
+    await expect(exportWorkspace(workspace)).rejects.toThrow(
+      /uncommitted changes/u,
+    );
+    await expect(exportWorkspace(workspace, "origin")).rejects.toThrow(
+      WorkspaceError,
+    );
+    expect(await workspace.currentBranch).toBe("bb/env-test");
+  });
+
+  it("fails to import when the primary workspace has uncommitted changes", async () => {
     const sourceRepo = await initRepo();
     await initBareRemoteFrom(sourceRepo);
     await runGit(["checkout", "-b", "feature"], { cwd: sourceRepo });
@@ -169,19 +174,12 @@ describe("importWorkspace", () => {
     await fs.writeFile(path.join(primaryRepo, "local.txt"), "dirty local\n", "utf8");
 
     const primary = new Workspace(primaryRepo);
-    const imported = await importWorkspace(primary, remoteExport);
-
-    expect(imported.previousBranch).toBe("main");
-    expect(imported.stashRef).toMatch(/^stash@\{/u);
-    expect(await listStashes(primaryRepo)).toHaveLength(1);
-    expect(await primary.currentBranch).toBe("feature");
-
-    await importWorkspace(primary, { branch: imported.previousBranch ?? "main" });
-    await primary.stashPop(imported.stashRef ?? undefined);
+    await expect(importWorkspace(primary, remoteExport)).rejects.toThrow(
+      /uncommitted changes/u,
+    );
 
     const restored = await fs.readFile(path.join(primaryRepo, "local.txt"), "utf8");
     expect(restored).toContain("dirty local");
-    expect(await listStashes(primaryRepo)).toEqual([]);
     expect(await primary.currentBranch).toBe("main");
   });
 });
