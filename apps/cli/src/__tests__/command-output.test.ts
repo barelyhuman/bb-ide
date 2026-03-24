@@ -37,6 +37,7 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
     type: "standard",
     status: "idle",
     title: null,
+    titleFallback: null,
     mergeBaseBranch: null,
     environmentId: null,
     parentThreadId: null,

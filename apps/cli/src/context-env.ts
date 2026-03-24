@@ -1,4 +1,4 @@
-export const DEFAULT_SERVER_URL = "http://localhost:3333";
+import { cliConfig } from "@bb/config/cli";
 
 function normalizeValue(value?: string): string | undefined {
   if (value === undefined) return undefined;
@@ -6,12 +6,12 @@ function normalizeValue(value?: string): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-export function resolveServerUrlFromEnv(): string | undefined {
-  return normalizeValue(process.env.BB_SERVER_URL);
+export function resolveServerUrl(): string {
+  return cliConfig.BB_SERVER_URL;
 }
 
-export function resolveServerUrl(): string {
-  return resolveServerUrlFromEnv() ?? DEFAULT_SERVER_URL;
+export function resolveHostDaemonUrl(): string {
+  return `http://localhost:${cliConfig.BB_HOST_DAEMON_PORT}`;
 }
 
 export function resolveProjectId(flagValue?: string): string | undefined {
@@ -44,15 +44,12 @@ export interface ContextSnapshot {
   projectId?: string;
   threadId?: string;
   serverUrl: string;
-  serverUrlFromEnv?: string;
 }
 
 export function resolveContextSnapshot(): ContextSnapshot {
-  const serverUrlFromEnv = resolveServerUrlFromEnv();
   return {
     projectId: resolveProjectId(),
     threadId: resolveThreadId(),
-    serverUrl: serverUrlFromEnv ?? DEFAULT_SERVER_URL,
-    serverUrlFromEnv,
+    serverUrl: cliConfig.BB_SERVER_URL,
   };
 }

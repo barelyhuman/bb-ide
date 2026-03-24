@@ -23,16 +23,13 @@ program.addHelpText("after", () => {
   const context = resolveContextSnapshot();
   const project = context.projectId ?? "<unset>";
   const thread = context.threadId ?? "<unset>";
-  const serverEnv = context.serverUrlFromEnv ?? "<unset>";
-  const serverResolved = context.serverUrl;
 
   return `
 
 Current context:
   BB_PROJECT_ID: ${project}
   BB_THREAD_ID: ${thread}
-  BB_SERVER_URL: ${serverEnv}
-  Server URL: ${serverResolved}
+  BB_SERVER_URL: ${context.serverUrl}
 
 Quick start:
   bb status

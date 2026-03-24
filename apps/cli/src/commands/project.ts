@@ -1,6 +1,7 @@
 import { Command } from "commander";
-import { type Project } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
 import { createClient, unwrap } from "../client.js";
+import { fetchLocalHostId } from "../daemon.js";
 import {
   confirmDestructiveAction,
   getErrorMessage,
@@ -17,7 +18,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .action(async (opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const projects = await unwrap<Project[]>(
+        const projects = await unwrap<ProjectResponse[]>(
           client.api.v1.projects.$get(),
         );
         if (outputJson(opts, projects)) return;
@@ -25,7 +26,8 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
           console.log("No projects found");
           return;
         }
-        printProjectTable(projects);
+        const localHostId = await fetchLocalHostId();
+        printProjectTable(projects, localHostId);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -37,23 +39,30 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .description("Create a project")
     .requiredOption("--name <name>", "Project name")
     .requiredOption("--root <path>", "Project source path")
-    .requiredOption("--host <id>", "Host ID for the project source")
+    .option("--host <id>", "Host ID for the project source (auto-detected from daemon if omitted)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { name: string; root: string; host: string; json?: boolean }) => {
+    .action(async (opts: { name: string; root: string; host?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const created = await unwrap<Project>(
+        const hostId = opts.host ?? await fetchLocalHostId();
+        if (!hostId) {
+          throw new Error(
+            "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
+          );
+        }
+        const created = await unwrap<ProjectResponse>(
           client.api.v1.projects.$post({
             json: {
               name: opts.name,
               sourcePath: opts.root,
-              hostId: opts.host,
+              hostId,
             },
           }),
         );
         if (outputJson(opts, created)) return;
         console.log(`Project created: ${created.id}`);
-        printProject(created);
+        const localHostId = await fetchLocalHostId();
+        printProject(created, localHostId);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -67,13 +76,14 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .action(async (id: string, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const found = await unwrap<Project>(
+        const found = await unwrap<ProjectResponse>(
           client.api.v1.projects[":id"].$get({
             param: { id },
           }),
         );
         if (outputJson(opts, found)) return;
-        printProject(found);
+        const localHostId = await fetchLocalHostId();
+        printProject(found, localHostId);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -95,7 +105,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         }
         const body: Record<string, unknown> = {};
         if (opts.name) body.name = opts.name;
-        const updated = await unwrap<Project>(
+        const updated = await unwrap<ProjectResponse>(
           client.api.v1.projects[":id"].$patch({
             param: { id },
             json: body,
@@ -103,7 +113,8 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         );
         if (outputJson(opts, updated)) return;
         console.log(`Project ${updated.id} updated`);
-        printProject(updated);
+        const localHostId = await fetchLocalHostId();
+        printProject(updated, localHostId);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -142,32 +153,46 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
 
 }
 
-function printProject(project: Project): void {
+function printProject(project: ProjectResponse, localHostId: string | null): void {
   console.log("");
   console.log(`  ID:       ${project.id}`);
   console.log(`  Name:     ${project.name}`);
   console.log(`  Created:  ${new Date(project.createdAt).toLocaleString()}`);
   console.log(`  Updated:  ${new Date(project.updatedAt).toLocaleString()}`);
+  if (project.sources.length > 0) {
+    console.log("  Sources:");
+    for (const source of project.sources) {
+      const local = localHostId && source.hostId === localHostId ? " (local)" : "";
+      const path = source.path ?? source.repoUrl ?? "-";
+      console.log(`    ${source.hostId}${local}  ${source.type}  ${path}`);
+    }
+  }
   console.log("");
 }
 
-function printProjectTable(projects: Project[]): void {
+function printProjectTable(projects: ProjectResponse[], localHostId: string | null): void {
   const idWidth = Math.max(4, ...projects.map((p) => p.id.length));
   const nameWidth = Math.max(4, ...projects.map((p) => p.name.length));
 
   const header = [
     "ID".padEnd(idWidth),
     "Name".padEnd(nameWidth),
+    "Local Path",
   ].join("  ");
 
   console.log("");
   console.log(header);
   console.log("-".repeat(header.length));
   for (const project of projects) {
+    const localSource = localHostId
+      ? project.sources.find((s) => s.hostId === localHostId)
+      : undefined;
+    const path = localSource?.path ?? "-";
     console.log(
       [
         project.id.padEnd(idWidth),
         project.name.padEnd(nameWidth),
+        path,
       ].join("  "),
     );
   }

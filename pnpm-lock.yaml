@@ -144,12 +144,18 @@ importers:
 
   apps/cli:
     dependencies:
+      '@bb/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@bb/core-ui':
         specifier: workspace:*
         version: link:../../packages/core-ui
       '@bb/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@bb/host-daemon-contract':
+        specifier: workspace:*
+        version: link:../../packages/host-daemon-contract
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../../packages/server-contract

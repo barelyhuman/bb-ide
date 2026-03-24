@@ -12,10 +12,13 @@ import {
 } from "@bb/core-ui";
 import type {
   CreateThreadRequest,
+  EnvironmentStatusResponse,
+  ProjectResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
+import { fetchLocalHostId } from "../daemon.js";
 import {
   confirmDestructiveAction,
   getErrorMessage,
@@ -530,9 +533,19 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
       );
 
-      // TODO: Project no longer has rootPath — resolve via ProjectSource.
-      // See phase-2a-findings.md.
-      const projectRootPath: string | undefined = undefined;
+      const localHostId = await fetchLocalHostId();
+      let projectRootPath: string | undefined;
+      try {
+        const project = await unwrap<ProjectResponse>(
+          client.api.v1.projects[":id"].$get({ param: { id: thread.projectId } }),
+        );
+        const localSource = localHostId
+          ? project.sources.find((s) => s.hostId === localHostId)
+          : project.sources[0];
+        projectRootPath = localSource?.path ?? undefined;
+      } catch {
+        // Project fetch failed; leave rootPath undefined
+      }
 
       const events =
         recentEvents === undefined
@@ -551,13 +564,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       });
 
       let workStatus: WorkspaceStatus | null | undefined;
-      if (opts.workStatus) {
-        workStatus = await unwrap<WorkspaceStatus | null>(
-          client.api.v1.threads[":id"]["work-status"].$get({
-            param: { id: threadId },
+      if (opts.workStatus && thread.environmentId) {
+        const envStatus = await unwrap<EnvironmentStatusResponse>(
+          client.api.v1.environments[":id"].status.$get({
+            param: { id: thread.environmentId },
             query: {},
           }),
         );
+        workStatus = envStatus.workspace;
       }
 
       let gitDiff: ThreadGitDiffResponse | undefined;

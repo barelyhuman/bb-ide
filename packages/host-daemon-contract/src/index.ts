@@ -1,6 +1,16 @@
 export type { EmptyInput, Endpoint, Untyped } from "./common.js";
 
 export {
+  createHostDaemonLocalClient,
+  hostIdResponseSchema,
+} from "./local.js";
+export type {
+  HostIdResponse,
+  HostDaemonLocalRoutes,
+  HostDaemonLocalSchema,
+} from "./local.js";
+
+export {
   HOST_DAEMON_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
   environmentDestroyCommandSchema,
