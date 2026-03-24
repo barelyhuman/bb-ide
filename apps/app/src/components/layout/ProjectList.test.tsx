@@ -26,9 +26,6 @@ vi.mock("@/hooks/useApi", () => {
       data: mockProjects,
       isLoading: false,
     }),
-    useSystemEnvironments: () => ({
-      data: [],
-    }),
     useThreads: () => ({
       data: mockThreads,
       isLoading: false,

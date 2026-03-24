@@ -26,7 +26,6 @@ import type {
   SendDraftResponse,
   CreateThreadRequest,
   SquashMergeOptions,
-  SystemEnvironmentInfo,
   SystemProviderInfo,
   SystemShutdownAcceptedResponse,
   SystemShutdownBlockedResponse,
@@ -564,10 +563,6 @@ export async function getAvailableModels(providerId?: string): Promise<Available
 
 export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
   return request<SystemProviderInfo[]>(apiClient.system.providers.$get({ query: {} }));
-}
-
-export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]> {
-  return request<SystemEnvironmentInfo[]>(apiClient.system.environments.$get());
 }
 
 export async function listEnvironments(projectId?: string): Promise<Environment[]> {

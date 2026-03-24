@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react";
 import { Loader2 } from "lucide-react";
-import type { PromptMentionSuggestion } from "@bb/server-contract";
+import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
 import { cn } from "@/lib/utils";
 
 interface PromptMentionMenuProps {

@@ -17,7 +17,6 @@ import {
   useMarkThreadRead,
   useMarkThreadUnread,
   useDeleteThread,
-  useSystemEnvironments,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
   useThreadManagerWorkspaceFile,
@@ -38,7 +37,7 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
-import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
+import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -71,7 +70,6 @@ import type {
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError, openThreadPathInEditor } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
-import { getEnvironmentIconInfo } from "@/lib/environment-icon";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import {
   buildFollowUpSignatureFromInput,
@@ -83,7 +81,6 @@ import {
   formatChangeSummary,
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
-import { supportsPrimaryCheckoutMetadata } from "@/lib/thread-primary-checkout";
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
 import {
   isArchiveForceRequiredError,
@@ -408,8 +405,7 @@ export function ThreadDetailView() {
   const updateThread = useUpdateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
-  const environmentCatalog = useSystemEnvironments();
-  const fileMentions = usePromptFileMentions(projectId, {
+  const promptMentions = usePromptMentions(projectId, {
     threadSuggestionMode:
       thread?.type === "manager" ? "all" : thread ? "managers" : "none",
     currentThreadId: threadId,
@@ -601,11 +597,6 @@ export function ThreadDetailView() {
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
-  const environmentInfo = useMemo(
-    () =>
-      environmentCatalog.data?.find((environment) => environment.id === thread?.environmentId),
-    [environmentCatalog.data, thread?.environmentId],
-  );
   const builtInActionsById = useMemo(
     () => new Map((thread?.builtInActions ?? []).map((action) => [action.id, action])),
     [thread?.builtInActions],
@@ -613,8 +604,7 @@ export function ThreadDetailView() {
   const squashMergeAction = builtInActionsById.get("squash_merge");
   const promoteAction = builtInActionsById.get("promote");
   const demoteAction = builtInActionsById.get("demote");
-  const supportsPrimaryCheckout =
-    isThreadPrimaryCheckoutActive || supportsPrimaryCheckoutMetadata(environmentInfo?.capabilities);
+  const supportsPrimaryCheckout = isThreadPrimaryCheckoutActive;
   const supportsSquashMerge = squashMergeAction?.available === true;
 
   useEffect(() => {
@@ -769,7 +759,7 @@ export function ThreadDetailView() {
       );
     };
 
-    if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
+    if (requiresArchiveConfirmation(thread.workStatus, null)) {
       const confirmed = window.confirm(
         `This ${label} has uncommitted or unmerged work. Archive anyway?`,
       );
@@ -802,7 +792,7 @@ export function ThreadDetailView() {
         },
       },
     );
-  }, [archiveThread, environmentInfo, navigate, thread, unarchiveThread]);
+  }, [archiveThread, navigate, thread, unarchiveThread]);
 
   const handlePromptGitStatsBannerClick = useCallback(() => {
     openThreadDiffPanel();
@@ -998,8 +988,7 @@ export function ThreadDetailView() {
       ? demoteAction?.available === false
       : promoteAction?.available === false);
   const isDirectThreadEnvironment =
-    environmentInfo?.capabilities.host_filesystem === true &&
-    environmentInfo.capabilities.isolated_workspace !== true;
+    thread.attachedEnvironment?.managed === false;
   const threadHeaderGitAction: {
     target: ThreadGitActionDialogTarget;
     label: string;
@@ -1038,7 +1027,6 @@ export function ThreadDetailView() {
     return null;
   })();
   const isThreadGitActionPending = requestEnvironmentAction.isPending;
-  const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
   const projectRootPath = project?.rootPath;
   const threadEnvironmentDisplay = getThreadEnvironmentDisplay({
     projectRootPath,
@@ -1092,7 +1080,7 @@ export function ThreadDetailView() {
   const showThreadWorkspaceStatus =
     canUseGitUi &&
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
-    !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
+    !(thread.archivedAt !== undefined && thread.attachedEnvironment?.managed !== true);
   const threadGitStatusDisplay = getThreadGitStatusDisplay(
     resolvedThreadWorkStatus,
     {
@@ -1771,17 +1759,17 @@ export function ThreadDetailView() {
       threadStatus={thread.status}
       onStop={() => stopThread.mutate(thread.id)}
       promptPlaceholder={promptPlaceholder}
-      mentionSuggestions={fileMentions.suggestions}
+      mentionSuggestions={promptMentions.suggestions}
       mentionSearchScope={
-        fileMentions.threadSuggestionMode === "all"
+        promptMentions.threadSuggestionMode === "all"
           ? "files-and-threads"
-          : fileMentions.threadSuggestionMode === "managers"
+          : promptMentions.threadSuggestionMode === "managers"
             ? "files-and-managers"
             : "files"
       }
-      mentionLoading={fileMentions.isLoading}
-      mentionError={fileMentions.isError}
-      onMentionQueryChange={fileMentions.setQuery}
+      mentionLoading={promptMentions.isLoading}
+      mentionError={promptMentions.isError}
+      onMentionQueryChange={promptMentions.setQuery}
       attachments={promptDraft.attachments}
       projectId={projectId}
       onAttachFiles={handleAttachFiles}
@@ -1806,7 +1794,7 @@ export function ThreadDetailView() {
       sandboxOptions={sandboxOptions}
       onSandboxModeChange={setSandboxMode}
       environmentLabel={threadEnvironmentValue}
-      environmentIcon={environmentIconInfo?.icon}
+      environmentIcon={undefined}
       contextWindowUsage={contextWindowUsage}
     />
   );

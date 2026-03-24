@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
 import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
-import type { PromptMentionSuggestion } from "@bb/server-contract"
+import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"

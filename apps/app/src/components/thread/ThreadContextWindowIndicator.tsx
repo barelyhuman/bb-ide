@@ -4,7 +4,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useHoverPopover } from "@/hooks/useHoverPopover";
-import type { ThreadContextWindowUsage } from "@bb/domain";
+import type { ThreadContextWindowUsage } from "@bb/server-contract";
 import {
   calculateContextWindowUsagePercent,
   formatCompactTokenCount,

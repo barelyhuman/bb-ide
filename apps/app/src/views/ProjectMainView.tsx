@@ -10,13 +10,11 @@ import {
   useProjectWorkspaceStatus,
   useProjects,
   useCreateThread,
-  useSystemEnvironments,
   useUploadPromptAttachment,
 } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
-import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
+import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
-import { getEnvironmentIconInfo } from "@/lib/environment-icon";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
@@ -28,12 +26,11 @@ export function ProjectMainView() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const { data: environments } = useSystemEnvironments();
   const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const createThread = useCreateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
-  const fileMentions = usePromptFileMentions(projectId);
+  const promptMentions = usePromptMentions(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const prompt = promptDraft.text;
   const promptInput = useMemo(
@@ -71,16 +68,10 @@ export function ProjectMainView() {
     supportsServiceTier,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
-    () => {
-      const environmentById = new Map(
-        (environments ?? []).map((environment) => [environment.id, environment]),
-      );
-      return environmentOptions.map((option) => ({
-        ...option,
-        icon: getEnvironmentIconInfo(environmentById.get(option.value))?.icon,
-      }));
-    },
-    [environmentOptions, environments],
+    () => environmentOptions.map((option) => ({
+      ...option,
+    })),
+    [environmentOptions],
   );
   const projectOptions = useMemo(() => {
     const knownOptions =
@@ -165,10 +156,7 @@ export function ProjectMainView() {
 
     return currentBranch;
   }, [workspaceStatus]);
-  const selectedEnvironment = useMemo(
-    () => environments?.find((environment) => environment.id === environmentSelectionValue),
-    [environmentSelectionValue, environments],
-  );
+  const selectedEnvironment = undefined;
   const selectedProject = useMemo(
     () => projects?.find((project) => project.id === projectId),
     [projectId, projects],
@@ -318,10 +306,10 @@ export function ProjectMainView() {
           isSubmitting={createThread.isPending}
           submitDisabled={isSubmitDisabled}
           submitTitle={createThread.isPending ? "Submitting..." : "Submit (Enter)"}
-          mentionSuggestions={fileMentions.suggestions}
-          mentionLoading={fileMentions.isLoading}
-          mentionError={fileMentions.isError}
-          onMentionQueryChange={fileMentions.setQuery}
+          mentionSuggestions={promptMentions.suggestions}
+          mentionLoading={promptMentions.isLoading}
+          mentionError={promptMentions.isError}
+          onMentionQueryChange={promptMentions.setQuery}
           attachments={promptDraft.attachments}
           attachmentProjectId={projectId}
           onAttachFiles={handleAttachFiles}

@@ -22,14 +22,12 @@ import {
   useMarkThreadRead,
   useMarkThreadUnread,
   useProjects,
-  useSystemEnvironments,
   useThreads,
   useUnarchiveThread,
   useUpdateProject,
   useUpdateThread,
 } from "@/hooks/useApi"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
-import { getEnvironmentIconInfo } from "@/lib/environment-icon"
 import { cn } from "@/lib/utils"
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
 import {
@@ -102,11 +100,6 @@ export function ProjectList({
   isCreatingProject = false,
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: environments } = useSystemEnvironments()
-  const environmentById = useMemo(
-    () => new Map((environments ?? []).map((environment) => [environment.id, environment])),
-    [environments],
-  )
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
   const markThreadRead = useMarkThreadRead()
@@ -294,11 +287,7 @@ export function ProjectList({
   const requestArchiveThread = (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    const environmentInfo = thread.attachedEnvironment ??
-      (thread.environmentId
-        ? environmentById.get(thread.environmentId)
-        : undefined)
-    if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
+    if (requiresArchiveConfirmation(thread.workStatus, null)) {
       setArchiveConfirmationThread(thread)
       return
     }
@@ -399,12 +388,6 @@ export function ProjectList({
     const isThreadActionsOpen = openThreadActionsThreadId === thread.id
     const isThreadActive = selectedThreadId === thread.id
     const threadTitle = getThreadDisplayTitle(thread)
-    const environmentInfo = thread.attachedEnvironment
-      ?? (thread.environmentId
-        ? environmentById.get(thread.environmentId)
-        : undefined)
-    const environmentIconInfo = getEnvironmentIconInfo(environmentInfo)
-    const ThreadEnvironmentIcon = environmentIconInfo?.icon
     const isManager = options?.isManager === true
     const isManagedChild = options?.isManagedChild === true
     const hasManagedChildren = options?.hasManagedChildren === true
@@ -490,11 +473,6 @@ export function ProjectList({
             >
               {isManager ? (
                 <UserRound className="size-4 text-sidebar-foreground/70" aria-label="Manager" />
-              ) : ThreadEnvironmentIcon ? (
-                <ThreadEnvironmentIcon
-                  className="size-4 text-sidebar-foreground/70"
-                  aria-label={environmentIconInfo.ariaLabel}
-                />
               ) : null}
             </span>
             <div

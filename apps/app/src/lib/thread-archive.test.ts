@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import type {
   WorkspaceStatus,
 } from "@bb/domain"
-import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { HttpError } from "./api"
 import {
   isArchiveForceRequiredError,
@@ -26,19 +25,9 @@ function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
 }
 
 function makeEnvironment(
-  isolatedWorkspace: boolean,
-): SystemEnvironmentInfo {
-  return {
-    id: isolatedWorkspace ? "worktree" : "local",
-    displayName: isolatedWorkspace ? "Git Worktree Workspace" : "Direct Workspace",
-    capabilities: {
-      host_filesystem: true,
-      isolated_workspace: isolatedWorkspace,
-      promote_primary_checkout: isolatedWorkspace,
-      demote_primary_checkout: isolatedWorkspace,
-      squash_merge: isolatedWorkspace,
-    },
-  }
+  managed: boolean,
+) {
+  return { managed }
 }
 
 describe("thread-archive", () => {

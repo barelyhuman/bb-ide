@@ -5,12 +5,9 @@ import type {
   Environment,
   WorkspaceStatus,
 } from "@bb/domain"
-import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { HttpError } from "./api"
 
-type ArchiveEnvironmentShape =
-  | Pick<SystemEnvironmentInfo, "capabilities">
-  | Pick<Environment, "properties">
+type ArchiveEnvironmentShape = Pick<Environment, "managed">
 
 function isIsolatedArchiveEnvironment(
   environment: ArchiveEnvironmentShape | null | undefined,
@@ -18,13 +15,7 @@ function isIsolatedArchiveEnvironment(
   if (!environment) {
     return false
   }
-  if ("capabilities" in environment) {
-    return environment.capabilities.isolated_workspace === true
-  }
-  return (
-    environment.properties?.workspaceKind === "worktree" ||
-    environment.properties?.location === "docker"
-  )
+  return environment.managed === true
 }
 
 export function requiresArchiveConfirmation(

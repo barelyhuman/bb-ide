@@ -1,17 +1,14 @@
 import { type ComponentType, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { formatEnvironmentDisplayName } from "@bb/core-ui";
 import type {
   AvailableModel,
   ReasoningLevel,
   SandboxMode,
   ServiceTier,
 } from "@bb/domain";
-import type { SystemEnvironmentInfo } from "@bb/server-contract";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import {
   useAvailableModels,
-  useSystemEnvironments,
   useSystemProviders,
 } from "./useApi";
 
@@ -260,22 +257,6 @@ function promptModelReasoningReducer(
   }
 }
 
-function toEnvironmentOptions(
-  environments: readonly SystemEnvironmentInfo[] | undefined,
-): PromptOption<string>[] {
-  if (!environments || environments.length === 0) {
-    return [];
-  }
-  return environments.map((environment) => ({
-    value: environment.id,
-    label:
-      formatEnvironmentDisplayName({
-        id: environment.id,
-        displayName: environment.displayName,
-      }) ?? environment.id,
-  }));
-}
-
 export function formatModelLabel(value: string, providerId?: string): string {
   let label = value
     .split("-")
@@ -344,7 +325,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   const availableModelsQuery = useAvailableModels(
     hasMultipleProviders ? effectiveProviderId || undefined : undefined,
   );
-  const environmentsQuery = useSystemEnvironments();
 
   const activeProviderCapabilities = selectedProviderInfo?.capabilities;
 
@@ -420,8 +400,8 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   }, [activeModel]);
 
   const environmentOptions = useMemo(
-    () => toEnvironmentOptions(environmentsQuery.data),
-    [environmentsQuery.data],
+    (): PromptOption<string>[] => [],
+    [],
   );
 
   // Sync provider from localStorage when storageKeys change (project switch).

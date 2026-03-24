@@ -16,16 +16,6 @@ const apiState = vi.hoisted(() => ({
       name: "Project One",
     },
   ],
-  environments: [
-    {
-      id: "env-1",
-      displayName: "Local Env",
-      capabilities: {
-        host_filesystem: true,
-        isolated_workspace: false,
-      },
-    },
-  ],
   workspaceStatus: {
     state: "clean",
     changedFiles: 0,
@@ -48,9 +38,6 @@ vi.mock("@/hooks/useApi", () => ({
     data: apiState.projects,
     isLoading: false,
   }),
-  useSystemEnvironments: () => ({
-    data: apiState.environments,
-  }),
   useProjectWorkspaceStatus: () => ({
     data: apiState.workspaceStatus,
     isLoading: false,
@@ -72,8 +59,8 @@ vi.mock("@/hooks/usePromptDraftStorage", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePromptFileMentions", () => ({
-  usePromptFileMentions: () => ({
+vi.mock("@/hooks/usePromptMentions", () => ({
+  usePromptMentions: () => ({
     suggestions: [],
     isLoading: false,
     isError: false,

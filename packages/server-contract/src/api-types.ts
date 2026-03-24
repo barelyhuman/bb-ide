@@ -19,10 +19,11 @@ import { apiErrorSchema } from "./errors.js";
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
 
-const threadTimelineContextWindowUsageSchema = z.object({
+export const threadContextWindowUsageSchema = z.object({
   totalTokens: z.number(),
   modelContextWindow: z.number(),
 });
+export type ThreadContextWindowUsage = z.infer<typeof threadContextWindowUsageSchema>;
 
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
@@ -231,7 +232,7 @@ export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResp
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
-  contextWindowUsage: threadTimelineContextWindowUsageSchema.nullable().optional(),
+  contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
 });
 export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
 
@@ -293,22 +294,6 @@ export const projectFileSuggestionSchema = z.object({
 });
 export type ProjectFileSuggestion = z.infer<typeof projectFileSuggestionSchema>;
 
-export const promptMentionSuggestionSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("file"),
-    path: z.string(),
-    replacement: z.string(),
-  }),
-  z.object({
-    kind: z.literal("thread"),
-    path: z.string(),
-    replacement: z.string(),
-    threadId: z.string(),
-    title: z.string().optional(),
-    threadType: threadTypeSchema,
-  }),
-]);
-export type PromptMentionSuggestion = z.infer<typeof promptMentionSuggestionSchema>;
 
 export const uploadedPromptAttachmentSchema = z.object({
   type: z.enum(["localImage", "localFile"]),

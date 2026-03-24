@@ -29,7 +29,6 @@ import type {
   SendDraftResponse,
   CreateThreadRequest,
   SquashMergeOptions,
-  SystemEnvironmentInfo,
   SystemProviderInfo,
   SendMessageRequest,
   ThreadTimelineResponse,
@@ -705,14 +704,6 @@ export function useSystemProviders() {
   return useQuery<SystemProviderInfo[]>({
     queryKey: ["systemProviders"],
     queryFn: () => api.listSystemProviders(),
-    staleTime: 60_000,
-  });
-}
-
-export function useSystemEnvironments() {
-  return useQuery<SystemEnvironmentInfo[]>({
-    queryKey: ["systemEnvironments"],
-    queryFn: () => api.listSystemEnvironments(),
     staleTime: 60_000,
   });
 }

@@ -1,7 +1,7 @@
 import {
   extractThreadContextWindowUsage as extractThreadContextWindowUsageFromEvents,
 } from "@bb/core-ui";
-import type { ThreadContextWindowUsage } from "@bb/domain";
+import type { ThreadContextWindowUsage } from "@bb/server-contract";
 
 const TOKEN_COMPACT_FORMATTER = new Intl.NumberFormat("en-US", {
   notation: "compact",

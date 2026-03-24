@@ -130,13 +130,6 @@ const apiState = vi.hoisted(() => {
         "",
       ].join("\n"),
     },
-    environments: [
-      {
-        id: "env-1",
-        displayName: "Local Env",
-        capabilities: {},
-      },
-    ],
   };
 });
 
@@ -193,9 +186,6 @@ vi.mock("../hooks/useApi", () => ({
   useMarkThreadRead: () => apiState.pendingMutation,
   useMarkThreadUnread: () => apiState.pendingMutation,
   useDeleteThread: () => apiState.pendingMutation,
-  useSystemEnvironments: () => ({
-    data: apiState.environments,
-  }),
   useUnarchiveThread: () => apiState.pendingMutation,
   useThreadDefaultExecutionOptions: () => ({
     data: {},
@@ -243,8 +233,8 @@ vi.mock("@/hooks/usePromptDraftStorage", () => ({
   }),
 }));
 
-vi.mock("@/hooks/usePromptFileMentions", () => ({
-  usePromptFileMentions: (
+vi.mock("@/hooks/usePromptMentions", () => ({
+  usePromptMentions: (
     projectId: string | undefined,
     options:
       | {
@@ -626,9 +616,18 @@ describe("ThreadDetailView", () => {
     apiState.thread.status = "idle";
     apiState.timelineLoading = false;
     apiState.thread.primaryCheckout = { isActive: true };
-    apiState.environments[0].capabilities = {
-      host_filesystem: true,
-      isolated_workspace: false,
+    apiState.thread.attachedEnvironment = {
+      id: "env-1",
+      projectId: "project-1",
+      descriptor: { type: "path", path: "/tmp/project-one" },
+      managed: false,
+      properties: {
+        provisioningSystemKind: "direct-path",
+        location: "localhost",
+        workspaceKind: "primary_checkout",
+      },
+      createdAt: 1,
+      updatedAt: 1,
     };
 
     const html = renderThreadDetailView();
@@ -638,7 +637,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Commit");
 
     apiState.thread.primaryCheckout = { isActive: false };
-    apiState.environments[0].capabilities = {};
+    apiState.thread.attachedEnvironment = undefined;
   });
 
   it("renders the manager workspace tab for manager threads", () => {
@@ -755,19 +754,15 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("managed");
   });
 
-  it("disables promote while the thread is active", () => {
+  it("does not show promote when primaryCheckout is not active", () => {
     apiState.thread.status = "active";
     apiState.thread.primaryCheckout = { isActive: false };
-    apiState.environments[0].capabilities = {
-      promote_primary_checkout: true,
-    };
 
     const html = renderThreadDetailView();
 
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Promote<\/button>/);
+    expect(html).not.toContain("Promote");
 
     apiState.thread.status = "idle";
-    apiState.environments[0].capabilities = {};
   });
 
   it("hides the working indicator while the thread timeline is still loading", () => {

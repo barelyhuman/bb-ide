@@ -1,6 +1,17 @@
+import type { ThreadType } from "@bb/domain";
 import { useEffect, useMemo, useState } from "react";
-import type { PromptMentionSuggestion } from "@bb/server-contract";
 import { useProjectFileSuggestions, useThreads } from "./useApi";
+
+export type PromptMentionSuggestion =
+  | { kind: "file"; path: string; replacement: string }
+  | {
+      kind: "thread";
+      path: string;
+      replacement: string;
+      threadId: string;
+      title?: string;
+      threadType: ThreadType;
+    };
 
 const FILE_MENTION_DEBOUNCE_MS = 120;
 const FILE_MENTION_LIMIT = 8;
@@ -33,7 +44,7 @@ function areSuggestionsEqual(
   return true;
 }
 
-export function usePromptFileMentions(
+export function usePromptMentions(
   projectId: string | undefined,
   options?: {
     threadSuggestionMode?: "none" | "managers" | "all";
@@ -117,7 +128,7 @@ export function usePromptFileMentions(
         path: `thread:${thread.id}`,
         replacement: `thread:${thread.id}`,
         threadId: thread.id,
-        title: thread.title,
+        title: thread.title ?? undefined,
         threadType: thread.type,
       }));
   }, [
