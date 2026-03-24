@@ -100,7 +100,12 @@ describe("resolveThreadPlaceholder", () => {
       status: "idle",
       updatedAt: 1,
       lastReadAt: 1,
-      builtInActions: [],
+      environmentId: null,
+      title: null,
+      titleFallback: null,
+      mergeBaseBranch: null,
+      parentThreadId: null,
+      archivedAt: null,
     };
 
     expect(
@@ -122,7 +127,12 @@ describe("resolveThreadPlaceholder", () => {
       status: "idle",
       updatedAt: 1,
       lastReadAt: 1,
-      builtInActions: [],
+      environmentId: null,
+      title: null,
+      titleFallback: null,
+      mergeBaseBranch: null,
+      parentThreadId: null,
+      archivedAt: null,
     };
 
     expect(

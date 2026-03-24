@@ -35,8 +35,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { openThreadPathInEditor } from "@/lib/api";
-import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
 import {
   type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
@@ -262,13 +260,6 @@ function GitDiffFileCard({
                 type="button"
                 className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
                 title={fileDiffLabel}
-                onClick={() => {
-                  void openThreadPathInEditor(threadId, {
-                    relativePath: openablePath,
-                    target: "file",
-                    command: getPathCommandForTarget("file"),
-                  });
-                }}
               >
                 {fileDiffLabel}
               </button>

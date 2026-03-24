@@ -6,6 +6,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
+  Environment,
   PromptInput,
   Project,
   ReasoningLevel,
@@ -39,6 +40,8 @@ import type {
 import * as api from "../lib/api";
 import { wsManager } from "../lib/ws";
 
+const ENVIRONMENT_QUERY_KEY = "environment";
+const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
 const THREAD_MERGE_BASE_BRANCHES_QUERY_KEY = "threadMergeBaseBranches";
 const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
@@ -255,33 +258,6 @@ export function appendOptimisticUserRowToTimeline(
   };
 }
 
-function appendQueuedThreadMessage(
-  thread: Thread,
-  queuedMessage: ThreadQueuedMessage,
-): Thread {
-  const existingQueue = thread.queuedMessages ?? [];
-  if (existingQueue.some((entry) => entry.id === queuedMessage.id)) {
-    return thread;
-  }
-  return {
-    ...thread,
-    queuedMessages: [...existingQueue, queuedMessage],
-  };
-}
-
-function removeQueuedThreadMessage(
-  thread: Thread,
-  queuedMessageId: string,
-): Thread {
-  const existingQueue = thread.queuedMessages ?? [];
-  if (!existingQueue.some((entry) => entry.id === queuedMessageId)) {
-    return thread;
-  }
-  return {
-    ...thread,
-    queuedMessages: existingQueue.filter((entry) => entry.id !== queuedMessageId),
-  };
-}
 
 interface ThreadListFilters {
   projectId?: string;
@@ -596,6 +572,27 @@ export function useThreadWorkStatus(
   });
 }
 
+export function useEnvironment(environmentId: string | null | undefined) {
+  return useQuery<Environment>({
+    queryKey: [ENVIRONMENT_QUERY_KEY, environmentId],
+    queryFn: () => api.getEnvironment(environmentId!),
+    enabled: !!environmentId,
+  });
+}
+
+export function useEnvironmentWorkStatus(
+  environmentId: string | null | undefined,
+  mergeBaseBranch?: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<WorkspaceStatus | null>({
+    queryKey: [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId, mergeBaseBranch ?? null],
+    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch),
+    enabled: (options?.enabled ?? true) && !!environmentId,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useThreadMergeBaseBranches(
   id: string,
   options?: { enabled?: boolean },
@@ -822,10 +819,8 @@ export function useCreateThreadDraft() {
         reasoningLevel,
         sandboxMode,
       }),
-    onSuccess: (queuedMessage, variables) => {
-      updateCachedThread(queryClient, variables.id, (thread) =>
-        appendQueuedThreadMessage(thread, queuedMessage),
-      );
+    onSuccess: (_queuedMessage, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
     },
   });
 }
@@ -862,9 +857,7 @@ export function useDeleteThreadDraft() {
       queuedMessageId: string;
     }) => api.deleteThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
-      updateCachedThread(queryClient, variables.id, (thread) =>
-        removeQueuedThreadMessage(thread, variables.queuedMessageId),
-      );
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
     },
   });
 }

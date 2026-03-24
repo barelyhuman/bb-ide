@@ -371,7 +371,6 @@ export function ThreadFollowUpComposer({
                 <div className="overflow-hidden">
                   <WorkspaceChangesList
                     files={resolvedThreadWorkStatus.files ?? []}
-                    threadId={threadId}
                     onFileClick={onPromptBannerFileClick}
                   />
                 </div>

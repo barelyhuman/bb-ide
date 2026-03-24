@@ -1,9 +1,5 @@
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { PageShell } from "@/components/layout/PageShell";
-import {
-  getOpenPathPreferences,
-  setOpenPathPreferences,
-} from "@/lib/open-path-preferences";
 import {
   getAutoArchivePreferences,
   setAutoArchivePreferences,
@@ -34,36 +30,10 @@ function SettingsWithControl({
 }
 
 export function AppSettingsView() {
-  const initialPreferences = useMemo(() => getOpenPathPreferences(), []);
-  const [fileCommand, setFileCommand] = useState(initialPreferences.fileCommand);
-  const [directoryCommand, setDirectoryCommand] = useState(initialPreferences.directoryCommand);
   const [autoArchiveThreadOnCommit, setAutoArchiveThreadOnCommit] = useState(
     () => getAutoArchivePreferences().autoArchiveThreadOnCommit,
   );
   const theme = usePreferredTheme();
-  const lastSavedRef = useRef({
-    fileCommand: initialPreferences.fileCommand.trim(),
-    directoryCommand: initialPreferences.directoryCommand.trim(),
-  });
-
-  const saveOpenPathSettings = () => {
-    const nextFileCommand = fileCommand.trim();
-    const nextDirectoryCommand = directoryCommand.trim();
-    const unchanged =
-      nextFileCommand === lastSavedRef.current.fileCommand &&
-      nextDirectoryCommand === lastSavedRef.current.directoryCommand;
-    if (unchanged) return;
-
-    setOpenPathPreferences({
-      fileCommand: nextFileCommand,
-      directoryCommand: nextDirectoryCommand,
-    });
-    lastSavedRef.current = {
-      fileCommand: nextFileCommand,
-      directoryCommand: nextDirectoryCommand,
-    };
-    toast.success("Open-path settings saved");
-  };
 
   const saveAutoArchiveSettings = (checked: boolean) => {
     setAutoArchiveThreadOnCommit(checked);
@@ -74,42 +44,6 @@ export function AppSettingsView() {
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 pt-2">
-        <SettingsWithControl
-          label="Folder open command"
-          description='Leave blank for system default. Saves on blur.'
-        >
-          <input
-            id="folder-command"
-            value={directoryCommand}
-            onChange={(event) => {
-              setDirectoryCommand(event.target.value);
-            }}
-            onBlur={saveOpenPathSettings}
-            className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
-            placeholder='e.g. "code"'
-          />
-        </SettingsWithControl>
-        <SettingsWithControl
-          label="File open command"
-          description='Leave blank for system default. Saves on blur.'
-        >
-          <div className="w-full">
-            <input
-              id="file-command"
-              value={fileCommand}
-              onChange={(event) => {
-                setFileCommand(event.target.value);
-              }}
-              onBlur={saveOpenPathSettings}
-              className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
-              placeholder='e.g. "code"'
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Use <code className="rounded bg-muted px-1 py-0.5">{`{path}`}</code> to place the
-              file/folder path explicitly.
-            </p>
-          </div>
-        </SettingsWithControl>
         <SettingsWithControl
           label="Auto-archive on commit"
           description="Automatically archive local threads after commit and worktree threads after squash merge."

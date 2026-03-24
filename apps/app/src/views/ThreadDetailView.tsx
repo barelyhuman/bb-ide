@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   useThread,
+  useEnvironment,
+  useEnvironmentWorkStatus,
   useThreadWorkStatus,
   useThreadTimeline,
   useThreadTimelineToolDetails,
@@ -62,15 +64,14 @@ import {
   buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
-import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
+import type { Environment, PromptInput, ServiceTier, Thread } from "@bb/domain";
 import type {
   EnvironmentActionApiError,
   EnvironmentActionFailureDetails,
 } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
-import { HttpError, openThreadPathInEditor } from "@/lib/api";
+import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
-import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,
@@ -108,21 +109,15 @@ function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFai
   const typedDetails = details as Partial<EnvironmentActionFailureDetails>;
   switch (typedDetails.kind) {
     case "commit_failed":
-      return typedDetails.operation === "commit" &&
-          typedDetails.request !== undefined &&
-          typeof typedDetails.errorMessage === "string"
+      return typeof typedDetails.errorMessage === "string"
         ? typedDetails as EnvironmentActionFailureDetails
         : undefined;
     case "squash_merge_conflict":
-      return typedDetails.operation === "squash_merge" &&
-          typedDetails.request !== undefined &&
-          Array.isArray(typedDetails.conflictFiles)
+      return Array.isArray(typedDetails.conflictFiles)
         ? typedDetails as EnvironmentActionFailureDetails
         : undefined;
     case "squash_merge_commit_failed":
-      return typedDetails.operation === "squash_merge" &&
-          typedDetails.request !== undefined &&
-          typeof typedDetails.errorMessage === "string" &&
+      return typeof typedDetails.errorMessage === "string" &&
           (typedDetails.stage === "prep_commit" || typedDetails.stage === "squash_commit")
         ? typedDetails as EnvironmentActionFailureDetails
         : undefined;
@@ -145,7 +140,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "commit",
               initiatingThreadId: "",
-              options: details.request.options,
+              options: {},
             },
             { errorMessage: details.errorMessage },
           ),
@@ -159,7 +154,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "squash_merge",
               initiatingThreadId: "",
-              options: details.request.options,
+              options: {},
             },
             { conflictFiles: details.conflictFiles },
           ),
@@ -173,7 +168,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "squash_merge",
               initiatingThreadId: "",
-              options: details.request.options,
+              options: {},
             },
             {
               stage: details.stage,
@@ -217,34 +212,30 @@ function formatAttachedEnvironmentSuffix(path: string, projectRootPath?: string)
 
 function formatThreadEnvironmentLabel(args: {
   projectRootPath?: string;
-  attachedEnvironment?: Thread["attachedEnvironment"];
+  environment?: Environment;
 }): string | undefined {
-  const attachedEnvironment = args.attachedEnvironment;
-  if (attachedEnvironment) {
-    const properties = attachedEnvironment.properties;
-    const isPrimaryWorkspace =
-      args.projectRootPath !== undefined &&
-      attachedEnvironment.descriptor !== undefined &&
-      attachedEnvironment.descriptor.path === args.projectRootPath;
-    if (isPrimaryWorkspace) {
-      return "Direct";
-    }
-    if (properties?.location === "docker") {
-      return "Docker";
-    }
-    if (properties?.workspaceKind === "worktree") {
-      const suffix = formatAttachedEnvironmentSuffix(
-        attachedEnvironment.descriptor?.path ?? "",
-        args.projectRootPath,
-      );
-      return suffix ? `Worktree (${suffix})` : "Worktree";
-    }
-    if (properties?.location === "localhost") {
-      return "Direct";
-    }
-    return "Unknown";
+  const environment = args.environment;
+  if (!environment) {
+    return undefined;
   }
-  return undefined;
+  const isPrimaryWorkspace =
+    args.projectRootPath !== undefined &&
+    environment.path !== null &&
+    environment.path === args.projectRootPath;
+  if (isPrimaryWorkspace || !environment.managed) {
+    return "Direct";
+  }
+  if (environment.managed && environment.provisionerId === "docker-worktree") {
+    return "Docker";
+  }
+  if (environment.managed && environment.provisionerId === "worktree") {
+    const suffix = formatAttachedEnvironmentSuffix(
+      environment.path ?? "",
+      args.projectRootPath,
+    );
+    return suffix ? `Worktree (${suffix})` : "Worktree";
+  }
+  return "Unknown";
 }
 
 interface ThreadEnvironmentDisplay {
@@ -257,10 +248,8 @@ interface ThreadEnvironmentDisplay {
 }
 
 function ThreadEnvironmentValue({
-  threadId,
   display,
 }: {
-  threadId?: string;
   display?: ThreadEnvironmentDisplay;
 }) {
   const openPath = display?.openPath;
@@ -278,14 +267,6 @@ function ThreadEnvironmentValue({
         className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
         title={openPath.title}
         aria-label="Open environment folder"
-        onClick={() => {
-          if (!threadId) return;
-          void openThreadPathInEditor(threadId, {
-            relativePath: openPath.relativePath,
-            target: "directory",
-            command: getPathCommandForTarget("directory"),
-          });
-        }}
       >
         <ExternalLink className="size-3 shrink-0" />
       </button>
@@ -295,36 +276,36 @@ function ThreadEnvironmentValue({
 
 function getThreadEnvironmentDisplay(args: {
   projectRootPath?: string;
-  attachedEnvironment?: Thread["attachedEnvironment"];
+  environment?: Environment;
 }): ThreadEnvironmentDisplay | undefined {
-  const attachedEnvironment = args.attachedEnvironment;
+  const environment = args.environment;
   const label = formatThreadEnvironmentLabel(args);
-  if (!label || !attachedEnvironment) {
+  if (!label || !environment) {
     return label ? { label } : undefined;
   }
 
-  const descriptorPath = attachedEnvironment.descriptor?.path;
+  const envPath = environment.path;
   const isPrimary =
     args.projectRootPath !== undefined &&
-    descriptorPath !== undefined &&
-    descriptorPath === args.projectRootPath;
+    envPath !== null &&
+    envPath === args.projectRootPath;
 
   if (isPrimary) {
     return {
       label,
       openPath: {
         relativePath: ".",
-        title: descriptorPath,
+        title: envPath,
       },
     };
   }
 
-  if (attachedEnvironment.properties?.workspaceKind !== "worktree") {
+  if (!(environment.managed && environment.provisionerId === "worktree")) {
     return { label };
   }
 
   const suffix = formatAttachedEnvironmentSuffix(
-    descriptorPath ?? "",
+    envPath ?? "",
     args.projectRootPath,
   );
   if (!suffix) {
@@ -336,7 +317,7 @@ function getThreadEnvironmentDisplay(args: {
     suffix,
     openPath: {
       relativePath: ".",
-      title: descriptorPath ?? suffix,
+      title: envPath ?? suffix,
     },
   };
 }
@@ -507,7 +488,7 @@ export function ThreadDetailView() {
     initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
-    initialEnvironmentSelectionValue: thread?.environmentId,
+    initialEnvironmentSelectionValue: thread?.environmentId ?? undefined,
   });
   const preferredTheme = usePreferredTheme();
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
@@ -571,6 +552,10 @@ export function ThreadDetailView() {
   } = useThreadWorkStatus(threadId ?? "", selectedMergeBaseBranch);
   const resolvedThreadWorkStatus =
     threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
+  const environmentQuery = useEnvironment(thread?.environmentId);
+  const environment = environmentQuery.data;
+  const workStatusQuery = useEnvironmentWorkStatus(thread?.environmentId);
+  const workStatus = workStatusQuery.data;
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
   const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
@@ -596,23 +581,13 @@ export function ThreadDetailView() {
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
-  const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
-  const builtInActionsById = useMemo(
-    () => new Map((thread?.builtInActions ?? []).map((action) => [action.id, action])),
-    [thread?.builtInActions],
-  );
-  const squashMergeAction = builtInActionsById.get("squash_merge");
-  const promoteAction = builtInActionsById.get("promote");
-  const demoteAction = builtInActionsById.get("demote");
-  const supportsPrimaryCheckout = isThreadPrimaryCheckoutActive;
-  const supportsSquashMerge = squashMergeAction?.available === true;
 
   useEffect(() => {
     if (mergeBaseStateThreadIdRef.current === thread?.id) {
       return;
     }
     mergeBaseStateThreadIdRef.current = thread?.id;
-    setSelectedMergeBaseBranch(thread?.mergeBaseBranch);
+    setSelectedMergeBaseBranch(thread?.mergeBaseBranch ?? undefined);
   }, [setSelectedMergeBaseBranch, thread?.id, thread?.mergeBaseBranch]);
 
   useEffect(() => {
@@ -720,7 +695,7 @@ export function ThreadDetailView() {
       },
       {
         onError: (error) => {
-          setSelectedMergeBaseBranch(thread.mergeBaseBranch);
+          setSelectedMergeBaseBranch(thread.mergeBaseBranch ?? undefined);
           toast.error(
             error instanceof Error ? error.message : "Failed to update merge base branch.",
           );
@@ -759,7 +734,7 @@ export function ThreadDetailView() {
       );
     };
 
-    if (requiresArchiveConfirmation(thread.workStatus, null)) {
+    if (requiresArchiveConfirmation(workStatus, null)) {
       const confirmed = window.confirm(
         `This ${label} has uncommitted or unmerged work. Archive anyway?`,
       );
@@ -864,7 +839,7 @@ export function ThreadDetailView() {
       options.push({ value, label });
     };
 
-    addOption(parentThreadId, parentThreadDisplayName ?? "Manager");
+    addOption(parentThreadId ?? undefined, parentThreadDisplayName ?? "Manager");
     for (const manager of managerThreads) {
       addOption(manager.id, manager.title?.trim() ? manager.title : "Manager");
     }
@@ -968,27 +943,9 @@ export function ThreadDetailView() {
     !managerThreads.some((m) => m.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
-  const isPrimaryCheckoutMutationPending = requestEnvironmentAction.isPending;
-  const primaryCheckoutActionLabel = isPrimaryCheckoutActive
-    ? requestEnvironmentAction.isPending
-      ? "Demoting..."
-      : "Demote"
-    : requestEnvironmentAction.isPending
-    ? "Promoting..."
-    : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
-  const showPrimaryCheckoutAction = canUseGitUi && supportsPrimaryCheckout && !isArchivedThread;
-  const isPromoteBlockedByThreadStatus =
-    !isPrimaryCheckoutActive && thread.status !== "idle";
-  const isPrimaryCheckoutActionDisabled =
-    isPrimaryCheckoutMutationPending ||
-    isPromoteBlockedByThreadStatus ||
-    (isPrimaryCheckoutActive
-      ? demoteAction?.available === false
-      : promoteAction?.available === false);
   const isDirectThreadEnvironment =
-    thread.attachedEnvironment?.managed === false;
+    environment?.managed === false;
   const threadHeaderGitAction: {
     target: ThreadGitActionDialogTarget;
     label: string;
@@ -1008,7 +965,7 @@ export function ThreadDetailView() {
     }
 
     if (
-      supportsSquashMerge &&
+      environment?.managed &&
       (
         resolvedThreadWorkStatus.hasCommittedUnmergedChanges ||
         resolvedThreadWorkStatus.hasUncommittedChanges
@@ -1027,10 +984,11 @@ export function ThreadDetailView() {
     return null;
   })();
   const isThreadGitActionPending = requestEnvironmentAction.isPending;
-  const projectRootPath = project?.rootPath;
+  // TODO: Project no longer has rootPath; source path will come from project sources API
+  const projectRootPath = undefined;
   const threadEnvironmentDisplay = getThreadEnvironmentDisplay({
     projectRootPath,
-    attachedEnvironment: thread.attachedEnvironment,
+    environment,
   });
   const threadEnvironmentLabel = threadEnvironmentDisplay?.label;
   const provisioningStatusLabel =
@@ -1071,16 +1029,16 @@ export function ThreadDetailView() {
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
-    (thread.attachedEnvironment?.descriptor ? thread.attachedEnvironment.descriptor.type : undefined);
+    (environment ? "environment" : undefined);
   const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentDisplay
-    ? <ThreadEnvironmentValue threadId={threadId} display={threadEnvironmentDisplay} />
+    ? <ThreadEnvironmentValue display={threadEnvironmentDisplay} />
     : undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =
     canUseGitUi &&
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
-    !(thread.archivedAt !== undefined && thread.attachedEnvironment?.managed !== true);
+    !(thread.archivedAt !== undefined && environment?.managed !== true);
   const threadGitStatusDisplay = getThreadGitStatusDisplay(
     resolvedThreadWorkStatus,
     {
@@ -1145,37 +1103,12 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
-  const handleTogglePrimaryCheckout = () => {
-    const attachedEnvironmentId = thread.attachedEnvironment?.id ?? thread.environmentId;
-    if (!attachedEnvironmentId) {
-      window.alert("Thread has no attached environment");
-      return;
-    }
-    const action = isPrimaryCheckoutActive
-      ? requestEnvironmentAction.mutateAsync({
-          id: attachedEnvironmentId,
-          action: "demote",
-          initiatingThreadId: thread.id,
-        })
-      : requestEnvironmentAction.mutateAsync({
-          id: attachedEnvironmentId,
-          action: "promote",
-          initiatingThreadId: thread.id,
-        });
-    void action.catch((err) => {
-      window.alert(
-        err instanceof Error
-          ? err.message
-          : "Failed to update primary checkout state",
-      );
-    });
-  };
   const handleCommitThread = async ({
     includeUnstaged,
   }: {
     includeUnstaged: boolean;
   }) => {
-    const attachedEnvironmentId = thread?.attachedEnvironment?.id ?? thread?.environmentId;
+    const attachedEnvironmentId = thread?.environmentId;
     if (!threadId || !attachedEnvironmentId) {
       return;
     }
@@ -1203,7 +1136,7 @@ export function ThreadDetailView() {
     includeUnstaged: boolean;
     mergeBaseBranch?: string;
   }) => {
-    const attachedEnvironmentId = thread?.attachedEnvironment?.id ?? thread?.environmentId;
+    const attachedEnvironmentId = thread?.environmentId;
     if (!threadId || !attachedEnvironmentId) {
       return;
     }
@@ -1416,7 +1349,6 @@ export function ThreadDetailView() {
         >
           <WorkspaceChangesList
             files={resolvedThreadWorkStatus?.files}
-            threadId={thread.id}
             maxHeightClassName="max-h-48"
           />
         </DetailRow>
@@ -1659,23 +1591,8 @@ export function ThreadDetailView() {
           {!isManagerThread && parentThreadId ? (
             <StatusPill variant="outline">managed</StatusPill>
           ) : null}
-          {isPrimaryCheckoutActive ? (
-            <StatusPill variant="emphasis">active</StatusPill>
-          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {showPrimaryCheckoutAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-              disabled={isPrimaryCheckoutActionDisabled}
-              onClick={handleTogglePrimaryCheckout}
-            >
-              {primaryCheckoutActionLabel}
-            </Button>
-          ) : null}
           {threadHeaderGitAction ? (
             <Button
               type="button"

@@ -427,6 +427,10 @@ export async function markThreadUnread(id: string): Promise<Thread> {
   return request<Thread>(apiClient.threads[":id"].unread.$post({ param: { id } }));
 }
 
+export async function getEnvironment(id: string): Promise<Environment> {
+  return request<Environment>(apiClient.environments[":id"].$get({ param: { id } }));
+}
+
 export async function getEnvironmentWorkStatus(
   environmentId: string,
   mergeBaseBranch?: string,

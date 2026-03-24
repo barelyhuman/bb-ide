@@ -2,16 +2,17 @@ import { useCallback } from "react"
 import { useCreateProject } from "@/hooks/useApi"
 import {
   deriveProjectNameFromPath,
-  requestProjectRootPath,
 } from "@/lib/projectPathInput"
 
 export function useQuickCreateProject() {
   const { mutate, isPending } = useCreateProject()
 
+  // TODO: Wire up path picker via useHostDaemon when available.
+  // For now this uses window.prompt as a placeholder.
   const createFromPicker = useCallback(async () => {
     if (isPending) return
 
-    const rootPath = await requestProjectRootPath()
+    const rootPath = window.prompt("Enter project root path:")
     if (!rootPath) return
 
     const name = deriveProjectNameFromPath(rootPath).trim()
@@ -22,7 +23,8 @@ export function useQuickCreateProject() {
       return
     }
 
-    mutate({ name, rootPath })
+    // TODO: sourcePath + hostId per CreateProjectRequest schema
+    mutate({ name, sourcePath: rootPath, hostId: "" })
   }, [isPending, mutate])
 
   return { createFromPicker, isCreating: isPending }

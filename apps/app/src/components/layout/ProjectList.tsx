@@ -35,10 +35,6 @@ import {
   isUnreadDoneThread,
 } from "@/lib/thread-activity"
 import {
-  deriveProjectNameFromPath,
-  requestProjectRootPath,
-} from "@/lib/projectPathInput"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -71,7 +67,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { StatusPill } from "@bb/ui-core"
 import { toast } from "sonner"
 
 interface ProjectListProps {
@@ -237,30 +232,16 @@ export function ProjectList({
     })
   }
 
-  const changeProjectPath = async (projectId: string) => {
+  // TODO: Wire up path picker via useHostDaemon when available
+  const changeProjectPath = async (_projectId: string) => {
     if (updateProject.isPending) return
-
-    const rootPath = await requestProjectRootPath()
-    if (!rootPath) return
-
-    updateProject.mutate({
-      id: projectId,
-      rootPath,
-    })
+    window.alert("Path selection is not yet available.")
   }
 
-  const repairProjectPath = async (projectId: string, fallbackName: string) => {
+  // TODO: Wire up path picker via useHostDaemon when available
+  const repairProjectPath = async (_projectId: string, _fallbackName: string) => {
     if (updateProject.isPending) return
-
-    const rootPath = await requestProjectRootPath()
-    if (!rootPath) return
-
-    const nextName = deriveProjectNameFromPath(rootPath).trim() || fallbackName
-    updateProject.mutate({
-      id: projectId,
-      rootPath,
-      name: nextName,
-    })
+    window.alert("Path selection is not yet available.")
   }
 
   const removeProject = (projectId: string, projectName: string) => {
@@ -287,7 +268,7 @@ export function ProjectList({
   const requestArchiveThread = (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    if (requiresArchiveConfirmation(thread.workStatus, null)) {
+    if (requiresArchiveConfirmation(null, null)) {
       setArchiveConfirmationThread(thread)
       return
     }
@@ -461,9 +442,6 @@ export function ProjectList({
           </span>
         ) : null}
         <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
-          {thread.primaryCheckout?.isActive ? (
-            <StatusPill variant="emphasis">active</StatusPill>
-          ) : null}
           <span className="relative h-7 w-7 shrink-0">
             <span
               className={cn(
@@ -580,7 +558,8 @@ export function ProjectList({
               const isProjectCollapsed = collapsedProjectIds.has(project.id)
               const isProjectActive =
                 selectedProjectId === project.id && !selectedThreadId
-              const isProjectPathMissing = project.rootPathExists === false
+              // TODO: rootPathExists no longer on Project; derive from project sources
+              const isProjectPathMissing = false
 
               return (
                 <SidebarMenuItem key={project.id} className="space-y-1">

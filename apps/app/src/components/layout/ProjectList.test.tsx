@@ -43,7 +43,6 @@ vi.mock("@/hooks/useApi", () => {
 
 vi.mock("@/lib/projectPathInput", () => ({
   deriveProjectNameFromPath: vi.fn(),
-  requestProjectRootPath: vi.fn(),
 }))
 
 vi.mock("@/components/thread/ThreadActionsMenu", () => ({

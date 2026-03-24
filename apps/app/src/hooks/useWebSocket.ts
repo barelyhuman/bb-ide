@@ -245,6 +245,9 @@ export function useWebSocket(): void {
         case "system":
           queryClient.invalidateQueries({ queryKey: ["systemRestartPolicy"] });
           break;
+        case "project":
+          queryClient.invalidateQueries({ queryKey: ["projects"] });
+          break;
         default:
           assertNever(message);
       }

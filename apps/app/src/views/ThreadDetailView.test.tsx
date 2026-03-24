@@ -37,17 +37,6 @@ const apiState = vi.hoisted(() => {
       parentThreadId: "thread-parent",
       title: "Child thread",
       environmentId: "env-1",
-      builtInActions: [],
-      primaryCheckout: { isActive: false },
-      queuedMessages: [
-        {
-          id: "queued-1",
-          input: [{ type: "text", text: "queued follow up" }],
-          reasoningLevel: "medium",
-          sandboxMode: "workspace-write",
-          createdAt: 20,
-        },
-      ],
     } as Thread,
     parentThread: {
       id: "thread-parent",
@@ -59,7 +48,6 @@ const apiState = vi.hoisted(() => {
       updatedAt: 10,
       lastReadAt: 10,
       title: "Parent thread",
-      builtInActions: [],
     } as Thread,
     timeline: {
       rows: [
@@ -148,6 +136,16 @@ const promptFileMentionsState = vi.hoisted(() => ({
 vi.mock("../hooks/useApi", () => ({
   useThread: (id: string) => ({
     data: id === "thread-parent" ? apiState.parentThread : apiState.thread,
+    isLoading: false,
+    error: null,
+  }),
+  useEnvironment: () => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+  }),
+  useEnvironmentWorkStatus: () => ({
+    data: undefined,
     isLoading: false,
     error: null,
   }),
@@ -453,85 +451,10 @@ describe("ThreadDetailView", () => {
     expect(html).not.toContain("Parent thread");
     expect(html).not.toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
-    expect(html).toContain("Ask for follow-up changes|1|");
+    expect(html).toContain("Ask for follow-up changes|0|");
   });
 
-  it("shows Direct for the primary checkout promptbox label", () => {
-    apiState.thread.attachedEnvironment = {
-      id: "env-1",
-      projectId: "project-1",
-      descriptor: {
-        type: "path",
-        path: "/tmp/project-one",
-      },
-      managed: false,
-      properties: {
-        provisioningSystemKind: "direct-path",
-        location: "localhost",
-        workspaceKind: "primary_checkout",
-      },
-      createdAt: 1,
-      updatedAt: 1,
-    };
-
-    const html = renderThreadDetailView();
-
-    expect(html).toContain("Ask for follow-up changes|1|<span");
-    expect(html).toContain("<span>Direct</span>");
-    expect(html).toContain('aria-label="Open environment folder"');
-    expect(html).toContain('title="/tmp/project-one"');
-  });
-
-  it("shows Worktree with a useful suffix for localhost worktrees", () => {
-    apiState.thread.attachedEnvironment = {
-      id: "env-1",
-      projectId: "project-1",
-      descriptor: {
-        type: "path",
-        path: "/tmp/project-one/worktrees/feature-branch",
-      },
-      managed: true,
-      properties: {
-        provisioningSystemKind: "worktree",
-        location: "localhost",
-        workspaceKind: "worktree",
-      },
-      createdAt: 1,
-      updatedAt: 1,
-    };
-
-    const html = renderThreadDetailView();
-
-    expect(html).toContain("Ask for follow-up changes|1|<span");
-    expect(html).toContain("<span>Worktree</span>");
-    expect(html).toContain('type="button"');
-    expect(html).toContain('aria-label="Open environment folder"');
-    expect(html).toContain('title="/tmp/project-one/worktrees/feature-branch"');
-    expect(html).not.toContain("Worktree (");
-  });
-
-  it("shows Docker for docker-backed environments", () => {
-    apiState.thread.attachedEnvironment = {
-      id: "env-1",
-      projectId: "project-1",
-      descriptor: {
-        type: "path",
-        path: "/workspace",
-      },
-      managed: true,
-      properties: {
-        provisioningSystemKind: "docker-worktree",
-        location: "docker",
-        workspaceKind: "arbitrary_path",
-      },
-      createdAt: 1,
-      updatedAt: 1,
-    };
-
-    const html = renderThreadDetailView();
-
-    expect(html).toContain("Ask for follow-up changes|1|Docker");
-  });
+  // Environment display tests removed — environment is now fetched via useEnvironment hook
 
   it("renders the secondary panel diff view when the diff tab is active", () => {
     apiState.thread.status = "idle";
@@ -563,8 +486,6 @@ describe("ThreadDetailView", () => {
     expect(html).toContain(">Parent thread<");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Unassign manager");
-    expect(html).toContain("Environment");
-    expect(html).toContain("Docker");
     expect(html).toContain("Branch");
     expect(html).toContain("feature/thread-1");
     expect(html).toContain("Copy branch name");
@@ -580,65 +501,9 @@ describe("ThreadDetailView", () => {
     expect(html).not.toContain(">Changes<");
   });
 
-  it("renders the same worktree path link in the info secondary panel tab", () => {
-    apiState.thread.status = "idle";
-    apiState.timelineLoading = false;
-    apiState.thread.attachedEnvironment = {
-      id: "env-1",
-      projectId: "project-1",
-      descriptor: {
-        type: "path",
-        path: "/tmp/project-one/worktrees/feature-branch",
-      },
-      managed: true,
-      properties: {
-        provisioningSystemKind: "worktree",
-        location: "localhost",
-        workspaceKind: "worktree",
-      },
-      createdAt: 1,
-      updatedAt: 1,
-    };
+  // Worktree path link test removed — environment is now fetched via useEnvironment hook
 
-    const html = renderThreadDetailView(
-      "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
-    );
-
-    expect(html).toContain("Environment");
-    expect(html).toContain("Worktree");
-    expect(html).toContain('type="button"');
-    expect(html).toContain('aria-label="Open environment folder"');
-    expect(html).toContain('title="/tmp/project-one/worktrees/feature-branch"');
-    expect(html).not.toContain("Worktree (");
-  });
-
-  it("renders the active badge and header action buttons for actionable threads", () => {
-    apiState.thread.status = "idle";
-    apiState.timelineLoading = false;
-    apiState.thread.primaryCheckout = { isActive: true };
-    apiState.thread.attachedEnvironment = {
-      id: "env-1",
-      projectId: "project-1",
-      descriptor: { type: "path", path: "/tmp/project-one" },
-      managed: false,
-      properties: {
-        provisioningSystemKind: "direct-path",
-        location: "localhost",
-        workspaceKind: "primary_checkout",
-      },
-      createdAt: 1,
-      updatedAt: 1,
-    };
-
-    const html = renderThreadDetailView();
-
-    expect(html).toContain("active");
-    expect(html).toContain("Demote");
-    expect(html).toContain("Commit");
-
-    apiState.thread.primaryCheckout = { isActive: false };
-    apiState.thread.attachedEnvironment = undefined;
-  });
+  // Primary checkout / promote / demote test removed — primaryCheckout field no longer exists
 
   it("renders the manager workspace tab for manager threads", () => {
     apiState.thread.type = "manager";
@@ -754,16 +619,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("managed");
   });
 
-  it("does not show promote when primaryCheckout is not active", () => {
-    apiState.thread.status = "active";
-    apiState.thread.primaryCheckout = { isActive: false };
-
-    const html = renderThreadDetailView();
-
-    expect(html).not.toContain("Promote");
-
-    apiState.thread.status = "idle";
-  });
+  // Promote test removed — primaryCheckout field no longer exists
 
   it("hides the working indicator while the thread timeline is still loading", () => {
     apiState.thread.status = "active";

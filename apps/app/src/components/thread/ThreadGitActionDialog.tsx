@@ -331,7 +331,6 @@ function ThreadGitActionDialogContent({
                 ) : (
                   <WorkspaceChangesList
                     files={changedFiles}
-                    threadId={threadId}
                     maxHeightClassName="max-h-40"
                   />
                 )}
