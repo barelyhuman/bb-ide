@@ -128,7 +128,7 @@ export function usePromptMentions(
         path: `thread:${thread.id}`,
         replacement: `thread:${thread.id}`,
         threadId: thread.id,
-        title: thread.title ?? undefined,
+        title: thread.title ?? thread.titleFallback ?? undefined,
         threadType: thread.type,
       }));
   }, [
