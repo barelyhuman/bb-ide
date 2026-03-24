@@ -2,15 +2,15 @@ import {
   assertNever,
 } from "@bb/core-ui"
 import type {
-  EnvironmentRecord,
-  ThreadWorkStatus,
+  Environment,
+  WorkspaceStatus,
 } from "@bb/domain"
 import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { HttpError } from "./api"
 
 type ArchiveEnvironmentShape =
   | Pick<SystemEnvironmentInfo, "capabilities">
-  | Pick<EnvironmentRecord, "properties">
+  | Pick<Environment, "properties">
 
 function isIsolatedArchiveEnvironment(
   environment: ArchiveEnvironmentShape | null | undefined,
@@ -28,7 +28,7 @@ function isIsolatedArchiveEnvironment(
 }
 
 export function requiresArchiveConfirmation(
-  workStatus: ThreadWorkStatus | null | undefined,
+  workStatus: WorkspaceStatus | null | undefined,
   environment: ArchiveEnvironmentShape | null | undefined,
 ): boolean {
   if (!isIsolatedArchiveEnvironment(environment) || !workStatus) {

@@ -5,8 +5,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { UIMessage } from "@bb/domain";
-import { type ThreadDetailRow, type ThreadDetailToolGroupRow } from "@bb/domain";
+import type { ViewMessage } from "@bb/domain";
+import { type TimelineRow, type TimelineToolGroupRow } from "@bb/domain";
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@bb/ui-core";
 
 const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
@@ -28,11 +28,11 @@ interface LoadToolGroupMessagesArgs {
 
 interface UseThreadTimelineControllerParams {
   threadId?: string;
-  threadDetailRows: ThreadDetailRow[];
+  threadDetailRows: TimelineRow[];
   isSecondaryPanelOpen: boolean;
   loadToolGroupMessages: (
     args: LoadToolGroupMessagesArgs,
-  ) => Promise<{ messages: UIMessage[] }>;
+  ) => Promise<{ messages: ViewMessage[] }>;
 }
 
 function isNearBottom(container: HTMLDivElement): boolean {
@@ -125,7 +125,7 @@ export function useThreadTimelineController({
     new Set(),
   );
   const [toolGroupMessagesById, setToolGroupMessagesById] = useState<
-    Record<string, UIMessage[]>
+    Record<string, ViewMessage[]>
   >({});
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(
     null,
@@ -257,7 +257,7 @@ export function useThreadTimelineController({
   }, [containerElement, scheduleReconcile]);
 
   const handleLoadToolGroupMessages = useCallback(
-    (entry: ThreadDetailToolGroupRow) => {
+    (entry: TimelineToolGroupRow) => {
       if (!threadId) return;
       if (entry.messages.length > 0 || toolGroupMessagesById[entry.id]) return;
       if (loadingToolGroupIds.has(entry.id)) return;

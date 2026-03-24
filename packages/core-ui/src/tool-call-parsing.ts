@@ -1,4 +1,4 @@
-import type { UIToolCallSummary, UIToolParsedIntent } from "@bb/domain";
+import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { getFirstStringField } from "./format-helpers.js";
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
@@ -42,7 +42,7 @@ export function extractShellCommandFromString(value: string): string | undefined
 
 interface ToolDescriptor {
   /** The exploring-intent type, or null if this tool is not an exploring action. */
-  intentType: UIToolParsedIntent["type"] | null;
+  intentType: ViewToolParsedIntent["type"] | null;
   /** Arg keys to extract as the primary value (tried in order). */
   argKeys: readonly string[];
   /** Optional secondary arg keys (e.g. path for Grep). */
@@ -70,7 +70,7 @@ const TOOL_TABLE: Record<string, ToolDescriptor> = {
 export function toolNameToParsedIntents(
   toolName: string,
   args: Record<string, unknown> | null,
-): UIToolParsedIntent[] {
+): ViewToolParsedIntent[] {
   const desc = TOOL_TABLE[toolName];
   if (!desc?.intentType) return [];
 
@@ -124,7 +124,7 @@ function formatUnknownToolCommand(toolName: string, args: Record<string, unknown
   return `${toolName} { ${compact} }`;
 }
 
-export function isExploringIntent(intent: UIToolParsedIntent): boolean {
+export function isExploringIntent(intent: ViewToolParsedIntent): boolean {
   return (
     intent.type === "read" ||
     intent.type === "list_files" ||
@@ -132,7 +132,7 @@ export function isExploringIntent(intent: UIToolParsedIntent): boolean {
   );
 }
 
-export function isExploringCall(call: Pick<UIToolCallSummary, "parsedCmd">): boolean {
+export function isExploringCall(call: Pick<ViewToolCallSummary, "parsedCmd">): boolean {
   if (call.parsedCmd.length === 0) return false;
   return call.parsedCmd.every((intent) => isExploringIntent(intent));
 }

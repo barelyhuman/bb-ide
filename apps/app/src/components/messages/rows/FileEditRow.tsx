@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { UIFileEditMessage } from "@bb/domain";
+import type { ViewFileEditMessage } from "@bb/domain";
 import {
   CollapsibleHeader,
   ExpandablePanel,
@@ -21,11 +21,11 @@ function fileNameFromPath(path: string): string {
   return candidate && candidate.length > 0 ? candidate : path;
 }
 
-function fileChangeIdentity(change: UIFileEditMessage["changes"][number]): string {
+function fileChangeIdentity(change: ViewFileEditMessage["changes"][number]): string {
   return (change.movePath ?? change.path).replaceAll("\\", "/");
 }
 
-function formatFileChangeName(change: UIFileEditMessage["changes"][number]): string {
+function formatFileChangeName(change: ViewFileEditMessage["changes"][number]): string {
   const sourceName = fileNameFromPath(change.path);
   if (!change.movePath) return sourceName;
   const destinationName = fileNameFromPath(change.movePath);
@@ -33,7 +33,7 @@ function formatFileChangeName(change: UIFileEditMessage["changes"][number]): str
 }
 
 function summarizeChangedFileNames(
-  changes: UIFileEditMessage["changes"],
+  changes: ViewFileEditMessage["changes"],
   maxNames: number,
 ): { names: string[]; totalUniqueFiles: number; extraCount: number } {
   const seenFiles = new Set<string>();
@@ -56,7 +56,7 @@ function normalizeToken(value: string | undefined): string {
   return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
 }
 
-function fileChangeAction(change: UIFileEditMessage["changes"][number]): FileChangeAction {
+function fileChangeAction(change: ViewFileEditMessage["changes"][number]): FileChangeAction {
   if (change.movePath) return "renamed";
   const token = normalizeToken(change.kind);
   if (token.includes("add") || token.includes("create")) return "created";
@@ -71,7 +71,7 @@ function fileChangeActionLabel(action: FileChangeAction): string {
   return "Edited";
 }
 
-function diffStats(change: UIFileEditMessage["changes"][number]): { added: number; removed: number } {
+function diffStats(change: ViewFileEditMessage["changes"][number]): { added: number; removed: number } {
   const diff = change.diff;
   if (!diff) return { added: 0, removed: 0 };
   let added = 0;
@@ -116,7 +116,7 @@ function diffStats(change: UIFileEditMessage["changes"][number]): { added: numbe
 }
 
 function toSyntheticPatch(
-  change: UIFileEditMessage["changes"][number],
+  change: ViewFileEditMessage["changes"][number],
   action: FileChangeAction,
 ): string | undefined {
   if (action !== "created" && action !== "deleted") return undefined;
@@ -133,7 +133,7 @@ function toSyntheticPatch(
   return `--- ${fromPath}\n+++ ${toPath}\n@@ -1,${oldCount} +1,${newCount} @@\n${body}\n`;
 }
 
-function getRenderablePatch(change: UIFileEditMessage["changes"][number]): string | undefined {
+function getRenderablePatch(change: ViewFileEditMessage["changes"][number]): string | undefined {
   const patch = change.diff;
   if (patch && patch.trim().length > 0) {
     const trimmedPatch = patch.trimEnd();
@@ -167,7 +167,7 @@ export function FileEditRow({
   initialExpanded = false,
   preferOngoingLabels = false,
 }: {
-  message: UIFileEditMessage;
+  message: ViewFileEditMessage;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;
 }) {

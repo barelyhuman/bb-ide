@@ -1,10 +1,10 @@
-import type { UIAssistantTextMessage } from "@bb/domain";
+import type { ViewAssistantTextMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 
 export function AssistantMessageRow({
   message,
 }: {
-  message: UIAssistantTextMessage;
+  message: ViewAssistantTextMessage;
 }) {
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>

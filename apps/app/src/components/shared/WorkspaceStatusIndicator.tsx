@@ -1,4 +1,4 @@
-import { type ThreadWorkStatus } from "@bb/domain";
+import { type WorkspaceStatus } from "@bb/domain";
 import {
   Popover,
   PopoverContent,
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 
 interface WorkspaceStatusIndicatorProps {
-  status: ThreadWorkStatus | undefined;
+  status: WorkspaceStatus | undefined;
   label: string;
   variant: StatusPillVariant;
   className?: string;

@@ -1,5 +1,5 @@
 import { type ReactNode, type RefObject } from "react";
-import type { ThreadDetailRow, ThreadDetailToolGroupRow, UIMessage } from "@bb/domain";
+import type { TimelineRow, TimelineToolGroupRow, ViewMessage } from "@bb/domain";
 import {
   ConversationEmptyState,
   ConversationTimeline,
@@ -26,8 +26,8 @@ function ToolGroupEntry({
   preferOngoingLabels,
 }: {
   projectId?: string;
-  entry: ThreadDetailToolGroupRow;
-  messages: ThreadDetailToolGroupRow["messages"];
+  entry: TimelineToolGroupRow;
+  messages: TimelineToolGroupRow["messages"];
   isLoadingMessages: boolean;
   onLoadMessages: () => void;
   initialExpanded: boolean;
@@ -106,15 +106,15 @@ interface ThreadTimelinePaneProps {
   isTransientThreadLoadError: boolean;
   latestActivityRowId: string | null;
   loadingToolGroupIds: ReadonlySet<string>;
-  onLoadToolGroupMessages: (entry: ThreadDetailToolGroupRow) => void;
+  onLoadToolGroupMessages: (entry: TimelineToolGroupRow) => void;
   onScroll: () => void;
   projectId?: string;
   scrollRef: (element: HTMLDivElement | null) => void;
   showOngoingIndicator: boolean;
-  threadDetailRows: ThreadDetailRow[];
+  threadDetailRows: TimelineRow[];
   threadId: string;
   threadStatus: string;
-  toolGroupMessagesById: Record<string, UIMessage[]>;
+  toolGroupMessagesById: Record<string, ViewMessage[]>;
 }
 
 export function ThreadTimelinePane({

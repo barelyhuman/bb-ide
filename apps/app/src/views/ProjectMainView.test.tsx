@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ThreadWorkStatus } from "@bb/domain";
+import type { WorkspaceStatus } from "@bb/domain";
 import { ProjectMainView } from "./ProjectMainView";
 
 const apiState = vi.hoisted(() => ({
@@ -40,7 +40,7 @@ const apiState = vi.hoisted(() => ({
     behindCount: 0,
     currentBranch: "feature/project-main",
     defaultBranch: "main",
-  } as ThreadWorkStatus,
+  } as WorkspaceStatus,
 }));
 
 vi.mock("@/hooks/useApi", () => ({

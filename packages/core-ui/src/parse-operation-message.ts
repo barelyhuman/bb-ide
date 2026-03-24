@@ -7,12 +7,12 @@ import {
   readProvisioningTranscript,
 } from "./provisioning-helpers.js";
 import type {
-  ToUIMessagesOptions,
-  UIOperationMessage,
-  UIThreadOperationMetadata,
+  ToViewMessagesOptions,
+  ViewOperationMessage,
+  ViewThreadOperationMetadata,
 } from "@bb/domain";
 
-export function threadOperationTitle(meta: UIThreadOperationMetadata | null): string {
+export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): string {
   if (!meta) return "Operation update";
 
   const { operation, status, metadata } = meta;
@@ -90,8 +90,8 @@ export function threadOperationTitle(meta: UIThreadOperationMetadata | null): st
 }
 
 export function threadOperationStatus(
-  meta: UIThreadOperationMetadata | null,
-): UIOperationMessage["status"] {
+  meta: ViewThreadOperationMetadata | null,
+): ViewOperationMessage["status"] {
   if (!meta) return undefined;
   switch (meta.status) {
     case "requested":
@@ -112,7 +112,7 @@ export function threadOperationStatus(
 
 function provisioningOperationStatus(
   status: "started" | "in_progress" | "completed" | "failed",
-): UIOperationMessage["status"] {
+): ViewOperationMessage["status"] {
   switch (status) {
     case "started":
     case "in_progress":
@@ -131,8 +131,8 @@ function op(
   decoded: ThreadEvent,
   meta: EventMeta,
   idKey: string,
-  fields: Omit<UIOperationMessage, "kind" | "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt" | "startedAt">,
-): UIOperationMessage {
+  fields: Omit<ViewOperationMessage, "kind" | "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt" | "startedAt">,
+): ViewOperationMessage {
   return {
     kind: "operation",
     id: messageId(decoded.threadId, "op", `${idKey}:${meta.seq}`),
@@ -164,7 +164,7 @@ export function parseOperationMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
   options?: { includeOptionalOperations?: boolean },
-): UIOperationMessage | null {
+): ViewOperationMessage | null {
   const eventTurnId = getEventTurnId(decoded);
 
   if (decoded.type === "turn/plan/updated") {
@@ -286,7 +286,7 @@ export function parseOperationMessage(
   }
 
   if (decoded.type === "system/operation") {
-    const threadOperation: UIThreadOperationMetadata = {
+    const threadOperation: ViewThreadOperationMetadata = {
       operation: decoded.operation,
       status: decoded.status,
       ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
@@ -337,7 +337,7 @@ export function parseOperationMessage(
   return null;
 }
 
-export function interruptOperationMessage(message: UIOperationMessage): void {
+export function interruptOperationMessage(message: ViewOperationMessage): void {
   if (message.status !== "pending") return;
   message.status = "interrupted";
 
@@ -372,12 +372,12 @@ export function interruptOperationMessage(message: UIOperationMessage): void {
 }
 
 export function finalizeOperationMessage(
-  message: UIOperationMessage,
-  options: ToUIMessagesOptions | undefined,
+  message: ViewOperationMessage,
+  options: ToViewMessagesOptions | undefined,
 ): void {
   if (message.status !== "pending") return;
 
-  if (options?.threadStatus === "provisioning_failed") {
+  if (options?.threadStatus === "error") {
     switch (message.opType) {
       case "provisioning":
         message.status = "error";

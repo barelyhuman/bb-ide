@@ -15,11 +15,11 @@
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "dev": "tsc --watch --preserveWatchOutput",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@bb/domain": "workspace:*",
-    "@bb/env-daemon-contract": "workspace:*",
     "hono": "^4.7.0",
     "zod": "^3.24.0"
   },

@@ -1,4 +1,4 @@
-import type { EnvironmentRecord } from "@bb/domain"
+import type { Environment } from "@bb/domain"
 import type { SystemEnvironmentInfo } from "@bb/server-contract"
 import { Container, Laptop, Split, type LucideIcon } from "lucide-react"
 import { createElement, forwardRef } from "react"
@@ -10,7 +10,7 @@ interface EnvironmentIconInfo {
 
 type EnvironmentIconSource =
   | (Pick<SystemEnvironmentInfo, "capabilities"> & { id?: string })
-  | Pick<EnvironmentRecord, "managed" | "properties">
+  | Pick<Environment, "managed" | "properties">
 
 const WorktreeIcon = forwardRef<SVGSVGElement, React.ComponentPropsWithoutRef<typeof Split>>(
   (props, ref) =>

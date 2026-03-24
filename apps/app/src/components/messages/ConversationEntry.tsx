@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { assertNever } from "@bb/core-ui";
-import type { UIMessage } from "@bb/domain";
+import type { ViewMessage } from "@bb/domain";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
 import { DebugEventRow } from "./rows/DebugEventRow";
 import { ErrorRow } from "./rows/ErrorRow";
@@ -13,7 +13,7 @@ import { UserMessageRow } from "./rows/UserMessageRow";
 import { WebSearchRow } from "./rows/WebSearchRow";
 
 interface ConversationEntryProps {
-  message: UIMessage;
+  message: ViewMessage;
   projectId?: string;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;

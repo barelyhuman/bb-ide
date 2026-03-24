@@ -2,14 +2,14 @@ import type { ThreadEvent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
-import type { UIDebugRawEventMessage, UIErrorMessage, UIMessage } from "@bb/domain";
+import type { ViewDebugRawEventMessage, ViewErrorMessage, ViewMessage } from "@bb/domain";
 
 function formatErrorDetail(message: string, detail: string | undefined): string {
   if (detail && detail !== message) return `${message} - ${detail}`;
   return message || "Error event";
 }
 
-export function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): UIErrorMessage | null {
+export function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): ViewErrorMessage | null {
   if (decoded.type !== "error" && decoded.type !== "system/error") return null;
 
   const { message, detail } = decoded;
@@ -51,10 +51,10 @@ export function isIgnoredItemStartEvent(decoded: ThreadEvent): boolean {
 }
 
 export function appendDebugEvent(
-  out: UIMessage[],
+  out: ViewMessage[],
   decoded: ThreadEvent,
   meta: EventMeta,
-  reason: UIDebugRawEventMessage["reason"],
+  reason: ViewDebugRawEventMessage["reason"],
 ): void {
   const { type, threadId, ...data } = decoded;
   out.push({

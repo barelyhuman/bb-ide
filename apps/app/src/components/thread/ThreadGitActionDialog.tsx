@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { assertNever } from "@bb/core-ui";
-import type { PromptInput, ThreadType, ThreadWorkStatus } from "@bb/domain";
+import type { PromptInput, ThreadType, WorkspaceStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,7 @@ interface ThreadGitActionDialogProps {
   branchName?: string;
   gitStatusLabel?: string;
   gitStatusSummary?: string;
-  changedFiles?: ThreadWorkStatus["files"];
+  changedFiles?: WorkspaceStatus["files"];
   threadId?: string;
   threadType?: ThreadType;
   showMergeBaseDetails?: boolean;

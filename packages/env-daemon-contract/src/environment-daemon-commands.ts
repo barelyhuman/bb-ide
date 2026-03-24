@@ -9,7 +9,7 @@ import {
   threadGitDiffSelectionSchema,
   threadExecutionOptionsSchema,
   threadStatusSchema,
-  threadWorkStatusSchema,
+  workspaceStatusSchema,
   type ThreadGitDiffCommitSummary,
   type ThreadGitDiffMode,
   type ThreadGitDiffResponse,
@@ -165,7 +165,7 @@ export const environmentDaemonCommandResultSchemaByType = {
     models: z.array(availableModelSchema),
   }),
   "workspace.status": z.object({
-    workStatus: threadWorkStatusSchema.nullable(),
+    workStatus: workspaceStatusSchema.nullable(),
   }),
   "workspace.diff": z.object({
     gitDiff: environmentDaemonThreadGitDiffResponseSchema,

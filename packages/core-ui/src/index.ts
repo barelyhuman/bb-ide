@@ -23,17 +23,17 @@ export {
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 
 export {
-  buildThreadDetailRows,
+  buildTimelineRows,
 } from "./thread-detail-rows.js";
 export type {
-  BuildThreadDetailRowsOptions,
+  BuildTimelineRowsOptions,
 } from "./thread-detail-rows.js";
 
 export { decodeRow } from "./event-decode.js";
 export type { EventMeta } from "./event-decode.js";
 
-export { toUIMessages } from "./to-ui-messages.js";
-export type { ThreadEventWithMeta } from "./to-ui-messages.js";
+export { toViewMessages } from "./to-view-messages.js";
+export type { ThreadEventWithMeta } from "./to-view-messages.js";
 
 export {
   extractErrorMessage,

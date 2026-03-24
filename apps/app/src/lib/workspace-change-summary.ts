@@ -1,4 +1,4 @@
-import type { ThreadWorkStatus } from "@bb/domain";
+import type { WorkspaceStatus } from "@bb/domain";
 
 type ChangeCounts = {
   changedFiles: number;
@@ -7,7 +7,7 @@ type ChangeCounts = {
 };
 
 type WorkspaceChangeCounts = Pick<
-  ThreadWorkStatus,
+  WorkspaceStatus,
   "workspaceChangedFiles" | "workspaceInsertions" | "workspaceDeletions"
 >;
 

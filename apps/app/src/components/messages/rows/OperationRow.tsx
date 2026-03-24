@@ -3,7 +3,7 @@ import {
   ExpandablePanel,
   EventCodeBlock,
 } from "@bb/ui-core";
-import type { UIOperationMessage, UIProvisioningMetadata, UIProvisioningTranscriptEntry } from "@bb/domain";
+import type { ViewOperationMessage, ViewProvisioningMetadata, ViewProvisioningTranscriptEntry } from "@bb/domain";
 import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
@@ -25,7 +25,7 @@ function splitNonEmptyLines(value: string | undefined): string[] {
 }
 
 function formatProvisioningTranscriptEntry(
-  entry: UIProvisioningTranscriptEntry,
+  entry: ViewProvisioningTranscriptEntry,
 ): string | undefined {
   return entry.text;
 }
@@ -62,7 +62,7 @@ function isShimmeringOperationStatus(status: string): boolean {
   }
 }
 
-function isPendingOperation(message: UIOperationMessage): boolean {
+function isPendingOperation(message: ViewOperationMessage): boolean {
   if (message.status !== undefined) {
     return message.status === "pending";
   }
@@ -72,7 +72,7 @@ function isPendingOperation(message: UIOperationMessage): boolean {
   return false;
 }
 
-function getOperationTone(message: UIOperationMessage): "default" | "destructive" {
+function getOperationTone(message: ViewOperationMessage): "default" | "destructive" {
   return message.status === "error" ? "destructive" : "default";
 }
 
@@ -149,7 +149,7 @@ function OperationDetailLines({
 }
 
 function buildProvisioningSummary(
-  message: UIOperationMessage,
+  message: ViewOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
   const isPending = isPendingOperation(message);
@@ -195,7 +195,7 @@ function buildProvisioningSummary(
 }
 
 function buildProvisioningTranscript(
-  message: UIOperationMessage,
+  message: ViewOperationMessage,
 ): {
   lines: string[];
 } {
@@ -216,7 +216,7 @@ function capitalizeFirst(value: string): string {
 }
 
 function buildOperationSummary(
-  message: UIOperationMessage,
+  message: ViewOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
   const metadata = message.threadOperation;
@@ -317,7 +317,7 @@ function buildOperationSummary(
 }
 
 function buildCompactionSummary(
-  message: UIOperationMessage,
+  message: ViewOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
   if (message.status === "pending") {
@@ -337,7 +337,7 @@ export function OperationRow({
   message,
   initialExpanded = false,
 }: {
-  message: UIOperationMessage;
+  message: ViewOperationMessage;
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);

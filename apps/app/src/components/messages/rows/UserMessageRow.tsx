@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { UIUserMessage } from "@bb/domain";
+import type { ViewUserMessage } from "@bb/domain";
 import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox";
@@ -11,7 +11,7 @@ export function UserMessageRow({
   message,
   projectId,
 }: {
-  message: UIUserMessage;
+  message: ViewUserMessage;
   projectId?: string;
 }) {
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);

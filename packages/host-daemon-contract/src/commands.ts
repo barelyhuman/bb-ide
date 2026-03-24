@@ -1,0 +1,302 @@
+import {
+  availableModelSchema,
+  dynamicToolSchema,
+  promptInputSchema,
+  threadExecutionOptionsSchema,
+  threadGitDiffResponseSchema,
+  threadGitDiffSelectionSchema,
+  workspaceStatusSchema,
+} from "@bb/domain";
+import { z } from "zod";
+
+export const HOST_DAEMON_PROTOCOL_VERSION = 2 as const;
+
+export const HOST_DAEMON_COMMAND_TYPES = [
+  "thread.start",
+  "thread.resume",
+  "turn.run",
+  "turn.steer",
+  "thread.stop",
+  "thread.rename",
+  "provider.list_models",
+  "environment.provision",
+  "environment.destroy",
+  "workspace.status",
+  "workspace.diff",
+  "workspace.commit",
+  "workspace.squash_merge",
+  "workspace.reset",
+  "workspace.checkpoint",
+  "workspace.export",
+  "workspace.import",
+  "workspace.reattach",
+] as const;
+export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
+export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
+
+export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema;
+export type HostDaemonExecutionOptions = z.infer<
+  typeof hostDaemonExecutionOptionsSchema
+>;
+
+const hostDaemonThreadTargetSchema = z.object({
+  environmentId: z.string().min(1),
+  threadId: z.string().min(1),
+});
+
+const hostDaemonEnvironmentTargetSchema = z.object({
+  environmentId: z.string().min(1),
+});
+
+export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.start"),
+  projectId: z.string().min(1),
+  providerId: z.string().min(1).optional(),
+  input: z.array(promptInputSchema).min(1).optional(),
+  options: hostDaemonExecutionOptionsSchema.optional(),
+  dynamicTools: z.array(dynamicToolSchema).optional(),
+});
+
+export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.resume"),
+  projectId: z.string().min(1).optional(),
+  providerThreadId: z.string().min(1).optional(),
+  providerId: z.string().min(1).optional(),
+  options: hostDaemonExecutionOptionsSchema.optional(),
+  dynamicTools: z.array(dynamicToolSchema).optional(),
+});
+
+export const turnRunCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("turn.run"),
+  input: z.array(promptInputSchema).min(1),
+  options: hostDaemonExecutionOptionsSchema.optional(),
+});
+
+export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("turn.steer"),
+  expectedTurnId: z.string().min(1),
+  input: z.array(promptInputSchema).min(1),
+});
+
+export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.stop"),
+});
+
+export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("thread.rename"),
+  title: z.string().min(1),
+});
+
+export const providerListModelsCommandSchema = z.object({
+  type: z.literal("provider.list_models"),
+  providerId: z.string().min(1),
+  environmentId: z.string().min(1).optional(),
+});
+
+export const environmentProvisionCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+  type: z.literal("environment.provision"),
+  threadId: z.string().min(1).optional(),
+  projectId: z.string().min(1),
+  strategy: z.enum(["worktree", "clone", "existing_path"]),
+  sourcePath: z.string().min(1).optional(),
+  targetPath: z.string().min(1),
+  branchName: z.string().min(1).optional(),
+  scriptName: z.string().min(1).optional(),
+  timeoutMs: z.number().int().positive().optional(),
+});
+
+export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+  type: z.literal("environment.destroy"),
+  path: z.string().min(1),
+  kind: z.enum(["worktree", "directory"]),
+  force: z.boolean().optional(),
+});
+
+export const workspaceStatusCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.status"),
+  mergeBaseBranch: z.string().min(1).optional(),
+});
+
+export const workspaceDiffCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.diff"),
+  selection: threadGitDiffSelectionSchema.optional(),
+  mergeBaseBranch: z.string().min(1).optional(),
+});
+
+export const workspaceCommitCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.commit"),
+  message: z.string().min(1),
+  includeUnstaged: z.boolean().optional(),
+});
+
+export const workspaceSquashMergeCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.squash_merge"),
+  targetBranch: z.string().min(1),
+  commitMessage: z.string().min(1),
+});
+
+export const workspaceResetCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.reset"),
+});
+
+export const workspaceCheckpointCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.checkpoint"),
+  commitMessage: z.string().min(1),
+  remoteName: z.string().min(1).optional(),
+});
+
+export const workspaceExportCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.export"),
+  pushToRemote: z.string().min(1).optional(),
+});
+
+export const workspaceImportCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.import"),
+  branch: z.string().min(1),
+  remote: z.string().min(1).optional(),
+});
+
+export const workspaceReattachCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("workspace.reattach"),
+  branch: z.string().min(1),
+});
+
+export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
+  threadStartCommandSchema,
+  threadResumeCommandSchema,
+  turnRunCommandSchema,
+  turnSteerCommandSchema,
+  threadStopCommandSchema,
+  threadRenameCommandSchema,
+  providerListModelsCommandSchema,
+  environmentProvisionCommandSchema,
+  environmentDestroyCommandSchema,
+  workspaceStatusCommandSchema,
+  workspaceDiffCommandSchema,
+  workspaceCommitCommandSchema,
+  workspaceSquashMergeCommandSchema,
+  workspaceResetCommandSchema,
+  workspaceCheckpointCommandSchema,
+  workspaceExportCommandSchema,
+  workspaceImportCommandSchema,
+  workspaceReattachCommandSchema,
+]);
+export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
+
+export const hostDaemonCommandResultSchemaByType = {
+  "thread.start": z.object({
+    providerThreadId: z.string().min(1),
+  }),
+  "thread.resume": z.object({
+    providerThreadId: z.string().min(1).optional(),
+  }),
+  "turn.run": z.object({}),
+  "turn.steer": z.object({}),
+  "thread.stop": z.object({}),
+  "thread.rename": z.object({}),
+  "provider.list_models": z.object({
+    models: z.array(availableModelSchema),
+  }),
+  "environment.provision": z.object({
+    path: z.string().min(1),
+    branchName: z.string().min(1).optional(),
+    ranSetup: z.boolean(),
+  }),
+  "environment.destroy": z.object({}),
+  "workspace.status": z.object({
+    workspaceStatus: workspaceStatusSchema.nullable(),
+  }),
+  "workspace.diff": z.object({
+    diff: threadGitDiffResponseSchema,
+  }),
+  "workspace.commit": z.object({
+    commitSha: z.string().min(1),
+    commitSubject: z.string().min(1).optional(),
+  }),
+  "workspace.squash_merge": z.object({
+    merged: z.boolean(),
+    commitSha: z.string().min(1).optional(),
+    message: z.string().optional(),
+  }),
+  "workspace.reset": z.object({}),
+  "workspace.checkpoint": z.object({
+    commitSha: z.string().min(1),
+    remoteName: z.string().min(1),
+    branchName: z.string().min(1).optional(),
+  }),
+  "workspace.export": z.object({
+    type: z.literal("branch"),
+    branch: z.string().min(1),
+    remote: z.string().min(1).optional(),
+  }),
+  "workspace.import": z.object({
+    previousBranch: z.string().min(1).optional(),
+  }),
+  "workspace.reattach": z.object({}),
+} as const satisfies Record<HostDaemonCommandType, z.ZodTypeAny>;
+
+export type HostDaemonCommandResultByType = {
+  [K in keyof typeof hostDaemonCommandResultSchemaByType]: z.infer<
+    (typeof hostDaemonCommandResultSchemaByType)[K]
+  >;
+};
+
+export type HostDaemonCommandResult<
+  TType extends HostDaemonCommandType = HostDaemonCommandType,
+> = HostDaemonCommandResultByType[TType];
+
+export const hostDaemonCommandEnvelopeSchema = z.object({
+  id: z.string().min(1),
+  cursor: z.number().int().nonnegative(),
+  command: hostDaemonCommandSchema,
+});
+export type HostDaemonCommandEnvelope = z.infer<
+  typeof hostDaemonCommandEnvelopeSchema
+>;
+
+const hostDaemonCommandResultReportBaseSchema = z.object({
+  sessionId: z.string().min(1),
+  commandId: z.string().min(1),
+  cursor: z.number().int().nonnegative(),
+  completedAt: z.number().int().nonnegative(),
+});
+
+function createHostDaemonCommandResultReportSchemasForType<
+  TType extends HostDaemonCommandType,
+>(
+  type: TType,
+  resultSchema: (typeof hostDaemonCommandResultSchemaByType)[TType],
+) {
+  return [
+    hostDaemonCommandResultReportBaseSchema.extend({
+      type: z.literal(type),
+      ok: z.literal(true),
+      result: resultSchema,
+    }),
+    hostDaemonCommandResultReportBaseSchema.extend({
+      type: z.literal(type),
+      ok: z.literal(false),
+      errorCode: z.string().min(1),
+      errorMessage: z.string().min(1),
+    }),
+  ] as const;
+}
+
+const hostDaemonCommandResultReportSchemas = HOST_DAEMON_COMMAND_TYPES.flatMap(
+  (type) =>
+    createHostDaemonCommandResultReportSchemasForType(
+      type,
+      hostDaemonCommandResultSchemaByType[type],
+    ),
+);
+
+export const hostDaemonCommandResultReportSchema = z.union(
+  hostDaemonCommandResultReportSchemas as unknown as [
+    z.ZodTypeAny,
+    z.ZodTypeAny,
+    ...z.ZodTypeAny[],
+  ],
+);
+export type HostDaemonCommandResultReport = z.infer<
+  typeof hostDaemonCommandResultReportSchema
+>;

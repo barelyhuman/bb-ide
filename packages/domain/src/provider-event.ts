@@ -1,12 +1,12 @@
 import { z } from "zod";
 import {
-  clientOutboundStartEventDataSchema,
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemProvisioningEventDataSchema,
   systemThreadInterruptedEventDataSchema,
   systemThreadTitleUpdatedEventDataSchema,
+  turnRequestEventDataSchema,
 } from "./thread-events.js";
 
 export const threadEventItemStatusSchema = z.enum([
@@ -160,7 +160,7 @@ export type ThreadEventItem = z.infer<typeof threadEventItemSchema>;
  * Events originating from a provider process via the agent runtime.
  * These carry `providerThreadId` — the provider's internal session/thread ID.
  */
-export const providerThreadEventSchema = z.discriminatedUnion("type", [
+export const providerEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("thread/started"),
     threadId: z.string(),
@@ -305,25 +305,25 @@ export const providerThreadEventSchema = z.discriminatedUnion("type", [
     details: z.string().optional(),
   }),
 ]);
-export type ProviderThreadEvent = z.infer<typeof providerThreadEventSchema>;
+export type ProviderEvent = z.infer<typeof providerEventSchema>;
 
 /**
  * Events originating from the server/system layer (not from a provider process).
  * These do NOT carry `providerThreadId`.
  */
-export const systemThreadEventSchema = z.union([
+export const systemEventSchema = z.union([
   z.object({
     type: z.literal("client/thread/start"),
     threadId: z.string(),
-  }).merge(clientOutboundStartEventDataSchema),
+  }).merge(turnRequestEventDataSchema),
   z.object({
     type: z.literal("client/turn/requested"),
     threadId: z.string(),
-  }).merge(clientOutboundStartEventDataSchema),
+  }).merge(turnRequestEventDataSchema),
   z.object({
     type: z.literal("client/turn/start"),
     threadId: z.string(),
-  }).merge(clientOutboundStartEventDataSchema),
+  }).merge(turnRequestEventDataSchema),
   z.object({
     type: z.literal("system/error"),
     threadId: z.string(),
@@ -349,12 +349,12 @@ export const systemThreadEventSchema = z.union([
     threadId: z.string(),
   }).merge(systemProvisioningEventDataSchema),
 ]);
-export type SystemThreadEvent = z.infer<typeof systemThreadEventSchema>;
+export type SystemEvent = z.infer<typeof systemEventSchema>;
 
 /** All thread events — provider-originated or system-originated. */
 export const threadEventSchema = z.union([
-  providerThreadEventSchema,
-  systemThreadEventSchema,
+  providerEventSchema,
+  systemEventSchema,
 ]);
 export type ThreadEvent = z.infer<typeof threadEventSchema>;
 

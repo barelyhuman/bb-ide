@@ -1,11 +1,11 @@
 import type { ThreadEvent, ThreadEventItemStatus } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { UIFileEditMessage, UIToolCallMessage, UIToolCallSummary, UIToolParsedIntent } from "@bb/domain";
+import type { ViewFileEditMessage, ViewToolCallMessage, ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { durationToString } from "./format-helpers.js";
 import { extractShellCommandFromString, formatToolCallCommand, toolNameToParsedIntents } from "./tool-call-parsing.js";
 import { toRecord } from "./unknown-helpers.js";
 
-export function itemStatusToToolStatus(status: ThreadEventItemStatus): UIToolCallMessage["status"] {
+export function itemStatusToToolStatus(status: ThreadEventItemStatus): ViewToolCallMessage["status"] {
   switch (status) {
     case "pending": return "pending";
     case "completed": return "completed";
@@ -14,7 +14,7 @@ export function itemStatusToToolStatus(status: ThreadEventItemStatus): UIToolCal
   }
 }
 
-export function itemStatusToFileEditStatus(status: ThreadEventItemStatus): UIFileEditMessage["status"] {
+export function itemStatusToFileEditStatus(status: ThreadEventItemStatus): ViewFileEditMessage["status"] {
   switch (status) {
     case "pending": return "pending";
     case "completed": return "completed";
@@ -23,10 +23,10 @@ export function itemStatusToFileEditStatus(status: ThreadEventItemStatus): UIFil
   }
 }
 
-export interface ExecCallPartial extends Partial<UIToolCallSummary> {
+export interface ExecCallPartial extends Partial<ViewToolCallSummary> {
   callId: string;
   toolName?: string;
-  parsedCmd: UIToolParsedIntent[];
+  parsedCmd: ViewToolParsedIntent[];
 }
 
 export interface ExecLifecycleEvent {
@@ -35,7 +35,7 @@ export interface ExecLifecycleEvent {
   appendOutput?: boolean;
 }
 
-function toExecDefaultStatus(kind: "begin" | "end"): UIToolCallMessage["status"] {
+function toExecDefaultStatus(kind: "begin" | "end"): ViewToolCallMessage["status"] {
   if (kind === "begin") return "pending";
   return "completed";
 }

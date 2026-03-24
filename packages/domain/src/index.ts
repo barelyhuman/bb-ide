@@ -35,69 +35,57 @@ export type {
 } from "./provider-types.js";
 
 export {
-  environmentCapabilitiesSchema,
-  environmentCapabilitySchema,
-  environmentCapabilityValues,
-  environmentDescriptorSchema,
-  environmentLocationSchema,
-  environmentLocationValues,
-  environmentPropertiesSchema,
-  environmentRecordSchema,
-  environmentWorkspaceKindSchema,
-  environmentWorkspaceKindValues,
-  persistedEnvironmentRecordSchema,
+  environmentSchema,
+  environmentStatusSchema,
+  environmentStatusValues,
 } from "./environment.js";
 export type {
-  EnvironmentCapabilities,
-  EnvironmentCapability,
-  EnvironmentDescriptor,
-  EnvironmentLocation,
-  EnvironmentProperties,
-  EnvironmentRecord,
-  EnvironmentWorkspaceKind,
-  PersistedEnvironmentRecord,
+  Environment,
+  EnvironmentStatus,
 } from "./environment.js";
 
 export {
   projectSchema,
+  projectSourceSchema,
+  projectSourceTypeSchema,
+  projectSourceTypeValues,
 } from "./project.js";
 export type {
   Project,
+  ProjectSource,
+  ProjectSourceType,
 } from "./project.js";
 
 export {
-  threadBuiltInActionIdSchema,
-  threadBuiltInActionIdValues,
-  threadBuiltInActionSchema,
-  threadContextWindowUsageSchema,
-  threadPrimaryCheckoutStateSchema,
-  threadProvisioningReadinessSchema,
-  threadProvisioningReadinessValues,
+  hostSchema,
+  hostTypeSchema,
+  hostTypeValues,
+} from "./host.js";
+export type {
+  Host,
+  HostType,
+} from "./host.js";
+
+export {
   threadQueuedMessageSchema,
   threadSchema,
   threadStatusSchema,
   threadStatusValues,
   threadTypeSchema,
   threadTypeValues,
-  threadWorkFileChangeSchema,
-  threadWorkStateSchema,
-  threadWorkStateValues,
-  threadWorkStatusSchema,
+  workspaceFileChangeSchema,
+  workspaceStateSchema,
+  workspaceStateValues,
+  workspaceStatusSchema,
 } from "./thread.js";
 export type {
   Thread,
-  ThreadBuiltInAction,
-  ThreadBuiltInActionId,
-  ThreadContextWindowUsage,
-  ThreadPrimaryCheckoutState,
-  ThreadProvisioningReadiness,
-  ThreadProvisioningState,
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,
-  ThreadWorkFileChange,
-  ThreadWorkState,
-  ThreadWorkStatus,
+  WorkspaceFileChange,
+  WorkspaceState,
+  WorkspaceStatus,
 } from "./thread.js";
 
 export {
@@ -114,14 +102,12 @@ export type {
 } from "./thread-git-diff.js";
 
 export {
-  appThreadEventTypeSchema,
-  appThreadEventTypeValues,
-  clientExecutionOptionsSnapshotSchema,
-  clientOutboundStartEventDataSchema,
   provisioningTranscriptEntrySchema,
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
+  systemEventTypeSchema,
+  systemEventTypeValues,
   systemProvisioningEventDataSchema,
   systemThreadInterruptedEventDataSchema,
   systemThreadTitleUpdatedEventDataSchema,
@@ -132,33 +118,35 @@ export {
   threadProvisioningReasonValues,
   threadTurnInitiatorSchema,
   threadTurnInitiatorValues,
+  turnRequestEventDataSchema,
+  turnRequestOptionsSchema,
   turnLifecycleEventDataSchema,
 } from "./thread-events.js";
 export type {
-  AppThreadEventType,
-  ClientExecutionOptionsSnapshot,
-  ClientOutboundStartEventData,
   ProvisioningTranscriptEntry,
   SystemErrorEventData,
   SystemManagerUserMessageEventData,
   SystemOperationEventData,
+  SystemEventType,
   SystemProvisioningEventData,
   SystemThreadInterruptedEventData,
   SystemThreadTitleUpdatedEventData,
   ThreadEnvironmentStartReason,
   ThreadEventData,
-  ThreadEventDataByAppType,
+  ThreadEventDataByType,
   ThreadEventDataForType,
   ThreadEventOfType,
   ThreadEventRow,
   ThreadProvisioningReason,
   ThreadTurnInitiator,
+  TurnRequestEventData,
+  TurnRequestOptions,
   TurnLifecycleEventData,
 } from "./thread-events.js";
 
 export {
-  providerThreadEventSchema,
-  systemThreadEventSchema,
+  providerEventSchema,
+  systemEventSchema,
   threadEventFileChangeKindSchema,
   threadEventFileChangeSchema,
   threadEventItemSchema,
@@ -173,8 +161,8 @@ export {
   threadEventWarningCategorySchema,
 } from "./provider-event.js";
 export type {
-  ProviderThreadEvent,
-  SystemThreadEvent,
+  ProviderEvent,
+  SystemEvent,
   ThreadEvent,
   ThreadEventFileChange,
   ThreadEventFileChangeKind,
@@ -191,43 +179,43 @@ export type {
 } from "./provider-event.js";
 
 export {
-  threadDetailMessageRowSchema,
-  threadDetailRowSchema,
-  threadDetailToolGroupRowSchema,
-  threadDetailToolGroupStatusSchema,
-  threadDetailToolGroupStatusValues,
+  timelineMessageRowSchema,
+  timelineRowSchema,
+  timelineToolGroupRowSchema,
+  timelineToolGroupStatusSchema,
+  timelineToolGroupStatusValues,
 } from "./thread-detail-rows.js";
 export type {
-  ThreadDetailMessageRow,
-  ThreadDetailRow,
-  ThreadDetailToolGroupRow,
-  ThreadDetailToolGroupStatus,
+  TimelineMessageRow,
+  TimelineRow,
+  TimelineToolGroupRow,
+  TimelineToolGroupStatus,
 } from "./thread-detail-rows.js";
 
 export {
-  uiMessageSchema,
-  uiMessageStatusSchema,
-  uiMessageStatusValues,
+  viewMessageSchema,
+  viewMessageStatusSchema,
+  viewMessageStatusValues,
 } from "./ui-message.js";
 export type {
-  ToUIMessagesOptions,
-  UIAssistantReasoningMessage,
-  UIAssistantTextMessage,
-  UIDebugRawEventMessage,
-  UIErrorMessage,
-  UIFileEditChange,
-  UIFileEditMessage,
-  UIMessage,
-  UIMessageBase,
-  UIMessageStatus,
-  UIOperationMessage,
-  UIProvisioningMetadata,
-  UIProvisioningTranscriptEntry,
-  UIThreadOperationMetadata,
-  UIToolCallMessage,
-  UIToolCallSummary,
-  UIToolExploringMessage,
-  UIToolParsedIntent,
-  UIUserMessage,
-  UIWebSearchMessage,
+  ToViewMessagesOptions,
+  ViewAssistantReasoningMessage,
+  ViewAssistantTextMessage,
+  ViewDebugRawEventMessage,
+  ViewErrorMessage,
+  ViewFileEditChange,
+  ViewFileEditMessage,
+  ViewMessage,
+  ViewMessageBase,
+  ViewMessageStatus,
+  ViewOperationMessage,
+  ViewProvisioningMetadata,
+  ViewProvisioningTranscriptEntry,
+  ViewThreadOperationMetadata,
+  ViewToolCallMessage,
+  ViewToolCallSummary,
+  ViewToolExploringMessage,
+  ViewToolParsedIntent,
+  ViewUserMessage,
+  ViewWebSearchMessage,
 } from "./ui-message.js";

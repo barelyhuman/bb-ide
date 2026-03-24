@@ -1,26 +1,26 @@
 import { z } from "zod";
-import { uiMessageSchema, type UIMessage } from "./ui-message.js";
+import { viewMessageSchema, type ViewMessage } from "./ui-message.js";
 
-export interface ThreadDetailMessageRow {
+export interface TimelineMessageRow {
   kind: "message";
   id: string;
-  message: UIMessage;
+  message: ViewMessage;
 }
 
-export const threadDetailToolGroupStatusValues = [
+export const timelineToolGroupStatusValues = [
   "pending",
   "completed",
   "error",
   "interrupted",
 ] as const;
-export const threadDetailToolGroupStatusSchema = z.enum(
-  threadDetailToolGroupStatusValues,
+export const timelineToolGroupStatusSchema = z.enum(
+  timelineToolGroupStatusValues,
 );
-export type ThreadDetailToolGroupStatus = z.infer<
-  typeof threadDetailToolGroupStatusSchema
+export type TimelineToolGroupStatus = z.infer<
+  typeof timelineToolGroupStatusSchema
 >;
 
-export interface ThreadDetailToolGroupRow {
+export interface TimelineToolGroupRow {
   kind: "tool-group";
   id: string;
   turnId: string;
@@ -30,18 +30,18 @@ export interface ThreadDetailToolGroupRow {
   startedAt: number;
   createdAt: number;
   durationMs?: number;
-  status: ThreadDetailToolGroupStatus;
-  messages: UIMessage[];
+  status: TimelineToolGroupStatus;
+  messages: ViewMessage[];
 }
 
-export type ThreadDetailRow = ThreadDetailMessageRow | ThreadDetailToolGroupRow;
+export type TimelineRow = TimelineMessageRow | TimelineToolGroupRow;
 
-export const threadDetailMessageRowSchema = z.object({
+export const timelineMessageRowSchema = z.object({
   kind: z.literal("message"),
   id: z.string(),
-  message: uiMessageSchema,
+  message: viewMessageSchema,
 });
-export const threadDetailToolGroupRowSchema = z.object({
+export const timelineToolGroupRowSchema = z.object({
   kind: z.literal("tool-group"),
   id: z.string(),
   turnId: z.string(),
@@ -51,10 +51,10 @@ export const threadDetailToolGroupRowSchema = z.object({
   startedAt: z.number(),
   createdAt: z.number(),
   durationMs: z.number().optional(),
-  status: threadDetailToolGroupStatusSchema,
-  messages: z.array(uiMessageSchema),
+  status: timelineToolGroupStatusSchema,
+  messages: z.array(viewMessageSchema),
 });
-export const threadDetailRowSchema = z.discriminatedUnion("kind", [
-  threadDetailMessageRowSchema,
-  threadDetailToolGroupRowSchema,
+export const timelineRowSchema = z.discriminatedUnion("kind", [
+  timelineMessageRowSchema,
+  timelineToolGroupRowSchema,
 ]);

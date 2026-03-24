@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { UIDebugRawEventMessage } from "@bb/domain";
+import type { ViewDebugRawEventMessage } from "@bb/domain";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DEBUG_EVENT_EXPANDED_MAX_LENGTH } from "./shared";
@@ -27,7 +27,7 @@ function formatDebugEventData(
   }
 }
 
-export function DebugEventRow({ message }: { message: UIDebugRawEventMessage }) {
+export function DebugEventRow({ message }: { message: ViewDebugRawEventMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const event = message.rawEvent;
   const expandedContent = formatDebugEventData(event.data, {

@@ -3,19 +3,14 @@ import {
   promptInputSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
-  serviceTierSchema,
-  threadExecutionOptionsSchema,
 } from "./shared-types.js";
-import { environmentRecordSchema } from "./environment.js";
 
 export const threadStatusValues = [
   "created",
   "provisioning",
-  "provisioned",
-  "provisioning_failed",
-  "error",
   "idle",
   "active",
+  "error",
 ] as const;
 export const threadStatusSchema = z.enum(threadStatusValues);
 export type ThreadStatus = z.infer<typeof threadStatusSchema>;
@@ -24,20 +19,7 @@ export const threadTypeValues = ["standard", "manager"] as const;
 export const threadTypeSchema = z.enum(threadTypeValues);
 export type ThreadType = z.infer<typeof threadTypeSchema>;
 
-export const threadBuiltInActionIdValues = [
-  "commit",
-  "squash_merge",
-  "promote",
-  "demote",
-] as const;
-export const threadBuiltInActionIdSchema = z.enum(
-  threadBuiltInActionIdValues,
-);
-export type ThreadBuiltInActionId = z.infer<
-  typeof threadBuiltInActionIdSchema
->;
-
-export const threadWorkStateValues = [
+export const workspaceStateValues = [
   "clean",
   "untracked",
   "deleted",
@@ -45,52 +27,17 @@ export const threadWorkStateValues = [
   "committed_unmerged",
   "dirty_and_committed_unmerged",
 ] as const;
-export const threadWorkStateSchema = z.enum(threadWorkStateValues);
-export type ThreadWorkState = z.infer<typeof threadWorkStateSchema>;
+export const workspaceStateSchema = z.enum(workspaceStateValues);
+export type WorkspaceState = z.infer<typeof workspaceStateSchema>;
 
-export const threadProvisioningReadinessValues = [
-  "ready",
-  "degraded",
-  "failed",
-] as const;
-export const threadProvisioningReadinessSchema = z.enum(
-  threadProvisioningReadinessValues,
-);
-export type ThreadProvisioningReadiness = z.infer<
-  typeof threadProvisioningReadinessSchema
->;
-
-export const threadBuiltInActionSchema = z.object({
-  id: threadBuiltInActionIdSchema,
-  label: z.string(),
-  available: z.boolean(),
-  disabledReason: z.string().optional(),
-  queuesWhenActive: z.boolean(),
-  requiresDemoteFirst: z.boolean(),
-});
-export type ThreadBuiltInAction = z.infer<typeof threadBuiltInActionSchema>;
-
-export const threadQueuedMessageSchema = z.object({
-  id: z.string(),
-  input: z.array(promptInputSchema),
-  model: z.string().optional(),
-  serviceTier: serviceTierSchema.optional(),
-  reasoningLevel: reasoningLevelSchema,
-  sandboxMode: sandboxModeSchema,
-  createdAt: z.number(),
-});
-export type ThreadQueuedMessage = z.infer<typeof threadQueuedMessageSchema>;
-
-export const threadWorkFileChangeSchema = z.object({
+export const workspaceFileChangeSchema = z.object({
   path: z.string(),
   status: z.string(),
 });
-export type ThreadWorkFileChange = z.infer<
-  typeof threadWorkFileChangeSchema
->;
+export type WorkspaceFileChange = z.infer<typeof workspaceFileChangeSchema>;
 
-export const threadWorkStatusSchema = z.object({
-  state: threadWorkStateSchema,
+export const workspaceStatusSchema = z.object({
+  state: workspaceStateSchema,
   changedFiles: z.number(),
   insertions: z.number(),
   deletions: z.number(),
@@ -106,55 +53,33 @@ export const threadWorkStatusSchema = z.object({
   mergeBaseBranch: z.string().optional(),
   mergeBaseBranches: z.array(z.string()).optional(),
   baseRef: z.string().optional(),
-  files: z.array(threadWorkFileChangeSchema).optional(),
+  files: z.array(workspaceFileChangeSchema).optional(),
 });
-export type ThreadWorkStatus = z.infer<typeof threadWorkStatusSchema>;
+export type WorkspaceStatus = z.infer<typeof workspaceStatusSchema>;
 
-export const threadPrimaryCheckoutStateSchema = z.object({
-  isActive: z.boolean(),
-  promotedAt: z.number().optional(),
+export const threadQueuedMessageSchema = z.object({
+  id: z.string(),
+  content: z.array(promptInputSchema),
+  mode: z.enum(["auto", "start", "steer"]),
+  reasoningLevel: reasoningLevelSchema,
+  sandboxMode: sandboxModeSchema,
+  createdAt: z.number(),
+  updatedAt: z.number(),
 });
-export type ThreadPrimaryCheckoutState = z.infer<
-  typeof threadPrimaryCheckoutStateSchema
->;
-
-export const threadProvisioningStateSchema = z.object({
-  readiness: threadProvisioningReadinessSchema,
-  message: z.string().optional(),
-  fallbackReason: z.string().optional(),
-});
-export type ThreadProvisioningState = z.infer<
-  typeof threadProvisioningStateSchema
->;
-
-export const threadContextWindowUsageSchema = z.object({
-  totalTokens: z.number(),
-  modelContextWindow: z.number(),
-});
-export type ThreadContextWindowUsage = z.infer<
-  typeof threadContextWindowUsageSchema
->;
+export type ThreadQueuedMessage = z.infer<typeof threadQueuedMessageSchema>;
 
 export const threadSchema = z.object({
   id: z.string(),
   projectId: z.string(),
+  environmentId: z.string().nullable(),
   providerId: z.string(),
   type: threadTypeSchema,
-  title: z.string().optional(),
-  mergeBaseBranch: z.string().optional(),
-  titleFallback: z.string().optional(),
+  title: z.string().nullable(),
   status: threadStatusSchema,
-  workStatus: threadWorkStatusSchema.optional(),
-  primaryCheckout: threadPrimaryCheckoutStateSchema.optional(),
-  provisioningState: threadProvisioningStateSchema.optional(),
-  queuedMessages: z.array(threadQueuedMessageSchema).optional(),
-  environmentId: z.string().optional(),
-  attachedEnvironment: environmentRecordSchema.optional(),
-  builtInActions: z.array(threadBuiltInActionSchema).optional(),
-  defaultExecutionOptions: threadExecutionOptionsSchema.optional(),
-  parentThreadId: z.string().optional(),
-  archivedAt: z.number().optional(),
-  lastReadAt: z.number().optional(),
+  mergeBaseBranch: z.string().nullable(),
+  parentThreadId: z.string().nullable(),
+  archivedAt: z.number().nullable(),
+  lastReadAt: z.number().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

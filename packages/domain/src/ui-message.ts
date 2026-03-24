@@ -2,17 +2,17 @@ import { z } from "zod";
 import type { Thread } from "./thread.js";
 import type { ThreadEventRow } from "./thread-events.js";
 
-export const uiMessageStatusValues = [
+export const viewMessageStatusValues = [
   "streaming",
   "pending",
   "completed",
   "error",
   "interrupted",
 ] as const;
-export const uiMessageStatusSchema = z.enum(uiMessageStatusValues);
-export type UIMessageStatus = z.infer<typeof uiMessageStatusSchema>;
+export const viewMessageStatusSchema = z.enum(viewMessageStatusValues);
+export type ViewMessageStatus = z.infer<typeof viewMessageStatusSchema>;
 
-export interface UIMessageBase {
+export interface ViewMessageBase {
   id: string;
   threadId: string;
   sourceSeqStart: number;
@@ -22,7 +22,7 @@ export interface UIMessageBase {
   turnId?: string;
 }
 
-export interface UIUserMessage extends UIMessageBase {
+export interface ViewUserMessage extends ViewMessageBase {
   kind: "user";
   text: string;
   attachments?: {
@@ -35,19 +35,19 @@ export interface UIUserMessage extends UIMessageBase {
   };
 }
 
-export interface UIAssistantReasoningMessage extends UIMessageBase {
+export interface ViewAssistantReasoningMessage extends ViewMessageBase {
   kind: "assistant-reasoning";
   text: string;
-  status: Extract<UIMessageStatus, "streaming" | "completed">;
+  status: Extract<ViewMessageStatus, "streaming" | "completed">;
 }
 
-export interface UIAssistantTextMessage extends UIMessageBase {
+export interface ViewAssistantTextMessage extends ViewMessageBase {
   kind: "assistant-text";
   text: string;
-  status: Extract<UIMessageStatus, "streaming" | "completed">;
+  status: Extract<ViewMessageStatus, "streaming" | "completed">;
 }
 
-export type UIToolParsedIntent =
+export type ViewToolParsedIntent =
   | {
       type: "read";
       cmd: string;
@@ -70,81 +70,81 @@ export type UIToolParsedIntent =
       cmd: string;
     };
 
-export interface UIToolCallSummary {
+export interface ViewToolCallSummary {
   callId: string;
   command?: string;
   cwd?: string;
-  parsedCmd: UIToolParsedIntent[];
+  parsedCmd: ViewToolParsedIntent[];
   source?: string;
   output?: string;
   exitCode?: number;
   duration?: string;
   durationMs?: number;
   status: Extract<
-    UIMessageStatus,
+    ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
 }
 
-export interface UIToolExploringMessage extends UIMessageBase {
+export interface ViewToolExploringMessage extends ViewMessageBase {
   kind: "tool-exploring";
-  status: Extract<UIMessageStatus, "pending" | "completed">;
-  calls: UIToolCallSummary[];
+  status: Extract<ViewMessageStatus, "pending" | "completed">;
+  calls: ViewToolCallSummary[];
 }
 
-export interface UIToolCallMessage extends UIMessageBase {
+export interface ViewToolCallMessage extends ViewMessageBase {
   kind: "tool-call";
   toolName: string;
   callId: string;
   command?: string;
   cwd?: string;
-  parsedCmd?: UIToolParsedIntent[];
+  parsedCmd?: ViewToolParsedIntent[];
   source?: string;
   output?: string;
   exitCode?: number;
   duration?: string;
   durationMs?: number;
   status: Extract<
-    UIMessageStatus,
+    ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
 }
 
-export interface UIWebSearchMessage extends UIMessageBase {
+export interface ViewWebSearchMessage extends ViewMessageBase {
   kind: "web-search";
   callId: string;
   query?: string;
   action?: string;
-  status: Extract<UIMessageStatus, "pending" | "completed">;
+  status: Extract<ViewMessageStatus, "pending" | "completed">;
 }
 
-export interface UIFileEditChange {
+export interface ViewFileEditChange {
   path: string;
   kind?: string;
   movePath?: string | null;
   diff?: string;
 }
 
-export interface UIFileEditMessage extends UIMessageBase {
+export interface ViewFileEditMessage extends ViewMessageBase {
   kind: "file-edit";
   callId: string;
-  changes: UIFileEditChange[];
+  changes: ViewFileEditChange[];
   stdout?: string;
   stderr?: string;
   status: Extract<
-    UIMessageStatus,
+    ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
 }
 
-export interface UIThreadOperationMetadata {
+export interface ViewThreadOperationMetadata {
   operation: string;
   status: string;
   operationId?: string;
   metadata?: Record<string, unknown>;
 }
 
-export interface UIProvisioningTranscriptEntry {
+export interface ViewProvisioningTranscriptEntry {
   type: "step" | "output";
   key: string;
   text: string;
@@ -153,50 +153,50 @@ export interface UIProvisioningTranscriptEntry {
   metadata?: Record<string, unknown>;
 }
 
-export interface UIProvisioningMetadata {
+export interface ViewProvisioningMetadata {
   environmentId?: string;
-  transcript?: UIProvisioningTranscriptEntry[];
+  transcript?: ViewProvisioningTranscriptEntry[];
 }
 
-export interface UIOperationMessage extends UIMessageBase {
+export interface ViewOperationMessage extends ViewMessageBase {
   kind: "operation";
   opType: string;
   title: string;
   detail?: string;
   status?: Extract<
-    UIMessageStatus,
+    ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
-  provisioning?: UIProvisioningMetadata;
-  threadOperation?: UIThreadOperationMetadata;
+  provisioning?: ViewProvisioningMetadata;
+  threadOperation?: ViewThreadOperationMetadata;
 }
 
-export interface UIErrorMessage extends UIMessageBase {
+export interface ViewErrorMessage extends ViewMessageBase {
   kind: "error";
   message: string;
   rawType: string;
 }
 
-export interface UIDebugRawEventMessage extends UIMessageBase {
+export interface ViewDebugRawEventMessage extends ViewMessageBase {
   kind: "debug/raw-event";
   rawType: string;
   rawEvent: ThreadEventRow;
   reason: "ignored-noise" | "duplicate-event" | "unhandled";
 }
 
-export type UIMessage =
-  | UIUserMessage
-  | UIAssistantReasoningMessage
-  | UIAssistantTextMessage
-  | UIToolExploringMessage
-  | UIToolCallMessage
-  | UIWebSearchMessage
-  | UIFileEditMessage
-  | UIOperationMessage
-  | UIErrorMessage
-  | UIDebugRawEventMessage;
+export type ViewMessage =
+  | ViewUserMessage
+  | ViewAssistantReasoningMessage
+  | ViewAssistantTextMessage
+  | ViewToolExploringMessage
+  | ViewToolCallMessage
+  | ViewWebSearchMessage
+  | ViewFileEditMessage
+  | ViewOperationMessage
+  | ViewErrorMessage
+  | ViewDebugRawEventMessage;
 
-export interface ToUIMessagesOptions {
+export interface ToViewMessagesOptions {
   includeDebugRawEvents?: boolean;
   includeOptionalOperations?: boolean;
   includeInternalSystemMessages?: boolean;
@@ -204,4 +204,4 @@ export interface ToUIMessagesOptions {
   threadType?: Thread["type"];
 }
 
-export const uiMessageSchema = z.custom<UIMessage>();
+export const viewMessageSchema = z.custom<ViewMessage>();

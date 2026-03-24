@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { Thread, ThreadWorkStatus } from "@bb/domain";
+import type { Thread, WorkspaceStatus } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import { buildFollowUpSignatureFromInput, buildFollowUpSignatureFromRow } from "@/lib/thread-follow-up-signature";
 import { ThreadDetailView } from "./ThreadDetailView";
@@ -98,7 +98,7 @@ const apiState = vi.hoisted(() => {
       files: [{ path: "src/example.ts", status: "modified" }],
       hasUncommittedChanges: true,
       hasCommittedUnmergedChanges: false,
-    } as ThreadWorkStatus,
+    } as WorkspaceStatus,
     mergeBaseBranchOptions: ["main"],
     managerWorkspaceFiles: {
       files: [
