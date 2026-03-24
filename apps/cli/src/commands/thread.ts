@@ -467,9 +467,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
     .option("--include-archived", "Include archived threads in the listing")
-    .option("--include-work-status", "Include work status columns in output")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; includeWorkStatus?: boolean; json?: boolean }) => {
+    .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const resolvedProject = opts.project
@@ -496,7 +495,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           console.log("No threads found");
           return;
         }
-        printThreadTable(threads, opts.includeWorkStatus);
+        printThreadTable(threads);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -539,7 +538,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         const localSource = localHostId
           ? project.sources.find((s) => s.hostId === localHostId)
-          : project.sources[0];
+          : undefined;
         projectRootPath = localSource?.path ?? undefined;
       } catch {
         // Project fetch failed; leave rootPath undefined
@@ -1029,7 +1028,7 @@ function printThread(thread: Thread): void {
   console.log("");
 }
 
-function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void {
+function printThreadTable(threads: Thread[]): void {
   const idWidth = Math.max(4, ...threads.map((t) => t.id.length));
   const statusWidth = Math.max(
     12,
@@ -1041,22 +1040,11 @@ function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void 
   );
   const projectWidth = Math.max(7, ...threads.map((t) => t.projectId.length));
 
-  const headerCols = [
+  const header = [
     "ID".padEnd(idWidth),
     "Project".padEnd(projectWidth),
     "Status".padEnd(statusWidth),
-  ];
-
-  if (includeWorkStatus) {
-    headerCols.push(
-      "Work".padEnd(10),
-      "Branch".padEnd(20),
-      "Files".padEnd(5),
-      "+/-".padEnd(10),
-    );
-  }
-
-  const header = headerCols.join("  ");
+  ].join("  ");
 
   console.log("");
   console.log(header);
@@ -1067,20 +1055,13 @@ function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void 
       thread.archivedAt !== null
         ? `${statusText(thread.status)} (archived)`
         : statusText(thread.status);
-    const rowCols = [
-      thread.id.padEnd(idWidth),
-      thread.projectId.padEnd(projectWidth),
-      renderedStatus.padEnd(statusWidth),
-    ];
-
-    if (includeWorkStatus) {
-      // TODO: Thread no longer has inline workStatus — requires separate API call.
-      // See phase-2a-findings.md.
-      rowCols.push("-".padEnd(10), "-".padEnd(20), "-".padEnd(5), "-".padEnd(10));
-    }
-
-    const row = rowCols.join("  ");
-    console.log(row);
+    console.log(
+      [
+        thread.id.padEnd(idWidth),
+        thread.projectId.padEnd(projectWidth),
+        renderedStatus.padEnd(statusWidth),
+      ].join("  "),
+    );
   }
   console.log("");
 }

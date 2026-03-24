@@ -1,10 +1,13 @@
 import { Command } from "commander";
-import type { Project, Thread } from "@bb/domain";
+import type { Environment, Thread } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
 import {
   type EnvironmentDisplayInfo,
+  formatEnvironmentDisplay,
 } from "@bb/core-ui";
 import { resolveContextSnapshot } from "../context-env.js";
 import { createClient, unwrap } from "../client.js";
+import { fetchLocalHostId } from "../daemon.js";
 import { outputJson } from "./helpers.js";
 
 interface StatusPayload {
@@ -48,9 +51,11 @@ export function registerStatusCommand(
         try {
           const client = createClient(getUrl());
 
+          let projectRootPath: string | undefined;
+
           if (context.projectId) {
             try {
-              const project = await unwrap<Project>(
+              const project = await unwrap<ProjectResponse>(
                 client.api.v1.projects[":id"].$get({
                   param: { id: context.projectId },
                 }),
@@ -60,6 +65,12 @@ export function registerStatusCommand(
                 name: project.name,
               };
               serverAvailable = true;
+
+              const localHostId = await fetchLocalHostId();
+              const localSource = localHostId
+                ? project.sources.find((s) => s.hostId === localHostId)
+                : undefined;
+              projectRootPath = localSource?.path ?? undefined;
             } catch {
               // Project fetch failed; will fall back below
             }
@@ -72,13 +83,28 @@ export function registerStatusCommand(
                   param: { id: context.threadId },
                 }),
               );
+
+              let environmentDisplay: EnvironmentDisplayInfo | null = null;
+              if (thread.environmentId) {
+                try {
+                  const env = await unwrap<Environment>(
+                    client.api.v1.environments[":id"].$get({
+                      param: { id: thread.environmentId },
+                    }),
+                  );
+                  environmentDisplay = formatEnvironmentDisplay(env, projectRootPath);
+                } catch {
+                  // Environment fetch failed; leave as null
+                }
+              }
+
               payload.thread = {
                 id: thread.id,
                 type: thread.type,
                 status: thread.status,
                 title: thread.title ?? null,
                 parentThreadId: thread.parentThreadId ?? null,
-                environment: null,
+                environment: environmentDisplay,
               };
               serverAvailable = true;
 
