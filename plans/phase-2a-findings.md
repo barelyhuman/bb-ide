@@ -4,13 +4,10 @@ Discovered during `apps/cli` cutover to new contracts (`@bb/domain`, `@bb/server
 
 ## Missing routes in `@bb/server-contract`
 
-| Route (old) | Route (new, per architecture) | Used by CLI command | Status |
-|---|---|---|---|
-| `/threads/:id/git-diff` | `/threads/:id/diff` | `bb thread show --git-diff` | Not in contract |
-| `/threads/:id/merge-base-branches` | `/threads/:id/diff/branches` | `bb thread show --merge-base-branches` | Not in contract |
-| `/threads/:id/output` | `/threads/:id/output` | `bb thread output` | Not in contract |
-
-Removed: `bb server health` (command deleted), `bb project files` (command deleted), `bb thread sessions` (command deleted).
+All missing routes resolved:
+- `/threads/:id/diff` and `/threads/:id/diff/branches` — routes existed in contract (added in Phase 1c), CLI wired up to use them.
+- `bb thread output` — command deleted (not in architecture, data available from `/threads/:id/events`).
+- `bb server health`, `bb project files`, `bb thread sessions` — commands deleted.
 
 ## Missing fields on domain types
 
@@ -46,8 +43,5 @@ Removed: `bb server health` (command deleted), `bb project files` (command delet
 
 These commands compile but print an error and exit because they depend on routes or fields not in the contract:
 
-- `bb thread show --git-diff` — prints warning, skips
-- `bb thread show --merge-base-branches` — prints warning, skips
-- `bb thread output` — exits with error
 - `bb environment promote-status` — exits with error
 - `bb environment demote` (without explicit env ID) — exits with error when falling back to project-level resolution

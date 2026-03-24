@@ -560,16 +560,26 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
       }
 
-      // TODO: /threads/:id/diff route not in @bb/server-contract. See phase-2a-findings.md.
       let gitDiff: ThreadGitDiffResponse | undefined;
       if (opts.gitDiff) {
-        console.error("Warning: --git-diff is not available (route not in contract)");
+        gitDiff = await unwrap<ThreadGitDiffResponse>(
+          client.api.v1.threads[":id"].diff.$get({
+            param: { id: threadId },
+            query: {
+              ...(opts.diffSelection ? { selection: opts.diffSelection } : {}),
+              ...(opts.diffMergeBase ? { mergeBaseBranch: opts.diffMergeBase } : {}),
+            },
+          }),
+        );
       }
 
-      // TODO: /threads/:id/diff/branches route not in @bb/server-contract. See phase-2a-findings.md.
       let mergeBaseBranches: string[] | undefined;
       if (opts.mergeBaseBranches) {
-        console.error("Warning: --merge-base-branches is not available (route not in contract)");
+        mergeBaseBranches = await unwrap<string[]>(
+          client.api.v1.threads[":id"].diff.branches.$get({
+            param: { id: threadId },
+          }),
+        );
       }
 
       if (opts.json) {
@@ -952,20 +962,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       },
     );
 
-  thread
-    .command("output [id]")
-    .description("Get the final output of a thread (defaults to BB_THREAD_ID)")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (_id: string | undefined, _opts: { json?: boolean }) => {
-      try {
-        // TODO: /threads/:id/output route not in @bb/server-contract. See phase-2a-findings.md.
-        console.error("Error: thread output route is not available (not in contract)");
-        process.exit(1);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
 }
 
 export function statusText(status: ThreadStatus): string {
