@@ -32,7 +32,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         const projectId = resolvedProject.id;
         printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
         const thread = await unwrap<Thread>(
-          client.api.v1.projects[":id"].manager.$post({
+          client.api.v1.projects[":id"].managers.$post({
             param: { id: projectId },
             json: {
               ...(opts.title ? { title: opts.title } : {}),
@@ -219,7 +219,7 @@ function printManagedThreadTable(threads: Thread[]): void {
   const statusWidth = Math.max(6, ...threads.map((thread) => thread.status.length));
   const titleWidth = Math.max(
     5,
-    ...threads.map((thread) => (thread.title ?? thread.titleFallback ?? "<untitled>").length),
+    ...threads.map((thread) => (thread.title ?? "<untitled>").length),
   );
   const header = [
     "ID".padEnd(idWidth),
@@ -233,7 +233,7 @@ function printManagedThreadTable(threads: Thread[]): void {
       [
         thread.id.padEnd(idWidth),
         thread.status.padEnd(statusWidth),
-        (thread.title ?? thread.titleFallback ?? "<untitled>").padEnd(titleWidth),
+        (thread.title ?? "<untitled>").padEnd(titleWidth),
       ].join("  "),
     );
   }

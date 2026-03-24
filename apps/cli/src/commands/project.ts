@@ -5,8 +5,6 @@ import {
   confirmDestructiveAction,
   getErrorMessage,
   outputJson,
-  resolveProjectIdWithLabel,
-  printContextLabel,
 } from "./helpers.js";
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
@@ -38,16 +36,18 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .command("create")
     .description("Create a project")
     .requiredOption("--name <name>", "Project name")
-    .requiredOption("--root <path>", "Project root path")
+    .requiredOption("--root <path>", "Project source path")
+    .requiredOption("--host <id>", "Host ID for the project source")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { name: string; root: string; json?: boolean }) => {
+    .action(async (opts: { name: string; root: string; host: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const created = await unwrap<Project>(
           client.api.v1.projects.$post({
             json: {
               name: opts.name,
-              rootPath: opts.root,
+              sourcePath: opts.root,
+              hostId: opts.host,
             },
           }),
         );
@@ -84,23 +84,17 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .command("update <id>")
     .description("Update a project")
     .option("--name <name>", "Set the project name")
-    .option("--root <path>", "Set the project root path")
-    .option("--project-instructions <text>", "Set project instructions")
-    .option("--default-provider <id>", "Set the default provider ID")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { name?: string; root?: string; projectInstructions?: string; defaultProvider?: string; json?: boolean }) => {
+    .action(async (id: string, opts: { name?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        if (!opts.name && !opts.root && !opts.projectInstructions && !opts.defaultProvider) {
+        if (!opts.name) {
           throw new Error(
-            "No changes requested. Provide --name, --root, --project-instructions, or --default-provider.",
+            "No changes requested. Provide --name.",
           );
         }
         const body: Record<string, unknown> = {};
         if (opts.name) body.name = opts.name;
-        if (opts.root) body.rootPath = opts.root;
-        if (opts.projectInstructions) body.projectInstructions = opts.projectInstructions;
-        if (opts.defaultProvider) body.defaultProviderId = opts.defaultProvider;
         const updated = await unwrap<Project>(
           client.api.v1.projects[":id"].$patch({
             param: { id },
@@ -152,38 +146,10 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--limit <n>", "Result limit", "8")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (query: string, opts: { project?: string; limit?: string; json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const resolvedProject = resolveProjectIdWithLabel(opts.project);
-        const projectId = resolvedProject.id;
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        const limitValue = opts.limit ? Number.parseInt(opts.limit, 10) : 8;
-        if (!Number.isFinite(limitValue) || limitValue <= 0) {
-          throw new Error("Limit must be a positive integer");
-        }
-
-        const files = await unwrap<Array<{ path: string }>>(
-          client.api.v1.projects[":id"].files.$get({
-            param: { id: projectId },
-            query: {
-              query,
-              limit: String(limitValue),
-            },
-          }),
-        );
-        if (outputJson(opts, files)) return;
-        if (files.length === 0) {
-          console.log("No matching files");
-          return;
-        }
-        for (const file of files) {
-          console.log(file.path);
-        }
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
+    .action(async () => {
+      // TODO: /projects/:id/files route not in @bb/server-contract. See phase-2a-findings.md.
+      console.error("Error: project files search is not available (not in contract)");
+      process.exit(1);
     });
 }
 
@@ -191,7 +157,6 @@ function printProject(project: Project): void {
   console.log("");
   console.log(`  ID:       ${project.id}`);
   console.log(`  Name:     ${project.name}`);
-  console.log(`  Root:     ${project.rootPath}`);
   console.log(`  Created:  ${new Date(project.createdAt).toLocaleString()}`);
   console.log(`  Updated:  ${new Date(project.updatedAt).toLocaleString()}`);
   console.log("");
@@ -200,12 +165,10 @@ function printProject(project: Project): void {
 function printProjectTable(projects: Project[]): void {
   const idWidth = Math.max(4, ...projects.map((p) => p.id.length));
   const nameWidth = Math.max(4, ...projects.map((p) => p.name.length));
-  const rootWidth = Math.max(4, ...projects.map((p) => p.rootPath.length));
 
   const header = [
     "ID".padEnd(idWidth),
     "Name".padEnd(nameWidth),
-    "Root".padEnd(rootWidth),
   ].join("  ");
 
   console.log("");
@@ -216,7 +179,6 @@ function printProjectTable(projects: Project[]): void {
       [
         project.id.padEnd(idWidth),
         project.name.padEnd(nameWidth),
-        project.rootPath.padEnd(rootWidth),
       ].join("  "),
     );
   }

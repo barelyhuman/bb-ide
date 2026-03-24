@@ -1,30 +1,44 @@
 import { Command } from "commander";
-import type { Thread } from "@bb/domain";
-import type { SystemHealthReport } from "@bb/server-contract";
+import type {
+  SystemShutdownAcceptedResponse,
+  SystemShutdownBlockedResponse,
+  SystemShutdownBlockingThread,
+} from "@bb/server-contract";
 import { createClient, unwrap } from "../client.js";
 import { getErrorMessage, outputJson } from "./helpers.js";
 
-interface ShutdownAcceptedResponse {
-  ok: boolean;
-  forced: boolean;
-  blockingThreadsCount: number;
+// TODO: SystemHealthReport not in @bb/server-contract — see phase-2a-findings.md
+interface SystemHealthReport {
+  generatedAt: string;
+  uptime: number;
+  projectCount: number;
+  runningThreads: number;
+  threadCounts: {
+    total: number;
+    archived: number;
+    active: number;
+    idle: number;
+    error: number;
+    provisioning: number;
+    created: number;
+  };
+  storage: {
+    totalBytes: number;
+    disk?: {
+      availableBytes: number;
+      totalBytes: number;
+      path: string;
+    };
+    buckets: Array<{
+      label: string;
+      bytes: number;
+      paths: string[];
+    }>;
+  };
 }
 
-interface ShutdownBlockedResponse {
-  code?: string;
-  message?: string;
-  blockingThreads?: Array<{
-    id: string;
-    projectId: string;
-    status: Thread["status"];
-  }>;
-}
 
-function formatBlockingThread(thread: {
-  id: string;
-  projectId: string;
-  status: Thread["status"];
-}): string {
+function formatBlockingThread(thread: SystemShutdownBlockingThread): string {
   return `- ${thread.id} (${thread.status}, project ${thread.projectId})`;
 }
 
@@ -60,10 +74,8 @@ function printHealthReport(report: SystemHealthReport): void {
       `${report.threadCounts.active} active, ` +
       `${report.threadCounts.idle} idle, ` +
       `${report.threadCounts.error} error, ` +
-      `${report.threadCounts.provisioned} provisioned, ` +
       `${report.threadCounts.provisioning} provisioning, ` +
-      `${report.threadCounts.created} created, ` +
-      `${report.threadCounts.provisioningFailed} provisioning_failed`,
+      `${report.threadCounts.created} created`,
   );
   console.log(`Managed storage: ${formatBytes(report.storage.totalBytes)}`);
   if (report.storage.disk) {
@@ -88,10 +100,11 @@ export function registerServerCommands(program: Command, getUrl: () => string): 
     .description("Show server health and managed storage usage")
     .option("--json", "Print machine-readable JSON output")
     .action(async (opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
       try {
+        // TODO: /system/health route not in @bb/server-contract. See phase-2a-findings.md.
+        // Using a manual fetch as a fallback until the contract is updated.
         const report = await unwrap<SystemHealthReport>(
-          client.api.v1.system.health.$get(),
+          fetch(`${getUrl()}/api/v1/system/health`),
         );
         if (outputJson(opts, report)) return;
         printHealthReport(report);
@@ -114,7 +127,7 @@ export function registerServerCommands(program: Command, getUrl: () => string): 
         });
 
         if (shutdownResponse.status === 409) {
-          const blocked = await shutdownResponse.json() as ShutdownBlockedResponse;
+          const blocked = await shutdownResponse.json() as SystemShutdownBlockedResponse;
           const blockingThreads = blocked.blockingThreads ?? [];
           console.error(
             blocked.message ??
@@ -130,7 +143,7 @@ export function registerServerCommands(program: Command, getUrl: () => string): 
           return;
         }
 
-        const payload = await unwrap<ShutdownAcceptedResponse>(
+        const payload = await unwrap<SystemShutdownAcceptedResponse>(
           Promise.resolve(shutdownResponse),
         );
         if (outputJson(opts, payload)) return;

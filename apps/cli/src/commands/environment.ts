@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import type {
-  CommitEnvironmentOperationResponse,
-  SquashMergeEnvironmentOperationResponse,
+  CommitActionResponse,
+  SquashMergeActionResponse,
 } from "@bb/server-contract";
 import type { Thread } from "@bb/domain";
 import { createClient, unwrap } from "../client.js";
@@ -10,8 +10,6 @@ import {
   getErrorMessage,
   outputJson,
   printEnvironmentGitOperationResult,
-  printContextLabel,
-  resolveProjectIdWithLabel,
   resolveThreadIdOrSelf,
 } from "./helpers.js";
 
@@ -44,11 +42,11 @@ export function registerEnvironmentCommands(
       const client = createClient(getUrl());
       try {
         const initiatingThreadId = resolveThreadIdOrSelf(opts.thread, opts);
-        const result = await unwrap<CommitEnvironmentOperationResponse>(
-          client.api.v1.environments[":id"].operations.$post({
+        const result = await unwrap<CommitActionResponse>(
+          client.api.v1.environments[":id"].actions.$post({
             param: { id },
             json: {
-              operation: "commit",
+              action: "commit",
               initiatingThreadId,
               options: {
                 includeUnstaged: opts.stagedOnly ? false : true,
@@ -92,11 +90,11 @@ export function registerEnvironmentCommands(
       const client = createClient(getUrl());
       try {
         const initiatingThreadId = resolveThreadIdOrSelf(opts.thread, opts);
-        const result = await unwrap<SquashMergeEnvironmentOperationResponse>(
-          client.api.v1.environments[":id"].operations.$post({
+        const result = await unwrap<SquashMergeActionResponse>(
+          client.api.v1.environments[":id"].actions.$post({
             param: { id },
             json: {
-              operation: "squash_merge",
+              action: "squash_merge",
               initiatingThreadId,
               options: {
                 commitIfNeeded: opts.commitIfNeeded === true,
@@ -128,10 +126,10 @@ export function registerEnvironmentCommands(
         if (!threadId) {
           throw new Error("A thread id is required. Pass --thread or set BB_THREAD_ID.");
         }
-        const result = await unwrap<{ ok: true; promoted: boolean; message: string }>(
-          client.api.v1.environments[":id"].operations.$post({
+        const result = await unwrap<{ ok: true; action: "promote"; message: string }>(
+          client.api.v1.environments[":id"].actions.$post({
             param: { id },
-            json: { operation: "promote_primary", initiatingThreadId: threadId },
+            json: { action: "promote", initiatingThreadId: threadId },
           }),
         );
         if (outputJson(opts, result)) return;
@@ -164,40 +162,30 @@ export function registerEnvironmentCommands(
             return unwrap<Thread>(
               client.api.v1.threads[":id"].$get({ param: { id: threadIdFromContext } }),
             ).then((thread) => {
-              const attachedEnvironmentId = thread.attachedEnvironment?.id ?? thread.environmentId;
-              if (!attachedEnvironmentId) {
+              if (!thread.environmentId) {
                 throw new Error(`Thread ${thread.id} has no attached environment.`);
               }
               return {
-                environmentId: attachedEnvironmentId,
+                environmentId: thread.environmentId,
                 threadId: thread.id,
               };
             });
           }
-          const projectId = requireProjectId(opts.project);
-          return unwrap<Thread[]>(
-            client.api.v1.threads.$get({
-              query: { projectId },
-            }),
-          ).then((threads) => {
-            const active = threads.find((thread) => thread.primaryCheckout?.isActive);
-            const activeEnvironmentId = active?.attachedEnvironment?.id ?? active?.environmentId;
-            if (!active || !activeEnvironmentId) {
-              throw new Error("Primary checkout is already demoted.");
-            }
-            return {
-              environmentId: activeEnvironmentId,
-              threadId: active.id,
-            };
-          });
+          requireProjectId(opts.project); // validate project exists
+          // TODO: Thread no longer has primaryCheckout — need a different API
+          // to find the currently promoted environment. See phase-2a-findings.md.
+          throw new Error(
+            "Demoting by project requires a thread ID or environment ID. " +
+            "Pass --thread or set BB_THREAD_ID, or provide the environment ID directly.",
+          );
         })();
 
         const resolved = await resolution;
-        const result = await unwrap<{ ok: true; demoted: boolean; message: string }>(
-          client.api.v1.environments[":id"].operations.$post({
+        const result = await unwrap<{ ok: true; action: "demote"; message: string }>(
+          client.api.v1.environments[":id"].actions.$post({
             param: { id: resolved.environmentId },
             json: {
-              operation: "demote_primary",
+              action: "demote",
               initiatingThreadId: resolved.threadId,
             },
           }),
@@ -215,30 +203,12 @@ export function registerEnvironmentCommands(
     .description("Show which environment is active in the primary checkout")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { project?: string; json?: boolean }) => {
-      const client = createClient(getUrl());
+    .action(async (_opts: { project?: string; json?: boolean }) => {
       try {
-        const resolvedProject = resolveProjectIdWithLabel(opts.project);
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        const threads = await unwrap<Thread[]>(
-          client.api.v1.threads.$get({
-            query: { projectId: resolvedProject.id },
-          }),
-        );
-        const active = threads.find((thread) => thread.primaryCheckout?.isActive);
-        const environmentId = active?.environmentId ?? null;
-        if (outputJson(opts, { environmentId, threadId: active?.id ?? null })) return;
-        if (!environmentId) {
-          console.log("Primary checkout: demoted");
-          return;
-        }
-        console.log(`Primary checkout environment: ${environmentId}`);
-        if (active?.id) {
-          console.log(`Thread: ${active.id}`);
-        }
-        if (active?.title) {
-          console.log(`Title: ${active.title}`);
-        }
+        // TODO: Thread no longer has primaryCheckout — need /environments/:id/primary-status
+        // or similar route. See phase-2a-findings.md.
+        console.error("Error: promote-status is not available (primaryCheckout not in Thread type)");
+        process.exit(1);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);

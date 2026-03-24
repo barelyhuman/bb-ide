@@ -1,20 +1,17 @@
 import { Command } from "commander";
-import type { EnvironmentDaemonSessionListResponse } from "@bb/env-daemon-contract";
 import {
   type Thread,
   type ThreadEventRow,
   type ThreadGitDiffResponse,
   type ThreadStatus,
   type WorkspaceStatus,
-  type Project,
 } from "@bb/domain";
 import {
-  formatEnvironmentDisplay,
   formatTimelineAsText,
   type TimelineFormat,
 } from "@bb/core-ui";
 import type {
-  SpawnThreadRequest,
+  CreateThreadRequest,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { assertNever } from "../assert-never.js";
@@ -55,8 +52,8 @@ function buildSpawnEnvironmentSelection(args: {
   environmentValue?: string;
   newEnvironmentKind?: string;
 }): Pick<
-  SpawnThreadRequest,
-  "environmentId" | "environmentDescriptor" | "environmentCreationArgs"
+  CreateThreadRequest,
+  "environmentId" | "path" | "provisionerId"
 > {
   const environmentValue = args.environmentValue?.trim();
   const newEnvironmentKind = args.newEnvironmentKind?.trim();
@@ -66,9 +63,7 @@ function buildSpawnEnvironmentSelection(args: {
   }
   if (newEnvironmentKind) {
     return {
-      environmentCreationArgs: {
-        kind: newEnvironmentKind,
-      },
+      provisionerId: newEnvironmentKind as "worktree" | "e2b",
     };
   }
   if (!environmentValue) {
@@ -76,10 +71,7 @@ function buildSpawnEnvironmentSelection(args: {
   }
   if (looksLikePath(environmentValue)) {
     return {
-      environmentDescriptor: {
-        type: "path",
-        path: environmentValue,
-      },
+      path: environmentValue,
     };
   }
   return {
@@ -152,15 +144,13 @@ function parseThreadWaitTarget(opts: {
     switch (opts.status) {
       case "created":
       case "provisioning":
-      case "provisioned":
-      case "provisioning_failed":
       case "error":
       case "idle":
       case "active":
         return { kind: "status", status: opts.status };
       default:
         throw new Error(
-          `Invalid thread status '${opts.status}'. Expected one of created, provisioning, provisioned, provisioning_failed, error, idle, active.`,
+          `Invalid thread status '${opts.status}'. Expected one of created, provisioning, error, idle, active.`,
         );
     }
   }
@@ -181,11 +171,6 @@ function getThreadWaitUnreachableReason(
   }
 
   switch (currentStatus) {
-    case "provisioning_failed":
-      return (
-        `Thread ${threadId} is in status provisioning_failed and will not reach idle by waiting alone. ` +
-        `Inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up to trigger reprovisioning.`
-      );
     case "error":
       return (
         `Thread ${threadId} is in status error and will not reach idle by waiting alone. ` +
@@ -193,7 +178,6 @@ function getThreadWaitUnreachableReason(
       );
     case "created":
     case "provisioning":
-    case "provisioned":
     case "idle":
     case "active":
       return undefined;
@@ -209,16 +193,10 @@ function getThreadStopBlockedReason(
   switch (status) {
     case "created":
     case "provisioning":
-    case "provisioned":
     case "active":
       return undefined;
     case "idle":
       return `Thread ${threadId} is already idle.`;
-    case "provisioning_failed":
-      return (
-        `Thread ${threadId} is in status provisioning_failed. ` +
-        `Do not stop it to force idle; inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up to trigger reprovisioning.`
-      );
     case "error":
       return (
         `Thread ${threadId} is in status error. ` +
@@ -246,7 +224,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   ): Promise<{ ok: boolean }> => {
     const client = createClient(getUrl());
     return unwrap<{ ok: boolean }>(
-      client.api.v1.threads[":id"].tell.$post({
+      client.api.v1.threads[":id"].send.$post({
         param: { id: threadId },
         json: {
           input: [{ type: "text", text: message }],
@@ -451,10 +429,12 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           client.api.v1.threads.$post({
             json: {
               projectId,
+              // TODO: providerId is required in CreateThreadRequest but CLI allows omitting it
+              // (server should resolve a default). See phase-2a-findings.md.
+              providerId: opts.provider ?? "",
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
-              ...(opts.provider ? { providerId: opts.provider } : {}),
               ...(opts.model ? { model: opts.model } : {}),
               ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel as "low" | "medium" | "high" | "xhigh" } : {}),
               ...(opts.title ? { title: opts.title } : {}),
@@ -507,7 +487,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               ...(projectId ? { projectId } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
               ...(opts.includeArchived ? { includeArchived: "true" as const } : {}),
-              ...(opts.includeWorkStatus ? { includeWorkStatus: "true" as const } : {}),
             },
           }),
         );
@@ -517,37 +496,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           return;
         }
         printThreadTable(threads, opts.includeWorkStatus);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
-    .command("sessions [id]")
-    .description("Show env-daemon sessions for a thread (defaults to BB_THREAD_ID)")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { json?: boolean }) => {
-      try {
-        const resolved = resolveThreadIdWithLabel(id);
-        const threadId = resolved.id;
-        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const client = createClient(getUrl());
-        const thread = await unwrap<Thread>(
-          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
-        );
-        const environmentId = (thread as Thread & { attachedEnvironment?: { id: string } }).attachedEnvironment?.id;
-        if (!environmentId) {
-          console.error("Thread has no attached environment");
-          process.exit(1);
-        }
-        const response = await unwrap<EnvironmentDaemonSessionListResponse>(
-          client.api.v1.environments[":id"]["env-daemon"].sessions.$get({
-            param: { id: environmentId },
-          }),
-        );
-        if (outputJson(opts, response)) return;
-        printThreadSessions(response);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -582,18 +530,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
       );
 
-      // Fetch project root path for environment display labels
-      let projectRootPath: string | undefined;
-      if (thread.projectId) {
-        try {
-          const project = await unwrap<Project>(
-            client.api.v1.projects[":id"].$get({ param: { id: thread.projectId } }),
-          );
-          projectRootPath = project.rootPath;
-        } catch {
-          // Project fetch failed; environment labels will be less specific
-        }
-      }
+      // TODO: Project no longer has rootPath — resolve via ProjectSource.
+      // See phase-2a-findings.md.
+      const projectRootPath: string | undefined = undefined;
 
       const events =
         recentEvents === undefined
@@ -621,30 +560,16 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
       }
 
+      // TODO: /threads/:id/diff route not in @bb/server-contract. See phase-2a-findings.md.
       let gitDiff: ThreadGitDiffResponse | undefined;
       if (opts.gitDiff) {
-        const query: Record<string, string> = {};
-        if (opts.diffSelection) {
-          query.selection = opts.diffSelection;
-        }
-        if (opts.diffMergeBase) {
-          query.mergeBaseBranch = opts.diffMergeBase;
-        }
-        gitDiff = await unwrap<ThreadGitDiffResponse>(
-          client.api.v1.threads[":id"]["git-diff"].$get({
-            param: { id: threadId },
-            query,
-          }),
-        );
+        console.error("Warning: --git-diff is not available (route not in contract)");
       }
 
+      // TODO: /threads/:id/diff/branches route not in @bb/server-contract. See phase-2a-findings.md.
       let mergeBaseBranches: string[] | undefined;
       if (opts.mergeBaseBranches) {
-        mergeBaseBranches = await unwrap<string[]>(
-          client.api.v1.threads[":id"]["merge-base-branches"].$get({
-            param: { id: threadId },
-          }),
-        );
+        console.error("Warning: --merge-base-branches is not available (route not in contract)");
       }
 
       if (opts.json) {
@@ -888,7 +813,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
         if (!opts.yes) {
           const confirmed = await confirmDestructiveAction(
-            `Delete thread "${thread.title ?? thread.titleFallback ?? thread.id}" permanently? This cannot be undone.`,
+            `Delete thread "${thread.title ?? thread.id}" permanently? This cannot be undone.`,
           );
           if (!confirmed) {
             console.log(`Thread ${threadId} deletion cancelled`);
@@ -1006,7 +931,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           const timeline = await unwrap<ThreadTimelineResponse>(
             client.api.v1.threads[":id"].timeline.$get({
               param: { id: threadId },
-              query: { includeToolGroupMessages: "true" },
+              query: {},
             }),
           );
           const messages = timeline.rows.flatMap((row) =>
@@ -1031,17 +956,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("output [id]")
     .description("Get the final output of a thread (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
+    .action(async (_id: string | undefined, _opts: { json?: boolean }) => {
       try {
-        const resolved = resolveThreadIdWithLabel(id);
-        const threadId = resolved.id;
-        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const result = await unwrap<{ output: string }>(
-          client.api.v1.threads[":id"].output.$get({ param: { id: threadId } }),
-        );
-        if (outputJson(opts, result)) return;
-        console.log(result.output);
+        // TODO: /threads/:id/output route not in @bb/server-contract. See phase-2a-findings.md.
+        console.error("Error: thread output route is not available (not in contract)");
+        process.exit(1);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -1055,10 +974,6 @@ export function statusText(status: ThreadStatus): string {
       return "created";
     case "provisioning":
       return "provisioning";
-    case "provisioned":
-      return "provisioned";
-    case "provisioning_failed":
-      return "provisioning_failed";
     case "error":
       return "error";
     case "idle":
@@ -1075,7 +990,7 @@ function printThread(thread: Thread): void {
   console.log(`  ID:       ${thread.id}`);
   console.log(`  Project:  ${thread.projectId}`);
   console.log(`  Status:   ${statusText(thread.status)}`);
-  if (thread.archivedAt !== undefined) {
+  if (thread.archivedAt !== null) {
     console.log(`  Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
   }
   console.log(`  Created:  ${new Date(thread.createdAt).toLocaleString()}`);
@@ -1088,7 +1003,7 @@ function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void 
   const statusWidth = Math.max(
     12,
     ...threads.map((thread) =>
-      thread.archivedAt !== undefined
+      thread.archivedAt !== null
         ? `${statusText(thread.status)} (archived)`.length
         : statusText(thread.status).length
     ),
@@ -1118,7 +1033,7 @@ function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void 
 
   for (const thread of threads) {
     const renderedStatus =
-      thread.archivedAt !== undefined
+      thread.archivedAt !== null
         ? `${statusText(thread.status)} (archived)`
         : statusText(thread.status);
     const rowCols = [
@@ -1128,17 +1043,9 @@ function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void 
     ];
 
     if (includeWorkStatus) {
-      const ws = thread.workStatus;
-      if (ws) {
-        rowCols.push(
-          ws.state.padEnd(10),
-          (ws.currentBranch ?? "-").padEnd(20),
-          String(ws.changedFiles).padEnd(5),
-          `+${ws.insertions}/-${ws.deletions}`.padEnd(10),
-        );
-      } else {
-        rowCols.push("-".padEnd(10), "-".padEnd(20), "-".padEnd(5), "-".padEnd(10));
-      }
+      // TODO: Thread no longer has inline workStatus — requires separate API call.
+      // See phase-2a-findings.md.
+      rowCols.push("-".padEnd(10), "-".padEnd(20), "-".padEnd(5), "-".padEnd(10));
     }
 
     const row = rowCols.join("  ");
@@ -1208,16 +1115,11 @@ function printThreadStatus(payload: ThreadStatusPayload, projectRootPath?: strin
   if (thread.parentThreadId) {
     console.log(`Parent ${thread.parentThreadId}`);
   }
-  if (thread.archivedAt !== undefined) {
+  if (thread.archivedAt !== null) {
     console.log(`Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
   }
-  if (thread.attachedEnvironment) {
-    const envDisplay = formatEnvironmentDisplay(thread.attachedEnvironment, projectRootPath);
-    console.log(`Environment ${envDisplay.label}`);
-    console.log(`  ID: ${envDisplay.id}`);
-    if (envDisplay.path) {
-      console.log(`  Path: ${envDisplay.path}`);
-    }
+  if (thread.environmentId) {
+    console.log(`Environment ${thread.environmentId}`);
   }
   console.log(`Created ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`Updated ${new Date(thread.updatedAt).toLocaleString()}`);
@@ -1242,30 +1144,3 @@ function printThreadStatus(payload: ThreadStatusPayload, projectRootPath?: strin
   }
 }
 
-function printThreadSessions(payload: EnvironmentDaemonSessionListResponse): void {
-  console.log(`Environment ${payload.environmentId} env-daemon sessions`);
-  if (payload.sessions.length === 0) {
-    console.log("No sessions found");
-    return;
-  }
-
-  for (const session of payload.sessions) {
-    console.log("");
-    console.log(`- Session ${session.id}`);
-    console.log(`  Status ${session.status}`);
-    console.log(`  Daemon ${session.environmentDaemonId} (${session.environmentDaemonInstanceId})`);
-    console.log(`  Lease expires ${new Date(session.leaseExpiresAt).toLocaleString()}`);
-    if (session.lastHeartbeatAt !== undefined) {
-      console.log(`  Last heartbeat ${new Date(session.lastHeartbeatAt).toLocaleString()}`);
-    }
-    if (session.closedAt !== undefined) {
-      console.log(`  Closed ${new Date(session.closedAt).toLocaleString()}`);
-    }
-    if (session.closeReason) {
-      console.log(`  Close reason ${session.closeReason}`);
-    }
-    if (session.controlBaseUrl) {
-      console.log(`  Control endpoint ${session.controlBaseUrl}`);
-    }
-  }
-}

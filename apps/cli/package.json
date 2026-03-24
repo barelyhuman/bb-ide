@@ -16,7 +16,6 @@
   "dependencies": {
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
-    "@bb/env-daemon-contract": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
     "commander": "^13.0.0",

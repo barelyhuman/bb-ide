@@ -13,11 +13,6 @@ const THREAD_COMMAND_OPTION_SPECS: Record<
     optionsWithValues: new Set(["--status", "--event", "--timeout", "--poll-interval"]),
     flagOptions: new Set(),
   },
-  sessions: {
-    positionalCount: 1,
-    optionsWithValues: new Set(),
-    flagOptions: new Set(["--json"]),
-  },
   show: {
     positionalCount: 1,
     optionsWithValues: new Set(),

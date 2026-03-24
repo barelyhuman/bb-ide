@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import type {
-  CommitEnvironmentOperationResponse,
-  SquashMergeEnvironmentOperationResponse,
+  CommitActionResponse,
+  SquashMergeActionResponse,
 } from "@bb/server-contract";
 
 /**
@@ -103,10 +103,10 @@ export function printContextLabel(
 }
 
 export function printEnvironmentGitOperationResult(
-  result: CommitEnvironmentOperationResponse | SquashMergeEnvironmentOperationResponse,
+  result: CommitActionResponse | SquashMergeActionResponse,
 ): void {
   const flags = [
-    ...(result.operation === "commit"
+    ...(result.action === "commit"
       ? [result.commitCreated ? "committed" : "noop"]
       : [result.merged ? "merged" : "noop"]),
     ...(result.autoArchived ? ["archived"] : []),

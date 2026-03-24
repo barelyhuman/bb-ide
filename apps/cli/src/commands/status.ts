@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import type { Project, Thread } from "@bb/domain";
 import {
-  formatEnvironmentDisplay,
   type EnvironmentDisplayInfo,
 } from "@bb/core-ui";
 import { resolveContextSnapshot } from "../context-env.js";
@@ -9,7 +8,7 @@ import { createClient, unwrap } from "../client.js";
 import { outputJson } from "./helpers.js";
 
 interface StatusPayload {
-  project: { id: string; name: string; rootPath: string } | null;
+  project: { id: string; name: string } | null;
   thread: {
     id: string;
     type: string;
@@ -59,7 +58,6 @@ export function registerStatusCommand(
               payload.project = {
                 id: project.id,
                 name: project.name,
-                rootPath: project.rootPath,
               };
               serverAvailable = true;
             } catch {
@@ -74,16 +72,13 @@ export function registerStatusCommand(
                   param: { id: context.threadId },
                 }),
               );
-              const envDisplay = thread.attachedEnvironment
-                ? formatEnvironmentDisplay(thread.attachedEnvironment, payload.project?.rootPath)
-                : null;
               payload.thread = {
                 id: thread.id,
                 type: thread.type,
                 status: thread.status,
-                title: thread.title ?? thread.titleFallback ?? null,
+                title: thread.title ?? null,
                 parentThreadId: thread.parentThreadId ?? null,
-                environment: envDisplay,
+                environment: null,
               };
               serverAvailable = true;
 
@@ -98,7 +93,7 @@ export function registerStatusCommand(
                   payload.managedThreads = managed.map((t) => ({
                     id: t.id,
                     status: t.status,
-                    title: t.title ?? t.titleFallback ?? null,
+                    title: t.title ?? null,
                   }));
                 } catch {
                   // Managed threads fetch failed; leave as null
@@ -119,7 +114,6 @@ export function registerStatusCommand(
       // Human-readable output
       if (serverAvailable && payload.project) {
         console.log(`Project: ${payload.project.name} (${payload.project.id})`);
-        console.log(`  Root: ${payload.project.rootPath}`);
       } else if (context.projectId) {
         console.log(`Project: ${context.projectId}`);
       } else {
