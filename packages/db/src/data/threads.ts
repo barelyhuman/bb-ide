@@ -88,8 +88,13 @@ export function updateThread(
   if ("title" in input) changes.push("title-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
 
+  const set: Record<string, unknown> = { updatedAt: now };
+  if ("title" in input) set.title = input.title;
+  if ("environmentId" in input) set.environmentId = input.environmentId;
+  if ("lastReadAt" in input) set.lastReadAt = input.lastReadAt;
+
   db.update(threads)
-    .set({ ...input, updatedAt: now })
+    .set(set)
     .where(eq(threads.id, id))
     .run();
   const updated = db.select().from(threads).where(eq(threads.id, id)).get();

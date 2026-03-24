@@ -83,7 +83,8 @@ describe("commands", () => {
 
     const fetched = fetchCommands(db, noopNotifier, { hostId: host.id });
     expect(fetched).toHaveLength(2);
-    expect(fetched[0]!.state).toBe("pending"); // state at time of select (before mark)
+    expect(fetched[0]!.state).toBe("fetched");
+    expect(fetched[0]!.fetchedAt).toBeTypeOf("number");
 
     // Re-fetch should return empty (already fetched)
     const fetched2 = fetchCommands(db, noopNotifier, { hostId: host.id });

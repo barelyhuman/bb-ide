@@ -67,7 +67,7 @@ export interface FetchCommandsOptions {
  */
 export function fetchCommands(
   db: DbConnection,
-  _notifier: DbNotifier,
+  notifier: DbNotifier,
   options: FetchCommandsOptions,
 ) {
   const { hostId, afterCursor = 0, limit = 100 } = options;
@@ -87,15 +87,26 @@ export function fetchCommands(
     .limit(limit)
     .all();
 
+  if (commands.length === 0) return commands;
+
   // Mark as fetched
-  for (const cmd of commands) {
+  const ids = commands.map((cmd) => cmd.id);
+  for (const id of ids) {
     db.update(hostDaemonCommands)
       .set({ state: "fetched", fetchedAt: now })
-      .where(eq(hostDaemonCommands.id, cmd.id))
+      .where(eq(hostDaemonCommands.id, id))
       .run();
   }
 
-  return commands;
+  // Re-select to return up-to-date objects
+  return ids.map(
+    (id) =>
+      db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.id, id))
+        .get()!,
+  );
 }
 
 export interface ReportCommandResultInput {
@@ -109,7 +120,7 @@ export interface ReportCommandResultInput {
  */
 export function reportCommandResult(
   db: DbConnection,
-  _notifier: DbNotifier,
+  notifier: DbNotifier,
   input: ReportCommandResultInput,
 ) {
   const now = Date.now();

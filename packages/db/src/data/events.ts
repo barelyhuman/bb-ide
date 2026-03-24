@@ -1,4 +1,4 @@
-import { eq, sql, max } from "drizzle-orm";
+import { eq, sql, max, inArray } from "drizzle-orm";
 import type { ThreadEventType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -63,14 +63,18 @@ export function getHighWaterMarks(
   const result: Record<string, number> = {};
 
   if (threadIds && threadIds.length > 0) {
-    for (const threadId of threadIds) {
-      const row = db
-        .select({ maxSeq: max(events.sequence) })
-        .from(events)
-        .where(eq(events.threadId, threadId))
-        .get();
-      if (row?.maxSeq != null) {
-        result[threadId] = row.maxSeq;
+    const rows = db
+      .select({
+        threadId: events.threadId,
+        maxSeq: max(events.sequence),
+      })
+      .from(events)
+      .where(inArray(events.threadId, threadIds))
+      .groupBy(events.threadId)
+      .all();
+    for (const row of rows) {
+      if (row.maxSeq != null) {
+        result[row.threadId] = row.maxSeq;
       }
     }
   } else {

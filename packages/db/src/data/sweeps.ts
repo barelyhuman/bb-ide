@@ -1,4 +1,4 @@
-import { eq, and, sql, lt, ne, isNull } from "drizzle-orm";
+import { eq, and, sql, lt, ne } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
@@ -7,6 +7,7 @@ import {
   threads,
   environments,
 } from "../schema.js";
+import { transitionThreadStatus } from "./threads.js";
 
 /** Standard command TTL: 60 seconds */
 const STANDARD_COMMAND_TTL_MS = 60_000;
@@ -77,17 +78,10 @@ export function sweepExpiredCommands(
       try {
         const payload = JSON.parse(cmd.payload);
         if (payload.threadId) {
-          const thread = db
-            .select()
-            .from(threads)
-            .where(eq(threads.id, payload.threadId))
-            .get();
-          if (thread && thread.status !== "error") {
-            db.update(threads)
-              .set({ status: "error", updatedAt: currentTime })
-              .where(eq(threads.id, payload.threadId))
-              .run();
-            notifier.notifyThread(payload.threadId, ["status-changed"]);
+          try {
+            transitionThreadStatus(db, notifier, payload.threadId, "error");
+          } catch {
+            // Invalid transition (e.g., thread already in error or in created state) — skip
           }
         }
       } catch {
@@ -163,12 +157,12 @@ export function sweepExpiredLeases(
         .all();
 
       for (const thread of activeThreads) {
-        db.update(threads)
-          .set({ status: "error", updatedAt: currentTime })
-          .where(eq(threads.id, thread.id))
-          .run();
-        threadsErrored++;
-        notifier.notifyThread(thread.id, ["status-changed"]);
+        try {
+          transitionThreadStatus(db, notifier, thread.id, "error");
+          threadsErrored++;
+        } catch {
+          // Invalid transition — skip
+        }
       }
     }
   }
@@ -182,36 +176,22 @@ export function sweepExpiredLeases(
  * The caller decides what to do (e.g., queue destroy commands).
  */
 export function sweepManagedEnvironments(db: DbConnection) {
-  // Find managed environments
-  const managedEnvs = db
+  // Single query: managed environments NOT destroying, with zero non-archived threads
+  const rows = db
     .select()
     .from(environments)
     .where(
       and(
         eq(environments.managed, true),
         ne(environments.status, "destroying"),
+        sql`NOT EXISTS (
+          SELECT 1 FROM threads
+          WHERE threads.environment_id = ${environments.id}
+          AND threads.archived_at IS NULL
+        )`,
       ),
     )
     .all();
 
-  const candidates = [];
-  for (const env of managedEnvs) {
-    // Count non-archived threads referencing this environment
-    const nonArchivedThreads = db
-      .select()
-      .from(threads)
-      .where(
-        and(
-          eq(threads.environmentId, env.id),
-          isNull(threads.archivedAt),
-        ),
-      )
-      .all();
-
-    if (nonArchivedThreads.length === 0) {
-      candidates.push(env);
-    }
-  }
-
-  return candidates;
+  return rows;
 }
