@@ -85,8 +85,6 @@ export function shouldRenderThreadStartInput(
   switch (threadStatus) {
     case "created":
     case "provisioning":
-    case "provisioned":
-    case "provisioning_failed":
     case "error":
     case "idle":
     case "active":
@@ -102,11 +100,9 @@ export function shouldPreservePendingMessages(
   if (!threadStatus) return false;
   switch (threadStatus) {
     case "provisioning":
-    case "provisioned":
     case "active":
       return true;
     case "created":
-    case "provisioning_failed":
     case "error":
     case "idle":
       return false;

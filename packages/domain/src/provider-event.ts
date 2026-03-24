@@ -1,12 +1,12 @@
 import { z } from "zod";
 import {
-  clientOutboundStartEventDataSchema,
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemProvisioningEventDataSchema,
   systemThreadInterruptedEventDataSchema,
   systemThreadTitleUpdatedEventDataSchema,
+  turnRequestEventDataSchema,
 } from "./thread-events.js";
 
 export const threadEventItemStatusSchema = z.enum([
@@ -317,15 +317,15 @@ export const systemThreadEventSchema = z.union([
   z.object({
     type: z.literal("client/thread/start"),
     threadId: z.string(),
-  }).merge(clientOutboundStartEventDataSchema),
+  }).merge(turnRequestEventDataSchema),
   z.object({
     type: z.literal("client/turn/requested"),
     threadId: z.string(),
-  }).merge(clientOutboundStartEventDataSchema),
+  }).merge(turnRequestEventDataSchema),
   z.object({
     type: z.literal("client/turn/start"),
     threadId: z.string(),
-  }).merge(clientOutboundStartEventDataSchema),
+  }).merge(turnRequestEventDataSchema),
   z.object({
     type: z.literal("system/error"),
     threadId: z.string(),

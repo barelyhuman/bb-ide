@@ -1,12 +1,7 @@
 import { z } from "zod";
-import {
-  promptInputSchema,
-  reasoningLevelSchema,
-  sandboxModeSchema,
-  serviceTierSchema,
-} from "./shared-types.js";
+import { promptInputSchema, reasoningLevelSchema, sandboxModeSchema, serviceTierSchema } from "./shared-types.js";
 
-export const appThreadEventTypeValues = [
+export const systemEventTypeValues = [
   "client/thread/start",
   "client/turn/requested",
   "client/turn/start",
@@ -17,12 +12,8 @@ export const appThreadEventTypeValues = [
   "system/operation",
   "system/provisioning",
 ] as const;
-export const appThreadEventTypeSchema = z.enum(appThreadEventTypeValues);
-export type AppThreadEventType = z.infer<typeof appThreadEventTypeSchema>;
-
-export const systemEventTypeValues = appThreadEventTypeValues;
-export const systemEventTypeSchema = appThreadEventTypeSchema;
-export type SystemEventType = AppThreadEventType;
+export const systemEventTypeSchema = z.enum(systemEventTypeValues);
+export type SystemEventType = z.infer<typeof systemEventTypeSchema>;
 
 export const threadTurnInitiatorValues = ["user", "agent", "system"] as const;
 export const threadTurnInitiatorSchema = z.enum(threadTurnInitiatorValues);
@@ -54,22 +45,16 @@ export type ThreadEnvironmentStartReason = z.infer<
   typeof threadEnvironmentStartReasonSchema
 >;
 
-
-export const clientExecutionOptionsSnapshotSchema = z.object({
+export const turnRequestOptionsSchema = z.object({
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
   approvalPolicy: z.string().optional(),
 });
-export type ClientExecutionOptionsSnapshot = z.infer<
-  typeof clientExecutionOptionsSnapshotSchema
->;
+export type TurnRequestOptions = z.infer<typeof turnRequestOptionsSchema>;
 
-export const turnRequestOptionsSchema = clientExecutionOptionsSnapshotSchema;
-export type TurnRequestOptions = ClientExecutionOptionsSnapshot;
-
-export const clientOutboundStartEventDataSchema = z.object({
+export const turnRequestEventDataSchema = z.object({
   direction: z.literal("outbound"),
   source: z.enum(["spawn", "tell"]),
   initiator: threadTurnInitiatorSchema.optional(),
@@ -78,14 +63,9 @@ export const clientOutboundStartEventDataSchema = z.object({
     method: z.enum(["thread/start", "turn/start"]),
     params: z.record(z.string(), z.unknown()),
   }),
-  execution: clientExecutionOptionsSnapshotSchema,
+  execution: turnRequestOptionsSchema,
 });
-export type ClientOutboundStartEventData = z.infer<
-  typeof clientOutboundStartEventDataSchema
->;
-
-export const turnRequestEventDataSchema = clientOutboundStartEventDataSchema;
-export type TurnRequestEventData = ClientOutboundStartEventData;
+export type TurnRequestEventData = z.infer<typeof turnRequestEventDataSchema>;
 
 export const systemErrorEventDataSchema = z.object({
   code: z.string().optional(),
@@ -161,10 +141,10 @@ export type TurnLifecycleEventData = z.infer<
   typeof turnLifecycleEventDataSchema
 >;
 
-export type ThreadEventDataByAppType = {
-  "client/thread/start": ClientOutboundStartEventData;
-  "client/turn/requested": ClientOutboundStartEventData;
-  "client/turn/start": ClientOutboundStartEventData;
+export type ThreadEventDataByType = {
+  "client/thread/start": TurnRequestEventData;
+  "client/turn/requested": TurnRequestEventData;
+  "client/turn/start": TurnRequestEventData;
   "system/error": SystemErrorEventData;
   "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
@@ -174,12 +154,12 @@ export type ThreadEventDataByAppType = {
 };
 
 export type ThreadEventData =
-  | ThreadEventDataByAppType[AppThreadEventType]
+  | ThreadEventDataByType[SystemEventType]
   | Record<string, unknown>;
 
 export type ThreadEventDataForType<TType extends string> =
-  TType extends AppThreadEventType
-    ? ThreadEventDataByAppType[TType]
+  TType extends SystemEventType
+    ? ThreadEventDataByType[TType]
     : Record<string, unknown>;
 
 export const threadEventRowSchema = z.object({

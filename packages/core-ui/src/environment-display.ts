@@ -20,7 +20,7 @@ export function formatEnvironmentDisplay(
   environment: Environment,
   projectRootPath?: string,
 ): EnvironmentDisplayInfo {
-  const envPath = environment.path;
+  const envPath = environment.path ?? undefined;
 
   // Determine kind + label
   const isPrimary =
@@ -64,7 +64,7 @@ export function formatEnvironmentDisplay(
     label: "Unknown",
     kind: "unknown",
     id: environment.id,
-    path: envPath,
+    ...(envPath ? { path: envPath } : {}),
     managed: environment.managed,
   };
 }

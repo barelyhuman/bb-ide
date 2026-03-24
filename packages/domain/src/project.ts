@@ -3,11 +3,7 @@ import { z } from "zod";
 export const projectSchema = z.object({
   id: z.string(),
   name: z.string(),
-  rootPath: z.string(),
-  projectInstructions: z.string().optional(),
-  defaultProviderId: z.string().optional(),
-  primaryCheckoutThreadId: z.string().optional(),
-  rootPathExists: z.boolean().optional(),
+  defaultProviderId: z.string().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -24,9 +20,9 @@ export const projectSourceSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   type: projectSourceTypeSchema,
-  hostId: z.string().optional(),
-  path: z.string().optional(),
-  repoUrl: z.string().url().optional(),
+  hostId: z.string(),
+  path: z.string().nullable(),
+  repoUrl: z.string().url().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

@@ -36,29 +36,12 @@ export type {
 
 export {
   environmentSchema,
-  environmentCapabilitiesSchema,
-  environmentCapabilitySchema,
-  environmentCapabilityValues,
-  environmentDescriptorSchema,
-  environmentLocationSchema,
-  environmentLocationValues,
-  environmentPropertiesSchema,
   environmentStatusSchema,
   environmentStatusValues,
-  environmentWorkspaceKindSchema,
-  environmentWorkspaceKindValues,
-  persistedEnvironmentRecordSchema,
 } from "./environment.js";
 export type {
   Environment,
-  EnvironmentCapabilities,
-  EnvironmentCapability,
-  EnvironmentDescriptor,
-  EnvironmentLocation,
-  EnvironmentProperties,
   EnvironmentStatus,
-  EnvironmentWorkspaceKind,
-  PersistedEnvironmentRecord,
 } from "./environment.js";
 
 export {
@@ -87,14 +70,7 @@ export type {
 } from "./host.js";
 
 export {
-  threadBuiltInActionIdSchema,
-  threadBuiltInActionIdValues,
-  threadBuiltInActionSchema,
   threadContextWindowUsageSchema,
-  threadPrimaryCheckoutStateSchema,
-  threadProvisioningReadinessSchema,
-  threadProvisioningReadinessValues,
-  threadProvisioningStateSchema,
   threadQueuedMessageSchema,
   threadSchema,
   threadStatusSchema,
@@ -108,12 +84,7 @@ export {
 } from "./thread.js";
 export type {
   Thread,
-  ThreadBuiltInAction,
-  ThreadBuiltInActionId,
   ThreadContextWindowUsage,
-  ThreadPrimaryCheckoutState,
-  ThreadProvisioningReadiness,
-  ThreadProvisioningState,
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,
@@ -136,10 +107,6 @@ export type {
 } from "./thread-git-diff.js";
 
 export {
-  appThreadEventTypeSchema,
-  appThreadEventTypeValues,
-  clientExecutionOptionsSnapshotSchema,
-  clientOutboundStartEventDataSchema,
   provisioningTranscriptEntrySchema,
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
@@ -161,9 +128,6 @@ export {
   turnLifecycleEventDataSchema,
 } from "./thread-events.js";
 export type {
-  AppThreadEventType,
-  ClientExecutionOptionsSnapshot,
-  ClientOutboundStartEventData,
   ProvisioningTranscriptEntry,
   SystemErrorEventData,
   SystemManagerUserMessageEventData,
@@ -174,7 +138,7 @@ export type {
   SystemThreadTitleUpdatedEventData,
   ThreadEnvironmentStartReason,
   ThreadEventData,
-  ThreadEventDataByAppType,
+  ThreadEventDataByType,
   ThreadEventDataForType,
   ThreadEventOfType,
   ThreadEventRow,
