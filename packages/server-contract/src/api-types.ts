@@ -25,6 +25,51 @@ export const threadContextWindowUsageSchema = z.object({
 });
 export type ThreadContextWindowUsage = z.infer<typeof threadContextWindowUsageSchema>;
 
+// --- Thread creation: environment + workspace discriminated unions ---
+
+export const unmanagedWorkspaceSchema = z.object({
+  type: z.literal("unmanaged"),
+  path: z.string().min(1).nullable(),
+});
+
+export const managedWorktreeWorkspaceSchema = z.object({
+  type: z.literal("managed-worktree"),
+});
+
+export const managedCloneWorkspaceSchema = z.object({
+  type: z.literal("managed-clone"),
+});
+
+export const workspaceArgsSchema = z.discriminatedUnion("type", [
+  unmanagedWorkspaceSchema,
+  managedWorktreeWorkspaceSchema,
+  managedCloneWorkspaceSchema,
+]);
+export type WorkspaceArgs = z.infer<typeof workspaceArgsSchema>;
+
+export const reuseEnvironmentSchema = z.object({
+  type: z.literal("reuse"),
+  environmentId: z.string().min(1),
+});
+
+export const hostEnvironmentSchema = z.object({
+  type: z.literal("host"),
+  hostId: z.string().min(1),
+  workspace: workspaceArgsSchema,
+});
+
+export const sandboxHostEnvironmentSchema = z.object({
+  type: z.literal("sandbox-host"),
+  sandboxType: z.string().min(1),
+});
+
+export const environmentArgsSchema = z.discriminatedUnion("type", [
+  reuseEnvironmentSchema,
+  hostEnvironmentSchema,
+  sandboxHostEnvironmentSchema,
+]);
+export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
+
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
   providerId: z.string().min(1),
@@ -35,10 +80,7 @@ export const createThreadRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
-  environmentId: z.string().min(1).optional(),
-  hostId: z.string().min(1).optional(),
-  path: z.string().min(1).optional(),
-  provisionerId: z.enum(["worktree", "e2b"]).optional(),
+  environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
   spawnInitiator: z.enum(["user", "agent", "system"]).optional(),
 });

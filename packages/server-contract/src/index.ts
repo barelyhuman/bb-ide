@@ -17,6 +17,7 @@ export {
   createProjectRequestSchema,
   createProjectSourceRequestSchema,
   createThreadRequestSchema,
+  environmentArgsSchema,
   environmentActionApiErrorSchema,
   environmentActionFailureDetailsSchema,
   environmentActionRequestSchema,
@@ -45,6 +46,13 @@ export {
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
   updateThreadRequestSchema,
+  unmanagedWorkspaceSchema,
+  managedWorktreeWorkspaceSchema,
+  managedCloneWorkspaceSchema,
+  workspaceArgsSchema,
+  reuseEnvironmentSchema,
+  hostEnvironmentSchema,
+  sandboxHostEnvironmentSchema,
   uploadedPromptAttachmentSchema,
   workspaceFileSchema,
 } from "./api-types.js";
@@ -55,6 +63,7 @@ export type {
   CreateProjectRequest,
   CreateProjectSourceRequest,
   CreateThreadRequest,
+  EnvironmentArgs,
   EnvironmentActionApiError,
   EnvironmentActionFailureDetails,
   EnvironmentActionRequest,
@@ -84,6 +93,7 @@ export type {
   UpdateProjectSourceRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
+  WorkspaceArgs,
   WorkspaceFile,
 } from "./api-types.js";
 

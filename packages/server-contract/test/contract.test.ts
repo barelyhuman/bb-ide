@@ -16,6 +16,11 @@ describe("server-contract canonical schemas", () => {
         projectId: "proj_123",
         providerId: "codex",
         input: [{ type: "text", text: "Ship it" }],
+        environment: {
+          type: "host",
+          hostId: "host_abc",
+          workspace: { type: "unmanaged", path: null },
+        },
       }),
     ).toMatchObject({
       projectId: "proj_123",

@@ -57,7 +57,11 @@ Today's `@bb/workspace` exports raw primitives (`Workspace` class, `createWorktr
 
 ### Open questions
 
-**Q1: `provisionWorkspace` opts shape?** Needs: provisioning type (unmanaged/worktree/clone), path or source path, branch name, setup script config, progress callback. Probably a discriminated union on provisioning type.
+**Q1: `provisionWorkspace` opts shape?** ✅ Resolved — discriminated union on provisioning type, matching the `WorkspaceArgs` schema in `@bb/server-contract`:
+- `{ type: "unmanaged", path: string | null }` — validate existing path (null = project source path)
+- `{ type: "managed-worktree" }` — create git worktree + branch + setup script
+- `{ type: "managed-clone" }` — clone repo + branch + setup script
+Plus: source path, branch name, setup script config, progress callback (provided by server in the `environment.provision` command payload, not by the client).
 
 **Q2: Promote/demote — method or standalone?** Proposed as `workspace.promote(primary)`. Alternative: standalone `promote(source, primary)`. Trade-off: methods read naturally and `IWorkspace` knows its own branch name (no `envBranch` param needed for demote). But promote/demote operate on two workspaces equally — having it as a method on one is slightly misleading about ownership.
 

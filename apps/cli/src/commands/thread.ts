@@ -11,7 +11,7 @@ import {
   type TimelineFormat,
 } from "@bb/core-ui";
 import type {
-  CreateThreadRequest,
+  EnvironmentArgs,
   EnvironmentStatusResponse,
   ProjectResponse,
   ThreadTimelineResponse,
@@ -51,13 +51,11 @@ function looksLikePath(value: string): boolean {
   return value.includes("/") || value.startsWith(".") || value.startsWith("~");
 }
 
-function buildSpawnEnvironmentSelection(args: {
+function buildSpawnEnvironment(args: {
   environmentValue?: string;
   newEnvironmentKind?: string;
-}): Pick<
-  CreateThreadRequest,
-  "environmentId" | "path" | "provisionerId"
-> {
+  hostId: string;
+}): EnvironmentArgs {
   const environmentValue = args.environmentValue?.trim();
   const newEnvironmentKind = args.newEnvironmentKind?.trim();
 
@@ -65,19 +63,31 @@ function buildSpawnEnvironmentSelection(args: {
     throw new Error("Cannot combine --environment with --new-environment.");
   }
   if (newEnvironmentKind) {
+    if (newEnvironmentKind === "e2b") {
+      return { type: "sandbox-host", sandboxType: "e2b" };
+    }
     return {
-      provisionerId: newEnvironmentKind as "worktree" | "e2b",
+      type: "host",
+      hostId: args.hostId,
+      workspace: { type: "managed-worktree" },
     };
   }
   if (!environmentValue) {
-    return {};
+    return {
+      type: "host",
+      hostId: args.hostId,
+      workspace: { type: "unmanaged", path: null },
+    };
   }
   if (looksLikePath(environmentValue)) {
     return {
-      path: environmentValue,
+      type: "host",
+      hostId: args.hostId,
+      workspace: { type: "unmanaged", path: environmentValue },
     };
   }
   return {
+    type: "reuse",
     environmentId: environmentValue,
   };
 }
@@ -419,9 +429,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
         const projectId = requireProjectId(opts.project);
         const environmentValue = resolveEnvironmentId(opts.environment);
-        const environmentSelection = buildSpawnEnvironmentSelection({
+        const localHostId = await fetchLocalHostId();
+        if (!localHostId) {
+          throw new Error("Cannot reach local host daemon. Is it running?");
+        }
+        const environment = buildSpawnEnvironment({
           environmentValue,
           newEnvironmentKind: opts.newEnvironment,
+          hostId: localHostId,
         });
         const parentThreadId =
           opts.parentThread ??
@@ -441,7 +456,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               ...(opts.title ? { title: opts.title } : {}),
               ...(opts.serviceTier ? { serviceTier: opts.serviceTier as "fast" | "flex" } : {}),
               ...(opts.sandboxMode ? { sandboxMode: opts.sandboxMode as "read-only" | "workspace-write" | "danger-full-access" } : {}),
-              ...environmentSelection,
+              environment,
               ...(parentThreadId ? { parentThreadId } : {}),
             },
           }),

@@ -458,9 +458,10 @@ All request parsing uses Zod schemas from `@bb/server-contract`. Data functions 
 Thread creation with ephemeral hosts calls `provisionHost()` from `@bb/sandbox-host` to create the sandbox, then proceeds with the normal flow (create environment record, queue `environment.provision` command to the daemon inside the sandbox).
 
 **Tests (use `app.request()` with in-memory DB + real hub):**
-- [ ] `POST /threads` with existing path → env(ready), thread created
-- [ ] `POST /threads` with provisionerId → env(provisioning), provision command queued
-- [ ] `POST /threads` with ephemeral host → sandbox provisioned, env(provisioning), provision command queued
+- [ ] `POST /threads` with `{ type: "host", workspace: { type: "unmanaged" } }` → env(provisioning), provision validates path, env(ready), thread created
+- [ ] `POST /threads` with `{ type: "host", workspace: { type: "managed-worktree" } }` → env(provisioning), provision command queued
+- [ ] `POST /threads` with `{ type: "sandbox-host" }` → sandbox provisioned, env(provisioning), provision command queued
+- [ ] `POST /threads` with `{ type: "reuse", environmentId }` → existing env, thread created
 - [ ] `POST /threads/:id/send` idle → active, turn.run queued
 - [ ] `POST /threads/:id/send` active + steer → turn.steer queued
 - [ ] `POST /environments/:id/actions` commit → command queued

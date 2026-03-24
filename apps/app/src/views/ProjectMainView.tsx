@@ -15,6 +15,7 @@ import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
+import type { CreateThreadRequest } from "@bb/server-contract";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
 
@@ -90,25 +91,25 @@ export function ProjectMainView() {
     () => projects?.find((project) => project.id === projectId),
     [projectId, projects],
   );
-  const selectedEnvironmentRequest = useMemo((): {
-    hostId?: string;
-    provisionerId?: "worktree" | "e2b";
-    environmentId?: string;
-  } => {
-    if (!projectId) {
-      return {};
+  const selectedEnvironment = useMemo((): CreateThreadRequest["environment"] | null => {
+    if (!projectId || !localHostId) {
+      return null;
     }
     if (!environmentSelectionValue || environmentSelectionValue === "local") {
-      return localHostId ? { hostId: localHostId } : {};
+      return {
+        type: "host",
+        hostId: localHostId,
+        workspace: { type: "unmanaged", path: null },
+      };
     }
     if (environmentSelectionValue === "worktree") {
-      return localHostId
-        ? { hostId: localHostId, provisionerId: "worktree" }
-        : {};
+      return {
+        type: "host",
+        hostId: localHostId,
+        workspace: { type: "managed-worktree" },
+      };
     }
-    return {
-      environmentId: environmentSelectionValue,
-    };
+    return null;
   }, [environmentSelectionValue, localHostId, projectId]);
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
@@ -167,7 +168,7 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    if (submittedInput.length === 0 || createThread.isPending) return;
+    if (submittedInput.length === 0 || createThread.isPending || !selectedEnvironment) return;
 
     // Match thread follow-up behavior: clear immediately, then restore only if the
     // request fails and the user has not started a new draft in the meantime.
@@ -183,7 +184,7 @@ export function ProjectMainView() {
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
         sandboxMode,
-        ...selectedEnvironmentRequest,
+        environment: selectedEnvironment,
       });
     } catch {
       promptDraft.restoreIfEmpty(submittedDraft);
@@ -191,7 +192,7 @@ export function ProjectMainView() {
     }
   };
 
-  const isSubmitDisabled = createThread.isPending || promptInput.length === 0;
+  const isSubmitDisabled = createThread.isPending || promptInput.length === 0 || !selectedEnvironment;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">

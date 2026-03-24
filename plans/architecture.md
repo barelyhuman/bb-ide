@@ -332,14 +332,20 @@ This ensures that after any failure, a single reconnect brings the system back t
 
 ### Environment provisioning handshake
 
-1. Client calls `POST /threads` with creation args (provisioner, host, optional path)
-2. Server creates environment record (status: provisioning) and thread
-3. Server queues `environment.provision` command
-4. Daemon runs provisioner, reports result
-5. Server updates environment (sets path, status → ready) or errors the thread
-6. If thread has pending input, server queues `thread.start`
+1. Client calls `POST /threads` with an `environment` discriminated union:
+   - `{ type: "reuse", environmentId }` — attach to an existing environment
+   - `{ type: "host", hostId, workspace }` — create a new environment on a persistent host
+   - `{ type: "sandbox-host", sandboxType }` — provision an ephemeral sandbox host
+   Where `workspace` is one of:
+   - `{ type: "unmanaged", path: string | null }` — use existing path (null = project source path)
+   - `{ type: "managed-worktree" }` — create a git worktree
+   - `{ type: "managed-clone" }` — clone the repo
+2. Server creates environment record and thread, queues `environment.provision` command
+3. Daemon runs provisioner (validates path for unmanaged, creates worktree/clone for managed)
+4. Server updates environment (sets path, status → ready) or errors the thread
+5. If thread has pending input, server queues `thread.start`
 
-For existing environments: skip provisioning, just queue `thread.start`.
+For `reuse`: skip provisioning, just queue `thread.start`.
 
 **Provisioning failure cleanup:**
 - If provisioner fails (e.g., setup script errors), the provisioner's `provision()` method is responsible for rolling back partial state (deleting the worktree it created). The provisioner owns its own cleanup on failure.
@@ -349,17 +355,19 @@ For existing environments: skip provisioning, just queue `thread.start`.
 
 ### Command flow examples
 
-**Creating a thread with an existing path:**
+**Creating a thread with an existing path (unmanaged workspace):**
 ```
-App → POST /threads { path, hostId }
-Server → creates environment record optimistically (status: ready), creates thread, queues thread.start
-Daemon → runs thread.start; if path is bad, reports error
-Server → if error: marks environment as error, thread as error
+App → POST /threads { environment: { type: "host", hostId, workspace: { type: "unmanaged", path: null } } }
+Server → creates environment record (status: provisioning), creates thread
+Server → queues environment.provision command with { mode: "unmanaged", path: <resolved from project source> }
+Daemon → validates path exists, discovers properties (isGitRepo, etc.)
+Daemon → reports command-result with { path, isGitRepo }
+Server → updates environment (status: ready), queues thread.start if pending input
 ```
 
 **Creating a thread with a managed worktree:**
 ```
-App → POST /threads { provisionerId: "worktree", hostId }
+App → POST /threads { environment: { type: "host", hostId, workspace: { type: "managed-worktree" } } }
 Server → creates environment record (status: provisioning), creates thread (status: provisioning)
 Server → queues environment.provision command with { mode: "worktree", sourcePath, targetPath, branchName }
 Daemon → calls provisionWorkspace() from @bb/workspace
