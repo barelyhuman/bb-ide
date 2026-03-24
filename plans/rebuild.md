@@ -2,6 +2,14 @@
 
 Implementation plan for the bb server, host-daemon, and supporting infrastructure. See `plans/architecture.md` for the full architecture and `plans/host-package.md` for the `@bb/workspace` and `@bb/sandbox-host` package designs.
 
+## Start Here
+
+**Phases 1 and 2 are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors.
+
+**Next phase: Phase 3** — wrap `@bb/workspace` behind `provisionWorkspace() → IWorkspace`. See `plans/host-package.md` for the interface design.
+
+**Can also begin in parallel: Phases 4a–4c** — daemon skeleton, command cursor, session management. These don't need `IWorkspace`.
+
 ## Current State
 
 Foundation packages are built and validated. Phases 1 and 2 are complete. Consumers (app + CLI) are cut over to new contracts with zero type errors. This plan covers what remains.
@@ -24,8 +32,8 @@ Foundation packages are built and validated. Phases 1 and 2 are complete. Consum
 | `@bb/tsconfig` | Done — untouched |
 | `apps/app` | **Done** — cut over to new contracts, zero type errors, 116 tests passing. Environment selector with Direct/Worktree options. `useHostDaemon` hook for daemon operations. |
 | `apps/cli` | **Done** — cut over to new contracts, zero type errors, 67 tests passing. Fetches hostId from daemon, supports env reuse without daemon. |
-| `apps/server` | **Skeleton only** — directory exists. Will be rebuilt in Phase 6. |
-| `apps/host-daemon` | **Skeleton only** — directory exists, no implementation. Built in Phase 4. |
+| `apps/server` | **Not yet a package** — directory placeholder only. Needs full package setup (package.json, tsconfig, src/index.ts). Built in Phase 6. |
+| `apps/host-daemon` | **Not yet a package** — directory placeholder only. Needs full package setup. Built in Phase 4. |
 | `@bb/sandbox-host` | **Does not exist** — E2B host lifecycle, daemon bootstrap. See `plans/host-package.md`. |
 
 ### Key schema notes
@@ -43,6 +51,11 @@ The `DbNotifier` interface has 5 methods:
 - `notifySystem(changes)` — system-wide WS notifications
 
 Setup script params (`scriptName`, `timeoutMs`) gap remains — fix in Phase 3.
+
+### Cleanup
+
+- `@bb/env-daemon-contract` — dead package, nothing imports it. Delete when convenient.
+- `plans/extensions-system.md` — out of scope for rebuild, can be deleted or deferred.
 
 ### Architecture summary
 

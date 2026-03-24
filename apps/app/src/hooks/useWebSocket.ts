@@ -194,8 +194,9 @@ export function useWebSocket(): void {
     // Connect to WebSocket
     wsManager.connect();
 
-    // Subscribe to thread changes.
     wsManager.subscribe("thread");
+    wsManager.subscribe("project");
+    wsManager.subscribe("environment");
     wsManager.subscribe("system");
 
     // Invalidate React Query caches on changes
@@ -253,6 +254,8 @@ export function useWebSocket(): void {
       unsubscribeConnected();
       unsubscribe();
       wsManager.unsubscribe("thread");
+      wsManager.unsubscribe("project");
+      wsManager.unsubscribe("environment");
       wsManager.unsubscribe("system");
       wsManager.disconnect();
     };

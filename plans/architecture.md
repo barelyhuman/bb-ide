@@ -686,8 +686,8 @@ The server imports `@bb/sandbox-host` for ephemeral host lifecycle. The daemon i
 Taking this opportunity to clean up route naming for clarity and consistency.
 
 ### Routes to remove
-- `/system/pick-folder` — client-side now
-- `/system/open-path` — client-side now
+- `/system/pick-folder` — moved to host-daemon local API (`POST /pick-folder`)
+- `/system/open-path` — moved to host-daemon local API (`POST /open`)
 - `/threads/:id/open-path` — client-side now
 - `/system/restart-policy` — dropped
 - `/system/environments` — replaced by hosts + provisioners

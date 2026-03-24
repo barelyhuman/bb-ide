@@ -605,7 +605,7 @@ export function ThreadDetailView() {
       );
     };
 
-    if (requiresArchiveConfirmation(workStatus, null)) {
+    if (requiresArchiveConfirmation(workStatus, environment)) {
       const confirmed = window.confirm(
         `This ${label} has uncommitted or unmerged work. Archive anyway?`,
       );

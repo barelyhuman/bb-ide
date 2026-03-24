@@ -37,9 +37,14 @@ describe("parseSubKey", () => {
     expect(parseSubKey("thread:t-1")).toEqual({ entity: "thread", id: "t-1" })
   })
 
+  it("parses all entity types", () => {
+    expect(parseSubKey("project:p-1")).toEqual({ entity: "project", id: "p-1" })
+    expect(parseSubKey("environment:e-1")).toEqual({ entity: "environment", id: "e-1" })
+  })
+
   it("rejects unknown entities", () => {
-    expect(parseSubKey("project:p-1")).toBeNull()
     expect(parseSubKey("unknown")).toBeNull()
+    expect(parseSubKey("bogus:id-1")).toBeNull()
   })
 })
 
