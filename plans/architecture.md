@@ -116,7 +116,7 @@ Multiple threads can share one environment. Managed environments (created by the
 
 Provisioners run where they need access: managed worktree needs the host filesystem (runs on daemon), E2B needs an API key (runs on server), existing path needs nothing (server creates the DB record). The `environment.provision` command is only for daemon-side provisioners.
 
-**Actions (environment-scoped, extensible later):** commit, squash merge, promote to primary checkout (server-orchestrated via workspace export/import, not a single daemon command). Future: run workflow, open PR.
+**Actions (environment-scoped, extensible later):** commit, squash merge, promote to primary checkout (single atomic daemon command), demote back to default branch. Future: run workflow, open PR.
 
 **Thread actions (thread-scoped):** archive/unarchive, follow-up/stop, assign/unassign to another thread.
 
@@ -132,8 +132,8 @@ events: id, threadId, environmentId, turnId, providerThreadId, type, sequence, d
 - `providerThreadId` — text, nullable (links to provider's thread identifier)
 - `sequence` — integer, NOT NULL
 - `data` — text (JSON), NOT NULL
-- Unique constraint: `events(threadId, sequence)` (dedup key)
-- Indexes: `events(threadId, createdAt)`, `events(environmentId)`
+- Unique index: `events(threadId, sequence)` (dedup key)
+- Index: `events(environmentId)`
 
 ### Queued Thread Messages
 
@@ -171,7 +171,7 @@ host_daemon_commands: id, hostId, sessionId, cursor, type, payload, state, resul
 ```
 
 - `hostId` — FK to hosts, NOT NULL. Commands are **host-scoped** so they survive session replacement.
-- `sessionId` — FK to sessions, NOT NULL (records which session queued the command, for audit/cleanup)
+- `sessionId` — FK to sessions, nullable (`onDelete: "set null"`). Records which session queued the command for audit. Nullable so commands survive session cleanup.
 - `cursor` — integer, NOT NULL. Unique constraint: `host_daemon_commands(hostId, cursor)` (per-host monotonic cursor). The daemon persists one cursor to disk per host; this works because the cursor space is per-host, not per-session.
 - `state` — text, NOT NULL (`pending`, `fetched`, `success`, `error`)
 - `retryCount` — integer, NOT NULL, default `0`
@@ -214,7 +214,7 @@ Server queues commands in DB (host-scoped), sends `{ type: "commands-available" 
 - `environment.destroy` — no-op if path doesn't exist
 - All others are naturally idempotent (sending input, querying status)
 
-16 command types:
+17 command types:
 ```
 // Thread/provider
 thread.start, thread.resume, turn.run, turn.steer, thread.stop, thread.rename,
@@ -388,7 +388,7 @@ Host-daemon
   │     └── Provider process for Thread 2 (child process, stdio)
   ├── AgentRuntime for Environment B (workspacePath: /path/to/env-b)
   │     └── Provider process for Thread 3 (child process, stdio)
-  ├── Workspace class (git status, diff, commit, merge, export/import — per-environment instance)
+  ├── Workspace class (git status, diff, commit, merge, promote/demote — per-environment instance)
   └── Provisioners (create/destroy managed environments)
 ```
 

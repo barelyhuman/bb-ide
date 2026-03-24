@@ -4,7 +4,7 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Context
 
-The old server, environment-daemon, environment, core, and api-contract packages have been deleted. The contract packages (`@bb/domain`, `@bb/server-contract`, `@bb/env-daemon-contract`) have been consolidated. This plan rebuilds the backend from those contracts.
+The old server, environment-daemon, environment, core, and api-contract packages have been deleted. The contract packages (`@bb/domain`, `@bb/server-contract`, `@bb/host-daemon-contract`) have been consolidated. This plan rebuilds the backend from those contracts.
 
 ### What exists today
 
@@ -15,9 +15,9 @@ The old server, environment-daemon, environment, core, and api-contract packages
 | `@bb/domain` | **Done** (Phase 1c) — entity types, event types, Zod schemas. Renames complete, View* naming, slim types. |
 | `@bb/db` | **Done** (Phase 1d) — clean-slate schema, drizzle-kit migration, ID generation. |
 | `@bb/core-ui` | **Done** (Phase 1e) — view transforms updated for domain renames. |
-| `@bb/host-daemon-contract` | **Done** (Phase 2b) — 16 commands, session protocol, HostDaemon* naming, typed results. Needs updates: add `workspacePath` to thread.start/resume, add `isGitRepo` to provision result, add `threadHighWaterMarks` to session open response, replace export/import/reattach with promote/demote. |
+| `@bb/host-daemon-contract` | **Done** (Phase 2b) — 17 commands, session protocol, HostDaemon* naming, typed results. |
 | `@bb/server-contract` | **Done** (Phase 2a) — public API routes, WS protocol, type renames. |
-| `@bb/workspace` | **Done** (Phase 3) — Workspace class, provisioning, promote/export/import, tested with real git. |
+| `@bb/workspace` | **Done** (Phase 3) — Workspace class, provisioning, promote/demote, tested with real git. |
 | `@bb/agent-runtime` | Done — provider adapters (codex, claude-code, pi), registry, runtime. Leave as-is. |
 | `@bb/templates` | Done — untouched |
 | `@bb/ui-core` | Done — shared React components |
@@ -198,7 +198,7 @@ Update imports for domain renames. Update provisioning helpers for new event mod
 
 ### 2b. Rewrite `@bb/host-daemon-contract` (first)
 
-Rename from `env-daemon-contract`. Simplified session protocol. 16 commands including workspace operations (`workspace.status`, `workspace.diff`, `workspace.commit`, `workspace.squash_merge`, `workspace.reset`, `workspace.checkpoint`, `workspace.promote`, `workspace.demote`).
+Rename from `env-daemon-contract`. Simplified session protocol. 17 commands including workspace operations (`workspace.status`, `workspace.diff`, `workspace.commit`, `workspace.squash_merge`, `workspace.reset`, `workspace.checkpoint`, `workspace.promote`, `workspace.demote`).
 
 See `plans/architecture.md` "Host-Daemon Protocol" for full spec.
 
@@ -211,7 +211,7 @@ See `plans/architecture.md` "Host-Daemon Protocol" for full spec.
 Route renames, type renames, new routes, WebSocket protocol changes. See `plans/architecture.md` "Route Renames" and "Type Renames".
 
 **Validation:**
-- [ ] `createPublicApiClient()` and `createInternalApiClient()` typed correctly
+- [ ] `createPublicApiClient()` and `createHostDaemonClient()` typed correctly
 - [ ] All Zod schemas validate
 
 ---
@@ -268,7 +268,7 @@ class Workspace {
 - [ ] `commit()` stages and commits, returns sha
 - [ ] `reset()` discards all changes
 - [ ] `squashMergeInto()` uses temp worktree, handles missing target branch (fetch first)
-- [ ] `checkoutBranch()` / `detachHead()` / `stash()` / `stashPop()` — the promote primitives
+- [ ] `checkoutBranch()` / `detachHead()` — the promote primitives
 - [ ] `checkpoint()` commits and pushes (test with a local bare remote)
 - [ ] Non-git directory: `isGitRepo` returns false, git operations throw clear errors
 
@@ -301,40 +301,27 @@ removeDirectory({ path })
 - [ ] `removeWorktree()` removes worktree, force mode for uncommitted changes
 - [ ] Path conventions: `$BB_DATA_DIR/worktrees/<projectId>/<envId>/`
 
-### 3c. Promote/demote via export/import
+### 3c. Promote/demote
 
-Promote is server-orchestrated between two daemons. The `@bb/workspace` package provides the building blocks, not the orchestration.
+Single atomic operations in `@bb/workspace`. The daemon calls these directly — no server-side orchestration.
 
-**Export** (called on the source workspace's host):
 ```typescript
-// Source daemon detaches the worktree and returns changeset info
-async function exportWorkspace(workspace: Workspace): Promise<WorkspaceExport> {
-  const branch = await workspace.currentBranch;
-  await workspace.detachHead();
-  return { type: "branch", branch };
-}
-// For cross-machine: checkpoint first, then export with remote info
+// Promote: switch primary checkout to the environment's branch
+async function promoteWorkspace(source: Workspace, primary: Workspace, options?: { remote?: string }): Promise<void>
+
+// Demote: switch primary back to default branch, reattach source
+async function demoteWorkspace(source: Workspace, primary: Workspace, defaultBranch: string, envBranch: string): Promise<void>
 ```
 
-**Import** (called on the target/primary checkout's host):
-```typescript
-// Target daemon applies the changeset to the primary checkout
-async function importWorkspace(primary: Workspace, exportData: WorkspaceExport): Promise<ImportResult> {
-  if (await primary.getStatus().then(s => s.hasChanges)) throw new Error("primary has uncommitted changes");
-  if (exportData.remote) await primary.fetch({ remote: exportData.remote, branch: exportData.branch });
-  const previousBranch = await primary.currentBranch;
-  await primary.checkoutBranch(exportData.branch);
-  return { previousBranch };
-}
-```
+Both check workspaces are clean upfront — fail loudly if dirty, no stashing. Same-host: detach source HEAD, checkout branch on primary. Cross-host: fetch from remote first (branch must already be on remote from a prior checkpoint).
 
 **Testing:**
-- [ ] Export detaches worktree HEAD, returns branch info
-- [ ] Import fails loudly if primary has uncommitted changes
-- [ ] Import switches branch when primary is clean
-- [ ] Import with remote: fetches before switching
-- [ ] Demote (import back to original branch) works
-- [ ] Promoted state derived: check primary's current branch matches an env branch
+- [ ] Promote switches primary to env branch, source detached
+- [ ] Promote fails if source is dirty
+- [ ] Promote fails if primary is dirty
+- [ ] Demote restores primary to default branch, reattaches source
+- [ ] Demote fails if primary is dirty
+- [ ] Promoted state derived: primary's current branch matches an env branch
 
 ---
 
@@ -630,7 +617,7 @@ apps/server/src/routes/
 4. Else if provisionerId + hostId provided → create environment record (status: provisioning, managed: true, path null)
    → queue environment.provision command
 5. Create thread record (status: provisioning if env is provisioning, else created)
-6. If environment is ready and input provided → queue thread.start command, transition thread to active
+6. If environment is ready and input provided → queue thread.start command (include `workspacePath: environment.path`), transition thread to active
 7. If environment is ready and no input → transition thread to idle
 8. Return thread
 ```
@@ -640,7 +627,7 @@ Environment actions queue a single command and return immediately. No multi-step
 
 - **commit:** queue `workspace.commit` → result creates system event, notifies app.
 - **squash_merge:** queue `workspace.squash_merge` → result creates system event.
-- **promote:** queue `workspace.promote { environmentId, primaryPath }` → daemon does full export+import atomically → result notifies app.
+- **promote:** queue `workspace.promote { environmentId, primaryPath }` → daemon does full promote atomically → result notifies app.
 - **demote:** queue `workspace.demote { environmentId, primaryPath, defaultBranch }` → daemon does full demote atomically → result notifies app.
 
 **`POST /threads/:id/send`:** If thread is `idle`, transition to `active`, queue `turn.run`. If thread is `active` and mode is `steer`, queue `turn.steer`. If thread is `provisioning` or `created`, queue the message as a draft for later. The `mode` field (`auto`, `start`, `steer`) determines the command type.
@@ -652,7 +639,7 @@ Environment actions queue a single command and return immediately. No multi-step
 **Validation:**
 - [ ] `POST /threads` creates environment + thread + queues appropriate commands for each strategy
 - [ ] `POST /environments/:id/actions` queues first command, returns immediately
-- [ ] Command result chaining works (promote: export → import → done)
+- [ ] Command result side effects work (provision → ready, promote → notify app)
 - [ ] `POST /threads/:id/send` transitions thread status and queues correct command type
 - [ ] Error responses use consistent format
 
@@ -674,7 +661,7 @@ Auth: `Authorization: Bearer <BB_SECRET_TOKEN>` on all routes. Session validatio
 2. Upsert host record (create if new hostId, update name/type/lastSeenAt)
 3. Close existing active session for this hostId (status: `closed`, closeReason: `replaced`, send `session-close` over old WS via hub)
 4. Create new session record with server-assigned `heartbeatIntervalMs` (30s), `leaseTimeoutMs` (90s)
-5. Run reconciliation (compare `activeThreads` + `provisioningEnvironments` against DB state — see architecture doc)
+5. Run reconciliation (compare `activeThreads` against DB state — see architecture doc)
 6. Compute `threadHighWaterMarks`: query max event sequence per thread for all non-archived threads on this host
 7. Return `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs, threadHighWaterMarks }`
 
@@ -700,7 +687,7 @@ Auth: `Authorization: Bearer <BB_SECRET_TOKEN>` on all routes. Session validatio
 **Validation:**
 - [ ] Session open upserts host, closes old session (WS `session-close` sent), creates new session
 - [ ] Command fetch returns pending commands, marks fetched, long-poll works with waitMs
-- [ ] Command result updates state and runs side effects (provision → ready, export → chain import)
+- [ ] Command result updates state and runs side effects (provision → ready, promote → notify app)
 - [ ] Event ingestion deduplicates, returns correct high-water marks, updates thread status
 - [ ] Tool call dispatches to correct handler, returns response
 - [ ] Reconciliation corrects stale thread/environment states on reconnect
@@ -713,7 +700,7 @@ Auth: `Authorization: Bearer <BB_SECRET_TOKEN>` on all routes. Session validatio
 
 **Route handler tests:** Use Hono's `app.request()` test helper with in-memory DB + real hub. No HTTP server needed. Test the full request/response cycle. Key scenarios: `POST /threads` with each creation strategy, environment action chaining, send with status transitions.
 
-**Internal API tests:** Same `app.request()` pattern. Key scenarios: session open + reconciliation, command fetch + long-poll timeout, event ingestion + dedup + high-water-mark acks, command result + chaining (promote: export → import).
+**Internal API tests:** Same `app.request()` pattern. Key scenarios: session open + reconciliation, command fetch + long-poll timeout, event ingestion + dedup + high-water-mark acks, command result side effects (provision → ready, promote → notify).
 
 **Integration tests:** Start a real server on a random port with in-memory SQLite. Exercise the full HTTP API. Verify WS notifications arrive. Test the full session lifecycle: open → commands → events → results.
 
@@ -763,7 +750,7 @@ Phase 2 (contracts, after Phase 1):
   2b (host-daemon-contract) → 2a (server-contract)
 
 Phase 3 (@bb/workspace, after Phase 2):
-  3a (Workspace class) → 3b (provisioning) → 3c (promote/export/import)
+  3a (Workspace class) → 3b (provisioning) → 3c (promote/demote)
   Tested in isolation with real git repos.
 
 Phase 4 (host-daemon, partially parallel with Phase 3):
