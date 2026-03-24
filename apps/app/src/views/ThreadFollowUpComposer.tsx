@@ -57,8 +57,8 @@ function QueuedFollowUpList({
       </div>
       <ul>
         {queuedMessages.map((queuedMessage, index) => {
-          const preview = formatQueuedFollowUpPreview(queuedMessage.input);
-          const attachmentCount = countQueuedMessageAttachments(queuedMessage.input);
+          const preview = formatQueuedFollowUpPreview(queuedMessage.content);
+          const attachmentCount = countQueuedMessageAttachments(queuedMessage.content);
           const isProcessing = processingMessageId === queuedMessage.id;
           return (
             <li key={queuedMessage.id} className="px-2.5 py-0.5">

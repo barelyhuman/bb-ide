@@ -1620,7 +1620,7 @@ export function ThreadDetailView() {
         queuedMessageId: messageId,
       })
       .then(() => {
-        const restoredDraft = queuedInputToDraft(queuedMessage.input);
+        const restoredDraft = queuedInputToDraft(queuedMessage.content);
         promptDraft.setText(restoredDraft.text);
         promptDraft.setAttachments(restoredDraft.attachments);
         setAttachmentError(null);
