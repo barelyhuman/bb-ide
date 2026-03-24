@@ -58,6 +58,14 @@ async function createPrimaryAndWorktree(): Promise<{
   return { primaryRepo, worktreePath };
 }
 
+async function listStashes(repoPath: string): Promise<string[]> {
+  const result = await runGit(["stash", "list"], { cwd: repoPath });
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
 afterEach(async () => {
   await Promise.all(
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
@@ -101,6 +109,19 @@ describe("importWorkspace", () => {
 
     expect(result.previousBranch).toBe("main");
     expect(await primary.currentBranch).toBe("bb/env-test");
+  });
+
+  it("does not create a stash when the primary workspace is clean", async () => {
+    const { primaryRepo, worktreePath } = await createPrimaryAndWorktree();
+    const source = new Workspace(worktreePath);
+    const primary = new Workspace(primaryRepo);
+
+    const exportData = await exportWorkspace(source);
+    const result = await importWorkspace(primary, exportData);
+
+    expect(result.previousBranch).toBe("main");
+    expect(result.stashRef).toBeUndefined();
+    expect(await listStashes(primaryRepo)).toEqual([]);
   });
 
   it("is idempotent when already on the target branch", async () => {
@@ -152,6 +173,7 @@ describe("importWorkspace", () => {
 
     expect(imported.previousBranch).toBe("main");
     expect(imported.stashRef).toMatch(/^stash@\{/u);
+    expect(await listStashes(primaryRepo)).toHaveLength(1);
     expect(await primary.currentBranch).toBe("feature");
 
     await importWorkspace(primary, { branch: imported.previousBranch ?? "main" });
@@ -159,6 +181,7 @@ describe("importWorkspace", () => {
 
     const restored = await fs.readFile(path.join(primaryRepo, "local.txt"), "utf8");
     expect(restored).toContain("dirty local");
+    expect(await listStashes(primaryRepo)).toEqual([]);
     expect(await primary.currentBranch).toBe("main");
   });
 });
