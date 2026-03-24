@@ -219,3 +219,23 @@ export type {
   ViewUserMessage,
   ViewWebSearchMessage,
 } from "./ui-message.js";
+
+export {
+  THREAD_CHANGE_KINDS,
+  PROJECT_CHANGE_KINDS,
+  SYSTEM_CHANGE_KINDS,
+} from "./change-kinds.js";
+export type {
+  RealtimeEntity,
+  ThreadChangeKind,
+  ProjectChangeKind,
+  SystemChangeKind,
+  SubscribeMessage,
+  UnsubscribeMessage,
+  ClientMessage,
+  ThreadChangedMessage,
+  ProjectChangedMessage,
+  SystemChangedMessage,
+  ChangedMessage,
+  ServerMessage,
+} from "./change-kinds.js";
