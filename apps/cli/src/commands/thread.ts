@@ -962,6 +962,29 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       },
     );
 
+  thread
+    .command("output <id>")
+    .description("Get the final output of a thread")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const client = createClient(getUrl());
+      try {
+        const result = await unwrap<{ output: string | null }>(
+          client.api.v1.threads[":id"].output.$get({
+            param: { id },
+          }),
+        );
+        if (outputJson(opts, result)) return;
+        if (result.output) {
+          console.log(result.output);
+        } else {
+          console.log("(no output)");
+        }
+      } catch (err: unknown) {
+        console.error(`Error: ${getErrorMessage(err)}`);
+        process.exit(1);
+      }
+    });
 }
 
 export function statusText(status: ThreadStatus): string {

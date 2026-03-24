@@ -1426,4 +1426,29 @@ describe("CLI JSON output contracts", () => {
     expect(output).not.toContain("Provisioning interrupted");
   });
 
+  it("bb thread output --json prints the raw output payload", async () => {
+    const getOutput = vi.fn(async () => ({ output: "FINAL" }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              output: {
+                $get: getOutput,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "output", "thread-json-output", "--json"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      output: "FINAL",
+    });
+  });
 });

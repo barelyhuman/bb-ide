@@ -198,6 +198,9 @@ export type PublicApiSchema = {
   "/threads/:id/diff/branches": {
     $get: Endpoint<PathId, string[]>;
   };
+  "/threads/:id/output": {
+    $get: Endpoint<PathId, { output: string | null }>;
+  };
   "/threads/:id/events": {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
