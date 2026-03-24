@@ -209,6 +209,7 @@ function GitDiffFileCard({
   setGitDiffFileRef,
   onToggleGitDiffFileCollapsed,
   gitDiffViewOptions,
+  onOpenFile,
 }: {
   fileKey: string;
   fileDiff: ParsedGitDiffFile;
@@ -218,6 +219,7 @@ function GitDiffFileCard({
   setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
   onToggleGitDiffFileCollapsed: (fileKey: string) => void;
   gitDiffViewOptions: Record<string, string | boolean>;
+  onOpenFile?: (path: string) => void;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const isHeaderStuck = useIsStuck(sentinelRef);
@@ -255,11 +257,12 @@ function GitDiffFileCard({
                 )}
               />
             </button>
-            {canOpenFile && openablePath ? (
+            {canOpenFile && openablePath && onOpenFile ? (
               <button
                 type="button"
                 className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
                 title={fileDiffLabel}
+                onClick={() => onOpenFile(openablePath)}
               >
                 {fileDiffLabel}
               </button>
@@ -348,6 +351,7 @@ export function ThreadSecondaryPanel({
   setGitDiffFileRef,
   onToggleGitDiffFileCollapsed,
   gitDiffViewOptions,
+  onOpenFile,
 }: {
   activePanel: ThreadSecondaryPanelTab | null;
   metadataContent: ReactNode;
@@ -386,6 +390,7 @@ export function ThreadSecondaryPanel({
   setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
   onToggleGitDiffFileCollapsed: (fileKey: string) => void;
   gitDiffViewOptions: Record<string, string | boolean>;
+  onOpenFile?: (path: string) => void;
 }) {
   const isDiffPanelActive = activePanel === "git-diff";
   const isManagerWorkspacePanelActive = activePanel === "manager-workspace";
@@ -648,6 +653,7 @@ export function ThreadSecondaryPanel({
                             setGitDiffFileRef={setGitDiffFileRef}
                             onToggleGitDiffFileCollapsed={onToggleGitDiffFileCollapsed}
                             gitDiffViewOptions={gitDiffViewOptions}
+                            onOpenFile={onOpenFile}
                           />
                         );
                       })}

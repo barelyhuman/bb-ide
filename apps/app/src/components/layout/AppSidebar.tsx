@@ -24,7 +24,7 @@ interface AppSidebarProps {
 export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
-  const { createFromPicker, isCreating } = useQuickCreateProject()
+  const { createFromPicker, isCreating, isAvailable: canCreateProject } = useQuickCreateProject()
   const serverConnectionState = useServerConnectionState()
   const theme = usePreferredTheme()
 
@@ -65,9 +65,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
       <Sidebar>
         <SidebarContent>
           <ProjectList
-            onNewProject={() => {
-              void createFromPicker()
-            }}
+            onNewProject={canCreateProject ? () => { void createFromPicker() } : undefined}
             onProjectSelect={closeOnMobile}
             selectedProjectId={selectedProjectId}
             isCreatingProject={isCreating}

@@ -26,6 +26,7 @@ import type {
   CreateDraftRequest,
   EnvironmentActionResponse,
   ProjectFileSuggestion,
+  ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
@@ -360,7 +361,7 @@ function appendThreadIfMissing(
 // --- Projects ---
 
 export function useProjects() {
-  return useQuery<Project[]>({
+  return useQuery<ProjectResponse[]>({
     queryKey: ["projects"],
     queryFn: () => api.listProjects(),
     staleTime: 30_000,

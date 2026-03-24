@@ -27,6 +27,7 @@ import {
   useUpdateProject,
   useUpdateThread,
 } from "@/hooks/useApi"
+import { useHostDaemon } from "@/hooks/useHostDaemon"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
@@ -70,7 +71,7 @@ import {
 import { toast } from "sonner"
 
 interface ProjectListProps {
-  onNewProject: () => void
+  onNewProject?: () => void
   onProjectSelect?: () => void
   selectedProjectId?: string
   isCreatingProject?: boolean
@@ -104,6 +105,7 @@ export function ProjectList({
   const deleteThread = useDeleteThread()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
+  const { localHostId, pickFolder } = useHostDaemon()
   const location = useLocation()
   const navigate = useNavigate()
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
@@ -232,16 +234,20 @@ export function ProjectList({
     })
   }
 
-  // TODO: Wire up path picker via useHostDaemon when available
-  const changeProjectPath = async (_projectId: string) => {
-    if (updateProject.isPending) return
-    window.alert("Path selection is not yet available.")
+  const changeProjectPath = async (projectId: string) => {
+    if (updateProject.isPending || !pickFolder || !localHostId) return
+    const selectedPath = await pickFolder()
+    if (!selectedPath) return
+    // TODO: call PATCH /projects/:id/sources/:sourceId or POST /projects/:id/sources
+    window.alert(`Selected: ${selectedPath} (source update not yet implemented)`)
   }
 
-  // TODO: Wire up path picker via useHostDaemon when available
-  const repairProjectPath = async (_projectId: string, _fallbackName: string) => {
-    if (updateProject.isPending) return
-    window.alert("Path selection is not yet available.")
+  const repairProjectPath = async (projectId: string, fallbackName: string) => {
+    if (updateProject.isPending || !pickFolder || !localHostId) return
+    const selectedPath = await pickFolder()
+    if (!selectedPath) return
+    // TODO: call PATCH /projects/:id/sources/:sourceId or POST /projects/:id/sources
+    window.alert(`Selected: ${selectedPath} (source update not yet implemented)`)
   }
 
   const removeProject = (projectId: string, projectName: string) => {
@@ -509,7 +515,7 @@ export function ProjectList({
     <SidebarGroup>
       <SidebarGroupLabel className="flex items-center justify-between pr-1 mb-1">
         Projects
-        <button
+        {onNewProject ? <button
           type="button"
           onClick={onNewProject}
           disabled={isCreatingProject}
@@ -518,7 +524,7 @@ export function ProjectList({
           className="inline-flex size-5 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50"
         >
           <Plus className="size-4" />
-        </button>
+        </button> : null}
       </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu className="gap-2">
@@ -558,8 +564,10 @@ export function ProjectList({
               const isProjectCollapsed = collapsedProjectIds.has(project.id)
               const isProjectActive =
                 selectedProjectId === project.id && !selectedThreadId
-              // TODO: rootPathExists no longer on Project; derive from project sources
-              const isProjectPathMissing = false
+              const localSource = localHostId
+                ? project.sources?.find((s: { hostId: string }) => s.hostId === localHostId)
+                : undefined
+              const isProjectPathMissing = localHostId != null && !localSource
 
               return (
                 <SidebarMenuItem key={project.id} className="space-y-1">

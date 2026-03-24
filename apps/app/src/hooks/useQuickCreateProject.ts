@@ -1,31 +1,30 @@
 import { useCallback } from "react"
 import { useCreateProject } from "@/hooks/useApi"
-import {
-  deriveProjectNameFromPath,
-} from "@/lib/projectPathInput"
+import { useHostDaemon } from "@/hooks/useHostDaemon"
+import { deriveProjectNameFromPath } from "@/lib/projectPathInput"
 
 export function useQuickCreateProject() {
   const { mutate, isPending } = useCreateProject()
+  const { localHostId, pickFolder } = useHostDaemon()
 
-  // TODO: Wire up path picker via useHostDaemon when available.
-  // For now this uses window.prompt as a placeholder.
   const createFromPicker = useCallback(async () => {
-    if (isPending) return
+    if (isPending || !pickFolder || !localHostId) return
 
-    const rootPath = window.prompt("Enter project root path:")
-    if (!rootPath) return
+    const selectedPath = await pickFolder()
+    if (!selectedPath) return
 
-    const name = deriveProjectNameFromPath(rootPath).trim()
-    if (!name || !rootPath) {
+    const name = deriveProjectNameFromPath(selectedPath).trim()
+    if (!name) {
       window.alert(
-        "Could not read a valid folder path. Please pick or enter a different path."
+        "Could not derive a project name from the selected folder."
       )
       return
     }
 
-    // TODO: sourcePath + hostId per CreateProjectRequest schema
-    mutate({ name, sourcePath: rootPath, hostId: "" })
-  }, [isPending, mutate])
+    mutate({ name, sourcePath: selectedPath, hostId: localHostId })
+  }, [isPending, mutate, pickFolder, localHostId])
 
-  return { createFromPicker, isCreating: isPending }
+  const isAvailable = pickFolder != null && localHostId != null
+
+  return { createFromPicker, isCreating: isPending, isAvailable }
 }

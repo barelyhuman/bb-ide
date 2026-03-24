@@ -6,7 +6,7 @@ import { useQuickCreateProject } from "@/hooks/useQuickCreateProject";
 
 export function MainView() {
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const { createFromPicker, isCreating } = useQuickCreateProject();
+  const { createFromPicker, isCreating, isAvailable: canCreateProject } = useQuickCreateProject();
   const hasProjects = (projects?.length ?? 0) > 0;
 
   if (projectsLoading) {
@@ -28,9 +28,9 @@ export function MainView() {
             onClick={() => {
               void createFromPicker();
             }}
-            disabled={isCreating}
+            disabled={isCreating || !canCreateProject}
           >
-            {isCreating ? "Creating..." : "New project"}
+            {isCreating ? "Creating..." : !canCreateProject ? "No local daemon" : "New project"}
           </Button>
         </div>
       </PageShell>

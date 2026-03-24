@@ -17,7 +17,7 @@ type ThreadActivityShape = ThreadVisibilityShape & ThreadStatusShape
 export function isVisibleProjectThread(
   thread: ThreadVisibilityShape,
 ): boolean {
-  return thread.archivedAt === undefined && thread.parentThreadId === undefined
+  return thread.archivedAt == null && thread.parentThreadId == null
 }
 
 export function isRunningThreadStatus(status: ThreadStatus): boolean {
@@ -39,7 +39,7 @@ export function isBusyThread(thread: Pick<Thread, "status">): boolean {
 }
 
 export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {
-  if (thread.parentThreadId !== undefined) {
+  if (thread.parentThreadId != null) {
     return false
   }
 

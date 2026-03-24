@@ -436,7 +436,7 @@ export function ThreadDetailView() {
   const threadWorkStatusError = workStatusQuery.error;
   const resolvedThreadWorkStatus =
     threadWorkStatusError ? undefined : (workStatus ?? undefined);
-  const { isLocalHost } = useHostDaemon();
+  const { isLocalHost, openPath } = useHostDaemon();
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
   const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
@@ -1676,6 +1676,13 @@ export function ThreadDetailView() {
             setGitDiffFileRef={setGitDiffFileRef}
             onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
             gitDiffViewOptions={gitDiffViewOptions}
+            onOpenFile={environment?.path && isLocalHost(environment.hostId)
+              ? (relativePath: string) => {
+                  const fullPath = `${environment.path}/${relativePath}`;
+                  void openPath?.(fullPath);
+                }
+              : undefined
+            }
           />
         </PanelGroup>
       </div>

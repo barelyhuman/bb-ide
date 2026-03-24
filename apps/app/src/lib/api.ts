@@ -38,6 +38,7 @@ import type {
   UpdateProjectRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
+  ProjectResponse,
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
 
@@ -239,8 +240,8 @@ export async function updateProject(
   return request<Project>(apiClient.projects[":id"].$patch({ param: { id }, json: req }));
 }
 
-export async function listProjects(): Promise<Project[]> {
-  return request<Project[]>(apiClient.projects.$get());
+export async function listProjects(): Promise<ProjectResponse[]> {
+  return request<ProjectResponse[]>(apiClient.projects.$get());
 }
 
 export async function deleteProject(id: string): Promise<void> {
