@@ -501,15 +501,20 @@ The server's data mutation functions live in `@bb/db` and take a `DbNotifier` in
 ```typescript
 // Defined in @bb/db
 interface DbNotifier {
-  notifyThread(threadId: string, changes: string[]): void;
-  notifyProject(projectId: string, changes: string[]): void;
-  notifySystem(changes: string[]): void;
+  notifyThread(threadId: string, changes: ThreadChangeKind[]): void;
+  notifyProject(projectId: string, changes: ProjectChangeKind[]): void;
+  notifyEnvironment(environmentId: string, changes: EnvironmentChangeKind[]): void;
+  notifyCommand(hostId: string): void;
+  notifySystem(changes: SystemChangeKind[]): void;
 }
 ```
 
-The server's `NotificationHub` implements `DbNotifier`. CLI tools and tests pass a no-op implementation. This keeps notifications automatic (callers can't forget to notify) while keeping `@bb/db` independent of any WS framework.
+The server's `NotificationHub` implements `DbNotifier`. CLI tools and tests pass a no-op implementation (`noopNotifier`). This keeps notifications automatic (callers can't forget to notify) while keeping `@bb/db` independent of any WS framework.
 
-Change kind literals (`"status-changed"`, `"events-appended"`, etc.) are defined in `@bb/domain` so both `@bb/db` and `@bb/server-contract` can reference them.
+- `notifyThread/Project/Environment/System` — triggers client WS notifications (change hints so clients refetch)
+- `notifyCommand` — triggers daemon WS `commands-available` notification. Called by `queueCommand()`.
+
+Change kind literals are defined in `@bb/domain` so both `@bb/db` and `@bb/server-contract` can reference them.
 
 ### Thread status transitions
 

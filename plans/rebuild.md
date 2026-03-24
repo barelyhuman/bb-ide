@@ -4,7 +4,7 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Current State
 
-The old server, environment-daemon, environment, core, and api-contract packages have been deleted (note: `@bb/env-daemon-contract` still exists in the repo — delete when CLI is cut over in Phase 2a). Foundation packages are built. This plan covers what remains.
+Foundation packages are built and validated. Phases 1 and 2 are complete. Consumers (app + CLI) are cut over to new contracts with zero type errors. This plan covers what remains.
 
 ### What exists today
 
@@ -12,33 +12,37 @@ The old server, environment-daemon, environment, core, and api-contract packages
 |---|---|
 | `@bb/config` | **Done** — `envsafe` with scoped exports per consumer. |
 | `@bb/logger` | **Done** — pino + pino-roll, per-component log files, rotation. |
-| `@bb/domain` | **Done** — entity types, event types, Zod schemas. View* naming, slim types. |
-| `@bb/db` | **Done** — clean-slate schema, drizzle-kit migration, ID generation. |
-| `@bb/core-ui` | **Done** — view transforms updated for domain renames. |
-| `@bb/host-daemon-contract` | **Done** — 17 commands, session protocol, HostDaemon* naming, typed results. |
-| `@bb/server-contract` | **Done** — public API routes, WS protocol, type renames. |
+| `@bb/domain` | **Done** — entity types, event types, Zod schemas, change kinds (thread/project/environment/system). |
+| `@bb/db` | **Done** — schema, migrations, data functions (one per entity), `DbNotifier` with `notifyThread`/`notifyProject`/`notifyEnvironment`/`notifyCommand`/`notifySystem`. 59 tests passing. |
+| `@bb/core-ui` | **Done** — view transforms, `formatEnvironmentDisplay(env, isLocalHost)`, timeline formatting. |
+| `@bb/host-daemon-contract` | **Done** — 17 commands, session protocol, local API contract (`/host-id`, `/open`, `/pick-folder`, `/status`, `/restart`). |
+| `@bb/server-contract` | **Done** — public API routes, discriminated `EnvironmentArgs` union for thread creation, WS protocol. |
 | `@bb/workspace` | **Done** — Workspace class, provisioning, promote/demote, tested with real git. New `IWorkspace` interface in Phase 3. |
 | `@bb/agent-runtime` | Done — provider adapters (codex, claude-code, pi), registry, runtime. Leave as-is. |
 | `@bb/templates` | Done — untouched |
 | `@bb/ui-core` | Done — shared React components |
 | `@bb/tsconfig` | Done — untouched |
-| `apps/app` | Exists — needs import updates + new UI for hosts, sources, environment creation |
-| `apps/cli` | Exists — needs import updates |
-| `apps/server` | **Skeleton only** — `apps/server/src/data/` has exploratory data functions from branch investigation. Will be rebuilt in Phase 6; existing code is reference, not reused directly. |
+| `apps/app` | **Done** — cut over to new contracts, zero type errors, 116 tests passing. Environment selector with Direct/Worktree options. `useHostDaemon` hook for daemon operations. |
+| `apps/cli` | **Done** — cut over to new contracts, zero type errors, 67 tests passing. Fetches hostId from daemon, supports env reuse without daemon. |
+| `apps/server` | **Skeleton only** — directory exists. Will be rebuilt in Phase 6. |
 | `apps/host-daemon` | **Skeleton only** — directory exists, no implementation. Built in Phase 4. |
 | `@bb/sandbox-host` | **Does not exist** — E2B host lifecycle, daemon bootstrap. See `plans/host-package.md`. |
 
-### Known gaps in completed packages
+### Key schema notes
 
-Discovered by building four exploratory Phase 4/5 branches and comparing against architecture doc.
+The environment schema has these fields (relevant for Phase 3+):
+- `isWorktree` — boolean, whether this is a git worktree environment
+- `workspaceProvisionType` — enum (`unmanaged`, `managed-worktree`, `managed-clone`), nullable
+- `managed` — boolean, whether the system manages the environment lifecycle
 
-| Gap | Package | Fix |
-|---|---|---|
-| Change kind literals live in `@bb/server-contract` | `@bb/domain`, `@bb/server-contract` | Move to `@bb/domain`, re-export from server-contract |
-| `workspacePath` may be missing from `thread.start`/`thread.resume` schemas | `@bb/host-daemon-contract` | Audit and add if missing |
-| Routes in architecture "Route Renames" table not yet in server-contract | `@bb/server-contract` | Audit and add missing route definitions |
-| `@bb/db` has no data functions (only schema + connection) | `@bb/db` | Add data functions + `DbNotifier` interface in Phase 1 |
-| Setup script params (`scriptName`, `timeoutMs`) not exposed through `createWorktree`/`createClone` | `@bb/workspace` | Fix in Phase 3 |
+The `DbNotifier` interface has 5 methods:
+- `notifyThread(threadId, changes)` — thread-scoped WS notifications
+- `notifyProject(projectId, changes)` — project-scoped WS notifications
+- `notifyEnvironment(environmentId, changes)` — environment-scoped WS notifications (`status-changed`, `work-status-changed`)
+- `notifyCommand(hostId)` — triggers `commands-available` WS notification to daemon
+- `notifySystem(changes)` — system-wide WS notifications
+
+Setup script params (`scriptName`, `timeoutMs`) gap remains — fix in Phase 3.
 
 ### Architecture summary
 
@@ -109,13 +113,11 @@ These apply to all code written during the rebuild.
 
 Fix known gaps in completed packages. Small, surgical changes.
 
-**Status:** 1a ✅, 1b ✅, 1c ✅. 1d and 1e remaining.
+**Status:** All complete ✅
 
 ### 1a. Move change kinds to `@bb/domain` ✅
 
-Move `THREAD_CHANGE_KINDS`, `PROJECT_CHANGE_KINDS`, `SYSTEM_CHANGE_KINDS` (and their types) from `@bb/server-contract/src/websocket.ts` to `@bb/domain`. Re-export from `@bb/server-contract` so existing consumers don't break.
-
-**Why:** `@bb/db` needs these for its `DbNotifier` interface, and db must not depend on server-contract.
+Moved change kind constants and types to `@bb/domain`. Added `ENVIRONMENT_CHANGE_KINDS`. Deleted `@bb/server-contract/src/websocket.ts` (was only re-exports, no consumers).
 
 **Validation:**
 - [ ] `@bb/domain` exports all change kind constants and types
@@ -170,34 +172,13 @@ Audit `@bb/host-daemon-contract` and `@bb/server-contract` against `plans/archit
 - [ ] All public API routes from architecture exist in server-contract
 - [ ] Both packages typecheck
 
-### 1d. Host-daemon local API contract
+### 1d. Host-daemon local API contract ✅
 
-Add a `local` export path to `@bb/host-daemon-contract` (`@bb/host-daemon-contract/local`) with Zod schemas and a Hono `hc()` client for the daemon's local API (see architecture doc "Host-Daemon Local API" section).
+Added `@bb/host-daemon-contract/local` with schemas, typed routes, and `createHostDaemonLocalClient()` for `/host-id`, `/open`, `/pick-folder`, `/status`, `/restart`.
 
-Endpoints:
-- `GET /host-id` → `{ hostId: string }`
-- `POST /open` → `{ path: string }`
-- `GET /status` → `{ connected: boolean, serverUrl: string }`
-- `POST /restart` → `{}`
+### 1e. Server contract additions ✅
 
-Small: ~50 lines of schemas + typed routes + client factory. No auth (localhost only).
-
-**Validation:**
-- [ ] `@bb/host-daemon-contract/local` exports schemas, route types, and `createLocalClient()`
-- [ ] Package typechecks
-
-### 1e. Server contract additions
-
-Add routes and types surfaced by the consumer cutover findings:
-- `GET /system/providers/:id` — single provider lookup
-- `GET /threads/:id/default-execution-options` — execution options for prompt box
-- `GET /threads/:id/workspace/files` — workspace file listing
-- `GET /threads/:id/workspace/file` — workspace file content
-- `GET /threads?archived=true` — archived-only filter (replace `includeArchived`)
-
-**Validation:**
-- [ ] All routes added with Zod schemas
-- [ ] Package typechecks
+Added all missing routes: `/system/providers/:id`, `/system/config`, `/threads/:id/default-execution-options`, `/threads/:id/workspace/files`, `/threads/:id/workspace/file`, `/threads/:id/output`, `/threads/:id/diff`, `/threads/:id/diff/branches`, `/environments/:id/status`, project source CRUD. Thread list uses `archived` query param.
 
 ---
 
@@ -205,7 +186,7 @@ Add routes and types surfaced by the consumer cutover findings:
 
 Cut over CLI and app to new contracts. Validates contracts from a real consumer perspective before building the backend.
 
-**Status:** 2a ✅, 2b ✅ (mechanical renames done, 145 type errors remain from domain shape mismatches — see findings docs). Dead code sweep done. Remaining findings need 1d (local API contract) and 1e (server contract additions) before they can be fully resolved.
+**Status:** All complete ✅. Both consumers cut over with zero type errors. Dead code swept. Environment selector functional with Direct/Worktree options. CLI supports `--archived` flag, env reuse without daemon, explicit `--new-environment` validation.
 
 ### 2a. Cut over `apps/cli` to new contracts
 
