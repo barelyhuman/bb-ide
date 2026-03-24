@@ -948,7 +948,6 @@ export function ThreadDetailView() {
 
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
-  const isProvisioningFailed = thread.status === "provisioning_failed";
   const isRuntimeError = thread.status === "error";
   const queuedMessages = extractThreadQueuedMessages(thread);
   const isQueueMutationPending =
@@ -966,8 +965,6 @@ export function ThreadDetailView() {
       ? "Thread is being created..."
       : isProvisioning
       ? "Thread is provisioning..."
-      : isProvisioningFailed
-      ? "Retry provisioning by sending a message"
       : isRuntimeError
       ? "Retry by sending a follow-up message"
       : thread.status === "idle"

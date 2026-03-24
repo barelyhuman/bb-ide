@@ -112,12 +112,6 @@ describe("thread-activity", () => {
 
     expect(
       getThreadStatusLabelForTitle({
-        status: "provisioning_failed",
-        updatedAt: 100,
-      }),
-    ).toBe("Provisioning failed")
-    expect(
-      getThreadStatusLabelForTitle({
         status: "error",
         updatedAt: 100,
       }),
