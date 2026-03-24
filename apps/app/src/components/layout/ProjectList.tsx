@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import type { Thread } from "@bb/domain"
 import {
   AlertTriangle,
@@ -28,6 +29,7 @@ import {
   useUpdateThread,
 } from "@/hooks/useApi"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
+import * as api from "@/lib/api"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
@@ -105,6 +107,7 @@ export function ProjectList({
   const deleteThread = useDeleteThread()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
+  const queryClient = useQueryClient()
   const { localHostId, pickFolder } = useHostDaemon()
   const location = useLocation()
   const navigate = useNavigate()
@@ -234,20 +237,32 @@ export function ProjectList({
     })
   }
 
-  const changeProjectPath = async (projectId: string) => {
-    if (updateProject.isPending || !pickFolder || !localHostId) return
+  const upsertProjectSourcePath = async (projectId: string) => {
+    if (!pickFolder || !localHostId) return
     const selectedPath = await pickFolder()
     if (!selectedPath) return
-    // TODO: call PATCH /projects/:id/sources/:sourceId or POST /projects/:id/sources
-    window.alert(`Selected: ${selectedPath} (source update not yet implemented)`)
+    const project = projects?.find((p) => p.id === projectId)
+    const existingSource = project?.sources?.find(
+      (s: { hostId: string }) => s.hostId === localHostId,
+    )
+    try {
+      if (existingSource) {
+        await api.updateProjectSource(projectId, existingSource.id, { path: selectedPath })
+      } else {
+        await api.addProjectSource(projectId, { hostId: localHostId, path: selectedPath })
+      }
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to update project source")
+    }
   }
 
-  const repairProjectPath = async (projectId: string, fallbackName: string) => {
-    if (updateProject.isPending || !pickFolder || !localHostId) return
-    const selectedPath = await pickFolder()
-    if (!selectedPath) return
-    // TODO: call PATCH /projects/:id/sources/:sourceId or POST /projects/:id/sources
-    window.alert(`Selected: ${selectedPath} (source update not yet implemented)`)
+  const changeProjectPath = async (projectId: string) => {
+    await upsertProjectSourcePath(projectId)
+  }
+
+  const repairProjectPath = async (projectId: string, _fallbackName: string) => {
+    await upsertProjectSourcePath(projectId)
   }
 
   const removeProject = (projectId: string, projectName: string) => {

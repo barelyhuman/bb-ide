@@ -5,6 +5,7 @@ import {
 import type {
   Environment,
   Project,
+  ProjectSource,
   Thread,
   ThreadType,
   ThreadExecutionOptions,
@@ -17,6 +18,7 @@ import type {
 } from "@bb/domain";
 import type {
   CommitOptions,
+  CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateDraftRequest,
   EnvironmentActionResponse,
@@ -37,6 +39,7 @@ import type {
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
+  UpdateProjectSourceRequest,
   UploadedPromptAttachment,
   ProjectResponse,
 } from "@bb/server-contract";
@@ -246,6 +249,39 @@ export async function listProjects(): Promise<ProjectResponse[]> {
 
 export async function deleteProject(id: string): Promise<void> {
   await request<unknown>(apiClient.projects[":id"].$delete({ param: { id } }));
+}
+
+export async function addProjectSource(
+  projectId: string,
+  req: CreateProjectSourceRequest,
+): Promise<ProjectSource> {
+  return request<ProjectSource>(
+    apiClient.projects[":id"].sources.$post({ param: { id: projectId }, json: req }),
+  );
+}
+
+export async function updateProjectSource(
+  projectId: string,
+  sourceId: string,
+  req: UpdateProjectSourceRequest,
+): Promise<ProjectSource> {
+  return request<ProjectSource>(
+    apiClient.projects[":id"].sources[":sourceId"].$patch({
+      param: { id: projectId, sourceId },
+      json: req,
+    }),
+  );
+}
+
+export async function removeProjectSource(
+  projectId: string,
+  sourceId: string,
+): Promise<void> {
+  await request<unknown>(
+    apiClient.projects[":id"].sources[":sourceId"].$delete({
+      param: { id: projectId, sourceId },
+    }),
+  );
 }
 
 export async function searchProjectFiles(
