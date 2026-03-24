@@ -32,12 +32,8 @@ import type {
   SquashMergeOptions,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemRestartAcceptedResponse,
-  SystemRestartPolicy,
-  SystemRestartRequest,
   SystemShutdownAcceptedResponse,
   SystemShutdownRequest,
-  SystemStatus,
   SendMessageRequest,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -295,7 +291,7 @@ interface ThreadListFilters {
   projectId?: string;
   type?: ThreadType;
   parentThreadId?: string;
-  includeArchived?: boolean;
+  archived?: boolean;
   includeWorkStatus?: boolean;
 }
 
@@ -324,8 +320,8 @@ function isThreadListFilters(value: unknown): value is ThreadListFilters {
     return false;
   }
   if (
-    maybeFilters.includeArchived !== undefined &&
-    typeof maybeFilters.includeArchived !== "boolean"
+    maybeFilters.archived !== undefined &&
+    typeof maybeFilters.archived !== "boolean"
   ) {
     return false;
   }
@@ -358,7 +354,10 @@ function threadMatchesListFilters(
   thread: Thread,
   filters: ThreadListFilters | undefined,
 ): boolean {
-  if (thread.archivedAt !== undefined && !filters?.includeArchived) {
+  if (filters?.archived === true && thread.archivedAt === undefined) {
+    return false;
+  }
+  if (filters?.archived !== true && thread.archivedAt !== undefined) {
     return false;
   }
   if (filters?.projectId && thread.projectId !== filters.projectId) {
@@ -697,33 +696,10 @@ export function useThreadGitDiff(
   });
 }
 
-export function useSystemStatus() {
-  return useQuery<SystemStatus>({
-    queryKey: ["status"],
-    queryFn: () => api.getSystemStatus(),
-  });
-}
-
-export function useSystemRestartPolicy() {
-  return useQuery<SystemRestartPolicy>({
-    queryKey: ["systemRestartPolicy"],
-    queryFn: () => api.getSystemRestartPolicy(),
-    staleTime: 60_000,
-  });
-}
-
 export function useAvailableModels(providerId?: string) {
   return useQuery<AvailableModel[]>({
     queryKey: ["availableModels", providerId ?? null],
     queryFn: () => api.getAvailableModels(providerId),
-    staleTime: 60_000,
-  });
-}
-
-export function useSystemProvider() {
-  return useQuery<SystemProviderInfo>({
-    queryKey: ["systemProvider"],
-    queryFn: () => api.getSystemProvider(),
     staleTime: 60_000,
   });
 }
@@ -804,7 +780,6 @@ export function useSendThreadMessage() {
       reasoningLevel,
       sandboxMode,
       mode,
-      demotePrimaryIfNeeded,
     }: { id: string } & SendMessageRequest) =>
       api.sendThreadMessage(id, {
         input,
@@ -813,7 +788,6 @@ export function useSendThreadMessage() {
         reasoningLevel,
         sandboxMode,
         mode,
-        demotePrimaryIfNeeded,
       }),
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["thread", variables.id] });
@@ -1161,13 +1135,3 @@ export function useShutdownServer() {
   });
 }
 
-export function useRestartServer() {
-  return useMutation({
-    mutationFn: (req?: SystemRestartRequest): Promise<SystemRestartAcceptedResponse> =>
-      api.restartServer(req),
-    // Avoid immediately refetching system endpoints here: a successful restart
-    // request intentionally drops the server for a moment, which can produce
-    // noisy transient 5xx proxy errors in the browser console. The websocket
-    // reconnect path already invalidates queries once the server is back.
-  });
-}

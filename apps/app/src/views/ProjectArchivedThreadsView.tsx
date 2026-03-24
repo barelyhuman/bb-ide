@@ -9,7 +9,7 @@ export function ProjectArchivedThreadsView() {
   const { data: threads, isLoading } = useThreads(
     {
       projectId,
-      includeArchived: true,
+      archived: true,
     },
     { enabled: Boolean(projectId) },
   );

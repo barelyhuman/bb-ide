@@ -1,8 +1,6 @@
-import type { ThreadStatus } from "@bb/domain"
 import { cn } from "@/lib/utils"
 import { Link, useLocation } from "react-router-dom"
 import { Moon, Settings, Sun } from "lucide-react"
-import { toast } from "sonner"
 import {
   Sidebar,
   SidebarContent,
@@ -14,34 +12,19 @@ import {
 } from "@/components/ui/sidebar"
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
-import {
-  useRestartServer,
-  useSystemRestartPolicy,
-  useThreads,
-} from "@/hooks/useApi"
 import { useServerConnectionState } from "@/hooks/useWebSocket"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
 import { resolveServerStatusIndicatorState } from "@/lib/server-status-indicator"
-import { isDevelopmentRuntimeMode } from "@/lib/runtime-mode"
 
 interface AppSidebarProps {
   onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
   isResizing: boolean
 }
 
-const DEFAULT_SHUTDOWN_BLOCKING_STATUSES: readonly ThreadStatus[] = [
-  "created",
-  "provisioning",
-  "active",
-]
-
 export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const { createFromPicker, isCreating } = useQuickCreateProject()
-  const { data: threads } = useThreads()
-  const { data: restartPolicy } = useSystemRestartPolicy()
-  const restartServer = useRestartServer()
   const serverConnectionState = useServerConnectionState()
   const theme = usePreferredTheme()
 
@@ -56,31 +39,11 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     setPreferredTheme(isDarkTheme ? "light" : "dark")
   }
   const selectedProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1]
-  const shutdownBlockingStatuses =
-    restartPolicy?.shutdownBlockingStatuses ?? DEFAULT_SHUTDOWN_BLOCKING_STATUSES
-  const blockingThreadCount =
-    threads?.filter((thread) => shutdownBlockingStatuses.includes(thread.status)).length ??
-    0
-  const isDevelopment = isDevelopmentRuntimeMode(restartPolicy?.runtimeMode)
-  const shouldRestart = restartPolicy?.shouldRestart === true
   const serverStatus = resolveServerStatusIndicatorState({
     connectionState: serverConnectionState,
-    isRestartPending: restartServer.isPending,
-    shouldRestart,
+    isRestartPending: false,
+    shouldRestart: false,
   })
-  const isRestartDisabled =
-    restartServer.isPending ||
-    serverStatus === "reconnecting"
-
-  const restartTooltip = restartServer.isPending
-    ? "Requesting server restart…"
-    : blockingThreadCount > 0
-      ? `Force restart server. ${blockingThreadCount} active thread${blockingThreadCount === 1 ? "" : "s"} will reconnect if possible`
-      : serverStatus === "reconnecting"
-        ? "Server reconnecting"
-        : serverStatus === "out-of-date"
-          ? "Server connected but out of date. Click to restart"
-          : "Server connected and up to date. Click to restart"
 
   const serverIndicatorClassName = {
     "up-to-date":
@@ -96,22 +59,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     reconnecting: "Reconnecting...",
     "out-of-date": "Restart required",
   }[serverStatus]
-
-  const requestRestart = () => {
-    if (isRestartDisabled) return
-    restartServer.mutate({ force: true }, {
-      onSuccess: () => {
-        toast.success("Server restart requested")
-      },
-      onError: (error) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Failed to request server restart",
-        )
-      },
-    })
-  }
 
   return (
     <>
@@ -151,44 +98,22 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              {isDevelopment ? (
-                <SidebarMenuButton
-                  onClick={requestRestart}
-                  disabled={isRestartDisabled}
-                  className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none hover:bg-sidebar-accent/40 hover:text-sidebar-foreground active:bg-sidebar-accent/55"
-                  tooltip={restartTooltip}
-                  aria-label={restartTooltip}
-                  title={restartTooltip}
-                >
-                  <span
-                    className={cn(
-                      "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
-                      serverIndicatorClassName,
-                    )}
-                    aria-hidden
-                  />
-                  <span className="truncate text-xs font-medium leading-none">
-                    {serverStatusLabel}
-                  </span>
-                </SidebarMenuButton>
-              ) : (
-                <SidebarMenuButton
-                  className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none cursor-default hover:bg-sidebar/70 hover:text-sidebar-foreground/80 active:bg-sidebar/70"
-                  aria-label={`Server status: ${serverStatusLabel}`}
-                  title={`Server status: ${serverStatusLabel}`}
-                >
-                  <span
-                    className={cn(
-                      "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
-                      serverIndicatorClassName,
-                    )}
-                    aria-hidden
-                  />
-                  <span className="truncate text-xs font-medium leading-none">
-                    {serverStatusLabel}
-                  </span>
-                </SidebarMenuButton>
-              )}
+              <SidebarMenuButton
+                className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none cursor-default hover:bg-sidebar/70 hover:text-sidebar-foreground/80 active:bg-sidebar/70"
+                aria-label={`Server status: ${serverStatusLabel}`}
+                title={`Server status: ${serverStatusLabel}`}
+              >
+                <span
+                  className={cn(
+                    "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
+                    serverIndicatorClassName,
+                  )}
+                  aria-hidden
+                />
+                <span className="truncate text-xs font-medium leading-none">
+                  {serverStatusLabel}
+                </span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>

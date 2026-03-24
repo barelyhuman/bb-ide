@@ -30,14 +30,10 @@ import type {
   SquashMergeOptions,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemRestartAcceptedResponse,
-  SystemRestartPolicy,
-  SystemRestartRequest,
   SystemShutdownAcceptedResponse,
   SystemShutdownBlockedResponse,
   SystemShutdownBlockingThread,
   SystemShutdownRequest,
-  SystemStatus,
   SystemVoiceTranscriptionResponse,
   SendMessageRequest,
   ThreadTimelineResponse,
@@ -342,7 +338,7 @@ export async function listThreads(
     projectId?: string;
     type?: ThreadType;
     parentThreadId?: string;
-    includeArchived?: boolean;
+    archived?: boolean;
     includeWorkStatus?: boolean;
   },
   signal?: AbortSignal,
@@ -353,8 +349,8 @@ export async function listThreads(
         ...(filters?.projectId ? { projectId: filters.projectId } : {}),
         ...(filters?.type ? { type: filters.type } : {}),
         ...(filters?.parentThreadId ? { parentThreadId: filters.parentThreadId } : {}),
-        ...(filters?.includeArchived !== undefined
-          ? { includeArchived: String(filters.includeArchived) as "true" | "false" }
+        ...(filters?.archived !== undefined
+          ? { archived: String(filters.archived) as "true" | "false" }
           : {}),
         ...(filters?.includeWorkStatus !== undefined
           ? { includeWorkStatus: String(filters.includeWorkStatus) as "true" | "false" }
@@ -590,10 +586,6 @@ export async function getThreadOutput(id: string): Promise<{ output: string }> {
   return request<{ output: string }>(apiClient.threads[":id"].output.$get({ param: { id } }));
 }
 
-export async function getSystemStatus(): Promise<SystemStatus> {
-  return request<SystemStatus>(apiClient.system.status.$get());
-}
-
 export async function getAvailableModels(providerId?: string): Promise<AvailableModel[]> {
   return request<AvailableModel[]>(
     apiClient.system.models.$get({
@@ -602,10 +594,6 @@ export async function getAvailableModels(providerId?: string): Promise<Available
       },
     }),
   );
-}
-
-export async function getSystemProvider(): Promise<SystemProviderInfo> {
-  return request<SystemProviderInfo>(apiClient.system.provider.$get({ query: {} }));
 }
 
 export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
@@ -626,12 +614,8 @@ export async function listEnvironments(projectId?: string): Promise<Environment[
   );
 }
 
-export async function getSystemRestartPolicy(): Promise<SystemRestartPolicy> {
-  return request<SystemRestartPolicy>(apiClient.system["restart-policy"].$get());
-}
-
 function isShutdownBlocked(
-  body: SystemShutdownAcceptedResponse | SystemShutdownBlockedResponse | SystemRestartAcceptedResponse,
+  body: SystemShutdownAcceptedResponse | SystemShutdownBlockedResponse,
 ): body is SystemShutdownBlockedResponse {
   return "code" in body && body.code === "shutdown_blocked";
 }
@@ -644,26 +628,6 @@ export async function shutdownServer(
     await throwHttpError(res);
   }
   const body = await res.json();
-  if (isShutdownBlocked(body)) {
-    throw new SystemShutdownBlockedError(body.message, body.blockingThreads);
-  }
-  return body;
-}
-
-export async function restartServer(
-  req: SystemRestartRequest = {},
-): Promise<SystemRestartAcceptedResponse> {
-  const res = await apiClient.system.restart.$post({ json: req });
-  if (!res.ok && res.status !== 409) {
-    await throwHttpError(res);
-  }
-  // Server may close the connection mid-response during restart
-  let body: Awaited<ReturnType<typeof res.json>>;
-  try {
-    body = await res.json();
-  } catch {
-    return { ok: true, forced: Boolean(req.force), blockingThreadsCount: 0, restarting: true };
-  }
   if (isShutdownBlocked(body)) {
     throw new SystemShutdownBlockedError(body.message, body.blockingThreads);
   }

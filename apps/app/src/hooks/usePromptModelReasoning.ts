@@ -12,7 +12,6 @@ import { getProviderIconInfo } from "@/lib/provider-icon";
 import {
   useAvailableModels,
   useSystemEnvironments,
-  useSystemProvider,
   useSystemProviders,
 } from "./useApi";
 
@@ -346,12 +345,8 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     hasMultipleProviders ? effectiveProviderId || undefined : undefined,
   );
   const environmentsQuery = useSystemEnvironments();
-  const providerInfoQuery = useSystemProvider();
 
-  // Use per-provider capabilities when multiple providers are available.
-  const activeProviderCapabilities = hasMultipleProviders
-    ? selectedProviderInfo?.capabilities
-    : providerInfoQuery.data?.capabilities;
+  const activeProviderCapabilities = selectedProviderInfo?.capabilities;
 
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;

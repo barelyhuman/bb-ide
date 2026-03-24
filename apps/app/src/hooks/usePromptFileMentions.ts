@@ -66,7 +66,7 @@ export function usePromptFileMentions(
   );
   const threadSuggestionMode = options?.threadSuggestionMode ?? "none";
   const threadsQuery = useThreads(
-    { projectId, includeArchived: false },
+    { projectId },
     {
       enabled: Boolean(projectId) && threadSuggestionMode !== "none",
     },
