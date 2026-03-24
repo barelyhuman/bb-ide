@@ -157,6 +157,7 @@ export const workspaceDemoteCommandSchema = hostDaemonEnvironmentTargetSchema.ex
   threadId: z.string().min(1),
   primaryPath: z.string().min(1),
   defaultBranch: z.string().min(1),
+  envBranch: z.string().min(1),
 });
 
 export const hostDaemonCommandSchema = z.discriminatedUnion("type", [

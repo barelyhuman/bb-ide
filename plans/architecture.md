@@ -441,7 +441,7 @@ Transitions:
   suspended → connected (server resumes cloud host on command)
 ```
 
-**Host status is derived, not persisted.** The `hosts` table has no `status` column. The server derives status at query time by checking whether the host has an active, non-expired session. `connected` = active session with current heartbeat. `disconnected` = no active session or lease expired. `suspended` = server-initiated pause (cloud hosts only, v2).
+**Host status is derived, not persisted.** The `hosts` table has no `status` column. The server derives status at query time by checking whether the host has an active, non-expired session. `connected` = active session with current heartbeat. `disconnected` = no active session or lease expired. `suspended` = server-initiated pause (cloud hosts only, v2). API responses for hosts include the computed `status` field — the server's data layer adds it at query time, not stored in the `Host` domain type.
 
 ---
 

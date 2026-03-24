@@ -315,7 +315,7 @@ async function promoteWorkspace(source: Workspace, primary: Workspace, options?:
 async function demoteWorkspace(source: Workspace, primary: Workspace, defaultBranch: string, envBranch: string): Promise<void>
 ```
 
-Both check workspaces are clean upfront — fail loudly if dirty, no stashing. Same-host: detach source HEAD, checkout branch on primary. Cross-host: fetch from remote first (branch must already be on remote from a prior checkpoint).
+Promote checks both workspaces are clean upfront — fail loudly if dirty, no stashing. Same-host: detach source HEAD, checkout branch on primary. Cross-host: fetch from remote first (branch must already be on remote from a prior checkpoint). Demote checks primary is clean (source is detached HEAD, no dirty risk).
 
 **Testing:**
 - [ ] Promote switches primary to env branch, source detached
@@ -631,10 +631,9 @@ Phase 3 (@bb/workspace, after Phase 2):
   3a (Workspace class) → 3b (provisioning) → 3c (promote/demote)
   Tested in isolation with real git repos.
 
-Phase 4 (host-daemon, partially parallel with Phase 3):
-  4a, 4b can start after Phase 2.
-  4c needs Phase 3 (workspace) + Phase 5e (server internal API).
-  4d after 4c.
+Phase 4 (host-daemon, after Phase 2):
+  4a → 4b → 4c → 4d → 4e → 4f
+  4c needs Phase 3 (workspace). Tests use a fake in-process server, not Phase 5.
 
 Phase 5 (server, after Phase 2):
   5a → 5b → 5c → 5d + 5e (parallel)

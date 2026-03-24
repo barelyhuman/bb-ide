@@ -110,10 +110,12 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
         defaultBranch: "main",
+        envBranch: "bb/env-abc",
       }),
     ).toMatchObject({
       type: "workspace.demote",
       defaultBranch: "main",
+      envBranch: "bb/env-abc",
     });
   });
 
