@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  projectSchema,
+  projectSourceSchema,
   promptInputSchema,
   providerCapabilitiesSchema,
   reasoningLevelSchema,
@@ -275,6 +277,11 @@ export const workspaceFileSchema = z.object({
   name: z.string(),
 });
 export type WorkspaceFile = z.infer<typeof workspaceFileSchema>;
+
+export const projectResponseSchema = projectSchema.extend({
+  sources: z.array(projectSourceSchema),
+});
+export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
 export const environmentPrimaryStatusResponseSchema = z.object({
   isPromoted: z.boolean(),

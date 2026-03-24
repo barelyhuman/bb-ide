@@ -4,8 +4,6 @@ import type {
   AvailableModel,
   Environment,
   Host,
-  Project,
-  ProjectSource,
   Thread,
   ThreadEventRow,
   ThreadExecutionOptions,
@@ -29,6 +27,7 @@ import type {
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentPrimaryStatusResponse,
+  ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
@@ -47,16 +46,13 @@ import type { ApiError } from "./errors.js";
 
 export type PublicApiSchema = {
   "/projects": {
-    $get: Endpoint<EmptyInput, Project[]>;
-    $post: Endpoint<{ json: CreateProjectRequest }, Project, 201>;
+    $get: Endpoint<EmptyInput, ProjectResponse[]>;
+    $post: Endpoint<{ json: CreateProjectRequest }, ProjectResponse, 201>;
   };
   "/projects/:id": {
-    $get: Endpoint<PathProjectId, Project>;
-    $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, Project>;
+    $get: Endpoint<PathProjectId, ProjectResponse>;
+    $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, ProjectResponse>;
     $delete: Endpoint<PathProjectId, { ok: true }>;
-  };
-  "/projects/:id/sources": {
-    $get: Endpoint<PathProjectId, ProjectSource[]>;
   };
   "/projects/:id/managers": {
     $post: Endpoint<
