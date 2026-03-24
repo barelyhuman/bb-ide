@@ -1,6 +1,6 @@
 # bb Architecture
 
-Reference document for the bb system architecture, data model, and feature set.
+Reference document for the bb system architecture, data model, and feature set. See `plans/rebuild.md` for the phased implementation plan.
 
 ---
 
@@ -166,15 +166,18 @@ host_daemon_sessions: id, hostId, instanceId, protocolVersion, status, hostName,
 ### Host-Daemon Commands
 
 ```
-host_daemon_commands: id, sessionId, cursor, type, payload, state, resultPayload,
+host_daemon_commands: id, hostId, sessionId, cursor, type, payload, state, resultPayload,
                       retryCount, createdAt, fetchedAt, completedAt
 ```
 
-- `sessionId` — FK to sessions, NOT NULL
-- `cursor` — integer, NOT NULL. Unique constraint: `host_daemon_commands(sessionId, cursor)` (per-session monotonic cursor)
+- `hostId` — FK to hosts, NOT NULL. Commands are **host-scoped** so they survive session replacement.
+- `sessionId` — FK to sessions, NOT NULL (records which session queued the command, for audit/cleanup)
+- `cursor` — integer, NOT NULL. Unique constraint: `host_daemon_commands(hostId, cursor)` (per-host monotonic cursor). The daemon persists one cursor to disk per host; this works because the cursor space is per-host, not per-session.
 - `state` — text, NOT NULL (`pending`, `fetched`, `success`, `error`)
 - `retryCount` — integer, NOT NULL, default `0`
-- Index: `host_daemon_commands(sessionId, state)`
+- Index: `host_daemon_commands(hostId, state)`
+
+**Why host-scoped, not session-scoped:** The daemon persists a single cursor to `$BB_DATA_DIR/command-cursor` and resumes from it after reconnecting (which creates a new session). If commands were session-scoped, the old session's pending commands would be stranded and the new session's cursor space would start empty. Host-scoped commands ensure the "read cursor from disk and refetch" path works correctly across session replacement.
 
 ### Host-Daemon Cursors
 
@@ -203,7 +206,7 @@ Auth: `BB_SECRET_TOKEN` env var, sent as `Authorization: Bearer` on HTTP and as 
 
 ### Commands (server → daemon)
 
-Server queues commands in DB, sends `{ type: "commands-available" }` over WS. Daemon fetches via `GET /internal/session/commands?afterCursor={N}`. Reports results via `POST /internal/session/command-result`.
+Server queues commands in DB (host-scoped), sends `{ type: "commands-available" }` over WS. Daemon fetches via `GET /internal/session/commands?afterCursor={N}` (server resolves the host from the session and returns commands for that host). Reports results via `POST /internal/session/command-result`.
 
 **Delivery semantics: at-least-once.** Daemon persists cursor to disk after reporting command results, not after fetching. This ensures at-least-once delivery — if the daemon crashes after fetch but before reporting, it re-fetches the same commands on restart. All commands must be idempotent:
 - `thread.start` — checks if a provider process already exists for this thread before spawning
@@ -226,6 +229,8 @@ workspace.export, workspace.import, workspace.reattach, workspace.reset, workspa
 ```
 
 Each command carries `environmentId` and `threadId` inside its own payload (not in a wrapper/meta envelope), so each command is self-describing and can be validated in isolation. `environmentId` is nullable for `provider.list_models`. The command envelope is a flat `{ id, cursor, command }` structure.
+
+`thread.start` and `thread.resume` must include `workspacePath` in their payload. The daemon needs this to create an `AgentRuntime` (which requires `workspacePath` at construction time). For environments created via provisioning, the server learns the path from the provision command result. For existing-path environments, the server knows the path from the creation request. The daemon caches the path per environment after the first command.
 
 **Provisioning timeout:** `environment.provision` has a configurable timeout (default: 5 minutes, much longer than the generic 60s command TTL) because large repo checkouts and setup scripts can be slow. Other commands use the standard 60s TTL.
 
@@ -295,8 +300,77 @@ For existing environments: skip provisioning, just queue `thread.start`.
 
 **Provisioning failure cleanup:**
 - If provisioner fails (e.g., setup script errors), the provisioner's `provision()` method is responsible for rolling back partial state (deleting the worktree it created). The provisioner owns its own cleanup on failure.
-- If daemon crashes mid-provisioning, the command TTL expires and the server marks the thread as `error`. The partially-created worktree is cleaned up when the environment record is eventually deleted (triggers `environment.destroy`, which the provisioner handles idempotently).
+- If daemon crashes mid-provisioning, the command TTL expires and the server marks the thread as `error`. The partially-created worktree is cleaned up when the environment record is deleted (triggers `environment.destroy`, which the provisioner handles idempotently).
 - `environment.provision` is idempotent — provisioner checks if the target path already exists. If it does and is valid, it reports success. If it exists but is invalid (partial state), it cleans up and re-provisions.
+- **Errored environment cleanup:** When a thread errors due to provisioning failure, the environment is also marked as `error`. The managed environment cleanup rule applies: when zero non-archived threads reference a managed environment, the server queues `environment.destroy`. For errored environments with no threads (e.g., user deletes the thread), the server should also clean up. The lease expiry sweep or a dedicated errored-environment sweep handles this — query for managed environments in `error` status with zero referencing threads, queue `environment.destroy`. This prevents leaked worktrees on disk.
+
+### Command flow examples
+
+**Creating a thread with an existing path:**
+```
+App → POST /threads { path, hostId }
+Server → creates environment record optimistically (status: ready), creates thread, queues thread.start
+Daemon → runs thread.start; if path is bad, reports error
+Server → if error: marks environment as error, thread as error
+```
+
+**Creating a thread with a managed worktree:**
+```
+App → POST /threads { provisionerId: "worktree", hostId }
+Server → creates environment record (status: provisioning), creates thread (status: provisioning)
+Server → queues environment.provision command with { mode: "worktree", sourcePath, targetPath, branchName }
+Daemon → calls createWorktree() + runSetupScript() from @bb/workspace
+Daemon → reports command-result with { path, isGitRepo: true }
+Server → updates environment (status: ready, path), transitions thread to idle
+Server → queues thread.start if pending input
+```
+
+**Workspace operations (e.g., commit):**
+```
+App → POST /environments/:id/actions { type: "commit", message: "fix bug" }
+Server → resolves environment's host and path from DB
+Server → queues workspace.commit command { environmentId, threadId, message, includeUnstaged: true }
+Daemon → workspace.commit(options) on Workspace instance
+Daemon → reports command-result with { sha, subject }
+Server → creates system event, notifies app via WS
+```
+
+**Promote (same host):**
+```
+App → POST /environments/:id/actions { type: "promote" }
+Server → identifies source env and primary checkout path on same host
+Server → queues workspace.export to daemon { environmentId }
+Daemon → checks source is clean, detaches HEAD, returns { branch: "bb/env-abc" }
+Server → queues workspace.import to daemon { primaryPath, branch: "bb/env-abc" }
+Daemon → checks primary is clean, checks out branch, returns { previousBranch }
+Server → stores previousBranch for demote
+```
+
+**Demote (same host):**
+```
+Server → queues workspace.import { primaryPath, branch: "main" }
+Daemon → checks primary is clean, checks out default branch
+Server → queues workspace.reattach { environmentId, branch: "bb/env-abc" }
+Daemon → re-attaches worktree to its branch
+```
+
+**Promote idempotency and crash recovery:**
+- Export twice when already detached → no-op
+- Import twice with same branch → no-op
+- Reattach when already attached → no-op
+- Crash between export and import → server detects timeout, sends `workspace.reattach` to undo export. Primary was never modified.
+- **Both workspaces must be clean.** Promote and demote fail loudly if either has uncommitted changes. No stashing.
+
+**Promoted state is derived.** The daemon checks what branch the primary checkout is on. If it matches a known environment branch, that environment is promoted. No application state to track.
+
+**v1 scope: same-host promote only.** Cross-machine promote (push to remote, fetch on target) requires multi-machine support which is out of scope for v1. The `workspace.export` and `workspace.import` commands assume same-host (shared `.git` / worktree). The `remote` and `pushToRemote` parameters are reserved for v2 — the command schemas can include them as optional, but the implementation should reject cross-host promote with a clear error.
+
+### Non-git environments
+
+bb works with any directory. If the environment's `isGitRepo` is false:
+- Thread runs normally — agent writes code, runs commands
+- Server doesn't send workspace commands for non-git environments
+- UI shows the thread without the git panel
 
 ---
 
@@ -340,9 +414,17 @@ One `AgentRuntime` instance per environment (since `workspacePath` is per-enviro
 
 **Future improvement:** a socket shim process between daemon and provider could make provider processes survive daemon restarts. Deferred — not needed for v1.
 
-### Failure detection
+### Failure detection and thread recovery
 
-Server detects daemon death via WS drop + lease timeout (no heartbeat). Marks host disconnected, threads on that host transition to `error`.
+**Two distinct scenarios with different thread outcomes:**
+
+1. **Daemon restarts (reconnects before lease expires):** Daemon opens a new session, reports `activeThreads` (empty after restart — all provider processes died). Reconciliation runs: threads in `active` that the daemon has no session for → transition to `idle`, server queues `thread.resume`. **Threads go to `idle`, not `error`.** The user's work is interrupted but recoverable.
+
+2. **Daemon dies (lease timeout expires without reconnect):** Server's lease expiry sweep detects the session has timed out. Server marks host as `disconnected`, transitions all active threads on that host to `error`. **Threads go to `error`.** The user sees an error state. When the daemon eventually reconnects, reconciliation can recover threads if appropriate, but the default path is error.
+
+**The distinguishing factor is whether the daemon reconnects before the lease expires.** Restart is designed to be fast enough that it always reconnects in time. Unintentional death (crash, laptop sleep, network loss) may exceed the lease.
+
+Server detects daemon death via WS drop + lease timeout (no heartbeat). Marks host disconnected.
 
 **Host statuses:**
 ```
@@ -447,7 +529,7 @@ Subscribe/unsubscribe per entity, server pushes change-kind arrays. Notification
 
 **Host status in UI:** connection status (connected/disconnected/reconnecting), manual restart button.
 
-**Server-side:** health report, shutdown with blocking thread detection, voice transcription, file attachment upload.
+**Server-side:** shutdown with blocking thread detection, voice transcription, file attachment upload.
 
 ---
 
@@ -469,7 +551,7 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 | `@bb/host-daemon-contract` | Commands, events, session protocol, hc() client | @bb/domain, zod, hono |
 | `@bb/agent-runtime` | Provider adapters, registry, runtime | @bb/domain, @bb/templates |
 | `@bb/templates` | Prompt templates | gray-matter, handlebars |
-| `@bb/core-ui` | View transforms (toUIMessages, formatTimeline, detail rows) | @bb/domain, @bb/templates |
+| `@bb/core-ui` | View transforms (toViewMessages, formatTimeline, detail rows) | @bb/domain, @bb/templates |
 | `@bb/workspace` | Provisioning (worktree, clone), git operations (status, diff, commit, merge, promote), setup scripts | @bb/domain |
 | `@bb/ui-core` | Shared React components | react |
 | `@bb/tsconfig` | Shared TS config | — |
@@ -477,6 +559,20 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 | `apps/host-daemon` | Host-daemon implementation | @bb/domain, @bb/config, @bb/logger, @bb/host-daemon-contract, @bb/agent-runtime, @bb/workspace |
 | `apps/app` | Electron/web app | @bb/domain, @bb/core-ui, @bb/ui-core, @bb/server-contract |
 | `apps/cli` | CLI | @bb/domain, @bb/core-ui, @bb/server-contract |
+
+### Code ownership
+
+| Code | Location |
+|---|---|
+| `Workspace` class, provisioning functions | `@bb/workspace` |
+| Promote/demote orchestration (export/import/reattach) | `apps/host-daemon` (daemon composes Workspace primitives) |
+| E2B sandbox create/suspend/resume/destroy | `apps/server` (stubbed in v1) |
+| Host registration, identity, heartbeat | `apps/host-daemon` |
+| Command routing, AgentRuntime management | `apps/host-daemon` |
+| Environment DB records, thread lifecycle, command queuing | `apps/server` |
+| Workspace types (WorkspaceStatus, DiffResult, etc.) | `@bb/domain` |
+
+The server never imports `@bb/workspace`. It sends commands to daemons. The daemon imports `@bb/workspace` and uses it when processing commands.
 
 ---
 

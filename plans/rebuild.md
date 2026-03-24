@@ -1,6 +1,6 @@
 # Rebuild Plan
 
-Implementation plan for the bb server, host-daemon, and supporting infrastructure. See `plans/architecture.md` for the full architecture and data model. See `plans/environment-package.md` for the workspace and host design.
+Implementation plan for the bb server, host-daemon, and supporting infrastructure. See `plans/architecture.md` for the full architecture, data model, protocol specs, and command flow examples.
 
 ## Context
 
@@ -10,20 +10,22 @@ The old server, environment-daemon, environment, core, and api-contract packages
 
 | Package | State |
 |---|---|
-| `@bb/domain` | Done — entity types, event types, Zod schemas. Needs updates (renames, new types, dead type removal). |
-| `@bb/server-contract` | Done — public API routes, internal API, WS protocol, error types. Needs updates (route renames, new routes, type renames). |
-| `@bb/env-daemon-contract` | Done — needs rename to `@bb/host-daemon-contract` + full rewrite for new session protocol. |
-| `@bb/db` | Partial — schema + migrations + connection + IDs exist. Needs full rewrite (clean slate). |
+| `@bb/config` | **Done** (Phase 1a) — `envsafe` with scoped exports per consumer. |
+| `@bb/logger` | **Done** (Phase 1b) — pino + pino-roll, per-component log files, rotation. |
+| `@bb/domain` | **Done** (Phase 1c) — entity types, event types, Zod schemas. Renames complete, View* naming, slim types. |
+| `@bb/db` | **Done** (Phase 1d) — clean-slate schema, drizzle-kit migration, ID generation. |
+| `@bb/core-ui` | **Done** (Phase 1e) — view transforms updated for domain renames. |
+| `@bb/host-daemon-contract` | **Done** (Phase 2b) — 18 commands, session protocol, HostDaemon* naming, typed results. |
+| `@bb/server-contract` | **Done** (Phase 2a) — public API routes, WS protocol, type renames. |
+| `@bb/workspace` | **Done** (Phase 3) — Workspace class, provisioning, promote/export/import, tested with real git. |
 | `@bb/agent-runtime` | Done — provider adapters (codex, claude-code, pi), registry, runtime. Leave as-is. |
 | `@bb/templates` | Done — untouched |
-| `@bb/core-ui` | Done — view transforms. Needs import updates after domain renames. |
 | `@bb/ui-core` | Done — shared React components |
 | `@bb/tsconfig` | Done — untouched |
 | `apps/app` | Exists — needs import updates + new UI for hosts, sources, environment creation |
 | `apps/cli` | Exists — needs import updates |
-| `apps/server` | Empty — needs to be created |
-| `@bb/workspace` | Does not exist — needs to be created |
-| `apps/host-daemon` | Does not exist — needs to be created |
+| `apps/server` | **Does not exist** — needs to be created (Phase 5) |
+| `apps/host-daemon` | **Does not exist** — needs to be created (Phase 4) |
 
 ### Architecture summary
 
@@ -81,6 +83,8 @@ These apply to all code written during the rebuild. The previous codebase suffer
 - **Quality over quantity.** One real-scenario integration test > five mock-heavy unit tests.
 - **Real DB in tests.** `createConnection(":memory:")` + `migrate(db)`, not mock repositories.
 - **Assert outcomes, not call sequences.**
+- **Three test layers.** (1) Unit tests that assert behavior (not implementation — no `expect(fn).toHaveBeenCalledWith()`). (2) Integration tests that run the real thing — if `@bb/agent-runtime` can do it, so can the server and daemon. (3) End-to-end tests against standalone isolated instances (unique `BB_DATA_DIR` + `BB_SERVER_PORT`), verified via DB queries, CLI commands, and HTTP assertions.
+- **Standalone instance isolation.** A core design property is the ability to stand up an isolated bb instance in a temp dir with its own DB, logs, and host identity. E2E tests and QA passes use this: start server + daemon, exercise via API, verify via DB queries and CLI. See `plans/architecture.md` "Instance Isolation" section.
 
 ### Scope discipline
 
@@ -335,84 +339,110 @@ async function importWorkspace(primary: Workspace, exportData: WorkspaceExport):
 
 ## Phase 4: `apps/host-daemon`
 
-**Build and test against a mock server or in-memory server.** The daemon is the most complex component — session management, reconnection, command routing, AgentRuntime lifecycle.
+The daemon is the most complex component — session management, reconnection, command routing, AgentRuntime lifecycle. Build modules with injectable dependencies (HTTP client, WS factory) so each can be unit tested in isolation. Integration tests run the real daemon against a real server instance.
 
-### 4a. Daemon skeleton + identity (after Phase 2)
+### 4a. Daemon skeleton + identity
 
 ```
 apps/host-daemon/src/
-  index.ts            -- entrypoint: config, logger, lock, daemon, start
-  daemon.ts           -- main lifecycle
-  identity.ts         -- $BB_DATA_DIR/host-id, OS hostname
+  index.ts            -- entrypoint: validate config → acquire lock → create logger → read identity → start daemon
+  daemon.ts           -- main lifecycle (session, command loop, shutdown)
+  identity.ts         -- $BB_DATA_DIR/host-id (read or create), OS hostname via scutil/hostname
 ```
+
+**Startup sequence:** (1) validate config (fail fast if env vars missing), (2) acquire file lock on `$BB_DATA_DIR/daemon.lock` using `proper-lockfile` with stale detection (10s) — exit immediately with code 1 if held, (3) create logger, (4) read or create `$BB_DATA_DIR/host-id` (persisted UUID), (5) generate ephemeral `instanceId` via `crypto.randomUUID()`, (6) start daemon (session open → WS → command loop).
+
+**Shutdown:** On SIGTERM/SIGINT: flush event buffer (single attempt, 5s timeout), shutdown all AgentRuntime instances, release file lock, exit 0. Buffered events that fail to flush are lost (accepted — server handles sequence gaps).
 
 **Validation:**
-- [ ] Acquires `$BB_DATA_DIR/daemon.lock`
-- [ ] Generates/reads host ID
-- [ ] Gets OS computer name
+- [ ] Lock prevents second instance, exits with clear error message
+- [ ] host-id persisted and stable across restarts
+- [ ] Clean shutdown flushes events and releases lock
 
-### 4b. Session management (after Phase 2)
+### 4b. Session management
 
 ```
 apps/host-daemon/src/
-  session.ts          -- server connection, WS, reconnection with backoff + jitter
-  command-cursor.ts   -- persist/read $BB_DATA_DIR/command-cursor (atomic write)
-  event-buffer.ts     -- buffer events, post to server, track acks
+  session.ts          -- ServerConnection class: HTTP client + WS + reconnection
+  command-cursor.ts   -- persist/read $BB_DATA_DIR/command-cursor (atomic write-to-temp-then-rename)
+  event-buffer.ts     -- in-memory buffer, flush to server, track acks
 ```
+
+**ServerConnection** manages the full server relationship:
+
+**Session open:** `POST /internal/session/open` with `{ hostId, instanceId, hostName, hostType, protocolVersion, activeThreads }`. Server returns `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs }`. Store sessionId for all subsequent requests. The `activeThreads` array is populated from the runtime manager (Phase 4c) if available, or `[]` on fresh startup (all provider processes died). ServerConnection accepts an optional `getActiveThreads` callback injected by the daemon lifecycle so 4b doesn't depend on 4c's data structures.
+
+**WS connection:** `${BB_SERVER_URL.replace('http', 'ws')}/internal/ws?sessionId={sessionId}&token={BB_SECRET_TOKEN}`. Opened after successful session open. On message: if `commands-available`, trigger command fetch. If `session-close`, shut down (another instance took over).
+
+**Heartbeat:** `setInterval` at server-provided `heartbeatIntervalMs`. Sends `{ type: "heartbeat", bufferDepth, lastCommandCursor }` over WS. Does not reset on other activity. If `ws.send()` throws, clear interval and start reconnection.
+
+**Reconnection:** Daemon-driven, exponential backoff: base 1s, multiplier 2x, max 30s, jitter ±25% (`delay = min(1000 * 2^attempt, 30000) * (0.75 + Math.random() * 0.5)`). Reset attempt counter on successful WS open. If WS down >5s, fall back to polling `GET /internal/session/commands?afterCursor={N}` every ~10s. On WS reconnect, fetch from last cursor and stop polling.
+
+**Event buffer:** In-memory only (lost on crash). Flush triggered by: (a) 100ms debounce after last event, or (b) buffer reaching 50 events, whichever first. Each flush POSTs the full buffer to `/internal/session/events`. On success, discard events at or below per-thread high-water marks from ack. On HTTP failure, retain and retry on next flush. Max buffer: 1000 events; oldest dropped with warning log if exceeded.
+
+**Command cursor:** File `$BB_DATA_DIR/command-cursor` containing a single integer as UTF-8 text (e.g., `42\n`). Atomic write: `writeFile(path + '.tmp', ...)` then `rename(path + '.tmp', path)`. Read on startup: `parseInt(readFile(path))` or 0 if missing. Written after successfully reporting a command result (not after fetching).
 
 **Validation:**
-- [ ] Opens session, heartbeat works
-- [ ] Reconnects with backoff + jitter
-- [ ] Falls back to polling commands when WS is down
-- [ ] Command cursor persisted atomically
-- [ ] Events buffered, posted, acked events discarded
-- [ ] Reports active provider sessions on reconnect for state reconciliation
+- [ ] Opens session, receives sessionId, starts WS + heartbeat
+- [ ] WS disconnect triggers reconnection with backoff
+- [ ] Falls back to polling when WS is down >5s
+- [ ] Command cursor survives process restart (write to disk, read on startup)
+- [ ] Event buffer flushes, server ack discards acked events
+- [ ] Reports activeThreads on session open for reconciliation
 
-### 4c. Command routing + AgentRuntime (after 5e — needs server internal API)
+### 4c. Command routing + AgentRuntime
 
 ```
 apps/host-daemon/src/
-  command-router.ts   -- fetch commands, dispatch by environmentId
-  runtime-manager.ts  -- create/get/destroy AgentRuntime per environment
+  command-router.ts   -- fetch commands, dispatch by type, sequential per-environment
+  runtime-manager.ts  -- Map<environmentId, { runtime, workspace, path }>, lazy creation
 ```
 
-One `AgentRuntime` per environment. Commands map directly to runtime methods:
-```
-thread.start    → runtime.startThread()
-thread.resume   → runtime.resumeThread()
-turn.run        → runtime.runTurn()
-turn.steer      → runtime.steerTurn()
-thread.stop     → runtime.stopThread()
-thread.rename   → runtime.renameThread()
-provider.list_models → runtime.listModels()
+**Runtime manager:** Maintains `Map<environmentId, { runtime: AgentRuntime, workspace: Workspace, path: string }>`. Entries created lazily:
+- For `environment.provision`: entry created when provisioning completes (daemon learns the path from the provisioning result).
+- For `thread.start` / `thread.resume`: these commands must include `workspacePath` in their payload so the daemon can create the runtime. (This requires adding `workspacePath: z.string()` to the `thread.start` and `thread.resume` command schemas in `@bb/host-daemon-contract`.)
+- For all other commands: entry must already exist. If not, report error result with `unknown-environment`.
+
+**AgentRuntime creation:**
+```typescript
+createAgentRuntime({
+  workspacePath: entry.path,
+  env: {},  // provider API keys inherited from process.env by the runtime
+  onEvent: (event) => eventBuffer.push(environmentId, threadId, event),
+  onToolCall: (req) => serverConnection.postToolCall({ ...req, sessionId }),
+  onProcessExit: (info) => log.warn("provider process exited", info),
+})
 ```
 
-Workspace commands dispatch to `@bb/workspace`:
+**Event sequence numbering:** The daemon assigns per-thread monotonically increasing sequence numbers. The daemon maintains `Map<threadId, number>` as the next sequence counter. On restart, the daemon requests high-water marks from the server as part of session open (the server returns these in the session open response or the daemon fetches them from the event ack endpoint). New events start from `highWaterMark + 1`. This prevents post-restart sequence collisions with the server's `(threadId, sequence)` dedup.
+
+**Command processing:** Commands are processed **sequentially per-environment** using a per-environment async queue. Commands for different environments may execute concurrently. This prevents races like `workspace.commit` during `turn.run`. Within a batch, commands execute in cursor order.
+
+**Command dispatch:**
 ```
-workspace.status     → workspace.getStatus()
-workspace.diff       → workspace.getDiff()
-workspace.commit     → workspace.commit()
-workspace.squash_merge → workspace.squashMergeInto()
-workspace.reset      → workspace.reset()
-workspace.checkpoint → workspace.checkpoint()
-workspace.export     → exportWorkspace(workspace)
-workspace.import     → importWorkspace(primary, exportData)
-workspace.reattach   → workspace.checkoutBranch(branch)
+thread.start       → runtimeManager.ensureRuntime(envId, workspacePath) → runtime.startThread(...)
+thread.resume      → runtimeManager.ensureRuntime(envId, workspacePath) → runtime.resumeThread(...)
+turn.run           → runtime.runTurn(...)
+turn.steer         → runtime.steerTurn(...)
+thread.stop        → runtime.stopThread(...)
+thread.rename      → runtime.renameThread(...)
+provider.list_models → runtime.listModels(...)
+workspace.*        → workspace.method(...)
+environment.provision → createWorktree()/createClone() + runSetupScript() → runtimeManager.register(envId, path)
+environment.destroy   → runtimeManager.destroy(envId) → removeWorktree()/removeDirectory()
 ```
 
-Environment commands dispatch to provisioning functions:
-```
-environment.provision → createWorktree() or createClone() + runSetupScript()
-environment.destroy   → removeWorktree() or removeDirectory()
-```
+After each command completes, report the result via `POST /internal/session/command-result`, then persist the cursor to disk.
 
 **Validation:**
 - [ ] Commands routed to correct runtime/workspace by environmentId
-- [ ] New runtime created for new environments
-- [ ] Provider events flow: provider → runtime → event buffer → server
-- [ ] Tool calls: provider → daemon → server → daemon → provider
-- [ ] Command results reported to server
-- [ ] Idempotent: replayed commands don't duplicate side effects
+- [ ] Runtime created lazily on first command for an environment
+- [ ] Sequential execution per-environment (concurrent across environments)
+- [ ] Provider events flow through buffer to server with correct sequence numbers
+- [ ] Tool calls route through server and return response to provider
+- [ ] Command results reported, cursor persisted after each
+- [ ] Unknown environmentId returns error result
+- [ ] Replayed commands (idempotent) don't duplicate side effects
 
 ### 4d. Daemon restart
 
@@ -421,69 +451,257 @@ apps/host-daemon/src/
   restart.ts          -- self-relaunch: spawn new instance (detached), exit
 ```
 
+**Mechanism:** Spawn `process.argv[0]` with `process.argv.slice(1)` via `child_process.spawn({ detached: true, stdio: 'ignore', env: process.env })`. Call `child.unref()`. Release file lock explicitly. Exit with `process.exit(0)`. New process acquires lock (retry with 5s timeout, polling every 100ms to handle race window).
+
+For v1, restart is triggered only by manual invocation (CLI command or SIGUSR2 handler). SIGTERM/SIGINT trigger clean shutdown, not restart.
+
 **Validation:**
-- [ ] Spawns new instance, exits cleanly
-- [ ] Server sees reconnect (same hostId, new instanceId)
+- [ ] Spawns new instance, old exits cleanly
+- [ ] New instance acquires lock, reads cursor from disk
+- [ ] Server sees reconnect (same hostId, new instanceId), runs reconciliation
 - [ ] Active threads → idle (interrupted), resume via `thread.resume`
-- [ ] No commands lost (cursor on disk)
+
+### Phase 4 testing strategy
+
+**Unit tests:** Test each module in isolation with injected dependencies. `event-buffer.ts`: inject a fake HTTP poster, verify flush timing, ack handling, max buffer behavior. `command-cursor.ts`: use temp dir, verify atomic write/read. `command-router.ts`: inject a fake runtime manager and fake server connection, verify dispatch by command type, sequential per-environment execution, error handling.
+
+**Integration tests:** Run a real daemon against a real server (in-memory SQLite, random port). Use `AgentRuntimeOptions.adapterFactory` to inject a fake provider adapter that returns immediately and emits canned events. Test scenarios: session open → command queued → daemon fetches and executes → result reported → events posted. Test reconnection: kill WS, verify daemon reconnects and resumes.
+
+**E2E tests:** Stand up an isolated instance (`BB_DATA_DIR` in temp dir, random `BB_SERVER_PORT`). Start real server + real daemon. Create project, create thread, send message, verify events arrive, run workspace operations, verify git state. These overlap with Phase 7 but basic smoke tests should exist here.
 
 ---
 
 ## Phase 5: `apps/server`
 
-By this point, `@bb/workspace` and `apps/host-daemon` are solid and well-tested. The server is mostly plumbing: CRUD routes, command queuing, event ingestion, WS hub.
+By this point, `@bb/workspace` and `apps/host-daemon` are solid and well-tested. The server is mostly plumbing: CRUD routes, command queuing, event ingestion, WS hub. Framework: **Hono** on `@hono/node-server` — the contracts already define Hono-typed route schemas.
 
 ### 5a. Server skeleton
 
 ```
 apps/server/src/
-  index.ts, server.ts, db.ts
+  index.ts    -- read config, init DB, create hub, create logger, create app, call serve()
+  server.ts   -- createApp(deps): Hono — mount routes, middleware, WS upgrade handlers
+  db.ts       -- initDb(): calls createConnection(BB_DATABASE_URL) + migrate(db)
 ```
+
+**Mount structure:**
+- `/api/v1/*` — public routes (projects, threads, environments, hosts, system)
+- `/internal/*` — daemon routes (session, commands, events, tool-calls)
+- `/ws` — client WebSocket (subscribe/unsubscribe notifications)
+- `/internal/ws` — daemon WebSocket (heartbeat, commands-available, session-close)
+
+**Middleware:**
+- CORS on `/api/v1/*` (allow `*` in dev, configured origins in production)
+- Bearer token auth on `/internal/*` routes — reject if `Authorization` header doesn't match `BB_SECRET_TOKEN`
+- Session validation on `/internal/*` routes (except `/session/open`) — verify sessionId in request body/query is an active, non-expired session
+- Global error handler: returns `{ code, message }` JSON. Zod validation errors → `{ code: "invalid_request", message: <zod error> }`
+
+**Auth model:** Public routes are unauthenticated in v1 (single-user local server). Internal routes require Bearer token.
+
+**Startup:** `index.ts` calls `initDb()`, creates `NotificationHub`, creates logger, calls `createApp({ db, hub, logger })`, starts background sweeps (`setInterval`), calls `serve({ fetch: app.fetch, port: BB_SERVER_PORT })`.
+
+**Validation:**
+- [ ] Server starts, listens on configured port
+- [ ] Public routes accessible without auth
+- [ ] Internal routes reject without valid Bearer token
+- [ ] Invalid JSON / Zod failures return structured error response
 
 ### 5b. WebSocket notification hub
 
+Two separate WS endpoints with different protocols:
+
 ```
 apps/server/src/ws/
-  hub.ts, client-protocol.ts, daemon-protocol.ts
+  hub.ts              -- NotificationHub class: subscription tracking + notification dispatch
+  client-protocol.ts  -- /ws handler: ClientMessage (subscribe/unsubscribe) / ServerMessage (changed)
+  daemon-protocol.ts  -- /internal/ws handler: heartbeat / commands-available / session-close
 ```
 
+Use `@hono/node-ws` for WebSocket upgrade support.
+
+**NotificationHub:**
+- Client subscriptions: `Map<WebSocket, Set<subscriptionKey>>` where keys are `"thread:<id>"`, `"project:<id>"`, `"system"`.
+- Daemon connections: `Map<sessionId, WebSocket>`.
+- `notifyThread(threadId, changes[])` — sends to clients subscribed to `thread:<threadId>`.
+- `notifyProject(projectId, changes[])` — sends to clients subscribed to `project:<projectId>`.
+- `notifySystem(changes[])` — sends to clients subscribed to `"system"`.
+- `notifyDaemon(sessionId, message)` — sends to the daemon WS for that session.
+- `addClient(ws)`, `removeClient(ws)`, `addDaemon(sessionId, ws)`, `removeDaemon(sessionId)`.
+
+**client-protocol.ts:** Handles `/ws` upgrade. Parses `ClientMessage` (from `@bb/server-contract/websocket`), calls subscribe/unsubscribe on hub. On WS close, removes client and all its subscriptions. Unauthenticated.
+
+**daemon-protocol.ts:** Handles `/internal/ws` upgrade. Validates `token` and `sessionId` from query params. On `heartbeat` message: update `lastHeartbeatAt` and `leaseExpiresAt` on session record. On close: remove daemon from hub (lease timeout handles session expiry separately).
+
+**Mutation integration:** Data layer functions accept `hub: NotificationHub` as a parameter. After a successful DB write, they call `hub.notify*()`. No event emitter pattern — direct calls.
+
 **Validation:**
-- [ ] Clients subscribe/receive notifications
-- [ ] Daemon receives `commands-available`
-- [ ] Clean disconnect, no leaks
+- [ ] Client subscribes, receives notifications on mutation
+- [ ] Client unsubscribe stops notifications
+- [ ] Client disconnect cleans up subscriptions (no leak)
+- [ ] Daemon WS receives `commands-available` when command is queued
+- [ ] Daemon heartbeat updates session lease in DB
 
 ### 5c. Data layer
 
+Plain exported functions, not classes. Each function takes `db: DbConnection` and optionally `hub: NotificationHub` (queries don't need hub; mutations do).
+
 ```
 apps/server/src/data/
-  projects.ts, threads.ts, environments.ts, hosts.ts, events.ts, commands.ts
+  projects.ts      -- CRUD for projects and project_sources
+  threads.ts       -- CRUD + transitionThreadStatus (enforces valid transitions)
+  environments.ts  -- CRUD + checkManagedCleanup
+  hosts.ts         -- upsertHost, getHost, getHosts, updateHostLastSeen
+  events.ts        -- insertEvents (ON CONFLICT DO NOTHING), getEvents, getThreadHighWaterMarks
+  commands.ts      -- queueCommand (assign cursor), fetchCommands (mark fetched), reportCommandResult (side effects)
+  sessions.ts      -- openSession, updateHeartbeat, closeSession, getActiveSessionForHost
+  sweeps.ts        -- sweepExpiredCommands, sweepExpiredLeases (called from setInterval in index.ts)
 ```
 
-Every mutation publishes to NotificationHub automatically.
+**Thread status transitions** (enforced in `transitionThreadStatus`, reject invalid transitions):
+
+| From | To | Trigger |
+|---|---|---|
+| `created` | `provisioning` | managed env creation |
+| `created` | `idle` | existing path, no pending input |
+| `created` | `active` | existing path + pending input → `thread.start` |
+| `provisioning` | `idle` | provision success, no pending input |
+| `provisioning` | `active` | provision success + pending input |
+| `provisioning` | `error` | provision failure |
+| `idle` | `active` | `turn.run` / `thread.start` / `thread.resume` |
+| `active` | `idle` | turn complete / daemon restart (interrupted) |
+| `active` | `error` | provider crash / lease timeout |
+| `error` | `active` | reconciliation (daemon reports thread active) |
+
+**Command cursor assignment:** When queuing a command, read `max(cursor)` for the target host and increment by 1, inside a transaction. Commands are **host-scoped** (not session-scoped) so they survive session replacement — the daemon persists one cursor to disk per host and resumes from it after reconnecting with a new session. The `sessionId` on the command records which session created it (for audit), but fetch and cursor are by `hostId`.
+
+**Managed environment cleanup:** On thread archive or delete, call `checkManagedCleanup(db, hub, environmentId)`. If the environment is managed and zero non-archived threads reference it, queue `environment.destroy` command.
+
+**Command TTL sweep:** `setInterval` 30s. Queries commands in `fetched` state past their TTL (60s standard, 300s for `environment.provision`). `retryCount < 1` → re-queue (set state to `pending`, increment `retryCount`, assign new cursor). `retryCount >= 1` → set command to `error`, transition thread to `error`.
+
+**Lease expiry sweep:** `setInterval` 10s. Sessions where `leaseExpiresAt < now` → close session (status: `closed`, closeReason: `expired`), mark host disconnected, transition active threads on that host to `error`, notify system WS (`host-disconnected`).
+
+**Event high-water marks:** `insertEvents` returns `Record<threadId, number>` (max sequence per thread after insert). This is the ack the daemon uses to prune its buffer. Both the dedup (DB unique constraint) and the returned high-water marks must be tested explicitly.
 
 **Validation:**
-- [ ] CRUD with in-memory SQLite
-- [ ] Notifications reach WS clients on mutation
-- [ ] Thread status transitions validated
-- [ ] Managed environment cleanup rule
-- [ ] Event dedup on (threadId, sequence)
-- [ ] Command TTL sweep
+- [ ] CRUD for all entities with in-memory SQLite
+- [ ] Thread status transitions enforced (invalid transitions rejected)
+- [ ] Notifications reach WS clients on mutations
+- [ ] Event dedup via ON CONFLICT DO NOTHING
+- [ ] Event insert returns correct high-water marks per thread
+- [ ] Command cursor assigned monotonically per host
+- [ ] Command TTL sweep re-queues once then errors
+- [ ] Lease expiry sweep closes sessions and errors threads
+- [ ] Managed environment cleanup triggers `environment.destroy`
 
 ### 5d. Public API routes (parallel with 5e)
 
 ```
 apps/server/src/routes/
-  projects.ts, threads.ts, environments.ts, hosts.ts, system.ts
+  projects.ts       -- /projects, /projects/:id, /projects/:id/sources, /projects/:id/managers
+  threads.ts        -- /threads, /threads/:id, /threads/:id/send, /threads/:id/drafts/*, /threads/:id/stop,
+                       /threads/:id/archive, /threads/:id/unarchive, /threads/:id/read, /threads/:id/events,
+                       /threads/:id/timeline, /threads/:id/timeline/tool-details, /threads/:id/work-status,
+                       /threads/:id/diff, /threads/:id/diff/branches
+  environments.ts   -- /environments, /environments/:id, /environments/:id/actions, /environments/:id/primary-status
+  hosts.ts          -- /hosts, /hosts/:id
+  system.ts         -- /system/models, /system/providers, /system/shutdown, /system/voice-transcription
 ```
+
+**`POST /threads` (orchestration — not simple CRUD):**
+```
+1. Validate request (CreateThreadRequest)
+2. If environmentId provided → look up environment, verify it exists and is ready
+3. Else if path + hostId provided → create environment record (status: ready, managed: false, path set)
+4. Else if provisionerId + hostId provided → create environment record (status: provisioning, managed: true, path null)
+   → queue environment.provision command
+5. Create thread record (status: provisioning if env is provisioning, else created)
+6. If environment is ready and input provided → queue thread.start command, transition thread to active
+7. If environment is ready and no input → transition thread to idle
+8. Return thread
+```
+
+**`POST /environments/:id/actions` (asynchronous orchestration):**
+Environment actions are **asynchronous**. The route handler queues the first command and returns immediately. The `reportCommandResult` handler in the data layer chains subsequent commands.
+
+- **commit:** queue `workspace.commit` → result creates system event, notifies app.
+- **squash_merge:** queue `workspace.squash_merge` → result creates system event.
+- **promote:** queue `workspace.export` → export result triggers `workspace.import` (chained in `reportCommandResult`) → import result stores `previousBranch` for demote.
+- **demote:** queue `workspace.import { branch: defaultBranch }` → result triggers `workspace.reattach` (chained).
+
+**`POST /threads/:id/send`:** If thread is `idle`, transition to `active`, queue `turn.run`. If thread is `active` and mode is `steer`, queue `turn.steer`. If thread is `provisioning` or `created`, queue the message as a draft for later. The `mode` field (`auto`, `start`, `steer`) determines the command type.
+
+**`GET /threads/:id/work-status` and `GET /system/models`:** These need daemon data. For v1, the server queues a command (`workspace.status` or `provider.list_models`), waits up to 10s for the command result (polling the DB), and returns the result. If timeout, return 504. Future: cache results from daemon reports.
+
+**Error format:** All errors return `{ code: string, message: string }`. Use a custom `ApiError` class that extends `HTTPException`. Zod validation failures caught by middleware.
+
+**Validation:**
+- [ ] `POST /threads` creates environment + thread + queues appropriate commands for each strategy
+- [ ] `POST /environments/:id/actions` queues first command, returns immediately
+- [ ] Command result chaining works (promote: export → import → done)
+- [ ] `POST /threads/:id/send` transitions thread status and queues correct command type
+- [ ] Error responses use consistent format
 
 ### 5e. Internal API routes (parallel with 5d)
 
 ```
 apps/server/src/internal/
-  session.ts, commands.ts, events.ts, tool-calls.ts, reconciliation.ts
+  session.ts        -- POST /internal/session/open
+  commands.ts       -- GET /internal/session/commands, POST /internal/session/command-result
+  events.ts         -- POST /internal/session/events
+  tool-calls.ts     -- POST /internal/session/tool-call
+  reconciliation.ts -- called from session open (not a separate endpoint)
 ```
 
-Auth: `Authorization: Bearer <BB_SECRET_TOKEN>`.
+Auth: `Authorization: Bearer <BB_SECRET_TOKEN>` on all routes. Session validation (active session check) on all routes except `/session/open`.
+
+**`POST /internal/session/open`:**
+1. Validate against `hostDaemonSessionOpenRequestSchema`
+2. Upsert host record (create if new hostId, update name/type/lastSeenAt)
+3. Close existing active session for this hostId (status: `closed`, closeReason: `replaced`, send `session-close` over old WS via hub)
+4. Create new session record with server-assigned `heartbeatIntervalMs` (30s), `leaseTimeoutMs` (90s)
+5. Run reconciliation (compare `activeThreads` against DB state — see architecture doc)
+6. Return `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs }`
+
+**`GET /internal/session/commands`:** Validate sessionId. Query pending commands for this session's host after `afterCursor`. If commands exist, mark as `fetched` (set `fetchedAt`), return them. If no commands and `waitMs > 0`, hold request open — register a resolver with the hub; when `commands-available` fires for this session, resolve. Return 200 with commands or 200 with empty array on timeout.
+
+**`POST /internal/session/command-result`:** Validate session. Update command state (`success`/`error`), set `resultPayload`, `completedAt`. Run side-effect handler by command type:
+- `environment.provision` success → update environment (set path, status: ready), transition thread to idle, queue `thread.start` if pending input
+- `environment.provision` error → transition environment to error, thread to error
+- `workspace.export` success → chain `workspace.import` command
+- `workspace.import` success → store promote state, chain complete
+- `thread.start` success → store providerThreadId
+- Other results: create system events, notify WS as appropriate
+
+**`POST /internal/session/events`:** Validate session. Insert events with ON CONFLICT DO NOTHING. Update thread status based on event types (`turn/completed` → thread idle, `error` → thread error, `thread/name/updated` → update thread title). Notify WS clients with `events-appended` for each affected thread. Return `{ threadHighWaterMarks: Record<threadId, number> }`.
+
+**`POST /internal/session/tool-call`:** Validate session. Dispatch by `tool` name to server-side tool implementations. Known tools: `spawn_thread` (create child thread, return its ID), `delegate_to_thread` (set parentThreadId). Return `ToolCallResponse`. Unknown tools return error response.
+
+**`reconciliation.ts`:** Called from session open handler. Compares daemon's `activeThreads` against DB state:
+- Thread in `error` (lease timeout) but daemon reports active → transition to `active`
+- Thread in `active` but daemon has no session → transition to `idle`, queue `thread.resume`
+- Environment in `provisioning` but daemon reports no provisioning → transition environment/thread to `error`
+
+**Validation:**
+- [ ] Session open upserts host, closes old session (WS `session-close` sent), creates new session
+- [ ] Command fetch returns pending commands, marks fetched, long-poll works with waitMs
+- [ ] Command result updates state and runs side effects (provision → ready, export → chain import)
+- [ ] Event ingestion deduplicates, returns correct high-water marks, updates thread status
+- [ ] Tool call dispatches to correct handler, returns response
+- [ ] Reconciliation corrects stale thread/environment states on reconnect
+
+### Phase 5 testing strategy
+
+**Data layer tests:** In-memory SQLite. Test each module's functions. Assert DB state after mutations. Pass a real `NotificationHub` with mock WS connections to verify notifications are emitted.
+
+**WS hub tests:** Unit test `NotificationHub` directly with mock WS objects. Test subscribe/unsubscribe/notify/disconnect lifecycle. Test daemon notification routing by sessionId.
+
+**Route handler tests:** Use Hono's `app.request()` test helper with in-memory DB + real hub. No HTTP server needed. Test the full request/response cycle. Key scenarios: `POST /threads` with each creation strategy, environment action chaining, send with status transitions.
+
+**Internal API tests:** Same `app.request()` pattern. Key scenarios: session open + reconciliation, command fetch + long-poll timeout, event ingestion + dedup + high-water-mark acks, command result + chaining (promote: export → import).
+
+**Integration tests:** Start a real server on a random port with in-memory SQLite. Exercise the full HTTP API. Verify WS notifications arrive. Test the full session lifecycle: open → commands → events → results.
+
+**E2E tests:** Standalone isolated instance (temp `BB_DATA_DIR`, random port). Start server + daemon. Create project → thread → send message → verify events → commit → verify git state. Verify via DB queries and CLI commands.
 
 ---
 
