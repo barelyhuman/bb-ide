@@ -98,7 +98,7 @@ export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("session-close"),
-    reason: z.enum(["replaced", "expired", "shutdown"]),
+    reason: z.enum(["replaced", "expired", "daemon-disconnect"]),
   }),
 ]);
 export type HostDaemonServerWsMessage = z.infer<

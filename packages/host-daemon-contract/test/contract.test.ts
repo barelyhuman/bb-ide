@@ -177,6 +177,23 @@ describe("host-daemon session schemas", () => {
     });
 
     expect(
+      hostDaemonServerWsMessageSchema.parse({
+        type: "session-close",
+        reason: "daemon-disconnect",
+      }),
+    ).toMatchObject({
+      type: "session-close",
+      reason: "daemon-disconnect",
+    });
+
+    expect(() =>
+      hostDaemonServerWsMessageSchema.parse({
+        type: "session-close",
+        reason: "shutdown",
+      }),
+    ).toThrow();
+
+    expect(
       hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
         bufferDepth: 3,

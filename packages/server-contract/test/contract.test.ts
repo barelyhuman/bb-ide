@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  PROJECT_CHANGE_KINDS,
+  SYSTEM_CHANGE_KINDS,
   createPublicApiClient,
   createThreadRequestSchema,
   environmentActionRequestSchema,
@@ -41,6 +43,17 @@ describe("server-contract canonical schemas", () => {
     expect(
       timelineToolDetailsResponseSchema.parse({ messages: [] }),
     ).toEqual({ messages: [] });
+
+    expect(PROJECT_CHANGE_KINDS).toEqual([
+      "sources-changed",
+      "threads-changed",
+    ]);
+    expect(SYSTEM_CHANGE_KINDS).toEqual([
+      "host-connected",
+      "host-disconnected",
+      "environment-created",
+      "environment-deleted",
+    ]);
   });
 });
 

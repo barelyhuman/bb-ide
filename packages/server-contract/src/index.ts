@@ -77,12 +77,14 @@ export type {
 } from "./public-api.js";
 
 export {
+  PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
 } from "./websocket.js";
 export type {
   ChangedMessage,
   ClientMessage,
+  ProjectChangeKind,
   RealtimeEntity,
   ServerMessage,
   SubscribeMessage,
