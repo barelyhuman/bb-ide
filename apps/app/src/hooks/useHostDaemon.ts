@@ -9,9 +9,9 @@ import { openPath as daemonOpenPath, pickFolder as daemonPickFolder } from "@/li
  * Provides:
  * - `localHostId` — this machine's host ID, null if no daemon
  * - `hasDaemon` — whether a daemon is reachable
- * - `isLocalEnvironment(hostId)` — whether the given host matches this machine
- * - `openPath(path)` — open a path in the user's editor
- * - `pickFolder()` — open native folder picker, returns selected path or null
+ * - `isLocalHost(hostId)` — whether the given host matches this machine
+ * - `openPath(path)` — open a path in the user's editor (null if no daemon)
+ * - `pickFolder()` — open native folder picker (null if no daemon)
  */
 export function useHostDaemon() {
   const localHostId = useAtomValue(localHostIdAtom);
@@ -19,7 +19,7 @@ export function useHostDaemon() {
 
   const hasDaemon = localHostId != null && daemonPort != null;
 
-  const isLocalEnvironment = useCallback(
+  const isLocalHost = useCallback(
     (hostId: string | null | undefined) => {
       if (!localHostId || !hostId) return false;
       return hostId === localHostId;
@@ -42,7 +42,7 @@ export function useHostDaemon() {
   return {
     localHostId,
     hasDaemon,
-    isLocalEnvironment,
+    isLocalHost,
     openPath,
     pickFolder,
   };

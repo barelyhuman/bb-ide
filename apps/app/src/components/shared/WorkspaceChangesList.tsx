@@ -1,27 +1,27 @@
 import type { WorkspaceStatus } from "@bb/domain";
-import { openThreadPathInEditor } from "@/lib/api";
-import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
 import { formatWorkspaceFileStatus } from "@/lib/workspace-change-summary";
 
 export function WorkspaceChangesList({
   files,
-  threadId,
   maxHeightClassName = "max-h-32",
   emptyMessage = "No changed files detected.",
   onFileClick,
+  onOpenFile,
 }: {
   files: WorkspaceStatus["files"];
-  threadId?: string;
   maxHeightClassName?: string;
   emptyMessage?: string;
   onFileClick?: (file: NonNullable<WorkspaceStatus["files"]>[number]) => void;
+  onOpenFile?: (relativePath: string) => void;
 }) {
   if (!files || files.length === 0) {
     return (
       <p className="ui-text-sm leading-5 text-muted-foreground">{emptyMessage}</p>
     );
   }
+
+  const canClick = onFileClick || onOpenFile;
 
   return (
     <ul className={cn("space-y-1 overflow-auto", maxHeightClassName)}>
@@ -33,7 +33,7 @@ export function WorkspaceChangesList({
           <span className="ui-text-sm leading-5 text-muted-foreground/80">
             {formatWorkspaceFileStatus(file.status)}
           </span>
-          {threadId || onFileClick ? (
+          {canClick ? (
             <button
               type="button"
               className="min-w-0 truncate text-left ui-text-sm leading-5 underline-offset-2 hover:underline"
@@ -43,12 +43,7 @@ export function WorkspaceChangesList({
                   onFileClick(file);
                   return;
                 }
-                if (!threadId) return;
-                void openThreadPathInEditor(threadId, {
-                  relativePath: file.path,
-                  target: "file",
-                  command: getPathCommandForTarget("file"),
-                });
+                onOpenFile?.(file.path);
               }}
             >
               {file.path}
