@@ -36,6 +36,11 @@ projects:       id, name, createdAt, updatedAt
 project_sources: id, projectId, type, hostId, path, repoUrl, timestamps
 ```
 
+- `project_sources.hostId` — FK to hosts, NOT NULL, CASCADE on delete (source is meaningless without its host)
+- `project_sources.path` — text, NOT NULL for `local_path` type
+- `project_sources.repoUrl` — text, nullable (set for `github_repo` type)
+- Index: `project_sources(projectId)`
+
 Source types: `local_path` (v1), `github_repo` (future). In v1, a project has exactly one source. All code paths needing "the project root" resolve this single source. Multi-source support adds a `primary` flag later.
 
 ### Hosts
@@ -48,7 +53,8 @@ hosts: id, name, type, provider, externalId, lastSeenAt, timestamps
 
 - `id` is stable, generated once per machine, persisted at `$BB_DATA_DIR/host-id`
 - `name` is auto-populated from the OS (e.g., `scutil --get ComputerName` on macOS), user can rename
-- `type`: `persistent` (user's machine) or `ephemeral` (cloud sandbox like E2B)
+- `type`: `persistent` (user's machine) or `ephemeral` (cloud sandbox like E2B), NOT NULL (set explicitly at registration)
+- `lastSeenAt` — integer (epoch ms), NOT NULL. Index: `hosts(lastSeenAt)`
 - Auto-registered when a host-daemon connects to the server
 
 ### Threads
@@ -60,11 +66,17 @@ threads: id, projectId, environmentId, providerId, type, title, status,
          mergeBaseBranch, parentThreadId, archivedAt, lastReadAt, timestamps
 ```
 
+- `environmentId` — FK to environments, nullable (set after environment creation)
+- `providerId` — text, NOT NULL (set explicitly at creation time)
+- `lastReadAt` — integer (epoch ms), nullable (null = never read)
+- `archivedAt` — integer (epoch ms), nullable
+- Indexes: `threads(projectId, updatedAt)`, `threads(parentThreadId)`
+
 **Types:** `standard` (regular work) and `manager` (delegation-oriented, durable workspace, special rendering — users only see messages sent via a special tool).
 
 **Ownership:** Threads are managed by the user (unparented) or by another thread (`parentThreadId`). This is a handoff primitive — user → manager or manager → user. When a managed thread reaches a terminal state (idle, error), its manager is notified.
 
-**Statuses:** `created → provisioning → idle ↔ active → error`. Provisioning failures set status to `error` with a distinguishing error code.
+**Statuses:** Exactly 5 values: `created`, `provisioning`, `idle`, `active`, `error`. Flow: `created → provisioning → idle ↔ active → error`. Provisioning failures set status to `error` with a distinguishing error code. Do not add intermediate statuses like `provisioned` or `provisioning_failed` — the environment's status and error codes carry that detail.
 
 **Features:**
 - Archive/unarchive — inbox model. Unarchived = active work. Archived = done.
@@ -79,8 +91,16 @@ threads: id, projectId, environmentId, providerId, type, title, status,
 An environment is where a thread runs — a filesystem path on a specific host.
 
 ```
-environments: id, projectId, hostId, path, managed, isGitRepo, provisionerId, provisionerState, status, timestamps
+environments: id, projectId, hostId, path, managed, isGitRepo, provisionerId, provisionerState, branchName, status, timestamps
 ```
+
+- `hostId` — FK to hosts, NOT NULL, CASCADE on delete
+- `path` — text, **nullable**. NULL during provisioning (daemon reports path in command result). Set when provisioning completes.
+- `managed` — integer (boolean), NOT NULL, default `0`
+- `isGitRepo` — integer (boolean), NOT NULL, default `0`
+- `provisionerState` — text (JSON), nullable
+- `branchName` — text, nullable (set for managed worktree environments)
+- Indexes: `environments(hostId, path)` UNIQUE (when path is not null), `environments(status)`, `environments(projectId)`
 
 **Environment statuses:** `provisioning → ready → error | destroying`
 
@@ -100,6 +120,71 @@ Provisioners run where they need access: managed worktree needs the host filesys
 
 **Thread actions (thread-scoped):** archive/unarchive, follow-up/stop, assign/unassign to another thread.
 
+### Events
+
+```
+events: id, threadId, environmentId, turnId, providerThreadId, type, sequence, data, createdAt
+```
+
+- `threadId` — FK to threads, NOT NULL, CASCADE on delete
+- `environmentId` — FK to environments, nullable (thread may not have environment yet)
+- `turnId` — text, nullable (correlates events within a conversation turn)
+- `providerThreadId` — text, nullable (links to provider's thread identifier)
+- `sequence` — integer, NOT NULL
+- `data` — text (JSON), NOT NULL
+- Unique constraint: `events(threadId, sequence)` (dedup key)
+- Indexes: `events(threadId, createdAt)`, `events(environmentId)`
+
+### Queued Thread Messages
+
+```
+queued_thread_messages: id, threadId, content, mode, reasoningLevel, sandboxMode, createdAt, updatedAt
+```
+
+- `threadId` — FK to threads, NOT NULL, CASCADE on delete
+- `content` — text, NOT NULL
+- `mode` — text, NOT NULL (`auto`, `start`, `steer`)
+- `reasoningLevel` — text, NOT NULL (always set explicitly when queuing)
+- `sandboxMode` — text, NOT NULL (always set explicitly when queuing)
+
+### Host-Daemon Sessions
+
+```
+host_daemon_sessions: id, hostId, instanceId, protocolVersion, status, hostName, hostType,
+                      heartbeatIntervalMs, leaseTimeoutMs, leaseExpiresAt, lastHeartbeatAt,
+                      closedAt, closeReason, createdAt, updatedAt
+```
+
+- `hostId` — FK to hosts, NOT NULL
+- `status` — text, NOT NULL (`active`, `closed`)
+- `hostName`, `hostType` — text, NOT NULL (reported by daemon at session open)
+- `heartbeatIntervalMs`, `leaseTimeoutMs` — integer, NOT NULL (set by server in session open response)
+- `closedAt` — integer (epoch ms), nullable
+- `closeReason` — text, nullable (`replaced`, `expired`, `daemon-disconnect`)
+- Index: `host_daemon_sessions(hostId, status)`
+
+### Host-Daemon Commands
+
+```
+host_daemon_commands: id, sessionId, cursor, type, payload, state, resultPayload,
+                      retryCount, createdAt, fetchedAt, completedAt
+```
+
+- `sessionId` — FK to sessions, NOT NULL
+- `cursor` — integer, NOT NULL. Unique constraint: `host_daemon_commands(sessionId, cursor)` (per-session monotonic cursor)
+- `state` — text, NOT NULL (`pending`, `fetched`, `success`, `error`)
+- `retryCount` — integer, NOT NULL, default `0`
+- Index: `host_daemon_commands(sessionId, state)`
+
+### Host-Daemon Cursors
+
+```
+host_daemon_cursors: hostId, cursor, updatedAt
+```
+
+- `hostId` — FK to hosts, PRIMARY KEY
+- `cursor` — integer, NOT NULL (last successfully reported command cursor)
+
 ---
 
 ## Host-Daemon Protocol
@@ -112,7 +197,7 @@ Provisioners run where they need access: managed worktree needs the host filesys
 4. Daemon maintains WS connection for notifications and sends periodic heartbeats
 5. If existing session for same hostId, server closes old WS with `{ type: "session-close", reason: "replaced" }`
 
-Auth: `BB_SECRET_TOKEN` env var, sent as `Authorization: Bearer` on HTTP and as query param on WS.
+Auth: `BB_SECRET_TOKEN` env var, sent as `Authorization: Bearer` on HTTP and as query param on WS. The `sessionId` is passed in request body or query params (not as a custom header) — simpler, easier to test.
 
 **Session replacement:** When a new session opens for the same hostId, the server invalidates the old session ID. All HTTP requests from the old session are rejected (401). The old WS gets `{ type: "session-close", reason: "replaced" }`. This prevents overlapping daemon instances from both fetching commands or posting events.
 
@@ -140,7 +225,7 @@ workspace.status, workspace.diff, workspace.commit, workspace.squash_merge,
 workspace.export, workspace.import, workspace.reattach, workspace.reset, workspace.checkpoint
 ```
 
-Each command batch item includes `environmentId` (nullable for `provider.list_models`) so the daemon can route to the correct `AgentRuntime` instance.
+Each command carries `environmentId` and `threadId` inside its own payload (not in a wrapper/meta envelope), so each command is self-describing and can be validated in isolation. `environmentId` is nullable for `provider.list_models`. The command envelope is a flat `{ id, cursor, command }` structure.
 
 **Provisioning timeout:** `environment.provision` has a configurable timeout (default: 5 minutes, much longer than the generic 60s command TTL) because large repo checkouts and setup scripts can be slow. Other commands use the standard 60s TTL.
 
@@ -428,6 +513,8 @@ Taking this opportunity to clean up route naming for clarity and consistency.
 
 ## Type Renames
 
+**Clean break — no aliases.** When renaming, use only the new name. Do not export the old name as a backward-compat alias. There are no external consumers to maintain compatibility for during the rebuild.
+
 ### Domain types
 
 **Timeline/view types (rename from "Detail" to "Timeline"):**
@@ -510,7 +597,13 @@ Keep `ThreadEvent` as-is (union type — "event on a thread" is correct). Keep a
 
 ### Host-daemon-contract types
 
-Full rewrite — strip `environmentDaemon*` prefix entirely. Types become `Command`, `CommandType`, `Event`, `EventEnvelope`, etc. scoped under `@bb/host-daemon-contract`.
+Full rewrite — strip old `environmentDaemon*` prefix. Use `HostDaemon*` prefix on all exported types: `HostDaemonCommand`, `HostDaemonCommandType`, `HostDaemonEventEnvelope`, `HostDaemonSessionOpenRequest`, etc. Generic names like `Command` or `Event` collide when both `@bb/server-contract` and `@bb/host-daemon-contract` are imported in the same file (which happens in the server). The `HostDaemon*` prefix avoids this.
+
+Define typed result schemas per command type (a record mapping command type to its result schema) rather than a single generic result shape. This catches contract mismatches at parse time.
+
+Use typed event envelopes (reuse `threadEventSchema` from `@bb/domain`) rather than untyped `z.record()` payloads.
+
+Event ack format: `Record<string, number>` (threadId → high-water mark), not an array of objects.
 
 ---
 

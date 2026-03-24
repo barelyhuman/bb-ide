@@ -82,6 +82,14 @@ These apply to all code written during the rebuild. The previous codebase suffer
 - **Real DB in tests.** `createConnection(":memory:")` + `migrate(db)`, not mock repositories.
 - **Assert outcomes, not call sequences.**
 
+### Scope discipline
+
+- **No backward-compat aliases.** When renaming a type, route, or function, use only the new name. Don't export the old name as an alias "for convenience" — it creates two names for one thing and defers cleanup that never happens.
+- **No speculative API surface.** Don't declare schemas, routes, or types until the feature that uses them is being built. A contract package should contain exactly what's needed by the code that exists today.
+- **Domain types are persisted records.** Types in `@bb/domain` represent the shape of data as stored in the DB or transmitted over the wire. Runtime-only view state (work status, provisioning readiness, attached environment details, built-in actions, default execution options) belongs in the consuming layer (server views, UI projections), not in the domain type.
+- **Ignore downstream consumers during package rebuilds.** Changes to `packages/*` will break `apps/server`, `apps/cli`, `apps/app`. That is expected — those consumers are rebuilt in later phases. Don't add shims, re-exports, or weakened types to keep them compiling. The passing bar for a package phase is: every package under `packages/` typechecks and its own tests pass.
+- **Simplest correct implementation.** Prefer module-level singletons over factory functions with injectable parameters unless testing genuinely requires it. Prefer standard library/framework patterns (e.g., `pino-roll` for log rotation) over custom implementations. Don't add configurability, error classes, or abstraction layers until a second use case demands them.
+
 ---
 
 ## Stubs and Not-Implemented Boundaries
@@ -307,19 +315,20 @@ async function exportWorkspace(workspace: Workspace): Promise<WorkspaceExport> {
 ```typescript
 // Target daemon applies the changeset to the primary checkout
 async function importWorkspace(primary: Workspace, exportData: WorkspaceExport): Promise<ImportResult> {
+  if (await primary.getStatus().then(s => s.hasChanges)) throw new Error("primary has uncommitted changes");
   if (exportData.remote) await primary.fetch({ remote: exportData.remote, branch: exportData.branch });
-  const stashRef = await primary.stash("bb-promote");
   const previousBranch = await primary.currentBranch;
   await primary.checkoutBranch(exportData.branch);
-  return { previousBranch, stashRef };
+  return { previousBranch };
 }
 ```
 
 **Testing:**
 - [ ] Export detaches worktree HEAD, returns branch info
-- [ ] Import stashes dirty state, switches branch
+- [ ] Import fails loudly if primary has uncommitted changes
+- [ ] Import switches branch when primary is clean
 - [ ] Import with remote: fetches before switching
-- [ ] Demote (import back to original branch) restores stash
+- [ ] Demote (import back to original branch) works
 - [ ] Promoted state derived: check primary's current branch matches an env branch
 
 ---
