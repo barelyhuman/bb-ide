@@ -1,0 +1,154 @@
+import {
+  createAgentRuntime,
+  type AgentRuntime,
+  type AgentRuntimeOptions,
+} from "@bb/agent-runtime";
+import {
+  provisionWorkspace,
+  type IWorkspace,
+  type ProvisionWorkspaceOpts,
+} from "@bb/workspace";
+
+export interface RuntimeEntry {
+  environmentId: string;
+  runtime: AgentRuntime;
+  workspace: IWorkspace;
+  path: string;
+  activeThreadIds: Set<string>;
+}
+
+export interface EnsureEnvironmentArgs {
+  environmentId: string;
+  workspacePath?: string;
+  provision?: ProvisionWorkspaceOpts;
+}
+
+export interface RuntimeManagerOptions {
+  createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
+  provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
+  adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  onEvent?: AgentRuntimeOptions["onEvent"];
+  onToolCall?: AgentRuntimeOptions["onToolCall"];
+  onStderr?: AgentRuntimeOptions["onStderr"];
+  onProcessExit?: AgentRuntimeOptions["onProcessExit"];
+}
+
+export class RuntimeManager {
+  private readonly createRuntime;
+  private readonly provisionWorkspace;
+  private readonly entries = new Map<string, RuntimeEntry>();
+  private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
+
+  constructor(private readonly options: RuntimeManagerOptions = {}) {
+    this.createRuntime = options.createRuntime ?? createAgentRuntime;
+    this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
+  }
+
+  get(environmentId: string): RuntimeEntry | undefined {
+    return this.entries.get(environmentId);
+  }
+
+  async getOrAwait(environmentId: string): Promise<RuntimeEntry | undefined> {
+    const existing = this.entries.get(environmentId);
+    if (existing) {
+      return existing;
+    }
+
+    const pending = this.pendingEntries.get(environmentId);
+    if (pending) {
+      return pending;
+    }
+
+    return undefined;
+  }
+
+  hasThread(environmentId: string, threadId: string): boolean {
+    return this.entries.get(environmentId)?.activeThreadIds.has(threadId) ?? false;
+  }
+
+  markThreadActive(environmentId: string, threadId: string): void {
+    this.entries.get(environmentId)?.activeThreadIds.add(threadId);
+  }
+
+  async openWorkspace(path: string): Promise<IWorkspace> {
+    return this.provisionWorkspace({
+      type: "unmanaged",
+      path,
+      sourcePath: path,
+    });
+  }
+
+  async ensureEnvironment(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
+    const existing = this.entries.get(args.environmentId);
+    if (existing) {
+      return existing;
+    }
+
+    const pending = this.pendingEntries.get(args.environmentId);
+    if (pending) {
+      return pending;
+    }
+
+    const creation = this.createEntry(args).finally(() => {
+      this.pendingEntries.delete(args.environmentId);
+    });
+    this.pendingEntries.set(args.environmentId, creation);
+
+    const entry = await creation;
+    this.entries.set(args.environmentId, entry);
+    return entry;
+  }
+
+  async destroyEnvironment(environmentId: string): Promise<void> {
+    const existing = this.entries.get(environmentId);
+    const pending = this.pendingEntries.get(environmentId);
+    const entry = existing ?? (pending ? await pending : undefined);
+
+    if (!entry) {
+      return;
+    }
+
+    this.entries.delete(environmentId);
+    await entry.runtime.shutdown();
+    await entry.workspace.destroy();
+  }
+
+  private async createEntry(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
+    const provision =
+      args.provision ??
+      (args.workspacePath
+        ? {
+            type: "unmanaged" as const,
+            path: args.workspacePath,
+            sourcePath: args.workspacePath,
+          }
+        : null);
+
+    if (!provision) {
+      throw new Error(`Missing workspace path for environment ${args.environmentId}`);
+    }
+
+    const workspace = await this.provisionWorkspace(provision);
+    const runtime = this.createRuntime({
+      workspacePath: workspace.path,
+      adapterFactory: this.options.adapterFactory,
+      onEvent: this.options.onEvent ?? (() => undefined),
+      onToolCall:
+        this.options.onToolCall ??
+        (async () => ({
+          contentItems: [],
+          success: true,
+        })),
+      onStderr: this.options.onStderr,
+      onProcessExit: this.options.onProcessExit,
+    });
+
+    return {
+      environmentId: args.environmentId,
+      runtime,
+      workspace,
+      path: workspace.path,
+      activeThreadIds: new Set(),
+    };
+  }
+}

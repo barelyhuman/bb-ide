@@ -190,6 +190,9 @@ importers:
 
   apps/host-daemon:
     dependencies:
+      '@bb/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@bb/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -199,6 +202,9 @@ importers:
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@bb/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2

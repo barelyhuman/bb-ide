@@ -12,10 +12,12 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@bb/agent-runtime": "workspace:*",
     "@bb/config": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
     "proper-lockfile": "^4.1.2",
+    "@bb/workspace": "workspace:*",
     "ws": "^8.19.0"
   },
   "devDependencies": {
