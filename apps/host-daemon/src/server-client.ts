@@ -1,7 +1,8 @@
 import pRetry, { AbortError } from "p-retry";
 import {
+  HOST_DAEMON_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
-  hostDaemonCommandBatchSchema,
+  hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonEventBatchRequestSchema,
@@ -20,6 +21,32 @@ import {
 } from "@bb/host-daemon-contract";
 import type { ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
+
+const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
+
+function parseRawCommandBatch(json: unknown): unknown[] {
+  if (
+    json != null &&
+    typeof json === "object" &&
+    "commands" in json &&
+    Array.isArray(json.commands)
+  ) {
+    return json.commands;
+  }
+  throw new Error("Invalid command batch structure: missing commands array");
+}
+
+function extractRawField<T>(obj: unknown, key: string): T | undefined {
+  if (obj != null && typeof obj === "object" && key in obj) {
+    return (obj as Record<string, unknown>)[key] as T;
+  }
+  return undefined;
+}
+
+function extractRawCommandType(rawCommand: unknown): string | undefined {
+  const command = extractRawField<unknown>(rawCommand, "command");
+  return extractRawField<string>(command, "type") ?? undefined;
+}
 
 type FetchFn = typeof fetch;
 
@@ -99,6 +126,52 @@ export function createServerClient(
     return new Error(message);
   }
 
+  async function reportUnknownCommand(rawCommand: unknown): Promise<void> {
+    try {
+      const commandId = extractRawField<string>(rawCommand, "id");
+      const cursor = extractRawField<number>(rawCommand, "cursor");
+      const rawType = extractRawCommandType(rawCommand) ?? "unknown";
+
+      if (!commandId || cursor === undefined) {
+        options.logger.warn(
+          { rawCommand },
+          "cannot report unknown command: missing id or cursor",
+        );
+        return;
+      }
+
+      const response = await fetchFn(
+        buildInternalUrl("/session/command-result"),
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({
+            sessionId: requireSessionId(),
+            commandId,
+            cursor,
+            type: rawType,
+            completedAt: Date.now(),
+            ok: false,
+            errorCode: "unknown_command",
+            errorMessage: `Unrecognized command type: ${rawType}`,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        options.logger.warn(
+          { status: response.status, commandId },
+          "failed to report unknown command result",
+        );
+      }
+    } catch (error) {
+      options.logger.warn(
+        { err: error },
+        "error while reporting unknown command",
+      );
+    }
+  }
+
   return {
     async openSession(args: OpenSessionArgs): Promise<HostDaemonSessionOpenResponse> {
       const payload = hostDaemonSessionOpenRequestSchema.parse({
@@ -151,8 +224,33 @@ export function createServerClient(
         );
       }
 
-      const parsed = hostDaemonCommandBatchSchema.parse(await response.json());
-      return parsed.commands;
+      const rawCommands = parseRawCommandBatch(await response.json());
+      const accepted: HostDaemonCommandEnvelope[] = [];
+
+      for (const rawCommand of rawCommands) {
+        const rawType = extractRawCommandType(rawCommand);
+
+        if (rawType && knownCommandTypes.has(rawType)) {
+          const parsed = hostDaemonCommandEnvelopeSchema.safeParse(rawCommand);
+          if (parsed.success) {
+            accepted.push(parsed.data);
+          } else {
+            options.logger.warn(
+              { type: rawType, error: parsed.error.message },
+              "failed to parse command envelope, skipping",
+            );
+            void reportUnknownCommand(rawCommand);
+          }
+        } else {
+          options.logger.warn(
+            { type: rawType ?? "missing" },
+            "unknown command type in batch, reporting error to server",
+          );
+          void reportUnknownCommand(rawCommand);
+        }
+      }
+
+      return accepted;
     },
 
     async reportCommandResult(

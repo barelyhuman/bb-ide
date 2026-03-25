@@ -592,4 +592,85 @@ describe("dispatchCommand", () => {
       path: "/tmp/primary",
     });
   });
+
+  it("covers workspace.list_files", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-list-files-");
+    await fs.writeFile(path.join(tempDir, "file-a.txt"), "hello");
+    await fs.mkdir(path.join(tempDir, "sub"));
+    await fs.writeFile(path.join(tempDir, "sub", "file-b.ts"), "world");
+
+    const harness = createHarness({ workspacePath: tempDir });
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: tempDir,
+    });
+
+    const result = await dispatchCommand(
+      {
+        type: "workspace.list_files",
+        environmentId: "env-1",
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    const paths = result.files.map((f: { path: string }) => f.path).sort();
+    expect(paths).toContain("file-a.txt");
+    expect(paths).toContain(path.join("sub", "file-b.ts"));
+
+    // With query filter
+    const filtered = await dispatchCommand(
+      {
+        type: "workspace.list_files",
+        environmentId: "env-1",
+        query: "file-b",
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(filtered.files).toHaveLength(1);
+    expect(filtered.files[0].name).toBe("file-b.ts");
+  });
+
+  it("covers workspace.read_file", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-read-file-");
+    await fs.writeFile(path.join(tempDir, "readme.txt"), "contents here");
+
+    const harness = createHarness({ workspacePath: tempDir });
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: tempDir,
+    });
+
+    const result = await dispatchCommand(
+      {
+        type: "workspace.read_file",
+        environmentId: "env-1",
+        path: "readme.txt",
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result.path).toBe("readme.txt");
+    expect(result.content).toBe("contents here");
+  });
+
+  it("rejects workspace.read_file with path traversal", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-read-escape-");
+    const harness = createHarness({ workspacePath: tempDir });
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: tempDir,
+    });
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "workspace.read_file",
+          environmentId: "env-1",
+          path: "../../../etc/passwd",
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toThrow("escapes workspace root");
+  });
 });

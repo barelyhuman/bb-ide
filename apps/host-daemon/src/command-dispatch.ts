@@ -14,6 +14,7 @@ import {
   startThread,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
+import { listWorkspaceFiles, readWorkspaceFile } from "./workspace-files.js";
 
 export {
   CommandDispatchError,
@@ -154,6 +155,14 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       >;
     case "workspace.demote":
       return demoteWorkspace(command, options.runtimeManager) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "workspace.list_files":
+      return listWorkspaceFiles(command, options.runtimeManager) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "workspace.read_file":
+      return readWorkspaceFile(command, options.runtimeManager) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
     default: {

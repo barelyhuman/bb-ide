@@ -73,6 +73,7 @@ export interface TestServer {
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
   queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope;
+  queueRawCommand(raw: unknown): number;
   sendWebSocketMessage(message: HostDaemonServerWsMessage): void;
   setWebSocketAvailable(available: boolean): void;
   closeWebSockets(): void;
@@ -95,6 +96,8 @@ export async function createTestServer(
   const events: HostDaemonEventEnvelope[] = [];
   const activeSockets = new Set<WebSocket>();
   const commands = new Map<number, HostDaemonCommandEnvelope>();
+  // Raw commands bypass Zod validation — used to test unknown command types
+  const rawCommands = new Map<number, unknown>();
   const completedCommandCursors = new Set<number>();
   const threadHighWaterMarks = {
     ...(options.threadHighWaterMarks ?? { threadA: 4 }),
@@ -138,20 +141,38 @@ export async function createTestServer(
         !completedCommandCursors.has(command.cursor),
     );
 
-    if (available.length === 0) {
+    const availableRaw = [...rawCommands.entries()]
+      .filter(
+        ([cursor]) =>
+          cursor > afterCursor && !completedCommandCursors.has(cursor),
+      )
+      .map(([, value]) => value);
+
+    const allCommands = [
+      ...available.sort((left, right) => left.cursor - right.cursor),
+      ...availableRaw,
+    ];
+
+    if (allCommands.length === 0) {
       return new Response(null, { status: 204 });
     }
 
-    return context.json(
-      hostDaemonCommandBatchSchema.parse({
-        commands: available.sort((left, right) => left.cursor - right.cursor),
-      }),
-    );
+    // Return raw JSON to avoid schema validation on the server side
+    return context.json({ commands: allCommands });
   });
   app.post("/internal/session/command-result", async (context) => {
-    const payload = hostDaemonCommandResultReportSchema.parse(
-      await context.req.json(),
-    );
+    const json = await context.req.json();
+    // Accept both known (schema-validated) and unknown command type results.
+    // Unknown command error reports have a type not in the discriminated union,
+    // so we store the raw JSON and skip Zod validation when parsing fails.
+    let payload: HostDaemonCommandResultReport;
+    const schemaResult = hostDaemonCommandResultReportSchema.safeParse(json);
+    if (schemaResult.success) {
+      payload = schemaResult.data;
+    } else {
+      // Store as-is for unknown command error reports
+      payload = json as HostDaemonCommandResultReport;
+    }
     commandResultReports.push(payload);
     commandResultAttemptCount += 1;
     if (commandResultAttemptCount <= (options.commandResultFailures ?? 0)) {
@@ -253,6 +274,12 @@ export async function createTestServer(
       commands.set(nextCursor, envelope);
       nextCursor += 1;
       return envelope;
+    },
+    queueRawCommand(raw: unknown): number {
+      const cursor = nextCursor;
+      rawCommands.set(cursor, raw);
+      nextCursor += 1;
+      return cursor;
     },
     sendWebSocketMessage(message: HostDaemonServerWsMessage): void {
       const encoded = JSON.stringify(hostDaemonServerWsMessageSchema.parse(message));

@@ -40,6 +40,8 @@ export {
   workspaceDemoteCommandSchema,
   workspacePromoteCommandSchema,
   workspaceResetCommandSchema,
+  workspaceListFilesCommandSchema,
+  workspaceReadFileCommandSchema,
   workspaceSquashMergeCommandSchema,
   workspaceStatusCommandSchema,
 } from "./commands.js";

@@ -123,6 +123,11 @@ These apply to all code written during the rebuild.
 - **Exhaustive switches on discriminated unions.** Command dispatch, route handling, and similar switch statements on a union type must include `default: { const _exhaustive: never = value; throw new Error(...); }`. This catches missing handlers at compile time when a new variant is added to the union.
 - **Shared test fixtures.** Test doubles (fake servers, fake adapters) should live in `test/helpers/` and be imported. Do not copy-paste fixture code across test files — a single source of truth prevents drift and keeps tests maintainable.
 
+### Stub routes
+
+- **501 for unimplemented routes, never fake data.** If a route exists in the contract but cannot be implemented yet (missing daemon command, deferred feature), return `501` with `{ code: "unsupported_operation", message: "..." }`. Never return hardcoded fake data, empty arrays pretending to be real results, or stub factory objects. A 501 is honest — consumers know the feature doesn't work yet. An empty array or fake object looks like a working route that returned no data, which is a lie that hides bugs.
+- **Document why a route is 501.** Add a comment: `// 501: needs workspace.list_files daemon command (Phase 5b)` or `// 501: deferred feature`. This makes it obvious what needs to happen to implement the route.
+
 ### Scope discipline
 
 - **No backward-compat aliases.** When renaming a type, route, or function, use only the new name.
@@ -327,16 +332,54 @@ All request parsing uses Zod schemas from `@bb/server-contract`. Data functions 
 
 Thread creation with ephemeral hosts calls `provisionHost()` from `@bb/sandbox-host`. In Phase 6, this uses the stub (throws not-implemented for `sandbox-host` type threads). The real implementation comes in Phase 8.
 
+**Route implementation guide:** Every route in the server contract must be implemented. No returning fake data — if a route can't be implemented yet, return 501 (see Stub Routes principle). Here is the breakdown:
+
+**DB read/write routes (implement with existing `@bb/db` functions):**
+- Projects: GET/POST/PATCH/DELETE `/projects`, `/projects/:id`, project source CRUD
+- Hosts: GET `/hosts`, `/hosts/:id`
+- Environments: GET `/environments`, `/environments/:id`
+- Threads: GET/POST/PATCH/DELETE `/threads`, `/threads/:id`
+- Thread actions: POST archive, unarchive, read, unread (all DB writes via `archiveThread`, `unarchiveThread`, `updateThread`)
+- Thread data: GET events, timeline, timeline/tool-details, output (all via `listEvents` + transformation)
+- Thread data: GET default-execution-options (derive from thread/project config)
+- Drafts: POST/DELETE `/threads/:id/drafts`, `/threads/:id/drafts/:draftId`, POST send
+
+**Routes that queue daemon commands (implement, command types exist):**
+- POST `/threads` (creates thread + queues `environment.provision` and/or `thread.start`)
+- POST `/threads/:id/send` (queues `turn.run` or `turn.steer`)
+- POST `/threads/:id/stop` (queues `thread.stop`)
+- POST `/environments/:id/actions` (queues `workspace.commit`, `workspace.promote`, etc.)
+- GET `/environments/:id/status` (queues `workspace.status`)
+- GET `/environments/:id/diff` (queues `workspace.diff`)
+- GET `/system/models`, `/system/providers` (queues `provider.list_models`)
+- POST `/projects/:id/managers` (creates manager thread, same flow as thread creation)
+
+**Important: unmanaged workspace provisioning MUST go through the daemon.** The server queues `environment.provision` with mode `unmanaged` — the daemon validates the path exists and discovers git properties. The server must NOT do filesystem I/O directly.
+
+**Routes that return 501 (need daemon commands that don't exist yet or deferred features):**
+- GET `/threads/:id/workspace/files` — needs `workspace.list_files` (exists in contract but server-side command queue/response flow needed)
+- GET `/threads/:id/workspace/file` — needs `workspace.read_file` (same)
+- GET `/environments/:id/diff/branches` — needs `workspace.list_branches` (not in contract yet)
+- GET `/projects/:id/files` — needs daemon file listing
+- POST `/projects/:id/attachments`, GET `/projects/:id/attachments/content` — file upload, deferred
+- POST `/system/voice-transcription` — deferred
+- POST `/system/shutdown` — implement in Phase 7 integration
+
 **Tests (use `app.request()` with in-memory DB + real hub):**
-- [ ] `POST /threads` with `{ type: "host", workspace: { type: "unmanaged" } }` → env(provisioning), provision validates path, env(ready), thread created
+- [ ] `POST /threads` with `{ type: "host", workspace: { type: "unmanaged" } }` → env(provisioning), provision command queued to daemon
 - [ ] `POST /threads` with `{ type: "host", workspace: { type: "managed-worktree" } }` → env(provisioning), provision command queued
 - [ ] `POST /threads` with `{ type: "sandbox-host" }` → returns 501 (not implemented, until Phase 8)
 - [ ] `POST /threads` with `{ type: "reuse", environmentId }` → existing env, thread created
 - [ ] `POST /threads/:id/send` idle → active, turn.run queued
 - [ ] `POST /threads/:id/send` active + steer → turn.steer queued
-- [ ] `POST /environments/:id/actions` commit → command queued
-- [ ] `POST /environments/:id/actions` promote → promote command queued
-- [ ] CRUD for projects, hosts
+- [ ] `POST /threads/:id/stop` → thread.stop queued
+- [ ] `POST /threads/:id/archive` → archivedAt set
+- [ ] `POST /threads/:id/unarchive` → archivedAt cleared
+- [ ] `GET /threads/:id/events` → returns events from DB
+- [ ] `POST /environments/:id/actions` commit → workspace.commit command queued
+- [ ] `POST /environments/:id/actions` promote → workspace.promote command queued
+- [ ] CRUD for projects, project sources, hosts
+- [ ] 501 routes return structured error with `unsupported_operation` code
 
 ### 6d. Internal API routes
 
@@ -347,6 +390,12 @@ apps/server/src/internal/
 ```
 
 Session open, command fetch/result, event ingestion, tool calls, reconciliation.
+
+**Key correctness requirements (all three Phase 6 attempts got these wrong):**
+- **Heartbeat messages must update the session.** When the daemon sends `{ type: "heartbeat", bufferDepth, lastCommandCursor }` over the WS, the server must update `lastHeartbeatAt` and `leaseExpiresAt` on the session record. Without this, lease timeout sweeps will kill live sessions.
+- **Server-side cursor tracking must NOT advance past incomplete commands.** The `setCursor` call must only advance when all prior commands have completed. Do NOT use `Math.max(getCursor, report.cursor)` — this skips commands that complete out of order, violating the at-least-once delivery guarantee.
+- **Use the real `NotificationHub` for command result recording.** Don't pass noop notifiers to `setCursor` or data functions called during command result handling — the hub must fire `notifyCommand` and `notifyThread` so WS clients get real-time updates.
+- **Reconciliation queries must be efficient.** Do NOT load all environments and all threads into memory then filter in JS. Use targeted queries with WHERE clauses joining environments to the host. This is O(host's environments) not O(all environments).
 
 **Tests (use `app.request()`):**
 - [ ] Session open creates host + session, returns sessionId

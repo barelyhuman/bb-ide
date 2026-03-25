@@ -31,6 +31,8 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.checkpoint",
   "workspace.promote",
   "workspace.demote",
+  "workspace.list_files",
+  "workspace.read_file",
 ] as const;
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
@@ -167,6 +169,18 @@ export const workspaceDemoteCommandSchema = hostDaemonEnvironmentTargetSchema.ex
   envBranch: z.string().min(1),
 });
 
+const hostDaemonWorkspaceTargetSchema = hostDaemonEnvironmentTargetSchema;
+
+export const workspaceListFilesCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
+  type: z.literal("workspace.list_files"),
+  query: z.string().optional(),
+});
+
+export const workspaceReadFileCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
+  type: z.literal("workspace.read_file"),
+  path: z.string().min(1),
+});
+
 export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
   threadResumeCommandSchema,
@@ -185,6 +199,8 @@ export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
   workspaceCheckpointCommandSchema,
   workspacePromoteCommandSchema,
   workspaceDemoteCommandSchema,
+  workspaceListFilesCommandSchema,
+  workspaceReadFileCommandSchema,
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 
@@ -232,6 +248,13 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.demote": z.object({
     ok: z.boolean(),
+  }),
+  "workspace.list_files": z.object({
+    files: z.array(z.object({ path: z.string(), name: z.string() })),
+  }),
+  "workspace.read_file": z.object({
+    path: z.string(),
+    content: z.string(),
   }),
 } as const satisfies Record<HostDaemonCommandType, z.ZodTypeAny>;
 

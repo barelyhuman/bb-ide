@@ -28,4 +28,16 @@ export const workspaceTestAliases = {
   "@bb/logger": path.resolve(repoRoot, "packages/logger/src/index.ts"),
   "@bb/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
   "@bb/workspace": path.resolve(repoRoot, "packages/workspace/src/index.ts"),
+  "@bb/sandbox-host": path.resolve(
+    repoRoot,
+    "packages/sandbox-host/src/index.ts",
+  ),
+  "@bb/config/server": path.resolve(
+    repoRoot,
+    "packages/config/src/server.ts",
+  ),
+  "@bb/server-contract": path.resolve(
+    repoRoot,
+    "packages/server-contract/src/index.ts",
+  ),
 } as const;
