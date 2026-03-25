@@ -131,14 +131,7 @@ export type HostDaemonToolCallResponse = z.infer<
 
 export type HostDaemonInternalSchema = {
   "/session/open": {
-    /**
-     * Daemon opens a session with the server.
-     * Server upserts the host record, creates a new session, and closes any existing session
-     * for the same hostId (sends `session-close` with reason "replaced" over the old WS).
-     * Runs reconciliation: compares the daemon's reported `activeThreads` against DB state.
-     * Returns sessionId, heartbeat config (intervalMs, leaseTimeoutMs), and
-     * threadHighWaterMarks for event deduplication.
-     */
+    /** Used by the daemon to establish a session with the server. Replaces any prior session for the same host. */
     $post: Endpoint<
       { json: HostDaemonSessionOpenRequest },
       HostDaemonSessionOpenResponse,
@@ -146,50 +139,27 @@ export type HostDaemonInternalSchema = {
     >;
   };
   "/session/commands": {
-    /**
-     * Daemon polls for pending commands.
-     * Long-poll: if no commands are available and `waitMs > 0`, the server holds the request
-     * open up to `waitMs` milliseconds waiting for a commands-available notification.
-     * Returns 204 if the timeout expires with no commands. Supports cursor-based pagination
-     * via `afterCursor` and `limit`.
-     */
+    /** Used by the daemon to fetch pending commands. Supports long-poll via `waitMs`. */
     $get:
       | Endpoint<{ query: HostDaemonCommandsQuery }, HostDaemonCommandBatch, 200>
       | Endpoint<{ query: HostDaemonCommandsQuery }, undefined, 204>;
   };
   "/session/command-result": {
-    /**
-     * Daemon reports command completion.
-     * Handles provisioning results: success transitions environment to ready, failure
-     * transitions environment+thread to error state. On provision success with pending
-     * thread input, queues `thread.start` as a follow-up command.
-     * Updates the server-side cursor (contiguous advancement only).
-     * Side effects: fires WS notifications to connected clients.
-     */
+    /** Used by the daemon to report that a command has completed (success or error). */
     $post: Endpoint<
       { json: z.infer<typeof hostDaemonCommandResultReportSchema> },
       { ok: true }
     >;
   };
   "/session/events": {
-    /**
-     * Daemon posts a batch of thread events.
-     * Server deduplicates events by (threadId, sequence) -- re-posting an already-stored
-     * sequence is silently ignored. Returns threadHighWaterMarks for acknowledgment.
-     * Side effects: `turn/completed` events transition the thread to idle; if the thread
-     * is a child of a manager, notifies the parent thread.
-     */
+    /** Used by the daemon to stream provider events (turn progress, completions, errors) back to the server. */
     $post: Endpoint<
       { json: HostDaemonEventBatchRequest },
       HostDaemonEventBatchResponse
     >;
   };
   "/session/tool-call": {
-    /**
-     * Daemon proxies a tool call to the server for execution.
-     * Currently only `spawn_thread` is supported -- creates a child thread that reuses
-     * the parent's environment. The server executes the tool call and returns the result.
-     */
+    /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. spawn_thread). */
     $post: Endpoint<
       { json: HostDaemonToolCallRequest },
       HostDaemonToolCallResponse

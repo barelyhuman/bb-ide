@@ -231,7 +231,8 @@ export type PublicApiSchema = {
   "/threads/:id/archive": {
     /**
      * Archive a thread. Rejects if uncommitted work exists (unless force=true).
-     * Stops the thread if active. Cleans up managed environments with no remaining threads.
+     * Stops the thread if active. If its managed environment now has zero
+     * non-archived threads, destroys the environment.
      */
     $post: Endpoint<PathId & { json: { force?: boolean } }, { ok: true }>;
   };
@@ -278,6 +279,7 @@ export type PublicApiSchema = {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
   "/threads/:id/default-execution-options": {
+    /** Returns the model, reasoning level, and sandbox mode to pre-fill for the next message. */
     $get: Endpoint<PathId, ThreadExecutionOptions | null>;
   };
   "/threads/:id/workspace/files": {

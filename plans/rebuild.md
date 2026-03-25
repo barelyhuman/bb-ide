@@ -296,6 +296,18 @@ These are implementation requirements documented here so they're built correctly
 
 **Timeline transformation.** `GET /threads/:id/timeline` and `/timeline/tool-details` use `toViewMessages()` and `buildTimelineRows()` from `@bb/core-ui`. These are pure functions: read events from DB → transform → return. No daemon involvement.
 
+### Non-obvious requirements
+
+These are behaviors that aren't obvious from the route definitions alone:
+
+- **Attachments** are stored on the server filesystem at `$BB_DATA_DIR/attachments/<projectId>/`. Max 25MB (10MB for images). Sanitize filenames. Path traversal protection on reads. Clean up on project deletion.
+- **Thread rename** triggers a `thread.rename` daemon command in addition to the DB update — so the provider session knows the new title. This applies to both manual renames (PATCH /threads/:id) and auto-generated titles.
+- **Default project source.** Routes that aren't scoped to a specific environment or host (e.g., `GET /projects/:id/files`) should resolve the project's default source (the one with `isDefault = true`) to determine which host to query.
+- **Disconnected host error.** When a route needs to send a command to a host that is not connected, return a consistent error: `ApiError(502, "host_disconnected", "Host is not connected")`. All daemon-proxied routes should go through the same code path (`queueCommandAndWait`) so this check is centralized.
+- **Thread title generation.** When a thread is created with input and no explicit title, generate one asynchronously using `@mariozechner/pi-ai` + the `codexRunMetadata` template from `@bb/templates`. Set `titleFallback` synchronously from the first prompt text. Don't block thread creation on title generation.
+- **Pending input after provisioning.** When `environment.provision` succeeds and the thread has queued input, the server must queue `thread.start` as a follow-up. This happens in the command-result handler, not at thread creation time.
+- **Archive with cleanup.** Archiving a thread stops it if active. If the thread's environment is managed and now has zero non-archived threads, queues `environment.destroy`.
+
 ### 6a. Server skeleton + middleware
 
 **Implementation:**
