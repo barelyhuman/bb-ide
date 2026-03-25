@@ -4,11 +4,9 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Start Here
 
-**Phases 1–5 are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors. The host-daemon is built with full test coverage. The sandbox-host stub is on main.
+**Phases 1–5b are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors. The host-daemon is built with full test coverage. The sandbox-host stub is on main. All contract gaps are resolved.
 
-**Next phase: Phase 5b** — Contract fixes and pre-server prerequisites. Adds missing daemon command (`provider.list`), host status field + app atoms. Must land on main before Phase 6.
-
-**Then: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
+**Next phase: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
 
 **Then: Phase 7** — Integration & QA for persistent-host workflows (server + daemon).
 
@@ -18,7 +16,7 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Current State
 
-Phases 1–5 are complete. The host-daemon and sandbox-host stub are built and merged. This plan covers what remains.
+Phases 1–5b are complete. The host-daemon, sandbox-host stub, and all contract fixes are built and merged. This plan covers what remains.
 
 ### What exists today
 
@@ -270,39 +268,9 @@ Stub package with `provisionHost` and `SandboxHost` interface. All methods throw
 
 ## Phase 5b: Contract fixes and pre-server prerequisites
 
-Fix contract gaps and add missing daemon commands. These must land on main before the server build starts. Items that require the server package are documented as Phase 6 implementation requirements, not 5b.
+**Status:** Complete ✅
 
-### 5b-1. Add `provider.list` daemon command
-
-The server needs to list available providers but cannot import `@bb/agent-runtime`. Add a new daemon command `provider.list` that returns `ProviderInfo[]` (id, displayName, capabilities, available). The daemon calls `listAvailableProviderInfos()` from `@bb/agent-runtime` and returns the result.
-
-**Implementation:**
-- `packages/host-daemon-contract/src/commands.ts` — add `provider.list` command schema and result schema
-- `apps/host-daemon/src/command-dispatch.ts` — add dispatch case
-- `packages/server-contract/src/api-types.ts` — add `available: z.boolean()` to `systemProviderInfoSchema`
-- Tests for the new command
-
-### 5b-2. Add derived `status` field to Host type
-
-The server needs to return host connection status. Add `status: "connected" | "disconnected" | "suspended"` to the host schema. This is computed at query time (not stored in the DB) — the server derives it from `host_daemon_sessions` (active session with current heartbeat = connected).
-
-**Implementation:**
-- `packages/domain/src/host.ts` — add `status` field to `hostSchema` (with `z.enum(["connected", "disconnected", "suspended"])`)
-- The server (Phase 6) computes this when serving `GET /hosts` and `GET /hosts/:id`
-- `apps/app` — add `hostsAtom` (jotai), `useHosts()` hook, update `useHostDaemon` to expose `localHost` and `isLocalHostConnected`
-- Wire WS invalidation: system `host-connected`/`host-disconnected` changes trigger hosts refetch
-
-### 5b-3. Remove dead routes from contract
-
-Already done: `POST /system/shutdown` and `GET /system/providers/:id` removed from contract and callers.
-
-**Validation (entire Phase 5b):**
-- [ ] `pnpm exec turbo run typecheck` — all packages clean
-- [ ] `pnpm exec turbo run test` — all tests pass
-- [ ] `provider.list` daemon command works and returns provider info
-- [ ] Host schema has `status` field
-- [ ] App hosts atom fetches and updates on WS changes
-- [ ] No import of `@bb/agent-runtime` from server
+Added `provider.list` daemon command (21 total), host `status` field (connected/disconnected/suspended, derived not stored), app host tracking atoms. Removed dead routes (`POST /system/shutdown`, `GET /system/providers/:id`). `ProviderInfo` schema lives in `@bb/domain` — no cross-contract dependencies.
 
 ---
 
