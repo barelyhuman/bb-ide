@@ -30,7 +30,6 @@ vi.mock("../daemon.js", () => ({
 import { createClient, unwrap } from "../client.js";
 import { registerEnvironmentCommands } from "../commands/environment.js";
 import { registerManagerCommands } from "../commands/manager.js";
-import { registerServerCommands } from "../commands/server.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerProviderCommands } from "../commands/provider.js";
 import { registerStatusCommand } from "../commands/status.js";
@@ -990,46 +989,6 @@ describe("CLI command output contracts", () => {
     });
   });
 
-  it("bb server restart requests server shutdown", async () => {
-    const shutdownPost = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          ok: true,
-          forced: false,
-          blockingThreadsCount: 0,
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            shutdown: {
-              $post: shutdownPost,
-            },
-          },
-        },
-      },
-    }));
-    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
-      const response = await responsePromise as Response;
-      return response.json();
-    });
-
-    await runCommand(["server", "restart"], (program) =>
-      registerServerCommands(program, () => "http://server"),
-    );
-
-    expect(shutdownPost).toHaveBeenCalledWith({
-      json: {},
-    });
-    const lines = collectLogLines(vi.mocked(console.log));
-    expect(lines).toContain("Server shutdown requested.");
-  });
-
   it("bb environment commit prefixes failures with environment context", async () => {
     const post = vi.fn(async () => {
       throw new Error("HTTP 500: boom");
@@ -1095,44 +1054,6 @@ describe("CLI command output contracts", () => {
     expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
   });
 
-  it("bb server restart exits when shutdown is blocked by active work", async () => {
-    const shutdownPost = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          code: "shutdown_blocked",
-          message: "Server shutdown blocked by active thread work",
-          blockingThreads: [
-            { id: "thread-1", status: "active", projectId: "proj-1" },
-          ],
-        }),
-        {
-          status: 409,
-          headers: { "Content-Type": "application/json" },
-        },
-      ));
-    vi.mocked(createClient).mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            shutdown: {
-              $post: shutdownPost,
-            },
-          },
-        },
-      },
-    }));
-
-    await expect(
-      runCommand(["server", "restart"], (program) =>
-        registerServerCommands(program, () => "http://server"),
-      ),
-    ).rejects.toThrow("process.exit:1");
-
-    const errorLines = collectLogLines(vi.mocked(console.error));
-    expect(errorLines).toContain("Server shutdown blocked by active thread work");
-    expect(errorLines).toContain("Blocking threads:");
-    expect(errorLines).toContain("- thread-1 (active, project proj-1)");
-  });
 });
 
 describe("CLI JSON output contracts", () => {

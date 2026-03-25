@@ -35,9 +35,6 @@ import type {
   SendMessageRequest,
   SystemConfigResponse,
   SystemProviderInfo,
-  SystemShutdownAcceptedResponse,
-  SystemShutdownBlockedResponse,
-  SystemShutdownRequest,
   SystemVoiceTranscriptionResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -263,17 +260,6 @@ export type PublicApiSchema = {
       { query?: { hostId?: string; environmentId?: string } },
       SystemProviderInfo[]
     >;
-  };
-  "/system/providers/:id": {
-    $get: Endpoint<
-      PathId & { query?: { hostId?: string; environmentId?: string } },
-      SystemProviderInfo
-    >;
-  };
-  "/system/shutdown": {
-    $post:
-      | Endpoint<{ json: SystemShutdownRequest }, SystemShutdownAcceptedResponse, 200>
-      | Endpoint<{ json: SystemShutdownRequest }, SystemShutdownBlockedResponse, 409>;
   };
   "/system/voice-transcription": {
     $post: Endpoint<{ form: Record<string, string | Blob> }, SystemVoiceTranscriptionResponse>;

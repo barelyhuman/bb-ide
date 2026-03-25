@@ -9,7 +9,6 @@ import {
   serviceTierSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
-  threadStatusSchema,
   threadTypeSchema,
   viewMessageSchema,
   workspaceStatusSchema,
@@ -303,32 +302,6 @@ export const systemProviderInfoSchema = z.object({
   capabilities: providerCapabilitiesSchema,
 });
 export type SystemProviderInfo = z.infer<typeof systemProviderInfoSchema>;
-
-export const systemShutdownRequestSchema = z.object({
-  force: z.boolean().optional(),
-});
-export type SystemShutdownRequest = z.infer<typeof systemShutdownRequestSchema>;
-
-export const systemShutdownAcceptedResponseSchema = z.object({
-  ok: z.literal(true),
-  forced: z.boolean(),
-  blockingThreadsCount: z.number(),
-});
-export type SystemShutdownAcceptedResponse = z.infer<typeof systemShutdownAcceptedResponseSchema>;
-
-export const systemShutdownBlockingThreadSchema = z.object({
-  id: z.string(),
-  projectId: z.string(),
-  status: threadStatusSchema,
-});
-export type SystemShutdownBlockingThread = z.infer<typeof systemShutdownBlockingThreadSchema>;
-
-export const systemShutdownBlockedResponseSchema = z.object({
-  code: z.literal("shutdown_blocked"),
-  message: z.string(),
-  blockingThreads: z.array(systemShutdownBlockingThreadSchema),
-});
-export type SystemShutdownBlockedResponse = z.infer<typeof systemShutdownBlockedResponseSchema>;
 
 export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),

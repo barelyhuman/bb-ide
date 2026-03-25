@@ -29,10 +29,6 @@ import type {
   CreateThreadRequest,
   SquashMergeOptions,
   SystemProviderInfo,
-  SystemShutdownAcceptedResponse,
-  SystemShutdownBlockedResponse,
-  SystemShutdownBlockingThread,
-  SystemShutdownRequest,
   SystemVoiceTranscriptionResponse,
   SendMessageRequest,
   ThreadTimelineResponse,
@@ -58,21 +54,6 @@ function normalizeErrorText(raw: string): string {
 
 function requestOptions(signal?: AbortSignal) {
   return signal ? { init: { signal } } : undefined;
-}
-
-class SystemShutdownBlockedError extends Error {
-  code: "shutdown_blocked";
-  blockingThreads: SystemShutdownBlockingThread[];
-
-  constructor(
-    message: string,
-    blockingThreads: SystemShutdownBlockingThread[],
-  ) {
-    super(message);
-    this.name = "SystemShutdownBlockedError";
-    this.code = "shutdown_blocked";
-    this.blockingThreads = blockingThreads;
-  }
 }
 
 export class HttpError extends Error {
@@ -592,24 +573,4 @@ export async function listEnvironments(projectId?: string): Promise<Environment[
       },
     }),
   );
-}
-
-function isShutdownBlocked(
-  body: SystemShutdownAcceptedResponse | SystemShutdownBlockedResponse,
-): body is SystemShutdownBlockedResponse {
-  return "code" in body && body.code === "shutdown_blocked";
-}
-
-export async function shutdownServer(
-  req: SystemShutdownRequest = {},
-): Promise<SystemShutdownAcceptedResponse> {
-  const res = await apiClient.system.shutdown.$post({ json: req });
-  if (!res.ok && res.status !== 409) {
-    await throwHttpError(res);
-  }
-  const body = await res.json();
-  if (isShutdownBlocked(body)) {
-    throw new SystemShutdownBlockedError(body.message, body.blockingThreads);
-  }
-  return body;
 }

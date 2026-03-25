@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { registerServerCommands } from "./commands/server.js";
 import { registerEnvironmentCommands } from "./commands/environment.js";
 import { registerGuideCommand } from "./commands/guide.js";
 import { registerManagerCommands } from "./commands/manager.js";
@@ -51,7 +50,6 @@ registerProviderCommands(program, getUrl);
 registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
 registerEnvironmentCommands(program, getUrl);
-registerServerCommands(program, getUrl);
 registerGuideCommand(program);
 
 program.parseAsync(normalizeCliArgv(process.argv)).catch((err) => {
