@@ -53,7 +53,8 @@ export function usePromptMentions(
   },
 ) {
   const [query, setQuery] = useState<string | null>(null);
-  const [debouncedQuery] = useDebounceValue(query, FILE_MENTION_DEBOUNCE_MS);
+  const [debouncedNonNull] = useDebounceValue(query, FILE_MENTION_DEBOUNCE_MS);
+  const debouncedQuery = query === null ? null : debouncedNonNull;
   const [staleSuggestions, setStaleSuggestions] = useState<PromptMentionSuggestion[]>([]);
 
   const search = useProjectFileSuggestions(

@@ -10,7 +10,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { FormError } from "@/components/shared/FormError"
 import { threadTypeLabel } from "@/lib/thread-title"
 
 export interface ThreadRenameDialogTarget {
@@ -100,7 +99,9 @@ function ThreadRenameDialogContent({
               }
             }}
           />
-          <FormError message={validationMessage} className="px-0 py-0 border-0 bg-transparent" />
+          {validationMessage ? (
+            <p className="text-sm text-destructive">{validationMessage}</p>
+          ) : null}
         </div>
         <DialogFooter>
           <Button type="submit" disabled={pending}>

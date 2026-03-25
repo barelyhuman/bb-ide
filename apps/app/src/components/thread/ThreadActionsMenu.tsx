@@ -17,9 +17,9 @@ interface ThreadActionsMenuProps {
   onRename: () => void
   onToggleArchive: () => void
   onDelete?: () => void
-  debugToggleLabel?: string
-  debugToggleChecked?: boolean
-  onDebugToggleCheckedChange?: (checked: boolean) => void
+  viewerToggleLabel?: string
+  viewerToggleChecked?: boolean
+  onViewerToggleCheckedChange?: (checked: boolean) => void
   isRead: boolean
   isArchived: boolean
   onOpenChange?: (open: boolean) => void
@@ -34,9 +34,9 @@ export function ThreadActionsMenu({
   onRename,
   onToggleArchive,
   onDelete,
-  debugToggleLabel,
-  debugToggleChecked,
-  onDebugToggleCheckedChange,
+  viewerToggleLabel,
+  viewerToggleChecked,
+  onViewerToggleCheckedChange,
   isRead,
   isArchived,
   onOpenChange,
@@ -112,20 +112,20 @@ export function ThreadActionsMenu({
             Delete
           </DropdownMenuItem>
         ) : null}
-        {debugToggleLabel && onDebugToggleCheckedChange ? (
+        {viewerToggleLabel && onViewerToggleCheckedChange ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuCheckboxItem
               disabled={disabled}
-              checked={debugToggleChecked}
+              checked={viewerToggleChecked}
               onCheckedChange={(checked) => {
-                onDebugToggleCheckedChange(checked === true)
+                onViewerToggleCheckedChange(checked === true)
               }}
               onSelect={(event) => {
                 event.preventDefault()
               }}
             >
-              {debugToggleLabel}
+              {viewerToggleLabel}
             </DropdownMenuCheckboxItem>
           </>
         ) : null}

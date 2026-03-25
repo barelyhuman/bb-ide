@@ -610,7 +610,7 @@ export function useThreadTimeline(
     enabled?: boolean;
     limit?: number;
     refetchOnMount?: boolean | "always";
-    includeManagerDebugView?: boolean;
+    includeManagerWorkspaceViewer?: boolean;
   },
 ) {
   return useQuery<ThreadTimelineResponse>({
@@ -618,14 +618,14 @@ export function useThreadTimeline(
       "threadTimeline",
       id,
       options?.limit ?? null,
-      options?.includeManagerDebugView ?? false,
+      options?.includeManagerWorkspaceViewer ?? false,
     ],
     queryFn: () =>
       api.getThreadTimeline(
         id,
         options?.limit,
         false,
-        options?.includeManagerDebugView ?? false,
+        options?.includeManagerWorkspaceViewer ?? false,
       ),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
@@ -641,20 +641,20 @@ export function useThreadTimelineToolDetails() {
       turnId,
       sourceSeqStart,
       sourceSeqEnd,
-      includeManagerDebugView,
+      includeManagerWorkspaceViewer,
     }: {
       id: string;
       turnId: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
-      includeManagerDebugView?: boolean;
+      includeManagerWorkspaceViewer?: boolean;
     }): Promise<TimelineToolDetailsResponse> =>
       api.getThreadTimelineToolDetails(
         id,
         turnId,
         sourceSeqStart,
         sourceSeqEnd,
-        includeManagerDebugView ?? false,
+        includeManagerWorkspaceViewer ?? false,
       ),
   });
 }

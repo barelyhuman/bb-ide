@@ -5,25 +5,30 @@ import {
   useThreadManagerWorkspaceFiles,
 } from "../hooks/useApi";
 
-const MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX = "thread-manager-debug-view:";
+const LEGACY_MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX = "thread-manager-debug-view:";
+const MANAGER_WORKSPACE_VIEWER_STORAGE_KEY_PREFIX = "thread-manager-workspace-viewer:";
 
-interface UseThreadDebugViewParams {
+interface UseManagerWorkspaceViewerParams {
   threadId?: string;
   threadType?: ThreadType;
 }
 
-type DebugViewToggleHandler = (checked: boolean) => void;
+type ManagerWorkspaceViewerToggleHandler = (checked: boolean) => void;
 
-function getManagerDebugViewStorageKey(threadId: string) {
-  return `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`;
+function getManagerWorkspaceViewerStorageKey(threadId: string) {
+  return `${MANAGER_WORKSPACE_VIEWER_STORAGE_KEY_PREFIX}${threadId}`;
 }
 
-export function useThreadDebugView({
+function getLegacyManagerWorkspaceViewerStorageKey(threadId: string) {
+  return `${LEGACY_MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`;
+}
+
+export function useManagerWorkspaceViewer({
   threadId,
   threadType,
-}: UseThreadDebugViewParams) {
+}: UseManagerWorkspaceViewerParams) {
   const isManagerThread = threadType === "manager";
-  const [showManagerDebugView, setShowManagerDebugView] = useState(false);
+  const [showManagerWorkspaceViewer, setShowManagerWorkspaceViewer] = useState(false);
   const [selectedManagerWorkspacePath, setSelectedManagerWorkspacePath] =
     useState<string | null>(null);
   const { data: managerWorkspaceFiles } = useThreadManagerWorkspaceFiles(
@@ -53,30 +58,33 @@ export function useThreadDebugView({
     }
 
     if (!threadId || !isManagerThread) {
-      setShowManagerDebugView(false);
+      setShowManagerWorkspaceViewer(false);
       return;
     }
 
-    const rawValue = window.localStorage.getItem(
-      getManagerDebugViewStorageKey(threadId),
-    );
-    setShowManagerDebugView(rawValue === "true");
+    const rawValue =
+      window.localStorage.getItem(getManagerWorkspaceViewerStorageKey(threadId)) ??
+      window.localStorage.getItem(getLegacyManagerWorkspaceViewerStorageKey(threadId));
+    setShowManagerWorkspaceViewer(rawValue === "true");
   }, [isManagerThread, threadId]);
 
-  const handleManagerDebugViewChange: DebugViewToggleHandler = useCallback(
+  const handleManagerWorkspaceViewerChange: ManagerWorkspaceViewerToggleHandler = useCallback(
     (checked) => {
-      setShowManagerDebugView(checked);
+      setShowManagerWorkspaceViewer(checked);
       if (typeof window === "undefined" || !threadId || !isManagerThread) {
         return;
       }
 
-      const storageKey = getManagerDebugViewStorageKey(threadId);
+      const storageKey = getManagerWorkspaceViewerStorageKey(threadId);
+      const legacyStorageKey = getLegacyManagerWorkspaceViewerStorageKey(threadId);
       if (checked) {
         window.localStorage.setItem(storageKey, "true");
+        window.localStorage.removeItem(legacyStorageKey);
         return;
       }
 
       window.localStorage.removeItem(storageKey);
+      window.localStorage.removeItem(legacyStorageKey);
     },
     [isManagerThread, threadId],
   );
@@ -102,7 +110,7 @@ export function useThreadDebugView({
 
   return {
     effectiveManagerWorkspacePath,
-    handleManagerDebugViewChange,
+    handleManagerWorkspaceViewerChange,
     isManagerThread,
     isManagerWorkspaceFileLoading,
     managerWorkspaceFile,
@@ -110,6 +118,6 @@ export function useThreadDebugView({
     managerWorkspaceFiles,
     selectedManagerWorkspacePath,
     setSelectedManagerWorkspacePath,
-    showManagerDebugView,
+    showManagerWorkspaceViewer,
   };
 }

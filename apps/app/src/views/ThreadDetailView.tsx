@@ -71,7 +71,7 @@ import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
-import { useThreadDebugView } from "./useThreadDebugView";
+import { useManagerWorkspaceViewer } from "./useManagerWorkspaceViewer";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
 import { useThreadMergeBase } from "./useThreadMergeBase";
 import { useThreadReadTracking } from "./useThreadReadTracking";
@@ -181,15 +181,15 @@ export function ThreadDetailView() {
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const {
-    handleManagerDebugViewChange,
+    handleManagerWorkspaceViewerChange,
     isManagerWorkspaceFileLoading,
     managerWorkspaceFile,
     managerWorkspaceFileError,
     managerWorkspaceFiles,
     selectedManagerWorkspacePath,
     setSelectedManagerWorkspacePath,
-    showManagerDebugView,
-  } = useThreadDebugView({
+    showManagerWorkspaceViewer,
+  } = useManagerWorkspaceViewer({
     threadId,
     threadType: thread?.type,
   });
@@ -205,7 +205,7 @@ export function ThreadDetailView() {
     threadId ?? "",
     {
       refetchOnMount: "always",
-      includeManagerDebugView: showManagerDebugView,
+      includeManagerWorkspaceViewer: showManagerWorkspaceViewer,
     },
   );
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -362,7 +362,7 @@ export function ThreadDetailView() {
     loadToolGroupMessages: (args) =>
       timelineToolDetails.mutateAsync({
         ...args,
-        includeManagerDebugView: showManagerDebugView,
+        includeManagerWorkspaceViewer: showManagerWorkspaceViewer,
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
@@ -883,10 +883,10 @@ export function ThreadDetailView() {
       onDelete={() => {
         threadDeleteDialog.onOpen(thread);
       }}
-      debugToggleLabel={isManagerThread ? "Show all events" : undefined}
-      debugToggleChecked={isManagerThread ? showManagerDebugView : undefined}
-      onDebugToggleCheckedChange={
-        isManagerThread ? handleManagerDebugViewChange : undefined
+      viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
+      viewerToggleChecked={isManagerThread ? showManagerWorkspaceViewer : undefined}
+      onViewerToggleCheckedChange={
+        isManagerThread ? handleManagerWorkspaceViewerChange : undefined
       }
       isArchived={thread.archivedAt != null}
       threadType={thread.type}

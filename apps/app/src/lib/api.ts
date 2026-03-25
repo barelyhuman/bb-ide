@@ -516,15 +516,15 @@ export async function getThreadTimeline(
   id: string,
   limit?: number,
   includeToolGroupMessages: boolean = false,
-  includeManagerDebugView: boolean = false,
+  includeManagerWorkspaceViewer: boolean = false,
 ): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
         ...(limit !== undefined ? { limit: String(limit) } : {}),
-        ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" as const } : {}),
-        ...(includeManagerDebugView ? { includeManagerDebugView: "true" as const } : {}),
+        ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" } : {}),
+        ...(includeManagerWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
       },
     }),
   );
@@ -535,7 +535,7 @@ export async function getThreadTimelineToolDetails(
   turnId: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
-  includeManagerDebugView: boolean = false,
+  includeManagerWorkspaceViewer: boolean = false,
 ): Promise<TimelineToolDetailsResponse> {
   return request<TimelineToolDetailsResponse>(
     apiClient.threads[":id"].timeline["tool-details"].$get({
@@ -544,7 +544,7 @@ export async function getThreadTimelineToolDetails(
         turnId,
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
-        ...(includeManagerDebugView ? { includeManagerDebugView: "true" as const } : {}),
+        ...(includeManagerWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
       },
     }),
   );
