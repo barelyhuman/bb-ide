@@ -32,7 +32,7 @@ import { registerManagerCommands } from "../commands/manager.js";
 import { registerServerCommands } from "../commands/server.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerStatusCommand } from "../commands/status.js";
-import { registerThreadCommands } from "../commands/thread.js";
+import { registerThreadCommands } from "../commands/thread/index.js";
 
 type ServerClient = ReturnType<typeof createClient>;
 
