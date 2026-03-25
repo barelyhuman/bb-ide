@@ -36,6 +36,7 @@
     "hono": "^4.7.0",
     "jotai": "^2.19.0",
     "lucide-react": "^0.563.0",
+    "partysocket": "^1.1.16",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

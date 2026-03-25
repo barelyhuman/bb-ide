@@ -1,3 +1,4 @@
+import ReconnectingWebSocket from "partysocket/ws";
 import type {
   ClientMessage,
   ChangedMessage,
@@ -14,35 +15,30 @@ export type WebSocketConnectionState =
   | "reconnecting";
 
 export class WebSocketManager {
-  private socket: WebSocket | null = null;
+  private socket: ReconnectingWebSocket | null = null;
   private subscriptions = new Set<string>();
   private callbacks = new Set<ChangeCallback>();
   private connectedCallbacks = new Set<ConnectedCallback>();
   private connectionStateCallbacks = new Set<ConnectionStateCallback>();
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private connected = false;
   private hasConnected = false;
   private connectionState: WebSocketConnectionState = "connecting";
-  private shouldReconnect = true;
 
   connect(): void {
     if (this.socket) return;
-    this.shouldReconnect = true;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${window.location.host}/ws`;
 
-    try {
-      this.socket = new WebSocket(url);
-    } catch {
-      this.setConnectionState(this.hasConnected ? "reconnecting" : "connecting");
-      this.scheduleReconnect();
-      return;
-    }
+    this.socket = new ReconnectingWebSocket(url, undefined, {
+      minReconnectionDelay: 1000,
+      maxReconnectionDelay: 30000,
+      reconnectionDelayGrowFactor: 1.5,
+      connectionTimeout: 10000,
+      maxRetries: Infinity,
+    });
 
     this.socket.onopen = () => {
       const reconnected = this.hasConnected;
-      this.connected = true;
       this.hasConnected = true;
       this.setConnectionState("connected");
       // Re-subscribe to all active subscriptions
@@ -56,9 +52,9 @@ export class WebSocketManager {
       }
     };
 
-    this.socket.onmessage = (event) => {
+    this.socket.onmessage = (event: MessageEvent) => {
       try {
-        const msg = JSON.parse(event.data) as ServerMessage;
+        const msg = JSON.parse(event.data as string) as ServerMessage;
         if (msg.type === "changed") {
           for (const cb of this.callbacks) {
             cb(msg);
@@ -70,39 +66,22 @@ export class WebSocketManager {
     };
 
     this.socket.onclose = () => {
-      this.connected = false;
-      this.socket = null;
-      if (!this.shouldReconnect) {
-        this.setConnectionState("connecting");
-        return;
-      }
       this.setConnectionState(this.hasConnected ? "reconnecting" : "connecting");
-      this.scheduleReconnect();
-    };
-
-    this.socket.onerror = () => {
-      // onclose will fire after this
     };
   }
 
   disconnect(): void {
-    this.shouldReconnect = false;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
     if (this.socket) {
       this.socket.close();
       this.socket = null;
     }
-    this.connected = false;
     this.setConnectionState("connecting");
   }
 
   subscribe(entity: RealtimeEntity, id?: string): void {
     const key = subKey(entity, id);
     this.subscriptions.add(key);
-    if (this.connected) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
       this.sendMessage({ type: "subscribe", entity, id });
     }
   }
@@ -110,7 +89,7 @@ export class WebSocketManager {
   unsubscribe(entity: RealtimeEntity, id?: string): void {
     const key = subKey(entity, id);
     this.subscriptions.delete(key);
-    if (this.connected) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
       this.sendMessage({ type: "unsubscribe", entity, id });
     }
   }
@@ -144,14 +123,6 @@ export class WebSocketManager {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(msg));
     }
-  }
-
-  private scheduleReconnect(): void {
-    if (this.reconnectTimer) return;
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, 3000);
   }
 
   private setConnectionState(nextState: WebSocketConnectionState): void {
