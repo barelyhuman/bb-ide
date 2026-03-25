@@ -10,6 +10,7 @@ import type {
 import {
   appendOptimisticUserRowToTimeline,
   buildOptimisticUserThreadRow,
+  getEnvironmentActionInvalidationQueryKeys,
   resolveThreadPlaceholder,
   resolveEnvironmentGitDiffPlaceholder,
   resolveThreadTimelinePlaceholder,
@@ -215,6 +216,26 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
         "env-2",
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("getEnvironmentActionInvalidationQueryKeys", () => {
+  it("targets the initiating thread and related environment queries", () => {
+    expect(
+      getEnvironmentActionInvalidationQueryKeys({
+        environmentId: "env-1",
+        threadId: "thread-1",
+      }),
+    ).toEqual([
+      ["environment", "env-1"],
+      ["thread", "thread-1"],
+      ["threads"],
+      ["threadTimeline", "thread-1"],
+      ["environmentWorkStatus", "env-1"],
+      ["environmentGitDiff", "env-1"],
+      ["environmentMergeBaseBranches", "env-1"],
+      ["status"],
+    ]);
   });
 });
 

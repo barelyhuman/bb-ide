@@ -132,6 +132,27 @@ export function resolveThreadTimelinePlaceholder(
   );
 }
 
+interface EnvironmentActionInvalidationParams {
+  environmentId: string;
+  threadId: string;
+}
+
+export function getEnvironmentActionInvalidationQueryKeys({
+  environmentId,
+  threadId,
+}: EnvironmentActionInvalidationParams): QueryKey[] {
+  return [
+    [ENVIRONMENT_QUERY_KEY, environmentId],
+    [THREAD_QUERY_KEY, threadId],
+    ["threads"],
+    [THREAD_TIMELINE_QUERY_KEY, threadId],
+    [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId],
+    [ENVIRONMENT_GIT_DIFF_QUERY_KEY, environmentId],
+    [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environmentId],
+    ["status"],
+  ];
+}
+
 function getCachedThreadListPlaceholder(
   queryClient: QueryClient,
   id: string,
@@ -1065,13 +1086,13 @@ export function useRequestEnvironmentAction() {
       | { action: "squash_merge"; initiatingThreadId: string; options?: SquashMergeOptions }
     )): Promise<EnvironmentActionResponse> =>
       api.requestEnvironmentAction(id, req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["thread"] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
-      queryClient.invalidateQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
+    onSuccess: (_response, variables) => {
+      for (const queryKey of getEnvironmentActionInvalidationQueryKeys({
+        environmentId: variables.id,
+        threadId: variables.initiatingThreadId,
+      })) {
+        queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 }
-
