@@ -14,13 +14,13 @@ interface ParsedGitDiffFileEntry {
 }
 
 export function useGitDiffFileRenderQueue({
-  threadId,
+  environmentId,
   gitDiff,
   parsedGitDiffFileEntries,
   isDiffPanelActive,
   isParsingGitDiffFiles,
 }: {
-  threadId?: string;
+  environmentId?: string;
   gitDiff?: string;
   parsedGitDiffFileEntries: ParsedGitDiffFileEntry[];
   isDiffPanelActive: boolean;
@@ -43,11 +43,11 @@ export function useGitDiffFileRenderQueue({
     gitDiffFileRenderTimersRef.current.clear();
     setCollapsedGitDiffFileKeys(new Set());
     setLoadingGitDiffFileKeys(new Set());
-  }, [threadId, gitDiff]);
+  }, [environmentId, gitDiff]);
 
   useEffect(() => {
     queuedGitDiffFileRenderKeysRef.current.clear();
-  }, [threadId, gitDiff]);
+  }, [environmentId, gitDiff]);
 
   useEffect(
     () => () => {

@@ -44,14 +44,14 @@ import { wsManager } from "../lib/ws";
 const ENVIRONMENT_QUERY_KEY = "environment";
 const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
-const THREAD_MERGE_BASE_BRANCHES_QUERY_KEY = "threadMergeBaseBranches";
-const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
+const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY = "environmentMergeBaseBranches";
+const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 const THREAD_QUERY_KEY = "thread";
 type ThreadScopedQueryKeyPrefix =
   | typeof THREAD_QUERY_KEY
   | typeof THREAD_WORK_STATUS_QUERY_KEY
-  | typeof THREAD_GIT_DIFF_QUERY_KEY
+  | typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY
   | typeof THREAD_TIMELINE_QUERY_KEY;
 
 function extractThreadIdFromThreadScopedQueryKey(
@@ -93,16 +93,16 @@ export function resolveThreadWorkStatusPlaceholder(
   );
 }
 
-export function resolveThreadGitDiffPlaceholder(
+export function resolveEnvironmentGitDiffPlaceholder(
   previousData: ThreadGitDiffResponse | undefined,
   previousQueryKey: QueryKey | undefined,
-  nextThreadId: string,
+  nextEnvironmentId: string,
 ): ThreadGitDiffResponse | undefined {
   return resolveThreadScopedPlaceholder(
     previousData,
     previousQueryKey,
-    nextThreadId,
-    THREAD_GIT_DIFF_QUERY_KEY,
+    nextEnvironmentId,
+    ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   );
 }
 
@@ -571,13 +571,13 @@ export function useEnvironmentWorkStatus(
   });
 }
 
-export function useThreadMergeBaseBranches(
+export function useEnvironmentMergeBaseBranches(
   id: string,
   options?: { enabled?: boolean },
 ) {
   return useQuery<string[]>({
-    queryKey: [THREAD_MERGE_BASE_BRANCHES_QUERY_KEY, id],
-    queryFn: () => api.getThreadDiffBranches(id),
+    queryKey: [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, id],
+    queryFn: () => api.getEnvironmentDiffBranches(id),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnWindowFocus: false,
   });
@@ -638,7 +638,7 @@ export function useThreadTimelineToolDetails() {
   });
 }
 
-export function useThreadGitDiff(
+export function useEnvironmentGitDiff(
   id: string,
   options?: {
     enabled?: boolean;
@@ -652,16 +652,16 @@ export function useThreadGitDiff(
       : "combined";
   return useQuery<ThreadGitDiffResponse>({
     queryKey: [
-      THREAD_GIT_DIFF_QUERY_KEY,
+      ENVIRONMENT_GIT_DIFF_QUERY_KEY,
       id,
       options?.selection?.type ?? "combined",
       selectionKey,
       options?.mergeBaseBranch ?? null,
     ],
-    queryFn: () => api.getThreadDiff(id, options?.selection, options?.mergeBaseBranch),
+    queryFn: () => api.getEnvironmentDiff(id, options?.selection, options?.mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
     placeholderData: (previousData, previousQuery) =>
-      resolveThreadGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
+      resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,
     staleTime: 5_000,
   });

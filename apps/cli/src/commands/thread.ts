@@ -594,10 +594,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       }
 
       let gitDiff: ThreadGitDiffResponse | undefined;
-      if (opts.gitDiff) {
+      if (opts.gitDiff && thread.environmentId) {
         gitDiff = await unwrap<ThreadGitDiffResponse>(
-          client.api.v1.threads[":id"].diff.$get({
-            param: { id: threadId },
+          client.api.v1.environments[":id"].diff.$get({
+            param: { id: thread.environmentId },
             query: {
               ...(opts.diffSelection ? { selection: opts.diffSelection } : {}),
               ...(opts.diffMergeBase ? { mergeBaseBranch: opts.diffMergeBase } : {}),
@@ -607,10 +607,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       }
 
       let mergeBaseBranches: string[] | undefined;
-      if (opts.mergeBaseBranches) {
+      if (opts.mergeBaseBranches && thread.environmentId) {
         mergeBaseBranches = await unwrap<string[]>(
-          client.api.v1.threads[":id"].diff.branches.$get({
-            param: { id: threadId },
+          client.api.v1.environments[":id"].diff.branches.$get({
+            param: { id: thread.environmentId },
           }),
         );
       }

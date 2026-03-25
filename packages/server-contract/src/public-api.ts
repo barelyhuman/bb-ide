@@ -125,6 +125,20 @@ export type PublicApiSchema = {
       EnvironmentStatusResponse
     >;
   };
+  "/environments/:id/diff": {
+    $get: Endpoint<
+      PathId & {
+        query?: {
+          selection?: string;
+          mergeBaseBranch?: string;
+        };
+      },
+      ThreadGitDiffResponse
+    >;
+  };
+  "/environments/:id/diff/branches": {
+    $get: Endpoint<PathId, string[]>;
+  };
   "/environments/:id/actions": {
     $post:
       | Endpoint<
@@ -213,20 +227,6 @@ export type PublicApiSchema = {
       TimelineToolDetailsResponse
     >;
   };
-  "/threads/:id/diff": {
-    $get: Endpoint<
-      PathId & {
-        query?: {
-          selection?: string;
-          mergeBaseBranch?: string;
-        };
-      },
-      ThreadGitDiffResponse
-    >;
-  };
-  "/threads/:id/diff/branches": {
-    $get: Endpoint<PathId, string[]>;
-  };
   "/threads/:id/output": {
     $get: Endpoint<PathId, { output: string | null }>;
   };
@@ -254,15 +254,21 @@ export type PublicApiSchema = {
   };
   "/system/models": {
     $get: Endpoint<
-      { query?: { providerId?: string; environmentId?: string } },
+      { query?: { providerId?: string; hostId?: string; environmentId?: string } },
       AvailableModel[]
     >;
   };
   "/system/providers": {
-    $get: Endpoint<{ query?: { environmentId?: string } }, SystemProviderInfo[]>;
+    $get: Endpoint<
+      { query?: { hostId?: string; environmentId?: string } },
+      SystemProviderInfo[]
+    >;
   };
   "/system/providers/:id": {
-    $get: Endpoint<PathId, SystemProviderInfo>;
+    $get: Endpoint<
+      PathId & { query?: { hostId?: string; environmentId?: string } },
+      SystemProviderInfo
+    >;
   };
   "/system/shutdown": {
     $post:

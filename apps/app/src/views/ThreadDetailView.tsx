@@ -414,7 +414,7 @@ export function ThreadDetailView() {
       captureTimelineScrollPositionRef.current();
     },
     preferredTheme,
-    threadId,
+    environmentId: thread?.environmentId ?? undefined,
   });
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;

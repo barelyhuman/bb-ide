@@ -11,7 +11,7 @@ import {
   appendOptimisticUserRowToTimeline,
   buildOptimisticUserThreadRow,
   resolveThreadPlaceholder,
-  resolveThreadGitDiffPlaceholder,
+  resolveEnvironmentGitDiffPlaceholder,
   resolveThreadTimelinePlaceholder,
   resolveThreadWorkStatusPlaceholder,
 } from "./useApi";
@@ -192,27 +192,27 @@ describe("resolveThreadTimelinePlaceholder", () => {
   });
 });
 
-describe("resolveThreadGitDiffPlaceholder", () => {
-  it("keeps previous data for the same thread while changing git diff options", () => {
+describe("resolveEnvironmentGitDiffPlaceholder", () => {
+  it("keeps previous data for the same environment while changing git diff options", () => {
     const previousGitDiff = makeGitDiffResponse();
 
     expect(
-      resolveThreadGitDiffPlaceholder(
+      resolveEnvironmentGitDiffPlaceholder(
         previousGitDiff,
-        ["threadGitDiff", "thread-1", "combined", "combined", null],
-        "thread-1",
+        ["environmentGitDiff", "env-1", "combined", "combined", null],
+        "env-1",
       ),
     ).toBe(previousGitDiff);
   });
 
-  it("drops previous data when switching to a different thread", () => {
+  it("drops previous data when switching to a different environment", () => {
     const previousGitDiff = makeGitDiffResponse();
 
     expect(
-      resolveThreadGitDiffPlaceholder(
+      resolveEnvironmentGitDiffPlaceholder(
         previousGitDiff,
-        ["threadGitDiff", "thread-1", "combined", "combined", null],
-        "thread-2",
+        ["environmentGitDiff", "env-1", "combined", "combined", null],
+        "env-2",
       ),
     ).toBeUndefined();
   });

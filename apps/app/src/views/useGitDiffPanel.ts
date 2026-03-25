@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import type { Location, NavigateFunction } from "react-router-dom";
-import { useThreadGitDiff, useThreadMergeBaseBranches } from "../hooks/useApi";
+import { useEnvironmentGitDiff, useEnvironmentMergeBaseBranches } from "../hooks/useApi";
 import {
   getThreadSecondaryPanel,
   getStoredThreadSecondaryPanel,
@@ -38,7 +38,7 @@ interface UseGitDiffPanelParams {
   navigate: NavigateFunction;
   onBeforePanelChange?: () => void;
   preferredTheme: string;
-  threadId?: string;
+  environmentId?: string;
 }
 
 export function useGitDiffPanel({
@@ -46,7 +46,7 @@ export function useGitDiffPanel({
   navigate,
   onBeforePanelChange,
   preferredTheme,
-  threadId,
+  environmentId,
 }: UseGitDiffPanelParams) {
   const searchSecondaryPanel = useMemo(
     () => getThreadSecondaryPanel(location.search),
@@ -94,9 +94,9 @@ export function useGitDiffPanel({
   const {
     data: mergeBaseBranchOptions,
     isLoading: isLoadingMergeBaseBranchOptions,
-  } = useThreadMergeBaseBranches(threadId ?? "", {
+  } = useEnvironmentMergeBaseBranches(environmentId ?? "", {
     enabled:
-      Boolean(threadId) &&
+      Boolean(environmentId) &&
       shouldLoadMergeBaseBranchOptions &&
       isMergeBaseBranchPickerOpen,
   });
@@ -104,8 +104,8 @@ export function useGitDiffPanel({
     data: threadGitDiff,
     isLoading: isGitDiffLoading,
     error: gitDiffError,
-  } = useThreadGitDiff(threadId ?? "", {
-    enabled: Boolean(threadId) && isDiffPanelActive,
+  } = useEnvironmentGitDiff(environmentId ?? "", {
+    enabled: Boolean(environmentId) && isDiffPanelActive,
     selection: gitDiffSelection,
     mergeBaseBranch: selectedMergeBaseBranch,
   });
@@ -127,7 +127,7 @@ export function useGitDiffPanel({
     toggleAllGitDiffFilesCollapsed,
     toggleGitDiffFileCollapsed,
   } = useGitDiffFileRenderQueue({
-    threadId,
+    environmentId,
     gitDiff: threadGitDiff?.diff,
     parsedGitDiffFileEntries,
     isDiffPanelActive,
@@ -227,15 +227,15 @@ export function useGitDiffPanel({
     setSelectedMergeBaseBranch(undefined);
     setShouldLoadMergeBaseBranchOptions(false);
     setIsMergeBaseBranchPickerOpen(false);
-  }, [threadId]);
+  }, [environmentId]);
 
   useEffect(() => {
     setSelectedGitDiffCommitSha(null);
-  }, [threadId]);
+  }, [environmentId]);
 
   useEffect(() => {
     setPendingGitDiffScrollPath(null);
-  }, [threadId]);
+  }, [environmentId]);
 
   useEffect(() => {
     if (!threadGitDiff) return;
