@@ -9,4 +9,3 @@ export type {
   AgentRuntimeOptions,
   ProviderInfo,
 } from "./types.js";
-export type { AvailableModel } from "@bb/domain";

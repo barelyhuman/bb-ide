@@ -68,7 +68,14 @@ export class CommandRouter {
       this.environmentLanes.delete(envelope.command.environmentId);
     }
     this.recordCompletedResult(envelope.cursor, result);
-    this.reportingPromise = this.reportingPromise.then(() => this.flushCompleted());
+    this.reportingPromise = this.reportingPromise
+      .then(() => this.flushCompleted())
+      .catch((error) => {
+        this.logger.warn(
+          { err: error },
+          "failed to report command results, will retry on next completion",
+        );
+      });
     await this.reportingPromise;
   }
 

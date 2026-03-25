@@ -439,4 +439,65 @@ describe("CommandRouter", () => {
       ).completedResults.has(3),
     ).toBe(true);
   });
+
+  it("recovers result reporting after a transient report failure", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
+    });
+    const logger = createLogger();
+    let shouldFail = true;
+    const reported: number[] = [];
+    const router = new CommandRouter({
+      runtimeManager: manager,
+      logger,
+      reportResult: async (result) => {
+        if (shouldFail) {
+          shouldFail = false;
+          throw new Error("report failed");
+        }
+        reported.push(result.cursor);
+      },
+    });
+
+    await router.handleCommands([
+      {
+        id: "cmd-1",
+        cursor: 1,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          providerId: "fake",
+        },
+      },
+    ]);
+
+    expect(reported).toEqual([]);
+
+    await router.handleCommands([
+      {
+        id: "cmd-2",
+        cursor: 2,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-2",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          providerId: "fake",
+        },
+      },
+    ]);
+
+    expect(reported).toEqual([1, 2]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        err: expect.any(Error),
+      },
+      "failed to report command results, will retry on next completion",
+    );
+  });
 });

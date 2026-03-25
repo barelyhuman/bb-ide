@@ -1,9 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  createProviderForId,
-  type AvailableModel,
-} from "@bb/agent-runtime";
+import { createProviderForId } from "@bb/agent-runtime";
+import type { AvailableModel } from "@bb/domain";
 import type {
   HostDaemonCommand,
   HostDaemonCommandResult,

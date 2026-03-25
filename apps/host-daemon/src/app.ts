@@ -21,11 +21,14 @@ interface SessionState {
   value: string | null;
 }
 
-function createCommandFetchLoop(args: {
+const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
+
+export function createCommandFetchLoop(args: {
   logger: HostDaemonLogger;
   getCursor: () => number;
   fetchCommands: (options: { afterCursor: number }) => Promise<unknown[]>;
   handleCommands: (commands: unknown[]) => Promise<void>;
+  retryDelayMs?: number;
 }) {
   let fetchRequested = false;
   let fetchPromise: Promise<void> | null = null;
@@ -57,6 +60,9 @@ function createCommandFetchLoop(args: {
         }
       } catch (error) {
         args.logger.error({ err: error }, "Failed to fetch host-daemon commands");
+        setTimeout(() => {
+          void request();
+        }, args.retryDelayMs ?? COMMAND_FETCH_RETRY_DELAY_MS);
       } finally {
         fetchPromise = null;
         if (fetchRequested) {
