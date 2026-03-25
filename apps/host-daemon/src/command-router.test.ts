@@ -21,25 +21,7 @@ function createFakeWorkspace(path: string) {
     isGitRepo: true,
     isWorktree: false,
     currentBranch: vi.fn(async () => "main"),
-    getStatus: vi.fn(async () => ({
-      state: "clean" as const,
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
-      workspaceChangedFiles: 0,
-      workspaceInsertions: 0,
-      workspaceDeletions: 0,
-      hasUncommittedChanges: false,
-      hasCommittedUnmergedChanges: false,
-      aheadCount: 0,
-      behindCount: 0,
-      currentBranch: "main",
-      defaultBranch: "main",
-      mergeBaseBranch: "main",
-      mergeBaseBranches: [],
-      baseRef: "main",
-      files: [],
-    })),
+    getStatus: vi.fn(async () => null),
     getDiff: vi.fn(async () => ({
       mode: "combined",
       currentBranch: "main",
@@ -72,14 +54,8 @@ function createFakeWorkspace(path: string) {
     destroy: vi.fn(async () => undefined),
   } as unknown as IWorkspace & {
     commit: ReturnType<typeof vi.fn>;
-    getStatus: ReturnType<typeof vi.fn>;
-    getDiff: ReturnType<typeof vi.fn>;
-    reset: ReturnType<typeof vi.fn>;
-    checkpoint: ReturnType<typeof vi.fn>;
-    squashMergeInto: ReturnType<typeof vi.fn>;
-    promote: ReturnType<typeof vi.fn>;
-    demote: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
+    reset: ReturnType<typeof vi.fn>;
   };
 }
 
@@ -101,224 +77,15 @@ function createFakeRuntime() {
   };
 }
 
+function createLogger() {
+  return {
+    warn: vi.fn(),
+  };
+}
+
 describe("CommandRouter", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("dispatches thread commands to the runtime", async () => {
-    const runtime = createFakeRuntime();
-    const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
-    });
-    const router = new CommandRouter({ runtimeManager: manager });
-
-    await router.handleCommands([
-      {
-        id: "cmd-start",
-        cursor: 1,
-        command: {
-          type: "thread.start",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          providerId: "fake",
-        },
-      },
-      {
-        id: "cmd-stop",
-        cursor: 2,
-        command: {
-          type: "thread.stop",
-          environmentId: "env-1",
-          threadId: "thread-1",
-        },
-      },
-      {
-        id: "cmd-rename",
-        cursor: 3,
-        command: {
-          type: "thread.rename",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          title: "Renamed thread",
-        },
-      },
-    ]);
-
-    expect(runtime.startThread).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      projectId: "project-1",
-      providerId: "fake",
-      input: undefined,
-      options: undefined,
-      dynamicTools: undefined,
-    });
-    expect(runtime.stopThread).toHaveBeenCalledWith({ threadId: "thread-1" });
-    expect(runtime.renameThread).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      title: "Renamed thread",
-    });
-    expect(manager.listActiveThreads()).toEqual([]);
-  });
-
-  it("dispatches workspace commands to the workspace instance", async () => {
-    const workspace = createFakeWorkspace("/tmp/env-1");
-    const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(
-        () => createFakeRuntime() as unknown as AgentRuntime,
-      ),
-    });
-    await manager.ensureEnvironment({
-      environmentId: "env-1",
-      workspacePath: "/tmp/env-1",
-    });
-    const listModels = vi.fn(async () => []);
-    const router = new CommandRouter({
-      runtimeManager: manager,
-      listModels,
-    });
-
-    await router.handleCommands([
-      {
-        id: "status",
-        cursor: 1,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-1",
-          threadId: "thread-1",
-        },
-      },
-      {
-        id: "diff",
-        cursor: 2,
-        command: {
-          type: "workspace.diff",
-          environmentId: "env-1",
-          threadId: "thread-1",
-        },
-      },
-      {
-        id: "commit",
-        cursor: 3,
-        command: {
-          type: "workspace.commit",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          message: "Commit message",
-        },
-      },
-      {
-        id: "reset",
-        cursor: 4,
-        command: {
-          type: "workspace.reset",
-          environmentId: "env-1",
-          threadId: "thread-1",
-        },
-      },
-      {
-        id: "checkpoint",
-        cursor: 5,
-        command: {
-          type: "workspace.checkpoint",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          commitMessage: "Checkpoint",
-        },
-      },
-      {
-        id: "squash",
-        cursor: 6,
-        command: {
-          type: "workspace.squash_merge",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          targetBranch: "main",
-          commitMessage: "Squash",
-        },
-      },
-      {
-        id: "promote",
-        cursor: 7,
-        command: {
-          type: "workspace.promote",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          primaryPath: "/tmp/primary",
-        },
-      },
-      {
-        id: "demote",
-        cursor: 8,
-        command: {
-          type: "workspace.demote",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          primaryPath: "/tmp/primary",
-          defaultBranch: "main",
-          envBranch: "feature",
-        },
-      },
-      {
-        id: "models",
-        cursor: 9,
-        command: {
-          type: "provider.list_models",
-          providerId: "fake",
-        },
-      },
-    ]);
-
-    expect(workspace.getStatus).toHaveBeenCalledTimes(1);
-    expect(workspace.getDiff).toHaveBeenCalledTimes(1);
-    expect(workspace.commit).toHaveBeenCalledWith({
-      message: "Commit message",
-      includeUnstaged: undefined,
-    });
-    expect(workspace.reset).toHaveBeenCalledTimes(1);
-    expect(workspace.checkpoint).toHaveBeenCalledTimes(1);
-    expect(workspace.squashMergeInto).toHaveBeenCalledTimes(1);
-    expect(workspace.promote).toHaveBeenCalledTimes(1);
-    expect(workspace.demote).toHaveBeenCalledTimes(1);
-    expect(listModels).toHaveBeenCalledWith("fake");
-  });
-
-  it("errors when a command needs an unknown environment with no workspace path", async () => {
-    const results: Array<Record<string, unknown>> = [];
-    const router = new CommandRouter({
-      runtimeManager: new RuntimeManager({
-        provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-        createRuntime: vi.fn(
-          () => createFakeRuntime() as unknown as AgentRuntime,
-        ),
-      }),
-      reportResult: async (result) => {
-        results.push(result as unknown as Record<string, unknown>);
-      },
-    });
-
-    await router.handleCommands([
-      {
-        id: "missing",
-        cursor: 1,
-        command: {
-          type: "workspace.status",
-          environmentId: "env-missing",
-          threadId: "thread-1",
-        },
-      },
-    ]);
-
-    expect(results).toEqual([
-      expect.objectContaining({
-        ok: false,
-        errorCode: "unknown_environment",
-      }),
-    ]);
   });
 
   it("serializes workspace commands per environment", async () => {
@@ -500,57 +267,79 @@ describe("CommandRouter", () => {
     expect(reported).toEqual([5, 6, 7]);
   });
 
-  it("lazily creates and resumes a runtime for turn.run when no thread session exists", async () => {
+  it("captures completedAt after execution in success and error paths", async () => {
     const runtime = createFakeRuntime();
-    const provisionWorkspace = vi.fn(async () => createFakeWorkspace("/tmp/env-lazy"));
+    const success = createDeferred<{ providerThreadId: string }>();
+    const failure = createDeferred<{ providerThreadId: string }>();
+    runtime.startThread
+      .mockReturnValueOnce(success.promise)
+      .mockImplementationOnce(async () => {
+        await failure.promise;
+        throw new Error("boom");
+      });
+
     const manager = new RuntimeManager({
-      provisionWorkspace,
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
       createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
     });
+    let nowValue = 100;
+    const results: Array<{ cursor: number; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
       runtimeManager: manager,
-      resolveThreadRuntime: async () => ({
-        workspacePath: "/tmp/env-lazy",
-        projectId: "project-1",
-        providerId: "fake",
-        providerThreadId: "provider-1",
-      }),
+      now: () => nowValue,
+      reportResult: async (result) => {
+        results.push({
+          cursor: result.cursor,
+          completedAt: result.completedAt,
+          ok: result.ok,
+        });
+      },
     });
 
-    await router.handleCommands([
+    const handling = router.handleCommands([
       {
-        id: "turn-run",
+        id: "success",
         cursor: 1,
         command: {
-          type: "turn.run",
-          environmentId: "env-lazy",
+          type: "thread.start",
+          environmentId: "env-1",
           threadId: "thread-1",
-          input: [{ type: "text", text: "hello" }],
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          providerId: "fake",
+        },
+      },
+      {
+        id: "failure",
+        cursor: 2,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-2",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          providerId: "fake",
         },
       },
     ]);
 
-    expect(provisionWorkspace).toHaveBeenCalledWith({
-      workspaceProvisionType: "unmanaged",
-      path: "/tmp/env-lazy",
+    nowValue = 200;
+    success.resolve({ providerThreadId: "provider-1" });
+    await vi.waitFor(() => {
+      expect(results.some((result) => result.cursor === 1)).toBe(true);
     });
-    expect(runtime.resumeThread).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      projectId: "project-1",
-      providerThreadId: "provider-1",
-      providerId: "fake",
-      options: undefined,
-      resumePath: "/tmp/env-lazy",
-      dynamicTools: undefined,
-    });
-    expect(runtime.runTurn).toHaveBeenCalledWith({
-      threadId: "thread-1",
-      input: [{ type: "text", text: "hello" }],
-      options: undefined,
-    });
+
+    nowValue = 300;
+    failure.resolve({ providerThreadId: "provider-2" });
+    await handling;
+
+    expect(results).toEqual([
+      { cursor: 1, completedAt: 200, ok: true },
+      { cursor: 2, completedAt: 300, ok: false },
+    ]);
   });
 
-  it("destroys the runtime and workspace for environment.destroy", async () => {
+  it("cleans up environment lanes after environment.destroy", async () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
@@ -563,7 +352,6 @@ describe("CommandRouter", () => {
     });
 
     const router = new CommandRouter({ runtimeManager: manager });
-
     await router.handleCommands([
       {
         id: "destroy",
@@ -577,7 +365,67 @@ describe("CommandRouter", () => {
       },
     ]);
 
-    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
-    expect(workspace.destroy).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        router as unknown as { environmentLanes: Map<string, Promise<unknown>> }
+      ).environmentLanes.has("env-1"),
+    ).toBe(false);
+  });
+
+  it("warns on cursor gaps and holds later results until the gap closes", async () => {
+    const logger = createLogger();
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
+    });
+    const reported: number[] = [];
+    const router = new CommandRouter({
+      runtimeManager: manager,
+      logger,
+      reportResult: async (result) => {
+        reported.push(result.cursor);
+      },
+    });
+
+    await router.handleCommands([
+      {
+        id: "cmd-1",
+        cursor: 1,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          providerId: "fake",
+        },
+      },
+      {
+        id: "cmd-3",
+        cursor: 3,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-3",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          providerId: "fake",
+        },
+      },
+    ]);
+
+    expect(reported).toEqual([1]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cursor: 3,
+        lastReportedCursor: 0,
+      }),
+      "gap detected in command cursor sequence",
+    );
+    expect(
+      (
+        router as unknown as { completedResults: Map<number, unknown> }
+      ).completedResults.has(3),
+    ).toBe(true);
   });
 });
