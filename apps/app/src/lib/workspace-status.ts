@@ -2,7 +2,6 @@ import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
 import type { StatusPillVariant } from "@bb/ui-core";
 import {
-  formatDirtyWorkspaceLabel,
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
 
@@ -21,29 +20,6 @@ export function threadWorktreeCleanLabel(
 
   const isUpToDate = status.aheadCount === 0 && status.behindCount === 0;
   return isUpToDate ? "Clean, Up to date" : "Clean";
-}
-
-function workspaceStatusLabel(
-  status: WorkspaceStatus | undefined,
-  options?: { cleanLabel?: string },
-): string {
-  if (!status) return "Unknown";
-
-  switch (status.state) {
-    case "clean":
-      return options?.cleanLabel ?? "Up to date";
-    case "untracked":
-      return "Untracked";
-    case "deleted":
-      return "Deleted";
-    case "dirty_uncommitted":
-    case "dirty_and_committed_unmerged":
-      return formatDirtyWorkspaceLabel(status);
-    case "committed_unmerged":
-      return "Ahead";
-    default:
-      return assertNever(status.state);
-  }
 }
 
 interface ThreadGitStatusDisplay {

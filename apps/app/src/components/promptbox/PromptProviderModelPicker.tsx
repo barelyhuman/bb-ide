@@ -5,7 +5,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { useAvailableModels } from "@/hooks/useApi"
-import { getProviderIconInfo } from "@/lib/provider-icon"
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
   PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
@@ -84,11 +83,6 @@ export function PromptProviderModelPicker({
     }))
   }, [isPreviewing, modelOptions, previewModelsQuery.data, formatModelLabel, previewProviderId])
 
-  const previewProviderIcon = useMemo(() => {
-    if (!isPreviewing) return undefined
-    return getProviderIconInfo(previewProviderId!)?.icon
-  }, [isPreviewing, previewProviderId])
-
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       setOpen(nextOpen)
@@ -113,7 +107,6 @@ export function PromptProviderModelPicker({
     [isPreviewing, onModelChange, onSelectedProviderChange, previewProviderId],
   )
 
-  // Icon shown in the trigger: use preview provider icon while previewing isn't committed
   const TriggerIcon = ProviderIcon
 
   return (

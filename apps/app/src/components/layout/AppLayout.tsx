@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useAtom } from "jotai"
 import { atomWithStorage } from "jotai/utils"
 import { Link, useLocation, useNavigate } from "react-router-dom"
@@ -31,12 +31,9 @@ import {
   useHireProjectManager,
   useProjects,
   useThread,
-  useThreads,
 } from "@/hooks/useApi"
 import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
-import {
-} from "@/lib/thread-activity"
 import { HireManagerModal } from "@/components/HireManagerModal"
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage"
 
@@ -220,7 +217,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: threads } = useThreads()
   const hireProjectManager = useHireProjectManager()
   const hireManagerModal = useDialogState<string>()
   const [sidebarOpen, setSidebarOpen] = useState(true)

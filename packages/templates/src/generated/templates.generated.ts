@@ -160,21 +160,6 @@ export const templateDefinitions = [
     }
   },
   {
-    "id": "threadOperationCommit",
-    "body": "Please commit the changes in {{targetDescription}}.\nPlease review git status and the diff before committing.\n{{stageInstruction}}\n{{commitMessageInstruction}}\nPlease create at most one commit.\nPlease reply with whether a commit was created, the commit SHA if present, and any blockers.",
-    "fileName": "thread-operation-commit.md",
-    "kind": "prompt",
-    "title": "Thread Operation Commit",
-    "summary": "Instruction prompt for a deterministic commit operation within a thread or primary checkout.",
-    "intent": "Tell the agent exactly how to prepare and create at most one commit, then report the result.",
-    "editingNotes": "Preserve the explicit staging and reply requirements; downstream UI and recovery flows assume this shape.",
-    "variables": {
-      "targetDescription": "Human-readable description of the workspace target.",
-      "stageInstruction": "Instruction covering whether unstaged changes may be included.",
-      "commitMessageInstruction": "Instruction covering exact or generated commit message behavior."
-    }
-  },
-  {
     "id": "threadOperationSquashMergeCommitFailureFollowUp",
     "body": "{{failureInstruction}}\n{{#if errorMessage}}\nGit reported: {{errorMessage}}.\n{{/if}}",
     "fileName": "thread-operation-squash-merge-commit-failure-follow-up.md",
@@ -200,24 +185,6 @@ export const templateDefinitions = [
     "variables": {
       "mergeBaseBranch": "Merge base branch name shown to the agent.",
       "conflictFiles": "Optional comma-separated file list."
-    }
-  },
-  {
-    "id": "threadOperationSquashMerge",
-    "body": "Please squash-merge the changes in {{targetDescription}}.\n{{mergeBaseInstruction}}\n{{prepCommitInstruction}}\n{{commitMessageInstruction}}\n{{squashMessageInstruction}}\n{{conflictInstruction}}\nPlease reply with whether the squash merge completed and list any blockers.",
-    "fileName": "thread-operation-squash-merge.md",
-    "kind": "prompt",
-    "title": "Thread Operation Squash Merge",
-    "summary": "Instruction prompt for deterministic squash-merge operations from a thread or primary checkout.",
-    "intent": "Tell the agent how to choose the merge base, whether to create prep commits, how to message the merge, and how to report completion.",
-    "editingNotes": "Keep the prep-commit and conflict-handling branches explicit. Recovery prompts depend on this operation being narrowly scoped.",
-    "variables": {
-      "targetDescription": "Human-readable description of the workspace target.",
-      "mergeBaseInstruction": "Instruction covering the merge base branch.",
-      "prepCommitInstruction": "Instruction covering whether a prep commit may or must be created.",
-      "commitMessageInstruction": "Instruction covering the prep commit message when needed.",
-      "squashMessageInstruction": "Instruction covering the squash merge message.",
-      "conflictInstruction": "Instruction covering conflict handling and reporting."
     }
   }
 ] as const;
@@ -260,11 +227,6 @@ export interface TemplateVariables {
     exactCommitMessageInstruction?: string;
     errorMessage?: string;
   };
-  threadOperationCommit: {
-    targetDescription: string;
-    stageInstruction: string;
-    commitMessageInstruction: string;
-  };
   threadOperationSquashMergeCommitFailureFollowUp: {
     failureInstruction: string;
     errorMessage?: string;
@@ -272,14 +234,6 @@ export interface TemplateVariables {
   threadOperationSquashMergeConflictFollowUp: {
     mergeBaseBranch: string;
     conflictFiles?: string;
-  };
-  threadOperationSquashMerge: {
-    targetDescription: string;
-    mergeBaseInstruction: string;
-    prepCommitInstruction: string;
-    commitMessageInstruction: string;
-    squashMessageInstruction: string;
-    conflictInstruction: string;
   };
 }
 

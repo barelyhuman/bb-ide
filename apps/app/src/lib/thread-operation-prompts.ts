@@ -16,57 +16,6 @@ function formatPromptTarget(target: ThreadOperationPromptTarget): string {
   }
 }
 
-function buildCommitInstruction(
-  request: Extract<EnvironmentActionRequest, { action: "commit" }>,
-  target: ThreadOperationPromptTarget,
-): string {
-  const options = request.options;
-  const includeUnstaged = options?.includeUnstaged !== false;
-  const commitMessageHint = options?.message?.trim();
-
-  return renderTemplate("threadOperationCommit", {
-    targetDescription: formatPromptTarget(target),
-    stageInstruction: includeUnstaged
-      ? "Please stage relevant tracked and untracked changes before committing."
-      : "Please commit only currently staged changes and leave unstaged edits untouched.",
-    commitMessageInstruction: commitMessageHint
-      ? `Please use this commit message exactly: "${commitMessageHint}".`
-      : "If no commit message is provided, please create a concise conventional commit message.",
-  });
-}
-
-function buildSquashMergeInstruction(
-  request: Extract<EnvironmentActionRequest, { action: "squash_merge" }>,
-  target: ThreadOperationPromptTarget,
-): string {
-  const options = request.options;
-  const mergeBaseBranch = options?.mergeBaseBranch?.trim();
-  const commitMessage = options?.commitMessage?.trim();
-  const squashMessage = options?.squashMessage?.trim();
-  const includeUnstaged = options?.includeUnstaged !== false;
-  const commitIfNeeded = options?.commitIfNeeded === true;
-
-  return renderTemplate("threadOperationSquashMerge", {
-    targetDescription: formatPromptTarget(target),
-    mergeBaseInstruction: mergeBaseBranch
-      ? `Please use "${mergeBaseBranch}" as the merge base/target branch.`
-      : "Please use the default merge-base branch reported by git.",
-    prepCommitInstruction: commitIfNeeded
-      ? includeUnstaged
-        ? "If the workspace is dirty, please stage relevant changes and create a prep commit before squash merging."
-        : "If the workspace is dirty, please create a prep commit from currently staged changes before squash merging."
-      : "Please do not create a prep commit unless explicitly required to complete the merge.",
-    commitMessageInstruction: commitMessage
-      ? `If a prep commit is required, please use this commit message: "${commitMessage}".`
-      : "If a prep commit is required and no message is provided, please generate a concise commit message.",
-    squashMessageInstruction: squashMessage
-      ? `Please use this squash-merge message: "${squashMessage}".`
-      : "If no squash message is provided, please write a concise squash-merge message.",
-    conflictInstruction:
-      "If conflicts occur, please resolve them, run relevant checks, and summarize what was resolved.",
-  });
-}
-
 export function buildSquashMergeConflictFollowUpInstruction(
   request: Extract<EnvironmentActionRequest, { action: "squash_merge" }>,
   options?: {
@@ -128,22 +77,4 @@ export function buildCommitFailureFollowUpInstruction(
       : {}),
     ...(options?.errorMessage?.trim() ? { errorMessage: options.errorMessage.trim() } : {}),
   });
-}
-
-function buildThreadOperationInstruction(
-  request: EnvironmentActionRequest,
-  options?: { target?: ThreadOperationPromptTarget },
-): string {
-  const target = options?.target ?? "thread";
-  switch (request.action) {
-    case "commit":
-      return buildCommitInstruction(request, target);
-    case "squash_merge":
-      return buildSquashMergeInstruction(request, target);
-    case "promote":
-    case "demote":
-      return ""; // promote/demote don't have operation prompts
-    default:
-      return assertNever(request);
-  }
 }
