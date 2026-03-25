@@ -13,12 +13,15 @@
   },
   "dependencies": {
     "@bb/config": "workspace:*",
+    "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
-    "proper-lockfile": "^4.1.2"
+    "proper-lockfile": "^4.1.2",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
+    "hono": "^4.7.0",
     "typescript": "^5.7.0"
   }
 }

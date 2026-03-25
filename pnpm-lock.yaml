@@ -193,12 +193,18 @@ importers:
       '@bb/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@bb/host-daemon-contract':
+        specifier: workspace:*
+        version: link:../../packages/host-daemon-contract
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*
@@ -206,6 +212,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.10
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
