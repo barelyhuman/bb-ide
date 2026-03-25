@@ -33,6 +33,7 @@ import {
   useThread,
   useThreads,
 } from "@/hooks/useApi"
+import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
 } from "@/lib/thread-activity"
@@ -221,7 +222,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads } = useThreads()
   const hireProjectManager = useHireProjectManager()
-  const [hireManagerModalProjectId, setHireManagerModalProjectId] = useState<string | null>(null)
+  const hireManagerModal = useDialogState<string>()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
@@ -397,10 +398,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               projectId={projectId}
-              isManagerActionPending={hireProjectManager.isPending || hireManagerModalProjectId !== null}
+              isManagerActionPending={hireProjectManager.isPending || hireManagerModal.isOpen}
               onOpenManager={() => {
-                if (!projectId || hireManagerModalProjectId !== null) return
-                setHireManagerModalProjectId(projectId)
+                if (!projectId || hireManagerModal.isOpen) return
+                hireManagerModal.onOpen(projectId)
               }}
               meta={meta}
             />
@@ -411,11 +412,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
     </SidebarProvider>
-    {hireManagerModalProjectId ? (
+    {hireManagerModal.target ? (
       <HireManagerModal
-        projectId={hireManagerModalProjectId}
+        projectId={hireManagerModal.target}
         open
-        onClose={() => setHireManagerModalProjectId(null)}
+        onClose={hireManagerModal.onClose}
         onHired={(thread: Thread) => {
           navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
         }}

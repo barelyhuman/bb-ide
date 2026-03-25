@@ -27,6 +27,7 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import { useDialogState } from "@/hooks/useDialogState";
 import { PageShell } from "@/components/layout/PageShell";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import {
@@ -234,11 +235,9 @@ export function ThreadDetailView() {
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
   const [processingQueuedMessageId, setProcessingQueuedMessageId] =
     useState<string | null>(null);
-  const [threadRenameTarget, setThreadRenameTarget] =
-    useState<ThreadRenameDialogTarget | null>(null);
-  const [threadDeleteTarget, setThreadDeleteTarget] = useState<Thread | null>(null);
-  const [threadGitActionTarget, setThreadGitActionTarget] =
-    useState<ThreadGitActionDialogTarget | null>(null);
+  const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>();
+  const threadDeleteDialog = useDialogState<Thread>();
+  const threadGitActionDialog = useDialogState<ThreadGitActionDialogTarget>();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
   const promptInput = useMemo(
     () =>
@@ -402,12 +401,12 @@ export function ThreadDetailView() {
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return;
-    setThreadRenameTarget({
+    threadRenameDialog.onOpen({
       id: thread.id,
       currentTitle: getThreadDisplayTitle(thread),
       threadType: thread.type,
     });
-  }, [thread, updateThread.isPending]);
+  }, [thread, threadRenameDialog, updateThread.isPending]);
   const submitThreadRename = useCallback((currentThreadId: string, title: string) => {
     updateThread.mutate(
       {
@@ -416,11 +415,11 @@ export function ThreadDetailView() {
       },
       {
         onSuccess: () => {
-          setThreadRenameTarget(null);
+          threadRenameDialog.onClose();
         },
       },
     );
-  }, [updateThread]);
+  }, [threadRenameDialog, updateThread]);
   const toggleArchiveThread = useCallback(() => {
     if (!thread) return;
     const label = threadTypeLabel(thread.type);
@@ -882,7 +881,7 @@ export function ThreadDetailView() {
         void toggleArchiveThread();
       }}
       onDelete={() => {
-        setThreadDeleteTarget(thread);
+        threadDeleteDialog.onOpen(thread);
       }}
       debugToggleLabel={isManagerThread ? "Show all events" : undefined}
       debugToggleChecked={isManagerThread ? showManagerDebugView : undefined}
@@ -1014,7 +1013,7 @@ export function ThreadDetailView() {
       isManagerThread={isManagerThread}
       isSecondaryPanelOpen={isSecondaryPanelOpen}
       isThreadGitActionPending={isThreadGitActionPending}
-      onOpenThreadGitAction={setThreadGitActionTarget}
+      onOpenThreadGitAction={threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
       threadHeaderGitAction={threadHeaderGitAction}
       threadTitle={threadTitle}
@@ -1240,29 +1239,21 @@ export function ThreadDetailView() {
         }}
       />
       <ThreadRenameDialog
-        target={threadRenameTarget}
+        target={threadRenameDialog.target}
         pending={updateThread.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            setThreadRenameTarget(null);
-          }
-        }}
+        onOpenChange={threadRenameDialog.onOpenChange}
         onRename={submitThreadRename}
       />
       <ThreadDeleteDialog
-        target={threadDeleteTarget}
+        target={threadDeleteDialog.target}
         pending={deleteThread.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            setThreadDeleteTarget(null);
-          }
-        }}
+        onOpenChange={threadDeleteDialog.onOpenChange}
         onDelete={(target) => {
           deleteThread.mutate(
             { id: target.id },
             {
               onSuccess: () => {
-                setThreadDeleteTarget(null);
+                threadDeleteDialog.onClose();
                 navigate(`/projects/${target.projectId}`, { replace: true });
               },
               onError: (nextError) => {
@@ -1276,7 +1267,7 @@ export function ThreadDetailView() {
       />
       {canUseGitUi ? (
         <ThreadGitActionDialog
-          target={threadGitActionTarget}
+          target={threadGitActionDialog.target}
           pending={requestEnvironmentAction.isPending}
           askAgentPending={sendMessage.isPending}
           branchName={threadBranchName}
@@ -1297,7 +1288,7 @@ export function ThreadDetailView() {
           }
           onOpenChange={(open) => {
             if (!open) {
-              setThreadGitActionTarget(null);
+              threadGitActionDialog.onClose();
               onMergeBaseBranchPickerOpenChange(false);
             }
           }}

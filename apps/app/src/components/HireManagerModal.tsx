@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { FormError } from "@/components/shared/FormError";
 import { Input } from "@/components/ui/input";
 import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
@@ -51,19 +52,13 @@ export function HireManagerModal({
   const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<ReasoningLevel | "">("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (
-      providers.length > 0 &&
-      !providers.some((provider) => provider.id === selectedProviderId)
-    ) {
-      setSelectedProviderId(resolvePreferredManagerProviderId(providers));
-    }
-  }, [providers, selectedProviderId]);
+  const effectiveProviderId = providers.some((provider) => provider.id === selectedProviderId)
+    ? selectedProviderId
+    : resolvePreferredManagerProviderId(providers);
 
   const hasMultipleProviders = providers.length >= 2;
 
-  const modelsQuery = useAvailableModels(selectedProviderId || undefined);
+  const modelsQuery = useAvailableModels(effectiveProviderId || undefined);
   const models = useMemo(
     () => modelsQuery.data ?? [],
     [modelsQuery.data],
@@ -96,16 +91,16 @@ export function HireManagerModal({
     (): readonly PromptOption<string>[] =>
       models.map((model) => ({
         value: model.model,
-        label: formatModelLabel(model.displayName || model.model, selectedProviderId),
+        label: formatModelLabel(model.displayName || model.model, effectiveProviderId),
       })),
-    [models, selectedProviderId],
+    [effectiveProviderId, models],
   );
 
   // Reset model and reasoning when provider changes.
   useEffect(() => {
     setSelectedModel("");
     setSelectedReasoningLevel("");
-  }, [selectedProviderId]);
+  }, [effectiveProviderId]);
 
   useEffect(() => {
     if (models.length > 0 && !models.some((m) => m.model === selectedModel)) {
@@ -121,6 +116,11 @@ export function HireManagerModal({
       setSelectedReasoningLevel("");
     }
   }, [selectedModelData]);
+  const effectiveReasoningLevel = reasoningOptions.some(
+    (option) => option.value === selectedReasoningLevel,
+  )
+    ? selectedReasoningLevel
+    : reasoningOptions[0]?.value ?? "";
 
   const handleProviderChange = useCallback((id: string) => {
     setSelectedProviderId(id);
@@ -144,11 +144,11 @@ export function HireManagerModal({
       const thread = await hireManager.mutateAsync({
         projectId,
         ...(trimmedManagerName ? { title: trimmedManagerName } : {}),
-        ...(hasMultipleProviders && selectedProviderId
-          ? { providerId: selectedProviderId }
+        ...(hasMultipleProviders && effectiveProviderId
+          ? { providerId: effectiveProviderId }
           : {}),
         ...(selectedModel ? { model: selectedModel } : {}),
-        ...(selectedReasoningLevel ? { reasoningLevel: selectedReasoningLevel } : {}),
+        ...(effectiveReasoningLevel ? { reasoningLevel: effectiveReasoningLevel } : {}),
       });
       onHired(thread);
       onClose();
@@ -166,8 +166,8 @@ export function HireManagerModal({
     onHired,
     projectId,
     selectedModel,
-    selectedProviderId,
-    selectedReasoningLevel,
+    effectiveProviderId,
+    effectiveReasoningLevel,
   ]);
 
   return (
@@ -200,7 +200,7 @@ export function HireManagerModal({
                 <PromptProviderModelPicker
                   className="text-foreground"
                   providerOptions={providerOptions}
-                  selectedProviderId={selectedProviderId}
+                  selectedProviderId={effectiveProviderId}
                   onSelectedProviderChange={handleProviderChange}
                   hasMultipleProviders={hasMultipleProviders}
                   modelValue={selectedModel}
@@ -217,7 +217,7 @@ export function HireManagerModal({
               <DetailRow label="Reasoning" valueClassName="min-w-0" className="py-1">
                 <PromptOptionPicker
                   label="Reasoning"
-                  value={selectedReasoningLevel as ReasoningLevel}
+                  value={effectiveReasoningLevel}
                   options={reasoningOptions}
                   onChange={setSelectedReasoningLevel}
                   className="text-foreground"
@@ -225,11 +225,7 @@ export function HireManagerModal({
               </DetailRow>
             ) : null}
           </DetailCard>
-          {error ? (
-            <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+          <FormError message={error} />
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
               {isPending ? "Hiring..." : "Hire Manager"}

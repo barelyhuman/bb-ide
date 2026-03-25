@@ -53,12 +53,14 @@ import {
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/shared/EmptyState"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog"
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog"
+import { useDialogState } from "@/hooks/useDialogState"
 import {
   isArchiveForceRequiredError,
 } from "@/lib/thread-archive"
@@ -127,12 +129,10 @@ export function ProjectList({
   const navigate = useNavigate()
   const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(collapsedProjectIdsAtom)
   const [collapsedManagerIdList, setCollapsedManagerIdList] = useAtom(collapsedManagerIdsAtom)
-  const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
   const [openThreadActionsThreadId, setOpenThreadActionsThreadId] = useState<string | null>(null)
-  const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
-    null
-  )
-  const [threadDeleteTarget, setThreadDeleteTarget] = useState<Thread | null>(null)
+  const archiveConfirmationDialog = useDialogState<Thread>()
+  const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>()
+  const threadDeleteDialog = useDialogState<Thread>()
 
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
@@ -167,13 +167,14 @@ export function ProjectList({
   }, [threads])
 
   useEffect(() => {
-    if (!archiveConfirmationThread || !threads) return
+    const archiveConfirmationTarget = archiveConfirmationDialog.target
+    if (!archiveConfirmationTarget || !threads) return
 
-    const nextThread = threads.find((thread) => thread.id === archiveConfirmationThread.id)
+    const nextThread = threads.find((thread) => thread.id === archiveConfirmationTarget.id)
     if (!nextThread || nextThread.archivedAt != null) {
-      setArchiveConfirmationThread(null)
+      archiveConfirmationDialog.onClose()
     }
-  }, [archiveConfirmationThread, threads])
+  }, [archiveConfirmationDialog.onClose, archiveConfirmationDialog.target, threads])
 
   const toggleProjectCollapsed = (projectId: string) => {
     setCollapsedProjectIdList((current) => {
@@ -274,7 +275,7 @@ export function ProjectList({
     archiveThread.mutate({ id: thread.id }, {
       onError: (error) => {
         if (isArchiveForceRequiredError(error)) {
-          setArchiveConfirmationThread(thread)
+          archiveConfirmationDialog.onOpen(thread)
           return
         }
         toast.error(
@@ -287,7 +288,7 @@ export function ProjectList({
   const requestRenameThread = (thread: Thread) => {
     if (updateThread.isPending) return
 
-    setThreadRenameTarget({
+    threadRenameDialog.onOpen({
       id: thread.id,
       currentTitle: getThreadDisplayTitle(thread),
       threadType: thread.type,
@@ -302,7 +303,7 @@ export function ProjectList({
       },
       {
         onSuccess: () => {
-          setThreadRenameTarget(null)
+          threadRenameDialog.onClose()
         },
       }
     )
@@ -310,7 +311,7 @@ export function ProjectList({
 
   const requestDeleteThread = (thread: Thread) => {
     if (deleteThread.isPending) return
-    setThreadDeleteTarget(thread)
+    threadDeleteDialog.onOpen(thread)
   }
 
   const confirmDeleteThread = (thread: Thread) => {
@@ -318,7 +319,7 @@ export function ProjectList({
       { id: thread.id },
       {
         onSuccess: () => {
-          setThreadDeleteTarget(null)
+          threadDeleteDialog.onClose()
           if (selectedThreadId === thread.id) {
             navigate(`/projects/${thread.projectId}`, { replace: true })
           }
@@ -333,11 +334,11 @@ export function ProjectList({
   }
 
   const confirmArchiveThread = () => {
-    if (!archiveConfirmationThread || archiveThread.isPending) return
+    if (!archiveConfirmationDialog.target || archiveThread.isPending) return
 
-    const threadId = archiveConfirmationThread.id
-    const label = threadTypeLabel(archiveConfirmationThread.type)
-    setArchiveConfirmationThread(null)
+    const threadId = archiveConfirmationDialog.target.id
+    const label = threadTypeLabel(archiveConfirmationDialog.target.type)
+    archiveConfirmationDialog.onClose()
     archiveThread.mutate(
       { id: threadId, force: true },
       {
@@ -737,11 +738,13 @@ export function ProjectList({
                         {otherThreads.map((thread) => renderThreadRow(project.id, thread))}
                       </div>
                     ) : (
-                      <div className="group-data-[collapsible=icon]:hidden">
-                        <p className="py-0.5 pl-8 pr-2 text-xs leading-4 text-sidebar-foreground/60">
-                          No threads
-                        </p>
-                      </div>
+                      <EmptyState
+                        message="No threads"
+                        icon={FolderOpen}
+                        className="py-0.5 pl-8 pr-2 group-data-[collapsible=icon]:hidden"
+                        iconClassName="size-3.5 text-sidebar-foreground/50"
+                        messageClassName="text-xs leading-4 text-sidebar-foreground/60"
+                      />
                     )
                   ) : null}
                 </SidebarMenuItem>
@@ -749,20 +752,20 @@ export function ProjectList({
             })
           ) : (
             <SidebarMenuItem>
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                No projects
-              </div>
+              <EmptyState
+                message="No projects"
+                icon={Folder}
+                className="px-2 py-1.5"
+                iconClassName="size-3.5"
+                messageClassName="text-xs"
+              />
             </SidebarMenuItem>
           )}
         </SidebarMenu>
       </SidebarGroupContent>
       <Dialog
-        open={archiveConfirmationThread !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setArchiveConfirmationThread(null)
-          }
-        }}
+        open={archiveConfirmationDialog.isOpen}
+        onOpenChange={archiveConfirmationDialog.onOpenChange}
       >
         <DialogContent>
           <DialogHeader>
@@ -771,7 +774,7 @@ export function ProjectList({
               Archive and clean up workspace?
             </DialogTitle>
             <DialogDescription>
-              This {archiveConfirmationThread ? threadTypeLabel(archiveConfirmationThread.type) : "thread"} has uncommitted or unmerged work in its worktree. Archiving will remove
+              This {archiveConfirmationDialog.target ? threadTypeLabel(archiveConfirmationDialog.target.type) : "thread"} has uncommitted or unmerged work in its worktree. Archiving will remove
               that workspace and changes may be lost.
             </DialogDescription>
           </DialogHeader>
@@ -779,14 +782,14 @@ export function ProjectList({
             <Button
               type="button"
               variant="outline"
-              onClick={() => setArchiveConfirmationThread(null)}
+              onClick={archiveConfirmationDialog.onClose}
             >
               Cancel
             </Button>
             <Button
               type="button"
               variant="destructive"
-              disabled={!archiveConfirmationThread || archiveThread.isPending}
+              disabled={!archiveConfirmationDialog.target || archiveThread.isPending}
               onClick={confirmArchiveThread}
             >
               Archive anyway
@@ -795,23 +798,15 @@ export function ProjectList({
         </DialogContent>
       </Dialog>
       <ThreadRenameDialog
-        target={threadRenameTarget}
+        target={threadRenameDialog.target}
         pending={updateThread.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            setThreadRenameTarget(null)
-          }
-        }}
+        onOpenChange={threadRenameDialog.onOpenChange}
         onRename={submitThreadRename}
       />
       <ThreadDeleteDialog
-        target={threadDeleteTarget}
+        target={threadDeleteDialog.target}
         pending={deleteThread.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            setThreadDeleteTarget(null)
-          }
-        }}
+        onOpenChange={threadDeleteDialog.onOpenChange}
         onDelete={confirmDeleteThread}
       />
     </SidebarGroup>

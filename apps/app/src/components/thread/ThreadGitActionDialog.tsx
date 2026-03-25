@@ -3,6 +3,7 @@ import { assertNever } from "@bb/core-ui";
 import type { PromptInput, ThreadType, WorkspaceStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import { FormError } from "@/components/shared/FormError";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -338,11 +339,7 @@ function ThreadGitActionDialogContent({
             ) : null}
           </DetailCard>
         ) : null}
-        {errorMessage ? (
-          <p className="rounded-md border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            {errorMessage}
-          </p>
-        ) : null}
+        <FormError message={errorMessage} />
         <DialogFooter className="px-0 pt-4 sm:justify-between">
           {askAgentInput && onAskAgentToFix ? (
             <Button
