@@ -43,14 +43,14 @@ import { wsManager } from "../lib/ws";
 
 const ENVIRONMENT_QUERY_KEY = "environment";
 const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
-const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
+const WORKSPACE_STATUS_QUERY_KEY = "workspaceStatus";
 const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY = "environmentMergeBaseBranches";
 const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 const THREAD_QUERY_KEY = "thread";
 type ThreadScopedQueryKeyPrefix =
   | typeof THREAD_QUERY_KEY
-  | typeof THREAD_WORK_STATUS_QUERY_KEY
+  | typeof WORKSPACE_STATUS_QUERY_KEY
   | typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY
   | typeof THREAD_TIMELINE_QUERY_KEY;
 
@@ -80,7 +80,7 @@ function resolveThreadScopedPlaceholder<TData>(
     : undefined;
 }
 
-export function resolveThreadWorkStatusPlaceholder(
+export function resolveWorkspaceStatusPlaceholder(
   previousData: WorkspaceStatus | null | undefined,
   previousQueryKey: QueryKey | undefined,
   nextThreadId: string,
@@ -89,7 +89,7 @@ export function resolveThreadWorkStatusPlaceholder(
     previousData,
     previousQueryKey,
     nextThreadId,
-    THREAD_WORK_STATUS_QUERY_KEY,
+    WORKSPACE_STATUS_QUERY_KEY,
   );
 }
 
@@ -992,7 +992,7 @@ export function useDeleteThread() {
 
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
-      queryClient.removeQueries({ queryKey: ["threadWorkStatus", args.id] });
+      queryClient.removeQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY, args.id] });
       queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
       queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
 
@@ -1018,7 +1018,7 @@ export function useDeleteThread() {
     onSettled: (_data, _error, args) => {
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
-      queryClient.removeQueries({ queryKey: ["threadWorkStatus", args.id] });
+      queryClient.removeQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY, args.id] });
       queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
       queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -1069,10 +1069,9 @@ export function useRequestEnvironmentAction() {
       queryClient.invalidateQueries({ queryKey: ["thread"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
-      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus"] });
+      queryClient.invalidateQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });
 }
-
 

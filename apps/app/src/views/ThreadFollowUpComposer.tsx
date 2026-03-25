@@ -151,7 +151,7 @@ export function ThreadFollowUpComposer({
   mergeBaseBranchOptionsLoading = false,
   onPromptBannerMergeBaseBranchChange,
   onPromptBannerMergeBaseBranchPickerOpenChange,
-  resolvedThreadWorkStatus,
+  workspaceStatus,
   threadId,
   onPromptGitStatsBannerClick,
   onPromptBannerFileClick,
@@ -217,7 +217,7 @@ export function ThreadFollowUpComposer({
   mergeBaseBranchOptionsLoading?: boolean;
   onPromptBannerMergeBaseBranchChange?: (branch: string) => void;
   onPromptBannerMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
-  resolvedThreadWorkStatus?: {
+  workspaceStatus?: {
     files?: ComponentProps<typeof WorkspaceChangesList>["files"];
   } | null;
   threadId: string;
@@ -356,7 +356,7 @@ export function ThreadFollowUpComposer({
                 </span>
               )}
             </div>
-            {canExpandPromptChangeList && resolvedThreadWorkStatus ? (
+            {canExpandPromptChangeList && workspaceStatus ? (
               <div
                 className={cn(
                   "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
@@ -370,7 +370,7 @@ export function ThreadFollowUpComposer({
               >
                 <div className="overflow-hidden">
                   <WorkspaceChangesList
-                    files={resolvedThreadWorkStatus.files ?? []}
+                    files={workspaceStatus.files ?? []}
                     onFileClick={onPromptBannerFileClick}
                   />
                 </div>

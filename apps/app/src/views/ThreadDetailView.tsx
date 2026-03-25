@@ -78,7 +78,7 @@ import {
   buildFollowUpSignatureFromRow,
 } from "@/lib/thread-follow-up-signature";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
-import { getThreadGitStatusDisplay } from "@/lib/thread-work-status";
+import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   formatChangeSummary,
   formatWorkspaceChangeSummary,
@@ -423,9 +423,9 @@ export function ThreadDetailView() {
     selectedMergeBaseBranch,
   );
   const workStatus = workStatusQuery.data;
-  const threadWorkStatusError = workStatusQuery.error;
-  const resolvedThreadWorkStatus =
-    threadWorkStatusError ? undefined : (workStatus ?? undefined);
+  const workspaceStatusError = workStatusQuery.error;
+  const workspaceStatus =
+    workspaceStatusError ? undefined : (workStatus ?? undefined);
   const { isLocalHost, openPath } = useHostDaemon();
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
@@ -547,7 +547,7 @@ export function ThreadDetailView() {
     }
 
     const normalizedBranch = branch.trim();
-    const defaultBranch = resolvedThreadWorkStatus?.defaultBranch?.trim();
+    const defaultBranch = workspaceStatus?.defaultBranch?.trim();
     const nextPersistedMergeBaseBranch =
       normalizedBranch.length > 0 && normalizedBranch !== defaultBranch
         ? normalizedBranch
@@ -574,7 +574,7 @@ export function ThreadDetailView() {
       },
     );
   }, [
-    resolvedThreadWorkStatus?.defaultBranch,
+    workspaceStatus?.defaultBranch,
     setSelectedMergeBaseBranch,
     thread,
     threadId,
@@ -821,12 +821,12 @@ export function ThreadDetailView() {
     target: ThreadGitActionDialogTarget;
     label: string;
   } | null = (() => {
-    if (!canUseGitUi || !resolvedThreadWorkStatus || isArchivedThread) {
+    if (!canUseGitUi || !workspaceStatus || isArchivedThread) {
       return null;
     }
 
     if (isDirectThreadEnvironment) {
-      if (!resolvedThreadWorkStatus.hasUncommittedChanges) {
+      if (!workspaceStatus.hasUncommittedChanges) {
         return null;
       }
       return {
@@ -838,13 +838,13 @@ export function ThreadDetailView() {
     if (
       environment?.managed &&
       (
-        resolvedThreadWorkStatus.hasCommittedUnmergedChanges ||
-        resolvedThreadWorkStatus.hasUncommittedChanges
+        workspaceStatus.hasCommittedUnmergedChanges ||
+        workspaceStatus.hasUncommittedChanges
       )
     ) {
       return {
         target: {
-          kind: resolvedThreadWorkStatus.hasUncommittedChanges
+          kind: workspaceStatus.hasUncommittedChanges
             ? "commit_and_squash_merge"
             : "squash_merge",
         },
@@ -866,64 +866,64 @@ export function ThreadDetailView() {
       : undefined;
   const effectiveMergeBaseBranch =
     selectedMergeBaseBranch ??
-    resolvedThreadWorkStatus?.mergeBaseBranch ??
-    resolvedThreadWorkStatus?.defaultBranch;
+    workspaceStatus?.mergeBaseBranch ??
+    workspaceStatus?.defaultBranch;
   const showBranchComparisonUi = Boolean(
-    effectiveMergeBaseBranch || resolvedThreadWorkStatus?.defaultBranch,
+    effectiveMergeBaseBranch || workspaceStatus?.defaultBranch,
   );
-  const promptBannerSummary = resolvedThreadWorkStatus
+  const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary({
-          changedFiles: resolvedThreadWorkStatus.changedFiles,
-          insertions: resolvedThreadWorkStatus.insertions,
-          deletions: resolvedThreadWorkStatus.deletions,
+          changedFiles: workspaceStatus.changedFiles,
+          insertions: workspaceStatus.insertions,
+          deletions: workspaceStatus.deletions,
         })
-      : formatWorkspaceChangeSummary(resolvedThreadWorkStatus)
+      : formatWorkspaceChangeSummary(workspaceStatus)
     : "";
   const showPromptGitStatsBanner = canUseGitUi && Boolean(
-    resolvedThreadWorkStatus &&
+    workspaceStatus &&
     (
       showBranchComparisonUi
-        ? resolvedThreadWorkStatus.changedFiles > 0
-        : resolvedThreadWorkStatus.workspaceChangedFiles > 0
+        ? workspaceStatus.changedFiles > 0
+        : workspaceStatus.workspaceChangedFiles > 0
     ),
   );
   const canExpandPromptChangeList = Boolean(
     canUseGitUi &&
-    resolvedThreadWorkStatus &&
-    (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
+    workspaceStatus &&
+    (workspaceStatus.files?.length ?? 0) > 0,
   );
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     (environment ? "environment" : undefined);
   const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentLabel ?? undefined;
-  const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
+  const threadBranchName = workspaceStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
-  const showThreadWorkspaceStatus =
+  const showWorkspaceStatus =
     canUseGitUi &&
-    (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
+    (Boolean(workspaceStatus) || Boolean(workspaceStatusError)) &&
     !(thread.archivedAt != null && environment?.managed !== true);
-  const threadGitStatusDisplay = getThreadGitStatusDisplay(
-    resolvedThreadWorkStatus,
+  const threadGitStatusDisplay = getGitStatusDisplay(
+    workspaceStatus,
     {
       mergeBaseBranch: threadMergeBaseBranch,
       showBranchComparison: showBranchComparisonUi,
     },
   );
-  const threadGitStatusLabelClass = resolvedThreadWorkStatus?.state === "deleted"
+  const threadGitStatusLabelClass = workspaceStatus?.state === "deleted"
     ? "text-destructive"
-    : resolvedThreadWorkStatus?.state === "untracked"
+    : workspaceStatus?.state === "untracked"
       ? "text-muted-foreground"
       : "text-foreground";
   const showThreadChangedFiles = canUseGitUi && Boolean(
-    resolvedThreadWorkStatus &&
+    workspaceStatus &&
       (
-        resolvedThreadWorkStatus.state === "dirty_uncommitted" ||
-        resolvedThreadWorkStatus.state === "dirty_and_committed_unmerged" ||
-        resolvedThreadWorkStatus.state === "committed_unmerged"
+        workspaceStatus.state === "dirty_uncommitted" ||
+        workspaceStatus.state === "dirty_and_committed_unmerged" ||
+        workspaceStatus.state === "committed_unmerged"
       ) &&
-      (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
+      (workspaceStatus.files?.length ?? 0) > 0,
   );
   const showThreadMergeBase = showBranchComparisonUi && Boolean(threadMergeBaseBranch);
   const threadMergeBaseCandidates = getMergeBaseBranchCandidates({
@@ -941,7 +941,7 @@ export function ThreadDetailView() {
       (!isManagerThread && threadEnvironmentType) ||
       (!isManagerThread && threadBranchName) ||
       (!isManagerThread && showThreadMergeBase) ||
-      showThreadWorkspaceStatus ||
+      showWorkspaceStatus ||
       showThreadChangedFiles ||
       thread.archivedAt != null,
   );
@@ -1165,7 +1165,7 @@ export function ThreadDetailView() {
           )}
         </DetailRow>
       ) : null}
-      {showThreadWorkspaceStatus ? (
+      {showWorkspaceStatus ? (
         <DetailRow
           label="Git status"
           align="start"
@@ -1213,7 +1213,7 @@ export function ThreadDetailView() {
           valueClassName="pt-0.5"
         >
           <WorkspaceChangesList
-            files={resolvedThreadWorkStatus?.files}
+            files={workspaceStatus?.files}
             maxHeightClassName="max-h-48"
           />
         </DetailRow>
@@ -1519,7 +1519,7 @@ export function ThreadDetailView() {
       onPromptBannerMergeBaseBranchPickerOpenChange={
         showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
       }
-      resolvedThreadWorkStatus={resolvedThreadWorkStatus}
+      workspaceStatus={workspaceStatus}
       threadId={thread.id}
       onPromptGitStatsBannerClick={
         canUseGitUi ? handlePromptGitStatsBannerClick : () => {}
@@ -1718,7 +1718,7 @@ export function ThreadDetailView() {
           branchName={threadBranchName}
           gitStatusLabel={threadGitStatusDisplay.label}
           gitStatusSummary={threadGitStatusDisplay.summary}
-          changedFiles={resolvedThreadWorkStatus?.files}
+          changedFiles={workspaceStatus?.files}
           threadId={thread.id}
           threadType={thread.type}
           showMergeBaseDetails={showBranchComparisonUi}
