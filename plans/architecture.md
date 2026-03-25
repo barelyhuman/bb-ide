@@ -9,17 +9,19 @@ Reference document for the bb system architecture, data model, and protocol spec
 ```
 App/CLI  <--HTTP-->  Server (cloud)  <--HTTP-->  Host-daemon (per machine)
          <--WS(notifications)-->     <--WS(notifications)-->
-                                                    |
-                                              Provider processes (via agent-runtime, one per thread)
+   |                                                    |
+   +-----HTTP (local API)----> Host-daemon         Provider processes (via agent-runtime, one per thread)
 ```
 
 | Component | Where | Lifecycle | Role |
 |---|---|---|---|
 | **Server** | Cloud (or local for dev) | Always on, stateless (DB is the state) | HTTP API, DB, WebSocket hub, routes commands to hosts |
-| **Host-daemon** | On each machine | Long-lived, started by CLI/app or as a service | Registers host, provisions workspaces, runs provider processes, does git operations, relays events to server |
-| **App / CLI** | User's machine | Ephemeral | Pure clients, talk only to server |
+| **Host-daemon** | On each machine | Long-lived, started by CLI/app or as a service | Registers host, provisions workspaces, runs provider processes, does git operations, relays events to server. Exposes a local API for app/CLI. |
+| **App / CLI** | User's machine | Ephemeral | Talk to server for data + WS notifications. Talk directly to the local host daemon for machine-local operations (host ID, open-in-editor, folder picker, daemon status). |
 
-All connections use the same pattern: **HTTP for data, WebSocket for notifications only.** WS never carries payloads — just change hints so clients know to refetch. WS notifications are fired automatically by the server's data mutation layer, not by route handlers.
+**Server connections** use HTTP for data, WebSocket for notifications only. WS never carries payloads — just change hints so clients know to refetch. WS notifications are fired automatically by the server's data mutation layer, not by route handlers.
+
+**Local daemon connections** are direct HTTP from app/CLI to the daemon on `localhost:BB_HOST_DAEMON_PORT`. No auth (localhost-only). Used for operations that must be instant and work even when the server is unreachable. See "Host-Daemon Local API" section below.
 
 ---
 
@@ -627,7 +629,9 @@ POST /restart        → (dev only) triggers graceful restart
 
 **Ephemeral hosts don't have a local API.** The app only calls this for persistent hosts on the same machine. For threads running on ephemeral hosts, local operations (open-in-editor, etc.) are disabled with clear UI states.
 
-**Contract:** Defined in a small contract package or as part of `@bb/host-daemon-contract` (separate from the server-facing internal protocol).
+**Contract:** `@bb/host-daemon-contract/local` — Zod schemas, typed routes, and `createHostDaemonLocalClient()`. Separate from the server-facing internal protocol.
+
+**Port discovery:** The app fetches `GET /system/config` from the server on startup, which returns `{ hostDaemonPort }`. The CLI reads `BB_HOST_DAEMON_PORT` from the environment. Both use `createHostDaemonLocalClient()` to create a typed client.
 
 ## System / Operational
 
@@ -662,8 +666,8 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 | `@bb/tsconfig` | Shared TS config | — |
 | `apps/server` | Server implementation | @bb/domain, @bb/config, @bb/logger, @bb/db, @bb/server-contract, @bb/host-daemon-contract, @bb/sandbox-host |
 | `apps/host-daemon` | Host-daemon implementation | @bb/domain, @bb/config, @bb/logger, @bb/host-daemon-contract, @bb/agent-runtime, @bb/workspace |
-| `apps/app` | Electron/web app | @bb/domain, @bb/core-ui, @bb/ui-core, @bb/server-contract |
-| `apps/cli` | CLI | @bb/domain, @bb/core-ui, @bb/server-contract |
+| `apps/app` | Electron/web app | @bb/domain, @bb/core-ui, @bb/ui-core, @bb/server-contract, @bb/host-daemon-contract |
+| `apps/cli` | CLI | @bb/domain, @bb/core-ui, @bb/server-contract, @bb/host-daemon-contract |
 
 ### Code ownership
 
