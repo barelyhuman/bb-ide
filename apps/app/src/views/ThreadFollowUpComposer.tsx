@@ -6,7 +6,11 @@ import {
   type ServiceTier,
   type ThreadQueuedMessage,
 } from "@bb/domain";
-import { PromptBox } from "@/components/promptbox/PromptBox";
+import {
+  PromptBox,
+  type PromptBoxAttachmentsConfig,
+  type PromptBoxMentionsConfig,
+} from "@/components/promptbox/PromptBox";
 import {
   PromptOptionDisplay,
   type PromptOption,
@@ -151,7 +155,7 @@ export function ThreadFollowUpComposer({
   mergeBaseBranchOptionsLoading = false,
   onPromptBannerMergeBaseBranchChange,
   onPromptBannerMergeBaseBranchPickerOpenChange,
-  resolvedThreadWorkStatus,
+  workspaceStatus,
   threadId,
   onPromptGitStatsBannerClick,
   onPromptBannerFileClick,
@@ -217,7 +221,7 @@ export function ThreadFollowUpComposer({
   mergeBaseBranchOptionsLoading?: boolean;
   onPromptBannerMergeBaseBranchChange?: (branch: string) => void;
   onPromptBannerMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
-  resolvedThreadWorkStatus?: {
+  workspaceStatus?: {
     files?: ComponentProps<typeof WorkspaceChangesList>["files"];
   } | null;
   threadId: string;
@@ -237,12 +241,12 @@ export function ThreadFollowUpComposer({
   threadStatus: string;
   onStop?: () => void;
   promptPlaceholder: string;
-  mentionSuggestions: ComponentProps<typeof PromptBox>["mentionSuggestions"];
-  mentionSearchScope?: ComponentProps<typeof PromptBox>["mentionSearchScope"];
+  mentionSuggestions: PromptBoxMentionsConfig["suggestions"];
+  mentionSearchScope?: PromptBoxMentionsConfig["searchScope"];
   mentionLoading: boolean;
   mentionError: boolean;
-  onMentionQueryChange: NonNullable<ComponentProps<typeof PromptBox>["onMentionQueryChange"]>;
-  attachments: NonNullable<ComponentProps<typeof PromptBox>["attachments"]>;
+  onMentionQueryChange: NonNullable<PromptBoxMentionsConfig["onQueryChange"]>;
+  attachments: NonNullable<PromptBoxAttachmentsConfig["items"]>;
   projectId: string;
   onAttachFiles: (files: File[]) => void | Promise<void>;
   onRemoveAttachment: (path: string) => void;
@@ -356,7 +360,7 @@ export function ThreadFollowUpComposer({
                 </span>
               )}
             </div>
-            {canExpandPromptChangeList && resolvedThreadWorkStatus ? (
+            {canExpandPromptChangeList && workspaceStatus ? (
               <div
                 className={cn(
                   "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
@@ -370,7 +374,7 @@ export function ThreadFollowUpComposer({
               >
                 <div className="overflow-hidden">
                   <WorkspaceChangesList
-                    files={resolvedThreadWorkStatus.files ?? []}
+                    files={workspaceStatus.files ?? []}
                     onFileClick={onPromptBannerFileClick}
                   />
                 </div>
@@ -391,51 +395,69 @@ export function ThreadFollowUpComposer({
           value={message}
           onChange={onChangeMessage}
           onSubmit={onSubmit}
-          zenModeLayout="thread"
-          zenModeStorageKey={null}
-          zenModeResetKey={threadId}
-          resetZenModeOnSubmit
-          onStop={threadStatus === "active" ? onStop : undefined}
-          isSubmitting={isFollowUpSubmitting}
-          submitDisabled={!canSendFollowUp || isFollowUpSubmitting}
-          submitTitle={
-            threadStatus === "active" ? "Queue follow-up (Enter)" : "Submit (Enter)"
-          }
-          isRunning={threadStatus === "active"}
           placeholder={promptPlaceholder}
-          submitMode="enter"
           autoFocus
-          mentionSuggestions={mentionSuggestions}
-          mentionSearchScope={mentionSearchScope}
-          mentionLoading={mentionLoading}
-          mentionError={mentionError}
-          onMentionQueryChange={onMentionQueryChange}
-          attachments={attachments}
-          attachmentProjectId={projectId}
-          onAttachFiles={onAttachFiles}
-          onRemoveAttachment={onRemoveAttachment}
-          isAttaching={isAttaching}
-          attachmentError={attachmentError}
+          submission={{
+            onStop: threadStatus === "active" ? onStop : undefined,
+            isSubmitting: isFollowUpSubmitting,
+            disabled: !canSendFollowUp || isFollowUpSubmitting,
+            title: threadStatus === "active"
+              ? "Queue follow-up (Enter)"
+              : "Submit (Enter)",
+            isRunning: threadStatus === "active",
+            mode: "enter",
+          }}
+          mentions={{
+            suggestions: mentionSuggestions,
+            searchScope: mentionSearchScope,
+            isLoading: mentionLoading,
+            isError: mentionError,
+            onQueryChange: onMentionQueryChange,
+          }}
+          attachments={{
+            items: attachments,
+            projectId,
+            onAttachFiles,
+            onRemove: onRemoveAttachment,
+            isAttaching,
+            error: attachmentError,
+          }}
+          zenMode={{
+            layout: "thread",
+            storageKey: null,
+            resetKey: threadId,
+            resetOnSubmit: true,
+          }}
           footerStart={
             <PromptExecutionControls
-              hasMultipleProviders={hasMultipleProviders}
-              providerOptions={providerOptions}
-              selectedProviderId={selectedProviderId}
-              providerDisplayName={providerDisplayName}
-              providerReadOnly
-              activeModel={activeModel}
-              selectedModel={selectedModel}
-              modelOptions={modelOptions}
-              onSelectedModelChange={onSelectedModelChange}
-              serviceTier={serviceTier}
-              onServiceTierChange={onServiceTierChange}
-              supportsServiceTier={supportsServiceTier}
-              reasoningLevel={reasoningLevel}
-              reasoningOptions={reasoningOptions}
-              onReasoningLevelChange={onReasoningLevelChange}
-              sandboxMode={sandboxMode}
-              sandboxOptions={sandboxOptions}
-              onSandboxModeChange={onSandboxModeChange}
+              provider={{
+                hasMultiple: hasMultipleProviders,
+                options: providerOptions,
+                selectedId: selectedProviderId,
+                displayName: providerDisplayName,
+                readOnly: true,
+              }}
+              model={{
+                active: activeModel,
+                selected: selectedModel,
+                options: modelOptions,
+                onChange: onSelectedModelChange,
+              }}
+              serviceTier={{
+                value: serviceTier,
+                onChange: onServiceTierChange,
+                supported: supportsServiceTier,
+              }}
+              reasoning={{
+                value: reasoningLevel,
+                options: reasoningOptions,
+                onChange: onReasoningLevelChange,
+              }}
+              sandbox={{
+                value: sandboxMode,
+                options: sandboxOptions,
+                onChange: onSandboxModeChange,
+              }}
             />
           }
         />

@@ -3,99 +3,107 @@ import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
 import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
 
-interface PromptExecutionControlsProps {
-  providerOptions?: readonly PromptOption<string>[];
-  selectedProviderId?: string;
-  onSelectedProviderChange?: (value: string) => void;
-  hasMultipleProviders?: boolean;
-  providerDisplayName?: string;
-  providerReadOnly?: boolean;
-  activeModel?: { model: string } | null;
-  selectedModel: string;
-  modelOptions: readonly PromptOption<string>[];
-  onSelectedModelChange: (value: string) => void;
-  serviceTier?: ServiceTier;
-  onServiceTierChange: (value: ServiceTier | undefined) => void;
-  supportsServiceTier: boolean;
-  reasoningLevel: ReasoningLevel;
-  reasoningOptions: readonly PromptOption<ReasoningLevel>[];
-  onReasoningLevelChange: (value: ReasoningLevel) => void;
-  sandboxMode?: SandboxMode;
-  sandboxOptions: readonly PromptOption<SandboxMode>[];
-  onSandboxModeChange: (value: SandboxMode) => void;
+export interface PromptExecutionProviderConfig {
+  options?: readonly PromptOption<string>[];
+  selectedId?: string;
+  onChange?: (value: string) => void;
+  hasMultiple?: boolean;
+  displayName?: string;
+  readOnly?: boolean;
+}
+
+export interface PromptExecutionModelConfig {
+  active?: { model: string } | null;
+  selected: string;
+  options: readonly PromptOption<string>[];
+  onChange: (value: string) => void;
+}
+
+export interface PromptExecutionServiceTierConfig {
+  value?: ServiceTier;
+  onChange: (value: ServiceTier | undefined) => void;
+  supported: boolean;
+}
+
+export interface PromptExecutionReasoningConfig {
+  value: ReasoningLevel;
+  options: readonly PromptOption<ReasoningLevel>[];
+  onChange: (value: ReasoningLevel) => void;
+}
+
+export interface PromptExecutionSandboxConfig {
+  value?: SandboxMode;
+  options: readonly PromptOption<SandboxMode>[];
+  onChange: (value: SandboxMode) => void;
+}
+
+export interface PromptExecutionControlsProps {
+  provider: PromptExecutionProviderConfig;
+  model: PromptExecutionModelConfig;
+  serviceTier?: PromptExecutionServiceTierConfig;
+  reasoning: PromptExecutionReasoningConfig;
+  sandbox: PromptExecutionSandboxConfig;
 }
 
 export function PromptExecutionControls({
-  providerOptions,
-  selectedProviderId,
-  onSelectedProviderChange,
-  hasMultipleProviders,
-  providerDisplayName,
-  providerReadOnly,
-  activeModel,
-  selectedModel,
-  modelOptions,
-  onSelectedModelChange,
+  provider,
+  model,
   serviceTier,
-  onServiceTierChange,
-  supportsServiceTier,
-  reasoningLevel,
-  reasoningOptions,
-  onReasoningLevelChange,
-  sandboxMode,
-  sandboxOptions,
-  onSandboxModeChange,
+  reasoning,
+  sandbox,
 }: PromptExecutionControlsProps) {
-  const resolvedSandboxMode = sandboxMode ?? sandboxOptions[0]?.value ?? "workspace-write";
+  const resolvedSandboxMode = sandbox.value ?? sandbox.options[0]?.value ?? "workspace-write";
+  const handleProviderChange = provider.onChange ?? (() => {});
+  const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
 
   // Show read-only provider label when provider is locked (thread follow-up)
   // and there's no model list to show in the unified picker.
   const showReadOnlyProvider =
-    hasMultipleProviders &&
-    providerReadOnly &&
-    providerDisplayName &&
-    modelOptions.length === 0;
+    provider.hasMultiple &&
+    provider.readOnly &&
+    provider.displayName &&
+    model.options.length === 0;
 
-  const showModelPicker = modelOptions.length > 0;
+  const showModelPicker = model.options.length > 0;
 
   return (
     <>
       {showReadOnlyProvider ? (
         <PromptOptionDisplay
           label="Provider"
-          value={providerDisplayName}
-          icon={providerOptions?.find((p) => p.value === selectedProviderId)?.icon}
+          value={provider.displayName}
+          icon={provider.options?.find((candidate) => candidate.value === provider.selectedId)?.icon}
         />
       ) : null}
       {showModelPicker ? (
         <PromptProviderModelPicker
-          providerOptions={providerOptions ?? []}
-          selectedProviderId={selectedProviderId ?? ""}
-          onSelectedProviderChange={onSelectedProviderChange ?? (() => {})}
-          hasMultipleProviders={hasMultipleProviders ?? false}
-          providerReadOnly={providerReadOnly}
-          modelValue={activeModel?.model ?? selectedModel}
-          modelOptions={modelOptions}
-          onModelChange={onSelectedModelChange}
+          providerOptions={provider.options ?? []}
+          selectedProviderId={provider.selectedId ?? ""}
+          onSelectedProviderChange={handleProviderChange}
+          hasMultipleProviders={provider.hasMultiple ?? false}
+          providerReadOnly={provider.readOnly}
+          modelValue={model.active?.model ?? model.selected}
+          modelOptions={model.options}
+          onModelChange={model.onChange}
           formatModelLabel={formatModelLabel}
-          fastModeEnabled={serviceTier === "fast"}
-          onFastModeChange={(enabled) => onServiceTierChange(enabled ? "fast" : undefined)}
-          showFastModeToggle={supportsServiceTier}
+          fastModeEnabled={serviceTier?.value === "fast"}
+          onFastModeChange={(enabled) => handleServiceTierChange(enabled ? "fast" : undefined)}
+          showFastModeToggle={serviceTier?.supported ?? false}
         />
       ) : null}
-      {reasoningOptions.length > 0 ? (
+      {reasoning.options.length > 0 ? (
         <PromptOptionPicker
           label="Reasoning"
-          value={reasoningLevel}
-          options={reasoningOptions}
-          onChange={onReasoningLevelChange}
+          value={reasoning.value}
+          options={reasoning.options}
+          onChange={reasoning.onChange}
         />
       ) : null}
       <PromptOptionPicker
         label="Sandbox"
         value={resolvedSandboxMode}
-        options={sandboxOptions}
-        onChange={onSandboxModeChange}
+        options={sandbox.options}
+        onChange={sandbox.onChange}
       />
     </>
   );

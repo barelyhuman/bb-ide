@@ -1,11 +1,15 @@
-import { type ComponentType, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useAtom } from "jotai";
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AvailableModel,
   ReasoningLevel,
   SandboxMode,
   ServiceTier,
 } from "@bb/domain";
-import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
+import {
+  createLocalStorageEnumStorage,
+  createProjectScopedStorageAtomFamily,
+  rawStringLocalStorage,
+} from "@/lib/browser-storage";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import {
   useAvailableModels,
@@ -18,6 +22,7 @@ const REASONING_STORAGE_KEY = "bb.promptbox.reasoning";
 const SANDBOX_STORAGE_KEY = "bb.promptbox.sandbox";
 const ENVIRONMENT_STORAGE_KEY = "bb.promptbox.environment";
 const PROVIDER_STORAGE_KEY = "bb.promptbox.provider";
+type StoredServiceTier = "" | ServiceTier;
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
@@ -43,15 +48,6 @@ interface PromptOption<T extends string> {
   icon?: ComponentType<{ className?: string }>;
 }
 
-interface PromptModelReasoningStorageKeys {
-  provider: string;
-  model: string;
-  serviceTier: string;
-  reasoning: string;
-  sandbox: string;
-  environment: string;
-}
-
 interface UsePromptModelReasoningOptions {
   scope?: "new-thread" | "thread";
   projectId?: string | null;
@@ -64,38 +60,28 @@ interface UsePromptModelReasoningOptions {
   initialEnvironmentSelectionValue?: string;
 }
 
-interface PromptModelReasoningState {
+interface ThreadPromptSelections {
+  selectedProviderId: string;
   selectedModel: string;
   serviceTier: ServiceTier | undefined;
   reasoningLevel: ReasoningLevel;
   sandboxMode: SandboxMode;
   environmentSelectionValue: string;
-  touched: {
-    selectedModel: boolean;
-    serviceTier: boolean;
-    reasoningLevel: boolean;
-    sandboxMode: boolean;
-    environmentSelectionValue: boolean;
-  };
 }
 
-type PromptModelReasoningField = Exclude<keyof PromptModelReasoningState, "touched">;
+type ThreadPromptField = keyof ThreadPromptSelections;
 
-type PromptModelReasoningAction =
-  | {
-      type: "replace";
-      state: PromptModelReasoningState;
-    }
-  | {
-      type: "sync-untouched";
-      state: Omit<PromptModelReasoningState, "touched">;
-    }
-  | {
-      type: "set-field";
-      field: PromptModelReasoningField;
-      value: PromptModelReasoningState[PromptModelReasoningField];
-      touched?: boolean;
-    };
+interface SyncThreadPromptSelectionsArgs {
+  currentSelections: ThreadPromptSelections;
+  nextSelections: ThreadPromptSelections;
+  touchedFields: ReadonlySet<ThreadPromptField>;
+}
+
+interface UpdateThreadPromptSelectionsArgs {
+  currentSelections: ThreadPromptSelections;
+  field: ThreadPromptField;
+  value: ThreadPromptSelections[ThreadPromptField];
+}
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return value === "low" || value === "medium" || value === "high" || value === "xhigh";
@@ -113,148 +99,130 @@ function isServiceTier(value: unknown): value is ServiceTier {
   return value === "fast" || value === "flex";
 }
 
-function getPromptModelReasoningStorageKeys(
-  projectId?: string | null,
-): PromptModelReasoningStorageKeys {
-  return {
-    provider: getProjectScopedStorageKey(PROVIDER_STORAGE_KEY, projectId),
-    model: getProjectScopedStorageKey(MODEL_STORAGE_KEY, projectId),
-    serviceTier: getProjectScopedStorageKey(SERVICE_TIER_STORAGE_KEY, projectId),
-    reasoning: getProjectScopedStorageKey(REASONING_STORAGE_KEY, projectId),
-    sandbox: getProjectScopedStorageKey(SANDBOX_STORAGE_KEY, projectId),
-    environment: getProjectScopedStorageKey(ENVIRONMENT_STORAGE_KEY, projectId),
-  };
+function isStoredServiceTier(value: string): value is StoredServiceTier {
+  return value === "" || isServiceTier(value);
 }
 
-function readStoredString(primaryStorageKey: string): string | null {
-  if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(primaryStorageKey);
-}
+const storedServiceTierStorage = createLocalStorageEnumStorage<StoredServiceTier>(
+  isStoredServiceTier,
+);
+const reasoningLevelStorage = createLocalStorageEnumStorage<ReasoningLevel>(
+  (value): value is ReasoningLevel => isReasoningLevel(value),
+);
+const sandboxModeStorage = createLocalStorageEnumStorage<SandboxMode>(
+  (value): value is SandboxMode => isSandboxMode(value),
+);
+const providerIdAtomFamily = createProjectScopedStorageAtomFamily(
+  PROVIDER_STORAGE_KEY,
+  "",
+  rawStringLocalStorage,
+);
+const modelAtomFamily = createProjectScopedStorageAtomFamily(
+  MODEL_STORAGE_KEY,
+  "",
+  rawStringLocalStorage,
+);
+const serviceTierAtomFamily = createProjectScopedStorageAtomFamily<StoredServiceTier>(
+  SERVICE_TIER_STORAGE_KEY,
+  "",
+  storedServiceTierStorage,
+);
+const reasoningLevelAtomFamily = createProjectScopedStorageAtomFamily(
+  REASONING_STORAGE_KEY,
+  "medium",
+  reasoningLevelStorage,
+);
+const sandboxModeAtomFamily = createProjectScopedStorageAtomFamily(
+  SANDBOX_STORAGE_KEY,
+  "danger-full-access",
+  sandboxModeStorage,
+);
+const environmentSelectionAtomFamily = createProjectScopedStorageAtomFamily(
+  ENVIRONMENT_STORAGE_KEY,
+  "",
+  rawStringLocalStorage,
+);
 
-function getStoredModel(storageKeys: PromptModelReasoningStorageKeys): string {
-  return readStoredString(storageKeys.model) ?? "";
-}
-
-function getStoredReasoningLevel(storageKeys: PromptModelReasoningStorageKeys): ReasoningLevel {
-  const raw = readStoredString(storageKeys.reasoning);
-  return isReasoningLevel(raw) ? raw : "medium";
-}
-
-function getStoredServiceTier(
-  storageKeys: PromptModelReasoningStorageKeys,
-): ServiceTier | undefined {
-  const raw = readStoredString(storageKeys.serviceTier);
-  return isServiceTier(raw) ? raw : undefined;
-}
-
-function getStoredSandboxMode(storageKeys: PromptModelReasoningStorageKeys): SandboxMode {
-  const raw = readStoredString(storageKeys.sandbox);
-  return isSandboxMode(raw) ? raw : "danger-full-access";
-}
-
-function getStoredEnvironmentSelectionValue(storageKeys: PromptModelReasoningStorageKeys): string {
-  return readStoredString(storageKeys.environment) ?? "";
-}
-
-function createPromptModelReasoningState(
-  state: Omit<PromptModelReasoningState, "touched">,
-): PromptModelReasoningState {
-  return {
-    ...state,
-    touched: {
-      selectedModel: false,
-      serviceTier: false,
-      reasoningLevel: false,
-      sandboxMode: false,
-      environmentSelectionValue: false,
-    },
-  };
-}
-
-function getStoredPromptModelReasoningState(
-  storageKeys: PromptModelReasoningStorageKeys,
-): PromptModelReasoningState {
-  return createPromptModelReasoningState({
-    selectedModel: getStoredModel(storageKeys),
-    serviceTier: getStoredServiceTier(storageKeys),
-    reasoningLevel: getStoredReasoningLevel(storageKeys),
-    sandboxMode: getStoredSandboxMode(storageKeys),
-    environmentSelectionValue: getStoredEnvironmentSelectionValue(storageKeys),
-  });
-}
-
-function getInitialThreadPromptModelReasoningState(
+function getInitialThreadPromptSelections(
   options?: UsePromptModelReasoningOptions,
-): PromptModelReasoningState {
-  return createPromptModelReasoningState({
+): ThreadPromptSelections {
+  return {
+    selectedProviderId: options?.initialProviderId ?? "",
     selectedModel: options?.initialModel ?? "",
     serviceTier: options?.initialServiceTier,
     reasoningLevel: options?.initialReasoningLevel ?? "medium",
     sandboxMode: options?.initialSandboxMode ?? "danger-full-access",
     environmentSelectionValue: options?.initialEnvironmentSelectionValue ?? "",
-  });
+  };
 }
 
-function promptModelReasoningReducer(
-  state: PromptModelReasoningState,
-  action: PromptModelReasoningAction,
-): PromptModelReasoningState {
-  switch (action.type) {
-    case "replace":
-      return action.state;
-    case "sync-untouched": {
-      let changed = false;
-      const nextState = { ...state };
-      if (
-        !state.touched.selectedModel &&
-        state.selectedModel !== action.state.selectedModel
-      ) {
-        nextState.selectedModel = action.state.selectedModel;
-        changed = true;
-      }
-      if (!state.touched.serviceTier && state.serviceTier !== action.state.serviceTier) {
-        nextState.serviceTier = action.state.serviceTier;
-        changed = true;
-      }
-      if (
-        !state.touched.reasoningLevel &&
-        state.reasoningLevel !== action.state.reasoningLevel
-      ) {
-        nextState.reasoningLevel = action.state.reasoningLevel;
-        changed = true;
-      }
-      if (!state.touched.sandboxMode && state.sandboxMode !== action.state.sandboxMode) {
-        nextState.sandboxMode = action.state.sandboxMode;
-        changed = true;
-      }
-      if (
-        !state.touched.environmentSelectionValue &&
-        state.environmentSelectionValue !== action.state.environmentSelectionValue
-      ) {
-        nextState.environmentSelectionValue = action.state.environmentSelectionValue;
-        changed = true;
-      }
+function syncUntouchedThreadPromptSelections({
+  currentSelections,
+  nextSelections,
+  touchedFields,
+}: SyncThreadPromptSelectionsArgs): ThreadPromptSelections {
+  let changed = false;
+  const updatedSelections = { ...currentSelections };
 
-      return changed ? nextState : state;
-    }
-    case "set-field": {
-      const nextTouched = action.touched ?? true;
-      if (state[action.field] === action.value && state.touched[action.field] === nextTouched) {
-        return state;
-      }
-      return {
-        ...state,
-        [action.field]: action.value,
-        touched:
-          state.touched[action.field] === nextTouched
-            ? state.touched
-            : {
-                ...state.touched,
-                [action.field]: nextTouched,
-              },
-      };
-    }
+  if (
+    !touchedFields.has("selectedProviderId") &&
+    currentSelections.selectedProviderId !== nextSelections.selectedProviderId
+  ) {
+    updatedSelections.selectedProviderId = nextSelections.selectedProviderId;
+    changed = true;
   }
+  if (
+    !touchedFields.has("selectedModel") &&
+    currentSelections.selectedModel !== nextSelections.selectedModel
+  ) {
+    updatedSelections.selectedModel = nextSelections.selectedModel;
+    changed = true;
+  }
+  if (
+    !touchedFields.has("serviceTier") &&
+    currentSelections.serviceTier !== nextSelections.serviceTier
+  ) {
+    updatedSelections.serviceTier = nextSelections.serviceTier;
+    changed = true;
+  }
+  if (
+    !touchedFields.has("reasoningLevel") &&
+    currentSelections.reasoningLevel !== nextSelections.reasoningLevel
+  ) {
+    updatedSelections.reasoningLevel = nextSelections.reasoningLevel;
+    changed = true;
+  }
+  if (
+    !touchedFields.has("sandboxMode") &&
+    currentSelections.sandboxMode !== nextSelections.sandboxMode
+  ) {
+    updatedSelections.sandboxMode = nextSelections.sandboxMode;
+    changed = true;
+  }
+  if (
+    !touchedFields.has("environmentSelectionValue") &&
+    currentSelections.environmentSelectionValue !== nextSelections.environmentSelectionValue
+  ) {
+    updatedSelections.environmentSelectionValue = nextSelections.environmentSelectionValue;
+    changed = true;
+  }
+
+  return changed ? updatedSelections : currentSelections;
+}
+
+function updateThreadPromptSelections({
+  currentSelections,
+  field,
+  value,
+}: UpdateThreadPromptSelectionsArgs): ThreadPromptSelections {
+  if (currentSelections[field] === value) {
+    return currentSelections;
+  }
+
+  return {
+    ...currentSelections,
+    [field]: value,
+  };
 }
 
 export function formatModelLabel(value: string, providerId?: string): string {
@@ -281,31 +249,61 @@ export function formatModelLabel(value: string, providerId?: string): string {
 
 export function useThreadCreationOptions(options?: UsePromptModelReasoningOptions) {
   const scope = options?.scope ?? "new-thread";
-  const storageKeys = useMemo(
-    () => getPromptModelReasoningStorageKeys(options?.projectId),
-    [options?.projectId],
+  const [storedProviderId, setStoredProviderId] = useAtom(
+    providerIdAtomFamily(options?.projectId),
   );
+  const [storedSelectedModel, setStoredSelectedModel] = useAtom(
+    modelAtomFamily(options?.projectId),
+  );
+  const [storedServiceTier, setStoredServiceTier] = useAtom(
+    serviceTierAtomFamily(options?.projectId),
+  );
+  const [storedReasoningLevel, setStoredReasoningLevel] = useAtom(
+    reasoningLevelAtomFamily(options?.projectId),
+  );
+  const [storedSandboxMode, setStoredSandboxMode] = useAtom(
+    sandboxModeAtomFamily(options?.projectId),
+  );
+  const [storedEnvironmentSelectionValue, setStoredEnvironmentSelectionValue] = useAtom(
+    environmentSelectionAtomFamily(options?.projectId),
+  );
+  const [threadSelections, setThreadSelections] = useState<ThreadPromptSelections>(() =>
+    getInitialThreadPromptSelections(options),
+  );
+  const touchedThreadFieldsRef = useRef<Set<ThreadPromptField>>(new Set());
+  const threadResetKeyRef = useRef<string | number | null | undefined>(options?.resetKey);
 
   // --- Provider selection ---
   const providersQuery = useSystemProviders();
   const providers = providersQuery.data ?? [];
   const hasMultipleProviders = providers.length >= 2;
 
-  const [selectedProviderId, setSelectedProviderIdRaw] = useState<string>(() => {
-    if (scope === "thread") {
-      return options?.initialProviderId ?? "";
-    }
-    return readStoredString(storageKeys.provider) ?? "";
-  });
+  const rawSelectedProviderId =
+    scope === "new-thread" ? storedProviderId : threadSelections.selectedProviderId;
+  const rawSelectedModel =
+    scope === "new-thread" ? storedSelectedModel : threadSelections.selectedModel;
+  const rawServiceTier =
+    scope === "new-thread" ? storedServiceTier || undefined : threadSelections.serviceTier;
+  const rawReasoningLevel =
+    scope === "new-thread" ? storedReasoningLevel : threadSelections.reasoningLevel;
+  const rawSandboxMode =
+    scope === "new-thread" ? storedSandboxMode : threadSelections.sandboxMode;
+  const rawEnvironmentSelectionValue =
+    scope === "new-thread"
+      ? storedEnvironmentSelectionValue
+      : threadSelections.environmentSelectionValue;
 
   // Resolve the effective provider: use selectedProviderId if it matches a known
   // provider, otherwise fall back to the first provider in the list.
   const effectiveProviderId = useMemo(() => {
-    if (selectedProviderId && providers.some((p) => p.id === selectedProviderId)) {
-      return selectedProviderId;
+    if (
+      rawSelectedProviderId &&
+      providers.some((provider) => provider.id === rawSelectedProviderId)
+    ) {
+      return rawSelectedProviderId;
     }
     return providers[0]?.id ?? "";
-  }, [providers, selectedProviderId]);
+  }, [providers, rawSelectedProviderId]);
 
   const selectedProviderInfo = useMemo(
     () => providers.find((p) => p.id === effectiveProviderId),
@@ -331,23 +329,6 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;
 
-  const [state, dispatch] = useReducer(promptModelReasoningReducer, undefined, () =>
-    scope === "new-thread"
-      ? getStoredPromptModelReasoningState(storageKeys)
-      : getInitialThreadPromptModelReasoningState(options),
-  );
-  const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(() =>
-    scope === "new-thread" ? storageKeys.model : null,
-  );
-  const threadResetKeyRef = useRef<string | number | null | undefined>(options?.resetKey);
-  const {
-    selectedModel,
-    serviceTier,
-    reasoningLevel,
-    sandboxMode,
-    environmentSelectionValue,
-  } = state;
-
   const availableModels = useMemo(
     () =>
       availableModelsQuery.data &&
@@ -356,6 +337,15 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
         : [],
     [availableModelsQuery.data],
   );
+  const selectedModel = useMemo(() => {
+    if (availableModels.length === 0) {
+      return rawSelectedModel;
+    }
+    if (availableModels.some((model) => model.model === rawSelectedModel)) {
+      return rawSelectedModel;
+    }
+    return availableModels.find((model) => model.isDefault)?.model ?? availableModels[0].model;
+  }, [availableModels, rawSelectedModel]);
 
   const modelOptions = useMemo(
     (): PromptOption<string>[] =>
@@ -398,6 +388,19 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
 
     return options;
   }, [activeModel]);
+  const serviceTier = useMemo(
+    () => (supportsServiceTier ? rawServiceTier : undefined),
+    [rawServiceTier, supportsServiceTier],
+  );
+  const reasoningLevel = useMemo(() => {
+    if (reasoningOptions.length === 0) {
+      return rawReasoningLevel;
+    }
+    if (reasoningOptions.some((option) => option.value === rawReasoningLevel)) {
+      return rawReasoningLevel;
+    }
+    return activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value;
+  }, [activeModel, rawReasoningLevel, reasoningOptions]);
 
   const environmentOptions = useMemo(
     (): PromptOption<string>[] => [
@@ -406,119 +409,30 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     ],
     [],
   );
-
-  // Sync provider from localStorage when storageKeys change (project switch).
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    const stored = readStoredString(storageKeys.provider) ?? "";
-    setSelectedProviderIdRaw(stored);
-  }, [scope, storageKeys.provider]);
-
-  // For thread scope, sync from initialProviderId.
-  useEffect(() => {
-    if (scope !== "thread") return;
-    setSelectedProviderIdRaw(options?.initialProviderId ?? "");
-  }, [options?.initialProviderId, scope]);
-
-  // Persist provider selection for new-thread scope.
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined") return;
-    if (effectiveProviderId) {
-      window.localStorage.setItem(storageKeys.provider, effectiveProviderId);
-    } else {
-      window.localStorage.removeItem(storageKeys.provider);
+  const environmentSelectionValue = useMemo(() => {
+    if (environmentOptions.some((option) => option.value === rawEnvironmentSelectionValue)) {
+      return rawEnvironmentSelectionValue;
     }
-  }, [effectiveProviderId, hydratedStorageKey, scope, storageKeys.model, storageKeys.provider]);
-
-  useEffect(() => {
-    if (availableModels.length === 0) return;
-    if (availableModels.some((model) => model.model === selectedModel)) return;
-
-    const fallbackModel =
-      availableModels.find((model) => model.isDefault)?.model ?? availableModels[0].model;
-    dispatch({
-      type: "set-field",
-      field: "selectedModel",
-      value: fallbackModel,
-      touched: false,
-    });
-  }, [availableModels, selectedModel]);
-
-  useEffect(() => {
-    if (supportsServiceTier) return;
-    if (serviceTier !== undefined) {
-      dispatch({
-        type: "set-field",
-        field: "serviceTier",
-        value: undefined,
-        touched: false,
-      });
-    }
-  }, [serviceTier, supportsServiceTier]);
-
-  useEffect(() => {
-    if (reasoningOptions.length === 0) {
-      return;
-    }
-    if (!reasoningOptions.some((option) => option.value === reasoningLevel)) {
-      dispatch({
-        type: "set-field",
-        field: "reasoningLevel",
-        value: activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value,
-        touched: false,
-      });
-    }
-  }, [activeModel, reasoningLevel, reasoningOptions]);
-
-  useEffect(() => {
-    if (environmentOptions.length === 0) return;
-    if (environmentOptions.some((option) => option.value === environmentSelectionValue)) return;
-    dispatch({
-      type: "set-field",
-      field: "environmentSelectionValue",
-      value: environmentOptions[0].value,
-      touched: false,
-    });
-  }, [environmentOptions, environmentSelectionValue]);
-
-  useEffect(() => {
-    if (scope !== "new-thread") {
-      setHydratedStorageKey(null);
-      return;
-    }
-
-    dispatch({
-      type: "replace",
-      state: getStoredPromptModelReasoningState(storageKeys),
-    });
-    setHydratedStorageKey(storageKeys.model);
-  }, [scope, storageKeys]);
+    return environmentOptions[0]?.value ?? "";
+  }, [environmentOptions, rawEnvironmentSelectionValue]);
+  const sandboxMode = rawSandboxMode;
 
   useEffect(() => {
     if (scope !== "thread") return;
-    const nextState = getInitialThreadPromptModelReasoningState(options);
+    const nextSelections = getInitialThreadPromptSelections(options);
     if (threadResetKeyRef.current !== options?.resetKey) {
       threadResetKeyRef.current = options?.resetKey;
-      dispatch({
-        type: "replace",
-        state: nextState,
-      });
+      touchedThreadFieldsRef.current = new Set();
+      setThreadSelections(nextSelections);
       return;
     }
-    dispatch({
-      type: "sync-untouched",
-      state: {
-        selectedModel: nextState.selectedModel,
-        serviceTier: nextState.serviceTier,
-        reasoningLevel: nextState.reasoningLevel,
-        sandboxMode: nextState.sandboxMode,
-        environmentSelectionValue: nextState.environmentSelectionValue,
-      },
-    });
+    setThreadSelections((currentSelections) => syncUntouchedThreadPromptSelections({
+      currentSelections,
+      nextSelections,
+      touchedFields: touchedThreadFieldsRef.current,
+    }));
   }, [
-    options,
+    options?.initialProviderId,
     options?.initialEnvironmentSelectionValue,
     options?.initialModel,
     options?.initialReasoningLevel,
@@ -528,87 +442,85 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     scope,
   ]);
 
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined") return;
-    if (selectedModel) {
-      window.localStorage.setItem(storageKeys.model, selectedModel);
-    } else {
-      window.localStorage.removeItem(storageKeys.model);
-    }
-    if (serviceTier) {
-      window.localStorage.setItem(storageKeys.serviceTier, serviceTier);
-    } else {
-      window.localStorage.removeItem(storageKeys.serviceTier);
-    }
-    window.localStorage.setItem(storageKeys.reasoning, reasoningLevel);
-    window.localStorage.setItem(storageKeys.sandbox, sandboxMode);
-    if (environmentSelectionValue) {
-      window.localStorage.setItem(storageKeys.environment, environmentSelectionValue);
-    } else {
-      window.localStorage.removeItem(storageKeys.environment);
-    }
-  }, [
-    environmentSelectionValue,
-    hydratedStorageKey,
-    reasoningLevel,
-    sandboxMode,
-    scope,
-    selectedModel,
-    serviceTier,
-    storageKeys.environment,
-    storageKeys.model,
-    storageKeys.reasoning,
-    storageKeys.sandbox,
-    storageKeys.serviceTier,
-  ]);
-
   const setSelectedProviderId = useCallback(
     (value: string) => {
-      setSelectedProviderIdRaw(value);
+      if (scope === "new-thread") {
+        setStoredProviderId(value);
+        return;
+      }
+      touchedThreadFieldsRef.current.add("selectedProviderId");
+      setThreadSelections((currentSelections) => updateThreadPromptSelections({
+        currentSelections,
+        field: "selectedProviderId",
+        value,
+      }));
       // Don't eagerly reset the model here — the effect that watches
-      // availableModels will fall back to the default if the current
+      // derived values will fall back to the default if the current
       // selection isn't in the new provider's model list.
     },
-    [],
+    [scope, setStoredProviderId],
   );
 
   const setSelectedModel = useCallback((value: string) => {
-    dispatch({
-      type: "set-field",
+    if (scope === "new-thread") {
+      setStoredSelectedModel(value);
+      return;
+    }
+    touchedThreadFieldsRef.current.add("selectedModel");
+    setThreadSelections((currentSelections) => updateThreadPromptSelections({
+      currentSelections,
       field: "selectedModel",
       value,
-    });
-  }, []);
+    }));
+  }, [scope, setStoredSelectedModel]);
   const setServiceTier = useCallback((value: ServiceTier | undefined) => {
-    dispatch({
-      type: "set-field",
+    if (scope === "new-thread") {
+      setStoredServiceTier(value ?? "");
+      return;
+    }
+    touchedThreadFieldsRef.current.add("serviceTier");
+    setThreadSelections((currentSelections) => updateThreadPromptSelections({
+      currentSelections,
       field: "serviceTier",
       value,
-    });
-  }, []);
+    }));
+  }, [scope, setStoredServiceTier]);
   const setReasoningLevel = useCallback((value: ReasoningLevel) => {
-    dispatch({
-      type: "set-field",
+    if (scope === "new-thread") {
+      setStoredReasoningLevel(value);
+      return;
+    }
+    touchedThreadFieldsRef.current.add("reasoningLevel");
+    setThreadSelections((currentSelections) => updateThreadPromptSelections({
+      currentSelections,
       field: "reasoningLevel",
       value,
-    });
-  }, []);
+    }));
+  }, [scope, setStoredReasoningLevel]);
   const setSandboxMode = useCallback((value: SandboxMode) => {
-    dispatch({
-      type: "set-field",
+    if (scope === "new-thread") {
+      setStoredSandboxMode(value);
+      return;
+    }
+    touchedThreadFieldsRef.current.add("sandboxMode");
+    setThreadSelections((currentSelections) => updateThreadPromptSelections({
+      currentSelections,
       field: "sandboxMode",
       value,
-    });
-  }, []);
+    }));
+  }, [scope, setStoredSandboxMode]);
   const setEnvironmentSelectionValue = useCallback((value: string) => {
-    dispatch({
-      type: "set-field",
+    if (scope === "new-thread") {
+      setStoredEnvironmentSelectionValue(value);
+      return;
+    }
+    touchedThreadFieldsRef.current.add("environmentSelectionValue");
+    setThreadSelections((currentSelections) => updateThreadPromptSelections({
+      currentSelections,
       field: "environmentSelectionValue",
       value,
-    });
-  }, []);
+    }));
+  }, [scope, setStoredEnvironmentSelectionValue]);
 
   return {
     selectedProviderId: effectiveProviderId,

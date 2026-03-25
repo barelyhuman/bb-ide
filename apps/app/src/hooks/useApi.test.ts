@@ -10,10 +10,11 @@ import type {
 import {
   appendOptimisticUserRowToTimeline,
   buildOptimisticUserThreadRow,
+  getEnvironmentActionInvalidationQueryKeys,
   resolveThreadPlaceholder,
   resolveEnvironmentGitDiffPlaceholder,
   resolveThreadTimelinePlaceholder,
-  resolveThreadWorkStatusPlaceholder,
+  resolveWorkspaceStatusPlaceholder,
 } from "./useApi";
 
 function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
@@ -45,14 +46,14 @@ function makeGitDiffResponse(): ThreadGitDiffResponse {
   };
 }
 
-describe("resolveThreadWorkStatusPlaceholder", () => {
+describe("resolveWorkspaceStatusPlaceholder", () => {
   it("keeps previous data when only merge-base selection changes", () => {
     const previousStatus = makeStatus("clean");
 
     expect(
-      resolveThreadWorkStatusPlaceholder(
+      resolveWorkspaceStatusPlaceholder(
         previousStatus,
-        ["threadWorkStatus", "thread-1", null],
+        ["workspaceStatus", "thread-1", null],
         "thread-1",
       ),
     ).toBe(previousStatus);
@@ -62,9 +63,9 @@ describe("resolveThreadWorkStatusPlaceholder", () => {
     const previousStatus = makeStatus("deleted");
 
     expect(
-      resolveThreadWorkStatusPlaceholder(
+      resolveWorkspaceStatusPlaceholder(
         previousStatus,
-        ["threadWorkStatus", "thread-1", null],
+        ["workspaceStatus", "thread-1", null],
         "thread-2",
       ),
     ).toBeUndefined();
@@ -72,17 +73,17 @@ describe("resolveThreadWorkStatusPlaceholder", () => {
 
   it("preserves null placeholders only for the same thread", () => {
     expect(
-      resolveThreadWorkStatusPlaceholder(
+      resolveWorkspaceStatusPlaceholder(
         null,
-        ["threadWorkStatus", "thread-1", null],
+        ["workspaceStatus", "thread-1", null],
         "thread-1",
       ),
     ).toBeNull();
 
     expect(
-      resolveThreadWorkStatusPlaceholder(
+      resolveWorkspaceStatusPlaceholder(
         null,
-        ["threadWorkStatus", "thread-1", null],
+        ["workspaceStatus", "thread-1", null],
         "thread-2",
       ),
     ).toBeUndefined();
@@ -215,6 +216,26 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
         "env-2",
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("getEnvironmentActionInvalidationQueryKeys", () => {
+  it("targets the initiating thread and related environment queries", () => {
+    expect(
+      getEnvironmentActionInvalidationQueryKeys({
+        environmentId: "env-1",
+        threadId: "thread-1",
+      }),
+    ).toEqual([
+      ["environment", "env-1"],
+      ["thread", "thread-1"],
+      ["threads"],
+      ["threadTimeline", "thread-1"],
+      ["environmentWorkStatus", "env-1"],
+      ["environmentGitDiff", "env-1"],
+      ["environmentMergeBaseBranches", "env-1"],
+      ["status"],
+    ]);
   });
 });
 

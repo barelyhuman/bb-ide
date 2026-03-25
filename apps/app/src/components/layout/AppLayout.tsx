@@ -1,5 +1,7 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useAtom } from "jotai"
+import { atomWithStorage } from "jotai/utils"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   Archive,
@@ -31,10 +33,12 @@ import {
   useThread,
   useThreads,
 } from "@/hooks/useApi"
+import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
 } from "@/lib/thread-activity"
 import { HireManagerModal } from "@/components/HireManagerModal"
+import { createLocalStorageSyncStorage } from "@/lib/browser-storage"
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -44,6 +48,26 @@ const SIDEBAR_DEFAULT_WIDTH = 320
 function clampSidebarWidth(value: number) {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value))
 }
+
+const sidebarWidthStorage = createLocalStorageSyncStorage<number>({
+  parse: (storedValue, initialValue) => {
+    if (storedValue === null) {
+      return initialValue
+    }
+    const parsedValue = Number(storedValue)
+    if (!Number.isFinite(parsedValue)) {
+      return initialValue
+    }
+    return clampSidebarWidth(parsedValue)
+  },
+  serialize: (value) => String(clampSidebarWidth(value)),
+})
+const sidebarWidthAtom = atomWithStorage<number>(
+  SIDEBAR_WIDTH_KEY,
+  SIDEBAR_DEFAULT_WIDTH,
+  sidebarWidthStorage,
+  { getOnInit: true },
+)
 
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Projects", subtitle: "Select or create a project" },
@@ -198,15 +222,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads } = useThreads()
   const hireProjectManager = useHireProjectManager()
-  const [hireManagerModalProjectId, setHireManagerModalProjectId] = useState<string | null>(null)
+  const hireManagerModal = useDialogState<string>()
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH
-    const raw = window.localStorage.getItem(SIDEBAR_WIDTH_KEY)
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed)) return SIDEBAR_DEFAULT_WIDTH
-    return clampSidebarWidth(parsed)
-  })
+  const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom)
   const [isSidebarResizing, setIsSidebarResizing] = useState(false)
   const providerRef = useRef<HTMLDivElement>(null)
   const startXRef = useRef(0)
@@ -346,10 +364,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   }, [isSidebarResizing])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
     liveWidthRef.current = sidebarWidth
     providerRef.current?.style.setProperty("--sidebar-width", `${sidebarWidth}px`)
-    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth))
   }, [sidebarWidth])
 
   useEffect(() => {
@@ -382,10 +398,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               projectId={projectId}
-              isManagerActionPending={hireProjectManager.isPending || hireManagerModalProjectId !== null}
+              isManagerActionPending={hireProjectManager.isPending || hireManagerModal.isOpen}
               onOpenManager={() => {
-                if (!projectId || hireManagerModalProjectId !== null) return
-                setHireManagerModalProjectId(projectId)
+                if (!projectId || hireManagerModal.isOpen) return
+                hireManagerModal.onOpen(projectId)
               }}
               meta={meta}
             />
@@ -396,11 +412,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
     </SidebarProvider>
-    {hireManagerModalProjectId ? (
+    {hireManagerModal.target ? (
       <HireManagerModal
-        projectId={hireManagerModalProjectId}
+        projectId={hireManagerModal.target}
         open
-        onClose={() => setHireManagerModalProjectId(null)}
+        onClose={hireManagerModal.onClose}
         onHired={(thread: Thread) => {
           navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
         }}

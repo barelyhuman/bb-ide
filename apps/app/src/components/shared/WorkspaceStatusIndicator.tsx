@@ -6,8 +6,8 @@ import {
 } from "@/components/ui/popover";
 import { useHoverPopover } from "@/hooks/useHoverPopover";
 import {
-  threadWorkStatusDescription,
-} from "@/lib/thread-work-status";
+  workspaceStatusDescription,
+} from "@/lib/workspace-status";
 import { cn } from "@/lib/utils";
 import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 
@@ -27,7 +27,7 @@ export function WorkspaceStatusIndicator({
   const { open, triggerHoverProps, contentHoverProps, handleOpenChange } =
     useHoverPopover();
 
-  const description = threadWorkStatusDescription(status);
+  const description = workspaceStatusDescription(status);
 
   return (
     <Popover

@@ -23,7 +23,7 @@ export function threadWorktreeCleanLabel(
   return isUpToDate ? "Clean, Up to date" : "Clean";
 }
 
-function threadWorkStatusLabel(
+function workspaceStatusLabel(
   status: WorkspaceStatus | undefined,
   options?: { cleanLabel?: string },
 ): string {
@@ -91,7 +91,7 @@ function joinStatusSummary(parts: Array<string | null>): string {
   return filteredParts.join(" • ");
 }
 
-export function getThreadGitStatusDisplay(
+export function getGitStatusDisplay(
   status: WorkspaceStatus | undefined,
   options?: {
     mergeBaseBranch?: string;
@@ -191,7 +191,7 @@ export function getThreadGitStatusDisplay(
   }
 }
 
-export function threadWorkStatusDescription(
+export function workspaceStatusDescription(
   status: WorkspaceStatus | undefined,
 ): string {
   if (!status) {
@@ -235,7 +235,7 @@ export function threadWorkStatusDescription(
   }
 }
 
-export function threadWorkStatusVariant(
+export function workspaceStatusVariant(
   status: WorkspaceStatus | undefined,
   options?: { isArchivedThread?: boolean },
 ): StatusPillVariant {

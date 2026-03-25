@@ -43,14 +43,14 @@ import { wsManager } from "../lib/ws";
 
 const ENVIRONMENT_QUERY_KEY = "environment";
 const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
-const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
+const WORKSPACE_STATUS_QUERY_KEY = "workspaceStatus";
 const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY = "environmentMergeBaseBranches";
 const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 const THREAD_QUERY_KEY = "thread";
 type ThreadScopedQueryKeyPrefix =
   | typeof THREAD_QUERY_KEY
-  | typeof THREAD_WORK_STATUS_QUERY_KEY
+  | typeof WORKSPACE_STATUS_QUERY_KEY
   | typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY
   | typeof THREAD_TIMELINE_QUERY_KEY;
 
@@ -80,7 +80,7 @@ function resolveThreadScopedPlaceholder<TData>(
     : undefined;
 }
 
-export function resolveThreadWorkStatusPlaceholder(
+export function resolveWorkspaceStatusPlaceholder(
   previousData: WorkspaceStatus | null | undefined,
   previousQueryKey: QueryKey | undefined,
   nextThreadId: string,
@@ -89,7 +89,7 @@ export function resolveThreadWorkStatusPlaceholder(
     previousData,
     previousQueryKey,
     nextThreadId,
-    THREAD_WORK_STATUS_QUERY_KEY,
+    WORKSPACE_STATUS_QUERY_KEY,
   );
 }
 
@@ -130,6 +130,27 @@ export function resolveThreadTimelinePlaceholder(
     nextThreadId,
     THREAD_TIMELINE_QUERY_KEY,
   );
+}
+
+interface EnvironmentActionInvalidationParams {
+  environmentId: string;
+  threadId: string;
+}
+
+export function getEnvironmentActionInvalidationQueryKeys({
+  environmentId,
+  threadId,
+}: EnvironmentActionInvalidationParams): QueryKey[] {
+  return [
+    [ENVIRONMENT_QUERY_KEY, environmentId],
+    [THREAD_QUERY_KEY, threadId],
+    ["threads"],
+    [THREAD_TIMELINE_QUERY_KEY, threadId],
+    [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId],
+    [ENVIRONMENT_GIT_DIFF_QUERY_KEY, environmentId],
+    [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environmentId],
+    ["status"],
+  ];
 }
 
 function getCachedThreadListPlaceholder(
@@ -589,7 +610,7 @@ export function useThreadTimeline(
     enabled?: boolean;
     limit?: number;
     refetchOnMount?: boolean | "always";
-    includeManagerDebugView?: boolean;
+    includeManagerWorkspaceViewer?: boolean;
   },
 ) {
   return useQuery<ThreadTimelineResponse>({
@@ -597,14 +618,14 @@ export function useThreadTimeline(
       "threadTimeline",
       id,
       options?.limit ?? null,
-      options?.includeManagerDebugView ?? false,
+      options?.includeManagerWorkspaceViewer ?? false,
     ],
     queryFn: () =>
       api.getThreadTimeline(
         id,
         options?.limit,
         false,
-        options?.includeManagerDebugView ?? false,
+        options?.includeManagerWorkspaceViewer ?? false,
       ),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
@@ -620,20 +641,20 @@ export function useThreadTimelineToolDetails() {
       turnId,
       sourceSeqStart,
       sourceSeqEnd,
-      includeManagerDebugView,
+      includeManagerWorkspaceViewer,
     }: {
       id: string;
       turnId: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
-      includeManagerDebugView?: boolean;
+      includeManagerWorkspaceViewer?: boolean;
     }): Promise<TimelineToolDetailsResponse> =>
       api.getThreadTimelineToolDetails(
         id,
         turnId,
         sourceSeqStart,
         sourceSeqEnd,
-        includeManagerDebugView ?? false,
+        includeManagerWorkspaceViewer ?? false,
       ),
   });
 }
@@ -992,7 +1013,7 @@ export function useDeleteThread() {
 
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
-      queryClient.removeQueries({ queryKey: ["threadWorkStatus", args.id] });
+      queryClient.removeQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY, args.id] });
       queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
       queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
 
@@ -1018,7 +1039,7 @@ export function useDeleteThread() {
     onSettled: (_data, _error, args) => {
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
-      queryClient.removeQueries({ queryKey: ["threadWorkStatus", args.id] });
+      queryClient.removeQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY, args.id] });
       queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
       queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
@@ -1065,14 +1086,13 @@ export function useRequestEnvironmentAction() {
       | { action: "squash_merge"; initiatingThreadId: string; options?: SquashMergeOptions }
     )): Promise<EnvironmentActionResponse> =>
       api.requestEnvironmentAction(id, req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["thread"] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
-      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus"] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
+    onSuccess: (_response, variables) => {
+      for (const queryKey of getEnvironmentActionInvalidationQueryKeys({
+        environmentId: variables.id,
+        threadId: variables.initiatingThreadId,
+      })) {
+        queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 }
-
-

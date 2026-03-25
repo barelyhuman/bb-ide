@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceStatus } from "@bb/domain";
 import {
-  getThreadGitStatusDisplay,
-  threadWorkStatusDescription,
-  threadWorkStatusVariant,
+  getGitStatusDisplay,
+  workspaceStatusDescription,
+  workspaceStatusVariant,
   threadWorktreeCleanLabel,
-} from "./thread-work-status";
+} from "./workspace-status";
 
 function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
   return {
@@ -23,14 +23,14 @@ function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
   };
 }
 
-describe("thread-work-status", () => {
+describe("workspace-status", () => {
   it("uses destructive deleted variant for active threads", () => {
-    expect(threadWorkStatusVariant(makeStatus("deleted"))).toBe("destructive");
+    expect(workspaceStatusVariant(makeStatus("deleted"))).toBe("destructive");
   });
 
   it("uses neutral deleted variant for archived threads", () => {
     expect(
-      threadWorkStatusVariant(makeStatus("deleted"), { isArchivedThread: true }),
+      workspaceStatusVariant(makeStatus("deleted"), { isArchivedThread: true }),
     ).toBe("outline");
   });
 
@@ -49,24 +49,24 @@ describe("thread-work-status", () => {
 
   it("shows untracked label for non-git workspaces", () => {
     expect(threadWorktreeCleanLabel(makeStatus("untracked"))).toBe("Untracked");
-    expect(threadWorkStatusVariant(makeStatus("untracked"))).toBe("outline");
+    expect(workspaceStatusVariant(makeStatus("untracked"))).toBe("outline");
   });
 
   it("describes dirty workspaces with a short explanation", () => {
-    expect(threadWorkStatusDescription(makeStatus("dirty_uncommitted"))).toBe(
+    expect(workspaceStatusDescription(makeStatus("dirty_uncommitted"))).toBe(
       "You have local changes that have not been committed yet.",
     );
   });
 
   it("describes synchronized clean workspaces as having no local changes", () => {
-    expect(threadWorkStatusDescription(makeStatus("clean"))).toBe(
+    expect(workspaceStatusDescription(makeStatus("clean"))).toBe(
       "No local changes or unmerged commits.",
     );
   });
 
   it("describes clean branches that are behind their merge base", () => {
     expect(
-      threadWorkStatusDescription({
+      workspaceStatusDescription({
         ...makeStatus("clean"),
         behindCount: 2,
       }),
@@ -77,7 +77,7 @@ describe("thread-work-status", () => {
 
   it("reports behind branches as an explicit git status display", () => {
     expect(
-      getThreadGitStatusDisplay(
+      getGitStatusDisplay(
         {
           ...makeStatus("clean"),
           behindCount: 3,
@@ -95,7 +95,7 @@ describe("thread-work-status", () => {
 
   it("reports diverged branches as an explicit git status display", () => {
     expect(
-      getThreadGitStatusDisplay(
+      getGitStatusDisplay(
         {
           ...makeStatus("clean"),
           aheadCount: 2,
@@ -114,7 +114,7 @@ describe("thread-work-status", () => {
 
   it("reports ahead branches as an explicit git status display", () => {
     expect(
-      getThreadGitStatusDisplay(
+      getGitStatusDisplay(
         {
           ...makeStatus("committed_unmerged"),
           aheadCount: 2,
@@ -132,7 +132,7 @@ describe("thread-work-status", () => {
 
   it("reports dirty work with a change summary", () => {
     expect(
-      getThreadGitStatusDisplay({
+      getGitStatusDisplay({
         ...makeStatus("dirty_uncommitted"),
         workspaceChangedFiles: 3,
         workspaceInsertions: 8,
