@@ -74,9 +74,15 @@ function parseThreadWaitPollIntervalMs(value: string): number { ... }
 
 ---
 
-## 2. Extract shared table renderer
+## 2. Replace hand-rolled table rendering with `cli-table3`
 
-Four command files duplicate the same table rendering pattern: calculate max column widths, pad strings, print header + separator + rows.
+Four command files duplicate the same table rendering pattern. Replace with `cli-table3` (14 KB, 1 dep, built-in TypeScript types, ANSI-aware column widths).
+
+### Install
+
+```bash
+pnpm --filter @bb/cli add cli-table3
+```
 
 ### Current duplication
 
@@ -87,69 +93,45 @@ Four command files duplicate the same table rendering pattern: calculate max col
 | `commands/manager.ts` | `printManagerTable()` + `printManagedThreadTable()` | 182-241 |
 | `commands/thread.ts` | `printThreadTable()` | 1053-1089 |
 
-### Target
+### Usage pattern
 
-Create `src/table.ts`:
+Configure `cli-table3` in borderless mode to match current output style (no box characters, just aligned columns with a header separator):
 
 ```typescript
-interface TableColumn<T> {
-  header: string;
-  value: (item: T) => string;
-  minWidth?: number;  // minimum column width (default: header.length)
-  align?: "left" | "right";
-}
+import Table from "cli-table3";
 
-interface PrintTableOptions {
-  /** Print blank lines before and after the table (default: true — matches current behavior) */
-  blankLinePadding?: boolean;
-  /** Message to print when rows is empty (default: no output) */
-  emptyMessage?: string;
-  /** Prefix line to print before the table header */
-  prefix?: string;
-}
+function printProjectTable(projects: ProjectResponse[], localHostId: string | undefined): void {
+  if (projects.length === 0) return;
 
-export function printTable<T>(
-  columns: TableColumn<T>[],
-  rows: T[],
-  options?: PrintTableOptions,
-): void {
-  if (options?.prefix) console.log(options.prefix);
+  const table = new Table({
+    head: ["ID", "Name", "Local Path"],
+    chars: { top: "", "top-mid": "", "top-left": "", "top-right": "",
+             bottom: "", "bottom-mid": "", "bottom-left": "", "bottom-right": "",
+             left: "", "left-mid": "", mid: "-", "mid-mid": "  ",
+             right: "", "right-mid": "", middle: "  " },
+    style: { head: [], border: [], "padding-left": 0, "padding-right": 0 },
+    colWidths: [null, null, null],  // auto-size; use explicit numbers for minimums
+  });
 
-  if (rows.length === 0) {
-    if (options?.emptyMessage) console.log(options.emptyMessage);
-    return;
+  for (const p of projects) {
+    table.push([p.id, p.name, resolveLocalPath(p, localHostId) ?? ""]);
   }
 
-  const widths = columns.map((col) =>
-    Math.max(col.minWidth ?? col.header.length, ...rows.map((row) => col.value(row).length)),
-  );
-
-  const pad = (text: string, width: number, align: "left" | "right" = "left") =>
-    align === "right" ? text.padStart(width) : text.padEnd(width);
-
-  if (options?.blankLinePadding !== false) console.log("");
-
-  const headerLine = columns.map((col, i) => pad(col.header, widths[i], col.align)).join("  ");
-  console.log(headerLine);
-  console.log("-".repeat(headerLine.length));
-
-  for (const row of rows) {
-    console.log(
-      columns.map((col, i) => pad(col.value(row), widths[i], col.align)).join("  "),
-    );
-  }
-
-  if (options?.blankLinePadding !== false) console.log("");
+  console.log("");
+  console.log(table.toString());
+  console.log("");
 }
 ```
 
 ### Notes for migration
 
-- Read each existing table function before migrating — the proposed interface above handles the key variations (minWidth, prefix, emptyMessage, padding), but verify column headers and content match exactly.
-- `printProjectTable` takes `localHostId` as a second arg to resolve the local source path — capture it in the `value` closure.
-- `printModelTable` prints a prefix line (`"Models for ${providerId}:"`) — use the `prefix` option.
-- `printManagedThreadTable` has custom empty handling (`"Managed threads:\n  None"`) — use the `emptyMessage` option.
-- Current code uses minimum widths like `Math.max(4, ...)` — use the `minWidth` column option.
+- Read each existing table function before migrating — match column headers and content exactly.
+- The borderless `chars` config above removes all box-drawing characters. The `mid: "-"` produces the header separator line. `middle: "  "` sets column gap to 2 spaces (matching current output).
+- Consider extracting the borderless `chars`/`style` config into a shared constant in `src/table.ts` so each callsite just does `new Table({ head: [...], ...BORDERLESS_TABLE_STYLE })`.
+- `printProjectTable` takes `localHostId` as a second arg to resolve the local source path.
+- `printModelTable` prints a prefix line (`"Models for ${providerId}:"`) before the table — just `console.log()` it before the table output.
+- `printManagedThreadTable` has custom empty handling (`"Managed threads:\n  None"`) — handle before calling `cli-table3`.
+- Current code uses minimum widths like `Math.max(4, ...)` — use `colWidths` for explicit minimums where needed.
 
 ### Validation
 - Run `bb project list`, `bb provider list`, `bb thread list`, `bb manager list` and verify output matches current formatting exactly (including blank lines and alignment)
