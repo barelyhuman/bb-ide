@@ -113,7 +113,7 @@ export type PublicApiSchema = {
 
   // ─── Hosts ───────────────────────────────────────────────────────────
 
-  /** Host `status` is derived at query time from sessions (not stored in DB). */
+  /** Host `status` is derived at query time from the `host_daemon_sessions` table. */
   "/hosts": {
     $get: Endpoint<EmptyInput, Host[]>;
   };
@@ -213,7 +213,6 @@ export type PublicApiSchema = {
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
   };
   "/threads/:id/drafts": {
-    /** Create a draft message for later sending. */
     $post: Endpoint<PathId & { json: CreateDraftRequest }, ThreadQueuedMessage, 201>;
   };
   "/threads/:id/drafts/:draftId/send": {
@@ -227,7 +226,6 @@ export type PublicApiSchema = {
     $delete: Endpoint<PathThreadAndDraft, { ok: true }>;
   };
   "/threads/:id/stop": {
-    /** Stop an active thread. */
     $post: Endpoint<PathId, { ok: true }>;
   };
   "/threads/:id/archive": {
@@ -238,15 +236,12 @@ export type PublicApiSchema = {
     $post: Endpoint<PathId & { json: { force?: boolean } }, { ok: true }>;
   };
   "/threads/:id/unarchive": {
-    /** Unarchive a thread. */
     $post: Endpoint<PathId, { ok: true }>;
   };
   "/threads/:id/read": {
-    /** Mark thread as read. */
     $post: Endpoint<PathId, Thread>;
   };
   "/threads/:id/unread": {
-    /** Mark thread as unread. */
     $post: Endpoint<PathId, Thread>;
   };
   "/threads/:id/timeline": {
@@ -276,7 +271,6 @@ export type PublicApiSchema = {
     >;
   };
   "/threads/:id/output": {
-    /** Get the thread's final output text. */
     $get: Endpoint<PathId, { output: string | null }>;
   };
   "/threads/:id/events": {
@@ -284,7 +278,6 @@ export type PublicApiSchema = {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
   "/threads/:id/default-execution-options": {
-    /** Get default execution options for the next message. */
     $get: Endpoint<PathId, ThreadExecutionOptions | null>;
   };
   "/threads/:id/workspace/files": {
@@ -309,7 +302,6 @@ export type PublicApiSchema = {
   // ─── System ──────────────────────────────────────────────────────────
 
   "/system/config": {
-    /** Get server configuration. Returns `{ hostDaemonPort }`. */
     $get: Endpoint<EmptyInput, SystemConfigResponse>;
   };
   "/system/models": {
