@@ -7,10 +7,10 @@ export const templateDefinitions = [
     "body": "You are a coding agent working on a project thread inside bb, an agent orchestration tool. Run `bb status` to see your context and `bb guide` for CLI help. Follow the instructions carefully and write clean, working code.",
     "fileName": "agent-base-instructions.md",
     "kind": "instruction",
-    "title": "Codex Base Instructions",
+    "title": "Standard Agent Base Instructions",
     "summary": "Baseline system prompt for provider-backed coding threads.",
     "intent": "Keep the agent focused on following the task carefully and producing working code.",
-    "editingNotes": "Preserve the concise coding-agent framing. Add constraints here only when they should apply to every Codex-backed thread.",
+    "editingNotes": "Preserve the concise coding-agent framing.",
     "variables": {}
   },
   {
@@ -47,9 +47,9 @@ export const templateDefinitions = [
     "variables": {}
   },
   {
-    "id": "codexCommitMessage",
+    "id": "generateCommitMessage",
     "body": "Write a concise git commit message for {{diffDescription}}.\nRules:\n- Return ONLY JSON: {\"message\":\"...\"}\n- Use conventional commit style (feat|fix|refactor|test|docs|chore|perf|build|ci|style).\n- Prefer specific types like feat/fix/refactor/test/docs/perf over chore.\n- Use chore only for housekeeping (deps, tooling, CI, formatting, repo maintenance).\n- Use imperative mood, max 72 characters.\n- Single line only, no body.\n\nShortstat:\n{{shortstat}}\n\nFiles (name-status):\n{{files}}\n\nPatch excerpt:\n{{patch}}",
-    "fileName": "codex-commit-message.md",
+    "fileName": "generate-commit-message.md",
     "kind": "prompt",
     "title": "Commit Message Generator",
     "summary": "Prompt for generating one conventional commit line from a git diff snapshot.",
@@ -63,28 +63,17 @@ export const templateDefinitions = [
     }
   },
   {
-    "id": "codexRunMetadata",
-    "body": "You create concise run metadata for a coding task.\nReturn ONLY a JSON object with keys:\n- title: short, clear, 3-7 words, Title Case\n- worktreeName: lower-case, kebab-case slug prefixed with one of: feat/, fix/, chore/, test/, docs/, refactor/, perf/, build/, ci/, style/.\n\nChoose fix/ when the task is a bug fix, error, regression, crash, or cleanup. Use the closest match for chores/tests/docs/refactors/perf/build/ci/style. Otherwise use feat/.\n\nExamples:\n{\"title\":\"Fix Login Redirect Loop\",\"worktreeName\":\"fix/login-redirect-loop\"}\n{\"title\":\"Add Workspace Home View\",\"worktreeName\":\"feat/workspace-home\"}\n{\"title\":\"Update Lint Config\",\"worktreeName\":\"chore/update-lint-config\"}\n{\"title\":\"Add Coverage Tests\",\"worktreeName\":\"test/add-coverage-tests\"}\n\nTask:\n{{cleanedPrompt}}",
-    "fileName": "codex-run-metadata.md",
+    "id": "generateThreadMetadata",
+    "body": "You create concise metadata for a coding task.\nReturn ONLY a JSON object with keys:\n- title: short, clear, 3-7 words, Title Case\n- branchName: lower-case, kebab-case slug prefixed with one of: feat/, fix/, chore/, test/, docs/, refactor/, perf/, build/, ci/, style/.\n\nChoose fix/ when the task is a bug fix, error, regression, crash, or cleanup. Use the closest match for chores/tests/docs/refactors/perf/build/ci/style. Otherwise use feat/.\n\nExamples:\n{\"title\":\"Fix Login Redirect Loop\",\"branchName\":\"fix/login-redirect-loop\"}\n{\"title\":\"Add Workspace Home View\",\"branchName\":\"feat/workspace-home\"}\n{\"title\":\"Update Lint Config\",\"branchName\":\"chore/update-lint-config\"}\n{\"title\":\"Add Coverage Tests\",\"branchName\":\"test/add-coverage-tests\"}\n\nTask:\n{{cleanedPrompt}}",
+    "fileName": "generate-thread-metadata.md",
     "kind": "prompt",
-    "title": "Run Metadata Generator",
-    "summary": "Prompt for deriving a short thread title and worktree slug from the user's task prompt.",
-    "intent": "Generate stable, operator-friendly metadata for coding runs without adding explanatory prose.",
+    "title": "Thread Metadata Generator",
+    "summary": "Prompt for deriving a short thread title and branch name from the user's task prompt.",
+    "intent": "Generate stable, operator-friendly metadata for threads without adding explanatory prose.",
     "editingNotes": "Keep the examples concrete and the output contract JSON-only because callers parse the result directly.",
     "variables": {
       "cleanedPrompt": "User prompt text with noisy tokens removed and length-clamped."
     }
-  },
-  {
-    "id": "dockerAgentNote",
-    "body": "- Commands run inside a per-thread Docker container backed by the isolated workspace.",
-    "fileName": "docker-agent-note.md",
-    "kind": "instruction",
-    "title": "Docker Environment Note",
-    "summary": "Short additive note for environments that execute commands inside Docker.",
-    "intent": "Make containerized execution explicit without restating the full worktree prompt.",
-    "editingNotes": "Keep this as a single additive sentence so Docker environments can append it to other environment instructions.",
-    "variables": {}
   },
   {
     "id": "managerAgentInstructions",
@@ -260,16 +249,15 @@ export interface TemplateVariables {
   bbCliGuide: Record<string, never>;
   bbManagerWorkflows: Record<string, never>;
   bbSystemOverview: Record<string, never>;
-  codexCommitMessage: {
+  generateCommitMessage: {
     diffDescription: string;
     shortstat: string;
     files: string;
     patch: string;
   };
-  codexRunMetadata: {
+  generateThreadMetadata: {
     cleanedPrompt: string;
   };
-  dockerAgentNote: Record<string, never>;
   managerAgentInstructions: {
     managerWorkspacePath: string;
     managerPreferencesContent: string;

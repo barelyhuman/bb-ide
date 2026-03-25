@@ -292,7 +292,7 @@ These are implementation requirements documented here so they're built correctly
 
 **Voice transcription proxy.** Simple proxy: receive multipart audio → forward to `POST https://api.openai.com/v1/audio/transcriptions` with model `gpt-4o-transcribe`, auth via `OPENAI_API_KEY` → return `{ text }`. No format conversion. 25MB limit.
 
-**Auto-title generation.** After thread creation with input, fire-and-forget: clean prompt text → render `codexRunMetadata` template from `@bb/templates` → call `complete()` from `@mariozechner/pi-ai` with a cheap/fast model (configured via `BB_INFERENCE_MODEL`, default `gpt-4o-mini`) → parse JSON `{ title }` (ignore `worktreeName` if present in template output) → update thread title. `titleFallback` is derived synchronously from first prompt text (no LLM).
+**Auto-title generation.** After thread creation with input, fire-and-forget: clean prompt text → render `generateThreadMetadata` template from `@bb/templates` → call `complete()` from `@mariozechner/pi-ai` with a cheap/fast model (configured via `BB_INFERENCE_MODEL`, default `gpt-4o-mini`) → parse JSON `{ title, branchName }` → update thread title (branchName can be used for managed worktree branch naming). `titleFallback` is derived synchronously from first prompt text (no LLM).
 
 **Timeline transformation.** `GET /threads/:id/timeline` and `/timeline/tool-details` use `toViewMessages()` and `buildTimelineRows()` from `@bb/core-ui`. These are pure functions: read events from DB → transform → return. No daemon involvement. Use `extractThreadContextWindowUsage()` from `@bb/core-ui` for the `contextWindowUsage` field in `ThreadTimelineResponse`.
 
@@ -308,7 +308,7 @@ These are behaviors that aren't obvious from the route definitions alone:
 - **Thread rename** triggers a `thread.rename` daemon command in addition to the DB update — so the provider session knows the new title. This applies to both manual renames (PATCH /threads/:id) and auto-generated titles.
 - **Default project source.** Routes that aren't scoped to a specific environment or host (e.g., `GET /projects/:id/files`) should resolve the project's default source (the one with `isDefault = true`) to determine which host to query.
 - **Disconnected host error.** When a route needs to send a command to a host that is not connected, return a consistent error: `ApiError(502, "host_disconnected", "Host is not connected")`. All daemon-proxied routes should go through the same code path (`queueCommandAndWait`) so this check is centralized.
-- **Thread title generation.** When a thread is created with input and no explicit title, generate one asynchronously using `@mariozechner/pi-ai` + the `codexRunMetadata` template from `@bb/templates`. Set `titleFallback` synchronously from the first prompt text. Don't block thread creation on title generation.
+- **Thread title generation.** When a thread is created with input and no explicit title, generate one asynchronously using `@mariozechner/pi-ai` + the `generateThreadMetadata` template from `@bb/templates`. Set `titleFallback` synchronously from the first prompt text. Don't block thread creation on title generation.
 - **Pending input after provisioning.** When `environment.provision` succeeds and the thread has queued input, the server must queue `thread.start` as a follow-up. This happens in the command-result handler, not at thread creation time.
 - **Thread creation flow.** Step-by-step:
   1. Create thread record (status `created`), add input as a thread event if provided.
