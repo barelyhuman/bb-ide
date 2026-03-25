@@ -74,10 +74,8 @@ describe("fetchCommands with unknown command types", () => {
       "unknown command type in batch, reporting error to server",
     );
 
-    // Wait briefly for the fire-and-forget reportUnknownCommand to complete
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
     // The unknown command should have been reported back as an error
+    // (reports are now awaited before fetchCommands returns)
     const errorReport = testServer.commandResultReports.find(
       (r: any) => r.commandId === "command-unknown-1",
     );
@@ -117,8 +115,7 @@ describe("fetchCommands with unknown command types", () => {
     expect(commands).toHaveLength(0);
     expect(logger.warn).toHaveBeenCalled();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
+    // Reports are now awaited before fetchCommands returns
     const errorReport = testServer.commandResultReports.find(
       (r: any) => r.commandId === "cmd-unk-1",
     );

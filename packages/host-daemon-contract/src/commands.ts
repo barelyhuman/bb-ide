@@ -323,13 +323,18 @@ const hostDaemonCommandResultReportSchemas = HOST_DAEMON_COMMAND_TYPES.flatMap(
     ),
 );
 
-export const hostDaemonCommandResultReportSchema = z.union(
-  hostDaemonCommandResultReportSchemas as unknown as [
-    z.ZodTypeAny,
-    z.ZodTypeAny,
-    ...z.ZodTypeAny[],
-  ],
-);
+/** Catch-all schema for reporting errors on command types the daemon doesn't recognize. */
+const unknownCommandErrorSchema = hostDaemonCommandResultReportBaseSchema.extend({
+  type: z.string().min(1),
+  ok: z.literal(false),
+  errorCode: z.literal("unknown_command"),
+  errorMessage: z.string().min(1),
+});
+
+export const hostDaemonCommandResultReportSchema = z.union([
+  ...hostDaemonCommandResultReportSchemas,
+  unknownCommandErrorSchema,
+] as unknown as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]]);
 export type HostDaemonCommandResultReport = z.infer<
   typeof hostDaemonCommandResultReportSchema
 >;

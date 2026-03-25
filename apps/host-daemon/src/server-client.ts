@@ -226,6 +226,7 @@ export function createServerClient(
 
       const rawCommands = parseRawCommandBatch(await response.json());
       const accepted: HostDaemonCommandEnvelope[] = [];
+      const reportPromises: Promise<void>[] = [];
 
       for (const rawCommand of rawCommands) {
         const rawType = extractRawCommandType(rawCommand);
@@ -239,16 +240,20 @@ export function createServerClient(
               { type: rawType, error: parsed.error.message },
               "failed to parse command envelope, skipping",
             );
-            void reportUnknownCommand(rawCommand);
+            reportPromises.push(reportUnknownCommand(rawCommand));
           }
         } else {
           options.logger.warn(
             { type: rawType ?? "missing" },
             "unknown command type in batch, reporting error to server",
           );
-          void reportUnknownCommand(rawCommand);
+          reportPromises.push(reportUnknownCommand(rawCommand));
         }
       }
+
+      // Wait for all unknown command reports to complete before returning
+      // so the server can advance past them and not re-send them in the next batch
+      await Promise.all(reportPromises);
 
       return accepted;
     },

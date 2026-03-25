@@ -192,6 +192,7 @@ export async function createHostDaemonApp(
     onSessionOpened: (session) => {
       sessionState.value = session.sessionId;
       eventBuffer.seed(session.threadHighWaterMarks);
+      void commandFetchLoop.request();
     },
     setSession: (session) => {
       sessionState.value = session?.sessionId ?? null;
