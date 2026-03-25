@@ -188,6 +188,28 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  apps/host-daemon:
+    dependencies:
+      '@bb/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@bb/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      proper-lockfile:
+        specifier: ^4.1.2
+        version: 4.1.2
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/agent-runtime:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
