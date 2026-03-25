@@ -41,9 +41,9 @@
 
 ## Contract Documentation
 
-- Every route in `@bb/server-contract` and `@bb/host-daemon-contract` must have a JSDoc comment explaining what it does, how it's implemented (DB read, queue daemon command, server-side, etc.), and any non-obvious business logic or edge cases.
-- When adding a new route or command type, add the documentation in the same commit. A route without documentation is incomplete.
-- When changing a route's behavior, update the documentation to match.
+- Routes and commands that are self-evident from their name and type signature don't need comments. Add JSDoc only when the behavior is non-obvious — side effects, multi-step flows, guards, or context that the type signature doesn't convey.
+- When adding a new route or command type with non-obvious behavior, add the documentation in the same commit.
+- When changing a route's behavior, update any existing documentation to match.
 
 ## Planning Workflow
 
