@@ -11,6 +11,10 @@ export interface CreateWorkspaceArgs {
   sourcePath: string;
   targetPath: string;
   branchName: string;
+  /** Setup script filename (default: .bb-env-setup.sh) */
+  scriptName?: string;
+  /** Setup script timeout in ms (default: 5 min) */
+  timeoutMs?: number;
   onProgress?: ProgressCallback;
 }
 
@@ -96,6 +100,8 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
     );
     await runSetupScript({
       workspacePath: args.targetPath,
+      scriptName: args.scriptName,
+      timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
     });
     emitStep(args.onProgress, "worktree", "Created git worktree", "completed");
@@ -120,6 +126,8 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
     await runGit(["checkout", "-B", args.branchName], { cwd: args.targetPath });
     await runSetupScript({
       workspacePath: args.targetPath,
+      scriptName: args.scriptName,
+      timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
     });
     emitStep(args.onProgress, "clone", "Cloned repository", "completed");

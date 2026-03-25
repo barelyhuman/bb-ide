@@ -1,6 +1,12 @@
-export {
-  Workspace,
-} from "./workspace.js";
+export { provisionWorkspace } from "./provision.js";
+export type {
+  IWorkspace,
+  ProvisionWorkspaceOpts,
+  UnmanagedWorkspaceOpts,
+  ManagedWorktreeOpts,
+  ManagedCloneOpts,
+} from "./provision.js";
+
 export type {
   CheckpointOptions,
   CheckpointResult,
@@ -13,18 +19,4 @@ export type {
   SquashMergeResult,
 } from "./workspace.js";
 
-export {
-  createClone,
-  createWorktree,
-  removeDirectory,
-  removeWorktree,
-  runSetupScript,
-} from "./provisioning.js";
-export {
-  promoteWorkspace,
-  demoteWorkspace,
-} from "./promote.js";
-
-export {
-  WorkspaceError,
-} from "./git.js";
+export { WorkspaceError } from "./git.js";

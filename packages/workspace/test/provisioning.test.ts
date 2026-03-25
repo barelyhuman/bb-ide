@@ -2,14 +2,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { Workspace } from "../src/workspace.js";
 import {
-  Workspace,
   createClone,
   createWorktree,
   removeDirectory,
   removeWorktree,
   runSetupScript,
-} from "../src/index.js";
+} from "../src/provisioning.js";
 import { runGit } from "../src/git.js";
 
 const tempDirs: string[] = [];
