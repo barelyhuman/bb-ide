@@ -213,40 +213,58 @@ export function ProjectMainView() {
           value={prompt}
           onChange={promptDraft.setText}
           onSubmit={submitPrompt}
-          zenModeLayout="project-main"
-          zenModeStorageKey={projectMainZenModeStorageKey}
-          isSubmitting={createThread.isPending}
-          submitDisabled={isSubmitDisabled}
-          submitTitle={createThread.isPending ? "Submitting..." : "Submit (Enter)"}
-          mentionSuggestions={promptMentions.suggestions}
-          mentionLoading={promptMentions.isLoading}
-          mentionError={promptMentions.isError}
-          onMentionQueryChange={promptMentions.setQuery}
-          attachments={promptDraft.attachments}
-          attachmentProjectId={projectId}
-          onAttachFiles={handleAttachFiles}
-          onRemoveAttachment={promptDraft.removeAttachment}
-          isAttaching={uploadPromptAttachment.isPending}
-          attachmentError={attachmentError}
+          submission={{
+            isSubmitting: createThread.isPending,
+            disabled: isSubmitDisabled,
+            title: createThread.isPending ? "Submitting..." : "Submit (Enter)",
+          }}
+          mentions={{
+            suggestions: promptMentions.suggestions,
+            isLoading: promptMentions.isLoading,
+            isError: promptMentions.isError,
+            onQueryChange: promptMentions.setQuery,
+          }}
+          attachments={{
+            items: promptDraft.attachments,
+            projectId,
+            onAttachFiles: handleAttachFiles,
+            onRemove: promptDraft.removeAttachment,
+            isAttaching: uploadPromptAttachment.isPending,
+            error: attachmentError,
+          }}
+          zenMode={{
+            layout: "project-main",
+            storageKey: projectMainZenModeStorageKey,
+          }}
           footerStart={
             <PromptExecutionControls
-              providerOptions={providerOptions}
-              selectedProviderId={selectedProviderId}
-              onSelectedProviderChange={setSelectedProviderId}
-              hasMultipleProviders={hasMultipleProviders}
-              activeModel={activeModel}
-              selectedModel={selectedModel}
-              modelOptions={modelOptions}
-              onSelectedModelChange={setSelectedModel}
-              serviceTier={serviceTier}
-              onServiceTierChange={setServiceTier}
-              supportsServiceTier={supportsServiceTier}
-              reasoningLevel={reasoningLevel}
-              reasoningOptions={reasoningOptions}
-              onReasoningLevelChange={setReasoningLevel}
-              sandboxMode={sandboxMode}
-              sandboxOptions={sandboxOptions}
-              onSandboxModeChange={setSandboxMode}
+              provider={{
+                options: providerOptions,
+                selectedId: selectedProviderId,
+                onChange: setSelectedProviderId,
+                hasMultiple: hasMultipleProviders,
+              }}
+              model={{
+                active: activeModel,
+                selected: selectedModel,
+                options: modelOptions,
+                onChange: setSelectedModel,
+              }}
+              serviceTier={{
+                value: serviceTier,
+                onChange: setServiceTier,
+                supported: supportsServiceTier,
+              }}
+              reasoning={{
+                value: reasoningLevel,
+                options: reasoningOptions,
+                onChange: setReasoningLevel,
+              }}
+              sandbox={{
+                value: sandboxMode,
+                options: sandboxOptions,
+                onChange: setSandboxMode,
+              }}
             />
           }
         />

@@ -30,7 +30,40 @@ const ZEN_MODE_HEIGHT_CLASS: Record<ZenModeLayout, string> = {
   "project-main": "h-[70dvh]",
 }
 
-interface PromptBoxProps {
+export interface PromptBoxSubmissionConfig {
+  isSubmitting?: boolean
+  disabled?: boolean
+  title?: string
+  mode?: SubmitMode
+  isRunning?: boolean
+  onStop?: () => void
+}
+
+export interface PromptBoxMentionsConfig {
+  suggestions?: PromptMentionSuggestion[]
+  searchScope?: "files" | "files-and-managers" | "files-and-threads"
+  isLoading?: boolean
+  isError?: boolean
+  onQueryChange?: (query: string | null) => void
+}
+
+export interface PromptBoxAttachmentsConfig {
+  items?: PromptDraftAttachment[]
+  isAttaching?: boolean
+  error?: string | null
+  onAttachFiles?: (files: File[]) => void | Promise<void>
+  onRemove?: (path: string) => void
+  projectId?: string
+}
+
+export interface PromptBoxZenModeConfig {
+  layout?: ZenModeLayout
+  storageKey?: string | null
+  resetKey?: string | number
+  resetOnSubmit?: boolean
+}
+
+export interface PromptBoxProps {
   id?: string
   value: string
   onChange: (value: string) => void
@@ -38,28 +71,11 @@ interface PromptBoxProps {
   placeholder?: string
   className?: string
   footerStart?: ReactNode
-  isSubmitting?: boolean
-  submitDisabled?: boolean
-  submitTitle?: string
-  submitMode?: SubmitMode
-  isRunning?: boolean
-  onStop?: () => void
   autoFocus?: boolean
-  mentionSuggestions?: PromptMentionSuggestion[]
-  mentionSearchScope?: "files" | "files-and-managers" | "files-and-threads"
-  mentionLoading?: boolean
-  mentionError?: boolean
-  onMentionQueryChange?: (query: string | null) => void
-  attachments?: PromptDraftAttachment[]
-  isAttaching?: boolean
-  attachmentError?: string | null
-  onAttachFiles?: (files: File[]) => void | Promise<void>
-  onRemoveAttachment?: (path: string) => void
-  zenModeLayout?: ZenModeLayout
-  zenModeStorageKey?: string | null
-  zenModeResetKey?: string | number
-  resetZenModeOnSubmit?: boolean
-  attachmentProjectId?: string
+  submission?: PromptBoxSubmissionConfig
+  mentions?: PromptBoxMentionsConfig
+  attachments?: PromptBoxAttachmentsConfig
+  zenMode?: PromptBoxZenModeConfig
 }
 
 interface DismissedMentionRange {
@@ -125,29 +141,41 @@ export function PromptBox({
   placeholder = "What do you want to build?",
   className,
   footerStart,
-  isSubmitting = false,
-  submitDisabled = false,
-  submitTitle = "Submit (Enter)",
-  submitMode = "enter",
-  isRunning = false,
-  onStop,
   autoFocus = false,
-  mentionSuggestions = [],
-  mentionSearchScope = "files",
-  mentionLoading = false,
-  mentionError = false,
-  onMentionQueryChange,
-  attachments = [],
-  isAttaching = false,
-  attachmentError = null,
-  onAttachFiles,
-  onRemoveAttachment,
-  zenModeLayout = "thread",
-  zenModeStorageKey,
-  zenModeResetKey,
-  resetZenModeOnSubmit = false,
-  attachmentProjectId,
+  submission = {},
+  mentions = {},
+  attachments: attachmentConfig = {},
+  zenMode = {},
 }: PromptBoxProps) {
+  const {
+    isSubmitting = false,
+    disabled: submitDisabled = false,
+    title: submitTitle = "Submit (Enter)",
+    mode: submitMode = "enter",
+    isRunning = false,
+    onStop,
+  } = submission
+  const {
+    suggestions: mentionSuggestions = [],
+    searchScope: mentionSearchScope = "files",
+    isLoading: mentionLoading = false,
+    isError: mentionError = false,
+    onQueryChange: onMentionQueryChange,
+  } = mentions
+  const {
+    items: attachments = [],
+    isAttaching = false,
+    error: attachmentError = null,
+    onAttachFiles,
+    onRemove: onRemoveAttachment,
+    projectId: attachmentProjectId,
+  } = attachmentConfig
+  const {
+    layout: zenModeLayout = "thread",
+    storageKey: zenModeStorageKey,
+    resetKey: zenModeResetKey,
+    resetOnSubmit: resetZenModeOnSubmit = false,
+  } = zenMode
   const formRef = useRef<HTMLFormElement>(null)
   const heightAnimationFromRef = useRef<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
