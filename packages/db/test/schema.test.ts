@@ -25,7 +25,7 @@ import {
 } from "../src/index.js";
 
 function closeConnection(db: ReturnType<typeof createConnection>): void {
-  (db as { $client?: { close?: () => void } }).$client?.close?.();
+  db.$client.close();
 }
 
 describe("db rebuild schema", () => {

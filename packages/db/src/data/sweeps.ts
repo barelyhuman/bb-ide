@@ -1,4 +1,4 @@
-import { eq, and, sql, lt, ne } from "drizzle-orm";
+import { eq, and, sql, lt, ne, inArray } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
@@ -32,22 +32,23 @@ export function sweepExpiredCommands(
   let requeued = 0;
   let errored = 0;
 
-  // Find all fetched commands
+  // Find fetched commands that have exceeded their type-specific TTL
   const fetchedCommands = db
     .select()
     .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.state, "fetched"))
+    .where(
+      and(
+        eq(hostDaemonCommands.state, "fetched"),
+        sql`${hostDaemonCommands.fetchedAt} IS NOT NULL`,
+        sql`(${currentTime} - ${hostDaemonCommands.fetchedAt}) >= CASE
+          WHEN ${hostDaemonCommands.type} = 'environment.provision' THEN ${PROVISION_COMMAND_TTL_MS}
+          ELSE ${STANDARD_COMMAND_TTL_MS}
+        END`,
+      ),
+    )
     .all();
 
   for (const cmd of fetchedCommands) {
-    if (cmd.fetchedAt == null) continue;
-
-    const ttl =
-      cmd.type === "environment.provision"
-        ? PROVISION_COMMAND_TTL_MS
-        : STANDARD_COMMAND_TTL_MS;
-
-    if (currentTime - cmd.fetchedAt < ttl) continue;
 
     if (cmd.retryCount === 0) {
       // Re-queue: set back to pending with retryCount=1
@@ -136,33 +137,25 @@ export function sweepExpiredLeases(
 
     notifier.notifySystem(["host-disconnected"]);
 
-    // Find environments on this host
-    const hostEnvironments = db
-      .select()
-      .from(environments)
-      .where(eq(environments.hostId, session.hostId))
+    // Find all active/idle/provisioning threads on environments belonging to this host
+    const activeThreads = db
+      .select({ id: threads.id })
+      .from(threads)
+      .innerJoin(environments, eq(threads.environmentId, environments.id))
+      .where(
+        and(
+          eq(environments.hostId, session.hostId),
+          inArray(threads.status, ["active", "idle", "provisioning"]),
+        ),
+      )
       .all();
 
-    // Error all active/idle threads in those environments
-    for (const env of hostEnvironments) {
-      const activeThreads = db
-        .select()
-        .from(threads)
-        .where(
-          and(
-            eq(threads.environmentId, env.id),
-            sql`${threads.status} IN ('active', 'idle', 'provisioning')`,
-          ),
-        )
-        .all();
-
-      for (const thread of activeThreads) {
-        try {
-          transitionThreadStatus(db, notifier, thread.id, "error");
-          threadsErrored++;
-        } catch {
-          // Invalid transition — skip
-        }
+    for (const thread of activeThreads) {
+      try {
+        transitionThreadStatus(db, notifier, thread.id, "error");
+        threadsErrored++;
+      } catch {
+        // Invalid transition — skip
       }
     }
   }

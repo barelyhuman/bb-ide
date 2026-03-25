@@ -1,5 +1,7 @@
+import type { ComponentPropsWithoutRef } from "react"
 import { useCallback, useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import type { ExtraProps } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox"
 import { cn } from "@/lib/utils"
@@ -57,7 +59,7 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            code({ className: codeClassName, children, ...props }: any) {
+            code({ className: codeClassName, children, ...props }: ComponentPropsWithoutRef<"code"> & ExtraProps) {
               const codeText = String(children ?? "").replace(/\n$/, "")
               const languageMatch = /language-(\w+)/.exec(codeClassName || "")
               const language = languageMatch?.[1]
@@ -77,45 +79,45 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
                 </code>
               )
             },
-            pre({ children }: any) {
+            pre({ children }: ComponentPropsWithoutRef<"pre"> & ExtraProps) {
               return <>{children}</>
             },
-            p({ children }: any) {
+            p({ children }: ComponentPropsWithoutRef<"p"> & ExtraProps) {
               return <p className="mb-2 last:mb-0 text-foreground">{children}</p>
             },
-            ul({ children }: any) {
+            ul({ children }: ComponentPropsWithoutRef<"ul"> & ExtraProps) {
               return <ul className="mb-2 list-disc pl-5 text-foreground">{children}</ul>
             },
-            ol({ children }: any) {
+            ol({ children }: ComponentPropsWithoutRef<"ol"> & ExtraProps) {
               return <ol className="mb-2 list-decimal pl-5 text-foreground">{children}</ol>
             },
-            li({ children }: any) {
+            li({ children }: ComponentPropsWithoutRef<"li"> & ExtraProps) {
               return <li className="mb-1 text-foreground">{children}</li>
             },
-            blockquote({ children }: any) {
+            blockquote({ children }: ComponentPropsWithoutRef<"blockquote"> & ExtraProps) {
               return (
                 <blockquote className="my-2 border-l-2 border-border pl-3 italic text-muted-foreground">
                   {children}
                 </blockquote>
               )
             },
-            table({ children }: any) {
+            table({ children }: ComponentPropsWithoutRef<"table"> & ExtraProps) {
               return (
                 <div className="my-2 overflow-x-auto">
                   <table className="min-w-full border border-border/80">{children}</table>
                 </div>
               )
             },
-            thead({ children }: any) {
+            thead({ children }: ComponentPropsWithoutRef<"thead"> & ExtraProps) {
               return <thead className="bg-muted/40">{children}</thead>
             },
-            th({ children }: any) {
+            th({ children }: ComponentPropsWithoutRef<"th"> & ExtraProps) {
               return <th className="border border-border/80 px-2 py-1 text-left font-medium">{children}</th>
             },
-            td({ children }: any) {
+            td({ children }: ComponentPropsWithoutRef<"td"> & ExtraProps) {
               return <td className="border border-border/80 px-2 py-1">{children}</td>
             },
-            a({ children, href, ...props }: any) {
+            a({ children, href, ...props }: ComponentPropsWithoutRef<"a"> & ExtraProps) {
               return (
                 <a
                   href={href}
@@ -128,7 +130,7 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
                 </a>
               )
             },
-            img({ src, alt }: any) {
+            img({ src, alt }: ComponentPropsWithoutRef<"img"> & ExtraProps) {
               const imageUrl = typeof src === "string" ? src : ""
               if (!imageUrl) return null
               const imageIndex = imageUrls.indexOf(imageUrl)

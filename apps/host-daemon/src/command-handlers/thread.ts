@@ -1,6 +1,6 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { RuntimeEntry } from "../runtime-manager.js";
-import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
+import { CommandDispatchError, type CommandDispatchOptions, type CommandOf, type ThreadRuntimeResolution } from "../command-dispatch-support.js";
 
 export async function startThread(
   command: CommandOf<"thread.start">,
@@ -57,7 +57,7 @@ export async function ensureThreadRuntime(
   options: CommandDispatchOptions,
 ): Promise<RuntimeEntry> {
   let entry = options.runtimeManager.get(environmentId);
-  let resolution: import("../command-dispatch-support.js").ThreadRuntimeResolution | null = null;
+  let resolution: ThreadRuntimeResolution | null = null;
 
   if (!entry || !options.runtimeManager.hasThread(environmentId, threadId)) {
     resolution = (await options.resolveThreadRuntime?.({

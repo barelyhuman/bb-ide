@@ -116,7 +116,7 @@ describe("demoteWorkspace", () => {
     expect(await primary.currentBranch).toBe("bb/env-test");
     expect(await source.currentBranch).toBeUndefined();
 
-    await demoteWorkspace(source, primary, "main", "bb/env-test");
+    await demoteWorkspace({ source, primary, defaultBranch: "main", envBranch: "bb/env-test" });
 
     expect(await primary.currentBranch).toBe("main");
     expect(await source.currentBranch).toBe("bb/env-test");
@@ -131,7 +131,7 @@ describe("demoteWorkspace", () => {
     await fs.writeFile(path.join(primaryRepo, "README.md"), "dirty demote\n", "utf8");
 
     await expect(
-      demoteWorkspace(source, primary, "main", "bb/env-test"),
+      demoteWorkspace({ source, primary, defaultBranch: "main", envBranch: "bb/env-test" }),
     ).rejects.toThrow(/uncommitted changes/u);
 
     // Primary should still be on the env branch

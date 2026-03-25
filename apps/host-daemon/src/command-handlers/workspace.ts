@@ -33,6 +33,6 @@ export async function demoteWorkspace(
 ): Promise<HostDaemonCommandResult<"workspace.demote">> {
   const entry = await requireExistingEnvironment(command.environmentId, runtimeManager);
   const primaryWorkspace = await runtimeManager.openWorkspace(command.primaryPath);
-  await entry.workspace.demote(primaryWorkspace, command.defaultBranch, command.envBranch);
+  await entry.workspace.demote({ primary: primaryWorkspace, defaultBranch: command.defaultBranch, envBranch: command.envBranch });
   return { ok: true };
 }

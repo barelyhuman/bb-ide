@@ -6,6 +6,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { threadStatusValues } from "@bb/domain";
 import type { ThreadEventType } from "@bb/domain";
 
 export const hosts = sqliteTable(
@@ -108,7 +109,7 @@ export const threads = sqliteTable(
     type: text("type").notNull().default("standard"),
     title: text("title"),
     titleFallback: text("title_fallback"),
-    status: text("status").notNull().default("created"),
+    status: text("status", { enum: threadStatusValues }).notNull().default("created"),
     mergeBaseBranch: text("merge_base_branch"),
     parentThreadId: text("parent_thread_id").references(
       (): AnySQLiteColumn => threads.id,

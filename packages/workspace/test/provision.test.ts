@@ -326,7 +326,7 @@ describe("provisionWorkspace", () => {
       // Demote — need a workspace that's on the env branch still
       // After promote, env is detached. demote expects envBranch from ws.currentBranch.
       // This means demote can't work on a detached env. Let's test the error case.
-      await expect(env.demote(primary, "main")).rejects.toThrow(/no branch/u);
+      await expect(env.demote({ primary, defaultBranch: "main" })).rejects.toThrow(/no branch/u);
     });
   });
 });

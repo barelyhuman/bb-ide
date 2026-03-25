@@ -46,16 +46,16 @@ export async function promoteWorkspace(
  * Demote: switch primary checkout back to default branch, reattach source.
  * Primary must be clean. Fails loudly if dirty.
  */
-export async function demoteWorkspace(
-  source: Workspace,
-  primary: Workspace,
-  defaultBranch: string,
-  envBranch: string,
-): Promise<void> {
-  await assertWorkspaceClean(primary, "demote primary");
+export async function demoteWorkspace(args: {
+  source: Workspace;
+  primary: Workspace;
+  defaultBranch: string;
+  envBranch: string;
+}): Promise<void> {
+  await assertWorkspaceClean(args.primary, "demote primary");
 
-  await primary.checkoutBranch(defaultBranch);
+  await args.primary.checkoutBranch(args.defaultBranch);
 
   // Reattach source to its branch
-  await source.checkoutBranch(envBranch);
+  await args.source.checkoutBranch(args.envBranch);
 }

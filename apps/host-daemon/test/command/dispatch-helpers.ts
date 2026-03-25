@@ -94,9 +94,9 @@ export function createFakeWorkspace(pathname: string) {
     async promote(primary: IWorkspace) {
       state.promotedPrimaryPath = primary.path;
     },
-    async demote(primary: IWorkspace, defaultBranch: string) {
-      state.demotedPrimaryPath = primary.path;
-      state.demotedDefaultBranch = defaultBranch;
+    async demote(args: { primary: IWorkspace; defaultBranch: string; envBranch?: string }) {
+      state.demotedPrimaryPath = args.primary.path;
+      state.demotedDefaultBranch = args.defaultBranch;
     },
     async destroy() {
       state.destroyed = true;

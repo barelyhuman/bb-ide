@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { ThreadStatus } from "@bb/domain";
+import type { ThreadChangeKind, ThreadStatus } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { threads } from "../schema.js";
@@ -84,7 +84,7 @@ export function updateThread(
   input: UpdateThreadInput,
 ) {
   const now = Date.now();
-  const changes: import("@bb/domain").ThreadChangeKind[] = [];
+  const changes: ThreadChangeKind[] = [];
   if ("title" in input) changes.push("title-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
 
@@ -145,7 +145,7 @@ export function transitionThreadStatus(
     throw new Error(`Thread not found: ${id}`);
   }
 
-  const currentStatus = thread.status as ThreadStatus;
+  const currentStatus = thread.status;
   const allowed = ALLOWED_TRANSITIONS[currentStatus];
   if (!allowed || !allowed.includes(newStatus)) {
     throw new Error(

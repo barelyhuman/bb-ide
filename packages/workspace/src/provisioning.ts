@@ -37,17 +37,17 @@ function emitProgress(
   onProgress?.(entry);
 }
 
-function emitStep(
-  onProgress: ProgressCallback | undefined,
-  key: string,
-  text: string,
-  status: "started" | "completed" | "failed",
-): void {
-  emitProgress(onProgress, {
+function emitStep(args: {
+  onProgress: ProgressCallback | undefined;
+  key: string;
+  text: string;
+  status: "started" | "completed" | "failed";
+}): void {
+  emitProgress(args.onProgress, {
     type: "step",
-    key,
-    text,
-    status,
+    key: args.key,
+    text: args.text,
+    status: args.status,
     startedAt: Date.now(),
   });
 }
@@ -92,7 +92,7 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
     return { path: args.targetPath };
   }
 
-  emitStep(args.onProgress, "worktree", "Creating git worktree", "started");
+  emitStep({ onProgress: args.onProgress, key: "worktree", text: "Creating git worktree", status: "started" });
   try {
     await runGit(
       ["worktree", "add", "-B", args.branchName, args.targetPath],
@@ -104,10 +104,10 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
       timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
     });
-    emitStep(args.onProgress, "worktree", "Created git worktree", "completed");
+    emitStep({ onProgress: args.onProgress, key: "worktree", text: "Created git worktree", status: "completed" });
     return { path: args.targetPath };
   } catch (error) {
-    emitStep(args.onProgress, "worktree", "Failed to create git worktree", "failed");
+    emitStep({ onProgress: args.onProgress, key: "worktree", text: "Failed to create git worktree", status: "failed" });
     await removeWorktree({ path: args.targetPath, force: true });
     throw error;
   }
@@ -118,7 +118,7 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
     return { path: args.targetPath };
   }
 
-  emitStep(args.onProgress, "clone", "Cloning repository", "started");
+  emitStep({ onProgress: args.onProgress, key: "clone", text: "Cloning repository", status: "started" });
   try {
     await runGit(["clone", args.sourcePath, args.targetPath], {
       cwd: path.dirname(args.targetPath),
@@ -130,10 +130,10 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
       timeoutMs: args.timeoutMs,
       onProgress: args.onProgress,
     });
-    emitStep(args.onProgress, "clone", "Cloned repository", "completed");
+    emitStep({ onProgress: args.onProgress, key: "clone", text: "Cloned repository", status: "completed" });
     return { path: args.targetPath };
   } catch (error) {
-    emitStep(args.onProgress, "clone", "Failed to clone repository", "failed");
+    emitStep({ onProgress: args.onProgress, key: "clone", text: "Failed to clone repository", status: "failed" });
     await removeDirectory({ path: args.targetPath });
     throw error;
   }
@@ -148,7 +148,7 @@ export async function runSetupScript(
     return { ran: false };
   }
 
-  emitStep(args.onProgress, "setup", `Running ${scriptName}`, "started");
+  emitStep({ onProgress: args.onProgress, key: "setup", text: `Running ${scriptName}`, status: "started" });
 
   const timeoutMs = args.timeoutMs ?? 5 * 60 * 1000;
   const child = spawn("/bin/sh", [scriptPath], {
@@ -188,27 +188,27 @@ export async function runSetupScript(
 
     const output = outputChunks.join("");
     if (timedOut) {
-      emitStep(args.onProgress, "setup", `${scriptName} timed out`, "failed");
+      emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} timed out`, status: "failed" });
       throw new WorkspaceError(
         `Setup script timed out after ${timeoutMs}ms: ${scriptPath}`,
       );
     }
 
     if (result.signal) {
-      emitStep(args.onProgress, "setup", `${scriptName} interrupted`, "failed");
+      emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} interrupted`, status: "failed" });
       throw new WorkspaceError(
         `Setup script exited via signal ${result.signal}: ${scriptPath}`,
       );
     }
 
     if ((result.exitCode ?? 0) !== 0) {
-      emitStep(args.onProgress, "setup", `${scriptName} failed`, "failed");
+      emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} failed`, status: "failed" });
       throw new WorkspaceError(
         `Setup script failed with exit code ${result.exitCode}: ${scriptPath}`,
       );
     }
 
-    emitStep(args.onProgress, "setup", `Finished ${scriptName}`, "completed");
+    emitStep({ onProgress: args.onProgress, key: "setup", text: `Finished ${scriptName}`, status: "completed" });
     return { ran: true, exitCode: result.exitCode ?? 0, output };
   } finally {
     clearTimeout(timeout);
