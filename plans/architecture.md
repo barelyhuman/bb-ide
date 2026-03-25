@@ -303,17 +303,19 @@ Synchronous: daemon posts `POST /internal/session/tool-call`, blocks on HTTP res
 
 ### Reconnection
 
-Daemon-driven, server never nudges. On WS drop:
-1. Buffer events, retry HTTP with exponential backoff + jitter
-2. Reconnect WS with backoff + jitter
+Daemon-driven, server never nudges. WS reconnection uses `partysocket/ws` (`ReconnectingWebSocket`) — the same library used by `apps/app`. On WS reconnect, the daemon re-opens the session (new `sessionId`) to avoid stale session issues.
+
+On WS drop:
+1. Buffer events, retry HTTP with `p-retry` (max 5 retries, exponential backoff, 4xx not retried)
+2. `partysocket` handles WS reconnect (exponential backoff, 1s–30s)
 3. If WS down >5s, fall back to polling commands every ~10s
-4. On WS reconnect, fetch from last cursor, stop polling
+4. On WS reconnect, re-open session, fetch from last cursor, stop polling
 
 ### Resilience invariants
 
 - **Event ingestion is idempotent** on `(threadId, sequence)`. Server silently accepts already-seen events.
 - **Command cursor persisted to disk.** Daemon writes to `$BB_DATA_DIR/command-cursor` after reporting command results (atomic write: write to temp, rename). On restart, reads from disk and re-fetches from that cursor.
-- **Command result delivery with retry.** After executing a command, the daemon POSTs the result to the server with retry (exponential backoff). The cursor is advanced only after successful POST. If the daemon crashes mid-retry, the cursor wasn't advanced — the command is re-fetched and re-executed on restart. Commands are idempotent.
+- **Command result delivery with retry.** After executing a command, the daemon POSTs the result to the server with retry via `p-retry` (max 5 retries, exponential backoff, 4xx errors not retried). The cursor is advanced only after successful POST. If the daemon crashes mid-retry, the cursor wasn't advanced — the command is re-fetched and re-executed on restart. Commands are idempotent.
 - **Command TTL.** Server tracks commands that were fetched but never got a `command-result`. Standard commands: 60s timeout. `environment.provision`: 5 minute timeout. Abandoned commands re-queue once (retryCount 0 → 1), then error the thread (retryCount 1 → error).
 - **Protocol version mismatch** → 400 rejection with supported versions.
 - **File locking.** Daemon acquires an exclusive lock on `$BB_DATA_DIR/daemon.lock` at startup. If lock is held, another daemon instance is running — the new instance waits or exits.
