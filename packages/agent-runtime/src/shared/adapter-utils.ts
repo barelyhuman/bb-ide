@@ -40,17 +40,25 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
 // Base instructions
 // ---------------------------------------------------------------------------
 
-const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
+const DEFAULT_BASE_INSTRUCTIONS = renderTemplate(
+  "standardAgentInstructions",
+  {},
+);
 
 /**
  * Resolves base instructions with optional developer instructions appended.
  * If `developerInstructions` already starts with the default base instructions,
  * it is returned as-is to avoid duplication.
  */
-export function resolveBaseInstructions(developerInstructions?: string): string {
+export function resolveBaseInstructions(
+  developerInstructions?: string,
+): string {
   const trimmed = developerInstructions?.trim();
   if (!trimmed) return DEFAULT_BASE_INSTRUCTIONS;
-  if (trimmed === DEFAULT_BASE_INSTRUCTIONS || trimmed.startsWith(`${DEFAULT_BASE_INSTRUCTIONS}\n`)) {
+  if (
+    trimmed === DEFAULT_BASE_INSTRUCTIONS ||
+    trimmed.startsWith(`${DEFAULT_BASE_INSTRUCTIONS}\n`)
+  ) {
     return trimmed;
   }
   return `${DEFAULT_BASE_INSTRUCTIONS}\n\n${trimmed}`;
@@ -94,7 +102,10 @@ export function translateToolCallToItem(
       type: "commandExecution",
       id: callId,
       command: parsed.success ? String(parsed.data.command ?? "") : "",
-      cwd: parsed.success && typeof parsed.data.cwd === "string" ? parsed.data.cwd : "",
+      cwd:
+        parsed.success && typeof parsed.data.cwd === "string"
+          ? parsed.data.cwd
+          : "",
       status: "pending",
     };
   }
@@ -117,7 +128,9 @@ export function translateToolCallToItem(
     return {
       type: "webSearch",
       id: callId,
-      query: parsed.success ? String(parsed.data.query ?? parsed.data.url ?? "") : "",
+      query: parsed.success
+        ? String(parsed.data.query ?? parsed.data.url ?? "")
+        : "",
     };
   }
 
@@ -143,7 +156,7 @@ export function translateToolResultToItem(
   isError?: boolean,
 ): ThreadEventItem {
   const outputText = extractResultText(content);
-  const status = isError ? "failed" as const : "completed" as const;
+  const status = isError ? ("failed" as const) : ("completed" as const);
 
   if (toolName && BASH_TOOLS.has(toolName)) {
     return {
