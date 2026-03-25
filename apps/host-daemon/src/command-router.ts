@@ -433,9 +433,8 @@ export class CommandRouter {
           );
         }
         return {
-          type: "unmanaged" as const,
-          path: command.path ?? null,
-          sourcePath,
+          workspaceProvisionType: "unmanaged" as const,
+          path: sourcePath,
         };
       }
       case "managed-worktree":
@@ -447,7 +446,7 @@ export class CommandRouter {
           );
         }
         return {
-          type: command.workspaceProvisionType,
+          workspaceProvisionType: command.workspaceProvisionType,
           sourcePath: command.sourcePath,
           targetPath: command.targetPath,
           branchName: command.branchName,

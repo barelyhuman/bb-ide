@@ -1,16 +1,7 @@
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
-  hostDaemonCommandBatchSchema,
-  hostDaemonCommandResultReportSchema,
-  hostDaemonCommandsQuerySchema,
   hostDaemonDaemonWsMessageSchema,
-  hostDaemonEventBatchRequestSchema,
-  hostDaemonEventBatchResponseSchema,
   hostDaemonServerWsMessageSchema,
-  hostDaemonSessionOpenRequestSchema,
-  hostDaemonSessionOpenResponseSchema,
-  hostDaemonToolCallRequestSchema,
-  hostDaemonToolCallResponseSchema,
   type HostDaemonActiveThread,
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
@@ -20,19 +11,46 @@ import {
   type HostDaemonToolCallResponse,
 } from "@bb/host-daemon-contract";
 import type { ToolCallRequest } from "@bb/domain";
-import { WebSocket, type RawData } from "ws";
+import ReconnectingWebSocket from "partysocket/ws";
+import type { HostDaemonLogger } from "./logger.js";
+import type { ServerClient } from "./server-client.js";
 
-type FetchFn = typeof fetch;
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 type IntervalHandle = ReturnType<typeof setInterval>;
+
+export interface ReconnectingWebSocketLike {
+  readonly readyState: number;
+  onopen: ((event: any) => void) | null;
+  onmessage: ((event: any) => void) | null;
+  onclose: ((event: any) => void) | null;
+  onerror: ((event: any) => void) | null;
+  send(data: string): void;
+  close(code?: number, reason?: string): void;
+}
+
+export interface ReconnectingWebSocketOptions {
+  minReconnectionDelay: number;
+  maxReconnectionDelay: number;
+  reconnectionDelayGrowFactor: number;
+  connectionTimeout: number;
+  maxRetries: number;
+}
+
+export type CreateReconnectingWebSocket = (
+  urlProvider: () => Promise<string>,
+  options: ReconnectingWebSocketOptions,
+) => ReconnectingWebSocketLike;
 
 export interface ServerConnectionOptions {
   serverUrl: string;
   authToken: string;
+  logger: HostDaemonLogger;
+  serverClient: ServerClient;
   hostId: string;
   hostName: string;
   hostType: HostDaemonSessionOpenRequest["hostType"];
   instanceId: string;
+  setSession?: (session: HostDaemonSessionOpenResponse | null) => void;
   getActiveThreads?: () =>
     | HostDaemonActiveThread[]
     | Promise<HostDaemonActiveThread[]>;
@@ -47,57 +65,67 @@ export interface ServerConnectionOptions {
   onSessionOpened?: (
     session: HostDaemonSessionOpenResponse,
   ) => void | Promise<void>;
-  fetchFn?: FetchFn;
-  createWebSocket?: (url: string) => WebSocket;
   protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
-  reconnectBaseMs?: number;
-  reconnectMaxMs?: number;
+  createWebSocket?: CreateReconnectingWebSocket;
+  minReconnectionDelay?: number;
+  maxReconnectionDelay?: number;
+  reconnectionDelayGrowFactor?: number;
+  connectionTimeout?: number;
   pollAfterDisconnectMs?: number;
   pollIntervalMs?: number;
-  random?: () => number;
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
   setIntervalFn?: typeof setInterval;
   clearIntervalFn?: typeof clearInterval;
 }
 
-const DEFAULT_RECONNECT_BASE_MS = 1_000;
-const DEFAULT_RECONNECT_MAX_MS = 30_000;
+const DEFAULT_MIN_RECONNECTION_DELAY = 1_000;
+const DEFAULT_MAX_RECONNECTION_DELAY = 30_000;
+const DEFAULT_RECONNECTION_DELAY_GROW_FACTOR = 2;
+const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
 const DEFAULT_POLL_AFTER_DISCONNECT_MS = 5_000;
 const DEFAULT_POLL_INTERVAL_MS = 10_000;
+const OPEN_READY_STATE = 1;
 
 export class ServerConnection {
-  private readonly fetchFn: FetchFn;
-  private readonly createWebSocket: (url: string) => WebSocket;
-  private readonly reconnectBaseMs: number;
-  private readonly reconnectMaxMs: number;
+  private readonly createWebSocket: CreateReconnectingWebSocket;
+  private readonly minReconnectionDelay: number;
+  private readonly maxReconnectionDelay: number;
+  private readonly reconnectionDelayGrowFactor: number;
+  private readonly connectionTimeout: number;
   private readonly pollAfterDisconnectMs: number;
   private readonly pollIntervalMs: number;
-  private readonly random: () => number;
   private readonly setTimeoutFn: typeof setTimeout;
   private readonly clearTimeoutFn: typeof clearTimeout;
   private readonly setIntervalFn: typeof setInterval;
   private readonly clearIntervalFn: typeof clearInterval;
 
   private session: HostDaemonSessionOpenResponse | null = null;
-  private websocket: WebSocket | null = null;
-  private reconnectTimer: TimeoutHandle | null = null;
+  private websocket: ReconnectingWebSocketLike | null = null;
   private pollingDelayTimer: TimeoutHandle | null = null;
   private pollingInterval: IntervalHandle | null = null;
   private heartbeatInterval: IntervalHandle | null = null;
-  private reconnectAttempt = 0;
   private stopped = false;
+  private sessionCloseHandler: ServerConnectionOptions["onSessionClose"];
 
   constructor(private readonly options: ServerConnectionOptions) {
-    this.fetchFn = options.fetchFn ?? fetch;
+    this.sessionCloseHandler = options.onSessionClose;
     this.createWebSocket =
-      options.createWebSocket ?? ((url) => new WebSocket(url));
-    this.reconnectBaseMs = options.reconnectBaseMs ?? DEFAULT_RECONNECT_BASE_MS;
-    this.reconnectMaxMs = options.reconnectMaxMs ?? DEFAULT_RECONNECT_MAX_MS;
+      options.createWebSocket ??
+      ((urlProvider, reconnectOptions) =>
+        new ReconnectingWebSocket(urlProvider, [], reconnectOptions));
+    this.minReconnectionDelay =
+      options.minReconnectionDelay ?? DEFAULT_MIN_RECONNECTION_DELAY;
+    this.maxReconnectionDelay =
+      options.maxReconnectionDelay ?? DEFAULT_MAX_RECONNECTION_DELAY;
+    this.reconnectionDelayGrowFactor =
+      options.reconnectionDelayGrowFactor ??
+      DEFAULT_RECONNECTION_DELAY_GROW_FACTOR;
+    this.connectionTimeout =
+      options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS;
     this.pollAfterDisconnectMs =
       options.pollAfterDisconnectMs ?? DEFAULT_POLL_AFTER_DISCONNECT_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    this.random = options.random ?? Math.random;
     this.setTimeoutFn = options.setTimeoutFn ?? setTimeout;
     this.clearTimeoutFn = options.clearTimeoutFn ?? clearTimeout;
     this.setIntervalFn = options.setIntervalFn ?? setInterval;
@@ -116,11 +144,11 @@ export class ServerConnection {
   async shutdown(): Promise<void> {
     this.stopped = true;
     this.stopPollingFallback();
-    this.clearReconnectTimer();
     this.clearHeartbeat();
+    this.session = null;
+    this.options.setSession?.(null);
 
     if (this.websocket) {
-      this.websocket.removeAllListeners();
       this.websocket.close();
       this.websocket = null;
     }
@@ -131,105 +159,31 @@ export class ServerConnection {
     limit?: number;
     waitMs?: number;
   }): Promise<HostDaemonCommandEnvelope[]> {
-    const sessionId = this.requireSessionId();
-    const query = hostDaemonCommandsQuerySchema.parse({
-      sessionId,
-      afterCursor: String(options.afterCursor),
-      limit: options.limit === undefined ? undefined : String(options.limit),
-      waitMs: options.waitMs === undefined ? undefined : String(options.waitMs),
-    });
-
-    const response = await this.fetchFn(
-      this.buildInternalUrl("/session/commands", query),
-      {
-        method: "GET",
-        headers: this.headers(),
-      },
-    );
-
-    if (response.status === 204) {
-      return [];
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch commands: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const json = await response.json();
-    const parsed = hostDaemonCommandBatchSchema.parse(json);
-    return parsed.commands;
+    return this.options.serverClient.fetchCommands(options);
   }
 
   async reportCommandResult(
     report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void> {
-    await this.retryWithBackoff(async () => {
-      const payload = hostDaemonCommandResultReportSchema.parse({
-        ...report,
-        sessionId: this.requireSessionId(),
-      });
-      const response = await this.fetchFn(
-        this.buildInternalUrl("/session/command-result"),
-        {
-          method: "POST",
-          headers: this.headers(),
-          body: JSON.stringify(payload),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to report command result: ${response.status} ${response.statusText}`,
-        );
-      }
-    });
+    return this.options.serverClient.reportCommandResult(report);
   }
 
   async callTool(
     request: ToolCallRequest,
   ): Promise<HostDaemonToolCallResponse> {
-    const payload = hostDaemonToolCallRequestSchema.parse({
-      ...request,
-      sessionId: this.requireSessionId(),
-    });
-    const response = await this.fetchFn(this.buildInternalUrl("/session/tool-call"), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to call tool: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    return hostDaemonToolCallResponseSchema.parse(await response.json());
+    return this.options.serverClient.callTool(request);
   }
 
   async postEvents(
     events: HostDaemonEventEnvelope[],
   ): Promise<Record<string, number>> {
-    const payload = hostDaemonEventBatchRequestSchema.parse({
-      sessionId: this.requireSessionId(),
-      events,
-    });
-    const response = await this.fetchFn(this.buildInternalUrl("/session/events"), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(payload),
-    });
+    return this.options.serverClient.postEvents(events);
+  }
 
-    if (!response.ok) {
-      throw new Error(
-        `Failed to post events: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const json = await response.json();
-    return hostDaemonEventBatchResponseSchema.parse(json).threadHighWaterMarks;
+  setSessionCloseHandler(
+    handler: ServerConnectionOptions["onSessionClose"],
+  ): void {
+    this.sessionCloseHandler = handler;
   }
 
   private async openSessionAndConnect(): Promise<HostDaemonSessionOpenResponse> {
@@ -239,92 +193,111 @@ export class ServerConnection {
   }
 
   private async openSession(): Promise<HostDaemonSessionOpenResponse> {
-    const activeThreads = await this.options.getActiveThreads?.();
-    const payload = hostDaemonSessionOpenRequestSchema.parse({
+    const session = await this.options.serverClient.openSession({
       hostId: this.options.hostId,
       instanceId: this.options.instanceId,
       hostName: this.options.hostName,
       hostType: this.options.hostType,
       protocolVersion:
         this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
-      activeThreads,
+      activeThreads: this.options.getActiveThreads?.(),
     });
-
-    const response = await this.fetchFn(this.buildInternalUrl("/session/open"), {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify(payload),
-    });
-
-    if (response.status !== 201) {
-      throw new Error(
-        `Failed to open session: ${response.status} ${response.statusText}`,
-      );
-    }
-
-    const json = await response.json();
-    const session = hostDaemonSessionOpenResponseSchema.parse(json);
     this.session = session;
-    this.resetHeartbeat();
-    await this.options.onSessionOpened?.(session);
+    this.options.setSession?.(session);
     return session;
   }
 
-  private async connectWebSocket(sessionId: string): Promise<void> {
-    const websocketUrl = this.buildWebSocketUrl(sessionId);
-    const websocket = this.createWebSocket(websocketUrl);
+  private async connectWebSocket(
+    initialSessionId: string,
+  ): Promise<void> {
+    let nextSessionId: string | null = initialSessionId;
+    const websocket = this.createWebSocket(
+      async () => {
+        if (!nextSessionId) {
+          nextSessionId = (await this.openSession()).sessionId;
+        }
+        const sessionId = nextSessionId;
+        nextSessionId = null;
+        return this.buildWebSocketUrl(sessionId);
+      },
+      {
+        minReconnectionDelay: this.minReconnectionDelay,
+        maxReconnectionDelay: this.maxReconnectionDelay,
+        reconnectionDelayGrowFactor: this.reconnectionDelayGrowFactor,
+        connectionTimeout: this.connectionTimeout,
+        maxRetries: Number.POSITIVE_INFINITY,
+      },
+    );
+    this.websocket = websocket;
 
     return new Promise((resolve, reject) => {
       let settled = false;
-      let opened = false;
+      let hasOpened = false;
 
       const fail = (error: unknown) => {
         if (settled) {
           return;
         }
         settled = true;
+        void this.shutdown();
         reject(error instanceof Error ? error : new Error(String(error)));
       };
 
-      websocket.on("open", () => {
-        opened = true;
-        settled = true;
-        this.websocket = websocket;
-        this.reconnectAttempt = 0;
-        this.stopPollingFallback();
-        resolve();
-      });
-
-      websocket.on("message", (data: RawData) => {
-        this.handleWebSocketMessage(data);
-      });
-
-      websocket.on("close", () => {
-        if (this.websocket === websocket) {
-          this.websocket = null;
-        }
-
-        if (!opened) {
-          fail(new Error("WebSocket closed before opening"));
-        }
-
-        if (this.stopped) {
+      websocket.onopen = () => {
+        const session = this.session;
+        if (!session) {
+          fail(new Error("WebSocket opened before session was available"));
           return;
         }
 
-        this.startPollingFallback();
-        this.scheduleReconnect();
-      });
+        const handleOpen = async () => {
+          hasOpened = true;
+          this.stopPollingFallback();
+          this.resetHeartbeat();
+          await this.options.onSessionOpened?.(session);
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+        };
 
-      websocket.on("error", (error: Error) => {
-        if (!opened) {
+        void handleOpen().catch((error) => {
+          if (!settled) {
+            fail(error);
+            return;
+          }
+          this.options.logger.error(
+            { err: error, sessionId: session.sessionId },
+            "Failed to finish websocket open handling",
+          );
+        });
+      };
+
+      websocket.onmessage = (event) => {
+        this.handleWebSocketMessage(event.data);
+      };
+
+      websocket.onclose = () => {
+        this.clearHeartbeat();
+        if (!hasOpened) {
+          fail(new Error("WebSocket closed before opening"));
+          return;
+        }
+        if (this.stopped) {
+          return;
+        }
+        this.startPollingFallback();
+      };
+
+      websocket.onerror = (error) => {
+        if (!hasOpened) {
           fail(error);
         }
-      });
+      };
     });
   }
 
-  private handleWebSocketMessage(data: RawData): void {
+  private handleWebSocketMessage(data: unknown): void {
     const text =
       typeof data === "string"
         ? data
@@ -332,7 +305,7 @@ export class ServerConnection {
           ? Buffer.concat(data).toString("utf8")
         : Buffer.isBuffer(data)
           ? data.toString("utf8")
-          : Buffer.from(data).toString("utf8");
+          : String(data);
     const message = hostDaemonServerWsMessageSchema.parse(JSON.parse(text));
 
     if (message.type === "commands-available") {
@@ -342,7 +315,7 @@ export class ServerConnection {
       return;
     }
 
-    void Promise.resolve(this.options.onSessionClose?.(message.reason)).catch(
+    void Promise.resolve(this.sessionCloseHandler?.(message.reason)).catch(
       () => undefined,
     );
     void this.shutdown();
@@ -356,7 +329,7 @@ export class ServerConnection {
     }
 
     this.heartbeatInterval = this.setIntervalFn(() => {
-      if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+      if (!this.websocket || this.websocket.readyState !== OPEN_READY_STATE) {
         return;
       }
 
@@ -374,25 +347,6 @@ export class ServerConnection {
     }
     this.clearIntervalFn(this.heartbeatInterval);
     this.heartbeatInterval = null;
-  }
-
-  private scheduleReconnect(): void {
-    if (this.stopped || this.reconnectTimer) {
-      return;
-    }
-
-    const delayMs = this.computeBackoffMs(this.reconnectAttempt);
-    this.reconnectAttempt += 1;
-    this.reconnectTimer = this.setTimeoutFn(() => {
-      this.reconnectTimer = null;
-      void this.openSessionAndConnect().catch(() => {
-        if (this.stopped) {
-          return;
-        }
-        this.startPollingFallback();
-        this.scheduleReconnect();
-      });
-    }, delayMs);
   }
 
   private startPollingFallback(): void {
@@ -422,75 +376,6 @@ export class ServerConnection {
       this.clearIntervalFn(this.pollingInterval);
       this.pollingInterval = null;
     }
-  }
-
-  private clearReconnectTimer(): void {
-    if (!this.reconnectTimer) {
-      return;
-    }
-    this.clearTimeoutFn(this.reconnectTimer);
-    this.reconnectTimer = null;
-  }
-
-  private computeBackoffMs(attempt: number): number {
-    const baseDelay = Math.min(
-      this.reconnectMaxMs,
-      this.reconnectBaseMs * 2 ** attempt,
-    );
-    const jitterFactor = 0.75 + this.random() * 0.5;
-    return Math.round(baseDelay * jitterFactor);
-  }
-
-  private async retryWithBackoff<T>(operation: () => Promise<T>): Promise<T> {
-    let attempt = 0;
-
-    while (true) {
-      try {
-        return await operation();
-      } catch (error) {
-        if (this.stopped) {
-          throw error;
-        }
-        const delayMs = this.computeBackoffMs(attempt);
-        attempt += 1;
-        await this.delay(delayMs);
-      }
-    }
-  }
-
-  private async delay(delayMs: number): Promise<void> {
-    await new Promise<void>((resolve) => {
-      this.setTimeoutFn(resolve, delayMs);
-    });
-  }
-
-  private requireSessionId(): string {
-    if (!this.session?.sessionId) {
-      throw new Error("Server session is not open");
-    }
-    return this.session.sessionId;
-  }
-
-  private headers(): HeadersInit {
-    return {
-      authorization: `Bearer ${this.options.authToken}`,
-      "content-type": "application/json",
-    };
-  }
-
-  private buildInternalUrl(
-    pathname: string,
-    query?: Record<string, string | undefined>,
-  ): string {
-    const url = new URL(`/internal${pathname}`, this.options.serverUrl);
-    if (query) {
-      for (const [key, value] of Object.entries(query)) {
-        if (value !== undefined) {
-          url.searchParams.set(key, value);
-        }
-      }
-    }
-    return url.toString();
   }
 
   private buildWebSocketUrl(sessionId: string): string {

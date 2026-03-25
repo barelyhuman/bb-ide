@@ -1,30 +1,14 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { Hono } from "hono";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { ThreadEvent } from "@bb/domain";
 import { readCommandCursor } from "./command-cursor.js";
 import { startHostDaemon } from "./index.js";
 import {
-  hostDaemonCommandBatchSchema,
-  hostDaemonCommandResultReportSchema,
-  hostDaemonCommandsQuerySchema,
-  hostDaemonDaemonWsMessageSchema,
-  hostDaemonEventBatchRequestSchema,
-  hostDaemonServerWsMessageSchema,
-  hostDaemonSessionOpenRequestSchema,
-  hostDaemonToolCallRequestSchema,
-  type HostDaemonCommand,
-  type HostDaemonCommandEnvelope,
-  type HostDaemonCommandResultReport,
-  type HostDaemonEventEnvelope,
-  type HostDaemonSessionOpenRequest,
-  type HostDaemonServerWsMessage,
-} from "@bb/host-daemon-contract";
-import { WebSocketServer, type RawData, type WebSocket } from "ws";
+  createTestServer,
+} from "./test/helpers/test-server.js";
 
 type ProviderAdapter = ReturnType<NonNullable<AgentRuntimeOptions["adapterFactory"]>>;
 
@@ -163,6 +147,20 @@ async function waitFor(
   }
 }
 
+async function waitForCursor(
+  dataDir: string,
+  expectedCursor: number,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const startedAt = Date.now();
+  while ((await readCommandCursor(dataDir)) !== expectedCursor) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for command cursor");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 function createFakeAdapter(scriptPath: string): ProviderAdapter {
   return {
     id: "fake",
@@ -275,214 +273,6 @@ function createFakeAdapter(scriptPath: string): ProviderAdapter {
   };
 }
 
-async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
-
-async function serveHonoRequest(
-  app: Hono,
-  request: IncomingMessage,
-  response: ServerResponse,
-): Promise<void> {
-  const body = await readRequestBody(request);
-  const honoRequest = new Request(new URL(request.url ?? "/", "http://127.0.0.1"), {
-    method: request.method,
-    headers: request.headers as HeadersInit,
-    body:
-      request.method === "GET" || request.method === "HEAD"
-        ? undefined
-        : body.toString("utf8"),
-  });
-  const honoResponse = await app.fetch(honoRequest);
-
-  response.statusCode = honoResponse.status;
-  honoResponse.headers.forEach((value, key) => {
-    response.setHeader(key, value);
-  });
-  response.end(Buffer.from(await honoResponse.arrayBuffer()));
-}
-
-async function createFixtureServer() {
-  const sessionOpenCalls: HostDaemonSessionOpenRequest[] = [];
-  const heartbeats: Array<{
-    sessionId: string;
-    message: { bufferDepth: number; lastCommandCursor?: number };
-  }> = [];
-  const commandFetches: Array<{ sessionId: string; afterCursor: number }> = [];
-  const commandResults: HostDaemonCommandResultReport[] = [];
-  const events: HostDaemonEventEnvelope[] = [];
-  const threadHighWaterMarks: Record<string, number> = {};
-  const commands = new Map<number, HostDaemonCommandEnvelope>();
-  const completedCommandCursors = new Set<number>();
-  const activeSockets = new Set<WebSocket>();
-  let nextSessionId = 1;
-  let nextCursor = 1;
-
-  const app = new Hono();
-  app.post("/internal/session/open", async (context) => {
-    const payload = hostDaemonSessionOpenRequestSchema.parse(await context.req.json());
-    sessionOpenCalls.push(payload);
-    return context.json(
-      {
-        sessionId: `session-${nextSessionId++}`,
-        heartbeatIntervalMs: 25,
-        leaseTimeoutMs: 1_000,
-        threadHighWaterMarks,
-      },
-      201,
-    );
-  });
-  app.get("/internal/session/commands", (context) => {
-    const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
-    const afterCursor = Number.parseInt(query.afterCursor ?? "0", 10);
-    commandFetches.push({
-      sessionId: query.sessionId,
-      afterCursor,
-    });
-
-    const available = [...commands.values()].filter(
-      (command) =>
-        command.cursor > afterCursor &&
-        !completedCommandCursors.has(command.cursor),
-    );
-    if (available.length === 0) {
-      return new Response(null, { status: 204 });
-    }
-
-    return context.json(
-      hostDaemonCommandBatchSchema.parse({
-        commands: available.sort((left, right) => left.cursor - right.cursor),
-      }),
-    );
-  });
-  app.post("/internal/session/command-result", async (context) => {
-    const payload = hostDaemonCommandResultReportSchema.parse(await context.req.json());
-    commandResults.push(payload);
-    completedCommandCursors.add(payload.cursor);
-    return context.json({ ok: true });
-  });
-  app.post("/internal/session/events", async (context) => {
-    const payload = hostDaemonEventBatchRequestSchema.parse(await context.req.json());
-    events.push(...payload.events);
-    for (const event of payload.events) {
-      threadHighWaterMarks[event.threadId] = Math.max(
-        threadHighWaterMarks[event.threadId] ?? 0,
-        event.sequence,
-      );
-    }
-    return context.json({ threadHighWaterMarks });
-  });
-  app.post("/internal/session/tool-call", async (context) => {
-    hostDaemonToolCallRequestSchema.parse(await context.req.json());
-    return context.json({
-      success: true,
-      contentItems: [{ type: "inputText", text: "ok" }],
-    });
-  });
-
-  const server = createServer(async (request, response) => {
-    await serveHonoRequest(app, request, response);
-  });
-  const websocketServer = new WebSocketServer({ noServer: true });
-
-  server.on("upgrade", (request, socket, head) => {
-    const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    if (url.pathname !== "/internal/ws") {
-      socket.destroy();
-      return;
-    }
-
-    websocketServer.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
-      activeSockets.add(websocket);
-      websocket.on("message", (data: RawData) => {
-        const message = hostDaemonDaemonWsMessageSchema.parse(
-          JSON.parse(data.toString("utf8")),
-        );
-        heartbeats.push({
-          sessionId: url.searchParams.get("sessionId") ?? "",
-          message: {
-            bufferDepth: message.bufferDepth,
-            lastCommandCursor: message.lastCommandCursor,
-          },
-        });
-      });
-      websocket.on("close", () => {
-        activeSockets.delete(websocket);
-      });
-      websocketServer.emit("connection", websocket, request);
-    });
-  });
-
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Failed to bind fixture server");
-  }
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    sessionOpenCalls,
-    heartbeats,
-    commandFetches,
-    commandResults,
-    events,
-    queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope {
-      const envelope = {
-        id: `command-${nextCursor}`,
-        cursor: nextCursor,
-        command,
-      };
-      commands.set(nextCursor, envelope);
-      nextCursor += 1;
-      return envelope;
-    },
-    sendWebSocketMessage(message: HostDaemonServerWsMessage): void {
-      const encoded = JSON.stringify(hostDaemonServerWsMessageSchema.parse(message));
-      for (const socket of activeSockets) {
-        socket.send(encoded);
-      }
-    },
-    closeSockets(): void {
-      for (const socket of activeSockets) {
-        socket.close();
-      }
-    },
-    socketCount(): number {
-      return activeSockets.size;
-    },
-    async close(): Promise<void> {
-      for (const socket of activeSockets) {
-        socket.close();
-      }
-      await new Promise<void>((resolve, reject) => {
-        websocketServer.close((error?: Error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      });
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      });
-    },
-  };
-}
-
 async function setupDaemonHarness() {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
   const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
@@ -494,7 +284,9 @@ async function setupDaemonHarness() {
   await fs.mkdir(envAPath, { recursive: true });
   await fs.mkdir(envBPath, { recursive: true });
 
-  const server = await createFixtureServer();
+  const server = await createTestServer({
+    threadHighWaterMarks: {},
+  });
   const daemon = await startHostDaemon({
     dataDir,
     serverUrl: server.baseUrl,
@@ -545,7 +337,7 @@ describe("host daemon integration", () => {
         ok: true,
       });
       expect(harness.server.heartbeats[0]?.sessionId).toBe("session-1");
-      expect(await readCommandCursor(harness.dataDir)).toBe(1);
+      await waitForCursor(harness.dataDir, 1);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();
@@ -616,7 +408,7 @@ describe("host daemon integration", () => {
       await waitFor(() => harness.server.commandResults.length === 1);
       expect(await readCommandCursor(harness.dataDir)).toBe(1);
 
-      harness.server.closeSockets();
+      harness.server.closeWebSockets();
       await waitFor(() => harness.server.sessionOpenCalls.length === 2);
       await waitFor(() => harness.server.socketCount() === 1);
 

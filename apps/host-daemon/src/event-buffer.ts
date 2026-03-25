@@ -1,4 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
+import type { HostDaemonLogger } from "./logger.js";
 
 export interface BufferedEventInput {
   environmentId: string;
@@ -17,6 +18,7 @@ export interface BufferedEvent extends BufferedEventInput {
 type TimeoutHandle = ReturnType<typeof setTimeout>;
 
 export interface CreateEventBufferOptions {
+  logger: Pick<HostDaemonLogger, "warn">;
   postEvents: (events: BufferedEvent[]) => Promise<Record<string, number> | void>;
   initialHighWaterMarks?: Record<string, number>;
   debounceMs?: number;
@@ -153,7 +155,14 @@ export function createEventBuffer(
         if (threadHighWaterMarks) {
           ack(threadHighWaterMarks);
         }
-      } catch {
+      } catch (error) {
+        options.logger.warn(
+          {
+            err: error,
+            bufferDepth: batch.length,
+          },
+          "event flush failed, will retry",
+        );
         scheduleFlush(debounceMs);
       } finally {
         flushPromise = null;

@@ -531,9 +531,8 @@ describe("CommandRouter", () => {
     ]);
 
     expect(provisionWorkspace).toHaveBeenCalledWith({
-      type: "unmanaged",
+      workspaceProvisionType: "unmanaged",
       path: "/tmp/env-lazy",
-      sourcePath: "/tmp/env-lazy",
     });
     expect(runtime.resumeThread).toHaveBeenCalledWith({
       threadId: "thread-1",

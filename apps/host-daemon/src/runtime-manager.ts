@@ -104,9 +104,8 @@ export class RuntimeManager {
 
   async openWorkspace(path: string): Promise<IWorkspace> {
     return this.provisionWorkspace({
-      type: "unmanaged",
+      workspaceProvisionType: "unmanaged",
       path,
-      sourcePath: path,
     });
   }
 
@@ -161,9 +160,8 @@ export class RuntimeManager {
       args.provision ??
       (args.workspacePath
         ? {
-            type: "unmanaged" as const,
+            workspaceProvisionType: "unmanaged" as const,
             path: args.workspacePath,
-            sourcePath: args.workspacePath,
           }
         : null);
 

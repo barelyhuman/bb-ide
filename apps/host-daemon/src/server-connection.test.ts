@@ -1,20 +1,19 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Hono } from "hono";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandResultReportSchema,
-  hostDaemonDaemonWsMessageSchema,
-  hostDaemonEventBatchRequestSchema,
-  hostDaemonSessionOpenRequestSchema,
-  hostDaemonToolCallRequestSchema,
   type HostDaemonActiveThread,
-  type HostDaemonCommandResultReport,
-  type HostDaemonServerWsMessage,
-  type HostDaemonSessionOpenRequest,
 } from "@bb/host-daemon-contract";
-import { WebSocketServer, type RawData, type WebSocket } from "ws";
-import { ServerConnection } from "./server-connection.js";
+import type { HostDaemonLogger } from "./logger.js";
+import { createServerClient } from "./server-client.js";
+import {
+  ServerConnection,
+  type ReconnectingWebSocketLike,
+} from "./server-connection.js";
+import {
+  createTestServer,
+  type TestServer,
+} from "./test/helpers/test-server.js";
 
 async function waitFor(
   predicate: () => boolean,
@@ -29,219 +28,84 @@ async function waitFor(
   }
 }
 
-async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks);
-}
-
-type TestServer = Awaited<ReturnType<typeof createTestServer>>;
-
-async function createTestServer(options: {
-  commandResultFailures?: number;
-} = {}) {
-  const sessionOpenCalls: HostDaemonSessionOpenRequest[] = [];
-  const heartbeats: Array<{ sessionId: string; message: { bufferDepth: number; lastCommandCursor?: number } }> = [];
-  const commandResultReports: HostDaemonCommandResultReport[] = [];
-  const toolCalls: Array<{ sessionId: string; tool: string }> = [];
-  const activeSockets = new Set<WebSocket>();
-  let sessionCounter = 0;
-  let commandResultAttemptCount = 0;
-
-  const app = new Hono();
-  app.post("/internal/session/open", async (context) => {
-    const payload = hostDaemonSessionOpenRequestSchema.parse(
-      await context.req.json(),
-    );
-    sessionOpenCalls.push(payload);
-    sessionCounter += 1;
-    return context.json(
-      {
-        sessionId: `session-${sessionCounter}`,
-        heartbeatIntervalMs: 25,
-        leaseTimeoutMs: 500,
-        threadHighWaterMarks: { threadA: 4 },
-      },
-      201,
-    );
-  });
-  app.get("/internal/session/commands", (context) => {
-    void context.req.query();
-    return new Response(null, { status: 204 });
-  });
-  app.post("/internal/session/command-result", async (context) => {
-    const payload = hostDaemonCommandResultReportSchema.parse(
-      await context.req.json(),
-    );
-    commandResultReports.push(payload);
-    commandResultAttemptCount += 1;
-    if (commandResultAttemptCount <= (options.commandResultFailures ?? 0)) {
-      return context.json({ ok: false }, 500);
-    }
-    return context.json({ ok: true });
-  });
-  app.post("/internal/session/events", async (context) => {
-    const payload = hostDaemonEventBatchRequestSchema.parse(
-      await context.req.json(),
-    );
-    const threadHighWaterMarks = Object.fromEntries(
-      payload.events.map((event) => [event.threadId, event.sequence]),
-    );
-    return context.json({ threadHighWaterMarks });
-  });
-  app.post("/internal/session/tool-call", async (context) => {
-    const payload = hostDaemonToolCallRequestSchema.parse(
-      await context.req.json(),
-    );
-    toolCalls.push({
-      sessionId: payload.sessionId,
-      tool: payload.tool,
-    });
-    return context.json({
-      success: true,
-      contentItems: [{ type: "inputText", text: "ok" }],
-    });
-  });
-
-  const server = createServer(async (request, response) => {
-    await serveHonoRequest(app, request, response);
-  });
-  const websocketServer = new WebSocketServer({ noServer: true });
-
-  server.on("upgrade", (request, socket, head) => {
-    const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    if (url.pathname !== "/internal/ws") {
-      socket.destroy();
-      return;
-    }
-
-    websocketServer.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
-      activeSockets.add(websocket);
-      websocket.on("message", (data: RawData) => {
-        const message = hostDaemonDaemonWsMessageSchema.parse(JSON.parse(data.toString("utf8")));
-        heartbeats.push({
-          sessionId: url.searchParams.get("sessionId") ?? "",
-          message: {
-            bufferDepth: message.bufferDepth,
-            lastCommandCursor: message.lastCommandCursor,
-          },
-        });
-      });
-      websocket.on("close", () => {
-        activeSockets.delete(websocket);
-      });
-      websocketServer.emit("connection", websocket, request);
-    });
-  });
-
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Failed to bind test server");
-  }
-
-  const baseUrl = `http://127.0.0.1:${address.port}`;
-
+function createLogger(): HostDaemonLogger {
   return {
-    baseUrl,
-    sessionOpenCalls,
-    heartbeats,
-    commandResultReports,
-    toolCalls,
-    get commandResultAttemptCount() {
-      return commandResultAttemptCount;
-    },
-    sendWebSocketMessage(message: HostDaemonServerWsMessage): void {
-      const encoded = JSON.stringify(message);
-      for (const socket of activeSockets) {
-        socket.send(encoded);
-      }
-    },
-    closeWebSockets(): void {
-      for (const socket of activeSockets) {
-        socket.close();
-      }
-    },
-    socketCount(): number {
-      return activeSockets.size;
-    },
-    async close(): Promise<void> {
-      for (const socket of activeSockets) {
-        socket.close();
-      }
-      await new Promise<void>((resolve, reject) => {
-        websocketServer.close((error?: Error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      });
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      });
-    },
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   };
 }
 
-async function serveHonoRequest(
-  app: Hono,
-  request: IncomingMessage,
-  response: ServerResponse,
-): Promise<void> {
-  const body = await readRequestBody(request);
-  const honoRequest = new Request(
-    new URL(request.url ?? "/", "http://127.0.0.1"),
-    {
-      method: request.method,
-      headers: request.headers as HeadersInit,
-      body:
-        request.method === "GET" || request.method === "HEAD"
-          ? undefined
-          : body.toString("utf8"),
-    },
-  );
-  const honoResponse = await app.fetch(honoRequest);
-
-  response.statusCode = honoResponse.status;
-  honoResponse.headers.forEach((value, key) => {
-    response.setHeader(key, value);
+function createConnection(
+  testServer: TestServer,
+  overrides: Partial<ConstructorParameters<typeof ServerConnection>[0]> = {},
+) {
+  const sessionState = { value: "" };
+  const logger = createLogger();
+  const serverClient = createServerClient({
+    serverUrl: testServer.baseUrl,
+    authToken: "secret",
+    logger,
+    getSessionId: () => sessionState.value,
   });
-  const payload = Buffer.from(await honoResponse.arrayBuffer());
-  response.end(payload);
+
+  const connection = new ServerConnection({
+    serverUrl: testServer.baseUrl,
+    authToken: "secret",
+    hostId: "host-1",
+    hostName: "Host One",
+    hostType: "persistent",
+    instanceId: "instance-1",
+    logger,
+    serverClient,
+    setSession: (session) => {
+      sessionState.value = session?.sessionId ?? "";
+    },
+    ...overrides,
+  });
+
+  return { connection, logger };
+}
+
+class FakeReconnectingWebSocket implements ReconnectingWebSocketLike {
+  readyState = 0;
+  onopen: ((event: any) => void) | null = null;
+  onmessage: ((event: any) => void) | null = null;
+  onclose: ((event: any) => void) | null = null;
+  onerror: ((event: any) => void) | null = null;
+
+  constructor(private readonly urlProvider: () => Promise<string>) {}
+
+  async open(): Promise<void> {
+    await this.urlProvider();
+    this.readyState = 1;
+    this.onopen?.({});
+  }
+
+  disconnect(): void {
+    this.readyState = 3;
+    this.onclose?.({});
+  }
+
+  close(): void {
+    this.disconnect();
+  }
+
+  send(_data: string): void {}
 }
 
 describe("ServerConnection", () => {
   let testServer: TestServer | null = null;
 
   afterEach(async () => {
+    vi.useRealTimers();
     await testServer?.close();
     testServer = null;
   });
 
   it("opens a session and returns the server config", async () => {
     testServer = await createTestServer();
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
-    });
+    const { connection } = createConnection(testServer);
 
     const session = await connection.start();
 
@@ -254,14 +118,7 @@ describe("ServerConnection", () => {
 
   it("sends heartbeat messages over the websocket", async () => {
     testServer = await createTestServer();
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
+    const { connection } = createConnection(testServer, {
       getHeartbeatPayload: () => ({
         bufferDepth: 3,
         lastCommandCursor: 7,
@@ -285,14 +142,7 @@ describe("ServerConnection", () => {
   it("triggers the fetch callback when commands become available", async () => {
     testServer = await createTestServer();
     const onCommandsAvailable = vi.fn();
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
+    const { connection } = createConnection(testServer, {
       onCommandsAvailable,
     });
 
@@ -307,14 +157,7 @@ describe("ServerConnection", () => {
   it("triggers the shutdown callback when the server closes the session", async () => {
     testServer = await createTestServer();
     const onSessionClose = vi.fn();
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
+    const { connection } = createConnection(testServer, {
       onSessionClose,
     });
 
@@ -331,19 +174,11 @@ describe("ServerConnection", () => {
 
   it("reconnects after the websocket disconnects", async () => {
     testServer = await createTestServer();
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
-      reconnectBaseMs: 20,
-      reconnectMaxMs: 20,
+    const { connection } = createConnection(testServer, {
+      minReconnectionDelay: 20,
+      maxReconnectionDelay: 20,
       pollAfterDisconnectMs: 40,
       pollIntervalMs: 40,
-      random: () => 0.5,
     });
 
     await connection.start();
@@ -359,18 +194,7 @@ describe("ServerConnection", () => {
 
   it("retries command result delivery until the server accepts it", async () => {
     testServer = await createTestServer({ commandResultFailures: 1 });
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
-      reconnectBaseMs: 20,
-      reconnectMaxMs: 20,
-      random: () => 0.5,
-    });
+    const { connection } = createConnection(testServer);
 
     await connection.start();
     await connection.reportCommandResult({
@@ -407,17 +231,59 @@ describe("ServerConnection", () => {
     await connection.shutdown();
   });
 
+  it("stops retrying command results after the retry budget is exhausted", async () => {
+    testServer = await createTestServer({
+      commandResultFailures: 10,
+      commandResultFailureStatus: 500,
+    });
+    const { connection, logger } = createConnection(testServer);
+
+    await connection.start();
+
+    await expect(
+      connection.reportCommandResult({
+        commandId: "cmd-1",
+        cursor: 7,
+        completedAt: 1,
+        type: "turn.run",
+        ok: true,
+        result: {},
+      }),
+    ).rejects.toThrow(/Failed to report command result/u);
+
+    expect(testServer.commandResultAttemptCount).toBe(6);
+    expect(logger.warn).toHaveBeenCalledTimes(6);
+    await connection.shutdown();
+  });
+
+  it("does not retry command results after a 4xx response", async () => {
+    testServer = await createTestServer({
+      commandResultFailures: 1,
+      commandResultFailureStatus: 400,
+    });
+    const { connection, logger } = createConnection(testServer);
+
+    await connection.start();
+
+    await expect(
+      connection.reportCommandResult({
+        commandId: "cmd-1",
+        cursor: 7,
+        completedAt: 1,
+        type: "turn.run",
+        ok: true,
+        result: {},
+      }),
+    ).rejects.toThrow(/Failed to report command result/u);
+
+    expect(testServer.commandResultAttemptCount).toBe(1);
+    expect(logger.warn).not.toHaveBeenCalled();
+    await connection.shutdown();
+  });
+
   it("posts tool calls through the session API", async () => {
     testServer = await createTestServer();
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
-    });
+    const { connection } = createConnection(testServer);
 
     await connection.start();
     const response = await connection.callTool({
@@ -452,14 +318,7 @@ describe("ServerConnection", () => {
         providerThreadId: "provider-1",
       },
     ];
-
-    const connection = new ServerConnection({
-      serverUrl: testServer.baseUrl,
-      authToken: "secret",
-      hostId: "host-1",
-      hostName: "Host One",
-      hostType: "persistent",
-      instanceId: "instance-1",
+    const { connection } = createConnection(testServer, {
       getActiveThreads: () => activeThreads,
       protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
     });
@@ -467,6 +326,49 @@ describe("ServerConnection", () => {
     await connection.start();
 
     expect(testServer.sessionOpenCalls[0]?.activeThreads).toEqual(activeThreads);
+
+    await connection.shutdown();
+  });
+
+  it("polls for commands while the websocket stays down and stops after reconnect", async () => {
+    vi.useFakeTimers();
+    testServer = await createTestServer();
+    const onCommandsAvailable = vi.fn();
+    const sockets: FakeReconnectingWebSocket[] = [];
+    const { connection } = createConnection(testServer, {
+      onCommandsAvailable,
+      pollAfterDisconnectMs: 5_000,
+      pollIntervalMs: 10_000,
+      createWebSocket: (urlProvider) => {
+        const socket = new FakeReconnectingWebSocket(urlProvider);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          void socket.open();
+        });
+        return socket;
+      },
+    });
+
+    await connection.start();
+    const socket = sockets[0];
+    if (!socket) {
+      throw new Error("Expected fake websocket instance");
+    }
+
+    socket.disconnect();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(onCommandsAvailable).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(onCommandsAvailable).toHaveBeenCalledTimes(2);
+
+    await socket.open();
+    expect(testServer.sessionOpenCalls).toHaveLength(2);
+
+    const callsAfterReconnect = onCommandsAvailable.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(onCommandsAvailable).toHaveBeenCalledTimes(callsAfterReconnect);
 
     await connection.shutdown();
   });

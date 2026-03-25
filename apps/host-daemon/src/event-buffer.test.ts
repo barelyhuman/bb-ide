@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBuffer } from "./event-buffer.js";
 
+function createLogger() {
+  return {
+    warn: vi.fn(),
+  };
+}
+
 function createEvent(threadId: string) {
   return {
     type: "thread/identity" as const,
@@ -17,7 +23,7 @@ describe("event buffer", () => {
   it("flushes pushed events through the poster callback", async () => {
     vi.useFakeTimers();
     const postEvents = vi.fn(async () => ({ threadA: 1 }));
-    const buffer = createEventBuffer({ postEvents });
+    const buffer = createEventBuffer({ logger: createLogger(), postEvents });
 
     const event = buffer.push({
       environmentId: "env-1",
@@ -34,6 +40,7 @@ describe("event buffer", () => {
 
   it("discards acked events at or below the thread high-water mark", async () => {
     const buffer = createEventBuffer({
+      logger: createLogger(),
       postEvents: async () => undefined,
       flushAtCount: 1_000,
     });
@@ -66,7 +73,8 @@ describe("event buffer", () => {
       .fn<(_: unknown) => Promise<Record<string, number>>>()
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce({ threadA: 1 });
-    const buffer = createEventBuffer({ postEvents });
+    const logger = createLogger();
+    const buffer = createEventBuffer({ logger, postEvents });
 
     buffer.push({
       environmentId: "env-1",
@@ -81,10 +89,12 @@ describe("event buffer", () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(postEvents).toHaveBeenCalledTimes(2);
     expect(buffer.depth()).toBe(0);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
   });
 
   it("drops the oldest events when the buffer exceeds the max size", async () => {
     const buffer = createEventBuffer({
+      logger: createLogger(),
       postEvents: async () => undefined,
       flushAtCount: 2_000,
       maxBufferedEvents: 3,
@@ -117,6 +127,7 @@ describe("event buffer", () => {
 
   it("assigns monotonic per-thread sequence numbers", () => {
     const buffer = createEventBuffer({
+      logger: createLogger(),
       postEvents: async () => undefined,
       flushAtCount: 1_000,
     });
@@ -145,6 +156,7 @@ describe("event buffer", () => {
 
   it("starts sequences from the provided high-water marks", () => {
     const buffer = createEventBuffer({
+      logger: createLogger(),
       postEvents: async () => undefined,
       flushAtCount: 1_000,
       initialHighWaterMarks: {
@@ -164,6 +176,7 @@ describe("event buffer", () => {
 
   it("seeds later high-water marks and prunes acknowledged events", () => {
     const buffer = createEventBuffer({
+      logger: createLogger(),
       postEvents: async () => undefined,
       flushAtCount: 1_000,
     });
