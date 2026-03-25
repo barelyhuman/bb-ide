@@ -8,7 +8,7 @@ import { registerManagerCommands } from "./commands/manager.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerProviderCommands } from "./commands/provider.js";
 import { registerStatusCommand } from "./commands/status.js";
-import { registerThreadCommands } from "./commands/thread.js";
+import { registerThreadCommands } from "./commands/thread/index.js";
 import { normalizeCliArgv } from "./argv-normalization.js";
 import { resolveContextSnapshot, resolveServerUrl } from "./context-env.js";
 

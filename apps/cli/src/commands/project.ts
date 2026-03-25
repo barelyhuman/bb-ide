@@ -1,12 +1,42 @@
 import { Command } from "commander";
 import type { ProjectResponse } from "@bb/server-contract";
+import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
+import { renderBorderlessTable } from "../table.js";
 import {
   confirmDestructiveAction,
-  getErrorMessage,
   outputJson,
 } from "./helpers.js";
+
+interface ProjectListCommandOptions {
+  json?: boolean;
+}
+
+interface ProjectCreateCommandOptions {
+  name: string;
+  root: string;
+  host?: string;
+  json?: boolean;
+}
+
+interface ProjectShowCommandOptions {
+  json?: boolean;
+}
+
+interface ProjectUpdateCommandOptions {
+  name?: string;
+  json?: boolean;
+}
+
+interface ProjectDeleteCommandOptions {
+  yes?: boolean;
+  json?: boolean;
+}
+
+interface ProjectUpdateBody {
+  name?: string;
+}
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
   const project = program.command("project").description("Inspect and manage projects");
@@ -15,24 +45,19 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .command("list")
     .description("List projects")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { json?: boolean }) => {
+    .action(action(async (opts: ProjectListCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const projects = await unwrap<ProjectResponse[]>(
-          client.api.v1.projects.$get(),
-        );
-        if (outputJson(opts, projects)) return;
-        if (projects.length === 0) {
-          console.log("No projects found");
-          return;
-        }
-        const localHostId = await fetchLocalHostId();
-        printProjectTable(projects, localHostId);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      const projects = await unwrap<ProjectResponse[]>(
+        client.api.v1.projects.$get(),
+      );
+      if (outputJson(opts, projects)) return;
+      if (projects.length === 0) {
+        console.log("No projects found");
+        return;
       }
-    });
+      const localHostId = await fetchLocalHostId();
+      printProjectTable(projects, localHostId);
+    }));
 
   project
     .command("create")
@@ -41,115 +66,94 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .requiredOption("--root <path>", "Project source path")
     .option("--host <id>", "Host ID for the project source (auto-detected from daemon if omitted)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { name: string; root: string; host?: string; json?: boolean }) => {
+    .action(action(async (opts: ProjectCreateCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const hostId = opts.host ?? await fetchLocalHostId();
-        if (!hostId) {
-          throw new Error(
-            "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
-          );
-        }
-        const created = await unwrap<ProjectResponse>(
-          client.api.v1.projects.$post({
-            json: {
-              name: opts.name,
-              sourcePath: opts.root,
-              hostId,
-            },
-          }),
+      const hostId = opts.host ?? await fetchLocalHostId();
+      if (!hostId) {
+        throw new Error(
+          "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
         );
-        if (outputJson(opts, created)) return;
-        console.log(`Project created: ${created.id}`);
-        const localHostId = await fetchLocalHostId();
-        printProject(created, localHostId);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
       }
-    });
+      const created = await unwrap<ProjectResponse>(
+        client.api.v1.projects.$post({
+          json: {
+            name: opts.name,
+            sourcePath: opts.root,
+            hostId,
+          },
+        }),
+      );
+      if (outputJson(opts, created)) return;
+      console.log(`Project created: ${created.id}`);
+      const localHostId = await fetchLocalHostId();
+      printProject(created, localHostId);
+    }));
 
   project
     .command("show <id>")
     .description("Show project details")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
+    .action(action(async (id: string, opts: ProjectShowCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const found = await unwrap<ProjectResponse>(
-          client.api.v1.projects[":id"].$get({
-            param: { id },
-          }),
-        );
-        if (outputJson(opts, found)) return;
-        const localHostId = await fetchLocalHostId();
-        printProject(found, localHostId);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+      const found = await unwrap<ProjectResponse>(
+        client.api.v1.projects[":id"].$get({
+          param: { id },
+        }),
+      );
+      if (outputJson(opts, found)) return;
+      const localHostId = await fetchLocalHostId();
+      printProject(found, localHostId);
+    }));
 
   project
     .command("update <id>")
     .description("Update a project")
     .option("--name <name>", "Set the project name")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { name?: string; json?: boolean }) => {
+    .action(action(async (id: string, opts: ProjectUpdateCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        if (!opts.name) {
-          throw new Error(
-            "No changes requested. Provide --name.",
-          );
-        }
-        const body: Record<string, unknown> = {};
-        if (opts.name) body.name = opts.name;
-        const updated = await unwrap<ProjectResponse>(
-          client.api.v1.projects[":id"].$patch({
-            param: { id },
-            json: body,
-          }),
+      if (!opts.name) {
+        throw new Error(
+          "No changes requested. Provide --name.",
         );
-        if (outputJson(opts, updated)) return;
-        console.log(`Project ${updated.id} updated`);
-        const localHostId = await fetchLocalHostId();
-        printProject(updated, localHostId);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
       }
-    });
+      const body: ProjectUpdateBody = { name: opts.name };
+      const updated = await unwrap<ProjectResponse>(
+        client.api.v1.projects[":id"].$patch({
+          param: { id },
+          json: body,
+        }),
+      );
+      if (outputJson(opts, updated)) return;
+      console.log(`Project ${updated.id} updated`);
+      const localHostId = await fetchLocalHostId();
+      printProject(updated, localHostId);
+    }));
 
   project
     .command("delete <id>")
     .description("Delete a project and all its threads")
     .option("--yes", "Skip confirmation prompt")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { yes?: boolean; json?: boolean }) => {
+    .action(action(async (id: string, opts: ProjectDeleteCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        if (!opts.yes) {
-          const confirmed = await confirmDestructiveAction(
-            `Delete project ${id} and all its threads?`,
-          );
-          if (!confirmed) {
-            console.log("Aborted.");
-            return;
-          }
-        }
-        await unwrap<{ ok: boolean }>(
-          client.api.v1.projects[":id"].$delete({
-            param: { id },
-          }),
+      if (!opts.yes) {
+        const confirmed = await confirmDestructiveAction(
+          `Delete project ${id} and all its threads?`,
         );
-        if (outputJson(opts, { ok: true, id })) return;
-        console.log(`Project ${id} deleted`);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+        if (!confirmed) {
+          console.log("Aborted.");
+          return;
+        }
       }
-    });
+      await unwrap<{ ok: boolean }>(
+        client.api.v1.projects[":id"].$delete({
+          param: { id },
+        }),
+      );
+      if (outputJson(opts, { ok: true, id })) return;
+      console.log(`Project ${id} deleted`);
+    }));
 
 }
 
@@ -171,30 +175,25 @@ function printProject(project: ProjectResponse, localHostId: string | null): voi
 }
 
 function printProjectTable(projects: ProjectResponse[], localHostId: string | null): void {
-  const idWidth = Math.max(4, ...projects.map((p) => p.id.length));
-  const nameWidth = Math.max(4, ...projects.map((p) => p.name.length));
-
-  const header = [
-    "ID".padEnd(idWidth),
-    "Name".padEnd(nameWidth),
-    "Local Path",
-  ].join("  ");
+  const rows = projects.map((project) => {
+    const localSource = localHostId
+      ? project.sources.find((source) => source.hostId === localHostId)
+      : undefined;
+    return [project.id, project.name, localSource?.path ?? "-"];
+  });
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const nameWidth = Math.max(4, ...rows.map((row) => row[1].length));
+  const localPathWidth = Math.max(10, ...rows.map((row) => row[2].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["ID", "Name", "Local Path"],
+      colWidths: [idWidth, nameWidth, localPathWidth],
+      trimTrailingWhitespace: true,
+    },
+    rows,
+  );
 
   console.log("");
-  console.log(header);
-  console.log("-".repeat(header.length));
-  for (const project of projects) {
-    const localSource = localHostId
-      ? project.sources.find((s) => s.hostId === localHostId)
-      : undefined;
-    const path = localSource?.path ?? "-";
-    console.log(
-      [
-        project.id.padEnd(idWidth),
-        project.name.padEnd(nameWidth),
-        path,
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }
