@@ -13,6 +13,7 @@
 - Separate concerns. When a concern is better handled by a well-known, battle-tested library, install and use it.
 - Prefer a single object argument over multiple positional arguments, especially when a function takes 3+ parameters of the same type.
 - No inline dynamic imports unless for genuine performance reasons. If it's working around a circular dependency, fix the dependency graph instead.
+- Never load all rows and filter in JS when a targeted query with WHERE/JOIN is possible. Use the indexes defined in the schema.
 
 ## UI Consistency
 

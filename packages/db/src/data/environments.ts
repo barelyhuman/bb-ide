@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { WorkspaceProvisionType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -51,6 +51,20 @@ export function createEnvironment(
 export function getEnvironment(db: DbConnection, id: string) {
   return (
     db.select().from(environments).where(eq(environments.id, id)).get() ?? null
+  );
+}
+
+export function findEnvironmentByHostPath(
+  db: DbConnection,
+  hostId: string,
+  path: string,
+) {
+  return (
+    db
+      .select()
+      .from(environments)
+      .where(and(eq(environments.hostId, hostId), eq(environments.path, path)))
+      .get() ?? null
   );
 }
 

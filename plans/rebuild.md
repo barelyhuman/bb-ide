@@ -439,6 +439,8 @@ Session open, command fetch/result, event ingestion, tool calls, reconciliation.
 - **Server-side cursor tracking must NOT advance past incomplete commands.** The `setCursor` call must only advance when all prior commands have completed. Do NOT use `Math.max(getCursor, report.cursor)` — this skips commands that complete out of order, violating the at-least-once delivery guarantee.
 - **Use the real `NotificationHub` for command result recording.** Don't pass noop notifiers to `setCursor` or data functions called during command result handling — the hub must fire `notifyCommand` and `notifyThread` so WS clients get real-time updates.
 - **Reconciliation queries must be efficient.** Do NOT load all environments and all threads into memory then filter in JS. Use targeted queries with WHERE clauses joining environments to the host. This is O(host's environments) not O(all environments).
+- **Daemon WS disconnect should immediately close the session.** When the daemon's WebSocket disconnects, the server should close the session with reason `"daemon-disconnect"` immediately — don't wait for the lease expiry sweep. This makes daemon restart detection responsive instead of delayed by the sweep interval.
+- **No N+1 query patterns.** All data access must use targeted queries with appropriate WHERE clauses and JOINs. Never load all rows and filter in JS. The `@bb/db` data functions already have proper indexes — use them.
 
 **Tests (use `app.request()`):**
 - [ ] Session open creates host + session, returns sessionId

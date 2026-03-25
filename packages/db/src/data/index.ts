@@ -29,6 +29,7 @@ export type { CreateThreadInput, UpdateThreadInput } from "./threads.js";
 export {
   createEnvironment,
   getEnvironment,
+  findEnvironmentByHostPath,
   listEnvironments,
   updateEnvironment,
   deleteEnvironment,

@@ -29,6 +29,13 @@
       "when": 1774394812546,
       "tag": "0003_omniscient_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1774477850226,
+      "tag": "0004_lumpy_lionheart",
+      "breakpoints": true
     }
   ]
 }
