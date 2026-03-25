@@ -6,7 +6,9 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 **Phases 1–5 are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors. The host-daemon is built with full test coverage. The sandbox-host stub is on main.
 
-**Next phase: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
+**Next phase: Phase 5b** — Contract fixes and server prerequisites. Adds missing daemon commands (`provider.list`), host status field, title generation utility, command-and-wait pattern, attachment storage, voice transcription proxy. Must land on main before Phase 6.
+
+**Then: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
 
 **Then: Phase 7** — Integration & QA for persistent-host workflows (server + daemon).
 
@@ -266,6 +268,99 @@ Stub package with `provisionHost` and `SandboxHost` interface. All methods throw
 
 ---
 
+## Phase 5b: Contract fixes and server prerequisites
+
+Fix contract gaps, add missing daemon commands, and build server infrastructure that Phase 6 depends on. These must land on main before the server build starts.
+
+### 5b-1. Add `provider.list` daemon command
+
+The server needs to list available providers but cannot import `@bb/agent-runtime`. Add a new daemon command `provider.list` that returns `ProviderInfo[]` (id, displayName, capabilities, available). The daemon calls `listAvailableProviderInfos()` from `@bb/agent-runtime` and returns the result.
+
+**Implementation:**
+- `packages/host-daemon-contract/src/commands.ts` — add `provider.list` command schema and result schema
+- `apps/host-daemon/src/command-dispatch.ts` — add dispatch case
+- `packages/server-contract/src/api-types.ts` — add `available: z.boolean()` to `systemProviderInfoSchema`
+- Tests for the new command
+
+### 5b-2. Add derived `status` field to Host type
+
+The server needs to return host connection status. Add `status: "connected" | "disconnected" | "suspended"` to the host schema. This is computed at query time (not stored in the DB) — the server derives it from `host_daemon_sessions` (active session with current heartbeat = connected).
+
+**Implementation:**
+- `packages/domain/src/host.ts` — add `status` field to `hostSchema` (with `z.enum(["connected", "disconnected", "suspended"])`)
+- The server (Phase 6) computes this when serving `GET /hosts` and `GET /hosts/:id`
+- `apps/app` — add `hostsAtom` (jotai), `useHosts()` hook, update `useHostDaemon` to expose `localHost` and `isLocalHostConnected`
+- Wire WS invalidation: system `host-connected`/`host-disconnected` changes trigger hosts refetch
+
+### 5b-3. Add `@mariozechner/pi-ai` dependency and title generation utility
+
+The server needs to auto-generate thread titles using an LLM. Use `@mariozechner/pi-ai` (provider-agnostic AI completion) with the existing `codexRunMetadata` template from `@bb/templates`.
+
+**Implementation:**
+- Add `@mariozechner/pi-ai` as a dependency of `apps/server`
+- Add `BB_INFERENCE_MODEL` to `@bb/config/server` (default: `gpt-4o-mini`). Requires `OPENAI_API_KEY` (or appropriate key for the configured model's provider).
+- Create a server utility `generateThreadTitle(input: PromptInput[]): Promise<{ title: string, worktreeName: string }>` that:
+  1. Extracts and cleans text from the prompt input
+  2. Renders the `codexRunMetadata` template from `@bb/templates`
+  3. Calls `complete()` from `@mariozechner/pi-ai` with a cheap/fast model
+  4. Parses the JSON response
+- The server calls this after thread creation with input, updates the thread title asynchronously (fire-and-forget, don't block thread creation)
+- `titleFallback` is derived synchronously from the first prompt text (no LLM needed)
+
+### 5b-4. Design the command-and-wait pattern
+
+Several server routes need to queue a daemon command and wait for the result synchronously (e.g., `GET /environments/:id/status` queues `workspace.status` and returns the result to the HTTP client).
+
+**Implementation:**
+- Create a shared server utility: `queueCommandAndWait(deps, { hostId, command, timeoutMs }): Promise<CommandResult>`
+- Flow: queue command to DB → notify daemon via hub → wait for result (promise resolved when command-result handler fires for that commandId) → return result
+- The `NotificationHub` needs a `waitForCommandResult(commandId, timeoutMs)` method (analogous to existing `waitForCommands`)
+- Default timeouts: 30s for workspace queries, 5min for provisioning
+- On timeout: throw ApiError(504, "command_timeout")
+- Used by: `GET /environments/:id/status`, `GET /environments/:id/diff`, `GET /environments/:id/diff/branches`, `GET /threads/:id/workspace/files`, `GET /threads/:id/workspace/file`, `GET /system/models`, `GET /system/providers`, `POST /threads/:id/stop`, `POST /environments/:id/actions`
+
+### 5b-5. Implement attachment storage utility
+
+The server stores file attachments on the local filesystem (R2/S3 in future). No daemon involvement.
+
+**Implementation:**
+- Create a server utility for attachment storage:
+  - `storeAttachment(projectId, file): Promise<UploadedPromptAttachment>` — saves to `$BB_DATA_DIR/attachments/<projectId>/`, returns metadata
+  - `readAttachment(projectId, path): Promise<Buffer>` — reads file with path traversal protection
+  - `deleteProjectAttachments(projectId): void` — cleanup on project deletion
+- Filename: sanitized original name + timestamp + random suffix
+- Size limits: 25MB general, 10MB for images
+- Path traversal protection: validate resolved path starts with attachments directory
+
+### 5b-6. Implement voice transcription proxy
+
+Simple proxy to OpenAI Whisper API for audio transcription.
+
+**Implementation:**
+- Create a server utility: `transcribeAudio(file, prompt?): Promise<{ text: string }>`
+- Forwards multipart audio to `POST https://api.openai.com/v1/audio/transcriptions` with model `gpt-4o-transcribe`
+- Auth: `OPENAI_API_KEY` from config
+- No format conversion — forward raw audio as-is
+- Size limit: 25MB
+- Error mapping: 401/403 → auth error, 413 → too large, 429 → rate limited
+
+### 5b-7. Remove dead routes from contract
+
+Already done: `POST /system/shutdown` and `GET /system/providers/:id` removed from contract and callers.
+
+**Validation (entire Phase 5b):**
+- [ ] `pnpm exec turbo run typecheck` — all packages clean
+- [ ] `pnpm exec turbo run test` — all tests pass
+- [ ] `provider.list` daemon command works and returns provider info
+- [ ] Host schema has `status` field
+- [ ] App hosts atom fetches and updates on WS changes
+- [ ] `@mariozechner/pi-ai` is in server's package.json
+- [ ] Attachment storage writes/reads files correctly with path traversal protection
+- [ ] Voice transcription forwards to OpenAI and returns text
+- [ ] No import of `@bb/agent-runtime` from server
+
+---
+
 ## Phase 6: Server (`apps/server`)
 
 Framework: **Hono** on `@hono/node-server`. WebSocket via `@hono/node-ws`. Data functions from `@bb/db`.
@@ -496,7 +591,12 @@ Run persistent-host and ephemeral-host threads concurrently against the same ser
 ```
 Phases 1–5: ✅ Complete
 
-Phase 6 (server):
+Phase 5b (contract fixes + server prerequisites):
+  5b-1 (provider.list command) + 5b-2 (host status) + 5b-3 (title gen) can be parallel
+  5b-4 (command-and-wait) + 5b-5 (attachments) + 5b-6 (voice transcription) can be parallel
+  All must complete before Phase 6.
+
+Phase 6 (server, needs Phase 5b):
   6a → 6b → 6c + 6d (parallel) → 6e
 
 Phase 7 (integration & QA, persistent host):
@@ -509,9 +609,7 @@ Phase 9 (integration & QA, ephemeral host):
   Needs Phase 8. Validates sandbox-host end-to-end.
 ```
 
-**Critical path:** Phase 6 (server) → Phase 7 (persistent QA) → Phase 8 (sandbox-host real) → Phase 9 (ephemeral QA).
-
-Phase 7 validates the server + daemon work together before we invest in sandbox-host. Phase 8 can begin before Phase 7 is fully complete if persistent-host smoke tests are passing.
+**Critical path:** Phase 5b (prerequisites) → Phase 6 (server) → Phase 7 (persistent QA) → Phase 8 (sandbox-host real) → Phase 9 (ephemeral QA).
 
 ---
 
@@ -523,5 +621,3 @@ Phase 7 validates the server + daemon work together before we invest in sandbox-
 - Docker environments (cut)
 - Async context / trace ID propagation in logger (deferred)
 - HTTP request logging middleware (deferred)
-- Voice transcription endpoint (stub returns 501)
-- File attachment upload (deferred)
