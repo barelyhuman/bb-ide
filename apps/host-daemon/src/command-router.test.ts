@@ -161,6 +161,7 @@ describe("CommandRouter", () => {
       threadId: "thread-1",
       title: "Renamed thread",
     });
+    expect(manager.listActiveThreads()).toEqual([]);
   });
 
   it("dispatches workspace commands to the workspace instance", async () => {

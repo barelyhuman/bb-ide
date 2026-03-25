@@ -196,6 +196,9 @@ importers:
       '@bb/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../../packages/host-daemon-contract

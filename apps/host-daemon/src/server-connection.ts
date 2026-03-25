@@ -9,13 +9,17 @@ import {
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
+  hostDaemonToolCallRequestSchema,
+  hostDaemonToolCallResponseSchema,
   type HostDaemonActiveThread,
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonEventEnvelope,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
+  type HostDaemonToolCallResponse,
 } from "@bb/host-daemon-contract";
+import type { ToolCallRequest } from "@bb/domain";
 import { WebSocket, type RawData } from "ws";
 
 type FetchFn = typeof fetch;
@@ -39,6 +43,9 @@ export interface ServerConnectionOptions {
   onCommandsAvailable?: () => void | Promise<void>;
   onSessionClose?: (
     reason: "replaced" | "expired" | "daemon-disconnect",
+  ) => void | Promise<void>;
+  onSessionOpened?: (
+    session: HostDaemonSessionOpenResponse,
   ) => void | Promise<void>;
   fetchFn?: FetchFn;
   createWebSocket?: (url: string) => WebSocket;
@@ -156,10 +163,13 @@ export class ServerConnection {
   }
 
   async reportCommandResult(
-    report: HostDaemonCommandResultReport,
+    report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void> {
-    const payload = hostDaemonCommandResultReportSchema.parse(report);
     await this.retryWithBackoff(async () => {
+      const payload = hostDaemonCommandResultReportSchema.parse({
+        ...report,
+        sessionId: this.requireSessionId(),
+      });
       const response = await this.fetchFn(
         this.buildInternalUrl("/session/command-result"),
         {
@@ -175,6 +185,28 @@ export class ServerConnection {
         );
       }
     });
+  }
+
+  async callTool(
+    request: ToolCallRequest,
+  ): Promise<HostDaemonToolCallResponse> {
+    const payload = hostDaemonToolCallRequestSchema.parse({
+      ...request,
+      sessionId: this.requireSessionId(),
+    });
+    const response = await this.fetchFn(this.buildInternalUrl("/session/tool-call"), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to call tool: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    return hostDaemonToolCallResponseSchema.parse(await response.json());
   }
 
   async postEvents(
@@ -234,6 +266,7 @@ export class ServerConnection {
     const session = hostDaemonSessionOpenResponseSchema.parse(json);
     this.session = session;
     this.resetHeartbeat();
+    await this.options.onSessionOpened?.(session);
     return session;
   }
 

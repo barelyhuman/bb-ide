@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBuffer } from "./event-buffer.js";
 
+function createEvent(threadId: string) {
+  return {
+    type: "thread/identity" as const,
+    threadId,
+    providerThreadId: `provider-${threadId}`,
+  };
+}
+
 describe("event buffer", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -14,7 +22,7 @@ describe("event buffer", () => {
     const event = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { type: "turn/started" },
+      event: createEvent("threadA"),
     });
 
     await vi.advanceTimersByTimeAsync(100);
@@ -33,17 +41,17 @@ describe("event buffer", () => {
     const first = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { type: "first" },
+      event: createEvent("threadA"),
     });
     const second = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { type: "second" },
+      event: createEvent("threadA"),
     });
     const other = buffer.push({
       environmentId: "env-2",
       threadId: "threadB",
-      event: { type: "other" },
+      event: createEvent("threadB"),
     });
 
     buffer.ack({ threadA: first.sequence });
@@ -63,7 +71,7 @@ describe("event buffer", () => {
     buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { type: "turn/completed" },
+      event: createEvent("threadA"),
     });
 
     await vi.advanceTimersByTimeAsync(100);
@@ -85,22 +93,22 @@ describe("event buffer", () => {
     buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { index: 1 },
+      event: createEvent("threadA"),
     });
     const second = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { index: 2 },
+      event: createEvent("threadA"),
     });
     const third = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { index: 3 },
+      event: createEvent("threadA"),
     });
     const fourth = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { index: 4 },
+      event: createEvent("threadA"),
     });
 
     expect(buffer.snapshot()).toEqual([second, third, fourth]);
@@ -116,17 +124,17 @@ describe("event buffer", () => {
     const first = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { index: 1 },
+      event: createEvent("threadA"),
     });
     const second = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { index: 2 },
+      event: createEvent("threadA"),
     });
     const other = buffer.push({
       environmentId: "env-1",
       threadId: "threadB",
-      event: { index: 1 },
+      event: createEvent("threadB"),
     });
 
     expect(first.sequence).toBe(1);
@@ -147,10 +155,34 @@ describe("event buffer", () => {
     const event = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
-      event: { type: "resumed" },
+      event: createEvent("threadA"),
     });
 
     expect(event.sequence).toBe(42);
+    buffer.dispose();
+  });
+
+  it("seeds later high-water marks and prunes acknowledged events", () => {
+    const buffer = createEventBuffer({
+      postEvents: async () => undefined,
+      flushAtCount: 1_000,
+    });
+
+    buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+    buffer.seed({ threadA: 5 });
+
+    const event = buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+
+    expect(buffer.snapshot()).toEqual([event]);
+    expect(event.sequence).toBe(6);
     buffer.dispose();
   });
 });

@@ -1,7 +1,9 @@
+import type { ThreadEvent } from "@bb/domain";
+
 export interface BufferedEventInput {
   environmentId: string;
   threadId: string;
-  event: unknown;
+  event: ThreadEvent;
   id?: string;
   createdAt?: number;
 }
@@ -29,6 +31,7 @@ export interface CreateEventBufferOptions {
 export interface EventBuffer {
   push(event: BufferedEventInput): BufferedEvent;
   ack(threadHighWaterMarks: Record<string, number>): void;
+  seed(threadHighWaterMarks: Record<string, number>): void;
   flush(): Promise<void>;
   depth(): number;
   snapshot(): BufferedEvent[];
@@ -121,6 +124,14 @@ export function createEventBuffer(
     });
   }
 
+  function seed(threadHighWaterMarks: Record<string, number>): void {
+    for (const [threadId, highWaterMark] of Object.entries(threadHighWaterMarks)) {
+      const nextValue = nextSequenceByThread.get(threadId) ?? 1;
+      nextSequenceByThread.set(threadId, Math.max(nextValue, highWaterMark + 1));
+    }
+    ack(threadHighWaterMarks);
+  }
+
   async function flush(): Promise<void> {
     if (flushPromise) {
       return flushPromise;
@@ -165,6 +176,7 @@ export function createEventBuffer(
   return {
     push,
     ack,
+    seed,
     flush,
     depth(): number {
       return buffer.length;

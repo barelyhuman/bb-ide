@@ -136,4 +136,63 @@ describe("RuntimeManager", () => {
     expect(runtime.shutdown).toHaveBeenCalledTimes(1);
     expect(workspace.destroy).toHaveBeenCalledTimes(1);
   });
+
+  it("tracks active threads for session reconciliation", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    expect(manager.listActiveThreads()).toEqual([
+      {
+        environmentId: "env-1",
+        threadId: "thread-1",
+        providerThreadId: "provider-1",
+      },
+    ]);
+
+    manager.markThreadInactive("env-1", "thread-1");
+    expect(manager.listActiveThreads()).toEqual([]);
+  });
+
+  it("shuts down all tracked environments", async () => {
+    const workspaceA = createFakeWorkspace("/tmp/env-a");
+    const workspaceB = createFakeWorkspace("/tmp/env-b");
+    const runtimeA = createFakeRuntime();
+    const runtimeB = createFakeRuntime();
+    const provisionWorkspace = vi
+      .fn()
+      .mockResolvedValueOnce(workspaceA)
+      .mockResolvedValueOnce(workspaceB);
+    const createRuntime = vi
+      .fn()
+      .mockReturnValueOnce(runtimeA as unknown as AgentRuntime)
+      .mockReturnValueOnce(runtimeB as unknown as AgentRuntime);
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-a",
+      workspacePath: "/tmp/env-a",
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-b",
+      workspacePath: "/tmp/env-b",
+    });
+
+    await manager.shutdownAll();
+
+    expect(runtimeA.shutdown).toHaveBeenCalledTimes(1);
+    expect(runtimeB.shutdown).toHaveBeenCalledTimes(1);
+    expect(workspaceA.destroy).toHaveBeenCalledTimes(1);
+    expect(workspaceB.destroy).toHaveBeenCalledTimes(1);
+  });
 });

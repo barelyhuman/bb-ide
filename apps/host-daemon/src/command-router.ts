@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  createAgentRuntime,
-  type AgentRuntime,
+  createProviderForId,
+  type AvailableModel,
 } from "@bb/agent-runtime";
 import type {
   HostDaemonCommandEnvelope,
@@ -13,7 +13,6 @@ import type {
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 
 type RoutedCommandResult = Omit<HostDaemonCommandResultReport, "sessionId">;
-type AvailableModel = Awaited<ReturnType<AgentRuntime["listModels"]>>[number];
 
 export interface ThreadRuntimeResolution {
   workspacePath: string;
@@ -177,6 +176,7 @@ export class CommandRouter {
         this.options.runtimeManager.markThreadActive(
           command.environmentId,
           command.threadId,
+          result.providerThreadId,
         );
         return result;
       }
@@ -197,6 +197,7 @@ export class CommandRouter {
         this.options.runtimeManager.markThreadActive(
           command.environmentId,
           command.threadId,
+          result.providerThreadId ?? command.providerThreadId,
         );
         return result;
       }
@@ -221,6 +222,10 @@ export class CommandRouter {
       case "thread.stop": {
         const entry = await this.requireExistingEnvironment(command.environmentId);
         await entry.runtime.stopThread({ threadId: command.threadId });
+        this.options.runtimeManager.markThreadInactive(
+          command.environmentId,
+          command.threadId,
+        );
         return {};
       }
       case "thread.rename": {
@@ -384,7 +389,11 @@ export class CommandRouter {
         resumePath: resolution.workspacePath,
         dynamicTools: resolution.dynamicTools,
       });
-      this.options.runtimeManager.markThreadActive(environmentId, threadId);
+      this.options.runtimeManager.markThreadActive(
+        environmentId,
+        threadId,
+        resolution.providerThreadId,
+      );
     }
 
     return entry;
@@ -459,20 +468,7 @@ export class CommandRouter {
 }
 
 async function defaultListModels(providerId: string): Promise<AvailableModel[]> {
-  const runtime = createAgentRuntime({
-    workspacePath: process.cwd(),
-    onEvent: () => undefined,
-    onToolCall: async () => ({
-      contentItems: [],
-      success: true,
-    }),
-  });
-
-  try {
-    return await runtime.listModels({ providerId });
-  } finally {
-    await runtime.shutdown();
-  }
+  return createProviderForId(providerId).listModels();
 }
 
 function getErrorCode(error: unknown): string {

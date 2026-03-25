@@ -3,6 +3,8 @@ import {
   type AgentRuntime,
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
+import type { ThreadEvent } from "@bb/domain";
+import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import {
   provisionWorkspace,
   type IWorkspace,
@@ -14,7 +16,7 @@ export interface RuntimeEntry {
   runtime: AgentRuntime;
   workspace: IWorkspace;
   path: string;
-  activeThreadIds: Set<string>;
+  activeThreads: Map<string, { providerThreadId?: string }>;
 }
 
 export interface EnsureEnvironmentArgs {
@@ -27,7 +29,7 @@ export interface RuntimeManagerOptions {
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
   provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
-  onEvent?: AgentRuntimeOptions["onEvent"];
+  onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
   onToolCall?: AgentRuntimeOptions["onToolCall"];
   onStderr?: AgentRuntimeOptions["onStderr"];
   onProcessExit?: AgentRuntimeOptions["onProcessExit"];
@@ -63,11 +65,41 @@ export class RuntimeManager {
   }
 
   hasThread(environmentId: string, threadId: string): boolean {
-    return this.entries.get(environmentId)?.activeThreadIds.has(threadId) ?? false;
+    return this.entries.get(environmentId)?.activeThreads.has(threadId) ?? false;
   }
 
-  markThreadActive(environmentId: string, threadId: string): void {
-    this.entries.get(environmentId)?.activeThreadIds.add(threadId);
+  markThreadActive(
+    environmentId: string,
+    threadId: string,
+    providerThreadId?: string,
+  ): void {
+    const entry = this.entries.get(environmentId);
+    if (!entry) {
+      return;
+    }
+
+    const current = entry.activeThreads.get(threadId) ?? {};
+    entry.activeThreads.set(threadId, {
+      providerThreadId: providerThreadId ?? current.providerThreadId,
+    });
+  }
+
+  markThreadInactive(environmentId: string, threadId: string): void {
+    this.entries.get(environmentId)?.activeThreads.delete(threadId);
+  }
+
+  listActiveThreads(): HostDaemonActiveThread[] {
+    const activeThreads: HostDaemonActiveThread[] = [];
+    for (const [environmentId, entry] of this.entries) {
+      for (const [threadId, thread] of entry.activeThreads) {
+        activeThreads.push({
+          environmentId,
+          threadId,
+          providerThreadId: thread.providerThreadId,
+        });
+      }
+    }
+    return activeThreads;
   }
 
   async openWorkspace(path: string): Promise<IWorkspace> {
@@ -113,6 +145,17 @@ export class RuntimeManager {
     await entry.workspace.destroy();
   }
 
+  async shutdownAll(): Promise<void> {
+    const environmentIds = new Set<string>([
+      ...this.entries.keys(),
+      ...this.pendingEntries.keys(),
+    ]);
+
+    for (const environmentId of environmentIds) {
+      await this.destroyEnvironment(environmentId);
+    }
+  }
+
   private async createEntry(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
     const provision =
       args.provision ??
@@ -132,7 +175,19 @@ export class RuntimeManager {
     const runtime = this.createRuntime({
       workspacePath: workspace.path,
       adapterFactory: this.options.adapterFactory,
-      onEvent: this.options.onEvent ?? (() => undefined),
+      onEvent: (event) => {
+        if (event.type === "thread/identity") {
+          this.markThreadActive(
+            args.environmentId,
+            event.threadId,
+            event.providerThreadId,
+          );
+        }
+        this.options.onEvent?.({
+          environmentId: args.environmentId,
+          event,
+        });
+      },
       onToolCall:
         this.options.onToolCall ??
         (async () => ({
@@ -148,7 +203,7 @@ export class RuntimeManager {
       runtime,
       workspace,
       path: workspace.path,
-      activeThreadIds: new Set(),
+      activeThreads: new Map(),
     };
   }
 }

@@ -7,6 +7,7 @@ import {
   hostDaemonDaemonWsMessageSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonSessionOpenRequestSchema,
+  hostDaemonToolCallRequestSchema,
   type HostDaemonActiveThread,
   type HostDaemonCommandResultReport,
   type HostDaemonServerWsMessage,
@@ -44,6 +45,7 @@ async function createTestServer(options: {
   const sessionOpenCalls: HostDaemonSessionOpenRequest[] = [];
   const heartbeats: Array<{ sessionId: string; message: { bufferDepth: number; lastCommandCursor?: number } }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
+  const toolCalls: Array<{ sessionId: string; tool: string }> = [];
   const activeSockets = new Set<WebSocket>();
   let sessionCounter = 0;
   let commandResultAttemptCount = 0;
@@ -88,6 +90,19 @@ async function createTestServer(options: {
       payload.events.map((event) => [event.threadId, event.sequence]),
     );
     return context.json({ threadHighWaterMarks });
+  });
+  app.post("/internal/session/tool-call", async (context) => {
+    const payload = hostDaemonToolCallRequestSchema.parse(
+      await context.req.json(),
+    );
+    toolCalls.push({
+      sessionId: payload.sessionId,
+      tool: payload.tool,
+    });
+    return context.json({
+      success: true,
+      contentItems: [{ type: "inputText", text: "ok" }],
+    });
   });
 
   const server = createServer(async (request, response) => {
@@ -137,6 +152,7 @@ async function createTestServer(options: {
     sessionOpenCalls,
     heartbeats,
     commandResultReports,
+    toolCalls,
     get commandResultAttemptCount() {
       return commandResultAttemptCount;
     },
@@ -358,7 +374,6 @@ describe("ServerConnection", () => {
 
     await connection.start();
     await connection.reportCommandResult({
-      sessionId: "session-1",
       commandId: "cmd-1",
       cursor: 7,
       completedAt: 1,
@@ -387,6 +402,42 @@ describe("ServerConnection", () => {
         ok: true,
         result: {},
       }),
+    ]);
+
+    await connection.shutdown();
+  });
+
+  it("posts tool calls through the session API", async () => {
+    testServer = await createTestServer();
+
+    const connection = new ServerConnection({
+      serverUrl: testServer.baseUrl,
+      authToken: "secret",
+      hostId: "host-1",
+      hostName: "Host One",
+      hostType: "persistent",
+      instanceId: "instance-1",
+    });
+
+    await connection.start();
+    const response = await connection.callTool({
+      requestId: 1,
+      threadId: "thread-1",
+      turnId: "turn-1",
+      callId: "call-1",
+      tool: "spawn_thread",
+      arguments: { foo: "bar" },
+    });
+
+    expect(response).toEqual({
+      success: true,
+      contentItems: [{ type: "inputText", text: "ok" }],
+    });
+    expect(testServer.toolCalls).toEqual([
+      {
+        sessionId: "session-1",
+        tool: "spawn_thread",
+      },
     ]);
 
     await connection.shutdown();

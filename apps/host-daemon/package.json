@@ -14,6 +14,7 @@
   "dependencies": {
     "@bb/agent-runtime": "workspace:*",
     "@bb/config": "workspace:*",
+    "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
     "proper-lockfile": "^4.1.2",
