@@ -17,6 +17,8 @@ export async function restartHostDaemon(
     throw new Error("Cannot restart host daemon without process argv");
   }
 
+  await options.releaseLock();
+
   const spawnProcess = options.spawnProcess ?? spawn;
   const child = spawnProcess(argv[0], argv.slice(1), {
     cwd: options.cwd ?? process.cwd(),
@@ -26,7 +28,6 @@ export async function restartHostDaemon(
   });
 
   child.unref();
-  await options.releaseLock();
   (options.exit ?? process.exit)(0);
 }
 

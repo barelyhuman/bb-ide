@@ -54,7 +54,7 @@ describe("restartHostDaemon", () => {
     expect(unref).toHaveBeenCalledTimes(1);
     expect(releaseLock).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledWith(0);
-    expect(steps).toEqual(["spawn", "unref", "release", "exit"]);
+    expect(steps).toEqual(["release", "spawn", "unref", "exit"]);
   });
 
   it("releases the daemon lock before a replacement process acquires it", async () => {
