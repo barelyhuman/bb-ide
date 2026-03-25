@@ -570,12 +570,3 @@ export async function listHosts(): Promise<Host[]> {
   return request<Host[]>(apiClient.hosts.$get());
 }
 
-export async function listEnvironments(projectId?: string): Promise<Environment[]> {
-  return request<Environment[]>(
-    apiClient.environments.$get({
-      query: {
-        ...(projectId ? { projectId } : {}),
-      },
-    }),
-  );
-}

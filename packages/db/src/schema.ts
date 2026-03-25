@@ -49,6 +49,7 @@ export const projectSources = sqliteTable(
       .references(() => hosts.id, { onDelete: "cascade" }),
     path: text("path"),
     repoUrl: text("repo_url"),
+    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -56,6 +57,9 @@ export const projectSources = sqliteTable(
     index("project_sources_project_idx").on(table.projectId),
     index("project_sources_host_idx").on(table.hostId),
     uniqueIndex("project_sources_project_host_idx").on(table.projectId, table.hostId),
+    // NOTE: Drizzle does not support partial/filtered unique indexes.
+    // The constraint "only one default source per project" (WHERE is_default = 1)
+    // must be enforced in application code.
   ],
 );
 

@@ -22,6 +22,7 @@ export const projectSourceSchema = z.object({
   hostId: z.string(),
   path: z.string().nullable(),
   repoUrl: z.string().url().nullable(),
+  isDefault: z.boolean(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

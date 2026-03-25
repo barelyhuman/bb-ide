@@ -123,9 +123,6 @@ export type PublicApiSchema = {
 
   // ─── Environments ────────────────────────────────────────────────────
 
-  "/environments": {
-    $get: Endpoint<{ query?: { projectId?: string } }, Environment[]>;
-  };
   "/environments/:id": {
     $get:
       | Endpoint<PathId, Environment, 200>
