@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, PanelRight, X } from "lucide-react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Panel, PanelGroup } from "react-resizable-panels";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   useThread,
   useEnvironment,
@@ -20,33 +18,16 @@ import {
   useDeleteThread,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
-  useThreadManagerWorkspaceFile,
-  useThreadManagerWorkspaceFiles,
-  useProjects,
   useThreads,
   useUpdateThread,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
-import {
-  getMergeBaseBranchCandidates,
-  MergeBaseBranchPicker,
-} from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import {
   ThreadGitActionDialogError,
@@ -58,14 +39,13 @@ import {
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
-import { DetailCard, DetailRow, StatusPill } from "@bb/ui-core";
 import {
   buildCommitFailureFollowUpInstruction,
   buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
-import type { Environment, PromptInput, ServiceTier, Thread } from "@bb/domain";
+import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
 import type {
   EnvironmentActionApiError,
   EnvironmentActionFailureDetails,
@@ -73,11 +53,6 @@ import type {
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
-import {
-  buildFollowUpSignatureFromInput,
-  buildFollowUpSignatureFromRow,
-} from "@/lib/thread-follow-up-signature";
-import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   formatChangeSummary,
@@ -88,15 +63,17 @@ import {
   isArchiveForceRequiredError,
   requiresArchiveConfirmation,
 } from "@/lib/thread-archive";
-import { ThreadComposerPane } from "./ThreadComposerPane";
-import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
-import {
-  findLatestActivityRowId,
-} from "./threadDetailActivity";
+import { findLatestActivityRowId } from "./threadDetailActivity";
 import { extractThreadQueuedMessages, queuedInputToDraft } from "./threadQueuedMessages";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
-import { ThreadTimelinePane } from "./ThreadTimelinePane";
+import { ThreadDetailHeader } from "./ThreadDetailHeader";
+import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
+import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
+import { useThreadDebugView } from "./useThreadDebugView";
+import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
+import { useThreadMergeBase } from "./useThreadMergeBase";
+import { useThreadReadTracking } from "./useThreadReadTracking";
 import { toast } from "sonner";
 
 function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFailureDetails | undefined {
@@ -191,19 +168,6 @@ function toThreadGitActionDialogError(error: unknown): ThreadGitActionDialogErro
   });
 }
 
-
-const THREAD_HEADER_ACTION_BUTTON_CLASS =
-  "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
-const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
-const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
-
-interface PendingSubmittedFollowUp {
-  signature: string;
-  submittedAt: number;
-}
-
-const MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX = "thread-manager-debug-view:";
-
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
     projectId: string;
@@ -214,16 +178,26 @@ export function ThreadDetailView() {
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
     refetchOnMount: "always",
   });
-  const [showManagerDebugView, setShowManagerDebugView] = useState(false);
-  const { data: projects } = useProjects();
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
-  const project = projects?.find((candidate) => candidate.id === projectId);
+  const {
+    handleManagerDebugViewChange,
+    isManagerWorkspaceFileLoading,
+    managerWorkspaceFile,
+    managerWorkspaceFileError,
+    managerWorkspaceFiles,
+    selectedManagerWorkspacePath,
+    setSelectedManagerWorkspacePath,
+    showManagerDebugView,
+  } = useThreadDebugView({
+    threadId,
+    threadType: thread?.type,
+  });
   const { data: allProjectThreads } = useThreads(
     projectId ? { projectId } : undefined,
     { enabled: Boolean(projectId) },
   );
   const managerThreads = useMemo(
-    () => (allProjectThreads ?? []).filter((t) => t.type === "manager"),
+    () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
     [allProjectThreads],
   );
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
@@ -236,11 +210,6 @@ export function ThreadDetailView() {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
-  const {
-    data: managerWorkspaceFiles,
-  } = useThreadManagerWorkspaceFiles(threadId ?? "", {
-    enabled: thread?.type === "manager",
-  });
   const timelineToolDetails = useThreadTimelineToolDetails();
   const sendMessage = useSendThreadMessage();
   const createDraft = useCreateThreadDraft();
@@ -262,29 +231,15 @@ export function ThreadDetailView() {
     currentThreadId: threadId,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [pendingSubmittedFollowUp, setPendingSubmittedFollowUp] =
-    useState<PendingSubmittedFollowUp | null>(null);
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
-  const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<string | null>(
-    null,
-  );
-  const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
-    null,
-  );
+  const [processingQueuedMessageId, setProcessingQueuedMessageId] =
+    useState<string | null>(null);
+  const [threadRenameTarget, setThreadRenameTarget] =
+    useState<ThreadRenameDialogTarget | null>(null);
   const [threadDeleteTarget, setThreadDeleteTarget] = useState<Thread | null>(null);
   const [threadGitActionTarget, setThreadGitActionTarget] =
     useState<ThreadGitActionDialogTarget | null>(null);
-  const [selectedManagerWorkspacePath, setSelectedManagerWorkspacePath] = useState<string | null>(
-    null,
-  );
-  const effectiveManagerWorkspacePath =
-    thread?.type === "manager"
-      ? selectedManagerWorkspacePath ?? managerWorkspaceFiles?.files?.[0]?.path ?? null
-      : null;
-  const markedReadKeysRef = useRef<Set<string>>(new Set());
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
-  const mergeBaseStateThreadIdRef = useRef<string | undefined>(undefined);
-  const message = promptDraft.text;
   const promptInput = useMemo(
     () =>
       promptDraftToInput({
@@ -293,45 +248,6 @@ export function ThreadDetailView() {
       }),
     [promptDraft.attachments, promptDraft.text],
   );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!threadId || thread?.type !== "manager") {
-      setShowManagerDebugView(false);
-      return;
-    }
-    const rawValue = window.localStorage.getItem(
-      `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`,
-    );
-    setShowManagerDebugView(rawValue === "true");
-  }, [thread?.type, threadId]);
-
-  const handleManagerDebugViewChange = useCallback(
-    (checked: boolean) => {
-      setShowManagerDebugView(checked);
-      if (typeof window === "undefined" || !threadId || thread?.type !== "manager") {
-        return;
-      }
-      if (checked) {
-        window.localStorage.setItem(
-          `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`,
-          "true",
-        );
-        return;
-      }
-      window.localStorage.removeItem(
-        `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`,
-      );
-    },
-    [thread?.type, threadId],
-  );
-  const {
-    data: managerWorkspaceFile,
-    isLoading: isManagerWorkspaceFileLoading,
-    error: managerWorkspaceFileError,
-  } = useThreadManagerWorkspaceFile(threadId ?? "", effectiveManagerWorkspacePath, {
-    enabled: thread?.type === "manager" && effectiveManagerWorkspacePath !== null,
-  });
   const {
     selectedProviderId,
     providerOptions,
@@ -428,8 +344,7 @@ export function ThreadDetailView() {
     workspaceStatusError ? undefined : (workStatus ?? undefined);
   const { isLocalHost, openPath } = useHostDaemon();
   const isReasoningBlockActive = false;
-  const isTimelineLoading = timelineLoading;
-  const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
+  const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
   const {
     bottomSentinelRef,
     captureTimelineScrollPosition,
@@ -452,71 +367,38 @@ export function ThreadDetailView() {
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
-
-  useEffect(() => {
-    if (mergeBaseStateThreadIdRef.current === thread?.id) {
-      return;
-    }
-    mergeBaseStateThreadIdRef.current = thread?.id;
-    setSelectedMergeBaseBranch(thread?.mergeBaseBranch ?? undefined);
-  }, [setSelectedMergeBaseBranch, thread?.id, thread?.mergeBaseBranch]);
-
-  useEffect(() => {
-    setPendingSubmittedFollowUp(null);
-  }, [threadId]);
-
-  useEffect(() => {
-    if (thread?.type !== "manager") {
-      setSelectedManagerWorkspacePath(null);
-      return;
-    }
-    const files = managerWorkspaceFiles?.files ?? [];
-    if (files.length === 0) {
-      setSelectedManagerWorkspacePath(null);
-      return;
-    }
-    setSelectedManagerWorkspacePath((currentPath) =>
-      currentPath && files.some((file) => file.path === currentPath)
-        ? currentPath
-        : null,
-    );
-  }, [managerWorkspaceFiles?.files, thread?.type]);
-
-  useEffect(() => {
-    if (!pendingSubmittedFollowUp) {
-      return;
-    }
-
-    const acknowledged = threadDetailRows.some((row) => {
-      const rowSignature = buildFollowUpSignatureFromRow(row);
-      if (rowSignature !== pendingSubmittedFollowUp.signature) {
-        return false;
-      }
-      return row.kind === "message" && row.message.createdAt + 2_000 >= pendingSubmittedFollowUp.submittedAt;
-    });
-
-    if (!acknowledged) {
-      return;
-    }
-
+  const handleFollowUpAcknowledged = useCallback(() => {
     promptDraft.clear();
-    setPendingSubmittedFollowUp(null);
-  }, [pendingSubmittedFollowUp, promptDraft, threadDetailRows]);
-
-  useEffect(() => {
-    if (!thread) return;
-    if ((thread.lastReadAt ?? 0) >= thread.updatedAt) return;
-
-    const marker = `${thread.id}:${thread.updatedAt}`;
-    if (markedReadKeysRef.current.has(marker)) return;
-
-    markedReadKeysRef.current.add(marker);
-    markThreadRead.mutate(thread.id, {
-      onError: () => {
-        markedReadKeysRef.current.delete(marker);
-      },
-    });
-  }, [markThreadRead, thread]);
+  }, [promptDraft]);
+  const {
+    beginPendingFollowUp,
+    clearPendingFollowUp,
+    pendingSubmittedFollowUp,
+  } = useThreadFollowUpTracking({
+    threadDetailRows,
+    threadId,
+    onAcknowledged: handleFollowUpAcknowledged,
+  });
+  useThreadReadTracking({
+    markThreadRead,
+    thread,
+  });
+  const {
+    canSelectThreadMergeBase,
+    effectiveMergeBaseBranch,
+    handleThreadMergeBaseBranchChange,
+    showBranchComparisonUi,
+    showThreadMergeBase,
+    threadMergeBaseBranch,
+    threadMergeBaseCandidates,
+  } = useThreadMergeBase({
+    mergeBaseBranchOptions,
+    selectedMergeBaseBranch,
+    setSelectedMergeBaseBranch,
+    thread,
+    updateThread,
+    workspaceStatus,
+  });
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return;
@@ -526,7 +408,6 @@ export function ThreadDetailView() {
       threadType: thread.type,
     });
   }, [thread, updateThread.isPending]);
-
   const submitThreadRename = useCallback((currentThreadId: string, title: string) => {
     updateThread.mutate(
       {
@@ -540,47 +421,6 @@ export function ThreadDetailView() {
       },
     );
   }, [updateThread]);
-
-  const handleThreadMergeBaseBranchChange = useCallback((branch: string) => {
-    if (!threadId || !thread) {
-      return;
-    }
-
-    const normalizedBranch = branch.trim();
-    const defaultBranch = workspaceStatus?.defaultBranch?.trim();
-    const nextPersistedMergeBaseBranch =
-      normalizedBranch.length > 0 && normalizedBranch !== defaultBranch
-        ? normalizedBranch
-        : null;
-    const currentPersistedMergeBaseBranch = thread.mergeBaseBranch ?? null;
-
-    setSelectedMergeBaseBranch(normalizedBranch);
-    if (nextPersistedMergeBaseBranch === currentPersistedMergeBaseBranch) {
-      return;
-    }
-
-    updateThread.mutate(
-      {
-        id: threadId,
-        mergeBaseBranch: nextPersistedMergeBaseBranch,
-      },
-      {
-        onError: (error) => {
-          setSelectedMergeBaseBranch(thread.mergeBaseBranch ?? undefined);
-          toast.error(
-            error instanceof Error ? error.message : "Failed to update merge base branch.",
-          );
-        },
-      },
-    );
-  }, [
-    workspaceStatus?.defaultBranch,
-    setSelectedMergeBaseBranch,
-    thread,
-    threadId,
-    updateThread,
-  ]);
-
   const toggleArchiveThread = useCallback(() => {
     if (!thread) return;
     const label = threadTypeLabel(thread.type);
@@ -638,8 +478,7 @@ export function ThreadDetailView() {
         },
       },
     );
-  }, [archiveThread, navigate, thread, unarchiveThread]);
-
+  }, [archiveThread, environment, navigate, thread, unarchiveThread, workStatus]);
   const handlePromptGitStatsBannerClick = useCallback(() => {
     openThreadDiffPanel();
   }, [openThreadDiffPanel]);
@@ -649,7 +488,6 @@ export function ThreadDetailView() {
     },
     [openDiffFile],
   );
-
   const sendFollowUpInput = useCallback(
     async ({
       input,
@@ -688,7 +526,6 @@ export function ThreadDetailView() {
       threadId,
     ],
   );
-
   const isManagerThread = thread?.type === "manager";
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
@@ -727,7 +564,21 @@ export function ThreadDetailView() {
   const selectedManagerOption = managerSelectorOptions.find(
     (option) => option.value === managerSelectorValue,
   );
+  const handleAssignManager = useCallback((nextParentThreadId: string | null) => {
+    if (!thread || updateThread.isPending) {
+      return;
+    }
 
+    updateThread.mutate({
+      id: thread.id,
+      parentThreadId: nextParentThreadId,
+    });
+  }, [thread, updateThread]);
+  const handleManagerWorkspacePathToggle = useCallback((path: string) => {
+    setSelectedManagerWorkspacePath((currentPath) =>
+      currentPath === path ? null : path,
+    );
+  }, [setSelectedManagerWorkspacePath]);
   const handleAttachFiles = useCallback(async (files: File[]) => {
     if (!projectId || files.length === 0) return;
 
@@ -811,7 +662,7 @@ export function ThreadDetailView() {
     thread.type === "standard" &&
     !thread.parentThreadId &&
     managerThreads.length > 0 &&
-    !managerThreads.some((m) => m.id === thread.id);
+    !managerThreads.some((manager) => manager.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
   const isArchivedThread = thread.archivedAt != null;
@@ -864,13 +715,6 @@ export function ThreadDetailView() {
       : isProvisioning
       ? "Provisioning..."
       : undefined;
-  const effectiveMergeBaseBranch =
-    selectedMergeBaseBranch ??
-    workspaceStatus?.mergeBaseBranch ??
-    workspaceStatus?.defaultBranch;
-  const showBranchComparisonUi = Boolean(
-    effectiveMergeBaseBranch || workspaceStatus?.defaultBranch,
-  );
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary({
@@ -899,7 +743,6 @@ export function ThreadDetailView() {
     (environment ? "environment" : undefined);
   const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentLabel ?? undefined;
   const threadBranchName = workspaceStatus?.currentBranch;
-  const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showWorkspaceStatus =
     canUseGitUi &&
     (Boolean(workspaceStatus) || Boolean(workspaceStatusError)) &&
@@ -924,16 +767,6 @@ export function ThreadDetailView() {
         workspaceStatus.state === "committed_unmerged"
       ) &&
       (workspaceStatus.files?.length ?? 0) > 0,
-  );
-  const showThreadMergeBase = showBranchComparisonUi && Boolean(threadMergeBaseBranch);
-  const threadMergeBaseCandidates = getMergeBaseBranchCandidates({
-    mergeBaseBranch: threadMergeBaseBranch,
-    mergeBaseBranchOptions,
-  });
-  const canSelectThreadMergeBase = Boolean(
-    showThreadMergeBase &&
-      threadMergeBaseBranch &&
-      threadMergeBaseCandidates.length > 0,
   );
   const showThreadMetadata = Boolean(
     isManagerThread ||
@@ -973,7 +806,7 @@ export function ThreadDetailView() {
   }: {
     includeUnstaged: boolean;
   }) => {
-    const attachedEnvironmentId = thread?.environmentId;
+    const attachedEnvironmentId = thread.environmentId;
     if (!threadId || !attachedEnvironmentId) {
       return;
     }
@@ -988,8 +821,8 @@ export function ThreadDetailView() {
           autoArchiveOnSuccess,
         },
       });
-    } catch (error) {
-      throw toThreadGitActionDialogError(error);
+    } catch (nextError) {
+      throw toThreadGitActionDialogError(nextError);
     }
   };
   const handleSquashMergeThread = async ({
@@ -1001,7 +834,7 @@ export function ThreadDetailView() {
     includeUnstaged: boolean;
     mergeBaseBranch?: string;
   }) => {
-    const attachedEnvironmentId = thread?.environmentId;
+    const attachedEnvironmentId = thread.environmentId;
     if (!threadId || !attachedEnvironmentId) {
       return;
     }
@@ -1018,8 +851,8 @@ export function ThreadDetailView() {
           autoArchiveOnSuccess,
         },
       });
-    } catch (error) {
-      throw toThreadGitActionDialogError(error);
+    } catch (nextError) {
+      throw toThreadGitActionDialogError(nextError);
     }
   };
   const handleAskAgentToFixGitAction = async (input: PromptInput[]) => {
@@ -1031,268 +864,6 @@ export function ThreadDetailView() {
       input,
     });
   };
-  const renderThreadMetadataRows = () => (
-    <>
-      <DetailRow
-        label={isManagerThread ? "Kind" : "Type"}
-        valueClassName="min-w-0 truncate"
-      >
-        {isManagerThread
-          ? "Manager"
-          : parentThreadId
-            ? "Managed thread"
-            : "Thread"}
-      </DetailRow>
-      {!isManagerThread &&
-      (parentThreadId || canAssignToManager || canTakeOverThread) ? (
-        <DetailRow
-          label="Manager"
-          valueClassName="min-w-0"
-        >
-          {parentThreadId ? (
-            <div className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
-              <Link
-                to={`/projects/${projectId}/threads/${parentThreadId}`}
-                className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
-              >
-                {selectedManagerOption?.label ?? "Manager"}
-              </Link>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg]:size-3"
-                disabled={updateThread.isPending}
-                onClick={() => {
-                  updateThread.mutate({
-                    id: thread.id,
-                    parentThreadId: null,
-                  });
-                }}
-                aria-label="Unassign manager"
-              >
-                  <X />
-              </Button>
-            </div>
-          ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div
-                  role="button"
-                  tabIndex={
-                    updateThread.isPending ||
-                    (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
-                      ? -1
-                      : 0
-                  }
-                  className="inline-flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
-                >
-                  <span className="min-w-0 truncate text-xs text-foreground">
-                    {selectedManagerOption?.label ?? "None"}
-                  </span>
-                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-                </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-40 max-w-72">
-                {managerSelectorOptions.map((option) => (
-                  <DropdownMenuItem
-                    key={option.value}
-                    onSelect={() => {
-                      updateThread.mutate({
-                        id: thread.id,
-                        parentThreadId: option.value === "none" ? null : option.value,
-                      });
-                    }}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <span className="truncate" title={option.label}>
-                      {option.label}
-                    </span>
-                    <Check
-                      className={managerSelectorValue === option.value ? "size-4 opacity-100" : "size-4 opacity-0"}
-                    />
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </DetailRow>
-      ) : null}
-      {!isManagerThread && threadEnvironmentType ? (
-        <DetailRow
-          label="Environment"
-          valueClassName="min-w-0 truncate"
-        >
-          {threadEnvironmentValue ?? threadEnvironmentType}
-        </DetailRow>
-      ) : null}
-      {!isManagerThread && threadBranchName ? (
-        <DetailRow
-          label="Branch"
-          valueClassName="min-w-0 truncate"
-        >
-          <button
-            type="button"
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
-            onClick={() => {
-              void handleCopyThreadBranch();
-            }}
-            aria-label="Copy branch name"
-            title="Copy branch name"
-          >
-            <span className="truncate">{threadBranchName}</span>
-            <Copy className="size-3.5 shrink-0 text-muted-foreground" />
-          </button>
-        </DetailRow>
-      ) : null}
-      {!isManagerThread && showThreadMergeBase ? (
-        <DetailRow
-          label="Merge base"
-          valueClassName="min-w-0 truncate"
-        >
-          {canSelectThreadMergeBase && threadMergeBaseBranch ? (
-            <MergeBaseBranchPicker
-              value={threadMergeBaseBranch}
-              options={threadMergeBaseCandidates}
-              variant="minimal"
-              loading={isLoadingMergeBaseBranchOptions}
-              onChange={handleThreadMergeBaseBranchChange}
-              onOpenChange={onMergeBaseBranchPickerOpenChange}
-              className="max-w-full text-foreground"
-            />
-          ) : (
-            threadMergeBaseBranch
-          )}
-        </DetailRow>
-      ) : null}
-      {showWorkspaceStatus ? (
-        <DetailRow
-          label="Git status"
-          align="start"
-          valueClassName="min-w-0"
-        >
-          <div
-            className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-            title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
-          >
-            <span className={`shrink-0 font-medium ${threadGitStatusLabelClass}`}>
-              {threadGitStatusDisplay.label}
-            </span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {threadGitStatusDisplay.summary}
-            </span>
-          </div>
-        </DetailRow>
-      ) : null}
-      {thread.archivedAt != null ? (
-        <DetailRow
-          label="Archived"
-          valueClassName="min-w-0 truncate"
-        >
-          <ArchiveTimestampAction
-            isPending={
-              unarchiveThread.isPending &&
-              unarchiveThread.variables?.id === thread.id
-            }
-            onUnarchive={() => {
-              unarchiveThread.mutate({ id: thread.id });
-            }}
-            threadType={thread.type}
-          />
-        </DetailRow>
-      ) : null}
-    </>
-  );
-  const renderThreadMetadataCard = (className?: string) => (
-    <DetailCard className={className}>
-      {renderThreadMetadataRows()}
-      {showThreadChangedFiles ? (
-        <DetailRow
-          label="Changed files"
-          layout="vertical"
-          valueClassName="pt-0.5"
-        >
-          <WorkspaceChangesList
-            files={workspaceStatus?.files}
-            maxHeightClassName="max-h-48"
-          />
-        </DetailRow>
-      ) : null}
-    </DetailCard>
-  );
-  const renderThreadMetadataContent = (className?: string) => (
-    renderThreadMetadataCard(
-      [
-        "rounded-none border-0 bg-transparent px-0 py-0",
-        className,
-      ].filter(Boolean).join(" "),
-    )
-  );
-  const managerWorkspaceContent = thread.type === "manager" ? (
-    <div className="space-y-2">
-      {(managerWorkspaceFiles?.files?.length ?? 0) > 0 ? (
-        managerWorkspaceFiles?.files.map((file) => {
-          const isExpanded = effectiveManagerWorkspacePath === file.path;
-          const isActiveFile = isExpanded;
-
-          return (
-            <div
-              key={file.path}
-              className="overflow-hidden rounded-lg border border-border/70 bg-background/45"
-            >
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent/20"
-                onClick={() => {
-                  setSelectedManagerWorkspacePath((currentPath) =>
-                    currentPath === file.path ? null : file.path,
-                  );
-                }}
-                aria-expanded={isExpanded}
-              >
-                {isExpanded ? (
-                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                )}
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-                  {file.path}
-                </span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">
-                  {file.size} B
-                </span>
-              </button>
-              {isExpanded ? (
-                <div className="border-t border-border/70 px-3 py-3">
-                  {isManagerWorkspaceFileLoading && isActiveFile ? (
-                    <p className="text-xs text-muted-foreground">Loading file…</p>
-                  ) : managerWorkspaceFileError && isActiveFile ? (
-                    <p className="text-xs text-destructive">
-                      {managerWorkspaceFileError instanceof Error
-                        ? managerWorkspaceFileError.message
-                        : "Failed to load workspace file"}
-                    </p>
-                  ) : managerWorkspaceFile && isActiveFile ? (
-                    <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-                      {managerWorkspaceFile.content}
-                    </pre>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      Select a manager workspace file to view it.
-                    </p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          );
-        })
-      ) : (
-        <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-          No files yet.
-        </p>
-      )}
-    </div>
-  ) : undefined;
   const threadActionsMenu = (
     <ThreadActionsMenu
       triggerClassName="h-7 w-7 rounded-md p-0 text-muted-foreground"
@@ -1322,7 +893,6 @@ export function ThreadDetailView() {
       threadType={thread.type}
     />
   );
-
   const handleSend = async () => {
     if (promptInput.length === 0) return;
 
@@ -1338,17 +908,13 @@ export function ThreadDetailView() {
         });
         promptDraft.clear();
         setAttachmentError(null);
-      } catch (err) {
-        window.alert(err instanceof Error ? err.message : "Failed to queue follow-up");
+      } catch (nextError) {
+        window.alert(nextError instanceof Error ? nextError.message : "Failed to queue follow-up");
       }
       return;
     }
 
-    const submittedAt = Date.now();
-    setPendingSubmittedFollowUp({
-      signature: buildFollowUpSignatureFromInput(promptInput),
-      submittedAt,
-    });
+    beginPendingFollowUp(promptInput);
     setAttachmentError(null);
 
     try {
@@ -1359,12 +925,11 @@ export function ThreadDetailView() {
         reasoningLevel,
         sandboxMode,
       });
-    } catch (err) {
-      setPendingSubmittedFollowUp(null);
-      window.alert(err instanceof Error ? err.message : "Failed to send follow-up");
+    } catch (nextError) {
+      clearPendingFollowUp();
+      window.alert(nextError instanceof Error ? nextError.message : "Failed to send follow-up");
     }
   };
-
   const handleSendQueuedImmediately = (messageId: string) => {
     const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
     if (!queuedMessage) return;
@@ -1379,9 +944,9 @@ export function ThreadDetailView() {
       .then(() => {
         setAttachmentError(null);
       })
-      .catch((err) => {
+      .catch((nextError) => {
         window.alert(
-          err instanceof Error ? err.message : "Failed to send queued follow-up",
+          nextError instanceof Error ? nextError.message : "Failed to send queued follow-up",
         );
       })
       .finally(() => {
@@ -1390,7 +955,6 @@ export function ThreadDetailView() {
         );
       });
   };
-
   const handleEditQueuedMessage = (messageId: string) => {
     const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
     if (!queuedMessage) return;
@@ -1407,9 +971,9 @@ export function ThreadDetailView() {
         promptDraft.setAttachments(restoredDraft.attachments);
         setAttachmentError(null);
       })
-      .catch((err) => {
+      .catch((nextError) => {
         window.alert(
-          err instanceof Error ? err.message : "Failed to edit queued follow-up",
+          nextError instanceof Error ? nextError.message : "Failed to edit queued follow-up",
         );
       })
       .finally(() => {
@@ -1418,7 +982,6 @@ export function ThreadDetailView() {
         );
       });
   };
-
   const handleDeleteQueuedMessage = (messageId: string) => {
     setProcessingQueuedMessageId(messageId);
     void deleteDraft
@@ -1426,9 +989,9 @@ export function ThreadDetailView() {
         id: thread.id,
         queuedMessageId: messageId,
       })
-      .catch((err) => {
+      .catch((nextError) => {
         window.alert(
-          err instanceof Error ? err.message : "Failed to delete queued follow-up",
+          nextError instanceof Error ? nextError.message : "Failed to delete queued follow-up",
         );
       })
       .finally(() => {
@@ -1437,244 +1000,245 @@ export function ThreadDetailView() {
         );
       });
   };
-
   const effectiveSecondaryPanel =
     !canUseGitUi && activeSecondaryPanel === "git-diff"
       ? "thread-info"
       : !isManagerThread && activeSecondaryPanel === "manager-workspace"
         ? "thread-info"
         : activeSecondaryPanel;
-
-  const timelineHeader = (
-    <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
-      <div className="flex h-12 items-center gap-3">
-        <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
-        <Separator orientation="vertical" className="h-4" />
-        <div className="min-w-0 flex-1 flex items-center gap-2">
-          <p className="truncate text-sm font-semibold">{threadTitle}</p>
-          {isManagerThread ? <StatusPill variant="outline">manager</StatusPill> : null}
-          {!isManagerThread && parentThreadId ? (
-            <StatusPill variant="outline">managed</StatusPill>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {threadHeaderGitAction ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={isThreadGitActionPending}
-              className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-              onClick={() => {
-                setThreadGitActionTarget(threadHeaderGitAction.target);
-              }}
-            >
-              {threadHeaderGitAction.label}
-            </Button>
-          ) : null}
-          {threadActionsMenu}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={
-              isSecondaryPanelOpen
-                ? "h-7 w-7 rounded-md p-0 bg-accent/35 text-foreground hover:bg-accent/45"
-                : "h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground"
-            }
-            aria-label={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
-            title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
-            onClick={toggleThreadSecondaryPanel}
-          >
-            <PanelRight className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
-
   const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
-
-  const composerFooter = (
-    <ThreadComposerPane
-      composerRef={promptComposerRef}
-      provisioningStatusLabel={provisioningStatusLabel}
-      showScrollToBottom={showScrollToBottom}
-      onScrollToBottom={scrollToBottom}
-      showPromptGitStatsBanner={showPromptGitStatsBanner}
-      isDiffPanelActive={canUseGitUi && isDiffPanelActive}
-      canExpandPromptChangeList={canExpandPromptChangeList}
-      isChangeListExpanded={isChangeListExpanded}
-      onToggleChangeListExpanded={() => {
-        setIsChangeListExpanded((prev) => !prev);
-      }}
-      promptBannerSummary={promptBannerSummary}
-      showBranchComparisonUi={showBranchComparisonUi}
-      promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
-      mergeBaseBranchOptions={mergeBaseBranchOptions}
-      mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
-      onPromptBannerMergeBaseBranchChange={
-        showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
-      }
-      onPromptBannerMergeBaseBranchPickerOpenChange={
-        showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
-      }
-      workspaceStatus={workspaceStatus}
-      threadId={thread.id}
-      onPromptGitStatsBannerClick={
-        canUseGitUi ? handlePromptGitStatsBannerClick : () => {}
-      }
-      onPromptBannerFileClick={
-        canUseGitUi ? handlePromptBannerFileClick : () => {}
-      }
-      queuedMessages={queuedMessages}
-      canSendFollowUp={canSendFollowUp}
-      isFollowUpSubmitting={isFollowUpSubmitting}
-      isQueueMutationPending={isQueueMutationPending}
-      processingQueuedMessageId={processingQueuedMessageId}
-      onSendQueuedImmediately={handleSendQueuedImmediately}
-      onEditQueuedMessage={handleEditQueuedMessage}
-      onDeleteQueuedMessage={handleDeleteQueuedMessage}
-      message={message}
-      onChangeMessage={promptDraft.setText}
-      onSubmit={handleSend}
-      threadStatus={thread.status}
-      onStop={() => stopThread.mutate(thread.id)}
-      promptPlaceholder={promptPlaceholder}
-      mentionSuggestions={promptMentions.suggestions}
-      mentionSearchScope={
-        promptMentions.threadSuggestionMode === "all"
-          ? "files-and-threads"
-          : promptMentions.threadSuggestionMode === "managers"
-            ? "files-and-managers"
-            : "files"
-      }
-      mentionLoading={promptMentions.isLoading}
-      mentionError={promptMentions.isError}
-      onMentionQueryChange={promptMentions.setQuery}
-      attachments={promptDraft.attachments}
-      projectId={projectId}
-      onAttachFiles={handleAttachFiles}
-      onRemoveAttachment={promptDraft.removeAttachment}
-      isAttaching={uploadPromptAttachment.isPending}
-      attachmentError={attachmentError}
-      hasMultipleProviders={hasMultipleProviders}
-      providerOptions={providerOptions}
-      selectedProviderId={selectedProviderId}
-      providerDisplayName={selectedProviderDisplayName}
-      activeModel={activeModel}
-      selectedModel={selectedModel}
-      modelOptions={modelOptions}
-      onSelectedModelChange={setSelectedModel}
-      serviceTier={serviceTier}
-      onServiceTierChange={setServiceTier}
-      supportsServiceTier={supportsServiceTier}
-      reasoningLevel={reasoningLevel}
-      reasoningOptions={reasoningOptions}
-      onReasoningLevelChange={setReasoningLevel}
-      sandboxMode={sandboxMode}
-      sandboxOptions={sandboxOptions}
-      onSandboxModeChange={setSandboxMode}
-      environmentLabel={threadEnvironmentValue}
-      environmentIcon={undefined}
-      contextWindowUsage={contextWindowUsage}
+  const timelineHeader = (
+    <ThreadDetailHeader
+      actionsMenu={threadActionsMenu}
+      isManagedThread={Boolean(parentThreadId)}
+      isManagerThread={isManagerThread}
+      isSecondaryPanelOpen={isSecondaryPanelOpen}
+      isThreadGitActionPending={isThreadGitActionPending}
+      onOpenThreadGitAction={setThreadGitActionTarget}
+      onToggleSecondaryPanel={toggleThreadSecondaryPanel}
+      threadHeaderGitAction={threadHeaderGitAction}
+      threadTitle={threadTitle}
     />
   );
+  const composerFooter = (
+    <ThreadDetailPromptArea
+      attachments={{
+        attachmentError,
+        attachments: promptDraft.attachments,
+        isAttaching: uploadPromptAttachment.isPending,
+        onAttachFiles: handleAttachFiles,
+        onRemoveAttachment: promptDraft.removeAttachment,
+        projectId,
+      }}
+      banner={{
+        canExpandPromptChangeList,
+        isChangeListExpanded,
+        isDiffPanelActive: canUseGitUi && isDiffPanelActive,
+        mergeBaseBranchOptions,
+        mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
+        onPromptBannerFileClick: canUseGitUi ? handlePromptBannerFileClick : () => {},
+        onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
+          ? handleThreadMergeBaseBranchChange
+          : undefined,
+        onPromptBannerMergeBaseBranchPickerOpenChange: showBranchComparisonUi
+          ? onMergeBaseBranchPickerOpenChange
+          : undefined,
+        onPromptGitStatsBannerClick: canUseGitUi ? handlePromptGitStatsBannerClick : () => {},
+        onToggleChangeListExpanded: () => {
+          setIsChangeListExpanded((prev) => !prev);
+        },
+        promptBannerMergeBaseBranch,
+        promptBannerSummary,
+        showBranchComparisonUi,
+        showPromptGitStatsBanner,
+        workspaceStatus,
+      }}
+      composer={{
+        canSendFollowUp,
+        composerRef: promptComposerRef,
+        isFollowUpSubmitting,
+        message: promptDraft.text,
+        onChangeMessage: promptDraft.setText,
+        onStop: () => stopThread.mutate(thread.id),
+        onSubmit: handleSend,
+        processingQueuedMessageId,
+        promptPlaceholder,
+        provisioningStatusLabel,
+        threadId: thread.id,
+        threadStatus: thread.status,
+      }}
+      environment={{
+        contextWindowUsage,
+        environmentIcon: undefined,
+        environmentLabel: threadEnvironmentValue,
+      }}
+      execution={{
+        activeModel,
+        hasMultipleProviders,
+        modelOptions,
+        onReasoningLevelChange: setReasoningLevel,
+        onSandboxModeChange: setSandboxMode,
+        onSelectedModelChange: setSelectedModel,
+        onServiceTierChange: setServiceTier,
+        providerDisplayName: selectedProviderDisplayName,
+        providerOptions,
+        reasoningLevel,
+        reasoningOptions,
+        sandboxMode,
+        sandboxOptions,
+        selectedModel,
+        selectedProviderId,
+        serviceTier,
+        supportsServiceTier,
+      }}
+      mentions={{
+        mentionError: promptMentions.isError,
+        mentionLoading: promptMentions.isLoading,
+        mentionSearchScope:
+          promptMentions.threadSuggestionMode === "all"
+            ? "files-and-threads"
+            : promptMentions.threadSuggestionMode === "managers"
+              ? "files-and-managers"
+              : "files",
+        mentionSuggestions: promptMentions.suggestions,
+        onMentionQueryChange: promptMentions.setQuery,
+      }}
+      queue={{
+        isQueueMutationPending,
+        onDeleteQueuedMessage: handleDeleteQueuedMessage,
+        onEditQueuedMessage: handleEditQueuedMessage,
+        onScrollToBottom: scrollToBottom,
+        onSendQueuedImmediately: handleSendQueuedImmediately,
+        queuedMessages,
+        showScrollToBottom,
+      }}
+    />
+  );
+  const managerWorkspace = thread.type === "manager"
+    ? {
+        fileContent: managerWorkspaceFile?.content,
+        fileError:
+          managerWorkspaceFileError instanceof Error
+            ? managerWorkspaceFileError
+            : managerWorkspaceFileError
+              ? new Error("Failed to load workspace file")
+              : null,
+        files: managerWorkspaceFiles?.files,
+        isFileLoading: isManagerWorkspaceFileLoading,
+        onTogglePath: handleManagerWorkspacePathToggle,
+        selectedPath: selectedManagerWorkspacePath,
+      }
+    : undefined;
 
   return (
     <>
-      <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
-        <PanelGroup direction="horizontal" className="h-full w-full min-w-0" autoSaveId="bb.thread.panelLayout">
-          <Panel
-            id="thread-detail-timeline-panel"
-            defaultSize={
-              isSecondaryPanelOpen
-                ? TIMELINE_PANEL_DEFAULT_SIZE_PERCENT
-                : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
-            }
-            minSize={30}
-            order={1}
-            className="min-w-0 overflow-hidden"
-          >
-            <ThreadTimelinePane
-              bottomSentinelRef={bottomSentinelRef}
-              footer={composerFooter}
-              header={timelineHeader}
-              isReasoningBlockActive={isReasoningBlockActive}
-              isThreadTimelinePending={isThreadTimelinePending}
-              isTransientThreadLoadError={isTransientThreadLoadError}
-              latestActivityRowId={latestActivityRowId}
-              loadingToolGroupIds={loadingToolGroupIds}
-              onLoadToolGroupMessages={handleLoadToolGroupMessages}
-              onScroll={handleTimelineScroll}
-              projectId={projectId}
-              scrollRef={setContainerRef}
-              showOngoingIndicator={
-                thread.status === "active" &&
-                !isThreadTimelinePending
-              }
-              threadDetailRows={threadDetailRows}
-              threadId={thread.id}
-              threadStatus={thread.status}
-              toolGroupMessagesById={toolGroupMessagesById}
-            />
-          </Panel>
-          <ThreadSecondaryPanel
-            activePanel={effectiveSecondaryPanel}
-            metadataContent={
-              showThreadMetadata ? (
-                renderThreadMetadataContent()
-              ) : (
-                <div className="pt-1 text-sm text-muted-foreground">
-                  No thread details available.
-                </div>
-              )
-            }
-            managerWorkspaceContent={managerWorkspaceContent}
-            showManagerWorkspaceTab={thread.type === "manager"}
-            showGitDiffTab={canUseGitUi}
-            onPanelChange={openThreadSecondaryPanel}
-            threadId={thread.id}
-            panelRef={secondaryPanelRef}
-            resizablePanelRef={secondaryResizablePanelRef}
-            isOpen={isSecondaryPanelOpen}
-            isResizing={isSecondaryPanelResizing}
-            onCollapse={closeThreadSecondaryPanel}
-            onClose={closeThreadSecondaryPanel}
-            onDragging={handleSecondaryPanelDragging}
-            onResize={handleSecondaryPanelResize}
-            gitDiffSelectValue={gitDiffSelectValue}
-            gitDiffSelectOptions={gitDiffSelectOptions}
-            onGitDiffSelectionChange={onGitDiffSelectionChange}
-            isGitDiffLoading={canUseGitUi ? isGitDiffLoading : false}
-            gitDiffError={canUseGitUi ? gitDiffError : undefined}
-            threadGitDiff={canUseGitUi ? threadGitDiff : undefined}
-            currentGitDiff={canUseGitUi ? currentGitDiff : ""}
-            isPreparingGitDiff={canUseGitUi ? isPreparingGitDiff : false}
-            isParsingGitDiffFiles={canUseGitUi ? isParsingGitDiffFiles : false}
-            gitDiffStatsLabel={canUseGitUi ? gitDiffStatsLabel : ""}
-            hasParsedGitDiffFiles={canUseGitUi ? hasParsedGitDiffFiles : false}
-            areAllGitDiffFilesCollapsed={canUseGitUi ? areAllGitDiffFilesCollapsed : true}
-            onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
-            gitDiffDisplayMode={gitDiffDisplayMode}
-            onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
-            parsedGitDiffFileEntries={canUseGitUi ? parsedGitDiffFileEntries : []}
-            collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
-            queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeys}
-            loadingGitDiffFileKeys={loadingGitDiffFileKeys}
-            setGitDiffFileRef={setGitDiffFileRef}
-            onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
-            gitDiffViewOptions={gitDiffViewOptions}
-            onOpenFile={environment?.path && isLocalHost(environment.hostId)
+      <ThreadDetailSecondaryContent
+        footer={composerFooter}
+        header={timelineHeader}
+        isSecondaryPanelOpen={isSecondaryPanelOpen}
+        managerWorkspace={managerWorkspace}
+        metadata={{
+          canAssignToManager,
+          canSelectThreadMergeBase,
+          canTakeOverThread,
+          isLoadingMergeBaseBranchOptions,
+          isManagerThread,
+          managerSelectorOptions,
+          managerSelectorValue,
+          onAssignManager: handleAssignManager,
+          onCopyThreadBranch: () => {
+            void handleCopyThreadBranch();
+          },
+          onMergeBaseBranchChange: handleThreadMergeBaseBranchChange,
+          onMergeBaseBranchPickerOpenChange: onMergeBaseBranchPickerOpenChange,
+          onUnarchive: () => {
+            unarchiveThread.mutate({ id: thread.id });
+          },
+          parentThreadId: parentThreadId ?? undefined,
+          projectId,
+          selectedManagerOptionLabel: selectedManagerOption?.label,
+          showThreadChangedFiles,
+          showThreadMergeBase,
+          showWorkspaceStatus,
+          thread,
+          threadBranchName,
+          threadEnvironmentType,
+          threadEnvironmentValue,
+          threadGitStatusDisplay,
+          threadGitStatusLabelClass,
+          threadMergeBaseBranch,
+          threadMergeBaseCandidates,
+          unarchivePending:
+            unarchiveThread.isPending &&
+            unarchiveThread.variables?.id === thread.id,
+          updateThreadPending: updateThread.isPending,
+          workspaceStatusFiles: workspaceStatus?.files,
+        }}
+        secondaryPanel={{
+          activePanel: effectiveSecondaryPanel,
+          areAllGitDiffFilesCollapsed: canUseGitUi ? areAllGitDiffFilesCollapsed : true,
+          collapsedGitDiffFileKeys,
+          currentGitDiff: canUseGitUi ? currentGitDiff : "",
+          gitDiffDisplayMode,
+          gitDiffError: canUseGitUi ? gitDiffError : undefined,
+          gitDiffSelectOptions,
+          gitDiffSelectValue,
+          gitDiffStatsLabel: canUseGitUi ? gitDiffStatsLabel : "",
+          gitDiffViewOptions,
+          hasParsedGitDiffFiles: canUseGitUi ? hasParsedGitDiffFiles : false,
+          isGitDiffLoading: canUseGitUi ? isGitDiffLoading : false,
+          isOpen: isSecondaryPanelOpen,
+          isParsingGitDiffFiles: canUseGitUi ? isParsingGitDiffFiles : false,
+          isPreparingGitDiff: canUseGitUi ? isPreparingGitDiff : false,
+          isResizing: isSecondaryPanelResizing,
+          loadingGitDiffFileKeys,
+          onClose: closeThreadSecondaryPanel,
+          onCollapse: closeThreadSecondaryPanel,
+          onDragging: handleSecondaryPanelDragging,
+          onGitDiffDisplayModeChange: handleGitDiffDisplayModeChange,
+          onGitDiffSelectionChange: onGitDiffSelectionChange,
+          onOpenFile:
+            environment?.path && isLocalHost(environment.hostId)
               ? (relativePath: string) => {
                   const fullPath = `${environment.path}/${relativePath}`;
                   void openPath?.(fullPath);
                 }
-              : undefined
-            }
-          />
-        </PanelGroup>
-      </div>
+              : undefined,
+          onPanelChange: openThreadSecondaryPanel,
+          onResize: handleSecondaryPanelResize,
+          onToggleAllFiles: toggleAllGitDiffFilesCollapsed,
+          onToggleGitDiffFileCollapsed: toggleGitDiffFileCollapsed,
+          panelRef: secondaryPanelRef,
+          parsedGitDiffFileEntries: canUseGitUi ? parsedGitDiffFileEntries : [],
+          queuedGitDiffFileRenderKeys,
+          resizablePanelRef: secondaryResizablePanelRef,
+          setGitDiffFileRef,
+          showGitDiffTab: canUseGitUi,
+          showManagerWorkspaceTab: thread.type === "manager",
+          threadGitDiff: canUseGitUi ? threadGitDiff : undefined,
+          threadId: thread.id,
+        }}
+        showThreadMetadata={showThreadMetadata}
+        timeline={{
+          bottomSentinelRef,
+          isReasoningBlockActive,
+          isThreadTimelinePending,
+          isTransientThreadLoadError,
+          latestActivityRowId,
+          loadingToolGroupIds,
+          onLoadToolGroupMessages: handleLoadToolGroupMessages,
+          onScroll: handleTimelineScroll,
+          projectId,
+          scrollRef: setContainerRef,
+          showOngoingIndicator:
+            thread.status === "active" &&
+            !isThreadTimelinePending,
+          threadDetailRows,
+          threadId: thread.id,
+          threadStatus: thread.status,
+          toolGroupMessagesById,
+        }}
+      />
       <ThreadRenameDialog
         target={threadRenameTarget}
         pending={updateThread.isPending}
@@ -1701,9 +1265,9 @@ export function ThreadDetailView() {
                 setThreadDeleteTarget(null);
                 navigate(`/projects/${target.projectId}`, { replace: true });
               },
-              onError: (error) => {
+              onError: (nextError) => {
                 toast.error(
-                  error instanceof Error ? error.message : `Failed to delete ${threadTypeLabel(target.type)}.`,
+                  nextError instanceof Error ? nextError.message : `Failed to delete ${threadTypeLabel(target.type)}.`,
                 );
               },
             },
