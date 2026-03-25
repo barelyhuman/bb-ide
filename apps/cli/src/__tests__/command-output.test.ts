@@ -31,6 +31,7 @@ import { createClient, unwrap } from "../client.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerServerCommands } from "../commands/server.js";
 import { registerProjectCommands } from "../commands/project.js";
+import { registerProviderCommands } from "../commands/provider.js";
 import { registerStatusCommand } from "../commands/status.js";
 import { registerThreadCommands } from "../commands/thread/index.js";
 
@@ -59,6 +60,10 @@ function asServerClient(value: unknown): ServerClient {
 
 function collectLogLines(logSpy: ReturnType<typeof vi.spyOn>): string[] {
   return logSpy.mock.calls.map((args: unknown[]) => args.join(" "));
+}
+
+function collectLogPayloads(logSpy: ReturnType<typeof vi.spyOn>): string[] {
+  return logSpy.mock.calls.map((args: unknown[]) => String(args[0] ?? ""));
 }
 
 async function runCommand(
@@ -140,6 +145,38 @@ describe("CLI command output contracts", () => {
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
       projects,
     );
+  });
+
+  it("bb project list renders the shared borderless table", async () => {
+    const projects = [
+      {
+        id: "proj-1",
+        name: "Alpha",
+        sources: [{ hostId: "host-test-001", type: "local", path: "/tmp/alpha" }],
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ];
+    const get = vi.fn(async () => projects);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            $get: get,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["project", "list"], (program) =>
+      registerProjectCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      "ID      Name   Local Path\n------  -----  ----------\nproj-1  Alpha  /tmp/alpha",
+      "",
+    ]);
   });
 
   it("bb project create --json prints the created project", async () => {
@@ -225,6 +262,40 @@ describe("CLI command output contracts", () => {
       query: { projectId: "project-123", type: "manager" },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("No managers hired");
+  });
+
+  it("bb manager list renders the shared borderless table", async () => {
+    const list = vi.fn(async () => [
+      makeThread({
+        id: "thread-manager-1",
+        projectId: "project-123",
+        providerId: "codex",
+        title: "Manager",
+        type: "manager",
+        status: "active",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    ]);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            $get: list,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "list", "project-123"], (program) =>
+      registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      "ID                Status  Title  \n----------------  ------  -------\nthread-manager-1  active  Manager",
+      "",
+    ]);
   });
 
   it("bb manager status includes managed child threads", async () => {
@@ -390,6 +461,95 @@ describe("CLI command output contracts", () => {
         parentThreadId: "thread-manager-1",
       },
     });
+  });
+
+  it("bb thread list renders archived status in the shared borderless table", async () => {
+    const list = vi.fn(async () => [
+      makeThread({
+        id: "thread-archived-1",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        archivedAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    ]);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            $get: list,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "list"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      "ID                 Project  Status         \n-----------------  -------  ---------------\nthread-archived-1  proj-1   idle (archived)",
+      "",
+    ]);
+  });
+
+  it("bb provider list renders the shared borderless table", async () => {
+    const get = vi.fn(async () => [
+      { id: "openai", displayName: "OpenAI" },
+    ]);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          system: {
+            providers: {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["provider", "list"], (program) =>
+      registerProviderCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      "ID      Name  \n------  ------\nopenai  OpenAI",
+      "",
+    ]);
+  });
+
+  it("bb provider models renders the shared borderless table", async () => {
+    const get = vi.fn(async () => [
+      { model: "gpt-5", displayName: "GPT-5", isDefault: true },
+    ]);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          system: {
+            models: {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["provider", "models", "openai"], (program) =>
+      registerProviderCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "Models for openai:",
+      "",
+      "Model  Name   Default\n-----  -----  -------\ngpt-5  GPT-5  *",
+      "",
+    ]);
   });
 
   it("bb thread spawn --json prints the raw thread", async () => {

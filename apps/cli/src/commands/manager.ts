@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { type Thread } from "@bb/domain";
 import { createClient, unwrap } from "../client.js";
 import { requireThreadId } from "../context-env.js";
+import { renderBorderlessTable } from "../table.js";
 import {
   confirmDestructiveAction,
   getErrorMessage,
@@ -180,31 +181,24 @@ function printManagerThread(thread: Thread): void {
 }
 
 function printManagerTable(managers: Thread[]): void {
-  const idWidth = Math.max(4, ...managers.map((m) => m.id.length));
-  const statusWidth = Math.max(6, ...managers.map((m) => m.status.length));
-  const titleWidth = Math.max(
-    5,
-    ...managers.map((m) => (m.title ?? "<untitled>").length),
+  const rows = managers.map((manager) => [
+    manager.id,
+    manager.status,
+    manager.title ?? "<untitled>",
+  ]);
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const statusWidth = Math.max(6, ...rows.map((row) => row[1].length));
+  const titleWidth = Math.max(5, ...rows.map((row) => row[2].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["ID", "Status", "Title"],
+      colWidths: [idWidth, statusWidth, titleWidth],
+    },
+    rows,
   );
 
-  const header = [
-    "ID".padEnd(idWidth),
-    "Status".padEnd(statusWidth),
-    "Title".padEnd(titleWidth),
-  ].join("  ");
-
   console.log("");
-  console.log(header);
-  console.log("-".repeat(header.length));
-  for (const m of managers) {
-    console.log(
-      [
-        m.id.padEnd(idWidth),
-        m.status.padEnd(statusWidth),
-        (m.title ?? "<untitled>").padEnd(titleWidth),
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }
 
@@ -215,28 +209,21 @@ function printManagedThreadTable(threads: Thread[]): void {
     return;
   }
   console.log("");
-  const idWidth = Math.max(4, ...threads.map((thread) => thread.id.length));
-  const statusWidth = Math.max(6, ...threads.map((thread) => thread.status.length));
-  const titleWidth = Math.max(
-    5,
-    ...threads.map((thread) => (thread.title ?? "<untitled>").length),
+  const rows = threads.map((thread) => [
+    thread.id,
+    thread.status,
+    thread.title ?? "<untitled>",
+  ]);
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const statusWidth = Math.max(6, ...rows.map((row) => row[1].length));
+  const titleWidth = Math.max(5, ...rows.map((row) => row[2].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["ID", "Status", "Title"],
+      colWidths: [idWidth, statusWidth, titleWidth],
+    },
+    rows,
   );
-  const header = [
-    "ID".padEnd(idWidth),
-    "Status".padEnd(statusWidth),
-    "Title".padEnd(titleWidth),
-  ].join("  ");
-  console.log(header);
-  console.log("-".repeat(header.length));
-  for (const thread of threads) {
-    console.log(
-      [
-        thread.id.padEnd(idWidth),
-        thread.status.padEnd(statusWidth),
-        (thread.title ?? "<untitled>").padEnd(titleWidth),
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }
-

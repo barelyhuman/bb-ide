@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { ProjectResponse } from "@bb/server-contract";
 import { createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
+import { renderBorderlessTable } from "../table.js";
 import {
   confirmDestructiveAction,
   getErrorMessage,
@@ -171,30 +172,25 @@ function printProject(project: ProjectResponse, localHostId: string | null): voi
 }
 
 function printProjectTable(projects: ProjectResponse[], localHostId: string | null): void {
-  const idWidth = Math.max(4, ...projects.map((p) => p.id.length));
-  const nameWidth = Math.max(4, ...projects.map((p) => p.name.length));
-
-  const header = [
-    "ID".padEnd(idWidth),
-    "Name".padEnd(nameWidth),
-    "Local Path",
-  ].join("  ");
+  const rows = projects.map((project) => {
+    const localSource = localHostId
+      ? project.sources.find((source) => source.hostId === localHostId)
+      : undefined;
+    return [project.id, project.name, localSource?.path ?? "-"];
+  });
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const nameWidth = Math.max(4, ...rows.map((row) => row[1].length));
+  const localPathWidth = Math.max(10, ...rows.map((row) => row[2].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["ID", "Name", "Local Path"],
+      colWidths: [idWidth, nameWidth, localPathWidth],
+      trimTrailingWhitespace: true,
+    },
+    rows,
+  );
 
   console.log("");
-  console.log(header);
-  console.log("-".repeat(header.length));
-  for (const project of projects) {
-    const localSource = localHostId
-      ? project.sources.find((s) => s.hostId === localHostId)
-      : undefined;
-    const path = localSource?.path ?? "-";
-    console.log(
-      [
-        project.id.padEnd(idWidth),
-        project.name.padEnd(nameWidth),
-        path,
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }

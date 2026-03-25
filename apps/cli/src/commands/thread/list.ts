@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { Thread } from "@bb/domain";
 import { createClient, unwrap } from "../../client.js";
 import { resolveThreadId } from "../../context-env.js";
+import { renderBorderlessTable } from "../../table.js";
 import {
   getErrorMessage,
   outputJson,
@@ -73,44 +74,25 @@ function resolveProjectContext(
 }
 
 function printThreadTable(threads: Thread[]): void {
-  const idWidth = Math.max(4, ...threads.map((thread) => thread.id.length));
-  const statusWidth = Math.max(
-    12,
-    ...threads.map((thread) => {
-      const renderedStatus =
-        thread.archivedAt !== null
-          ? `${statusText(thread.status)} (archived)`
-          : statusText(thread.status);
-      return renderedStatus.length;
-    }),
+  const rows = threads.map((thread) => [
+    thread.id,
+    thread.projectId,
+    thread.archivedAt !== null
+      ? `${statusText(thread.status)} (archived)`
+      : statusText(thread.status),
+  ]);
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const projectWidth = Math.max(7, ...rows.map((row) => row[1].length));
+  const statusWidth = Math.max(12, ...rows.map((row) => row[2].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["ID", "Project", "Status"],
+      colWidths: [idWidth, projectWidth, statusWidth],
+    },
+    rows,
   );
-  const projectWidth = Math.max(
-    7,
-    ...threads.map((thread) => thread.projectId.length),
-  );
-
-  const header = [
-    "ID".padEnd(idWidth),
-    "Project".padEnd(projectWidth),
-    "Status".padEnd(statusWidth),
-  ].join("  ");
 
   console.log("");
-  console.log(header);
-  console.log("-".repeat(header.length));
-
-  for (const thread of threads) {
-    const renderedStatus =
-      thread.archivedAt !== null
-        ? `${statusText(thread.status)} (archived)`
-        : statusText(thread.status);
-    console.log(
-      [
-        thread.id.padEnd(idWidth),
-        thread.projectId.padEnd(projectWidth),
-        renderedStatus.padEnd(statusWidth),
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }

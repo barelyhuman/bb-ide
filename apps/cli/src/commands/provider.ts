@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { AvailableModel } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { createClient, unwrap } from "../client.js";
+import { renderBorderlessTable } from "../table.js";
 import { getErrorMessage, outputJson } from "./helpers.js";
 
 export function registerProviderCommands(program: Command, getUrl: () => string): void {
@@ -55,25 +56,19 @@ export function registerProviderCommands(program: Command, getUrl: () => string)
 }
 
 function printProviderTable(providers: SystemProviderInfo[]): void {
-  const idWidth = Math.max(4, ...providers.map((p) => p.id.length));
-  const nameWidth = Math.max(4, ...providers.map((p) => p.displayName.length));
-
-  const header = [
-    "ID".padEnd(idWidth),
-    "Name".padEnd(nameWidth),
-  ].join("  ");
+  const rows = providers.map((provider) => [provider.id, provider.displayName]);
+  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
+  const nameWidth = Math.max(4, ...rows.map((row) => row[1].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["ID", "Name"],
+      colWidths: [idWidth, nameWidth],
+    },
+    rows,
+  );
 
   console.log("");
-  console.log(header);
-  console.log("-".repeat(header.length));
-  for (const provider of providers) {
-    console.log(
-      [
-        provider.id.padEnd(idWidth),
-        provider.displayName.padEnd(nameWidth),
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }
 
@@ -82,26 +77,24 @@ function printModelTable(models: AvailableModel[], providerId?: string): void {
     console.log(`Models for ${providerId}:`);
   }
 
-  const modelWidth = Math.max(5, ...models.map((m) => m.model.length));
-  const nameWidth = Math.max(4, ...models.map((m) => (m.displayName ?? m.model).length));
-
-  const header = [
-    "Model".padEnd(modelWidth),
-    "Name".padEnd(nameWidth),
-    "Default",
-  ].join("  ");
+  const rows = models.map((model) => [
+    model.model,
+    model.displayName ?? model.model,
+    model.isDefault ? "*" : "",
+  ]);
+  const modelWidth = Math.max(5, ...rows.map((row) => row[0].length));
+  const nameWidth = Math.max(4, ...rows.map((row) => row[1].length));
+  const defaultWidth = Math.max(7, ...rows.map((row) => row[2].length));
+  const table = renderBorderlessTable(
+    {
+      head: ["Model", "Name", "Default"],
+      colWidths: [modelWidth, nameWidth, defaultWidth],
+      trimTrailingWhitespace: true,
+    },
+    rows,
+  );
 
   console.log("");
-  console.log(header);
-  console.log("-".repeat(header.length));
-  for (const model of models) {
-    console.log(
-      [
-        model.model.padEnd(modelWidth),
-        (model.displayName ?? model.model).padEnd(nameWidth),
-        model.isDefault ? "*" : "",
-      ].join("  "),
-    );
-  }
+  console.log(table);
   console.log("");
 }
