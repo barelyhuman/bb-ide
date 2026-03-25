@@ -6,7 +6,7 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 **Phases 1–5 are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors. The host-daemon is built with full test coverage. The sandbox-host stub is on main.
 
-**Next phase: Phase 5b** — Contract fixes and server prerequisites. Adds missing daemon commands (`provider.list`), host status field, title generation utility, command-and-wait pattern, attachment storage, voice transcription proxy. Must land on main before Phase 6.
+**Next phase: Phase 5b** — Contract fixes and pre-server prerequisites. Adds missing daemon command (`provider.list`), host status field + app atoms. Must land on main before Phase 6.
 
 **Then: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
 
@@ -268,9 +268,9 @@ Stub package with `provisionHost` and `SandboxHost` interface. All methods throw
 
 ---
 
-## Phase 5b: Contract fixes and server prerequisites
+## Phase 5b: Contract fixes and pre-server prerequisites
 
-Fix contract gaps, add missing daemon commands, and build server infrastructure that Phase 6 depends on. These must land on main before the server build starts.
+Fix contract gaps and add missing daemon commands. These must land on main before the server build starts. Items that require the server package are documented as Phase 6 implementation requirements, not 5b.
 
 ### 5b-1. Add `provider.list` daemon command
 
@@ -292,59 +292,7 @@ The server needs to return host connection status. Add `status: "connected" | "d
 - `apps/app` — add `hostsAtom` (jotai), `useHosts()` hook, update `useHostDaemon` to expose `localHost` and `isLocalHostConnected`
 - Wire WS invalidation: system `host-connected`/`host-disconnected` changes trigger hosts refetch
 
-### 5b-3. Add `@mariozechner/pi-ai` dependency and title generation utility
-
-The server needs to auto-generate thread titles using an LLM. Use `@mariozechner/pi-ai` (provider-agnostic AI completion) with the existing `codexRunMetadata` template from `@bb/templates`.
-
-**Implementation:**
-- Add `@mariozechner/pi-ai` as a dependency of `apps/server`
-- Add `BB_INFERENCE_MODEL` to `@bb/config/server` (default: `gpt-4o-mini`). Requires `OPENAI_API_KEY` (or appropriate key for the configured model's provider).
-- Create a server utility `generateThreadTitle(input: PromptInput[]): Promise<{ title: string, worktreeName: string }>` that:
-  1. Extracts and cleans text from the prompt input
-  2. Renders the `codexRunMetadata` template from `@bb/templates`
-  3. Calls `complete()` from `@mariozechner/pi-ai` with a cheap/fast model
-  4. Parses the JSON response
-- The server calls this after thread creation with input, updates the thread title asynchronously (fire-and-forget, don't block thread creation)
-- `titleFallback` is derived synchronously from the first prompt text (no LLM needed)
-
-### 5b-4. Design the command-and-wait pattern
-
-Several server routes need to queue a daemon command and wait for the result synchronously (e.g., `GET /environments/:id/status` queues `workspace.status` and returns the result to the HTTP client).
-
-**Implementation:**
-- Create a shared server utility: `queueCommandAndWait(deps, { hostId, command, timeoutMs }): Promise<CommandResult>`
-- Flow: queue command to DB → notify daemon via hub → wait for result (promise resolved when command-result handler fires for that commandId) → return result
-- The `NotificationHub` needs a `waitForCommandResult(commandId, timeoutMs)` method (analogous to existing `waitForCommands`)
-- Default timeouts: 30s for workspace queries, 5min for provisioning
-- On timeout: throw ApiError(504, "command_timeout")
-- Used by: `GET /environments/:id/status`, `GET /environments/:id/diff`, `GET /environments/:id/diff/branches`, `GET /threads/:id/workspace/files`, `GET /threads/:id/workspace/file`, `GET /system/models`, `GET /system/providers`, `POST /threads/:id/stop`, `POST /environments/:id/actions`
-
-### 5b-5. Implement attachment storage utility
-
-The server stores file attachments on the local filesystem (R2/S3 in future). No daemon involvement.
-
-**Implementation:**
-- Create a server utility for attachment storage:
-  - `storeAttachment(projectId, file): Promise<UploadedPromptAttachment>` — saves to `$BB_DATA_DIR/attachments/<projectId>/`, returns metadata
-  - `readAttachment(projectId, path): Promise<Buffer>` — reads file with path traversal protection
-  - `deleteProjectAttachments(projectId): void` — cleanup on project deletion
-- Filename: sanitized original name + timestamp + random suffix
-- Size limits: 25MB general, 10MB for images
-- Path traversal protection: validate resolved path starts with attachments directory
-
-### 5b-6. Implement voice transcription proxy
-
-Simple proxy to OpenAI Whisper API for audio transcription.
-
-**Implementation:**
-- Create a server utility: `transcribeAudio(file, prompt?): Promise<{ text: string }>`
-- Forwards multipart audio to `POST https://api.openai.com/v1/audio/transcriptions` with model `gpt-4o-transcribe`
-- Auth: `OPENAI_API_KEY` from config
-- No format conversion — forward raw audio as-is
-- Size limit: 25MB
-- Error mapping: 401/403 → auth error, 413 → too large, 429 → rate limited
-
-### 5b-7. Remove dead routes from contract
+### 5b-3. Remove dead routes from contract
 
 Already done: `POST /system/shutdown` and `GET /system/providers/:id` removed from contract and callers.
 
@@ -354,9 +302,6 @@ Already done: `POST /system/shutdown` and `GET /system/providers/:id` removed fr
 - [ ] `provider.list` daemon command works and returns provider info
 - [ ] Host schema has `status` field
 - [ ] App hosts atom fetches and updates on WS changes
-- [ ] `@mariozechner/pi-ai` is in server's package.json
-- [ ] Attachment storage writes/reads files correctly with path traversal protection
-- [ ] Voice transcription forwards to OpenAI and returns text
 - [ ] No import of `@bb/agent-runtime` from server
 
 ---
@@ -365,7 +310,23 @@ Already done: `POST /system/shutdown` and `GET /system/providers/:id` removed fr
 
 Framework: **Hono** on `@hono/node-server`. WebSocket via `@hono/node-ws`. Data functions from `@bb/db`.
 
+**Dependencies:** `@mariozechner/pi-ai` for title generation (provider-agnostic LLM calls, don't use OpenAI SDK directly).
+
 **Each sub-phase is a separate commit with both implementation and tests.**
+
+### Server-internal infrastructure (built as part of Phase 6, not standalone)
+
+These are implementation requirements documented here so they're built correctly:
+
+**Command-and-wait pattern.** Routes like `GET /environments/:id/status` need to queue a daemon command and wait for the result synchronously. Build a shared utility `queueCommandAndWait(deps, { hostId, command, timeoutMs })` that: queues command to DB → notifies daemon via hub → waits for result (promise resolved when command-result handler fires) → returns result. The `NotificationHub` needs a `waitForCommandResult(commandId, timeoutMs)` method. Default timeouts: 30s for workspace queries, 5min for provisioning. On timeout: `ApiError(504, "command_timeout")`. Used by: environment status/diff/branches, workspace files, system models/providers, thread stop, environment actions.
+
+**Attachment storage.** Server stores file attachments at `$BB_DATA_DIR/attachments/<projectId>/`. No daemon involvement. Utilities: `storeAttachment(projectId, file)` (sanitized filename + timestamp + random suffix, 25MB limit, 10MB for images), `readAttachment(projectId, path)` (path traversal protection), `deleteProjectAttachments(projectId)` (cleanup on project deletion).
+
+**Voice transcription proxy.** Simple proxy: receive multipart audio → forward to `POST https://api.openai.com/v1/audio/transcriptions` with model `gpt-4o-transcribe`, auth via `OPENAI_API_KEY` → return `{ text }`. No format conversion. 25MB limit.
+
+**Auto-title generation.** After thread creation with input, fire-and-forget: clean prompt text → render `codexRunMetadata` template from `@bb/templates` → call `complete()` from `@mariozechner/pi-ai` with a cheap/fast model (configured via `BB_INFERENCE_MODEL`, default `gpt-4o-mini`) → parse JSON `{ title, worktreeName }` → update thread title. `titleFallback` is derived synchronously from first prompt text (no LLM).
+
+**Timeline transformation.** `GET /threads/:id/timeline` and `/timeline/tool-details` use `toViewMessages()` and `buildTimelineRows()` from `@bb/core-ui`. These are pure functions: read events from DB → transform → return. No daemon involvement.
 
 ### 6a. Server skeleton + middleware
 
@@ -591,10 +552,9 @@ Run persistent-host and ephemeral-host threads concurrently against the same ser
 ```
 Phases 1–5: ✅ Complete
 
-Phase 5b (contract fixes + server prerequisites):
-  5b-1 (provider.list command) + 5b-2 (host status) + 5b-3 (title gen) can be parallel
-  5b-4 (command-and-wait) + 5b-5 (attachments) + 5b-6 (voice transcription) can be parallel
-  All must complete before Phase 6.
+Phase 5b (contract fixes + pre-server prerequisites):
+  5b-1 (provider.list command) + 5b-2 (host status + app atoms) — can be parallel
+  Must complete before Phase 6.
 
 Phase 6 (server, needs Phase 5b):
   6a → 6b → 6c + 6d (parallel) → 6e
