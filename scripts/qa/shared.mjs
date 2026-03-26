@@ -1,5 +1,5 @@
 import { execFile as execFileCallback, spawn } from "node:child_process";
-import { openSync } from "node:fs";
+import { closeSync, openSync } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -12,6 +12,43 @@ export const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
+
+function isNodeError(error) {
+  return error instanceof Error;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'\\''`)}'`;
+}
+
+async function resolveProjectEnvCandidates() {
+  const candidates = new Set([path.join(repoRoot, ".env")]);
+  const gitMetadataPath = path.join(repoRoot, ".git");
+
+  try {
+    const gitMetadata = await fs.stat(gitMetadataPath);
+    if (!gitMetadata.isFile()) {
+      return [...candidates];
+    }
+
+    const gitdirPointer = await fs.readFile(gitMetadataPath, "utf8");
+    const match = /^gitdir:\s*(.+)\s*$/m.exec(gitdirPointer);
+    if (!match?.[1]) {
+      return [...candidates];
+    }
+
+    const worktreeGitDir = path.resolve(repoRoot, match[1]);
+    const commonGitDir = path.dirname(path.dirname(worktreeGitDir));
+    candidates.add(path.join(path.dirname(commonGitDir), ".env"));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [...candidates];
+    }
+    throw error;
+  }
+
+  return [...candidates];
+}
 
 export async function createTestGitRepo(repoDir) {
   await fs.mkdir(repoDir, { recursive: true });
@@ -69,12 +106,12 @@ export async function killProcess(pid) {
   });
 }
 
-export function loadDotEnv() {
-  const envPath = path.join(repoRoot, ".env");
+export async function loadDotEnv() {
   const loaded = {};
 
-  return fs.readFile(envPath, "utf8").then(
-    (content) => {
+  for (const candidate of await resolveProjectEnvCandidates()) {
+    try {
+      const content = await fs.readFile(candidate, "utf8");
       for (const line of content.split("\n")) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith("#")) {
@@ -91,10 +128,22 @@ export function loadDotEnv() {
           loaded[key] = value;
         }
       }
-      return loaded;
-    },
-    () => loaded,
-  );
+      return {
+        loaded,
+        path: candidate,
+      };
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return {
+    loaded,
+    path: null,
+  };
 }
 
 export async function reservePort() {
@@ -125,12 +174,28 @@ export async function runGit(cwd, args) {
 
 export function spawnLoggedProcess(options) {
   const logFd = openSync(options.logPath, "a");
-  const child = spawn(options.command, options.args, {
-    cwd: options.cwd,
-    env: options.env,
-    stdio: ["ignore", logFd, logFd],
-  });
-  return child;
+  try {
+    const child = spawn(options.command, options.args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", logFd, logFd],
+    });
+    child.unref();
+    return child;
+  } finally {
+    closeSync(logFd);
+  }
+}
+
+export function buildDaemonRestartCommand(args) {
+  return [
+    `BB_DATA_DIR=${shellQuote(args.dataDir)}`,
+    `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
+    `BB_SECRET_TOKEN=${shellQuote(args.authToken)}`,
+    `BB_SERVER_URL=${shellQuote(args.serverUrl)}`,
+    `node ${shellQuote(args.entrypoint)}`,
+    `>> ${shellQuote(args.logPath)} 2>&1 &`,
+  ].join(" ");
 }
 
 export async function waitFor(check, options) {

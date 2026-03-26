@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  buildDaemonRestartCommand,
   createProject,
   createTestGitRepo,
   killProcess,
@@ -16,7 +17,7 @@ import {
 const token = "standalone-qa-token";
 
 async function main() {
-  await loadDotEnv();
+  const envFile = await loadDotEnv();
 
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-standalone-"));
   const logsDir = path.join(tmpRoot, "logs");
@@ -24,6 +25,8 @@ async function main() {
   const serverDataDir = path.join(tmpRoot, "server-data");
   const projectRoot = path.join(tmpRoot, "repos", "test-project");
   const statePath = path.join(tmpRoot, "standalone-state.json");
+  const daemonLogPath = path.join(logsDir, "host-daemon.log");
+  const serverLogPath = path.join(logsDir, "server.log");
 
   await fs.mkdir(logsDir, { recursive: true });
   await createTestGitRepo(projectRoot);
@@ -48,7 +51,7 @@ async function main() {
         BB_SERVER_URL: serverUrl,
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
       },
-      logPath: path.join(logsDir, "server.log"),
+      logPath: serverLogPath,
     });
 
     await waitForServerReady(serverUrl);
@@ -64,7 +67,7 @@ async function main() {
         BB_SECRET_TOKEN: token,
         BB_SERVER_URL: serverUrl,
       },
-      logPath: path.join(logsDir, "host-daemon.log"),
+      logPath: daemonLogPath,
     });
 
     const host = await waitForConnectedHost(serverUrl);
@@ -77,15 +80,35 @@ async function main() {
     const cleanupCommand =
       `node ${path.join(repoRoot, "scripts/qa/stop-standalone.mjs")} ` +
       `--state ${statePath}`;
+    const restartDaemonCommand = buildDaemonRestartCommand({
+      authToken: token,
+      daemonPort,
+      dataDir: bbRoot,
+      entrypoint: path.join(repoRoot, "apps/host-daemon/dist/index.js"),
+      logPath: daemonLogPath,
+      serverUrl,
+    });
 
     const state = {
       bbRoot,
+      cliEnv: {
+        BB_HOST_DAEMON_PORT: String(daemonPort),
+        BB_PROJECT_ID: project.id,
+        BB_SERVER_URL: serverUrl,
+      },
       cleanupCommand,
+      daemonLogPath,
+      daemonPort,
       daemonPid: daemonProcess.pid,
+      daemonUrl: `http://127.0.0.1:${daemonPort}`,
+      envFilePath: envFile.path,
       hostId: host.id,
       logsDir,
       projectId: project.id,
       projectRoot,
+      restartDaemonCommand,
+      serverDataDir,
+      serverLogPath,
       serverPid: serverProcess.pid,
       serverUrl,
       statePath,

@@ -140,6 +140,77 @@ describe("createAgentRuntime", () => {
     };
   }
 
+  function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
+    return {
+      id: "started-fake",
+      displayName: "Started Fake",
+      capabilities: {
+        supportsRename: false,
+        supportsServiceTier: false,
+      },
+      process: {
+        command: "node",
+        args: [scriptPath],
+      },
+      buildCommand(command) {
+        switch (command.type) {
+          case "initialize":
+            return {
+              jsonrpc: "2.0",
+              method: "initialize",
+            };
+          case "thread/start":
+            return {
+              jsonrpc: "2.0",
+              method: "thread/start",
+              params: {
+                threadId: command.threadId,
+              },
+            };
+          case "thread/resume":
+          case "turn/start":
+          case "turn/steer":
+          case "thread/stop":
+          case "thread/name/set":
+            return null;
+        }
+      },
+      translateEvent(event) {
+        const message = event as {
+          method?: string;
+          params?: {
+            thread?: {
+              id: string;
+              preview?: string;
+            };
+          };
+        };
+
+        if (message.method !== "thread/started" || !message.params?.thread) {
+          return [];
+        }
+
+        return [
+          {
+            type: "thread/started",
+            threadId: message.params.thread.id,
+          },
+          {
+            type: "thread/identity",
+            threadId: message.params.thread.id,
+            providerThreadId: message.params.thread.id,
+          },
+        ];
+      },
+      decodeToolCallRequest() {
+        return null;
+      },
+      async listModels() {
+        return [];
+      },
+    };
+  }
+
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "bb-runtime-test-"));
     scriptPath = fakeProviderScriptPath;
@@ -773,6 +844,91 @@ describe("createAgentRuntime", () => {
     for (const e of t2Events) {
       expect((e as Record<string, unknown>).providerThreadId).toBe(r2.providerThreadId);
     }
+
+    await runtime.shutdown();
+  });
+
+  it("maps thread/started before identity for multiple threads on one provider", async () => {
+    const events: ThreadEvent[] = [];
+    const startedScriptPath = join(tmpDir, "started-provider.cjs");
+    writeFileSync(
+      startedScriptPath,
+      `
+let nextThreadId = 1;
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    send({
+      jsonrpc: "2.0",
+      method: "thread/started",
+      params: {
+        thread: {
+          id: providerThreadId,
+        },
+      },
+    });
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { providerThreadId },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createStartedEventAdapter(startedScriptPath),
+    });
+
+    await runtime.startThread({
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "started-fake",
+    });
+    await runtime.startThread({
+      threadId: "t2",
+      projectId: "p1",
+      providerId: "started-fake",
+    });
+    await wait(50);
+
+    expect(
+      events.filter(
+        (event) => event.type === "thread/started" && event.threadId === "t1",
+      ),
+    ).toHaveLength(1);
+    expect(
+      events.filter(
+        (event) => event.type === "thread/started" && event.threadId === "t2",
+      ),
+    ).toHaveLength(1);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "thread/started" && event.threadId.startsWith("prov-"),
+      ),
+    ).toBe(false);
 
     await runtime.shutdown();
   });

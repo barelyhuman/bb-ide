@@ -28,6 +28,122 @@ import {
   requireProjectExists,
 } from "./thread-create-helpers.js";
 
+interface CreateThreadInEnvironmentArgs {
+  environment: Environment;
+  request: CreateThreadRequest;
+  threadStatus: "idle" | "provisioning";
+}
+
+interface ReuseUnmanagedEnvironmentArgs {
+  hostId: string;
+  path: string;
+  request: CreateThreadRequest;
+}
+
+function createThreadInEnvironment(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+  args: CreateThreadInEnvironmentArgs,
+) {
+  const thread = createThreadRecord(deps, args.request, args.environment.id);
+  transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
+
+  let eventSequence: number | undefined;
+  if (args.request.input && args.request.input.length > 0) {
+    eventSequence = appendClientTurnEvent(
+      deps,
+      thread.id,
+      args.environment.id,
+      "client/thread/start",
+      {
+        input: args.request.input,
+        execution: buildExecutionOptions(args.request, "client/thread/start"),
+        initiator: args.request.spawnInitiator ?? "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      },
+    );
+  }
+
+  if (args.threadStatus === "provisioning") {
+    appendProvisioningEvent(deps, {
+      threadId: thread.id,
+      environmentId: args.environment.id,
+      status: "started",
+      entries: [
+        {
+          type: "step",
+          key: "environment",
+          text: "environment: Direct",
+          status: "completed",
+        },
+      ],
+    });
+  }
+
+  if (eventSequence !== undefined && args.threadStatus === "idle") {
+    try {
+      startQueuedThreadIfNeeded(deps, {
+        thread,
+        environment: args.environment,
+        eventSequence,
+        request: args.request,
+      });
+    } catch (error) {
+      deleteThread(deps.db, deps.hub, thread.id);
+      throw error;
+    }
+  }
+
+  if (!args.request.title && args.request.input && args.request.input.length > 0) {
+    void generateThreadTitle(deps, {
+      threadId: thread.id,
+      input: args.request.input,
+    });
+  }
+
+  return getThreadSafe(deps, thread.id);
+}
+
+function maybeReuseUnmanagedEnvironment(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+  args: ReuseUnmanagedEnvironmentArgs,
+) {
+  const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
+  if (!existing) {
+    return null;
+  }
+
+  if (existing.projectId !== args.request.projectId) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Workspace path is already attached to a different project",
+    );
+  }
+
+  if (existing.status === "ready") {
+    return createThreadInEnvironment(deps, {
+      environment: existing,
+      request: args.request,
+      threadStatus: "idle",
+    });
+  }
+
+  if (existing.status === "provisioning") {
+    return createThreadInEnvironment(deps, {
+      environment: existing,
+      request: args.request,
+      threadStatus: "provisioning",
+    });
+  }
+
+  throw new ApiError(
+    409,
+    "invalid_request",
+    `Workspace path is already attached to an environment in ${existing.status} state`,
+  );
+}
+
 function startQueuedThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
@@ -84,43 +200,11 @@ export async function createThreadFromRequest(
         "Environment belongs to a different project",
       );
     }
-
-    const thread = createThreadRecord(deps, request, environment.id);
-    transitionThreadStatus(deps.db, deps.hub, thread.id, "idle");
-    if (request.input && request.input.length > 0) {
-      const eventSequence = appendClientTurnEvent(
-        deps,
-        thread.id,
-        environment.id,
-        "client/thread/start",
-        {
-        input: request.input,
-        execution: buildExecutionOptions(request, "client/thread/start"),
-        initiator: request.spawnInitiator ?? "user",
-        requestMethod: "thread/start",
-        source: "spawn",
-        },
-      );
-      try {
-        startQueuedThreadIfNeeded(deps, {
-          thread,
-          environment,
-          eventSequence,
-          request,
-        });
-      } catch (error) {
-        deleteThread(deps.db, deps.hub, thread.id);
-        throw error;
-      }
-    }
-
-    if (!request.title && request.input && request.input.length > 0) {
-      void generateThreadTitle(deps, {
-        threadId: thread.id,
-        input: request.input,
-      });
-    }
-    return getEnvironment(deps.db, environment.id) ? getThreadSafe(deps, thread.id) : thread;
+    return createThreadInEnvironment(deps, {
+      environment,
+      request,
+      threadStatus: "idle",
+    });
   }
 
   const hostId = request.environment.hostId;
@@ -133,6 +217,16 @@ export async function createThreadFromRequest(
 
   if (workspace.type === "unmanaged" && !unmanagedPath) {
     throw new ApiError(409, "invalid_request", "Workspace path is required");
+  }
+  if (workspace.type === "unmanaged" && unmanagedPath) {
+    const reusedThread = maybeReuseUnmanagedEnvironment(deps, {
+      hostId,
+      path: unmanagedPath,
+      request,
+    });
+    if (reusedThread) {
+      return reusedThread;
+    }
   }
   if (
     (workspace.type === "managed-worktree" || workspace.type === "managed-clone") &&

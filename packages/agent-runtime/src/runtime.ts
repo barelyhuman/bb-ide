@@ -186,19 +186,22 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       sourceThreadId?: string,
     ): void {
       for (const event of events) {
-        if (event.type === "thread/identity" && event.providerThreadId) {
-          // For bridge providers, event.threadId is our bb threadId.
-          // For codex, event.threadId is the codex thread ID, and we need
-          // to find the bb threadId that owns this process.
-          if (proc.threadIds.has(event.threadId)) {
-            threadToProviderThread.set(event.threadId, event.providerThreadId);
-          } else if (proc.pendingIdentity.length > 0) {
-            // Codex: assign to the next thread in the FIFO queue
-            const bbThreadId = proc.pendingIdentity.shift()!;
-            threadToProviderThread.set(bbThreadId, event.providerThreadId);
-          }
+        if (event.type !== "thread/identity" || !event.providerThreadId) {
+          continue;
         }
 
+        if (proc.threadIds.has(event.threadId)) {
+          threadToProviderThread.set(event.threadId, event.providerThreadId);
+          continue;
+        }
+
+        if (proc.pendingIdentity.length > 0) {
+          const bbThreadId = proc.pendingIdentity.shift()!;
+          threadToProviderThread.set(bbThreadId, event.providerThreadId);
+        }
+      }
+
+      for (const event of events) {
         // Stamp every event with the bb threadId and providerThreadId.
         // The adapter may set threadId to "" or the provider's internal ID.
         // The runtime resolves the correct bb threadId using its mappings.

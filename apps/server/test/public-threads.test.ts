@@ -1,5 +1,11 @@
 import { eq } from "drizzle-orm";
-import { getDraft, getEnvironment, getThread, threads } from "@bb/db";
+import {
+  getDraft,
+  getEnvironment,
+  getThread,
+  hostDaemonCommands,
+  threads,
+} from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -142,6 +148,122 @@ describe("public thread routes", () => {
       });
       expect(queued.command).toHaveProperty("targetPath");
       expect(queued.command).toHaveProperty("branchName");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reuses the ready unmanaged environment for the default source path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/shared-unmanaged-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        status: "ready",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Reuse the existing direct workspace" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response) as {
+        environmentId: string;
+        id: string;
+        status: string;
+      };
+      expect(createdThread).toMatchObject({
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.environmentId === environment.id &&
+          command.threadId === createdThread.id,
+      );
+      expect(queuedStart.command).toMatchObject({
+        workspacePath: source.path,
+      });
+
+      const provisionCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.provision"))
+        .all();
+      expect(provisionCommands).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("attaches new threads to an in-flight unmanaged environment without reprovisioning", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/inflight-unmanaged-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        status: "provisioning",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Wait for the existing provisioning flow" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      await expect(readJson(response)).resolves.toMatchObject({
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+
+      const queuedCommands = harness.db.select().from(hostDaemonCommands).all();
+      expect(queuedCommands).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
