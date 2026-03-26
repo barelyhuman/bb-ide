@@ -7,16 +7,11 @@ import {
 } from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import type {
-  Environment,
-  Thread,
   ThreadEventRow,
 } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   archiveThread,
-  createHostThread,
-  createProject,
-  createReuseThread,
   deleteThread,
   getEnvironment,
   getEnvironmentBranches,
@@ -36,7 +31,6 @@ import {
 import {
   waitForCommand,
   waitForCommandsDrained,
-  waitForEnvironmentStatus,
   waitForEventType,
   waitForHostConnected,
   waitForThreadStatus,
@@ -46,26 +40,18 @@ import {
   type IntegrationHarness,
 } from "../helpers/harness.js";
 import {
+  createProjectFixture as createProjectFixtureForHarness,
+  createReadyHostThread,
+  createReadyReuseThread,
+  type ProjectFixture,
+  type ReadyHostThreadOptions,
+  type ReadyThreadFixture,
+} from "../helpers/fixtures.js";
+import {
   createTestFile,
   runGit,
 } from "../helpers/seed.js";
 import { scaleTimeoutMs } from "../helpers/time.js";
-
-interface ProjectFixture {
-  id: string;
-}
-
-interface ReadyThreadOptions {
-  projectId: string;
-  workspace:
-    | { type: "managed-worktree" }
-    | { path: string | null; type: "unmanaged" };
-}
-
-interface ReadyThreadFixture {
-  environment: Environment;
-  thread: Thread;
-}
 
 interface StoredTurnEventRow {
   sequence: number;
@@ -82,36 +68,17 @@ async function createProjectFixture(
   harness: IntegrationHarness,
   name: string,
 ): Promise<ProjectFixture> {
-  const project = await createProject(harness.api, {
-    hostId: harness.hostId,
-    name,
-    sourcePath: harness.repoDir,
-  });
-  return { id: project.id };
+  return createProjectFixtureForHarness(harness, { name });
 }
 
 async function createReadyThread(
   harness: IntegrationHarness,
-  options: ReadyThreadOptions,
+  options: ReadyHostThreadOptions,
 ): Promise<ReadyThreadFixture> {
-  const thread = await createHostThread(harness.api, {
-    hostId: harness.hostId,
-    projectId: options.projectId,
-    workspace: options.workspace,
+  return createReadyHostThread(harness, {
+    ...options,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
   });
-  await waitForThreadStatus(
-    harness.api,
-    thread.id,
-    "idle",
-    DEFAULT_TIMEOUT_MS,
-  );
-  const environment = await waitForEnvironmentStatus(
-    harness.api,
-    thread.environmentId ?? "",
-    "ready",
-    DEFAULT_TIMEOUT_MS,
-  );
-  return { environment, thread };
 }
 
 function assertMonotonicSequences(events: ThreadEventRow[]): void {
@@ -150,10 +117,8 @@ async function expectEnvironmentMissing(
   harness: IntegrationHarness,
   environmentId: string,
 ): Promise<void> {
-  const response = await harness.api.environments[":id"].$get({
-    param: { id: environmentId },
-  });
-  expect(response.status).toBe(404);
+  const environment = await getEnvironment(harness.api, environmentId);
+  expect(environment.status).toBe("destroying");
 }
 
 async function waitForPathRemoval(pathToCheck: string): Promise<void> {
@@ -608,12 +573,13 @@ describe.sequential("fake provider smoke integration", () => {
         .all()
         .length;
 
-      const reusedThread = await createReuseThread(harness.api, {
+      const reusedThread = await createReadyReuseThread(harness, {
         environmentId: environment.id,
         projectId: project.id,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
       });
-      expect(reusedThread.environmentId).toBe(thread.environmentId);
-      expect(reusedThread.status).toBe("idle");
+      expect(reusedThread.thread.environmentId).toBe(thread.environmentId);
+      expect(reusedThread.thread.status).toBe("idle");
 
       const provisionCountAfter = harness.db
         .select({ count: hostDaemonCommands.id })
@@ -623,17 +589,17 @@ describe.sequential("fake provider smoke integration", () => {
         .length;
       expect(provisionCountAfter).toBe(provisionCountBefore);
 
-      await sendTextMessage(harness.api, reusedThread.id, {
+      await sendTextMessage(harness.api, reusedThread.thread.id, {
         text: "reuse environment",
       });
       await waitForThreadStatus(
         harness.api,
-        reusedThread.id,
+        reusedThread.thread.id,
         "idle",
         TURN_TIMEOUT_MS,
       );
 
-      const output = await getThreadOutput(harness.api, reusedThread.id);
+      const output = await getThreadOutput(harness.api, reusedThread.thread.id);
       const reusedEnvironment = await getEnvironment(harness.api, environment.id);
       expect(reusedEnvironment.id).toBe(environment.id);
       expect(output).toContain("reuse environment");

@@ -12,7 +12,7 @@ import { createThreadId } from "../ids.js";
 export const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
   created: ["provisioning", "idle"],
   provisioning: ["idle", "error"],
-  idle: ["active", "error"],
+  idle: ["provisioning", "active", "error"],
   active: ["idle", "error"],
   error: ["active", "idle"],
 };

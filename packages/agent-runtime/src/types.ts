@@ -107,5 +107,7 @@ export interface AgentRuntime {
 
   listModels(args: { providerId: string }): Promise<AvailableModel[]>;
 
+  listRunningProviders(): string[];
+
   shutdown(): Promise<void>;
 }

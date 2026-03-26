@@ -25,12 +25,19 @@ function slugify(value: string): string {
   return cleaned.length > 0 ? cleaned : "thread";
 }
 
+export function buildManagedBranchNameFromSeed(
+  seed: string,
+  threadId: string,
+): string {
+  return `bb/${slugify(seed)}-${threadId.slice(0, 8)}`;
+}
+
 export function buildManagedBranchName(
   request: CreateThreadRequest,
   threadId: string,
 ): string {
   const seed = request.title ?? deriveTitleFallback(request.input) ?? threadId;
-  return `bb/${slugify(seed)}-${threadId.slice(0, 8)}`;
+  return buildManagedBranchNameFromSeed(seed, threadId);
 }
 
 export function buildManagedTargetPath(

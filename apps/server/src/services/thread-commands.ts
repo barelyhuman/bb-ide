@@ -11,6 +11,7 @@ import type {
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import { getLastProviderThreadId } from "./thread-events.js";
 
 export function buildExecutionOptions(
   request:
@@ -64,6 +65,52 @@ export function queueThreadStartCommand(
       ...(args.input ? { input: args.input } : {}),
       options: args.execution,
     }),
+  });
+}
+
+export function queueStartOrRunCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    environment: {
+      hostId: string;
+      id: string;
+      path: string | null;
+    };
+    eventSequence: number;
+    execution: ThreadExecutionOptions;
+    input: PromptInput[];
+    projectId: string;
+    providerId: string;
+    thread: Thread;
+  },
+): void {
+  const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
+  if (providerThreadId) {
+    queueTurnRunCommand(deps, {
+      thread: args.thread,
+      input: args.input,
+      eventSequence: args.eventSequence,
+      execution: args.execution,
+      environment: {
+        id: args.environment.id,
+        hostId: args.environment.hostId,
+      },
+    });
+    return;
+  }
+
+  queueThreadStartCommand(deps, {
+    thread: args.thread,
+    environment: {
+      id: args.environment.id,
+      hostId: args.environment.hostId,
+      path: args.environment.path,
+    },
+    input: args.input,
+    eventSequence: args.eventSequence,
+    execution: args.execution,
+    projectId: args.projectId,
+    providerId: args.providerId,
   });
 }
 

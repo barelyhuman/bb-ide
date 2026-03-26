@@ -12,6 +12,7 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
+    fileParallelism: false,
     hookTimeout: Math.ceil(60_000 * timeoutScale),
     include: ["fake/**/*.test.ts"],
     name: "@bb/integration-tests",

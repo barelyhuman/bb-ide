@@ -568,6 +568,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return proc.adapter.listModels();
     },
 
+    listRunningProviders() {
+      return [...processes.keys()];
+    },
+
     async shutdown() {
       shuttingDown = true;
       const shutdownPromises: Promise<void>[] = [];
