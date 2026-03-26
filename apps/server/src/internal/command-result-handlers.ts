@@ -2,9 +2,9 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   deleteEnvironment,
   events,
+  getThread,
   hostDaemonCursors,
   hostDaemonCommands,
-  getThread,
   threads,
   transitionThreadStatus,
   updateEnvironment,
@@ -163,13 +163,8 @@ function handleProvisionCommandResult(
         continue;
       }
 
-      const refreshedThread = getThread(deps.db, thread.id);
-      if (!refreshedThread) {
-        continue;
-      }
-
       queueThreadStartCommand(deps, {
-        thread: refreshedThread,
+        thread,
         environment: {
           id: command.environmentId,
           hostId: commandRow.hostId,
@@ -177,8 +172,8 @@ function handleProvisionCommandResult(
         },
         input: parsedStartEvent.data.input,
         execution: parsedStartEvent.data.execution,
-        projectId: refreshedThread.projectId,
-        providerId: refreshedThread.providerId,
+        projectId: thread.projectId,
+        providerId: thread.providerId,
       });
       try {
         transitionThreadStatus(deps.db, deps.hub, thread.id, "active");

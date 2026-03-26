@@ -82,35 +82,43 @@ function toStoredEvent(envelope: HostDaemonEventEnvelope) {
 }
 
 function applyEventEffects(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
   events: HostDaemonEventEnvelope[],
 ): void {
   for (const entry of events) {
-    const event = entry.event;
-    if (event.type === "turn/started") {
-      const thread = getThread(deps.db, event.threadId);
-      if (!thread) {
-        continue;
-      }
-      try {
+    try {
+      const event = entry.event;
+      if (event.type === "turn/started") {
+        const thread = getThread(deps.db, event.threadId);
+        if (!thread) {
+          continue;
+        }
         if (thread.status === "idle" || thread.status === "error") {
           transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
         }
-      } catch {
-        // Ignore invalid transitions caused by concurrent lifecycle changes.
+        continue;
       }
-      continue;
-    }
 
-    if (event.type === "turn/completed") {
-      applyTurnCompletedEvent(deps, event);
-      continue;
-    }
+      if (event.type === "turn/completed") {
+        applyTurnCompletedEvent(deps, event);
+        continue;
+      }
 
-    if (event.type === "thread/name/updated") {
-      updateThread(deps.db, deps.hub, event.threadId, {
-        title: event.threadName,
-      });
+      if (event.type === "thread/name/updated") {
+        updateThread(deps.db, deps.hub, event.threadId, {
+          title: event.threadName,
+        });
+      }
+    } catch (error) {
+      deps.logger.error(
+        {
+          err: error,
+          eventType: entry.event.type,
+          sequence: entry.sequence,
+          threadId: entry.threadId,
+        },
+        "Failed to apply event side effects",
+      );
     }
   }
 }

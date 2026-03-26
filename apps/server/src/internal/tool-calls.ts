@@ -10,7 +10,7 @@ import { ApiError } from "../errors.js";
 import { parseJsonBody, parseValue } from "../services/validation.js";
 import { appendThreadEvent } from "../services/thread-events.js";
 import { createThreadFromRequest } from "../services/thread-create.js";
-import { requireThread } from "../services/entity-lookup.js";
+import { requireThreadEnvironment } from "../services/entity-lookup.js";
 import { requireActiveSession } from "./session-state.js";
 
 export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
@@ -19,7 +19,18 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
       context,
       hostDaemonToolCallRequestSchema,
     );
-    requireActiveSession(deps.db, payload.sessionId);
+    const session = requireActiveSession(deps.db, payload.sessionId);
+    const { environment, thread: targetThread } = requireThreadEnvironment(
+      deps.db,
+      payload.threadId,
+    );
+    if (environment.hostId !== session.hostId) {
+      throw new ApiError(
+        403,
+        "invalid_request",
+        "Thread does not belong to the session host",
+      );
+    }
 
     if (payload.tool === "message_user") {
       const args = parseValue(payload.arguments ?? {}, messageUserToolArgumentsSchema);
@@ -48,7 +59,7 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
       });
     }
 
-    const parentThread = requireThread(deps.db, payload.threadId);
+    const parentThread = targetThread;
     const args = parseValue(payload.arguments ?? {}, spawnThreadToolArgumentsSchema);
     const defaultSource = getDefaultProjectSource(deps.db, parentThread.projectId);
 
@@ -56,7 +67,7 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(409, "invalid_request", "Project has no default source");
     }
 
-    const thread = await createThreadFromRequest(deps, {
+    const childThread = await createThreadFromRequest(deps, {
       projectId: parentThread.projectId,
       providerId: args.providerId ?? parentThread.providerId,
       type: args.type ?? "standard",
@@ -81,7 +92,7 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
 
     return context.json({
       success: true,
-      contentItems: [{ type: "inputText", text: `Spawned thread ${thread.id}` }],
+      contentItems: [{ type: "inputText", text: `Spawned thread ${childThread.id}` }],
     });
   });
 }

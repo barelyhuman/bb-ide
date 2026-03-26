@@ -81,6 +81,16 @@ describe("NotificationHub", () => {
     expect(socket2.messages).toHaveLength(0);
   });
 
+  it("treats daemon notifications for unknown hosts as a no-op", () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+
+    hub.registerDaemon("session-1", "host-1", socket);
+
+    expect(() => hub.notifyDaemon("nonexistent-session-id")).not.toThrow();
+    expect(socket.messages).toHaveLength(0);
+  });
+
   it("notifies all clients subscribed to the same thread", () => {
     const hub = new NotificationHub();
     const socket1 = createMockSocket();

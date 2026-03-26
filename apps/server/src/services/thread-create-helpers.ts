@@ -30,7 +30,7 @@ export function buildManagedBranchName(
   threadId: string,
 ): string {
   const seed = request.title ?? deriveTitleFallback(request.input) ?? threadId;
-  return `bb/${slugify(seed)}`;
+  return `bb/${slugify(seed)}-${threadId.slice(0, 8)}`;
 }
 
 export function buildManagedTargetPath(

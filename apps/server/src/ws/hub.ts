@@ -207,7 +207,7 @@ export class NotificationHub implements DbNotifier {
   }
 
   notifyCommand(hostId: string): void {
-    this.notifyDaemon(hostId, { type: "commands-available" });
+    this.notifyDaemon(hostId);
 
     const waiters = this.commandWaiters.get(hostId);
     if (!waiters) {
@@ -282,9 +282,9 @@ export class NotificationHub implements DbNotifier {
     }
   }
 
-  private notifyDaemon(
+  notifyDaemon(
     hostId: string,
-    message: { type: "commands-available" },
+    message: { type: "commands-available" } = { type: "commands-available" },
   ): void {
     const sessionId = this.daemonSessionIdsByHost.get(hostId);
     if (!sessionId) {

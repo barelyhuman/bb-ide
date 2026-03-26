@@ -1,4 +1,4 @@
-import { getDefaultProjectSource } from "@bb/db";
+import { archiveThread, getDefaultProjectSource } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
@@ -102,16 +102,19 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);
-        const autoArchived = Boolean(payload.options?.autoArchiveOnSuccess && primaryThread);
-        if (autoArchived && primaryThread) {
-          await maybeCleanupEnvironment(deps, primaryThread.environmentId);
+        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess && primaryThread);
+        const archivedThread = autoArchiveRequested && primaryThread
+          ? archiveThread(deps.db, deps.hub, primaryThread.id)
+          : null;
+        if (archivedThread) {
+          await maybeCleanupEnvironment(deps, archivedThread.environmentId);
         }
         return context.json({
           ok: true,
           action: "commit",
           commitCreated: true,
           message: `Created commit ${result.commitSha}`,
-          autoArchived,
+          autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
           commitSubject: result.commitSubject,
         });
@@ -134,16 +137,19 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);
-        const autoArchived = Boolean(payload.options?.autoArchiveOnSuccess && primaryThread);
-        if (autoArchived && primaryThread) {
-          await maybeCleanupEnvironment(deps, primaryThread.environmentId);
+        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess && primaryThread);
+        const archivedThread = autoArchiveRequested && primaryThread
+          ? archiveThread(deps.db, deps.hub, primaryThread.id)
+          : null;
+        if (archivedThread) {
+          await maybeCleanupEnvironment(deps, archivedThread.environmentId);
         }
         return context.json({
           ok: true,
           action: "squash_merge",
           merged: result.merged,
           message: result.message ?? "Squash merge completed",
-          autoArchived,
+          autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
         });
       }

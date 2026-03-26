@@ -1,6 +1,7 @@
 import {
   createEnvironment,
   createThread,
+  deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
   transitionThreadStatus,
@@ -91,11 +92,16 @@ export async function createThreadFromRequest(
         requestMethod: "thread/start",
         source: "spawn",
       });
-      startQueuedThreadIfNeeded(deps, {
-        thread,
-        environment,
-        request,
-      });
+      try {
+        startQueuedThreadIfNeeded(deps, {
+          thread,
+          environment,
+          request,
+        });
+      } catch (error) {
+        deleteThread(deps.db, deps.hub, thread.id);
+        throw error;
+      }
     }
 
     if (!request.title && request.input && request.input.length > 0) {
@@ -206,6 +212,7 @@ export async function createThreadFromRequest(
   }
   return getThreadSafe(deps, thread.id);
 }
+
 export async function ensureProjectSourceEnvironment(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
