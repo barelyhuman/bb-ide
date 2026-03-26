@@ -567,6 +567,49 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  tests/integration:
+    dependencies:
+      '@bb/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
+      '@bb/core-ui':
+        specifier: workspace:*
+        version: link:../../packages/core-ui
+      '@bb/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@bb/host-daemon-contract':
+        specifier: workspace:*
+        version: link:../../packages/host-daemon-contract
+      '@bb/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@bb/server-contract':
+        specifier: workspace:*
+        version: link:../../packages/server-contract
+      '@hono/node-server':
+        specifier: ^1.19.11
+        version: 1.19.11(hono@4.11.9)
+      drizzle-orm:
+        specifier: ^0.38.4
+        version: 0.38.4(@types/better-sqlite3@7.6.13)(@types/react@19.2.13)(better-sqlite3@11.10.0)(react@19.2.4)
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.1.1(@types/node@22.19.10)(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
+
 packages:
 
   '@anthropic-ai/claude-agent-sdk@0.2.76':

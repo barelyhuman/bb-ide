@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
-const workspaceRoots = ["apps", "packages"] as const;
+const workspaceRoots = ["apps", "packages", "tests"] as const;
 
 function discoverVitestProjects(): string[] {
   return workspaceRoots
