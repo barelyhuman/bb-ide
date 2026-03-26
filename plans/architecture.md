@@ -40,7 +40,7 @@ When a user creates a thread, two orthogonal decisions are made:
 
 | Workspace strategy | What happens | Managed? | Who provisions |
 |---|---|---|---|
-| **Existing path** | Point at any directory. No provisioning. | No | **Server** — creates env record with `status: ready` |
+| **Existing path** | Point at any directory. Daemon validates path and discovers properties. | No | **Host-daemon** — via `environment.provision` command with mode `unmanaged` |
 | **Worktree** | Create git worktree + branch, run setup script | Yes | **Host-daemon** — via `environment.provision` command |
 | **Clone** | Clone repo, create branch, run setup script | Yes | **Host-daemon** — via `environment.provision` command |
 
@@ -255,11 +255,11 @@ Server queues commands in DB (host-scoped), sends `{ type: "commands-available" 
 - `environment.destroy` — no-op if path doesn't exist
 - All others are naturally idempotent (sending input, querying status)
 
-20 command types:
+21 command types:
 ```
 // Thread/provider
 thread.start, thread.resume, turn.run, turn.steer, thread.stop, thread.rename,
-provider.list_models
+provider.list, provider.list_models
 
 // Environment lifecycle
 environment.provision, environment.destroy

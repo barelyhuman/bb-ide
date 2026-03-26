@@ -25,7 +25,7 @@ Phases 1–6 are complete. The server is built with services layer architecture,
 | `@bb/domain` | **Done** — entity types, event types, Zod schemas, change kinds (thread/project/environment/system). |
 | `@bb/db` | **Done** — schema, migrations, data functions (one per entity), `DbNotifier` with `notifyThread`/`notifyProject`/`notifyEnvironment`/`notifyCommand`/`notifySystem`. 59 tests passing. |
 | `@bb/core-ui` | **Done** — view transforms, `formatEnvironmentDisplay(env, isLocalHost)`, timeline formatting. |
-| `@bb/host-daemon-contract` | **Done** — 20 commands (17 original + `workspace.list_files`, `workspace.read_file`, `workspace.list_branches`), session protocol, local API contract. Unknown command types handled gracefully (per-command parsing, error reported to server). |
+| `@bb/host-daemon-contract` | **Done** — 21 commands (17 original + `workspace.list_files`, `workspace.read_file`, `workspace.list_branches`, `provider.list`), session protocol, local API contract. Unknown command types handled gracefully (per-command parsing, error reported to server). |
 | `@bb/server-contract` | **Done** — public API routes, discriminated `EnvironmentArgs` union for thread creation, WS protocol. |
 | `@bb/workspace` | **Done** — Workspace class, `provisionWorkspace() → IWorkspace`, promote/demote, tested with real git. |
 | `@bb/agent-runtime` | Done — provider adapters (codex, claude-code, pi), registry, runtime. Leave as-is. |
@@ -34,8 +34,8 @@ Phases 1–6 are complete. The server is built with services layer architecture,
 | `@bb/tsconfig` | Done — untouched |
 | `apps/app` | **Done** — cut over to new contracts, zero type errors, 116 tests passing. Environment selector with Direct/Worktree options. `useHostDaemon` hook for daemon operations. |
 | `apps/cli` | **Done** — cut over to new contracts, zero type errors, 67 tests passing. Fetches hostId from daemon, supports env reuse without daemon. |
-| `apps/server` | **Not yet a package** — directory placeholder only. Needs full package setup (package.json, tsconfig, src/index.ts). Built in Phase 6. |
-| `apps/host-daemon` | **Done** — daemon skeleton, session management, command routing (20 types, domain-split handlers), event buffering, runtime manager, local API. Uses `p-retry`, `partysocket/ws`, `p-debounce`. 65 tests. |
+| `apps/server` | **Done** — Hono on `@hono/node-server`, services layer architecture, authorization hardening, command-and-wait pattern, WS notification hub, sweeps. 128 tests. |
+| `apps/host-daemon` | **Done** — daemon skeleton, session management, command routing (21 types, domain-split handlers), event buffering, runtime manager, local API. Uses `p-retry`, `partysocket/ws`, `p-debounce`. 65 tests. |
 | `@bb/sandbox-host` | **Stub** — interface only (`provisionHost`, `SandboxHost`), all methods throw "Not implemented". Real implementation in Phase 8. |
 
 ### Key schema notes
@@ -636,7 +636,7 @@ interface CreateHarnessOptions {
 - In-memory SQLite — fast, no file contention.
 - Real HTTP, real WS, real child processes for providers.
 - Harnesses can run in parallel (unique ports, unique dirs).
-- The `adapterFactory` option allows real providers for 7f tests.
+- The `adapterFactory` option allows real providers for 7e tests.
 
 **Assertion helpers:**
 
@@ -1154,13 +1154,11 @@ alias bb="node apps/cli/dist/index.js"
    bb thread wait <threadId> --status idle
    ✓ Interrupted thread recovers
 
-4. Thread summary for diagnostics
-   node scripts/qa/thread-summary.mjs <threadId>
-   ✓ Diagnostic output is useful and accurate
-
-5. Failure bundle capture
-   node scripts/qa/capture-failure-bundle.mjs <threadId> --scenario recovery-test
-   ✓ Bundle contains thread state, events, sessions, logs
+4. Inspect thread state for diagnostics
+   bb thread show <threadId>
+   bb thread log <threadId>
+   bb thread output <threadId>
+   ✓ Thread state, events, and output are inspectable via CLI
 ```
 
 **Runbook: Provider-specific** (per provider, 10 minutes each)
