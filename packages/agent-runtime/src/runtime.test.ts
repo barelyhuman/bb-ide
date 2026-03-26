@@ -86,6 +86,32 @@ describe("createAgentRuntime", () => {
     await runtime.shutdown();
   });
 
+  it("runs the initial turn when startThread includes input", async () => {
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (e) => events.push(e),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createFakeAdapter(scriptPath),
+    });
+
+    await runtime.startThread({
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      input: [{ type: "text", text: "hello from start" }],
+    });
+    await wait(100);
+
+    expect(events.some((e) => e.type === "thread/identity")).toBe(true);
+    expect(events.some((e) => e.type === "turn/started")).toBe(true);
+    expect(events.some((e) => e.type === "turn/completed")).toBe(true);
+    await runtime.shutdown();
+  });
+
   it("resumes a thread", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({

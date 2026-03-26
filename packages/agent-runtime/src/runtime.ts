@@ -410,7 +410,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "thread/start",
         threadId,
-        input,
         options: toAdapterOptions(execOpts, envVars),
         dynamicTools,
       });
@@ -449,6 +448,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           `Provider "${pid}" did not return a providerThreadId for thread "${threadId}" within 5 seconds`,
         );
       }
+
+      if (input && input.length > 0) {
+        await runtime.runTurn({
+          threadId,
+          input,
+          options: execOpts,
+        });
+      }
+
       return { providerThreadId: resolved };
     },
 

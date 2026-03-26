@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createFakeAdapter } from "@bb/agent-runtime/test";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
@@ -20,6 +21,10 @@ import { waitForHostConnected } from "./assertions.js";
 import { createTestGitRepo } from "./seed.js";
 
 export const TEST_AUTH_TOKEN = "test-secret-token";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+let loadedProjectEnvPath: string | null | undefined;
 
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 type InternalHostDaemonClient = ReturnType<typeof createHostDaemonClient>;
@@ -94,6 +99,62 @@ function resolveAdapterFactory(
     return options.adapterFactory;
   }
   return () => createFakeAdapter();
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error;
+}
+
+async function resolveProjectEnvCandidates(): Promise<string[]> {
+  const candidates = new Set<string>([path.join(repoRoot, ".env")]);
+  const gitMetadataPath = path.join(repoRoot, ".git");
+
+  try {
+    const gitMetadata = await fs.stat(gitMetadataPath);
+    if (!gitMetadata.isFile()) {
+      return [...candidates];
+    }
+
+    const gitdirPointer = await fs.readFile(gitMetadataPath, "utf8");
+    const match = /^gitdir:\s*(.+)\s*$/m.exec(gitdirPointer);
+    if (!match?.[1]) {
+      return [...candidates];
+    }
+
+    const worktreeGitDir = path.resolve(repoRoot, match[1]);
+    const commonGitDir = path.dirname(path.dirname(worktreeGitDir));
+    candidates.add(path.join(path.dirname(commonGitDir), ".env"));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return [...candidates];
+    }
+    throw error;
+  }
+
+  return [...candidates];
+}
+
+export async function loadProjectEnvFile(): Promise<string | null> {
+  if (loadedProjectEnvPath !== undefined) {
+    return loadedProjectEnvPath;
+  }
+
+  for (const candidate of await resolveProjectEnvCandidates()) {
+    try {
+      await fs.access(candidate);
+      process.loadEnvFile(candidate);
+      loadedProjectEnvPath = candidate;
+      return candidate;
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  loadedProjectEnvPath = null;
+  return loadedProjectEnvPath;
 }
 
 async function startIntegrationServer(
@@ -197,6 +258,7 @@ async function startHarnessDaemon(
 export async function createIntegrationHarness(
   options: CreateHarnessOptions = {},
 ): Promise<IntegrationHarness> {
+  await loadProjectEnvFile();
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-integration-"));
   const reposRoot = path.join(tmpRoot, "repos");
   const daemonDataDir = path.join(tmpRoot, "daemon-data");

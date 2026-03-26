@@ -2,6 +2,7 @@ import type {
   Environment,
   Host,
   Thread,
+  ThreadExecutionOptions,
   ThreadEventRow,
   ThreadGitDiffResponse,
 } from "@bb/domain";
@@ -32,6 +33,7 @@ import {
 } from "@bb/server-contract";
 
 export interface CreateHostThreadOptions {
+  execution?: ThreadExecutionRequestOptions;
   hostId: string;
   input?: CreateThreadRequest["input"];
   projectId: string;
@@ -44,6 +46,7 @@ export interface CreateHostThreadOptions {
 }
 
 export interface CreateReuseThreadOptions {
+  execution?: ThreadExecutionRequestOptions;
   environmentId: string;
   input?: CreateThreadRequest["input"];
   projectId: string;
@@ -51,7 +54,13 @@ export interface CreateReuseThreadOptions {
   title?: string;
 }
 
+export type ThreadExecutionRequestOptions = Pick<
+  ThreadExecutionOptions,
+  "model" | "reasoningLevel" | "sandboxMode" | "serviceTier"
+>;
+
 export interface SendTextMessageOptions {
+  execution?: ThreadExecutionRequestOptions;
   mode?: "auto" | "start" | "steer";
   text: string;
 }
@@ -106,6 +115,7 @@ export async function createHostThread(
         workspace: options.workspace,
       },
       input: options.input,
+      ...(options.execution ?? {}),
       projectId: options.projectId,
       providerId: options.providerId ?? "fake",
       title: options.title,
@@ -126,6 +136,7 @@ export async function createReuseThread(
         environmentId: options.environmentId,
       },
       input: options.input,
+      ...(options.execution ?? {}),
       projectId: options.projectId,
       providerId: options.providerId ?? "fake",
       title: options.title,
@@ -263,6 +274,7 @@ export async function sendTextMessage(
   const request: SendMessageRequest = {
     input: [{ type: "text", text: options.text }],
     mode: options.mode,
+    ...(options.execution ?? {}),
   };
   const response = await api.threads[":id"].send.$post({
     param: { id: threadId },
