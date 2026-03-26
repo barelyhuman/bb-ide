@@ -41,15 +41,20 @@ export interface RunningTestServer {
 export interface IntegrationHarness {
   api: PublicApiClient;
   cleanup(): Promise<void>;
+  crashDaemon(): Promise<void>;
   daemon: HostDaemon;
   daemonApp: HostDaemonApp;
+  daemonDataDir: string;
   db: DbConnection;
   hostId: string;
   hub: NotificationHub;
   internal: InternalHostDaemonClient;
   repoDir: string;
+  restartDaemon(reason?: string): Promise<void>;
   server: RunningTestServer;
   serverUrl: string;
+  shutdownDaemon(reason?: string): Promise<void>;
+  startDaemon(): Promise<void>;
 }
 
 export interface CreateHarnessOptions {
@@ -60,6 +65,7 @@ interface HarnessDaemonResources {
   daemon: HostDaemon;
   daemonApp: HostDaemonApp;
   hostId: string;
+  releaseLock: () => Promise<void>;
 }
 
 interface ListeningAddress {
@@ -180,6 +186,7 @@ async function startHarnessDaemon(
       daemon: daemonApp.daemon,
       daemonApp,
       hostId: identity.hostId,
+      releaseLock,
     };
   } catch (error) {
     await releaseLock().catch(() => undefined);
@@ -192,6 +199,7 @@ export async function createIntegrationHarness(
 ): Promise<IntegrationHarness> {
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-integration-"));
   const reposRoot = path.join(tmpRoot, "repos");
+  const daemonDataDir = path.join(tmpRoot, "daemon-data");
   const repoDir = await createTestGitRepo({
     repoDir: path.join(reposRoot, "test-project"),
   });
@@ -199,6 +207,58 @@ export async function createIntegrationHarness(
   let server: RunningTestServer | null = null;
   let daemonResources: HarnessDaemonResources | null = null;
   let cleanedUp = false;
+  let harness: IntegrationHarness | null = null;
+
+  async function startDaemon(): Promise<void> {
+    if (!server) {
+      throw new Error("Server has not been started");
+    }
+    if (!harness) {
+      throw new Error("Harness has not been initialized");
+    }
+    if (daemonResources) {
+      return;
+    }
+
+    daemonResources = await startHarnessDaemon(
+      daemonDataDir,
+      server.baseUrl,
+      options,
+    );
+    harness.daemon = daemonResources.daemon;
+    harness.daemonApp = daemonResources.daemonApp;
+    harness.hostId = daemonResources.hostId;
+    await waitForHostConnected(harness.api);
+  }
+
+  async function shutdownDaemon(reason = "integration-shutdown"): Promise<void> {
+    if (!daemonResources) {
+      return;
+    }
+    const currentResources = daemonResources;
+    daemonResources = null;
+    await currentResources.daemon.shutdown(reason);
+  }
+
+  async function restartDaemon(reason = "integration-restart"): Promise<void> {
+    await shutdownDaemon(reason);
+    await startDaemon();
+  }
+
+  async function crashDaemon(): Promise<void> {
+    if (!daemonResources) {
+      return;
+    }
+    const currentResources = daemonResources;
+    daemonResources = null;
+    await currentResources.daemonApp.connection.shutdown().catch(() => undefined);
+    currentResources.daemonApp.eventBuffer.dispose();
+    await currentResources.daemonApp.localApi?.close().catch(() => undefined);
+    await currentResources.daemonApp.runtimeManager.shutdownAll().catch(
+      () => undefined,
+    );
+    await currentResources.releaseLock().catch(() => undefined);
+  }
 
   async function cleanup(): Promise<void> {
     if (cleanedUp) {
@@ -206,37 +266,41 @@ export async function createIntegrationHarness(
     }
     cleanedUp = true;
 
-    await daemonResources?.daemon.shutdown("integration-cleanup").catch(
-      () => undefined,
-    );
+    await shutdownDaemon("integration-cleanup").catch(() => undefined);
     await server?.close().catch(() => undefined);
     await fs.rm(tmpRoot, { recursive: true, force: true });
   }
 
   try {
     server = await startIntegrationServer(tmpRoot);
+    const api = createPublicApiClient(server.baseUrl);
     daemonResources = await startHarnessDaemon(
-      path.join(tmpRoot, "daemon-data"),
+      daemonDataDir,
       server.baseUrl,
       options,
     );
-
-    const api = createPublicApiClient(server.baseUrl);
     await waitForHostConnected(api);
 
-    return {
+    harness = {
       api,
       cleanup,
+      crashDaemon,
       daemon: daemonResources.daemon,
       daemonApp: daemonResources.daemonApp,
+      daemonDataDir,
       db: server.db,
       hostId: daemonResources.hostId,
       hub: server.hub,
       internal: createHostDaemonClient(server.baseUrl, TEST_AUTH_TOKEN),
       repoDir,
+      restartDaemon,
       server,
       serverUrl: server.baseUrl,
+      shutdownDaemon,
+      startDaemon,
     };
+
+    return harness;
   } catch (error) {
     await cleanup();
     throw error;

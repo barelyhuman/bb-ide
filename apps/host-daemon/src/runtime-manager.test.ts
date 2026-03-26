@@ -161,6 +161,33 @@ describe("RuntimeManager", () => {
     expect(manager.listActiveThreads()).toEqual([]);
   });
 
+  it("remembers known threads after a turn completes so follow-ups reuse the runtime", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadInactive("env-1", "thread-1");
+
+    expect(manager.hasThread("env-1", "thread-1")).toBe(true);
+    expect(manager.listActiveThreads()).toEqual([]);
+
+    manager.markThreadActive("env-1", "thread-1");
+    expect(manager.listActiveThreads()).toEqual([
+      {
+        environmentId: "env-1",
+        threadId: "thread-1",
+        providerThreadId: "provider-1",
+      },
+    ]);
+  });
+
   it("shuts down all tracked environments", async () => {
     const workspaceA = createFakeWorkspace("/tmp/env-a");
     const workspaceB = createFakeWorkspace("/tmp/env-b");

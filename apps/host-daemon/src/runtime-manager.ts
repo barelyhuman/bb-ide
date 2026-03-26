@@ -17,6 +17,7 @@ export interface RuntimeEntry {
   workspace: IWorkspace;
   path: string;
   activeThreads: Map<string, { providerThreadId?: string }>;
+  knownThreads: Map<string, { providerThreadId?: string }>;
 }
 
 export interface EnsureEnvironmentArgs {
@@ -65,7 +66,7 @@ export class RuntimeManager {
   }
 
   hasThread(environmentId: string, threadId: string): boolean {
-    return this.entries.get(environmentId)?.activeThreads.has(threadId) ?? false;
+    return this.entries.get(environmentId)?.knownThreads.has(threadId) ?? false;
   }
 
   markThreadActive(
@@ -78,8 +79,12 @@ export class RuntimeManager {
       return;
     }
 
-    const current = entry.activeThreads.get(threadId) ?? {};
+    const current =
+      entry.knownThreads.get(threadId) ?? entry.activeThreads.get(threadId) ?? {};
     entry.activeThreads.set(threadId, {
+      providerThreadId: providerThreadId ?? current.providerThreadId,
+    });
+    entry.knownThreads.set(threadId, {
       providerThreadId: providerThreadId ?? current.providerThreadId,
     });
   }
@@ -180,6 +185,8 @@ export class RuntimeManager {
             event.threadId,
             event.providerThreadId,
           );
+        } else if (event.type === "turn/completed") {
+          this.markThreadInactive(args.environmentId, event.threadId);
         }
         this.options.onEvent?.({
           environmentId: args.environmentId,
@@ -202,6 +209,7 @@ export class RuntimeManager {
       workspace,
       path: workspace.path,
       activeThreads: new Map(),
+      knownThreads: new Map(),
     };
   }
 }
