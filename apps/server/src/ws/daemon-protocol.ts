@@ -3,25 +3,11 @@ import { closeSession, heartbeatSession, hostDaemonSessions } from "@bb/db";
 import { hostDaemonDaemonWsMessageSchema } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "../internal/session-state.js";
+import { decodeSocketPayload } from "./decode-payload.js";
 
 interface DaemonSocket {
   close(code?: number, reason?: string): void;
   send(data: string): void;
-}
-
-function decodeSocketPayload(raw: unknown): string {
-  if (typeof raw === "string") {
-    return raw;
-  }
-  if (raw instanceof ArrayBuffer) {
-    return Buffer.from(raw).toString("utf8");
-  }
-  if (ArrayBuffer.isView(raw)) {
-    return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString(
-      "utf8",
-    );
-  }
-  return String(raw);
 }
 
 export function validateDaemonWebSocket(

@@ -6,6 +6,7 @@ import type {
   ThreadChangeKind,
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
+import { COMMAND_RESULT_CACHE_TTL_MS } from "../constants.js";
 
 interface HubSocket {
   close(code?: number, reason?: string): void;
@@ -165,7 +166,7 @@ export class NotificationHub implements DbNotifier {
     this.commandResultCache.set(commandId, result);
     setTimeout(() => {
       this.commandResultCache.delete(commandId);
-    }, 5 * 60_000);
+    }, COMMAND_RESULT_CACHE_TTL_MS);
 
     const waiters = this.commandResultWaiters.get(commandId);
     if (!waiters) {

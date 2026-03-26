@@ -5,7 +5,6 @@ import {
   getThread,
   insertEvents,
   threads,
-  transitionThreadStatus,
   updateThread,
 } from "@bb/db";
 import {
@@ -15,6 +14,7 @@ import {
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
+import { tryTransition } from "../services/thread-transitions.js";
 import { parseJsonBody } from "../services/validation.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
 import { requireActiveSession } from "./session-state.js";
@@ -94,7 +94,7 @@ function applyEventEffects(
           continue;
         }
         if (thread.status === "idle" || thread.status === "error") {
-          transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
+          tryTransition(deps.db, deps.hub, thread.id, "active");
         }
         continue;
       }

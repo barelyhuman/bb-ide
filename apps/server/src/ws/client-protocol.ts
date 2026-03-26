@@ -1,24 +1,10 @@
 import type { ClientMessage } from "@bb/domain";
+import { decodeSocketPayload } from "./decode-payload.js";
 import type { NotificationHub } from "./hub.js";
 
 interface ClientSocket {
   close(code?: number, reason?: string): void;
   send(data: string): void;
-}
-
-function decodeSocketPayload(raw: unknown): string {
-  if (typeof raw === "string") {
-    return raw;
-  }
-  if (raw instanceof ArrayBuffer) {
-    return Buffer.from(raw).toString("utf8");
-  }
-  if (ArrayBuffer.isView(raw)) {
-    return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString(
-      "utf8",
-    );
-  }
-  return String(raw);
 }
 
 function isClientMessage(value: unknown): value is ClientMessage {

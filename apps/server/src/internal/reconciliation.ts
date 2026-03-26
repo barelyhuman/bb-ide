@@ -1,7 +1,8 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import { environments, threads, transitionThreadStatus } from "@bb/db";
+import { environments, threads } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
+import { tryTransition } from "../services/thread-transitions.js";
 
 export function reconcileSessionThreads(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -25,11 +26,7 @@ export function reconcileSessionThreads(
       .all();
 
     for (const thread of erroredThreads) {
-      try {
-        transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
-      } catch {
-        // If the transition is already satisfied or invalid, leave the record as-is.
-      }
+      tryTransition(deps.db, deps.hub, thread.id, "active");
     }
   }
 
@@ -49,11 +46,7 @@ export function reconcileSessionThreads(
     .all();
 
   for (const thread of activeButMissing) {
-    try {
-      transitionThreadStatus(deps.db, deps.hub, thread.id, "idle");
-    } catch {
-      // Ignore invalid transitions caused by concurrent lifecycle updates.
-    }
+    tryTransition(deps.db, deps.hub, thread.id, "idle");
   }
 
   if (activeThreadIds.length > 0) {
@@ -71,11 +64,7 @@ export function reconcileSessionThreads(
       .all();
 
     for (const thread of idleButActive) {
-      try {
-        transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
-      } catch {
-        // Ignore invalid transitions caused by concurrent lifecycle updates.
-      }
+      tryTransition(deps.db, deps.hub, thread.id, "active");
     }
   }
 }

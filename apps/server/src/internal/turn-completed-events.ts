@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { events, getThread, transitionThreadStatus } from "@bb/db";
 import { providerEventSchema } from "@bb/domain";
 import type { AppDeps } from "../types.js";
+import { decodeEventRow } from "../services/thread-data.js";
 
 export function applyTurnCompletedEvent(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -38,10 +39,14 @@ export function handleTurnCompletedEvents(
 
   const rows = deps.db
     .select({
+      createdAt: events.createdAt,
       data: events.data,
+      id: events.id,
       providerThreadId: events.providerThreadId,
+      sequence: events.sequence,
       threadId: events.threadId,
       turnId: events.turnId,
+      type: events.type,
     })
     .from(events)
     .where(
@@ -62,10 +67,11 @@ export function handleTurnCompletedEvents(
     if (!row.providerThreadId || !row.turnId) {
       continue;
     }
+    const decodedRow = decodeEventRow(row);
     const payload = providerEventSchema.parse({
-      ...JSON.parse(row.data),
-      type: "turn/completed",
-      threadId: row.threadId,
+      ...decodedRow.data,
+      type: decodedRow.type,
+      threadId: decodedRow.threadId,
       providerThreadId: row.providerThreadId,
       turnId: row.turnId,
     });

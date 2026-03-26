@@ -14,6 +14,7 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
+import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { encodeDraftContent, toQueuedMessage } from "../../services/drafts.js";
 import { maybeCleanupEnvironment } from "../../services/environment-cleanup.js";
@@ -173,7 +174,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     await queueCommandAndWait(deps, {
       hostId: environment.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "thread.stop",
         environmentId: environment.id,
@@ -195,7 +196,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
         await queueCommandAndWait(deps, {
           hostId: environment.hostId,
-          timeoutMs: 30_000,
+          timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.status",
             environmentId: environment.id,
@@ -219,7 +220,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (thread.status === "active") {
       await queueCommandAndWait(deps, {
         hostId: environment.hostId,
-        timeoutMs: 30_000,
+        timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "thread.stop",
           environmentId: environment.id,

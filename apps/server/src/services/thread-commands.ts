@@ -10,6 +10,7 @@ import type {
 } from "@bb/server-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { requireConnectedHostSession } from "./entity-lookup.js";
 
 export function buildExecutionOptions(
   request:
@@ -24,17 +25,6 @@ export function buildExecutionOptions(
     ...(request.sandboxMode ? { sandboxMode: request.sandboxMode } : {}),
     source,
   };
-}
-
-function requireConnectedSession(
-  deps: Pick<AppDeps, "db">,
-  hostId: string,
-) {
-  const session = getActiveSession(deps.db, hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
-  }
-  return session;
 }
 
 export function queueThreadStartCommand(
@@ -55,7 +45,7 @@ export function queueThreadStartCommand(
   if (!args.environment.path) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
-  const session = requireConnectedSession(deps, args.environment.hostId);
+  const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
@@ -85,7 +75,7 @@ export function queueTurnRunCommand(
     thread: Thread;
   },
 ): void {
-  const session = requireConnectedSession(deps, args.environment.hostId);
+  const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
@@ -116,7 +106,7 @@ export function queueTurnSteerCommand(
     thread: Thread;
   },
 ): void {
-  const session = requireConnectedSession(deps, args.environment.hostId);
+  const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
@@ -166,7 +156,7 @@ export function queueThreadStopCommand(
     threadId: string;
   },
 ): void {
-  const session = requireConnectedSession(deps, args.environment.hostId);
+  const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,

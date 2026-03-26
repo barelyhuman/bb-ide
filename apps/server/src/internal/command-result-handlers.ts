@@ -6,7 +6,6 @@ import {
   hostDaemonCursors,
   hostDaemonCommands,
   threads,
-  transitionThreadStatus,
   updateEnvironment,
 } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
@@ -21,6 +20,7 @@ import {
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
+import { tryTransition } from "../services/thread-transitions.js";
 
 function parseCommand(
   commandRow: typeof hostDaemonCommands.$inferSelect,
@@ -128,12 +128,8 @@ function handleProvisionCommandResult(
         ],
       });
 
-      try {
-        if (thread.status === "created" || thread.status === "provisioning") {
-          transitionThreadStatus(deps.db, deps.hub, thread.id, "idle");
-        }
-      } catch {
-        // Ignore already-transitioned threads.
+      if (thread.status === "created" || thread.status === "provisioning") {
+        tryTransition(deps.db, deps.hub, thread.id, "idle");
       }
 
       const startEvent = deps.db
@@ -175,11 +171,7 @@ function handleProvisionCommandResult(
         projectId: thread.projectId,
         providerId: thread.providerId,
       });
-      try {
-        transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
-      } catch {
-        // Ignore already-transitioned threads.
-      }
+      tryTransition(deps.db, deps.hub, thread.id, "active");
     }
 
     return;
@@ -210,14 +202,10 @@ function handleProvisionCommandResult(
       message: `Thread provisioning failed for project ${thread.projectId}`,
       detail: report.errorMessage,
     });
-    try {
-      if (thread.status === "created") {
-        transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
-      }
-      transitionThreadStatus(deps.db, deps.hub, thread.id, "error");
-    } catch {
-      // Ignore invalid transitions caused by concurrent updates.
+    if (thread.status === "created" && !tryTransition(deps.db, deps.hub, thread.id, "provisioning")) {
+      continue;
     }
+    tryTransition(deps.db, deps.hub, thread.id, "error");
   }
 }
 
@@ -253,11 +241,7 @@ function handleThreadStopResult(
     return;
   }
   if (thread.status === "active") {
-    try {
-      transitionThreadStatus(deps.db, deps.hub, thread.id, "idle");
-    } catch {
-      // Ignore invalid transitions caused by concurrent provider events.
-    }
+    tryTransition(deps.db, deps.hub, thread.id, "idle");
   }
   appendThreadInterruptedEvent(deps, {
     threadId: thread.id,

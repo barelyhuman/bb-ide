@@ -16,7 +16,7 @@ interface StoredEventRow {
   type: string;
 }
 
-function decodeEventRow(row: StoredEventRow): ThreadEventRow {
+export function decodeEventRow(row: StoredEventRow): ThreadEventRow {
   return {
     id: row.id,
     threadId: row.threadId,

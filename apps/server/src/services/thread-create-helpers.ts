@@ -1,7 +1,6 @@
 import path from "node:path";
 import {
   createThread,
-  getActiveSession,
   getDefaultProjectSource,
   getProject,
   getThread,
@@ -11,6 +10,7 @@ import type { ProjectSource } from "@bb/domain";
 import type { CreateThreadRequest } from "@bb/server-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { requireConnectedHostSession } from "./entity-lookup.js";
 import { deriveTitleFallback } from "./title-generation.js";
 
 export interface ResolvedProjectSource extends ProjectSource {
@@ -52,17 +52,6 @@ export function requireProjectExists(
   return project;
 }
 
-export function requireConnectedHost(
-  deps: Pick<AppDeps, "db">,
-  hostId: string,
-) {
-  const session = getActiveSession(deps.db, hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
-  }
-  return session;
-}
-
 export function requireDefaultSource(
   deps: Pick<AppDeps, "db">,
   projectId: string,
@@ -99,7 +88,7 @@ export function queueEnvironmentProvision(
     workspaceProvisionType: "managed-clone" | "managed-worktree" | "unmanaged";
   },
 ): void {
-  const session = requireConnectedHost(deps, args.hostId);
+  const session = requireConnectedHostSession(deps, args.hostId);
   const payload = {
     type: "environment.provision" as const,
     environmentId: args.environmentId,

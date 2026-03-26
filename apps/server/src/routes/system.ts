@@ -1,6 +1,7 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
+import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireEnvironment, requireDefaultConnectedHostId } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { transcribeVoiceInput } from "../services/voice-transcription.js";
@@ -24,7 +25,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     const hostId = resolveHostId(deps, context.req.query());
     const rawResult = await queueCommandAndWait(deps, {
       hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: { type: "provider.list" },
     });
     return context.json(
@@ -38,7 +39,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     if (providerId) {
       const rawResult = await queueCommandAndWait(deps, {
         hostId,
-        timeoutMs: 30_000,
+        timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "provider.list_models",
           providerId,
@@ -55,7 +56,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     const providers = hostDaemonCommandResultSchemaByType["provider.list"].parse(
       await queueCommandAndWait(deps, {
         hostId,
-        timeoutMs: 30_000,
+        timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "provider.list" },
       }),
     ).providers;
@@ -64,7 +65,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
         hostDaemonCommandResultSchemaByType["provider.list_models"].parse(
           await queueCommandAndWait(deps, {
             hostId,
-            timeoutMs: 30_000,
+            timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
               type: "provider.list_models",
               providerId: provider.id,

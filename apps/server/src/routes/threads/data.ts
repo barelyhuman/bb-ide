@@ -1,6 +1,7 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
+import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import {
   requireThread,
   requireThreadEnvironment,
@@ -61,7 +62,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.list_files",
         environmentId: environment.id,
@@ -77,7 +78,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.read_file",
         environmentId: environment.id,

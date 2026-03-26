@@ -13,6 +13,8 @@ import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "./command-wait.js";
+import { COMMAND_TIMEOUT_MS } from "../constants.js";
+import { requireConnectedHostSession } from "./entity-lookup.js";
 import { appendClientTurnEvent, appendProvisioningEvent } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
@@ -22,7 +24,6 @@ import {
   createThreadRecord,
   getThreadSafe,
   queueEnvironmentProvision,
-  requireConnectedHost,
   requireDefaultSource,
   requireProjectExists,
 } from "./thread-create-helpers.js";
@@ -114,7 +115,7 @@ export async function createThreadFromRequest(
   }
 
   const hostId = request.environment.hostId;
-  requireConnectedHost(deps, hostId);
+  requireConnectedHostSession(deps, hostId);
   const workspace = request.environment.workspace;
   const defaultSource = requireDefaultSource(deps, request.projectId);
   const unmanagedPath = workspace.type === "unmanaged"
@@ -236,7 +237,7 @@ export async function ensureProjectSourceEnvironment(
 
   const rawResult = await queueCommandAndWait(deps, {
     hostId: args.hostId,
-    timeoutMs: 30_000,
+    timeoutMs: COMMAND_TIMEOUT_MS,
     command: {
       type: "environment.provision",
       environmentId: environment.id,

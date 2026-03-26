@@ -22,6 +22,7 @@ import {
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
+import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { deleteProjectAttachments, readAttachment, storeAttachment } from "../services/attachments.js";
 import { requireHostWithStatus, requireProject } from "../services/entity-lookup.js";
@@ -164,7 +165,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     });
     const rawResult = await queueCommandAndWait(deps, {
       hostId: source.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.list_files",
         environmentId: environment.id,

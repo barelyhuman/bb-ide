@@ -2,6 +2,7 @@ import { archiveThread, getDefaultProjectSource } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
+import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { maybeCleanupEnvironment } from "../services/environment-cleanup.js";
 import {
@@ -35,7 +36,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.status",
         environmentId: environment.id,
@@ -52,7 +53,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.diff",
         environmentId: environment.id,
@@ -71,7 +72,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
-      timeoutMs: 30_000,
+      timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.list_branches",
         environmentId: environment.id,
@@ -91,7 +92,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       case "commit": {
         const rawResult = await queueCommandAndWait(deps, {
           hostId: environment.hostId,
-          timeoutMs: 30_000,
+          timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.commit",
             environmentId: environment.id,
@@ -125,7 +126,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         }
         const rawResult = await queueCommandAndWait(deps, {
           hostId: environment.hostId,
-          timeoutMs: 30_000,
+          timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.squash_merge",
             environmentId: environment.id,
@@ -160,7 +161,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         }
         await queueCommandAndWait(deps, {
           hostId: environment.hostId,
-          timeoutMs: 30_000,
+          timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.promote",
             environmentId: environment.id,
@@ -187,7 +188,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         }
         await queueCommandAndWait(deps, {
           hostId: environment.hostId,
-          timeoutMs: 30_000,
+          timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.demote",
             environmentId: environment.id,

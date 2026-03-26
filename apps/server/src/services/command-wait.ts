@@ -1,13 +1,11 @@
-import {
-  getActiveSession,
-  queueCommand,
-} from "@bb/db";
+import { queueCommand } from "@bb/db";
 import type {
   HostDaemonCommand,
   HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { requireConnectedHostSession } from "./entity-lookup.js";
 
 export interface CompletedCommandResult {
   commandId: string;
@@ -38,10 +36,7 @@ export async function queueCommandAndWait<TType extends HostDaemonCommandType>(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueCommandAndWaitArgs<TType>,
 ): Promise<unknown> {
-  const session = getActiveSession(deps.db, args.hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
-  }
+  const session = requireConnectedHostSession(deps, args.hostId);
 
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,

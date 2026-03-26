@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import {
   environments,
+  getActiveSession,
   getEnvironment,
   getHost,
   getProject,
@@ -75,6 +76,17 @@ export function requireHostWithStatus(db: DbConnection, hostId: string): Host {
     throw new ApiError(404, "host_not_found", "Host not found");
   }
   return toHostRecord(host, toHostStatus(db, host.id));
+}
+
+export function requireConnectedHostSession(
+  deps: Pick<{ db: DbConnection }, "db">,
+  hostId: string,
+) {
+  const session = getActiveSession(deps.db, hostId);
+  if (!session || session.leaseExpiresAt <= Date.now()) {
+    throw new ApiError(502, "host_disconnected", "Host is not connected");
+  }
+  return session;
 }
 
 export function requireProject(db: DbConnection, projectId: string): Project {

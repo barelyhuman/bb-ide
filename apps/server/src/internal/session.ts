@@ -2,12 +2,10 @@ import { getHighWaterMarks, getActiveSession, openSession, upsertHost } from "@b
 import { hostDaemonSessionOpenRequestSchema } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
+import { HEARTBEAT_INTERVAL_MS, LEASE_TIMEOUT_MS } from "../constants.js";
 import { listHostThreadIds } from "../services/entity-lookup.js";
 import { parseJsonBody } from "../services/validation.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
-
-const HEARTBEAT_INTERVAL_MS = 5_000;
-const LEASE_TIMEOUT_MS = 30_000;
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   app.post("/session/open", async (context) => {
