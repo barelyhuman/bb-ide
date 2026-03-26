@@ -174,6 +174,7 @@ describe("server integration", () => {
           result: {
             path: "/tmp/project-root",
             branchName: "bb/test",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -253,6 +254,7 @@ describe("server integration", () => {
           result: {
             path: "/tmp/event-project",
             branchName: "bb/event",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -369,6 +371,7 @@ describe("server integration", () => {
           result: {
             path: "/tmp/lifecycle-project",
             branchName: "bb/lifecycle",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,

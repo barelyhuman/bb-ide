@@ -68,6 +68,7 @@ describe("internal command result idempotency", () => {
       const firstResponse = await reportQueuedCommandSuccess(harness, queued, {
         path: "/tmp/idempotent-provision",
         branchName: "bb/idempotent",
+        defaultBranch: "main",
         isGitRepo: true,
         isWorktree: false,
         ranSetup: false,
@@ -89,6 +90,7 @@ describe("internal command result idempotency", () => {
       const secondResponse = await reportQueuedCommandSuccess(harness, queued, {
         path: "/tmp/idempotent-provision",
         branchName: "bb/idempotent",
+        defaultBranch: "main",
         isGitRepo: true,
         isWorktree: false,
         ranSetup: false,

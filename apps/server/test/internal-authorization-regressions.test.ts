@@ -78,6 +78,7 @@ describe("internal authorization regressions", () => {
           result: {
             path: "/tmp/cross-host-command",
             branchName: "bb/cross-host",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,

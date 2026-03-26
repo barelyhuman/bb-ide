@@ -1,15 +1,7 @@
 // Phase 7c: Fake provider multi-thread scenarios (plans/rebuild.md)
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  count,
-  eq,
-} from "drizzle-orm";
 import { createFakeAdapter } from "@bb/agent-runtime/test";
-import {
-  hostDaemonCommands,
-  threads as threadRows,
-} from "@bb/db";
 import type { ThreadEventRow } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -33,7 +25,14 @@ import {
   createReadyHostThread,
   createReadyReuseThread,
 } from "../helpers/fixtures.js";
-import { createIntegrationHarness } from "../helpers/harness.js";
+import {
+  createIntegrationHarness,
+  withHarness,
+} from "../helpers/harness.js";
+import {
+  countQueuedCommandsByType,
+  countStoredThreads,
+} from "../helpers/queries.js";
 import {
   createTestFile,
   createTestGitRepo,
@@ -49,6 +48,7 @@ const TURN_TIMEOUT_MS = scaleTimeoutMs(15_000);
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(5_000);
 // Reprovision waits: managed cleanup plus a fresh start can take longer than a normal turn.
 const REPROVISION_TIMEOUT_MS = scaleTimeoutMs(25_000);
+// Fake provider inputs accept `delay:<ms>` prefixes to keep sibling turns overlapping.
 const CONCURRENT_DELAY_TEXT = "delay:800";
 
 function countTurnEvents(
@@ -67,10 +67,8 @@ function assertEventsBelongToThread(
 }
 
 describe.sequential("fake provider multi-thread integration", () => {
-  it("runs two threads in the same environment without cross-contaminating events", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("runs two threads in the same environment without cross-contaminating events", () =>
+    withHarness(async (harness) => {
       const project = await createProjectFixture(harness, {
         name: "Shared Environment Same Provider",
       });
@@ -127,15 +125,10 @@ describe.sequential("fake provider multi-thread integration", () => {
       const outputB = await getThreadOutput(harness.api, threadB.thread.id);
       expect(outputA).toContain("shared-a");
       expect(outputB).toContain("shared-b");
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("supports interleaved follow-ups for two sibling threads in one environment", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("supports sequential follow-ups for two sibling threads in one environment", () =>
+    withHarness(async (harness) => {
       const project = await createProjectFixture(harness, {
         name: "Shared Environment Follow Ups",
       });
@@ -183,15 +176,10 @@ describe.sequential("fake provider multi-thread integration", () => {
       expect(countTurnEvents(eventsA, "turn/completed")).toBe(2);
       expect(countTurnEvents(eventsB, "turn/started")).toBe(2);
       expect(countTurnEvents(eventsB, "turn/completed")).toBe(2);
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("keeps a shared environment alive while one sibling remains unarchived", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("keeps a shared environment alive while one sibling remains unarchived", () =>
+    withHarness(async (harness) => {
       const project = await createProjectFixture(harness, {
         name: "Archive One Sibling",
       });
@@ -228,27 +216,17 @@ describe.sequential("fake provider multi-thread integration", () => {
       });
       await waitForThreadStatus(harness.api, threadB.thread.id, "idle", TURN_TIMEOUT_MS);
 
-      const destroyCommandCount = harness.db
-        .select({ count: count() })
-        .from(hostDaemonCommands)
-        .where(eq(hostDaemonCommands.type, "environment.destroy"))
-        .get();
-      expect(destroyCommandCount?.count ?? 0).toBe(0);
+      expect(countQueuedCommandsByType(harness.db, "environment.destroy")).toBe(0);
 
       const environment = await getEnvironment(harness.api, threadA.environment.id);
       expect(environment.status).toBe("ready");
       expect(await getThreadOutput(harness.api, threadB.thread.id)).toContain(
         "thread-b still works",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("destroys a managed shared environment and reprovisions it after unarchive", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("destroys a managed shared environment and reprovisions it after unarchive", () =>
+    withHarness(async (harness) => {
       const project = await createProjectFixture(harness, {
         name: "Archive All Managed Siblings",
       });
@@ -304,15 +282,10 @@ describe.sequential("fake provider multi-thread integration", () => {
       expect(await getThreadOutput(harness.api, threadA.thread.id)).toContain(
         "reprovision after archive",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("isolates concurrent work across separate environments", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("isolates concurrent work across separate environments", () =>
+    withHarness(async (harness) => {
       const secondRepoDir = await createTestGitRepo({
         repoDir: path.join(path.dirname(harness.repoDir), "second-project"),
       });
@@ -393,74 +366,85 @@ describe.sequential("fake provider multi-thread integration", () => {
           cwd: secondRepoDir,
         })).trim(),
       ).toBe("env-b commit");
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
   it("keeps provider processes isolated for different providers in one environment", async () => {
-    const harness = await createIntegrationHarness({
-      adapterFactory: (providerId) =>
-        createFakeAdapter({
-          displayName: providerId,
-          id: providerId,
-          modelId: `${providerId}-model`,
-          modelName: `${providerId} model`,
-        }),
-    });
+    await withHarness(
+      {
+        adapterFactory: (providerId) =>
+          createFakeAdapter({
+            displayName: providerId,
+            id: providerId,
+            modelId: `${providerId}-model`,
+            modelName: `${providerId} model`,
+          }),
+      },
+      async (harness) => {
+        const project = await createProjectFixture(harness, {
+          name: "Shared Environment Different Providers",
+        });
+        const threadA = await createReadyHostThread(harness, {
+          projectId: project.id,
+          providerId: "fake-alpha",
+          timeoutMs: DEFAULT_TIMEOUT_MS,
+          workspace: {
+            type: "unmanaged",
+            path: harness.repoDir,
+          },
+        });
+        const threadB = await createReadyReuseThread(harness, {
+          environmentId: threadA.environment.id,
+          projectId: project.id,
+          providerId: "fake-beta",
+          timeoutMs: DEFAULT_TIMEOUT_MS,
+        });
 
-    try {
-      const project = await createProjectFixture(harness, {
-        name: "Shared Environment Different Providers",
-      });
-      const threadA = await createReadyHostThread(harness, {
-        projectId: project.id,
-        providerId: "fake-alpha",
-        timeoutMs: DEFAULT_TIMEOUT_MS,
-        workspace: {
-          type: "unmanaged",
-          path: harness.repoDir,
-        },
-      });
-      const threadB = await createReadyReuseThread(harness, {
-        environmentId: threadA.environment.id,
-        projectId: project.id,
-        providerId: "fake-beta",
-        timeoutMs: DEFAULT_TIMEOUT_MS,
-      });
+        await Promise.all([
+          sendTextMessage(harness.api, threadA.thread.id, {
+            text: `${CONCURRENT_DELAY_TEXT} alpha`,
+          }),
+          sendTextMessage(harness.api, threadB.thread.id, {
+            text: `${CONCURRENT_DELAY_TEXT} beta`,
+          }),
+        ]);
+        await Promise.all([
+          waitForThreadStatus(
+            harness.api,
+            threadA.thread.id,
+            "idle",
+            TURN_TIMEOUT_MS,
+          ),
+          waitForThreadStatus(
+            harness.api,
+            threadB.thread.id,
+            "idle",
+            TURN_TIMEOUT_MS,
+          ),
+        ]);
 
-      await Promise.all([
-        sendTextMessage(harness.api, threadA.thread.id, {
-          text: `${CONCURRENT_DELAY_TEXT} alpha`,
-        }),
-        sendTextMessage(harness.api, threadB.thread.id, {
-          text: `${CONCURRENT_DELAY_TEXT} beta`,
-        }),
-      ]);
-      await Promise.all([
-        waitForThreadStatus(harness.api, threadA.thread.id, "idle", TURN_TIMEOUT_MS),
-        waitForThreadStatus(harness.api, threadB.thread.id, "idle", TURN_TIMEOUT_MS),
-      ]);
+        const runtimeEntry = harness.daemonApp.runtimeManager.get(
+          threadA.environment.id,
+        );
+        const runningProviders =
+          runtimeEntry?.runtime.listRunningProviders().sort() ?? [];
+        expect(runningProviders).toEqual(["fake-alpha", "fake-beta"]);
 
-      const runtimeEntry = harness.daemonApp.runtimeManager.get(threadA.environment.id);
-      const runningProviders = runtimeEntry?.runtime.listRunningProviders().sort() ?? [];
-      expect(runningProviders).toEqual(["fake-alpha", "fake-beta"]);
-
-      const eventsA = await getThreadEvents(harness.api, threadA.thread.id);
-      const eventsB = await getThreadEvents(harness.api, threadB.thread.id);
-      assertEventsBelongToThread(eventsA, threadA.thread.id);
-      assertEventsBelongToThread(eventsB, threadB.thread.id);
-      expect(await getThreadOutput(harness.api, threadA.thread.id)).toContain("alpha");
-      expect(await getThreadOutput(harness.api, threadB.thread.id)).toContain("beta");
-    } finally {
-      await harness.cleanup();
-    }
+        const eventsA = await getThreadEvents(harness.api, threadA.thread.id);
+        const eventsB = await getThreadEvents(harness.api, threadB.thread.id);
+        assertEventsBelongToThread(eventsA, threadA.thread.id);
+        assertEventsBelongToThread(eventsB, threadB.thread.id);
+        expect(await getThreadOutput(harness.api, threadA.thread.id)).toContain(
+          "alpha",
+        );
+        expect(await getThreadOutput(harness.api, threadB.thread.id)).toContain(
+          "beta",
+        );
+      },
+    );
   });
 
-  it("handles three concurrent threads across shared and isolated environments", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("handles three concurrent threads across shared and isolated environments", () =>
+    withHarness(async (harness) => {
       const secondRepoDir = await createTestGitRepo({
         repoDir: path.join(path.dirname(harness.repoDir), "stress-project"),
       });
@@ -523,10 +507,7 @@ describe.sequential("fake provider multi-thread integration", () => {
         threadC.thread.id,
       );
       expect(await getThreadOutput(harness.api, threadC.thread.id)).toContain("stress-c");
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
   it("runs two isolated bb instances concurrently without cross-contamination", async () => {
     const harnessA = await createIntegrationHarness();
@@ -602,18 +583,8 @@ describe.sequential("fake provider multi-thread integration", () => {
         }),
       ]);
 
-      expect(
-        harnessA.db
-          .select({ count: count() })
-          .from(threadRows)
-          .get()?.count ?? 0,
-      ).toBe(1);
-      expect(
-        harnessB.db
-          .select({ count: count() })
-          .from(threadRows)
-          .get()?.count ?? 0,
-      ).toBe(1);
+      expect(countStoredThreads(harnessA.db)).toBe(1);
+      expect(countStoredThreads(harnessB.db)).toBe(1);
 
       expect((await getHosts(harnessA.api)).length).toBe(1);
       expect((await getHosts(harnessB.api)).length).toBe(1);

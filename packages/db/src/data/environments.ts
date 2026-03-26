@@ -16,6 +16,7 @@ export interface CreateEnvironmentInput {
   isGitRepo?: boolean;
   isWorktree?: boolean;
   branchName?: string | null;
+  defaultBranch?: string | null;
   workspaceProvisionType?: WorkspaceProvisionType | null;
   status?: EnvironmentStatus;
 }
@@ -37,6 +38,7 @@ export function createEnvironment(
       isGitRepo: input.isGitRepo ?? false,
       isWorktree: input.isWorktree ?? false,
       branchName: input.branchName ?? null,
+      defaultBranch: input.defaultBranch ?? null,
       workspaceProvisionType: input.workspaceProvisionType ?? null,
       status: input.status ?? "provisioning",
       createdAt: now,
@@ -88,6 +90,7 @@ export interface UpdateEnvironmentInput {
   isGitRepo?: boolean;
   isWorktree?: boolean;
   branchName?: string | null;
+  defaultBranch?: string | null;
 }
 
 export function updateEnvironment(

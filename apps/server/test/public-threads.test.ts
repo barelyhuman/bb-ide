@@ -198,7 +198,7 @@ describe("public thread routes", () => {
       expect(queued.command).toHaveProperty("branchName");
 
       const thread = getThread(harness.db, createdThread.id);
-      expect(thread?.mergeBaseBranch).toBe("main");
+      expect(thread?.mergeBaseBranch).toBeNull();
     } finally {
       await repo.cleanup();
       await harness.cleanup();
@@ -860,6 +860,7 @@ describe("public thread routes", () => {
         {
           path: managerProvisionPath,
           branchName: managerProvisionCommand.command.branchName ?? "bb/project-manager",
+          defaultBranch: "main",
           isGitRepo: true,
           isWorktree: true,
           ranSetup: false,
@@ -888,15 +889,12 @@ describe("public thread routes", () => {
           command.type === "thread.start" &&
           command.threadId === managerThread.id,
       );
-      expect(managerStartCommand.command.dynamicTools).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: "message_user" }),
-          expect.objectContaining({ name: "spawn_thread" }),
-        ]),
-      );
       expect(managerStartCommand.command.options).toMatchObject({
-        instructions: expect.stringContaining("You are a manager for this project."),
+        source: "client/turn/requested",
       });
+      expect(managerStartCommand.command.threadType).toBe("manager");
+      expect(managerStartCommand.command.projectName).toBe(project.name);
+      expect(managerStartCommand.command.projectRootPath).toBe("/tmp/thread-data-project");
     } finally {
       await harness.cleanup();
     }

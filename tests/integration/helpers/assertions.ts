@@ -1,9 +1,5 @@
 import fs from "node:fs/promises";
-import { and, eq, or } from "drizzle-orm";
-import {
-  hostDaemonCommands,
-  type DbConnection,
-} from "@bb/db";
+import type { DbConnection } from "@bb/db";
 import type {
   Environment,
   EnvironmentStatus,
@@ -12,28 +8,14 @@ import type {
   ThreadEventRow,
   ThreadStatus,
 } from "@bb/domain";
-import {
-  hostDaemonCommandSchema,
-  type HostDaemonCommand,
-} from "@bb/host-daemon-contract";
 import { createPublicApiClient } from "@bb/server-contract";
+import {
+  listPendingHostCommands,
+  listQueuedCommands,
+  type QueuedCommand,
+} from "./queries.js";
 
 const POLL_INTERVAL_MS = 100;
-
-export interface QueuedCommand {
-  command: HostDaemonCommand;
-  completedAt: number | null;
-  createdAt: number;
-  cursor: number;
-  fetchedAt: number | null;
-  hostId: string;
-  id: string;
-  payload: string;
-  retryCount: number;
-  sessionId: string | null;
-  state: string;
-  type: string;
-}
 
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 async function pollUntil<T>(
@@ -246,25 +228,6 @@ export async function waitForPathRemoval(
   );
 }
 
-function toQueuedCommand(
-  row: typeof hostDaemonCommands.$inferSelect,
-): QueuedCommand {
-  return {
-    command: hostDaemonCommandSchema.parse(JSON.parse(row.payload)),
-    completedAt: row.completedAt ?? null,
-    createdAt: row.createdAt,
-    cursor: row.cursor,
-    fetchedAt: row.fetchedAt ?? null,
-    hostId: row.hostId,
-    id: row.id,
-    payload: row.payload,
-    retryCount: row.retryCount,
-    sessionId: row.sessionId ?? null,
-    state: row.state,
-    type: row.type,
-  };
-}
-
 export async function waitForCommand(
   db: DbConnection,
   predicate: (command: QueuedCommand) => boolean,
@@ -273,12 +236,7 @@ export async function waitForCommand(
   let currentCommands = "none";
   return pollUntil(
     async () => {
-      const rows = db
-        .select()
-        .from(hostDaemonCommands)
-        .orderBy(hostDaemonCommands.cursor)
-        .all();
-      const commands = rows.map(toQueuedCommand);
+      const commands = listQueuedCommands(db);
       currentCommands =
         commands.map((command) => `${command.cursor}:${command.type}`).join(", ") ||
         "none";
@@ -298,21 +256,9 @@ export async function waitForCommandsDrained(
   let pendingCount = -1;
   await pollUntil(
     async () => {
-      const rows = db
-        .select()
-        .from(hostDaemonCommands)
-        .where(
-          and(
-            eq(hostDaemonCommands.hostId, hostId),
-            or(
-              eq(hostDaemonCommands.state, "pending"),
-              eq(hostDaemonCommands.state, "fetched"),
-            ),
-          ),
-        )
-        .all();
-      pendingCount = rows.length;
-      return rows.length === 0 ? rows : null;
+      const commands = listPendingHostCommands(db, hostId);
+      pendingCount = commands.length;
+      return commands.length === 0 ? commands : null;
     },
     `Timed out waiting for host ${hostId} commands to drain`,
     timeoutMs,

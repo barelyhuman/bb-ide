@@ -7,6 +7,7 @@ import {
   hostDaemonCommands,
   threads,
   updateEnvironment,
+  updateThread,
 } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
 import {
@@ -114,6 +115,7 @@ async function handleProvisionCommandResult(
       isGitRepo: report.result.isGitRepo,
       isWorktree: report.result.isWorktree,
       branchName: report.result.branchName,
+      defaultBranch: report.result.defaultBranch,
     });
 
     if (shouldDestroyAfterProvision) {
@@ -127,6 +129,11 @@ async function handleProvisionCommandResult(
     }
 
     for (const thread of boundThreads) {
+      if (!thread.mergeBaseBranch && report.result.defaultBranch) {
+        updateThread(deps.db, deps.hub, thread.id, {
+          mergeBaseBranch: report.result.defaultBranch,
+        });
+      }
       appendProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: command.environmentId,

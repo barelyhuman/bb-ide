@@ -1,16 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  getDefaultProjectSource,
-  getProject,
-} from "@bb/db";
 import type {
   DynamicTool,
-  Environment,
-  Thread,
+  ThreadRuntimeExecutionOptions,
 } from "@bb/domain";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
-import type { AppDeps } from "../types.js";
 
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
 const NO_MANAGER_PREFERENCES = "No preferences yet.";
@@ -87,63 +82,65 @@ const MANAGER_DYNAMIC_TOOLS: DynamicTool[] = [
   },
 ];
 
-export interface ResolveThreadRuntimeConfigArgs {
-  environment: Pick<Environment, "path">;
-  thread: Pick<Thread, "id" | "projectId" | "type">;
-}
+type ThreadRuntimeConfigCommand = Extract<
+  HostDaemonCommand,
+  { type: "thread.start" | "thread.resume" | "turn.run" | "turn.steer" }
+>;
 
-export interface ThreadRuntimeConfig {
+interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
-  instructions?: string;
+  options?: ThreadRuntimeExecutionOptions;
 }
 
-async function readManagerPreferences(managerWorkspacePath: string): Promise<string> {
-  const preferencesPath = path.join(
-    managerWorkspacePath,
-    MANAGER_PREFERENCES_FILE_NAME,
-  );
+async function readManagerPreferences(workspacePath: string): Promise<string> {
   try {
-    return await readFile(preferencesPath, "utf8");
+    return await readFile(
+      path.join(workspacePath, MANAGER_PREFERENCES_FILE_NAME),
+      "utf8",
+    );
   } catch {
     return NO_MANAGER_PREFERENCES;
   }
 }
 
-async function buildManagerRuntimeConfig(
-  deps: Pick<AppDeps, "db">,
-  args: ResolveThreadRuntimeConfigArgs,
-): Promise<ThreadRuntimeConfig> {
-  const project = getProject(deps.db, args.thread.projectId);
-  if (!project) {
-    throw new Error(`Project ${args.thread.projectId} was not found`);
+function mergeDynamicTools(dynamicTools: DynamicTool[] | undefined): DynamicTool[] {
+  const merged = [...(dynamicTools ?? [])];
+  const existingNames = new Set(merged.map((tool) => tool.name));
+
+  for (const managerTool of MANAGER_DYNAMIC_TOOLS) {
+    if (existingNames.has(managerTool.name)) {
+      continue;
+    }
+    merged.push(managerTool);
   }
 
-  const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
-  const managerWorkspacePath = args.environment.path ?? "";
-  const projectRootPath = defaultSource?.path ?? managerWorkspacePath;
-
-  return {
-    dynamicTools: MANAGER_DYNAMIC_TOOLS,
-    instructions: renderTemplate("managerAgentInstructions", {
-      managerPreferencesContent: managerWorkspacePath
-        ? await readManagerPreferences(managerWorkspacePath)
-        : NO_MANAGER_PREFERENCES,
-      managerThreadId: args.thread.id,
-      managerWorkspacePath,
-      projectId: project.id,
-      projectName: project.name,
-      projectRootPath,
-    }),
-  };
+  return merged;
 }
 
 export async function resolveThreadRuntimeConfig(
-  deps: Pick<AppDeps, "db">,
-  args: ResolveThreadRuntimeConfigArgs,
+  command: ThreadRuntimeConfigCommand,
 ): Promise<ThreadRuntimeConfig> {
-  if (args.thread.type !== "manager") {
-    return {};
+  if (command.threadType !== "manager") {
+    return {
+      ...(command.dynamicTools ? { dynamicTools: command.dynamicTools } : {}),
+      ...(command.options ? { options: command.options } : {}),
+    };
   }
 
-  return buildManagerRuntimeConfig(deps, args);
+  const instructions = renderTemplate("managerAgentInstructions", {
+    managerPreferencesContent: await readManagerPreferences(command.workspacePath),
+    managerThreadId: command.threadId,
+    managerWorkspacePath: command.workspacePath,
+    projectId: command.projectId,
+    projectName: command.projectName,
+    projectRootPath: command.projectRootPath,
+  });
+
+  return {
+    dynamicTools: mergeDynamicTools(command.dynamicTools),
+    options: {
+      ...(command.options ?? {}),
+      instructions,
+    },
+  };
 }

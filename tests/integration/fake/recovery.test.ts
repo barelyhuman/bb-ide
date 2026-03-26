@@ -1,8 +1,5 @@
 // Phase 7d: Fake provider recovery scenarios (plans/rebuild.md)
-import { and, desc, eq, isNotNull } from "drizzle-orm";
 import {
-  events,
-  hostDaemonSessions,
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
@@ -27,9 +24,13 @@ import {
   createReadyHostThread,
 } from "../helpers/fixtures.js";
 import {
-  createIntegrationHarness,
   type IntegrationHarness,
+  withHarness,
 } from "../helpers/harness.js";
+import {
+  readLatestProviderThreadId,
+  readSessionRow,
+} from "../helpers/queries.js";
 import { scaleTimeoutMs } from "../helpers/time.js";
 
 // Setup waits: create the thread and observe the first ready/idle state.
@@ -40,6 +41,7 @@ const TURN_TIMEOUT_MS = scaleTimeoutMs(15_000);
 const RECOVERY_TIMEOUT_MS = scaleTimeoutMs(30_000);
 // Active-turn waits: only long enough to catch a turn in flight before the crash/restart step.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(5_000);
+// Fake provider inputs accept `delay:<ms>` prefixes to hold a turn open across crash recovery.
 const STOP_DELAY_TEXT = "delay:5000 recovery turn";
 
 function assertMonotonicSequences(
@@ -48,19 +50,6 @@ function assertMonotonicSequences(
   for (let index = 1; index < events.length; index += 1) {
     expect(events[index]?.seq).toBeGreaterThan(events[index - 1]?.seq ?? -1);
   }
-}
-
-function getSession(
-  harness: IntegrationHarness,
-  sessionId: string,
-): typeof hostDaemonSessions.$inferSelect | null {
-  return (
-    harness.db
-      .select()
-      .from(hostDaemonSessions)
-      .where(eq(hostDaemonSessions.id, sessionId))
-      .get() ?? null
-  );
 }
 
 function requireSessionId(harness: IntegrationHarness): string {
@@ -76,7 +65,7 @@ async function createRecoveryThread(
   name: string,
 ) {
   const project = await createProjectFixture(harness, { name });
-  return createReadyHostThread(harness, {
+  const readyThread = await createReadyHostThread(harness, {
     projectId: project.id,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     workspace: {
@@ -84,13 +73,16 @@ async function createRecoveryThread(
       path: harness.repoDir,
     },
   });
+  return {
+    ...readyThread,
+    projectName: name,
+    projectRootPath: harness.repoDir,
+  };
 }
 
 describe.sequential("fake provider recovery integration", () => {
-  it("restarts cleanly after a graceful shutdown and continues an existing thread", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("restarts cleanly after a graceful shutdown and continues an existing thread", () =>
+    withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
         "Graceful Shutdown Recovery",
@@ -122,15 +114,10 @@ describe.sequential("fake provider recovery integration", () => {
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after graceful restart",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("survives an ungraceful daemon crash and resumes idle work after restart", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("survives an ungraceful daemon crash and resumes idle work after restart", () =>
+    withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
         "Crash Recovery Idle",
@@ -159,15 +146,10 @@ describe.sequential("fake provider recovery integration", () => {
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after crash restart",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("moves an active thread to error on crash and allows a new turn after restart", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("moves an active thread to error on crash and allows a new turn after restart", () =>
+    withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
         "Crash Recovery Active",
@@ -215,15 +197,10 @@ describe.sequential("fake provider recovery integration", () => {
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "recovered after crash",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("preserves cursor continuity and event sequencing across restart", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("preserves cursor continuity and event sequencing across restart", () =>
+    withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
         "Cursor Continuity",
@@ -254,15 +231,10 @@ describe.sequential("fake provider recovery integration", () => {
       expect(
         eventsAfter.filter((event) => event.type === "turn/completed"),
       ).toHaveLength(2);
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("does not revive an idle thread that was manually marked errored before reconnect", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("does not revive an idle thread that was manually marked errored before reconnect", () =>
+    withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
         "Reconciliation Idle Error",
@@ -287,15 +259,10 @@ describe.sequential("fake provider recovery integration", () => {
 
       const afterReconnect = await getThread(harness.api, thread.id);
       expect(afterReconnect.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("rejects late command results from an old session after restart", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
+  it("rejects late command results from an old session after restart", () =>
+    withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
         "Old Session Rejection",
@@ -310,7 +277,7 @@ describe.sequential("fake provider recovery integration", () => {
       await harness.restartDaemon("old-session-restart");
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
 
-      const oldSession = getSession(harness, oldSessionId);
+      const oldSession = readSessionRow(harness.db, oldSessionId);
       expect(oldSession?.status).toBe("closed");
 
       const staleResultResponse = await harness.internal.session["command-result"].$post({
@@ -335,16 +302,12 @@ describe.sequential("fake provider recovery integration", () => {
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after stale session rejection",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 
-  it("drains queued work that was inserted while the daemon was offline", async () => {
-    const harness = await createIntegrationHarness();
-
-    try {
-      const { environment, thread } = await createRecoveryThread(
+  it("drains queued work that was inserted while the daemon was offline", () =>
+    withHarness(async (harness) => {
+      const { environment, projectName, projectRootPath, thread } =
+        await createRecoveryThread(
         harness,
         "Queued Work Recovery",
       );
@@ -362,20 +325,7 @@ describe.sequential("fake provider recovery integration", () => {
       );
 
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
-      const providerThreadId =
-        harness.db
-          .select({ providerThreadId: events.providerThreadId })
-          .from(events)
-          .where(
-            and(
-              eq(events.threadId, thread.id),
-              isNotNull(events.providerThreadId),
-            ),
-          )
-          .orderBy(desc(events.sequence))
-          .limit(1)
-          .get()
-          ?.providerThreadId ?? null;
+      const providerThreadId = readLatestProviderThreadId(harness.db, thread.id);
       if (!providerThreadId || !environment.path) {
         throw new Error("Expected queued recovery turn to have provider context");
       }
@@ -385,7 +335,10 @@ describe.sequential("fake provider recovery integration", () => {
         threadId: thread.id,
         workspacePath: environment.path,
         projectId: thread.projectId,
+        projectName,
+        projectRootPath,
         providerId: thread.providerId,
+        threadType: thread.type,
         providerThreadId,
         eventSequence: eventsBefore.length + 1,
         input: [{ type: "text", text: "queued while offline" }],
@@ -415,8 +368,5 @@ describe.sequential("fake provider recovery integration", () => {
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "queued while offline",
       );
-    } finally {
-      await harness.cleanup();
-    }
-  });
+    }));
 });

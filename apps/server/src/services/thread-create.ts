@@ -3,7 +3,6 @@ import {
   createThread,
   deleteThread,
   findEnvironmentByHostPath,
-  getDefaultProjectSource,
   getEnvironment,
   transitionThreadStatus,
   updateEnvironment,
@@ -27,7 +26,6 @@ import {
   queueEnvironmentProvision,
   requireDefaultSource,
   requireProjectExists,
-  resolveThreadMergeBaseBranch,
 } from "./thread-create-helpers.js";
 
 interface CreateThreadInEnvironmentArgs {
@@ -211,10 +209,7 @@ export async function createThreadFromRequest(
         "Environment belongs to a different project",
       );
     }
-    const defaultSource = getDefaultProjectSource(deps.db, request.projectId);
-    const mergeBaseBranch = await resolveThreadMergeBaseBranch({
-      candidatePaths: [environment.path, defaultSource?.path],
-    });
+    const mergeBaseBranch = environment.defaultBranch ?? null;
     if (environment.status === "ready") {
       if (!environment.path) {
         throw new ApiError(409, "invalid_request", "Environment is not ready");
@@ -244,11 +239,7 @@ export async function createThreadFromRequest(
   const unmanagedPath = workspace.type === "unmanaged"
     ? workspace.path ?? defaultSource.path
     : null;
-  const mergeBaseBranch = await resolveThreadMergeBaseBranch({
-    candidatePaths: workspace.type === "unmanaged"
-      ? [unmanagedPath]
-      : [defaultSource.path],
-  });
+  const mergeBaseBranch = null;
 
   if (workspace.type === "unmanaged" && !unmanagedPath) {
     throw new ApiError(409, "invalid_request", "Workspace path is required");
@@ -401,6 +392,7 @@ export async function ensureProjectSourceEnvironment(
     isGitRepo: result.isGitRepo,
     isWorktree: result.isWorktree,
     branchName: result.branchName,
+    defaultBranch: result.defaultBranch,
   });
   if (!updated) {
     throw new ApiError(500, "internal_error", "Failed to update environment");

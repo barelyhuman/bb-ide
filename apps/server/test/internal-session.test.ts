@@ -216,6 +216,7 @@ describe("internal session routes", () => {
           result: {
             path: "/tmp/provision-success",
             branchName: "bb/success",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -362,6 +363,7 @@ describe("internal session routes", () => {
           result: {
             path: "/tmp/reprovision-start",
             branchName: "bb/reprovision-start",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: true,
             ranSetup: false,
@@ -454,6 +456,7 @@ describe("internal session routes", () => {
           result: {
             path: "/tmp/reprovision-filter",
             branchName: "bb/reprovision-filter",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: true,
             ranSetup: false,

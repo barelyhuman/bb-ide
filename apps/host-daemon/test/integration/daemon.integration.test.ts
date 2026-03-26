@@ -44,6 +44,52 @@ async function waitForCursor(
   }
 }
 
+function createStandardThreadStartCommand(args: {
+  environmentId: string;
+  projectId: string;
+  providerId: string;
+  threadId: string;
+  workspacePath: string;
+}) {
+  return {
+    type: "thread.start" as const,
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+    workspacePath: args.workspacePath,
+    projectId: args.projectId,
+    projectName: "Project 1",
+    projectRootPath: args.workspacePath,
+    providerId: args.providerId,
+    threadType: "standard" as const,
+  };
+}
+
+function createTurnRunCommand(args: {
+  environmentId: string;
+  eventSequence: number;
+  input: Array<{ text: string; type: "text" }>;
+  projectId: string;
+  providerId: string;
+  providerThreadId: string;
+  threadId: string;
+  workspacePath: string;
+}) {
+  return {
+    type: "turn.run" as const,
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+    workspacePath: args.workspacePath,
+    projectId: args.projectId,
+    projectName: "Project 1",
+    projectRootPath: args.workspacePath,
+    providerId: args.providerId,
+    threadType: "standard" as const,
+    providerThreadId: args.providerThreadId,
+    eventSequence: args.eventSequence,
+    input: args.input,
+  };
+}
+
 async function setupDaemonHarness() {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
   const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
@@ -88,12 +134,13 @@ describe("host daemon integration", () => {
 
     try {
       harness.server.queueCommand({
-        type: "thread.start",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        workspacePath: harness.envAPath,
-        projectId: "project-1",
-        providerId: "fake",
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+        }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
 
@@ -118,26 +165,28 @@ describe("host daemon integration", () => {
 
     try {
       harness.server.queueCommand({
-        type: "thread.start",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        workspacePath: harness.envAPath,
-        projectId: "project-1",
-        providerId: "fake",
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+        }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
       await waitFor(() => harness.server.commandResults.length === 1);
 
       harness.server.queueCommand({
-        type: "turn.run",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        workspacePath: harness.envAPath,
-        projectId: "project-1",
-        providerId: "fake",
-        providerThreadId: "provider-thread-a",
-        eventSequence: 1,
-        input: [{ type: "text", text: "hello" }],
+        ...createTurnRunCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-thread-a",
+          eventSequence: 1,
+          input: [{ type: "text", text: "hello" }],
+        }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
 
@@ -171,12 +220,13 @@ describe("host daemon integration", () => {
 
     try {
       harness.server.queueCommand({
-        type: "thread.start",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        workspacePath: harness.envAPath,
-        projectId: "project-1",
-        providerId: "fake",
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+        }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
       await waitFor(() => harness.server.commandResults.length === 1);
@@ -213,45 +263,49 @@ describe("host daemon integration", () => {
 
     try {
       harness.server.queueCommand({
-        type: "thread.start",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        workspacePath: harness.envAPath,
-        projectId: "project-1",
-        providerId: "fake",
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+        }),
       });
       harness.server.queueCommand({
-        type: "thread.start",
-        environmentId: "env-b",
-        threadId: "thread-b",
-        workspacePath: harness.envBPath,
-        projectId: "project-1",
-        providerId: "fake",
+        ...createStandardThreadStartCommand({
+          environmentId: "env-b",
+          threadId: "thread-b",
+          workspacePath: harness.envBPath,
+          projectId: "project-1",
+          providerId: "fake",
+        }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
       await waitFor(() => harness.server.commandResults.length === 2);
 
       harness.server.queueCommand({
-        type: "turn.run",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        workspacePath: harness.envAPath,
-        projectId: "project-1",
-        providerId: "fake",
-        providerThreadId: "provider-thread-a",
-        eventSequence: 1,
-        input: [{ type: "text", text: "delay:200 slow" }],
+        ...createTurnRunCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-thread-a",
+          eventSequence: 1,
+          input: [{ type: "text", text: "delay:200 slow" }],
+        }),
       });
       harness.server.queueCommand({
-        type: "turn.run",
-        environmentId: "env-b",
-        threadId: "thread-b",
-        workspacePath: harness.envBPath,
-        projectId: "project-1",
-        providerId: "fake",
-        providerThreadId: "provider-thread-b",
-        eventSequence: 1,
-        input: [{ type: "text", text: "fast" }],
+        ...createTurnRunCommand({
+          environmentId: "env-b",
+          threadId: "thread-b",
+          workspacePath: harness.envBPath,
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-thread-b",
+          eventSequence: 1,
+          input: [{ type: "text", text: "fast" }],
+        }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
 

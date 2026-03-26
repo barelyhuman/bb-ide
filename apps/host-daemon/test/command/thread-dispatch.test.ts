@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -6,6 +8,7 @@ import {
   createFakeRuntime,
   createFakeWorkspace,
   createHarness,
+  makeTempDir,
 } from "./dispatch-helpers.js";
 
 afterEach(cleanupTempDirs);
@@ -21,7 +24,10 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
+        projectName: "Project 1",
+        projectRootPath: "/tmp/project-1",
         providerId: "fake",
+        threadType: "standard",
       },
       { runtimeManager: harness.manager },
     );
@@ -32,7 +38,10 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
+        projectName: "Project 1",
+        projectRootPath: "/tmp/project-1",
         providerId: "fake",
+        threadType: "standard",
         providerThreadId: "provider-1",
       },
       { runtimeManager: harness.manager },
@@ -81,7 +90,10 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
+        projectName: "Project 1",
+        projectRootPath: "/tmp/project-1",
         providerId: "fake",
+        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 3,
         input: [{ type: "text", text: "hello" }],
@@ -95,7 +107,10 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
+        projectName: "Project 1",
+        projectRootPath: "/tmp/project-1",
         providerId: "fake",
+        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 4,
         expectedTurnId: "turn-1",
@@ -120,7 +135,10 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-lazy",
         projectId: "project-1",
+        projectName: "Project 1",
+        projectRootPath: "/tmp/project-1",
         providerId: "fake",
+        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 1,
         input: [{ type: "text", text: "hello" }],
@@ -177,7 +195,10 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-exit",
         projectId: "project-1",
+        projectName: "Project 1",
+        projectRootPath: "/tmp/project-1",
         providerId: "fake",
+        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 2,
         input: [{ type: "text", text: "after exit" }],
@@ -265,5 +286,52 @@ describe("thread command dispatch", () => {
         },
       ],
     });
+  });
+
+  it("resolves manager runtime config inside the daemon", async () => {
+    const managerWorkspace = await makeTempDir("bb-manager-runtime-");
+    await fs.writeFile(
+      path.join(managerWorkspace, "PREFERENCES.md"),
+      "Prefer concise user updates.\nDelegate implementation quickly.\n",
+      "utf8",
+    );
+    const harness = createHarness({ workspacePath: managerWorkspace });
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-manager",
+        threadId: "thread-manager",
+        workspacePath: managerWorkspace,
+        projectId: "project-1",
+        projectName: "Manager Project",
+        projectRootPath: "/tmp/manager-project",
+        providerId: "fake",
+        threadType: "manager",
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(harness.runtimeState.startedDynamicTools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "message_user" }),
+        expect.objectContaining({ name: "spawn_thread" }),
+      ]),
+    );
+    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+      "You are a manager for this project.",
+    );
+    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+      "Prefer concise user updates.",
+    );
+    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+      "Delegate implementation quickly.",
+    );
+    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+      "Manager Project",
+    );
+    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+      managerWorkspace,
+    );
   });
 });

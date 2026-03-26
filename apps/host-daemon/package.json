@@ -23,6 +23,7 @@
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
+    "@bb/templates": "workspace:*",
     "@bb/workspace": "workspace:*",
     "p-debounce": "^5.1.0",
     "p-retry": "^6.2.1",

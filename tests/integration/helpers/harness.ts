@@ -71,6 +71,9 @@ export interface CreateHarnessOptions {
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
 }
 
+export type WithHarnessCallback<T> = (harness: IntegrationHarness) => Promise<T>;
+type WithHarnessInvocation<T> = CreateHarnessOptions | WithHarnessCallback<T>;
+
 interface HarnessDaemonResources {
   daemon: HostDaemon;
   daemonApp: HostDaemonApp;
@@ -372,5 +375,30 @@ export async function createIntegrationHarness(
   } catch (error) {
     await cleanup();
     throw error;
+  }
+}
+
+export async function withHarness<T>(
+  run: WithHarnessCallback<T>,
+): Promise<T>;
+export async function withHarness<T>(
+  options: CreateHarnessOptions,
+  run: WithHarnessCallback<T>,
+): Promise<T>;
+export async function withHarness<T>(
+  arg1: WithHarnessInvocation<T>,
+  arg2?: WithHarnessCallback<T>,
+): Promise<T> {
+  const options = typeof arg1 === "function" ? {} : arg1;
+  const run = typeof arg1 === "function" ? arg1 : arg2;
+  if (!run) {
+    throw new Error("withHarness requires a callback");
+  }
+
+  const harness = await createIntegrationHarness(options);
+  try {
+    return await run(harness);
+  } finally {
+    await harness.cleanup();
   }
 }

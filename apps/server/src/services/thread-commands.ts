@@ -1,6 +1,11 @@
-import { getActiveSession, queueCommand, transitionThreadStatus } from "@bb/db";
+import {
+  getActiveSession,
+  getDefaultProjectSource,
+  getProject,
+  queueCommand,
+  transitionThreadStatus,
+} from "@bb/db";
 import type {
-  DynamicTool,
   PromptInput,
   Thread,
   ThreadExecutionOptions,
@@ -14,7 +19,6 @@ import type {
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
-import { resolveThreadRuntimeConfig } from "./thread-runtime-config.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 
 export function buildExecutionOptions(
@@ -64,15 +68,15 @@ export async function queueThreadStartCommand(
       threadId: args.thread.id,
       workspacePath: runtimeContext.workspacePath,
       projectId: args.projectId,
+      projectName: runtimeContext.projectName,
+      projectRootPath: runtimeContext.projectRootPath,
       providerId: args.providerId,
+      threadType: runtimeContext.threadType,
       ...(args.eventSequence !== undefined
         ? { eventSequence: args.eventSequence }
         : {}),
       ...(args.input ? { input: args.input } : {}),
       ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
-      ...(runtimeContext.dynamicTools
-        ? { dynamicTools: runtimeContext.dynamicTools }
-        : {}),
     }),
   });
 }
@@ -90,11 +94,13 @@ interface ReadyThreadCommandEnvironment {
 }
 
 interface ThreadRuntimeContext {
-  dynamicTools?: DynamicTool[];
   options?: HostDaemonExecutionOptions;
   projectId: string;
+  projectName: string;
+  projectRootPath: string;
   providerId: string;
   providerThreadId?: string;
+  threadType: Thread["type"];
   workspacePath: string;
 }
 
@@ -118,35 +124,23 @@ async function buildThreadRuntimeContext(
   },
 ): Promise<ThreadRuntimeContext> {
   const workspacePath = requireEnvironmentPath(args.environment);
-  const runtimeConfig = await resolveThreadRuntimeConfig(deps, {
-    environment: { path: workspacePath },
-    thread: {
-      id: args.thread.id,
-      projectId: args.thread.projectId,
-      type: args.thread.type,
-    },
-  });
-  const options =
-    args.execution || runtimeConfig.instructions
-      ? {
-          ...(args.execution ?? {}),
-          ...(runtimeConfig.instructions
-            ? { instructions: runtimeConfig.instructions }
-            : {}),
-        }
-      : undefined;
+  const project = getProject(deps.db, args.thread.projectId);
+  if (!project) {
+    throw new ApiError(404, "project_not_found", "Project not found");
+  }
+  const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
 
   return {
     workspacePath,
     projectId: args.thread.projectId,
+    projectName: project.name,
+    projectRootPath: defaultSource?.path ?? workspacePath,
     providerId: args.thread.providerId,
+    threadType: args.thread.type,
     ...(args.providerThreadId
       ? { providerThreadId: args.providerThreadId }
       : {}),
-    ...(options ? { options } : {}),
-    ...(runtimeConfig.dynamicTools
-      ? { dynamicTools: runtimeConfig.dynamicTools }
-      : {}),
+    ...(args.execution ? { options: args.execution } : {}),
   };
 }
 
@@ -223,15 +217,15 @@ export async function queueTurnRunCommand(
       eventSequence: args.eventSequence,
       workspacePath: runtimeContext.workspacePath,
       projectId: runtimeContext.projectId,
+      projectName: runtimeContext.projectName,
+      projectRootPath: runtimeContext.projectRootPath,
       providerId: runtimeContext.providerId,
+      threadType: runtimeContext.threadType,
       ...(runtimeContext.providerThreadId
         ? { providerThreadId: runtimeContext.providerThreadId }
         : {}),
       input: args.input,
       ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
-      ...(runtimeContext.dynamicTools
-        ? { dynamicTools: runtimeContext.dynamicTools }
-        : {}),
     }),
   });
 
@@ -272,16 +266,16 @@ export async function queueTurnSteerCommand(
       eventSequence: args.eventSequence,
       workspacePath: runtimeContext.workspacePath,
       projectId: runtimeContext.projectId,
+      projectName: runtimeContext.projectName,
+      projectRootPath: runtimeContext.projectRootPath,
       providerId: runtimeContext.providerId,
+      threadType: runtimeContext.threadType,
       ...(runtimeContext.providerThreadId
         ? { providerThreadId: runtimeContext.providerThreadId }
         : {}),
       expectedTurnId: args.expectedTurnId,
       input: args.input,
       ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
-      ...(runtimeContext.dynamicTools
-        ? { dynamicTools: runtimeContext.dynamicTools }
-        : {}),
     }),
   });
 }

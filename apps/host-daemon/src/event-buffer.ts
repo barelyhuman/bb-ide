@@ -135,10 +135,6 @@ export function createEventBuffer(
   }
 
   function seed(threadHighWaterMarks: Record<string, number>): void {
-    for (const [threadId, highWaterMark] of Object.entries(threadHighWaterMarks)) {
-      const nextValue = nextSequenceByThread.get(threadId) ?? 1;
-      nextSequenceByThread.set(threadId, Math.max(nextValue, highWaterMark + 1));
-    }
     ack(threadHighWaterMarks);
   }
 

@@ -214,6 +214,9 @@ importers:
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@bb/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       '@bb/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
@@ -584,12 +587,18 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@bb/host-daemon':
+        specifier: workspace:*
+        version: link:../../apps/host-daemon
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../../packages/host-daemon-contract
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@bb/server':
+        specifier: workspace:*
+        version: link:../../apps/server
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../../packages/server-contract

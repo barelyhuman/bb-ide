@@ -18,6 +18,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.status",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
       },
@@ -27,6 +28,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.diff",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
       },
@@ -36,6 +38,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.commit",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         message: "Commit message",
@@ -46,6 +49,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.squash_merge",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         targetBranch: "main",
@@ -57,6 +61,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.reset",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
       },
@@ -66,6 +71,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.checkpoint",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         commitMessage: "Checkpoint",
@@ -76,6 +82,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.promote",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         primaryPath: "/tmp/primary",
@@ -86,6 +93,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.demote",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         primaryPath: "/tmp/primary",
@@ -117,6 +125,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.status",
         environmentId: "env-rehydrate",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-rehydrate",
         threadId: "thread-1",
       },
@@ -145,7 +154,12 @@ describe("workspace command dispatch", () => {
     });
 
     const result = await dispatchCommand(
-      { type: "workspace.list_files", environmentId: "env-1", workspacePath: tempDir },
+      {
+        type: "workspace.list_files",
+        environmentId: "env-1",
+        environmentStatus: "ready",
+        workspacePath: tempDir,
+      },
       { runtimeManager: harness.manager },
     );
 
@@ -157,6 +171,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_files",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: tempDir,
         query: "file-b",
       },
@@ -180,6 +195,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.read_file",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: tempDir,
         path: "readme.txt",
       },
@@ -203,6 +219,7 @@ describe("workspace command dispatch", () => {
         {
           type: "workspace.read_file",
           environmentId: "env-1",
+          environmentStatus: "ready",
           workspacePath: tempDir,
           path: "../../../etc/passwd",
         },
@@ -222,6 +239,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_branches",
         environmentId: "env-1",
+        environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
       },
       { runtimeManager: harness.manager },

@@ -25,6 +25,7 @@ describe("environment command dispatch", () => {
       isGitRepo: true,
       isWorktree: false,
       branchName: "main",
+      defaultBranch: "main",
       ranSetup: false,
     });
     expect(harness.provisions).toEqual([
@@ -59,6 +60,7 @@ describe("environment command dispatch", () => {
       isGitRepo: true,
       isWorktree: true,
       branchName: "main",
+      defaultBranch: "main",
       ranSetup: false,
     });
     expect(harness.provisions).toEqual([
@@ -95,6 +97,7 @@ describe("environment command dispatch", () => {
       isGitRepo: true,
       isWorktree: false,
       branchName: "main",
+      defaultBranch: "main",
       ranSetup: false,
     });
     expect(harness.provisions).toEqual([

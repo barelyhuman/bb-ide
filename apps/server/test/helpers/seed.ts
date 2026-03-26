@@ -73,6 +73,7 @@ export function seedEnvironment(
     managed?: boolean;
     workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone";
     branchName?: string | null;
+    defaultBranch?: string | null;
   },
 ) {
   return createEnvironment(deps.db, deps.hub, {
@@ -85,6 +86,7 @@ export function seedEnvironment(
     isWorktree: args.workspaceProvisionType === "managed-worktree",
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
     branchName: args.branchName ?? "bb/test",
+    defaultBranch: args.defaultBranch ?? "main",
   });
 }
 

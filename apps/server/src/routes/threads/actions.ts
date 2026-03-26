@@ -13,6 +13,8 @@ import {
   sendMessageRequestSchema,
 } from "@bb/server-contract";
 import type {
+  Environment,
+  PromptInput,
   Thread,
   ThreadExecutionOptions,
 } from "@bb/domain";
@@ -66,6 +68,67 @@ function resolveSendMode(
   return "start";
 }
 
+interface QueueTurnDuringReprovisionArgs {
+  deps: Pick<AppDeps, "db" | "hub">;
+  environment: Environment;
+  execution: ThreadExecutionOptions;
+  input: PromptInput[];
+  onQueued?: () => void;
+  thread: Thread;
+}
+
+function queueTurnDuringReprovision(
+  args: QueueTurnDuringReprovisionArgs,
+): boolean {
+  if (args.environment.status === "ready" && args.environment.path) {
+    return false;
+  }
+
+  if (
+    !args.environment.managed ||
+    !args.environment.workspaceProvisionType ||
+    args.environment.status === "provisioning"
+  ) {
+    throw new ApiError(409, "invalid_request", "Environment is not ready");
+  }
+
+  const reprovisionResult = queueManagedEnvironmentReprovision(args.deps, {
+    environment: args.environment,
+    thread: args.thread,
+  });
+  if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
+    throw new ApiError(409, "invalid_request", "Environment is already provisioning");
+  }
+
+  appendClientTurnEvent(args.deps, {
+    threadId: args.thread.id,
+    environmentId: args.environment.id,
+    type: "client/turn/requested",
+    input: args.input,
+    execution: args.execution,
+    initiator: "user",
+    requestMethod: "turn/start",
+    source: "tell",
+  });
+  args.onQueued?.();
+  return true;
+}
+
+function requireReadyThreadEnvironment(environment: Environment): Environment & {
+  path: string;
+  status: "ready";
+} {
+  if (environment.status !== "ready" || !environment.path) {
+    throw new ApiError(409, "invalid_request", "Environment is not ready");
+  }
+
+  return {
+    ...environment,
+    path: environment.path,
+    status: "ready",
+  };
+}
+
 export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   app.post("/threads/:id/send", async (context) => {
     const payload = await parseJsonBody(context, sendMessageRequestSchema);
@@ -74,37 +137,22 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const mode = resolveSendMode(thread.status, payload.mode);
     const execution = buildExecutionOptions(payload, "client/turn/requested");
 
-    if (environment.status !== "ready" || !environment.path) {
-      if (
-        environment.managed &&
-        environment.workspaceProvisionType &&
-        environment.status !== "provisioning"
-      ) {
-        const reprovisionResult = queueManagedEnvironmentReprovision(deps, {
-          environment,
-          thread,
-        });
-        if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
-          throw new ApiError(409, "invalid_request", "Environment is already provisioning");
-        }
-        appendClientTurnEvent(deps, {
-          threadId: thread.id,
-          environmentId: environment.id,
-          type: "client/turn/requested",
-          input: payload.input,
-          execution,
-          initiator: "user",
-          requestMethod: "turn/start",
-          source: "tell",
-        });
-        return context.json({ ok: true });
-      }
-      throw new ApiError(409, "invalid_request", "Environment is not ready");
+    if (
+      queueTurnDuringReprovision({
+        deps,
+        environment,
+        execution,
+        input: payload.input,
+        thread,
+      })
+    ) {
+      return context.json({ ok: true });
     }
+    const readyEnvironment = requireReadyThreadEnvironment(environment);
 
     const eventSequence = appendClientTurnEvent(deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: readyEnvironment.id,
       type: "client/turn/requested",
       input: payload.input,
       execution,
@@ -120,9 +168,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         eventSequence,
         execution,
         environment: {
-          id: environment.id,
-          hostId: environment.hostId,
-          path: environment.path,
+          id: readyEnvironment.id,
+          hostId: readyEnvironment.hostId,
+          path: readyEnvironment.path,
         },
       });
       tryTransition(deps.db, deps.hub, thread.id, "active");
@@ -138,9 +186,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         execution,
         expectedTurnId,
         environment: {
-          id: environment.id,
-          hostId: environment.hostId,
-          path: environment.path,
+          id: readyEnvironment.id,
+          hostId: readyEnvironment.hostId,
+          path: readyEnvironment.path,
         },
       });
     }
@@ -182,38 +230,25 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         : {}),
     };
 
-    if (environment.status !== "ready" || !environment.path) {
-      if (
-        environment.managed &&
-        environment.workspaceProvisionType &&
-        environment.status !== "provisioning"
-      ) {
-        const reprovisionResult = queueManagedEnvironmentReprovision(deps, {
-          environment,
-          thread,
-        });
-        if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
-          throw new ApiError(409, "invalid_request", "Environment is already provisioning");
-        }
-        appendClientTurnEvent(deps, {
-          threadId: thread.id,
-          environmentId: environment.id,
-          type: "client/turn/requested",
-          input: queuedMessage.content,
-          execution,
-          initiator: "user",
-          requestMethod: "turn/start",
-          source: "tell",
-        });
-        deleteDraft(deps.db, deps.hub, draft.id);
-        return context.json({ ok: true, queuedMessage });
-      }
-      throw new ApiError(409, "invalid_request", "Environment is not ready");
+    if (
+      queueTurnDuringReprovision({
+        deps,
+        environment,
+        execution,
+        input: queuedMessage.content,
+        onQueued: () => {
+          deleteDraft(deps.db, deps.hub, draft.id);
+        },
+        thread,
+      })
+    ) {
+      return context.json({ ok: true, queuedMessage });
     }
+    const readyEnvironment = requireReadyThreadEnvironment(environment);
 
     const eventSequence = appendClientTurnEvent(deps, {
       threadId: thread.id,
-      environmentId: environment.id,
+      environmentId: readyEnvironment.id,
       type: "client/turn/requested",
       input: queuedMessage.content,
       execution,
@@ -229,9 +264,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         eventSequence,
         execution,
         environment: {
-          id: environment.id,
-          hostId: environment.hostId,
-          path: environment.path,
+          id: readyEnvironment.id,
+          hostId: readyEnvironment.hostId,
+          path: readyEnvironment.path,
         },
       });
       tryTransition(deps.db, deps.hub, thread.id, "active");
@@ -247,9 +282,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         execution,
         expectedTurnId,
         environment: {
-          id: environment.id,
-          hostId: environment.hostId,
-          path: environment.path,
+          id: readyEnvironment.id,
+          hostId: readyEnvironment.hostId,
+          path: readyEnvironment.path,
         },
       });
     }
@@ -300,6 +335,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.status",
             environmentId: environment.id,
+            environmentStatus: environment.status,
             workspacePath: environment.path,
             ...(thread.mergeBaseBranch
               ? { mergeBaseBranch: thread.mergeBaseBranch }

@@ -16,11 +16,15 @@ export async function provisionEnvironment(
     !alreadyExists && entry.workspace.managed
       ? await detectSetupScript(command)
       : false;
+  const defaultBranch = entry.workspace.isGitRepo
+    ? (await entry.workspace.getStatus()).defaultBranch ?? null
+    : null;
   return {
     path: entry.workspace.path,
     isGitRepo: entry.workspace.isGitRepo,
     isWorktree: entry.workspace.isWorktree,
     branchName: await entry.workspace.currentBranch(),
+    defaultBranch,
     ranSetup,
   };
 }

@@ -3,6 +3,7 @@ import {
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   promptInputSchema,
+  threadTypeSchema,
   threadRuntimeExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
@@ -53,7 +54,10 @@ const hostDaemonThreadTargetSchema = z.object({
 const hostDaemonThreadRuntimeContextSchema = z.object({
   workspacePath: z.string().min(1),
   projectId: z.string().min(1),
+  projectName: z.string().min(1),
+  projectRootPath: z.string().min(1),
   providerId: z.string().min(1),
+  threadType: threadTypeSchema,
   providerThreadId: z.string().min(1).optional(),
   options: hostDaemonExecutionOptionsSchema.optional(),
   dynamicTools: z.array(dynamicToolSchema).optional(),
@@ -64,18 +68,16 @@ const hostDaemonEnvironmentTargetSchema = z.object({
 });
 
 const hostDaemonWorkspaceTargetSchema = hostDaemonEnvironmentTargetSchema.extend({
+  environmentStatus: z.literal("ready"),
   workspacePath: z.string().min(1),
 });
 
-export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("thread.start"),
-  workspacePath: z.string().min(1),
-  projectId: z.string().min(1),
-  providerId: z.string().min(1),
   eventSequence: z.number().int().nonnegative().optional(),
   input: z.array(promptInputSchema).min(1).optional(),
-  options: hostDaemonExecutionOptionsSchema.optional(),
-  dynamicTools: z.array(dynamicToolSchema).optional(),
 });
 
 /** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */
@@ -258,7 +260,7 @@ export const workspaceListBranchesCommandSchema = hostDaemonWorkspaceTargetSchem
   type: z.literal("workspace.list_branches"),
 });
 
-export const hostDaemonCommandSchema = z.union([
+const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
   threadResumeCommandSchema,
   turnRunCommandSchema,
@@ -267,7 +269,6 @@ export const hostDaemonCommandSchema = z.union([
   threadRenameCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
-  environmentProvisionCommandSchema,
   environmentDestroyCommandSchema,
   workspaceStatusCommandSchema,
   workspaceDiffCommandSchema,
@@ -280,6 +281,10 @@ export const hostDaemonCommandSchema = z.union([
   workspaceListFilesCommandSchema,
   workspaceReadFileCommandSchema,
   workspaceListBranchesCommandSchema,
+]);
+export const hostDaemonCommandSchema = z.union([
+  hostDaemonNonProvisionCommandSchema,
+  environmentProvisionCommandSchema,
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 
