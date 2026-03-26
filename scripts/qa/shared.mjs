@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 const execFile = promisify(execFileCallback);
 
 export const STANDALONE_INSTANCE_ENV = "BB_STANDALONE_INSTANCE";
+export const STANDALONE_PARENT_PID_ENV = "BB_STANDALONE_PARENT_PID";
 const STANDALONE_TMP_PREFIX = "bb-standalone-";
 const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
@@ -232,30 +233,17 @@ async function listOpenFilePids(targetPath) {
 }
 
 async function listProcessesByInstance(instanceId) {
-  const { stdout } = await execFile(
-    "ps",
-    ["eww", "-Ao", "pid=,command="],
-    { encoding: "utf8", maxBuffer: PROCESS_SCAN_MAX_BUFFER },
-  );
-  return stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const match = /^(\d+)\s+(.*)$/u.exec(line);
-      if (!match) {
-        return null;
-      }
-      return {
-        command: match[2],
-        pid: Number.parseInt(match[1], 10),
-      };
-    })
-    .filter((entry) => entry && entry.command.includes(`${STANDALONE_INSTANCE_ENV}=${instanceId}`))
+  return (await listStandaloneProcesses())
+    .filter((entry) => entry.instanceId === instanceId)
     .map((entry) => entry.pid);
 }
 
-async function listStandaloneProcessPids() {
+function readStandaloneEnvValue(command, envName) {
+  const match = new RegExp(`${envName}=([^\\s]+)`, "u").exec(command);
+  return match?.[1] ?? null;
+}
+
+async function listStandaloneProcesses() {
   const { stdout } = await execFile(
     "ps",
     ["eww", "-Ao", "pid=,command="],
@@ -276,7 +264,17 @@ async function listStandaloneProcessPids() {
       };
     })
     .filter((entry) => entry && entry.command.includes(`${STANDALONE_INSTANCE_ENV}=`))
-    .map((entry) => entry.pid);
+    .map((entry) => {
+      const parentPid = Number.parseInt(
+        readStandaloneEnvValue(entry.command, STANDALONE_PARENT_PID_ENV) ?? "",
+        10,
+      );
+      return {
+        instanceId: readStandaloneEnvValue(entry.command, STANDALONE_INSTANCE_ENV),
+        parentPid: Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null,
+        pid: entry.pid,
+      };
+    });
 }
 
 export async function cleanupStandaloneInstance(state) {
@@ -314,6 +312,9 @@ export async function cleanupStandaloneOrphans() {
 
   for (const tmpRoot of roots) {
     const state = await readJsonIfExists(path.join(tmpRoot, "standalone-state.json"));
+    if (!state?.parentPid || (await isProcessRunning(state.parentPid))) {
+      continue;
+    }
     const cleanupResult = await cleanupStandaloneInstance({
       ...state,
       tmpRoot,
@@ -329,12 +330,16 @@ export async function cleanupStandaloneOrphans() {
     }
   }
 
-  for (const pid of await listStandaloneProcessPids()) {
-    if (killedPids.has(pid)) {
+  for (const processInfo of await listStandaloneProcesses()) {
+    if (
+      !processInfo.parentPid ||
+      killedPids.has(processInfo.pid) ||
+      (await isProcessRunning(processInfo.parentPid))
+    ) {
       continue;
     }
-    await killProcess(pid).catch(() => undefined);
-    killedPids.add(pid);
+    await killProcess(processInfo.pid).catch(() => undefined);
+    killedPids.add(processInfo.pid);
   }
 
   return {
@@ -349,6 +354,7 @@ export function buildDaemonRestartCommand(args) {
     `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
     `BB_SECRET_TOKEN=${shellQuote(args.authToken)}`,
     `BB_SERVER_URL=${shellQuote(args.serverUrl)}`,
+    `BB_STANDALONE_PARENT_PID=${shellQuote(String(args.parentPid))}`,
     `node ${shellQuote(args.entrypoint)}`,
     `>> ${shellQuote(args.logPath)} 2>&1 &`,
   ].join(" ");

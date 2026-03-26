@@ -222,13 +222,15 @@ export class RuntimeManager {
         })),
       onStderr: this.options.onStderr,
       onProcessExit: (info) => {
-        threads.clear();
-        const current = this.entries.get(args.environmentId);
-        if (current?.runtime === runtime) {
-          this.entries.delete(args.environmentId);
+        for (const threadId of info.threadIds) {
+          threads.delete(threadId);
         }
-        if (runtime) {
-          void runtime.shutdown().catch(() => {});
+        const current = this.entries.get(args.environmentId);
+        if (
+          current?.runtime === runtime &&
+          runtime?.listRunningProviders().length === 0
+        ) {
+          this.entries.delete(args.environmentId);
         }
         this.options.onProcessExit?.(info);
       },

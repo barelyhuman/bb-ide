@@ -115,6 +115,7 @@ export function createFakeRuntime() {
     steeredTurnId: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
     renamedTitle: undefined as string | undefined,
+    runningProviders: [] as string[],
     shutdownCount: 0,
   };
   const runtime = {
@@ -139,6 +140,9 @@ export function createFakeRuntime() {
     },
     async renameThread(args: { title: string }) {
       state.renamedTitle = args.title;
+    },
+    listRunningProviders() {
+      return state.runningProviders;
     },
     async shutdown() {
       state.shutdownCount += 1;

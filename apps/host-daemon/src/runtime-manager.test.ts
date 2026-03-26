@@ -74,6 +74,7 @@ function createFakeRuntime() {
     stopThread: vi.fn(async (_args: unknown) => undefined),
     renameThread: vi.fn(async (_args: unknown) => undefined),
     listModels: vi.fn(async () => []),
+    listRunningProviders: vi.fn((): string[] => []),
     shutdown: vi.fn(async () => undefined),
   };
 }
@@ -222,7 +223,49 @@ describe("RuntimeManager", () => {
 
     expect(manager.get("env-exit")).toBeUndefined();
     expect(manager.hasThread("env-exit", "thread-1")).toBe(false);
-    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+    expect(runtime.shutdown).not.toHaveBeenCalled();
+  });
+
+  it("keeps sibling provider threads running when one provider exits", async () => {
+    const workspace = createFakeWorkspace("/tmp/env-shared");
+    const runtime = createFakeRuntime();
+    let runningProviders = ["fake-alpha", "fake-beta"];
+    runtime.listRunningProviders.mockImplementation(() => runningProviders);
+    let onProcessExit:
+      | ((info: {
+          code: number | null;
+          providerId: string;
+          signal: string | null;
+          threadIds: string[];
+        }) => void)
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => workspace),
+      createRuntime: vi.fn((options) => {
+        onProcessExit = options.onProcessExit;
+        return runtime as unknown as AgentRuntime;
+      }),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-shared",
+      workspacePath: "/tmp/env-shared",
+    });
+    manager.markThreadActive("env-shared", "thread-a", "provider-a");
+    manager.markThreadActive("env-shared", "thread-b", "provider-b");
+
+    runningProviders = ["fake-beta"];
+    onProcessExit?.({
+      providerId: "fake-alpha",
+      threadIds: ["thread-a"],
+      code: 1,
+      signal: null,
+    });
+
+    expect(manager.get("env-shared")).toBeDefined();
+    expect(manager.hasThread("env-shared", "thread-a")).toBe(false);
+    expect(manager.hasThread("env-shared", "thread-b")).toBe(true);
+    expect(runtime.shutdown).not.toHaveBeenCalled();
   });
 
   it("shuts down all tracked environments", async () => {

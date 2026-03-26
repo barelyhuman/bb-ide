@@ -143,6 +143,8 @@ async function handleProvisionCommandResult(
 
       if (thread.status === "created" || thread.status === "provisioning") {
         tryTransition(deps.db, deps.hub, thread.id, "idle");
+      } else {
+        continue;
       }
 
       const startEvent = deps.db
@@ -240,6 +242,10 @@ function handleEnvironmentDestroyResult(
   }
   const command = parseCommand(commandRow);
   if (command.type !== "environment.destroy") {
+    return;
+  }
+  const environment = getEnvironment(deps.db, command.environmentId);
+  if (environment?.status !== "destroying") {
     return;
   }
   updateEnvironment(deps.db, deps.hub, command.environmentId, {

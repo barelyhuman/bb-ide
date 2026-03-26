@@ -12,6 +12,7 @@ import {
   repoRoot,
   reservePort,
   STANDALONE_INSTANCE_ENV,
+  STANDALONE_PARENT_PID_ENV,
   spawnLoggedProcess,
   waitForConnectedHost,
   waitForServerReady,
@@ -23,6 +24,7 @@ async function main() {
   await cleanupStandaloneOrphans();
   const envFile = await loadDotEnv();
   const instanceId = randomUUID();
+  const parentPid = process.ppid;
 
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-standalone-"));
   const logsDir = path.join(tmpRoot, "logs");
@@ -55,6 +57,7 @@ async function main() {
         BB_SERVER_PORT: String(serverPort),
         BB_SERVER_URL: serverUrl,
         [STANDALONE_INSTANCE_ENV]: instanceId,
+        [STANDALONE_PARENT_PID_ENV]: String(parentPid),
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
       },
       logPath: serverLogPath,
@@ -73,6 +76,7 @@ async function main() {
         BB_SECRET_TOKEN: token,
         BB_SERVER_URL: serverUrl,
         [STANDALONE_INSTANCE_ENV]: instanceId,
+        [STANDALONE_PARENT_PID_ENV]: String(parentPid),
       },
       logPath: daemonLogPath,
     });
@@ -94,6 +98,7 @@ async function main() {
       dataDir: bbRoot,
       entrypoint: path.join(repoRoot, "apps/host-daemon/dist/index.js"),
       logPath: daemonLogPath,
+      parentPid,
       serverUrl,
     });
 
@@ -113,6 +118,7 @@ async function main() {
       hostId: host.id,
       instanceId,
       logsDir,
+      parentPid,
       projectId: project.id,
       projectRoot,
       restartDaemonCommand,
