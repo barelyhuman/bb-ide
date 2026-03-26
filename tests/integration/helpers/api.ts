@@ -14,6 +14,7 @@ import {
   threadSchema,
 } from "@bb/domain";
 import type {
+  CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateThreadRequest,
   EnvironmentActionRequest,
@@ -101,6 +102,19 @@ export async function createProject(
   });
   await expectStatus(response, 201, `create project ${request.name}`);
   return projectResponseSchema.parse(await response.json());
+}
+
+export async function createManagerThread(
+  api: PublicApiClient,
+  projectId: string,
+  request: CreateManagerThreadRequest,
+): Promise<Thread> {
+  const response = await api.projects[":id"].managers.$post({
+    param: { id: projectId },
+    json: request,
+  });
+  await expectStatus(response, 201, `create manager thread for project ${projectId}`);
+  return threadSchema.parse(await response.json());
 }
 
 export async function createHostThread(

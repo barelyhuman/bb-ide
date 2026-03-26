@@ -62,6 +62,28 @@ describe("host-daemon command schemas", () => {
     });
   });
 
+  it("rejects malformed environment.provision commands at parse time", () => {
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        projectId: "proj_123",
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/project",
+        targetPath: "/tmp/project/.bb/env",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        projectId: "proj_123",
+        workspaceProvisionType: "unmanaged",
+      }),
+    ).toThrow();
+  });
+
   it("parses thread.start with workspacePath", () => {
     expect(
       hostDaemonCommandSchema.parse({

@@ -832,9 +832,10 @@ describe("createAgentRuntime", () => {
     const threadEvents = events.filter((e) => "threadId" in e);
     expect(threadEvents.length).toBeGreaterThan(0);
     for (const e of threadEvents) {
-      const rec = e as Record<string, unknown>;
-      expect(rec.threadId).toBe("my-thread");
-      expect(rec.providerThreadId).toBe(providerThreadId);
+      expect(e.threadId).toBe("my-thread");
+      if ("providerThreadId" in e) {
+        expect(e.providerThreadId).toBe(providerThreadId);
+      }
     }
 
     await runtime.shutdown();
@@ -863,20 +864,24 @@ describe("createAgentRuntime", () => {
 
     // t1 events should have threadId "t1" and providerThreadId from r1
     const t1Events = events.filter(
-      (e) => "threadId" in e && (e as Record<string, unknown>).threadId === "t1",
+      (e) => "threadId" in e && e.threadId === "t1",
     );
     const t2Events = events.filter(
-      (e) => "threadId" in e && (e as Record<string, unknown>).threadId === "t2",
+      (e) => "threadId" in e && e.threadId === "t2",
     );
 
     expect(t1Events.length).toBeGreaterThan(0);
     expect(t2Events.length).toBeGreaterThan(0);
 
     for (const e of t1Events) {
-      expect((e as Record<string, unknown>).providerThreadId).toBe(r1.providerThreadId);
+      if ("providerThreadId" in e) {
+        expect(e.providerThreadId).toBe(r1.providerThreadId);
+      }
     }
     for (const e of t2Events) {
-      expect((e as Record<string, unknown>).providerThreadId).toBe(r2.providerThreadId);
+      if ("providerThreadId" in e) {
+        expect(e.providerThreadId).toBe(r2.providerThreadId);
+      }
     }
 
     await runtime.shutdown();

@@ -122,15 +122,53 @@ export const providerListModelsCommandSchema = z.object({
   environmentId: z.string().min(1).optional(),
 });
 
+const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({
+  type: z.literal("environment.provision"),
+  projectId: z.string().min(1),
+  /** Setup script filename */
+  scriptName: z.string().min(1).optional(),
+  /** Setup script timeout in ms */
+  timeoutMs: z.number().int().positive().optional(),
+});
+
+const unmanagedEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("unmanaged"),
+    /** Path to validate */
+    path: z.string().min(1),
+  });
+
+const managedWorktreeEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("managed-worktree"),
+    /** Source repo path */
+    sourcePath: z.string().min(1),
+    /** Target path for worktree creation */
+    targetPath: z.string().min(1),
+    /** Branch name */
+    branchName: z.string().min(1),
+  });
+
+const managedCloneEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("managed-clone"),
+    /** Source repo path */
+    sourcePath: z.string().min(1),
+    /** Target path for clone creation */
+    targetPath: z.string().min(1),
+    /** Branch name */
+    branchName: z.string().min(1),
+  });
+
 /**
  * Provision a workspace for an environment.
  *
  * Discriminated by `workspaceProvisionType`:
- * - `unmanaged`: validates path exists, discovers git properties (isGitRepo,
+ * - `unmanaged`: validates `path`, discovers git properties (isGitRepo,
  *   isWorktree, branchName). Does NOT create anything.
- * - `managed-worktree`: creates a git worktree at targetPath from sourcePath,
- *   runs setup script if present.
- * - `managed-clone`: clones repo from sourcePath to targetPath, runs setup
+ * - `managed-worktree`: creates a git worktree at `targetPath` from
+ *   `sourcePath`, runs setup script if present.
+ * - `managed-clone`: clones repo from `sourcePath` to `targetPath`, runs setup
  *   script if present.
  *
  * Idempotent — if path already exists and is valid, reports success.
@@ -140,23 +178,14 @@ export const providerListModelsCommandSchema = z.object({
  *
  * Lane-serialized per environmentId.
  */
-export const environmentProvisionCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
-  type: z.literal("environment.provision"),
-  projectId: z.string().min(1),
-  workspaceProvisionType: workspaceProvisionTypeSchema,
-  /** Path to validate (unmanaged) or target path (managed) */
-  path: z.string().min(1).optional(),
-  /** Source repo path (managed-worktree, managed-clone) */
-  sourcePath: z.string().min(1).optional(),
-  /** Target path for worktree/clone creation */
-  targetPath: z.string().min(1).optional(),
-  /** Branch name (managed-worktree, managed-clone) */
-  branchName: z.string().min(1).optional(),
-  /** Setup script filename */
-  scriptName: z.string().min(1).optional(),
-  /** Setup script timeout in ms */
-  timeoutMs: z.number().int().positive().optional(),
-});
+export const environmentProvisionCommandSchema = z.discriminatedUnion(
+  "workspaceProvisionType",
+  [
+    unmanagedEnvironmentProvisionCommandSchema,
+    managedWorktreeEnvironmentProvisionCommandSchema,
+    managedCloneEnvironmentProvisionCommandSchema,
+  ],
+);
 
 export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.destroy"),
@@ -229,7 +258,7 @@ export const workspaceListBranchesCommandSchema = hostDaemonWorkspaceTargetSchem
   type: z.literal("workspace.list_branches"),
 });
 
-export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
+export const hostDaemonCommandSchema = z.union([
   threadStartCommandSchema,
   threadResumeCommandSchema,
   turnRunCommandSchema,

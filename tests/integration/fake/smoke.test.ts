@@ -1,8 +1,11 @@
 // Phase 7b: Fake provider basic lifecycle (plans/rebuild.md)
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
+import { createFakeAdapter } from "@bb/agent-runtime/test";
 import {
+  environments,
   events as eventRows,
   hostDaemonCommands,
 } from "@bb/db";
@@ -13,6 +16,8 @@ import type {
 import { describe, expect, it } from "vitest";
 import {
   archiveThread,
+  createHostThread,
+  createManagerThread,
   deleteThread,
   getEnvironment,
   getEnvironmentBranches,
@@ -126,6 +131,15 @@ async function expectEnvironmentDestroyed(
   expect(environment.status).toBe("destroyed");
 }
 
+function countProvisionCommands(harness: IntegrationHarness): number {
+  return harness.db
+    .select({ count: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .where(eq(hostDaemonCommands.type, "environment.provision"))
+    .all()
+    .length;
+}
+
 describe.sequential("fake provider smoke integration", () => {
   it("creates a project and unmanaged thread, then provisions the workspace", async () => {
     const harness = await createIntegrationHarness();
@@ -178,6 +192,95 @@ describe.sequential("fake provider smoke integration", () => {
       });
 
       expect(worktreeList).toContain(`worktree ${resolvedWorktreePath}`);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("creates a manager thread and starts it with manager tools and instructions", async () => {
+    const threadStartCommands: Array<{
+      dynamicToolNames: string[];
+      instructions: string | undefined;
+      threadId: string;
+    }> = [];
+    const harness = await createIntegrationHarness({
+      adapterFactory: (providerId) => {
+        const baseAdapter = createFakeAdapter({
+          displayName: providerId,
+          id: providerId,
+          modelId: `${providerId}-model`,
+          modelName: `${providerId} model`,
+        });
+        const buildCommand: typeof baseAdapter.buildCommand = (command) => {
+          if (command.type === "thread/start") {
+            threadStartCommands.push({
+              dynamicToolNames: (command.dynamicTools ?? [])
+                .map((tool) => tool.name)
+                .sort(),
+              instructions: command.options?.instructions,
+              threadId: command.threadId,
+            });
+          }
+          return baseAdapter.buildCommand(command);
+        };
+        return {
+          ...baseAdapter,
+          buildCommand,
+        };
+      },
+    });
+
+    try {
+      const project = await createProjectFixture(harness, "Manager Smoke");
+      const managerThread = await createManagerThread(harness.api, project.id, {
+        providerId: "fake",
+        title: "Project manager",
+      });
+      expect(managerThread.type).toBe("manager");
+
+      const readyManager = await waitForThreadStatus(
+        harness.api,
+        managerThread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
+      const managerEnvironment = await getEnvironment(
+        harness.api,
+        readyManager.environmentId ?? "",
+      );
+      if (!managerEnvironment.path) {
+        throw new Error("Manager environment path was not assigned");
+      }
+
+      await fs.writeFile(
+        path.join(managerEnvironment.path, "PREFERENCES.md"),
+        "Prefer concise user updates.\nDelegate implementation quickly.\n",
+        "utf8",
+      );
+
+      await sendTextMessage(harness.api, managerThread.id, {
+        text: "Coordinate the next step",
+      });
+      await waitForThreadStatus(harness.api, managerThread.id, "idle", TURN_TIMEOUT_MS);
+
+      const managerStartCommand = threadStartCommands.find(
+        (command) => command.threadId === managerThread.id,
+      );
+      expect(managerStartCommand).toBeDefined();
+      expect(managerStartCommand?.dynamicToolNames).toEqual(
+        expect.arrayContaining(["message_user", "spawn_thread"]),
+      );
+      expect(managerStartCommand?.instructions).toContain(
+        "You are a manager for this project.",
+      );
+      expect(managerStartCommand?.instructions).toContain(
+        "Prefer concise user updates.",
+      );
+      expect(managerStartCommand?.instructions).toContain(
+        "Delegate implementation quickly.",
+      );
+      expect(managerStartCommand?.instructions).toContain(managerThread.id);
+      expect(managerStartCommand?.instructions).toContain(managerEnvironment.path);
     } finally {
       await harness.cleanup();
     }
@@ -547,6 +650,84 @@ describe.sequential("fake provider smoke integration", () => {
     }
   });
 
+  it("moves a thread to error and records failure events when environment provisioning fails", async () => {
+    const harness = await createIntegrationHarness();
+
+    try {
+      const project = await createProjectFixture(harness, "Provision Failure Smoke");
+      const missingPath = path.join(
+        path.dirname(harness.repoDir),
+        `missing-provision-${randomUUID()}`,
+      );
+      await fs.rm(missingPath, { recursive: true, force: true });
+
+      const thread = await createHostThread(harness.api, {
+        hostId: harness.hostId,
+        projectId: project.id,
+        workspace: {
+          type: "unmanaged",
+          path: missingPath,
+        },
+      });
+      const environmentId = thread.environmentId;
+      if (!environmentId) {
+        throw new Error("Provisioning thread was missing an environment");
+      }
+
+      await waitForThreadStatus(harness.api, thread.id, "error", TURN_TIMEOUT_MS);
+
+      const environment = await getEnvironment(harness.api, environmentId);
+      const events = await getThreadEvents(harness.api, thread.id);
+      expect(environment.status).toBe("error");
+      expect(
+        events.some(
+          (event) =>
+            event.type === "system/provisioning" &&
+            event.data.status === "failed",
+        ),
+      ).toBe(true);
+      expect(
+        events.some(
+          (event) =>
+            event.type === "system/error" &&
+            event.data.code === "thread_provisioning_failed",
+        ),
+      ).toBe(true);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reuses the same unmanaged environment when two host threads target the same path", async () => {
+    const harness = await createIntegrationHarness();
+
+    try {
+      const project = await createProjectFixture(harness, "Implicit Reuse Smoke");
+      const firstThread = await createReadyThread(harness, {
+        projectId: project.id,
+        workspace: {
+          type: "unmanaged",
+          path: harness.repoDir,
+        },
+      });
+      const provisionCountBeforeSecondThread = countProvisionCommands(harness);
+
+      const secondThread = await createReadyThread(harness, {
+        projectId: project.id,
+        workspace: {
+          type: "unmanaged",
+          path: harness.repoDir,
+        },
+      });
+
+      expect(secondThread.thread.environmentId).toBe(firstThread.thread.environmentId);
+      expect(secondThread.environment.id).toBe(firstThread.environment.id);
+      expect(countProvisionCommands(harness)).toBe(provisionCountBeforeSecondThread);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("creates a reuse thread without provisioning a second environment", async () => {
     const harness = await createIntegrationHarness();
 
@@ -560,12 +741,7 @@ describe.sequential("fake provider smoke integration", () => {
         },
       });
 
-      const provisionCountBefore = harness.db
-        .select({ count: hostDaemonCommands.id })
-        .from(hostDaemonCommands)
-        .where(eq(hostDaemonCommands.type, "environment.provision"))
-        .all()
-        .length;
+      const provisionCountBefore = countProvisionCommands(harness);
 
       const reusedThread = await createReadyReuseThread(harness, {
         environmentId: environment.id,
@@ -575,12 +751,7 @@ describe.sequential("fake provider smoke integration", () => {
       expect(reusedThread.thread.environmentId).toBe(thread.environmentId);
       expect(reusedThread.thread.status).toBe("idle");
 
-      const provisionCountAfter = harness.db
-        .select({ count: hostDaemonCommands.id })
-        .from(hostDaemonCommands)
-        .where(eq(hostDaemonCommands.type, "environment.provision"))
-        .all()
-        .length;
+      const provisionCountAfter = countProvisionCommands(harness);
       expect(provisionCountAfter).toBe(provisionCountBefore);
 
       await sendTextMessage(harness.api, reusedThread.thread.id, {
@@ -597,6 +768,104 @@ describe.sequential("fake provider smoke integration", () => {
       const reusedEnvironment = await getEnvironment(harness.api, environment.id);
       expect(reusedEnvironment.id).toBe(environment.id);
       expect(output).toContain("reuse environment");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 409 when a second send tries to reprovision while managed reprovision is already in progress", async () => {
+    const harness = await createIntegrationHarness();
+
+    try {
+      await fs.writeFile(
+        path.join(harness.repoDir, ".bb-env-setup.sh"),
+        "#!/bin/sh\nsleep 2\n",
+        "utf8",
+      );
+      const project = await createProjectFixture(harness, "Managed Reprovision Conflict");
+      const { environment, thread } = await createReadyThread(harness, {
+        projectId: project.id,
+        workspace: { type: "managed-worktree" },
+      });
+      const originalWorkspacePath = environment.path ?? "";
+
+      await archiveThread(harness.api, thread.id);
+      await waitForCommand(
+        harness.db,
+        (command) =>
+          command.type === "environment.destroy" &&
+          command.command.type === "environment.destroy" &&
+          command.command.environmentId === environment.id,
+        DEFAULT_TIMEOUT_MS,
+      );
+      await waitForCommandsDrained(harness.db, harness.hostId, DEFAULT_TIMEOUT_MS);
+      await waitForPathRemoval(originalWorkspacePath, DEFAULT_TIMEOUT_MS);
+
+      await unarchiveThread(harness.api, thread.id);
+      const provisionCountBefore = countProvisionCommands(harness);
+      const firstSendResponse = await harness.api.threads[":id"].send.$post({
+        param: { id: thread.id },
+        json: {
+          input: [{ type: "text", text: "start reprovision" }],
+        },
+      });
+      expect(firstSendResponse.status).toBe(200);
+      expect(countProvisionCommands(harness)).toBe(provisionCountBefore + 1);
+
+      const secondSendResponse = await harness.api.threads[":id"].send.$post({
+        param: { id: thread.id },
+        json: {
+          input: [{ type: "text", text: "duplicate reprovision" }],
+        },
+      });
+      expect(secondSendResponse.status).toBe(409);
+      await expect(secondSendResponse.json()).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(countProvisionCommands(harness)).toBe(provisionCountBefore + 1);
+
+      const reloadingEnvironment = await getEnvironment(harness.api, environment.id);
+      expect(reloadingEnvironment.status).toBe("provisioning");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects reprovision attempts for unmanaged environments", async () => {
+    const harness = await createIntegrationHarness();
+
+    try {
+      const project = await createProjectFixture(harness, "Unmanaged Reprovision Rejected");
+      const { environment, thread } = await createReadyThread(harness, {
+        projectId: project.id,
+        workspace: {
+          type: "unmanaged",
+          path: harness.repoDir,
+        },
+      });
+      const provisionCountBefore = countProvisionCommands(harness);
+
+      harness.db
+        .update(environments)
+        .set({
+          path: null,
+          status: "error",
+          updatedAt: Date.now(),
+        })
+        .where(eq(environments.id, environment.id))
+        .run();
+
+      const response = await harness.api.threads[":id"].send.$post({
+        param: { id: thread.id },
+        json: {
+          input: [{ type: "text", text: "try unmanaged reprovision" }],
+        },
+      });
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(countProvisionCommands(harness)).toBe(provisionCountBefore);
     } finally {
       await harness.cleanup();
     }

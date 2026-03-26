@@ -29,12 +29,15 @@ export async function detectSetupScript(
   command: typeof environmentProvisionCommandSchema._type,
 ): Promise<boolean> {
   const scriptName = command.scriptName ?? ".bb-env-setup.sh";
-  const scriptParentPath =
-    command.workspaceProvisionType === "unmanaged"
-      ? command.path
-      : command.sourcePath;
-  if (!scriptParentPath) {
-    return false;
+  let scriptParentPath: string;
+  switch (command.workspaceProvisionType) {
+    case "unmanaged":
+      scriptParentPath = command.path;
+      break;
+    case "managed-worktree":
+    case "managed-clone":
+      scriptParentPath = command.sourcePath;
+      break;
   }
   try {
     await fs.access(path.join(scriptParentPath, scriptName));
@@ -49,16 +52,9 @@ export function toProvisionWorkspaceOptions(
 ) {
   switch (command.workspaceProvisionType) {
     case "unmanaged": {
-      const sourcePath = command.sourcePath ?? command.path;
-      if (!sourcePath) {
-        throw new CommandDispatchError(
-          "invalid_command",
-          `Unmanaged provision missing source path for environment ${command.environmentId}`,
-        );
-      }
       return {
         workspaceProvisionType: "unmanaged" as const,
-        path: sourcePath,
+        path: command.path,
       };
     }
     case "managed-worktree":
