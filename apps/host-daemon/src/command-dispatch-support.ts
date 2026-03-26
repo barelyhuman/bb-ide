@@ -1,8 +1,10 @@
 import { createProviderForId, listAvailableProviders } from "@bb/agent-runtime";
-import type { AvailableModel, ProviderInfo } from "@bb/domain";
+import type {
+  AvailableModel,
+  ProviderInfo,
+} from "@bb/domain";
 import type {
   HostDaemonCommand,
-  HostDaemonExecutionOptions,
 } from "@bb/host-daemon-contract";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 
@@ -11,25 +13,12 @@ export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
   { type: TType }
 >;
 
-export interface ThreadRuntimeResolution {
-  workspacePath: string;
-  projectId?: string;
-  providerId?: string;
-  providerThreadId?: string;
-  options?: HostDaemonExecutionOptions;
-  dynamicTools?: Array<{
-    name: string;
-    description: string;
-    inputSchema: unknown;
-  }>;
-}
-
 export interface CommandDispatchOptions {
   runtimeManager: RuntimeManager;
-  resolveThreadRuntime?: (args: {
-    environmentId: string;
+  seedThreadHighWaterMark?: (args: {
+    sequence: number;
     threadId: string;
-  }) => Promise<ThreadRuntimeResolution | null>;
+  }) => void;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
 }
@@ -66,6 +55,32 @@ export async function requireExistingEnvironment(
     );
   }
   return entry;
+}
+
+export async function requireWorkspaceEnvironment(
+  args: {
+    environmentId: string;
+    environmentStatus: "ready";
+    workspacePath: string;
+  },
+  runtimeManager: RuntimeManager,
+): Promise<RuntimeEntry> {
+  if (args.environmentStatus !== "ready") {
+    throw new CommandDispatchError(
+      "invalid_environment_status",
+      `Environment ${args.environmentId} is not ready`,
+    );
+  }
+
+  const existing = await runtimeManager.getOrAwait(args.environmentId);
+  if (existing) {
+    return existing;
+  }
+
+  return runtimeManager.ensureEnvironment({
+    environmentId: args.environmentId,
+    workspacePath: args.workspacePath,
+  });
 }
 
 export function defaultListProviders(): ProviderInfo[] {

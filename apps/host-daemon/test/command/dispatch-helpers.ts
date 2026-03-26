@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
+import type { AvailableModel, DynamicTool, ThreadRuntimeExecutionOptions } from "@bb/domain";
 import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 
@@ -18,6 +19,7 @@ export function createFakeWorkspace(pathname: string) {
     demotedPrimaryPath: undefined as string | undefined,
     demotedDefaultBranch: undefined as string | undefined,
     destroyed: false,
+    listedModelsProviderId: undefined as string | undefined,
   };
   const workspace = {
     path: pathname,
@@ -101,7 +103,7 @@ export function createFakeWorkspace(pathname: string) {
     async destroy() {
       state.destroyed = true;
     },
-  } as unknown as IWorkspace;
+  } satisfies IWorkspace;
 
   return { workspace, state };
 }
@@ -109,27 +111,50 @@ export function createFakeWorkspace(pathname: string) {
 export function createFakeRuntime() {
   const state = {
     startedThreadId: undefined as string | undefined,
+    startedDynamicTools: undefined as DynamicTool[] | undefined,
+    startedOptions: undefined as ThreadRuntimeExecutionOptions | undefined,
     resumedThreadId: undefined as string | undefined,
+    resumedDynamicTools: undefined as DynamicTool[] | undefined,
+    resumedOptions: undefined as ThreadRuntimeExecutionOptions | undefined,
     resumedProviderThreadId: undefined as string | undefined,
     ranTurnText: undefined as string | undefined,
+    ranTurnOptions: undefined as ThreadRuntimeExecutionOptions | undefined,
     steeredTurnId: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
     renamedTitle: undefined as string | undefined,
+    runningProviders: [] as string[],
     shutdownCount: 0,
   };
   const runtime = {
     async ensureProvider() {},
-    async startThread(args: { threadId: string }) {
+    async startThread(args: {
+      dynamicTools?: DynamicTool[];
+      options?: ThreadRuntimeExecutionOptions;
+      threadId: string;
+    }) {
       state.startedThreadId = args.threadId;
+      state.startedDynamicTools = args.dynamicTools;
+      state.startedOptions = args.options;
       return { providerThreadId: `provider-${args.threadId}` };
     },
-    async resumeThread(args: { threadId: string; providerThreadId?: string }) {
+    async resumeThread(args: {
+      dynamicTools?: DynamicTool[];
+      options?: ThreadRuntimeExecutionOptions;
+      providerThreadId?: string;
+      threadId: string;
+    }) {
       state.resumedThreadId = args.threadId;
+      state.resumedDynamicTools = args.dynamicTools;
+      state.resumedOptions = args.options;
       state.resumedProviderThreadId = args.providerThreadId;
       return { providerThreadId: args.providerThreadId };
     },
-    async runTurn(args: { input: Array<{ type: string; text: string }> }) {
+    async runTurn(args: {
+      input: Array<{ text?: string; type: string }>;
+      options?: ThreadRuntimeExecutionOptions;
+    }) {
       state.ranTurnText = args.input[0]?.text;
+      state.ranTurnOptions = args.options;
     },
     async steerTurn(args: { expectedTurnId: string }) {
       state.steeredTurnId = args.expectedTurnId;
@@ -140,13 +165,20 @@ export function createFakeRuntime() {
     async renameThread(args: { title: string }) {
       state.renamedTitle = args.title;
     },
+    listRunningProviders() {
+      return state.runningProviders;
+    },
+    async listModels(args: { providerId: string }) {
+      state.listedModelsProviderId = args.providerId;
+      return [] satisfies AvailableModel[];
+    },
     async shutdown() {
       state.shutdownCount += 1;
     },
   };
 
   return {
-    runtime: runtime as unknown as AgentRuntime,
+    runtime: runtime satisfies AgentRuntime,
     state,
   };
 }

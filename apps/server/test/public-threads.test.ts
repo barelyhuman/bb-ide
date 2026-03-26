@@ -1,5 +1,17 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
-import { getDraft, getEnvironment, getThread, threads } from "@bb/db";
+import {
+  createEnvironment,
+  getDraft,
+  getEnvironment,
+  getThread,
+  hostDaemonCommands,
+  threads,
+} from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -16,8 +28,48 @@ import {
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
+const execFileAsync = promisify(execFile);
+
 async function readJson(response: Response): Promise<unknown> {
   return response.json();
+}
+
+interface GitCommandArgs {
+  args: string[];
+  cwd: string;
+}
+
+interface TestGitRepo {
+  cleanup: () => Promise<void>;
+  path: string;
+}
+
+async function runGitCommand(args: GitCommandArgs): Promise<void> {
+  await execFileAsync("git", args.args, {
+    cwd: args.cwd,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_EMAIL: "bb-tests@example.com",
+      GIT_AUTHOR_NAME: "bb tests",
+      GIT_COMMITTER_EMAIL: "bb-tests@example.com",
+      GIT_COMMITTER_NAME: "bb tests",
+    },
+  });
+}
+
+async function createTestGitRepo(): Promise<TestGitRepo> {
+  const repoPath = await mkdtemp(path.join(tmpdir(), "bb-server-thread-repo-"));
+  await runGitCommand({ cwd: repoPath, args: ["init", "--initial-branch=main"] });
+  await writeFile(path.join(repoPath, "README.md"), "# thread test repo\n", "utf8");
+  await runGitCommand({ cwd: repoPath, args: ["add", "README.md"] });
+  await runGitCommand({ cwd: repoPath, args: ["commit", "-m", "Initial commit"] });
+
+  return {
+    path: repoPath,
+    cleanup: async () => {
+      await rm(repoPath, { recursive: true, force: true });
+    },
+  };
 }
 
 function cleanWorkspaceStatus() {
@@ -97,11 +149,12 @@ describe("public thread routes", () => {
 
   it("creates managed-worktree threads and queues managed provisioning", async () => {
     const harness = await createTestAppHarness();
+    const repo = await createTestGitRepo();
     try {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/managed-project",
+        path: repo.path,
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -127,6 +180,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       const createdThread = await readJson(response) as {
         environmentId: string;
+        id: string;
         status: string;
       };
       expect(createdThread.status).toBe("provisioning");
@@ -142,6 +196,126 @@ describe("public thread routes", () => {
       });
       expect(queued.command).toHaveProperty("targetPath");
       expect(queued.command).toHaveProperty("branchName");
+
+      const thread = getThread(harness.db, createdThread.id);
+      expect(thread?.mergeBaseBranch).toBeNull();
+    } finally {
+      await repo.cleanup();
+      await harness.cleanup();
+    }
+  });
+
+  it("reuses the ready unmanaged environment for the default source path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/shared-unmanaged-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        status: "ready",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Reuse the existing direct workspace" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response) as {
+        environmentId: string;
+        id: string;
+        status: string;
+      };
+      expect(createdThread).toMatchObject({
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.environmentId === environment.id &&
+          command.threadId === createdThread.id,
+      );
+      expect(queuedStart.command).toMatchObject({
+        workspacePath: source.path,
+      });
+
+      const provisionCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.provision"))
+        .all();
+      expect(provisionCommands).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("attaches new threads to an in-flight unmanaged environment without reprovisioning", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/inflight-unmanaged-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        status: "provisioning",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Wait for the existing provisioning flow" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      await expect(readJson(response)).resolves.toMatchObject({
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+
+      const queuedCommands = harness.db.select().from(hostDaemonCommands).all();
+      expect(queuedCommands).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
@@ -236,11 +410,19 @@ describe("public thread routes", () => {
         status: "active",
       });
       seedEvent(harness.deps, {
+        threadId: idleThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-idle",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-turn",
         turnId: "turn-1",
-        sequence: 1,
+        sequence: 2,
         type: "turn/started",
         data: {},
       });
@@ -265,6 +447,10 @@ describe("public thread routes", () => {
       );
       expect(runCommand.command).toMatchObject({
         environmentId: environment.id,
+        workspacePath: environment.path,
+        projectId: project.id,
+        providerId: idleThread.providerId,
+        providerThreadId: "provider-idle",
       });
       expect(getThread(harness.db, idleThread.id)?.status).toBe("active");
 
@@ -290,6 +476,10 @@ describe("public thread routes", () => {
       expect(steerCommand.command).toMatchObject({
         expectedTurnId: "turn-1",
         environmentId: environment.id,
+        workspacePath: environment.path,
+        projectId: project.id,
+        providerId: activeThread.providerId,
+        providerThreadId: "provider-turn",
       });
     } finally {
       await harness.cleanup();
@@ -493,6 +683,41 @@ describe("public thread routes", () => {
     }
   });
 
+  it("marks provisioning managed environments as destroying without queueing an invalid destroy", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        projectId: project.id,
+        hostId: host.id,
+        path: null,
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "DELETE",
+      });
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+
+      const destroyCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.destroy"))
+        .all();
+      expect(destroyCommands).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("queues thread.rename, returns thread events, sends drafts, and creates manager threads", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -553,6 +778,16 @@ describe("public thread routes", () => {
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
         content: JSON.stringify([{ type: "text", text: "Draft content" }]),
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft",
+        sequence: 2,
+        type: "thread/identity",
+        data: {},
       });
       const draftSendResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
@@ -572,6 +807,10 @@ describe("public thread routes", () => {
       );
       expect(draftCommand.command).toMatchObject({
         environmentId: environment.id,
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+        },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();
 
@@ -608,6 +847,54 @@ describe("public thread routes", () => {
           command.projectId === project.id,
       );
       expect(managerProvisionCommand.command.type).toBe("environment.provision");
+      if (managerProvisionCommand.command.type !== "environment.provision") {
+        throw new Error("Expected manager provisioning command");
+      }
+      const managerProvisionPath = managerProvisionCommand.command.targetPath;
+      if (!managerProvisionPath) {
+        throw new Error("Expected manager provisioning target path");
+      }
+      const provisionResponse = await reportQueuedCommandSuccess(
+        harness,
+        managerProvisionCommand,
+        {
+          path: managerProvisionPath,
+          branchName: managerProvisionCommand.command.branchName ?? "bb/project-manager",
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: true,
+          ranSetup: false,
+        },
+      );
+      expect(provisionResponse.status).toBe(200);
+
+      const managerSendResponse = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Start coordinating work" }],
+          }),
+        },
+      );
+      expect(managerSendResponse.status).toBe(200);
+
+      const managerStartCommand = await waitForQueuedCommandAfter(
+        harness,
+        managerProvisionCommand.row.cursor,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === managerThread.id,
+      );
+      expect(managerStartCommand.command.options).toMatchObject({
+        source: "client/turn/requested",
+      });
+      expect(managerStartCommand.command.threadType).toBe("manager");
+      expect(managerStartCommand.command.projectName).toBe(project.name);
+      expect(managerStartCommand.command.projectRootPath).toBe("/tmp/thread-data-project");
     } finally {
       await harness.cleanup();
     }

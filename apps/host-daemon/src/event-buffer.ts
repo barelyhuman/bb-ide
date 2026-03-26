@@ -123,6 +123,11 @@ export function createEventBuffer(
       return;
     }
 
+    for (const [threadId, highWaterMark] of Object.entries(threadHighWaterMarks)) {
+      const nextValue = nextSequenceByThread.get(threadId) ?? 1;
+      nextSequenceByThread.set(threadId, Math.max(nextValue, highWaterMark + 1));
+    }
+
     buffer = buffer.filter((event) => {
       const highWaterMark = threadHighWaterMarks[event.threadId];
       return highWaterMark === undefined || event.sequence > highWaterMark;
@@ -130,10 +135,6 @@ export function createEventBuffer(
   }
 
   function seed(threadHighWaterMarks: Record<string, number>): void {
-    for (const [threadId, highWaterMark] of Object.entries(threadHighWaterMarks)) {
-      const nextValue = nextSequenceByThread.get(threadId) ?? 1;
-      nextSequenceByThread.set(threadId, Math.max(nextValue, highWaterMark + 1));
-    }
     ack(threadHighWaterMarks);
   }
 

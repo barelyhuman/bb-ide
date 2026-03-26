@@ -6,19 +6,36 @@ import {
   defaultListModels,
   defaultListProviders,
   requireExistingEnvironment,
+  requireWorkspaceEnvironment,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { ensureThreadRuntime, resumeThread, startThread } from "./command-handlers/thread.js";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
+import { resolveThreadRuntimeConfig } from "./thread-runtime-config.js";
 
 export {
   CommandDispatchError,
   getErrorCode,
   type CommandDispatchOptions,
-  type ThreadRuntimeResolution,
 } from "./command-dispatch-support.js";
+
+function seedThreadHighWaterMarkIfPresent(
+  command:
+    | Extract<HostDaemonCommand, { type: "thread.start" }>
+    | Extract<HostDaemonCommand, { type: "turn.run" }>
+    | Extract<HostDaemonCommand, { type: "turn.steer" }>,
+  options: CommandDispatchOptions,
+): void {
+  if (command.eventSequence === undefined) {
+    return;
+  }
+  options.seedThreadHighWaterMark?.({
+    threadId: command.threadId,
+    sequence: command.eventSequence,
+  });
+}
 
 export async function dispatchCommand<TCommand extends HostDaemonCommand>(
   command: TCommand,
@@ -26,28 +43,24 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
 ): Promise<HostDaemonCommandResult<TCommand["type"]>> {
   switch (command.type) {
     case "thread.start":
+      seedThreadHighWaterMarkIfPresent(command, options);
       return startThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "thread.resume":
       return resumeThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "turn.run": {
-      const entry = await ensureThreadRuntime(
-        command.environmentId,
-        command.threadId,
-        options,
-      );
+      seedThreadHighWaterMarkIfPresent(command, options);
+      const entry = await ensureThreadRuntime(command, options);
+      const runtimeConfig = await resolveThreadRuntimeConfig(command);
       await entry.runtime.runTurn({
         threadId: command.threadId,
         input: command.input,
-        options: command.options,
+        options: runtimeConfig.options,
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "turn.steer": {
-      const entry = await ensureThreadRuntime(
-        command.environmentId,
-        command.threadId,
-        options,
-      );
+      seedThreadHighWaterMarkIfPresent(command, options);
+      const entry = await ensureThreadRuntime(command, options);
       await entry.runtime.steerTurn({
         threadId: command.threadId,
         expectedTurnId: command.expectedTurnId,
@@ -98,19 +111,13 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.status": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return {
         workspaceStatus: await entry.workspace.getStatus(),
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.diff": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return {
         diff: await entry.workspace.getDiff({
           mergeBaseBranch: command.mergeBaseBranch,
@@ -119,10 +126,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.commit": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.commit({
         message: command.message,
         includeUnstaged: command.includeUnstaged,
@@ -133,18 +137,12 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "workspace.reset": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       await entry.workspace.reset();
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.checkpoint": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.checkpoint({
         commitMessage: command.commitMessage,
         remoteName: command.remoteName,

@@ -2,10 +2,13 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
 import {
+  getThread,
   hostDaemonCursors,
   hostDaemonSessions,
+  listEvents,
   queueCommand,
 } from "@bb/db";
+import { systemErrorEventDataSchema } from "@bb/domain";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   createHostDaemonClient,
@@ -52,6 +55,26 @@ async function waitForSessionStatus(
   }
 
   throw new Error(`Timed out waiting for session ${args.sessionId} to reach ${args.status}`);
+}
+
+async function waitForThreadStatus(
+  args: {
+    server: Awaited<ReturnType<typeof startTestServer>>;
+    threadId: string;
+    status: string;
+  },
+): Promise<NonNullable<ReturnType<typeof getThread>>> {
+  const deadline = Date.now() + 1_000;
+
+  while (Date.now() < deadline) {
+    const thread = getThread(args.server.db, args.threadId);
+    if (thread?.status === args.status) {
+      return thread;
+    }
+    await sleep(10);
+  }
+
+  throw new Error(`Timed out waiting for thread ${args.threadId} to reach ${args.status}`);
 }
 
 describe("internal session correctness", () => {
@@ -287,6 +310,70 @@ describe("internal session correctness", () => {
         status: "closed",
       });
       expect(closedSession.closeReason).toBe("daemon-disconnect");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("marks active threads errored and appends a system error when the daemon disconnects", async () => {
+    const server = await startTestServer();
+    try {
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        server.config.authToken,
+      );
+      const sessionResponse = await daemonClient.session.open.$post({
+        json: {
+          hostId: "host-daemon-active-disconnect",
+          instanceId: "instance-1",
+          hostName: "Disconnect Host",
+          hostType: "persistent",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        },
+      });
+      expect(sessionResponse.status).toBe(201);
+      const session = await sessionResponse.json();
+
+      const { project } = seedProjectWithSource(server, {
+        hostId: "host-daemon-active-disconnect",
+      });
+      const environment = seedEnvironment(server, {
+        hostId: "host-daemon-active-disconnect",
+        projectId: project.id,
+      });
+      const thread = seedThread(server, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const socket = new WebSocket(
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+      );
+      await waitForOpen(socket);
+      socket.close();
+
+      await waitForSessionStatus({
+        server,
+        sessionId: session.sessionId,
+        status: "closed",
+      });
+      await waitForThreadStatus({
+        server,
+        threadId: thread.id,
+        status: "error",
+      });
+
+      const errorEvent = listEvents(server.db, { threadId: thread.id }).find(
+        (event) => event.type === "system/error",
+      );
+      expect(errorEvent).toBeDefined();
+      expect(
+        systemErrorEventDataSchema.parse(JSON.parse(errorEvent?.data ?? "{}")),
+      ).toMatchObject({
+        code: "host_daemon_disconnected",
+        message: "Host daemon disconnected during active work",
+      });
     } finally {
       await server.close();
     }

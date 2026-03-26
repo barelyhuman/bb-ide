@@ -1,12 +1,15 @@
 import { eq, max, sql } from "drizzle-orm";
-import { events } from "@bb/db";
-import { insertEvents } from "@bb/db";
+import {
+  createEventId,
+  events,
+} from "@bb/db";
 import type {
   PromptInput,
   ThreadEventType,
   ThreadExecutionOptions,
   ThreadTurnInitiator,
 } from "@bb/domain";
+import { turnRequestEventDataSchema } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 
 export interface AppendThreadEventArgs {
@@ -19,50 +22,63 @@ export interface AppendThreadEventArgs {
 }
 
 export interface ClientTurnEventArgs {
+  environmentId: string | null;
   execution: ThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
   source: "spawn" | "tell";
+  threadId: string;
+  type: "client/thread/start" | "client/turn/requested" | "client/turn/start";
 }
 
 export function appendThreadEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs,
 ): number {
-  const maxRow = deps.db
-    .select({ maxSeq: max(events.sequence) })
-    .from(events)
-    .where(eq(events.threadId, args.threadId))
-    .get();
-  const nextSequence = (maxRow?.maxSeq ?? 0) + 1;
+  const now = Date.now();
+  const nextSequence = deps.db.transaction(
+    (tx) => {
+      const maxRow = tx
+        .select({ maxSeq: max(events.sequence) })
+        .from(events)
+        .where(eq(events.threadId, args.threadId))
+        .get();
+      const sequence = (maxRow?.maxSeq ?? 0) + 1;
 
-  insertEvents(deps.db, deps.hub, [
-    {
-      threadId: args.threadId,
-      environmentId: args.environmentId ?? null,
-      providerThreadId: args.providerThreadId ?? null,
-      sequence: nextSequence,
-      turnId: args.turnId ?? null,
-      type: args.type,
-      data: JSON.stringify(args.data),
+      tx.run(
+        sql`INSERT INTO events
+          (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, data, created_at)
+          VALUES (
+            ${createEventId()},
+            ${args.threadId},
+            ${args.environmentId ?? null},
+            ${args.turnId ?? null},
+            ${args.providerThreadId ?? null},
+            ${sequence},
+            ${args.type},
+            ${JSON.stringify(args.data)},
+            ${now}
+          )`,
+      );
+
+      return sequence;
     },
-  ]);
+    { behavior: "immediate" },
+  );
 
+  deps.hub.notifyThread(args.threadId, ["events-appended"]);
   return nextSequence;
 }
 
 export function appendClientTurnEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  threadId: string,
-  environmentId: string | null,
-  type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
   args: ClientTurnEventArgs,
 ): number {
   return appendThreadEvent(deps, {
-    threadId,
-    environmentId,
-    type,
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    type: args.type,
     data: {
       direction: "outbound",
       source: args.source,
@@ -173,6 +189,23 @@ export function getLastTurnId(
   return row?.turnId ?? null;
 }
 
+export function getLastProviderThreadId(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): string | null {
+  const row = deps.db
+    .select({ providerThreadId: events.providerThreadId })
+    .from(events)
+    .where(
+      sql`${events.threadId} = ${threadId}
+        AND ${events.providerThreadId} IS NOT NULL`,
+    )
+    .orderBy(sql`${events.sequence} DESC`)
+    .limit(1)
+    .get();
+  return row?.providerThreadId ?? null;
+}
+
 export function getLastExecutionOptions(
   deps: Pick<AppDeps, "db">,
   threadId: string,
@@ -192,6 +225,17 @@ export function getLastExecutionOptions(
     return null;
   }
 
-  const parsed = JSON.parse(row.data) as { execution?: ThreadExecutionOptions };
-  return parsed.execution ?? null;
+  let eventData: unknown;
+  try {
+    eventData = JSON.parse(row.data);
+  } catch {
+    return null;
+  }
+
+  const parsed = turnRequestEventDataSchema.safeParse(eventData);
+  if (!parsed.success) {
+    return null;
+  }
+
+  return parsed.data.execution;
 }

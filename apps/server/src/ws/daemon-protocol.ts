@@ -1,8 +1,16 @@
-import { eq } from "drizzle-orm";
-import { closeSession, heartbeatSession, hostDaemonSessions } from "@bb/db";
+import { and, eq, inArray } from "drizzle-orm";
+import {
+  closeSession,
+  environments,
+  heartbeatSession,
+  hostDaemonSessions,
+  threads,
+} from "@bb/db";
 import { hostDaemonDaemonWsMessageSchema } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "../internal/session-state.js";
+import { appendSystemErrorEvent } from "../services/thread-events.js";
+import { tryTransition } from "../services/thread-transitions.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
 interface DaemonSocket {
@@ -59,4 +67,28 @@ export function onDaemonSocketClose(
     return;
   }
   closeSession(deps.db, deps.hub, sessionId, "daemon-disconnect");
+  const interruptedThreads = deps.db
+    .select({
+      environmentId: threads.environmentId,
+      id: threads.id,
+    })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(
+      and(
+        eq(environments.hostId, session.hostId),
+        inArray(threads.status, ["active", "provisioning"]),
+      ),
+    )
+    .all();
+  for (const thread of interruptedThreads) {
+    appendSystemErrorEvent(deps, {
+      code: "host_daemon_disconnected",
+      detail: "The host daemon disconnected while work was in progress.",
+      environmentId: thread.environmentId,
+      message: "Host daemon disconnected during active work",
+      threadId: thread.id,
+    });
+    tryTransition(deps.db, deps.hub, thread.id, "error");
+  }
 }

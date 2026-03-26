@@ -90,6 +90,7 @@ export const environments = sqliteTable(
       .notNull()
       .default(false),
     branchName: text("branch_name"),
+    defaultBranch: text("default_branch"),
     workspaceProvisionType: text("workspace_provision_type").$type<WorkspaceProvisionType>(),
     status: text("status").$type<EnvironmentStatus>().notNull().default("provisioning"),
     createdAt: integer("created_at").notNull(),
@@ -167,8 +168,10 @@ export const queuedThreadMessages = sqliteTable(
       .references(() => threads.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
     mode: text("mode").notNull(),
+    model: text("model"),
     reasoningLevel: text("reasoning_level").notNull(),
     sandboxMode: text("sandbox_mode").notNull(),
+    serviceTier: text("service_tier"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

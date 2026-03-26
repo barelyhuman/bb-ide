@@ -3,7 +3,8 @@ import {
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   promptInputSchema,
-  threadExecutionOptionsSchema,
+  threadTypeSchema,
+  threadRuntimeExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
   workspaceProvisionTypeSchema,
@@ -40,7 +41,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
 
-export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema;
+export const hostDaemonExecutionOptionsSchema = threadRuntimeExecutionOptionsSchema;
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;
@@ -50,40 +51,56 @@ const hostDaemonThreadTargetSchema = z.object({
   threadId: z.string().min(1),
 });
 
+const hostDaemonThreadRuntimeContextSchema = z.object({
+  workspacePath: z.string().min(1),
+  projectId: z.string().min(1),
+  projectName: z.string().min(1),
+  projectRootPath: z.string().min(1),
+  providerId: z.string().min(1),
+  threadType: threadTypeSchema,
+  providerThreadId: z.string().min(1).optional(),
+  options: hostDaemonExecutionOptionsSchema.optional(),
+  dynamicTools: z.array(dynamicToolSchema).optional(),
+});
+
 const hostDaemonEnvironmentTargetSchema = z.object({
   environmentId: z.string().min(1),
 });
 
-export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("thread.start"),
+const hostDaemonWorkspaceTargetSchema = hostDaemonEnvironmentTargetSchema.extend({
+  environmentStatus: z.literal("ready"),
   workspacePath: z.string().min(1),
-  projectId: z.string().min(1),
-  providerId: z.string().min(1),
+});
+
+export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
+  type: z.literal("thread.start"),
+  eventSequence: z.number().int().nonnegative().optional(),
   input: z.array(promptInputSchema).min(1).optional(),
-  options: hostDaemonExecutionOptionsSchema.optional(),
-  dynamicTools: z.array(dynamicToolSchema).optional(),
 });
 
 /** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */
-export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("thread.resume"),
-  workspacePath: z.string().min(1),
-  projectId: z.string().min(1).optional(),
-  providerThreadId: z.string().min(1).optional(),
-  providerId: z.string().min(1).optional(),
-  options: hostDaemonExecutionOptionsSchema.optional(),
-  dynamicTools: z.array(dynamicToolSchema).optional(),
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
-export const turnRunCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("turn.run"),
+  eventSequence: z.number().int().nonnegative(),
   input: z.array(promptInputSchema).min(1),
-  options: hostDaemonExecutionOptionsSchema.optional(),
 });
 
-export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("turn.steer"),
+  eventSequence: z.number().int().nonnegative(),
   expectedTurnId: z.string().min(1),
   input: z.array(promptInputSchema).min(1),
 });
@@ -107,15 +124,53 @@ export const providerListModelsCommandSchema = z.object({
   environmentId: z.string().min(1).optional(),
 });
 
+const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({
+  type: z.literal("environment.provision"),
+  projectId: z.string().min(1),
+  /** Setup script filename */
+  scriptName: z.string().min(1).optional(),
+  /** Setup script timeout in ms */
+  timeoutMs: z.number().int().positive().optional(),
+});
+
+const unmanagedEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("unmanaged"),
+    /** Path to validate */
+    path: z.string().min(1),
+  });
+
+const managedWorktreeEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("managed-worktree"),
+    /** Source repo path */
+    sourcePath: z.string().min(1),
+    /** Target path for worktree creation */
+    targetPath: z.string().min(1),
+    /** Branch name */
+    branchName: z.string().min(1),
+  });
+
+const managedCloneEnvironmentProvisionCommandSchema =
+  environmentProvisionCommandBaseSchema.extend({
+    workspaceProvisionType: z.literal("managed-clone"),
+    /** Source repo path */
+    sourcePath: z.string().min(1),
+    /** Target path for clone creation */
+    targetPath: z.string().min(1),
+    /** Branch name */
+    branchName: z.string().min(1),
+  });
+
 /**
  * Provision a workspace for an environment.
  *
  * Discriminated by `workspaceProvisionType`:
- * - `unmanaged`: validates path exists, discovers git properties (isGitRepo,
+ * - `unmanaged`: validates `path`, discovers git properties (isGitRepo,
  *   isWorktree, branchName). Does NOT create anything.
- * - `managed-worktree`: creates a git worktree at targetPath from sourcePath,
- *   runs setup script if present.
- * - `managed-clone`: clones repo from sourcePath to targetPath, runs setup
+ * - `managed-worktree`: creates a git worktree at `targetPath` from
+ *   `sourcePath`, runs setup script if present.
+ * - `managed-clone`: clones repo from `sourcePath` to `targetPath`, runs setup
  *   script if present.
  *
  * Idempotent — if path already exists and is valid, reports success.
@@ -125,23 +180,14 @@ export const providerListModelsCommandSchema = z.object({
  *
  * Lane-serialized per environmentId.
  */
-export const environmentProvisionCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
-  type: z.literal("environment.provision"),
-  projectId: z.string().min(1),
-  workspaceProvisionType: workspaceProvisionTypeSchema,
-  /** Path to validate (unmanaged) or target path (managed) */
-  path: z.string().min(1).optional(),
-  /** Source repo path (managed-worktree, managed-clone) */
-  sourcePath: z.string().min(1).optional(),
-  /** Target path for worktree/clone creation */
-  targetPath: z.string().min(1).optional(),
-  /** Branch name (managed-worktree, managed-clone) */
-  branchName: z.string().min(1).optional(),
-  /** Setup script filename */
-  scriptName: z.string().min(1).optional(),
-  /** Setup script timeout in ms */
-  timeoutMs: z.number().int().positive().optional(),
-});
+export const environmentProvisionCommandSchema = z.discriminatedUnion(
+  "workspaceProvisionType",
+  [
+    unmanagedEnvironmentProvisionCommandSchema,
+    managedWorktreeEnvironmentProvisionCommandSchema,
+    managedCloneEnvironmentProvisionCommandSchema,
+  ],
+);
 
 export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.destroy"),
@@ -149,58 +195,56 @@ export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema
   workspaceProvisionType: workspaceProvisionTypeSchema,
 });
 
-export const workspaceStatusCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.status"),
   mergeBaseBranch: z.string().min(1).optional(),
 });
 
-export const workspaceDiffCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diff"),
   selection: threadGitDiffSelectionSchema.optional(),
   mergeBaseBranch: z.string().min(1).optional(),
 });
 
-export const workspaceCommitCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.commit"),
   message: z.string().min(1),
   includeUnstaged: z.boolean().optional(),
 });
 
-export const workspaceSquashMergeCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.squash_merge"),
   targetBranch: z.string().min(1),
   commitMessage: z.string().min(1),
 });
 
 /** Discard all uncommitted changes. Internal use only — not exposed via public API. */
-export const workspaceResetCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceResetCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.reset"),
 });
 
 /** Commit and push to remote. Internal use only — not exposed via public API. */
-export const workspaceCheckpointCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceCheckpointCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.checkpoint"),
   commitMessage: z.string().min(1),
   remoteName: z.string().min(1).optional(),
 });
 
 /** Switch the project's primary checkout to the environment's branch so the user can work with the changes directly. */
-export const workspacePromoteCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspacePromoteCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.promote"),
   threadId: z.string().min(1),
   primaryPath: z.string().min(1),
 });
 
 /** Reverse a prior promote — restore the primary checkout to the default branch. */
-export const workspaceDemoteCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceDemoteCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.demote"),
   threadId: z.string().min(1),
   primaryPath: z.string().min(1),
   defaultBranch: z.string().min(1),
   envBranch: z.string().min(1),
 });
-
-const hostDaemonWorkspaceTargetSchema = hostDaemonEnvironmentTargetSchema;
 
 export const workspaceListFilesCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.list_files"),
@@ -212,11 +256,11 @@ export const workspaceReadFileCommandSchema = hostDaemonWorkspaceTargetSchema.ex
   path: z.string().min(1),
 });
 
-export const workspaceListBranchesCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const workspaceListBranchesCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.list_branches"),
 });
 
-export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
+const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
   threadResumeCommandSchema,
   turnRunCommandSchema,
@@ -225,7 +269,6 @@ export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
   threadRenameCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
-  environmentProvisionCommandSchema,
   environmentDestroyCommandSchema,
   workspaceStatusCommandSchema,
   workspaceDiffCommandSchema,
@@ -238,6 +281,10 @@ export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
   workspaceListFilesCommandSchema,
   workspaceReadFileCommandSchema,
   workspaceListBranchesCommandSchema,
+]);
+export const hostDaemonCommandSchema = z.union([
+  hostDaemonNonProvisionCommandSchema,
+  environmentProvisionCommandSchema,
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 

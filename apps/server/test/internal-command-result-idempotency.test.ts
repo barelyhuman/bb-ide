@@ -38,19 +38,16 @@ describe("internal command result idempotency", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      appendClientTurnEvent(
-        harness.deps,
-        thread.id,
-        environment.id,
-        "client/thread/start",
-        {
-          input: [{ type: "text", text: "Start once" }],
-          execution: { source: "client/thread/start" },
-          initiator: "user",
-          requestMethod: "thread/start",
-          source: "spawn",
-        },
-      );
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/thread/start",
+        input: [{ type: "text", text: "Start once" }],
+        execution: { source: "client/thread/start" },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
       const command = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
         sessionId: session.id,
@@ -71,6 +68,7 @@ describe("internal command result idempotency", () => {
       const firstResponse = await reportQueuedCommandSuccess(harness, queued, {
         path: "/tmp/idempotent-provision",
         branchName: "bb/idempotent",
+        defaultBranch: "main",
         isGitRepo: true,
         isWorktree: false,
         ranSetup: false,
@@ -92,6 +90,7 @@ describe("internal command result idempotency", () => {
       const secondResponse = await reportQueuedCommandSuccess(harness, queued, {
         path: "/tmp/idempotent-provision",
         branchName: "bb/idempotent",
+        defaultBranch: "main",
         isGitRepo: true,
         isWorktree: false,
         ranSetup: false,

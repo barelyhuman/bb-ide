@@ -22,16 +22,15 @@ import type {
   ThreadType,
 } from "@bb/domain";
 import type {
-  CommitOptions,
   CreateProjectRequest,
   CreateDraftRequest,
+  EnvironmentActionRequest,
   EnvironmentActionResponse,
   ProjectFileSuggestion,
   ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
-  SquashMergeOptions,
   SystemProviderInfo,
   SendMessageRequest,
   ThreadTimelineResponse,
@@ -1084,14 +1083,7 @@ export function useRequestEnvironmentAction() {
     mutationFn: ({
       id,
       ...req
-    }: {
-      id: string;
-    } & (
-      | { action: "promote" }
-      | { action: "demote" }
-      | { action: "commit"; options?: CommitOptions }
-      | { action: "squash_merge"; options?: SquashMergeOptions }
-    )): Promise<EnvironmentActionResponse> =>
+    }: { id: string } & EnvironmentActionRequest): Promise<EnvironmentActionResponse> =>
       api.requestEnvironmentAction(id, req),
     onSuccess: (_response, variables) => {
       for (const queryKey of getEnvironmentActionInvalidationQueryKeys({

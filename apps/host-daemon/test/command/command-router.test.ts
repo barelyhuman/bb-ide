@@ -115,6 +115,8 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env-1",
+          environmentStatus: "ready",
+          workspacePath: "/tmp/env-1",
           threadId: "thread-1",
           message: "Commit",
         },
@@ -125,6 +127,8 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.reset",
           environmentId: "env-1",
+          environmentStatus: "ready",
+          workspacePath: "/tmp/env-1",
           threadId: "thread-1",
         },
       },
@@ -175,6 +179,14 @@ describe("CommandRouter", () => {
           type: "turn.run",
           environmentId: "env-1",
           threadId: "thread-a",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
+          providerId: "fake",
+          threadType: "standard",
+          providerThreadId: "provider-a",
+          eventSequence: 1,
           input: [{ type: "text", text: "A" }],
         },
       },
@@ -185,13 +197,22 @@ describe("CommandRouter", () => {
           type: "turn.run",
           environmentId: "env-1",
           threadId: "thread-b",
+          workspacePath: "/tmp/env-1",
+          projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
+          providerId: "fake",
+          threadType: "standard",
+          providerThreadId: "provider-b",
+          eventSequence: 2,
           input: [{ type: "text", text: "B" }],
         },
       },
     ]);
 
-    await Promise.resolve();
-    expect(runtime.runTurn).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => {
+      expect(runtime.runTurn).toHaveBeenCalledTimes(2);
+    });
 
     threadA.resolve(undefined);
     threadB.resolve(undefined);
@@ -232,7 +253,10 @@ describe("CommandRouter", () => {
           threadId: "thread-1",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
       {
@@ -244,7 +268,10 @@ describe("CommandRouter", () => {
           threadId: "thread-2",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
       {
@@ -256,7 +283,10 @@ describe("CommandRouter", () => {
           threadId: "thread-3",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
     ]);
@@ -314,7 +344,10 @@ describe("CommandRouter", () => {
           threadId: "thread-1",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
       {
@@ -326,7 +359,10 @@ describe("CommandRouter", () => {
           threadId: "thread-2",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
     ]);
@@ -408,7 +444,10 @@ describe("CommandRouter", () => {
           threadId: "thread-1",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
       {
@@ -420,7 +459,10 @@ describe("CommandRouter", () => {
           threadId: "thread-3",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
     ]);
@@ -470,7 +512,10 @@ describe("CommandRouter", () => {
           threadId: "thread-1",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
     ]);
@@ -487,7 +532,10 @@ describe("CommandRouter", () => {
           threadId: "thread-2",
           workspacePath: "/tmp/env-1",
           projectId: "project-1",
+          projectName: "Project 1",
+          projectRootPath: "/tmp/project-1",
           providerId: "fake",
+          threadType: "standard",
         },
       },
     ]);

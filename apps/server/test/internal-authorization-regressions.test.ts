@@ -42,19 +42,16 @@ describe("internal authorization regressions", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      appendClientTurnEvent(
-        harness.deps,
-        thread.id,
-        environment.id,
-        "client/thread/start",
-        {
-          input: [{ type: "text", text: "Start after provisioning" }],
-          execution: { source: "client/thread/start" },
-          initiator: "user",
-          requestMethod: "thread/start",
-          source: "spawn",
-        },
-      );
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/thread/start",
+        input: [{ type: "text", text: "Start after provisioning" }],
+        execution: { source: "client/thread/start" },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
       const command = queueCommand(harness.db, harness.hub, {
         hostId: hostB.host.id,
         sessionId: hostB.session.id,
@@ -81,6 +78,7 @@ describe("internal authorization regressions", () => {
           result: {
             path: "/tmp/cross-host-command",
             branchName: "bb/cross-host",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,

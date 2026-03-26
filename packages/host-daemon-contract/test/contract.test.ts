@@ -19,6 +19,8 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "workspace.commit",
         environmentId: "env_123",
+        environmentStatus: "ready",
+        workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         message: "Checkpoint work",
         includeUnstaged: true,
@@ -50,6 +52,8 @@ describe("host-daemon command schemas", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env_123",
+          environmentStatus: "ready",
+          workspacePath: "/tmp/workspace",
           threadId: "thr_123",
           message: "Checkpoint work",
         },
@@ -60,6 +64,28 @@ describe("host-daemon command schemas", () => {
     });
   });
 
+  it("rejects malformed environment.provision commands at parse time", () => {
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        projectId: "proj_123",
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/project",
+        targetPath: "/tmp/project/.bb/env",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        projectId: "proj_123",
+        workspaceProvisionType: "unmanaged",
+      }),
+    ).toThrow();
+  });
+
   it("parses thread.start with workspacePath", () => {
     expect(
       hostDaemonCommandSchema.parse({
@@ -68,11 +94,27 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
+        projectName: "Project 123",
+        projectRootPath: "/tmp/project",
         providerId: "codex",
+        threadType: "manager",
+        options: {
+          instructions: "You are a manager.",
+        },
+        dynamicTools: [
+          {
+            name: "message_user",
+            description: "Send a user-visible update",
+            inputSchema: { type: "object" },
+          },
+        ],
       }),
     ).toMatchObject({
       type: "thread.start",
       workspacePath: "/tmp/workspace",
+      options: {
+        instructions: "You are a manager.",
+      },
     });
   });
 
@@ -83,6 +125,11 @@ describe("host-daemon command schemas", () => {
         environmentId: "env_123",
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        projectName: "Project 123",
+        projectRootPath: "/tmp/project",
+        providerId: "codex",
+        threadType: "standard",
       }),
     ).toMatchObject({
       type: "thread.resume",
@@ -90,11 +137,73 @@ describe("host-daemon command schemas", () => {
     });
   });
 
+  it("requires eventSequence and runtime context for turn.run and turn.steer", () => {
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "turn.run",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        projectName: "Project 123",
+        projectRootPath: "/tmp/project",
+        providerId: "codex",
+        threadType: "standard",
+        providerThreadId: "provider_123",
+        eventSequence: 12,
+        input: [{ type: "text", text: "hello" }],
+      }),
+    ).toMatchObject({
+      type: "turn.run",
+      eventSequence: 12,
+      workspacePath: "/tmp/workspace",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "turn.steer",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        projectName: "Project 123",
+        projectRootPath: "/tmp/project",
+        providerId: "codex",
+        threadType: "standard",
+        providerThreadId: "provider_123",
+        eventSequence: 13,
+        expectedTurnId: "turn_123",
+        input: [{ type: "text", text: "adjust" }],
+      }),
+    ).toMatchObject({
+      type: "turn.steer",
+      eventSequence: 13,
+      expectedTurnId: "turn_123",
+    });
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "turn.run",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        projectName: "Project 123",
+        projectRootPath: "/tmp/project",
+        providerId: "codex",
+        threadType: "standard",
+        input: [{ type: "text", text: "hello" }],
+      }),
+    ).toThrow();
+  });
+
   it("parses promote and demote commands", () => {
     expect(
       hostDaemonCommandSchema.parse({
         type: "workspace.promote",
         environmentId: "env_123",
+        environmentStatus: "ready",
+        workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
       }),
@@ -107,6 +216,8 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "workspace.demote",
         environmentId: "env_123",
+        environmentStatus: "ready",
+        workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
         defaultBranch: "main",
@@ -150,6 +261,7 @@ describe("host-daemon command schemas", () => {
         isGitRepo: true,
         isWorktree: true,
         branchName: "bb/env-123",
+        defaultBranch: "main",
         ranSetup: true,
       }),
     ).toMatchObject({

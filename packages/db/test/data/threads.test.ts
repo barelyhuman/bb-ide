@@ -137,21 +137,29 @@ describe("transitionThreadStatus", () => {
     const t1 = transitionThreadStatus(db, noopNotifier, thread.id, "idle");
     expect(t1.status).toBe("idle");
 
-    // idle → active
-    const t2 = transitionThreadStatus(db, noopNotifier, thread.id, "active");
-    expect(t2.status).toBe("active");
+    // idle → provisioning
+    const t2 = transitionThreadStatus(db, noopNotifier, thread.id, "provisioning");
+    expect(t2.status).toBe("provisioning");
 
-    // active → idle
+    // provisioning → idle
     const t3 = transitionThreadStatus(db, noopNotifier, thread.id, "idle");
     expect(t3.status).toBe("idle");
 
+    // idle → active
+    const t4 = transitionThreadStatus(db, noopNotifier, thread.id, "active");
+    expect(t4.status).toBe("active");
+
+    // active → idle
+    const t5 = transitionThreadStatus(db, noopNotifier, thread.id, "idle");
+    expect(t5.status).toBe("idle");
+
     // idle → error
-    const t4 = transitionThreadStatus(db, noopNotifier, thread.id, "error");
-    expect(t4.status).toBe("error");
+    const t6 = transitionThreadStatus(db, noopNotifier, thread.id, "error");
+    expect(t6.status).toBe("error");
 
     // error → active
-    const t5 = transitionThreadStatus(db, noopNotifier, thread.id, "active");
-    expect(t5.status).toBe("active");
+    const t7 = transitionThreadStatus(db, noopNotifier, thread.id, "active");
+    expect(t7.status).toBe("active");
   });
 
   it("rejects invalid transitions", () => {
@@ -184,7 +192,7 @@ describe("transitionThreadStatus", () => {
     // Verify the transitions match the architecture doc
     expect(ALLOWED_TRANSITIONS.created).toEqual(["provisioning", "idle"]);
     expect(ALLOWED_TRANSITIONS.provisioning).toEqual(["idle", "error"]);
-    expect(ALLOWED_TRANSITIONS.idle).toEqual(["active", "error"]);
+    expect(ALLOWED_TRANSITIONS.idle).toEqual(["provisioning", "active", "error"]);
     expect(ALLOWED_TRANSITIONS.active).toEqual(["idle", "error"]);
     expect(ALLOWED_TRANSITIONS.error).toEqual(["active", "idle"]);
   });

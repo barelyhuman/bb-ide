@@ -1,12 +1,13 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import {
-  deleteEnvironment,
   events,
+  getEnvironment,
   getThread,
   hostDaemonCursors,
   hostDaemonCommands,
   threads,
   updateEnvironment,
+  updateThread,
 } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
 import {
@@ -20,6 +21,7 @@ import {
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
+import { queueEnvironmentDestroyCommand } from "../services/environment-cleanup.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 function parseCommand(
@@ -88,16 +90,17 @@ export function advanceHostCursor(
   });
 }
 
-function handleProvisionCommandResult(
+async function handleProvisionCommandResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
-): void {
+): Promise<void> {
   const command = parseCommand(commandRow);
   if (command.type !== "environment.provision") {
     return;
   }
 
+  const environment = getEnvironment(deps.db, command.environmentId);
   const boundThreads = deps.db
     .select()
     .from(threads)
@@ -105,15 +108,32 @@ function handleProvisionCommandResult(
     .all();
 
   if (report.ok) {
+    const shouldDestroyAfterProvision = environment?.status === "destroying";
     updateEnvironment(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
-      status: "ready",
+      status: shouldDestroyAfterProvision ? "destroying" : "ready",
       isGitRepo: report.result.isGitRepo,
       isWorktree: report.result.isWorktree,
       branchName: report.result.branchName,
+      defaultBranch: report.result.defaultBranch,
     });
 
+    if (shouldDestroyAfterProvision) {
+      queueEnvironmentDestroyCommand(deps, {
+        hostId: commandRow.hostId,
+        id: command.environmentId,
+        path: report.result.path,
+        workspaceProvisionType: command.workspaceProvisionType,
+      });
+      return;
+    }
+
     for (const thread of boundThreads) {
+      if (!thread.mergeBaseBranch && report.result.defaultBranch) {
+        updateThread(deps.db, deps.hub, thread.id, {
+          mergeBaseBranch: report.result.defaultBranch,
+        });
+      }
       appendProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: command.environmentId,
@@ -130,15 +150,24 @@ function handleProvisionCommandResult(
 
       if (thread.status === "created" || thread.status === "provisioning") {
         tryTransition(deps.db, deps.hub, thread.id, "idle");
+      } else {
+        continue;
       }
 
       const startEvent = deps.db
-        .select({ data: events.data })
+        .select({
+          data: events.data,
+          sequence: events.sequence,
+          type: events.type,
+        })
         .from(events)
         .where(
           and(
             eq(events.threadId, thread.id),
-            eq(events.type, "client/thread/start"),
+            or(
+              eq(events.type, "client/thread/start"),
+              eq(events.type, "client/turn/requested"),
+            ),
           ),
         )
         .orderBy(desc(events.sequence))
@@ -159,13 +188,14 @@ function handleProvisionCommandResult(
         continue;
       }
 
-      queueThreadStartCommand(deps, {
+      await queueThreadStartCommand(deps, {
         thread,
         environment: {
           id: command.environmentId,
           hostId: commandRow.hostId,
           path: report.result.path,
         },
+        eventSequence: startEvent.sequence,
         input: parsedStartEvent.data.input,
         execution: parsedStartEvent.data.execution,
         projectId: thread.projectId,
@@ -221,7 +251,13 @@ function handleEnvironmentDestroyResult(
   if (command.type !== "environment.destroy") {
     return;
   }
-  deleteEnvironment(deps.db, deps.hub, command.environmentId);
+  const environment = getEnvironment(deps.db, command.environmentId);
+  if (environment?.status !== "destroying") {
+    return;
+  }
+  updateEnvironment(deps.db, deps.hub, command.environmentId, {
+    status: "destroyed",
+  });
 }
 
 function handleThreadStopResult(
@@ -249,14 +285,14 @@ function handleThreadStopResult(
   });
 }
 
-export function handleCommandResultSideEffects(
+export async function handleCommandResultSideEffects(
   deps: Pick<AppDeps, "db" | "hub">,
   report: HostDaemonCommandResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
-): void {
+): Promise<void> {
   switch (report.type) {
     case "environment.provision":
-      handleProvisionCommandResult(deps, report, commandRow);
+      await handleProvisionCommandResult(deps, report, commandRow);
       return;
     case "environment.destroy":
       handleEnvironmentDestroyResult(deps, report, commandRow);

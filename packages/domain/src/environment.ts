@@ -5,6 +5,7 @@ export const environmentStatusValues = [
   "ready",
   "error",
   "destroying",
+  "destroyed",
 ] as const;
 export const environmentStatusSchema = z.enum(environmentStatusValues);
 export type EnvironmentStatus = z.infer<typeof environmentStatusSchema>;
@@ -26,6 +27,7 @@ export const discoveredWorkspacePropertiesSchema = z.object({
   isGitRepo: z.boolean(),
   isWorktree: z.boolean(),
   branchName: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
 });
 export type DiscoveredWorkspaceProperties = z.infer<typeof discoveredWorkspacePropertiesSchema>;
 
@@ -39,6 +41,7 @@ export const environmentSchema = z.object({
   isWorktree: z.boolean(),
   workspaceProvisionType: workspaceProvisionTypeSchema.nullable(),
   branchName: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
   status: environmentStatusSchema,
   createdAt: z.number(),
   updatedAt: z.number(),

@@ -29,13 +29,17 @@ describe("drafts", () => {
       threadId: thread.id,
       content: "[]",
       mode: "auto",
+      model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
     });
 
     expect(draft.id).toMatch(/^draft_/);
     expect(draft.threadId).toBe(thread.id);
     expect(draft.content).toBe("[]");
+    expect(draft.model).toBe("gpt-5");
+    expect(draft.serviceTier).toBe("flex");
   });
 
   it("gets a draft by ID", () => {

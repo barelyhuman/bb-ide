@@ -174,6 +174,7 @@ describe("server integration", () => {
           result: {
             path: "/tmp/project-root",
             branchName: "bb/test",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -253,6 +254,7 @@ describe("server integration", () => {
           result: {
             path: "/tmp/event-project",
             branchName: "bb/event",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -369,6 +371,7 @@ describe("server integration", () => {
           result: {
             path: "/tmp/lifecycle-project",
             branchName: "bb/lifecycle",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -390,22 +393,24 @@ describe("server integration", () => {
       });
       expect(sendResponse.status).toBe(200);
 
-      const turnRunCommand = await fetchSingleCommand(
+      const threadStartCommand = await fetchSingleCommand(
         daemonClient,
         session.sessionId,
         provisionCommand.cursor,
       );
-      expect(turnRunCommand.command.type).toBe("turn.run");
+      expect(threadStartCommand.command.type).toBe("thread.start");
 
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
-          commandId: turnRunCommand.id,
-          cursor: turnRunCommand.cursor,
+          commandId: threadStartCommand.id,
+          cursor: threadStartCommand.cursor,
           completedAt: Date.now(),
-          type: "turn.run",
+          type: "thread.start",
           ok: true,
-          result: {},
+          result: {
+            providerThreadId: "provider-thread",
+          },
         },
       });
 

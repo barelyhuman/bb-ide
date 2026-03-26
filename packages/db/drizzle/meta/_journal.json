@@ -36,6 +36,20 @@
       "when": 1774477850226,
       "tag": "0004_lumpy_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1774546200000,
+      "tag": "0005_steady_havok",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1774818000000,
+      "tag": "0006_hushed_oracle",
+      "breakpoints": true
     }
   ]
 }

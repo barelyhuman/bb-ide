@@ -169,6 +169,8 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_files",
         environmentId: environment.id,
+        environmentStatus: "ready",
+        workspacePath: source.path,
         ...(context.req.query("query") ? { query: context.req.query("query") } : {}),
       },
     });

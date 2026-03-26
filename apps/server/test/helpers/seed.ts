@@ -73,6 +73,7 @@ export function seedEnvironment(
     managed?: boolean;
     workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone";
     branchName?: string | null;
+    defaultBranch?: string | null;
   },
 ) {
   return createEnvironment(deps.db, deps.hub, {
@@ -85,6 +86,7 @@ export function seedEnvironment(
     isWorktree: args.workspaceProvisionType === "managed-worktree",
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
     branchName: args.branchName ?? "bb/test",
+    defaultBranch: args.defaultBranch ?? "main",
   });
 }
 
@@ -121,16 +123,20 @@ export function seedDraft(
     content: string;
     threadId: string;
     mode?: string;
+    model?: string;
     reasoningLevel?: string;
     sandboxMode?: string;
+    serviceTier?: string;
   },
 ) {
   return createDraft(deps.db, deps.hub, {
     threadId: args.threadId,
     content: args.content,
     mode: args.mode ?? "auto",
+    ...(args.model ? { model: args.model } : {}),
     reasoningLevel: args.reasoningLevel ?? "medium",
     sandboxMode: args.sandboxMode ?? "danger-full-access",
+    ...(args.serviceTier ? { serviceTier: args.serviceTier } : {}),
   });
 }
 

@@ -222,4 +222,59 @@ describe("public thread lifecycle regressions", () => {
       await harness.cleanup();
     }
   });
+
+  it("keeps reused threads in provisioning when the reused environment is still provisioning", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-reuse-provisioning" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/reuse-provisioning",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reuse-provisioning",
+        status: "provisioning",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          input: [{ type: "text", text: "Wait for provisioning" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response);
+      if (
+        typeof createdThread !== "object" ||
+        !createdThread ||
+        !("id" in createdThread) ||
+        typeof createdThread.id !== "string"
+      ) {
+        throw new Error("Thread creation response shape was invalid");
+      }
+
+      expect(listThreads(harness.db, { projectId: project.id })[0]?.status).toBe("provisioning");
+      await expect(
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "thread.start" &&
+            command.threadId === createdThread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

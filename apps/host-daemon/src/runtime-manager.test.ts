@@ -1,87 +1,123 @@
 import type { AgentRuntime } from "@bb/agent-runtime";
-import type { IWorkspace } from "@bb/workspace";
+import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeManager } from "./runtime-manager.js";
 
+type CurrentBranchArgs = Parameters<IWorkspace["currentBranch"]>;
+type GetStatusResult = Awaited<ReturnType<IWorkspace["getStatus"]>>;
+type GetDiffResult = Awaited<ReturnType<IWorkspace["getDiff"]>>;
+type CommitArgs = Parameters<IWorkspace["commit"]>;
+type FetchArgs = Parameters<IWorkspace["fetch"]>;
+type CheckpointArgs = Parameters<IWorkspace["checkpoint"]>;
+type SquashMergeArgs = Parameters<IWorkspace["squashMergeInto"]>;
+type PromoteArgs = Parameters<IWorkspace["promote"]>;
+type DemoteArgs = Parameters<IWorkspace["demote"]>;
+type ProvisionWorkspaceArgs = Parameters<
+  (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>
+>;
+type EnsureProviderArgs = Parameters<AgentRuntime["ensureProvider"]>[0];
+type StartThreadArgs = Parameters<AgentRuntime["startThread"]>[0];
+type ResumeThreadArgs = Parameters<AgentRuntime["resumeThread"]>[0];
+type RunTurnArgs = Parameters<AgentRuntime["runTurn"]>[0];
+type SteerTurnArgs = Parameters<AgentRuntime["steerTurn"]>[0];
+type StopThreadArgs = Parameters<AgentRuntime["stopThread"]>[0];
+type RenameThreadArgs = Parameters<AgentRuntime["renameThread"]>[0];
+type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
+
 function createFakeWorkspace(path: string) {
-  return {
+  const status: GetStatusResult = {
+    state: "clean",
+    changedFiles: 0,
+    insertions: 0,
+    deletions: 0,
+    workspaceChangedFiles: 0,
+    workspaceInsertions: 0,
+    workspaceDeletions: 0,
+    hasUncommittedChanges: false,
+    hasCommittedUnmergedChanges: false,
+    aheadCount: 0,
+    behindCount: 0,
+    currentBranch: "main",
+    defaultBranch: "main",
+    mergeBaseBranch: "main",
+    mergeBaseBranches: [],
+    baseRef: "main",
+    files: [],
+  };
+  const diff: GetDiffResult = {
+    mode: "local_uncommitted",
+    currentBranch: "main",
+    mergeBaseBranch: "main",
+    mergeBaseRef: "main",
+    commits: [],
+    selection: { type: "combined" },
+    diff: "",
+    truncated: false,
+  };
+  const workspace = {
     path,
     managed: false,
     isGitRepo: true,
     isWorktree: false,
-    currentBranch: vi.fn(async () => "main"),
-    getStatus: vi.fn(async () => ({
-      state: "clean" as const,
-      changedFiles: 0,
-      insertions: 0,
-      deletions: 0,
-      workspaceChangedFiles: 0,
-      workspaceInsertions: 0,
-      workspaceDeletions: 0,
-      hasUncommittedChanges: false,
-      hasCommittedUnmergedChanges: false,
-      aheadCount: 0,
-      behindCount: 0,
-      currentBranch: "main",
-      defaultBranch: "main",
-      mergeBaseBranch: "main",
-      mergeBaseBranches: [],
-      baseRef: "main",
-      files: [],
-    })),
-    getDiff: vi.fn(async () => ({
-      mode: "combined",
-      currentBranch: "main",
-      mergeBaseBranch: "main",
-      mergeBaseRef: "main",
-      commits: [],
-      selection: { type: "combined" as const },
-      diff: "",
-      truncated: false,
-    })),
+    currentBranch: vi.fn(
+      async (..._args: CurrentBranchArgs) => "main",
+    ),
+    getStatus: vi.fn(async () => status),
+    getDiff: vi.fn(async () => diff),
     getBranches: vi.fn(async () => ["main"]),
-    commit: vi.fn(async () => ({
+    commit: vi.fn(async (..._args: CommitArgs) => ({
       commitSha: "commit-1",
       commitSubject: "commit",
     })),
     reset: vi.fn(async () => undefined),
-    fetch: vi.fn(async () => undefined),
-    checkpoint: vi.fn(async () => ({
+    fetch: vi.fn(async (..._args: FetchArgs) => undefined),
+    checkpoint: vi.fn(async (..._args: CheckpointArgs) => ({
       commitSha: "commit-1",
       branchName: "main",
       remoteName: "origin",
     })),
-    squashMergeInto: vi.fn(async () => ({
+    squashMergeInto: vi.fn(async (..._args: SquashMergeArgs) => ({
       merged: true,
       commitSha: "commit-1",
       targetBranch: "main",
     })),
-    promote: vi.fn(async () => undefined),
-    demote: vi.fn(async () => undefined),
+    promote: vi.fn(async (..._args: PromoteArgs) => undefined),
+    demote: vi.fn(async (..._args: DemoteArgs) => undefined),
     destroy: vi.fn(async () => undefined),
-  } as unknown as IWorkspace & {
-    destroy: ReturnType<typeof vi.fn>;
-  };
+  } satisfies IWorkspace;
+
+  return workspace;
 }
 
 function createFakeRuntime() {
   return {
-    ensureProvider: vi.fn(async () => undefined),
-    startThread: vi.fn(async (_args: unknown) => ({ providerThreadId: "provider-1" })),
-    resumeThread: vi.fn(async (_args: unknown) => ({ providerThreadId: "provider-1" })),
-    runTurn: vi.fn(async (_args: unknown) => undefined),
-    steerTurn: vi.fn(async (_args: unknown) => undefined),
-    stopThread: vi.fn(async (_args: unknown) => undefined),
-    renameThread: vi.fn(async (_args: unknown) => undefined),
-    listModels: vi.fn(async () => []),
+    ensureProvider: vi.fn(async (_args: EnsureProviderArgs) => undefined),
+    startThread: vi.fn(
+      async (_args: StartThreadArgs) => ({ providerThreadId: "provider-1" }),
+    ),
+    resumeThread: vi.fn(
+      async (_args: ResumeThreadArgs) => ({ providerThreadId: "provider-1" }),
+    ),
+    runTurn: vi.fn(async (_args: RunTurnArgs) => undefined),
+    steerTurn: vi.fn(async (_args: SteerTurnArgs) => undefined),
+    stopThread: vi.fn(async (_args: StopThreadArgs) => undefined),
+    renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
+    listModels: vi.fn(async (_args: ListModelsArgs) => []),
+    listRunningProviders: vi.fn((): string[] => []),
     shutdown: vi.fn(async () => undefined),
-  };
+  } satisfies AgentRuntime;
+}
+
+function createProvisionWorkspaceMock(path: string) {
+  return vi.fn(
+    async (..._args: ProvisionWorkspaceArgs) => createFakeWorkspace(path),
+  );
 }
 
 describe("RuntimeManager", () => {
   it("creates a runtime the first time an environment is requested", async () => {
-    const provisionWorkspace = vi.fn(async () => createFakeWorkspace("/tmp/env-1"));
-    const createRuntime = vi.fn(() => createFakeRuntime() as unknown as AgentRuntime);
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
+    const createRuntime = vi.fn(() => createFakeRuntime());
     const manager = new RuntimeManager({
       provisionWorkspace,
       createRuntime,
@@ -98,8 +134,8 @@ describe("RuntimeManager", () => {
   });
 
   it("reuses the existing runtime for subsequent requests", async () => {
-    const provisionWorkspace = vi.fn(async () => createFakeWorkspace("/tmp/env-1"));
-    const createRuntime = vi.fn(() => createFakeRuntime() as unknown as AgentRuntime);
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
+    const createRuntime = vi.fn(() => createFakeRuntime());
     const manager = new RuntimeManager({
       provisionWorkspace,
       createRuntime,
@@ -123,8 +159,10 @@ describe("RuntimeManager", () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-1").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn(() => runtime),
     });
 
     await manager.ensureEnvironment({
@@ -139,8 +177,8 @@ describe("RuntimeManager", () => {
 
   it("tracks active threads for session reconciliation", async () => {
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-1"),
+      createRuntime: vi.fn(() => createFakeRuntime()),
     });
 
     await manager.ensureEnvironment({
@@ -161,19 +199,128 @@ describe("RuntimeManager", () => {
     expect(manager.listActiveThreads()).toEqual([]);
   });
 
+  it("remembers known threads after a turn completes so follow-ups reuse the runtime", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-1"),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    manager.markThreadActive("env-1", "thread-1", "provider-1");
+    manager.markThreadInactive("env-1", "thread-1");
+
+    expect(manager.hasThread("env-1", "thread-1")).toBe(true);
+    expect(manager.listActiveThreads()).toEqual([]);
+
+    manager.markThreadActive("env-1", "thread-1");
+    expect(manager.listActiveThreads()).toEqual([
+      {
+        environmentId: "env-1",
+        threadId: "thread-1",
+        providerThreadId: "provider-1",
+      },
+    ]);
+  });
+
+  it("removes stale entries when the provider process exits", async () => {
+    const workspace = createFakeWorkspace("/tmp/env-exit");
+    const runtime = createFakeRuntime();
+    let onProcessExit:
+      | ((info: {
+          code: number | null;
+          providerId: string;
+          signal: string | null;
+          threadIds: string[];
+        }) => void)
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-exit").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn((options) => {
+        onProcessExit = options.onProcessExit;
+        return runtime;
+      }),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-exit",
+      workspacePath: "/tmp/env-exit",
+    });
+    manager.markThreadActive("env-exit", "thread-1", "provider-1");
+
+    onProcessExit?.({
+      providerId: "fake",
+      threadIds: ["thread-1"],
+      code: 1,
+      signal: null,
+    });
+
+    expect(manager.get("env-exit")).toBeUndefined();
+    expect(manager.hasThread("env-exit", "thread-1")).toBe(false);
+    expect(runtime.shutdown).not.toHaveBeenCalled();
+  });
+
+  it("keeps sibling provider threads running when one provider exits", async () => {
+    const workspace = createFakeWorkspace("/tmp/env-shared");
+    const runtime = createFakeRuntime();
+    let runningProviders = ["fake-alpha", "fake-beta"];
+    runtime.listRunningProviders.mockImplementation(() => runningProviders);
+    let onProcessExit:
+      | ((info: {
+          code: number | null;
+          providerId: string;
+          signal: string | null;
+          threadIds: string[];
+        }) => void)
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-shared").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn((options) => {
+        onProcessExit = options.onProcessExit;
+        return runtime;
+      }),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-shared",
+      workspacePath: "/tmp/env-shared",
+    });
+    manager.markThreadActive("env-shared", "thread-a", "provider-a");
+    manager.markThreadActive("env-shared", "thread-b", "provider-b");
+
+    runningProviders = ["fake-beta"];
+    onProcessExit?.({
+      providerId: "fake-alpha",
+      threadIds: ["thread-a"],
+      code: 1,
+      signal: null,
+    });
+
+    expect(manager.get("env-shared")).toBeDefined();
+    expect(manager.hasThread("env-shared", "thread-a")).toBe(false);
+    expect(manager.hasThread("env-shared", "thread-b")).toBe(true);
+    expect(runtime.shutdown).not.toHaveBeenCalled();
+  });
+
   it("shuts down all tracked environments", async () => {
     const workspaceA = createFakeWorkspace("/tmp/env-a");
     const workspaceB = createFakeWorkspace("/tmp/env-b");
     const runtimeA = createFakeRuntime();
     const runtimeB = createFakeRuntime();
-    const provisionWorkspace = vi
-      .fn()
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-a")
       .mockResolvedValueOnce(workspaceA)
       .mockResolvedValueOnce(workspaceB);
     const createRuntime = vi
       .fn()
-      .mockReturnValueOnce(runtimeA as unknown as AgentRuntime)
-      .mockReturnValueOnce(runtimeB as unknown as AgentRuntime);
+      .mockReturnValueOnce(runtimeA)
+      .mockReturnValueOnce(runtimeB);
     const manager = new RuntimeManager({
       provisionWorkspace,
       createRuntime,

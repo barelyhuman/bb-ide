@@ -7,7 +7,10 @@ import {
   hostDaemonSessions,
   queueCommand,
 } from "@bb/db";
-import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+import {
+  HOST_DAEMON_PROTOCOL_VERSION,
+  hostDaemonCommandSchema,
+} from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import { appendClientTurnEvent } from "../src/services/thread-events.js";
 import {
@@ -177,19 +180,16 @@ describe("internal session routes", () => {
         environmentId: successEnvironment.id,
         status: "provisioning",
       });
-      appendClientTurnEvent(
-        harness.deps,
-        successThread.id,
-        successEnvironment.id,
-        "client/thread/start",
-        {
-          input: [{ type: "text", text: "Start when ready" }],
-          execution: { source: "client/thread/start" },
-          initiator: "user",
-          requestMethod: "thread/start",
-          source: "spawn",
-        },
-      );
+      appendClientTurnEvent(harness.deps, {
+        threadId: successThread.id,
+        environmentId: successEnvironment.id,
+        type: "client/thread/start",
+        input: [{ type: "text", text: "Start when ready" }],
+        execution: { source: "client/thread/start" },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
       const successCommand = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
         sessionId: session.id,
@@ -216,6 +216,7 @@ describe("internal session routes", () => {
           result: {
             path: "/tmp/provision-success",
             branchName: "bb/success",
+            defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
@@ -296,6 +297,193 @@ describe("internal session routes", () => {
     }
   });
 
+  it("restarts reprovisioned threads with thread.start instead of turn.run", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-reprovision-start",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-start",
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-old",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Resume after reprovision" }],
+        execution: { source: "client/turn/requested" },
+        initiator: "user",
+        requestMethod: "turn/start",
+        source: "tell",
+      });
+      const provisionCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.provision",
+        payload: JSON.stringify({
+          type: "environment.provision",
+          environmentId: environment.id,
+          projectId: project.id,
+          workspaceProvisionType: "managed-worktree",
+          targetPath: "/tmp/reprovision-start",
+          sourcePath: "/tmp/reprovision-source",
+          branchName: "bb/reprovision-start",
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: provisionCommand.id,
+          cursor: provisionCommand.cursor,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/reprovision-start",
+            branchName: "bb/reprovision-start",
+            defaultBranch: "main",
+            isGitRepo: true,
+            isWorktree: true,
+            ranSetup: false,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const queuedRestart = await waitForQueuedCommandAfter(
+        harness,
+        provisionCommand.cursor,
+        ({ command }) => command.threadId === thread.id,
+      );
+      expect(queuedRestart.command.type).toBe("thread.start");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("only restarts threads that are still provisioning when reprovision completes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-reprovision-filter",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-filter",
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const provisioningThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const idleSibling = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      appendClientTurnEvent(harness.deps, {
+        threadId: provisioningThread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Resume provisioning thread" }],
+        execution: { source: "client/turn/requested" },
+        initiator: "user",
+        requestMethod: "turn/start",
+        source: "tell",
+      });
+      appendClientTurnEvent(harness.deps, {
+        threadId: idleSibling.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Do not restart this sibling" }],
+        execution: { source: "client/turn/requested" },
+        initiator: "user",
+        requestMethod: "turn/start",
+        source: "tell",
+      });
+      const provisionCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.provision",
+        payload: JSON.stringify({
+          type: "environment.provision",
+          environmentId: environment.id,
+          projectId: project.id,
+          workspaceProvisionType: "managed-worktree",
+          targetPath: "/tmp/reprovision-filter",
+          sourcePath: "/tmp/reprovision-filter-source",
+          branchName: "bb/reprovision-filter",
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: provisionCommand.id,
+          cursor: provisionCommand.cursor,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/reprovision-filter",
+            branchName: "bb/reprovision-filter",
+            defaultBranch: "main",
+            isGitRepo: true,
+            isWorktree: true,
+            ranSetup: false,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, provisioningThread.id)?.status).toBe("active");
+      expect(getThread(harness.db, idleSibling.id)?.status).toBe("idle");
+
+      const queuedStarts = harness.db
+        .select({ cursor: hostDaemonCommands.cursor, payload: hostDaemonCommands.payload })
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.start"))
+        .all()
+        .filter((row) => row.cursor > provisionCommand.cursor)
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)))
+        .filter((command) => command.type === "thread.start");
+
+      expect(queuedStarts).toHaveLength(1);
+      expect(queuedStarts[0]?.threadId).toBe(provisioningThread.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("reconciles errored and orphaned active threads when a session opens", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -340,6 +528,104 @@ describe("internal session routes", () => {
       expect(response.status).toBe(201);
       expect(getThread(harness.db, erroredThread.id)?.status).toBe("active");
       expect(getThread(harness.db, activeThread.id)?.status).toBe("idle");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks environments destroyed after a successful destroy result", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-destroy-result",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/destroy-result-environment",
+        managed: true,
+        status: "destroying",
+      });
+      const destroyCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.destroy",
+        payload: JSON.stringify({
+          type: "environment.destroy",
+          environmentId: environment.id,
+          path: environment.path,
+          workspaceProvisionType: "managed-worktree",
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: destroyCommand.id,
+          cursor: destroyCommand.cursor,
+          completedAt: Date.now(),
+          type: "environment.destroy",
+          ok: true,
+          result: {},
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("ignores stale destroy results after reprovision has already started", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-stale-destroy",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/stale-destroy",
+        managed: true,
+        status: "provisioning",
+      });
+      const destroyCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.destroy",
+        payload: JSON.stringify({
+          type: "environment.destroy",
+          environmentId: environment.id,
+          path: environment.path,
+          workspaceProvisionType: "managed-worktree",
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: destroyCommand.id,
+          cursor: destroyCommand.cursor,
+          completedAt: Date.now(),
+          type: "environment.destroy",
+          ok: true,
+          result: {},
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
     } finally {
       await harness.cleanup();
     }

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ThreadExecutionOptions } from "@bb/domain";
+import type { ThreadRuntimeExecutionOptions } from "@bb/domain";
 import type {
   AdapterOptions,
   JsonRpcMessage,
@@ -59,7 +59,7 @@ function sendRequest(
 // ---------------------------------------------------------------------------
 
 function toAdapterOptions(
-  execOpts: (ThreadExecutionOptions & { instructions?: string }) | undefined,
+  execOpts: ThreadRuntimeExecutionOptions | undefined,
   envVars: Record<string, string>,
 ): AdapterOptions | undefined {
   if (!execOpts && Object.keys(envVars).length === 0) return undefined;
@@ -186,19 +186,22 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       sourceThreadId?: string,
     ): void {
       for (const event of events) {
-        if (event.type === "thread/identity" && event.providerThreadId) {
-          // For bridge providers, event.threadId is our bb threadId.
-          // For codex, event.threadId is the codex thread ID, and we need
-          // to find the bb threadId that owns this process.
-          if (proc.threadIds.has(event.threadId)) {
-            threadToProviderThread.set(event.threadId, event.providerThreadId);
-          } else if (proc.pendingIdentity.length > 0) {
-            // Codex: assign to the next thread in the FIFO queue
-            const bbThreadId = proc.pendingIdentity.shift()!;
-            threadToProviderThread.set(bbThreadId, event.providerThreadId);
-          }
+        if (event.type !== "thread/identity" || !event.providerThreadId) {
+          continue;
         }
 
+        if (proc.threadIds.has(event.threadId)) {
+          threadToProviderThread.set(event.threadId, event.providerThreadId);
+          continue;
+        }
+
+        if (proc.pendingIdentity.length > 0) {
+          const bbThreadId = proc.pendingIdentity.shift()!;
+          threadToProviderThread.set(bbThreadId, event.providerThreadId);
+        }
+      }
+
+      for (const event of events) {
         // Stamp every event with the bb threadId and providerThreadId.
         // The adapter may set threadId to "" or the provider's internal ID.
         // The runtime resolves the correct bb threadId using its mappings.
@@ -240,6 +243,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           if (provId) {
             eventRecord.providerThreadId = provId;
           }
+        }
+
+        if (
+          typeof eventRecord.threadId !== "string" ||
+          eventRecord.threadId.length === 0
+        ) {
+          options.onStderr?.(
+            `Dropping unscoped provider event ${event.type}; no bb thread could be resolved`,
+          );
+          continue;
         }
 
         options.onEvent(event);
@@ -410,7 +423,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "thread/start",
         threadId,
-        input,
         options: toAdapterOptions(execOpts, envVars),
         dynamicTools,
       });
@@ -449,6 +461,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           `Provider "${pid}" did not return a providerThreadId for thread "${threadId}" within 5 seconds`,
         );
       }
+
+      if (input && input.length > 0) {
+        await runtime.runTurn({
+          threadId,
+          input,
+          options: execOpts,
+        });
+      }
+
       return { providerThreadId: resolved };
     },
 
@@ -566,6 +587,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId });
       const proc = requireProviderProcess(providerId);
       return proc.adapter.listModels();
+    },
+
+    listRunningProviders() {
+      return [...processes.keys()];
     },
 
     async shutdown() {
