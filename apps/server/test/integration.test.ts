@@ -390,22 +390,24 @@ describe("server integration", () => {
       });
       expect(sendResponse.status).toBe(200);
 
-      const turnRunCommand = await fetchSingleCommand(
+      const threadStartCommand = await fetchSingleCommand(
         daemonClient,
         session.sessionId,
         provisionCommand.cursor,
       );
-      expect(turnRunCommand.command.type).toBe("turn.run");
+      expect(threadStartCommand.command.type).toBe("thread.start");
 
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
-          commandId: turnRunCommand.id,
-          cursor: turnRunCommand.cursor,
+          commandId: threadStartCommand.id,
+          cursor: threadStartCommand.cursor,
           completedAt: Date.now(),
-          type: "turn.run",
+          type: "thread.start",
           ok: true,
-          result: {},
+          result: {
+            providerThreadId: "provider-thread",
+          },
         },
       });
 

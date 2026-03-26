@@ -59,6 +59,7 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
   workspacePath: z.string().min(1),
   projectId: z.string().min(1),
   providerId: z.string().min(1),
+  eventSequence: z.number().int().nonnegative().optional(),
   input: z.array(promptInputSchema).min(1).optional(),
   options: hostDaemonExecutionOptionsSchema.optional(),
   dynamicTools: z.array(dynamicToolSchema).optional(),
@@ -78,12 +79,14 @@ export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.extend({
 /** Run a conversation turn with user input. Used for every message after the first. */
 export const turnRunCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("turn.run"),
+  eventSequence: z.number().int().nonnegative().optional(),
   input: z.array(promptInputSchema).min(1),
   options: hostDaemonExecutionOptionsSchema.optional(),
 });
 
 export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("turn.steer"),
+  eventSequence: z.number().int().nonnegative().optional(),
   expectedTurnId: z.string().min(1),
   input: z.array(promptInputSchema).min(1),
 });

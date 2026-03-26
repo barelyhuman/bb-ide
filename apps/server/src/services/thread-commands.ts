@@ -30,6 +30,7 @@ export function buildExecutionOptions(
 export function queueThreadStartCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
+    eventSequence?: number;
     environment: {
       hostId: string;
       id: string;
@@ -57,6 +58,9 @@ export function queueThreadStartCommand(
       workspacePath: args.environment.path,
       projectId: args.projectId,
       providerId: args.providerId,
+      ...(args.eventSequence !== undefined
+        ? { eventSequence: args.eventSequence }
+        : {}),
       ...(args.input ? { input: args.input } : {}),
       options: args.execution,
     }),
@@ -66,6 +70,7 @@ export function queueThreadStartCommand(
 export function queueTurnRunCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
+    eventSequence?: number;
     environment: {
       hostId: string;
       id: string;
@@ -84,6 +89,9 @@ export function queueTurnRunCommand(
       type: "turn.run",
       environmentId: args.environment.id,
       threadId: args.thread.id,
+      ...(args.eventSequence !== undefined
+        ? { eventSequence: args.eventSequence }
+        : {}),
       input: args.input,
       options: args.execution,
     }),
@@ -97,6 +105,7 @@ export function queueTurnRunCommand(
 export function queueTurnSteerCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
+    eventSequence?: number;
     environment: {
       hostId: string;
       id: string;
@@ -115,6 +124,9 @@ export function queueTurnSteerCommand(
       type: "turn.steer",
       environmentId: args.environment.id,
       threadId: args.thread.id,
+      ...(args.eventSequence !== undefined
+        ? { eventSequence: args.eventSequence }
+        : {}),
       expectedTurnId: args.expectedTurnId,
       input: args.input,
     }),

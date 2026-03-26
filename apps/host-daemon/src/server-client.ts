@@ -11,12 +11,14 @@ import {
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
+  hostDaemonThreadRuntimeResponseSchema,
   type HostDaemonActiveThread,
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonEventEnvelope,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
+  type HostDaemonThreadRuntimeResponse,
   type HostDaemonToolCallResponse,
 } from "@bb/host-daemon-contract";
 import type { ToolCallRequest } from "@bb/domain";
@@ -74,6 +76,9 @@ export interface ServerClient {
     limit?: number;
     waitMs?: number;
   }): Promise<HostDaemonCommandEnvelope[]>;
+  resolveThreadRuntime(args: {
+    threadId: string;
+  }): Promise<HostDaemonThreadRuntimeResponse | null>;
   reportCommandResult(
     report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void>;
@@ -256,6 +261,28 @@ export function createServerClient(
       await Promise.all(reportPromises);
 
       return accepted;
+    },
+
+    async resolveThreadRuntime({ threadId }): Promise<HostDaemonThreadRuntimeResponse | null> {
+      const response = await fetchFn(
+        buildInternalUrl(`/threads/${threadId}/runtime`, {
+          sessionId: requireSessionId(),
+        }),
+        {
+          method: "GET",
+          headers: headers(),
+        },
+      );
+
+      if (response.status === 404) {
+        return null;
+      }
+
+      if (!response.ok) {
+        throw createResponseError("resolve thread runtime", response);
+      }
+
+      return hostDaemonThreadRuntimeResponseSchema.parse(await response.json());
     },
 
     async reportCommandResult(

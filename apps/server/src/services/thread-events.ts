@@ -173,6 +173,23 @@ export function getLastTurnId(
   return row?.turnId ?? null;
 }
 
+export function getLastProviderThreadId(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): string | null {
+  const row = deps.db
+    .select({ providerThreadId: events.providerThreadId })
+    .from(events)
+    .where(
+      sql`${events.threadId} = ${threadId}
+        AND ${events.providerThreadId} IS NOT NULL`,
+    )
+    .orderBy(sql`${events.sequence} DESC`)
+    .limit(1)
+    .get();
+  return row?.providerThreadId ?? null;
+}
+
 export function getLastExecutionOptions(
   deps: Pick<AppDeps, "db">,
   threadId: string,

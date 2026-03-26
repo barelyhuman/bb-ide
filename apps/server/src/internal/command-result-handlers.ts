@@ -133,7 +133,7 @@ function handleProvisionCommandResult(
       }
 
       const startEvent = deps.db
-        .select({ data: events.data })
+        .select({ data: events.data, sequence: events.sequence })
         .from(events)
         .where(
           and(
@@ -166,6 +166,7 @@ function handleProvisionCommandResult(
           hostId: commandRow.hostId,
           path: report.result.path,
         },
+        eventSequence: startEvent.sequence,
         input: parsedStartEvent.data.input,
         execution: parsedStartEvent.data.execution,
         projectId: thread.projectId,

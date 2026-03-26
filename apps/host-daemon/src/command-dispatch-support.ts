@@ -26,6 +26,10 @@ export interface ThreadRuntimeResolution {
 
 export interface CommandDispatchOptions {
   runtimeManager: RuntimeManager;
+  seedThreadHighWaterMark?: (args: {
+    sequence: number;
+    threadId: string;
+  }) => void;
   resolveThreadRuntime?: (args: {
     environmentId: string;
     threadId: string;

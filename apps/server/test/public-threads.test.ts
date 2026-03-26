@@ -236,11 +236,19 @@ describe("public thread routes", () => {
         status: "active",
       });
       seedEvent(harness.deps, {
+        threadId: idleThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-idle",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-turn",
         turnId: "turn-1",
-        sequence: 1,
+        sequence: 2,
         type: "turn/started",
         data: {},
       });
@@ -553,6 +561,14 @@ describe("public thread routes", () => {
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
         content: JSON.stringify([{ type: "text", text: "Draft content" }]),
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft",
+        sequence: 2,
+        type: "thread/identity",
+        data: {},
       });
       const draftSendResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,

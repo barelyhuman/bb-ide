@@ -12,6 +12,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
+  hostDaemonExecutionOptionsSchema,
 } from "./commands.js";
 
 export const hostDaemonActiveThreadSchema = z.object({
@@ -129,6 +130,17 @@ export type HostDaemonToolCallResponse = z.infer<
   typeof hostDaemonToolCallResponseSchema
 >;
 
+export const hostDaemonThreadRuntimeResponseSchema = z.object({
+  workspacePath: z.string().min(1),
+  projectId: z.string().min(1),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1).optional(),
+  options: hostDaemonExecutionOptionsSchema.optional(),
+});
+export type HostDaemonThreadRuntimeResponse = z.infer<
+  typeof hostDaemonThreadRuntimeResponseSchema
+>;
+
 export type HostDaemonInternalSchema = {
   "/session/open": {
     /** Used by the daemon to establish a session with the server. Replaces any prior session for the same host. */
@@ -163,6 +175,16 @@ export type HostDaemonInternalSchema = {
     $post: Endpoint<
       { json: HostDaemonToolCallRequest },
       HostDaemonToolCallResponse
+    >;
+  };
+  "/threads/:id/runtime": {
+    /** Used by the daemon to reconstruct a thread runtime after restart or before the first follow-up command. */
+    $get: Endpoint<
+      {
+        param: { id: string };
+        query: { sessionId: string };
+      },
+      HostDaemonThreadRuntimeResponse
     >;
   };
 };

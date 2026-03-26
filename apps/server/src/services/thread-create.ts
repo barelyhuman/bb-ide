@@ -32,6 +32,7 @@ function startQueuedThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: Environment;
+    eventSequence?: number;
     request: CreateThreadRequest;
     thread: ReturnType<typeof createThread>;
   },
@@ -48,6 +49,7 @@ function startQueuedThreadIfNeeded(
       path: args.environment.path,
     },
     input: args.request.input,
+    eventSequence: args.eventSequence,
     execution: buildExecutionOptions(args.request, "client/thread/start"),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
@@ -86,17 +88,24 @@ export async function createThreadFromRequest(
     const thread = createThreadRecord(deps, request, environment.id);
     transitionThreadStatus(deps.db, deps.hub, thread.id, "idle");
     if (request.input && request.input.length > 0) {
-      appendClientTurnEvent(deps, thread.id, environment.id, "client/thread/start", {
+      const eventSequence = appendClientTurnEvent(
+        deps,
+        thread.id,
+        environment.id,
+        "client/thread/start",
+        {
         input: request.input,
         execution: buildExecutionOptions(request, "client/thread/start"),
         initiator: request.spawnInitiator ?? "user",
         requestMethod: "thread/start",
         source: "spawn",
-      });
+        },
+      );
       try {
         startQueuedThreadIfNeeded(deps, {
           thread,
           environment,
+          eventSequence,
           request,
         });
       } catch (error) {

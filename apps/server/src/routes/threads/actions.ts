@@ -12,6 +12,11 @@ import {
   sendDraftRequestSchema,
   sendMessageRequestSchema,
 } from "@bb/server-contract";
+import type {
+  PromptInput,
+  Thread,
+  ThreadExecutionOptions,
+} from "@bb/domain";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
@@ -22,11 +27,76 @@ import { requireThreadEnvironment } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
 import {
   buildExecutionOptions,
+  queueThreadStartCommand,
   queueTurnRunCommand,
   queueTurnSteerCommand,
 } from "../../services/thread-commands.js";
-import { appendClientTurnEvent, getLastTurnId } from "../../services/thread-events.js";
+import {
+  appendClientTurnEvent,
+  getLastProviderThreadId,
+  getLastTurnId,
+} from "../../services/thread-events.js";
+import { tryTransition } from "../../services/thread-transitions.js";
 import { parseJsonBody } from "../../services/validation.js";
+
+interface QueueStartOrRunArgs {
+  environment: {
+    hostId: string;
+    id: string;
+    path: string | null;
+  };
+  eventSequence: number;
+  execution: ThreadExecutionOptions;
+  input: PromptInput[];
+  thread: Thread;
+}
+
+function ensureThreadIsWritable(thread: Thread): void {
+  if (thread.archivedAt) {
+    throw new ApiError(409, "invalid_request", "Thread is archived");
+  }
+}
+
+function queueStartOrRunCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: QueueStartOrRunArgs,
+): void {
+  const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
+  if (providerThreadId) {
+    queueTurnRunCommand(deps, {
+      thread: args.thread,
+      input: args.input,
+      eventSequence: args.eventSequence,
+      execution: args.execution,
+      environment: {
+        id: args.environment.id,
+        hostId: args.environment.hostId,
+      },
+    });
+    return;
+  }
+
+  if (!args.environment.path) {
+    throw new ApiError(409, "invalid_request", "Environment is not ready");
+  }
+
+  queueThreadStartCommand(deps, {
+    thread: args.thread,
+    environment: {
+      id: args.environment.id,
+      hostId: args.environment.hostId,
+      path: args.environment.path,
+    },
+    input: args.input,
+    eventSequence: args.eventSequence,
+    execution: args.execution,
+    projectId: args.thread.projectId,
+    providerId: args.thread.providerId,
+  });
+  if (args.thread.status === "idle") {
+    tryTransition(deps.db, deps.hub, args.thread.id, "active");
+  }
+}
 
 function resolveSendMode(
   threadStatus: string,
@@ -54,27 +124,37 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   app.post("/threads/:id/send", async (context) => {
     const payload = await parseJsonBody(context, sendMessageRequestSchema);
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    ensureThreadIsWritable(thread);
     if (environment.status !== "ready" || !environment.path) {
       throw new ApiError(409, "invalid_request", "Environment is not ready");
     }
 
     const mode = resolveSendMode(thread.status, payload.mode);
-    appendClientTurnEvent(deps, thread.id, environment.id, "client/turn/requested", {
+    const execution = buildExecutionOptions(payload, "client/turn/requested");
+    const eventSequence = appendClientTurnEvent(
+      deps,
+      thread.id,
+      environment.id,
+      "client/turn/requested",
+      {
       input: payload.input,
-      execution: buildExecutionOptions(payload, "client/turn/requested"),
+      execution,
       initiator: "user",
       requestMethod: "turn/start",
       source: "tell",
-    });
+      },
+    );
 
     if (mode === "start") {
-      queueTurnRunCommand(deps, {
+      queueStartOrRunCommand(deps, {
         thread,
         input: payload.input,
-        execution: buildExecutionOptions(payload, "client/turn/requested"),
+        eventSequence,
+        execution,
         environment: {
           id: environment.id,
           hostId: environment.hostId,
+          path: environment.path,
         },
       });
     } else {
@@ -85,6 +165,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       queueTurnSteerCommand(deps, {
         thread,
         input: payload.input,
+        eventSequence,
         expectedTurnId,
         environment: {
           id: environment.id,
@@ -116,30 +197,39 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     }
     const queuedMessage = toQueuedMessage(draft);
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    ensureThreadIsWritable(thread);
     const mode = resolveSendMode(thread.status, payload.mode ?? queuedMessage.mode);
+    const execution: ThreadExecutionOptions = {
+      source: "client/turn/requested",
+      reasoningLevel: queuedMessage.reasoningLevel,
+      sandboxMode: queuedMessage.sandboxMode,
+    };
 
-    appendClientTurnEvent(deps, thread.id, environment.id, "client/turn/requested", {
+    const eventSequence = appendClientTurnEvent(
+      deps,
+      thread.id,
+      environment.id,
+      "client/turn/requested",
+      {
       input: queuedMessage.content,
-      execution: {
-        source: "client/turn/requested",
-        reasoningLevel: queuedMessage.reasoningLevel,
-        sandboxMode: queuedMessage.sandboxMode,
-      },
+      execution,
       initiator: "user",
       requestMethod: "turn/start",
       source: "tell",
-    });
+      },
+    );
 
     if (mode === "start") {
-      queueTurnRunCommand(deps, {
+      queueStartOrRunCommand(deps, {
         thread,
         input: queuedMessage.content,
-        execution: {
-          source: "client/turn/requested",
-          reasoningLevel: queuedMessage.reasoningLevel,
-          sandboxMode: queuedMessage.sandboxMode,
+        eventSequence,
+        execution,
+        environment: {
+          id: environment.id,
+          hostId: environment.hostId,
+          path: environment.path,
         },
-        environment: { id: environment.id, hostId: environment.hostId },
       });
     } else {
       const expectedTurnId = getLastTurnId(deps, thread.id);
@@ -149,6 +239,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       queueTurnSteerCommand(deps, {
         thread,
         input: queuedMessage.content,
+        eventSequence,
         expectedTurnId,
         environment: { id: environment.id, hostId: environment.hostId },
       });

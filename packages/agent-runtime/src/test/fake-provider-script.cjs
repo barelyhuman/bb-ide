@@ -104,15 +104,9 @@ function scheduleTurnCompletion(threadId, responseText, delayMs) {
   }, delayMs);
 }
 
-function startTurn(message) {
-  const threadId = message.params?.threadId ?? "unknown";
+function beginTurn(threadId, input) {
   const thread = getThreadState(threadId);
   if (!thread) {
-    send({
-      jsonrpc: "2.0",
-      id: message.id,
-      error: { code: -32000, message: "Unknown thread: " + threadId },
-    });
     return;
   }
 
@@ -120,7 +114,7 @@ function startTurn(message) {
   thread.turnCount += 1;
 
   const turnId = "turn-" + thread.turnCount;
-  const inputText = parseInputText(message.params?.input);
+  const inputText = parseInputText(input);
   const plan = parseTurnPlan(inputText);
 
   thread.activeTurn = {
@@ -128,11 +122,6 @@ function startTurn(message) {
     timer: null,
   };
 
-  send({
-    jsonrpc: "2.0",
-    id: message.id,
-    result: { ok: true },
-  });
   send({
     jsonrpc: "2.0",
     method: "turn/started",
@@ -168,6 +157,26 @@ function startTurn(message) {
   scheduleTurnCompletion(threadId, plan.responseText, plan.delayMs);
 }
 
+function startTurn(message) {
+  const threadId = message.params?.threadId ?? "unknown";
+  const thread = getThreadState(threadId);
+  if (!thread) {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      error: { code: -32000, message: "Unknown thread: " + threadId },
+    });
+    return;
+  }
+
+  send({
+    jsonrpc: "2.0",
+    id: message.id,
+    result: { ok: true },
+  });
+  beginTurn(threadId, message.params?.input);
+}
+
 function startOrResumeThread(message, mode) {
   const threadId = message.params?.threadId ?? "unknown";
   const providerThreadId =
@@ -193,6 +202,9 @@ function startOrResumeThread(message, mode) {
       method: "thread/identity",
       params: { threadId, providerThreadId },
     });
+    if (Array.isArray(message.params?.input) && message.params.input.length > 0) {
+      beginTurn(threadId, message.params.input);
+    }
   }
 }
 

@@ -20,16 +20,34 @@ export {
   type ThreadRuntimeResolution,
 } from "./command-dispatch-support.js";
 
+function seedThreadHighWaterMarkIfPresent(
+  command:
+    | Extract<HostDaemonCommand, { type: "thread.start" }>
+    | Extract<HostDaemonCommand, { type: "turn.run" }>
+    | Extract<HostDaemonCommand, { type: "turn.steer" }>,
+  options: CommandDispatchOptions,
+): void {
+  if (command.eventSequence === undefined) {
+    return;
+  }
+  options.seedThreadHighWaterMark?.({
+    threadId: command.threadId,
+    sequence: command.eventSequence,
+  });
+}
+
 export async function dispatchCommand<TCommand extends HostDaemonCommand>(
   command: TCommand,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<TCommand["type"]>> {
   switch (command.type) {
     case "thread.start":
+      seedThreadHighWaterMarkIfPresent(command, options);
       return startThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "thread.resume":
       return resumeThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "turn.run": {
+      seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(
         command.environmentId,
         command.threadId,
@@ -43,6 +61,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "turn.steer": {
+      seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(
         command.environmentId,
         command.threadId,
