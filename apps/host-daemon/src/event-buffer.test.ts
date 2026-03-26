@@ -249,4 +249,28 @@ describe("event buffer", () => {
     expect(event.sequence).toBe(6);
     buffer.dispose();
   });
+
+  it("bumps the next sequence after an explicit ack", () => {
+    const buffer = createEventBuffer({
+      logger: createLogger(),
+      postEvents: async () => undefined,
+      flushAtCount: 1_000,
+    });
+
+    buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+    buffer.ack({ threadA: 5 });
+
+    const event = buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+
+    expect(event.sequence).toBe(6);
+    buffer.dispose();
+  });
 });

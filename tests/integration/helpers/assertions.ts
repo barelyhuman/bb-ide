@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { and, eq, or } from "drizzle-orm";
 import {
   hostDaemonCommands,
@@ -223,6 +224,25 @@ export async function waitForEnvironmentStatus(
     `Timed out waiting for environment ${environmentId} to reach ${status}`,
     timeoutMs,
     () => currentStatus,
+  );
+}
+
+export async function waitForPathRemoval(
+  pathToCheck: string,
+  timeoutMs = 10_000,
+): Promise<void> {
+  await pollUntil(
+    async () => {
+      try {
+        await fs.access(pathToCheck);
+        return null;
+      } catch {
+        return true;
+      }
+    },
+    `Timed out waiting for ${pathToCheck} to be removed`,
+    timeoutMs,
+    () => "path still exists",
   );
 }
 

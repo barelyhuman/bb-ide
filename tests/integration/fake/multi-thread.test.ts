@@ -24,6 +24,7 @@ import {
 import {
   waitForCommand,
   waitForCommandsDrained,
+  waitForPathRemoval,
   waitForThreadStatus,
 } from "../helpers/assertions.js";
 import {
@@ -57,21 +58,6 @@ function assertEventsBelongToThread(
 ): void {
   expect(events.length).toBeGreaterThan(0);
   expect(events.every((event) => event.threadId === threadId)).toBe(true);
-}
-
-async function waitForPathRemoval(pathToCheck: string): Promise<void> {
-  const deadline = Date.now() + DEFAULT_TIMEOUT_MS;
-
-  while (Date.now() <= deadline) {
-    try {
-      await fs.access(pathToCheck);
-    } catch {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error(`Timed out waiting for ${pathToCheck} to be removed`);
 }
 
 describe.sequential("fake provider multi-thread integration", () => {
@@ -283,7 +269,7 @@ describe.sequential("fake provider multi-thread integration", () => {
         DEFAULT_TIMEOUT_MS,
       );
       await waitForCommandsDrained(harness.db, harness.hostId, DEFAULT_TIMEOUT_MS);
-      await waitForPathRemoval(originalWorkspacePath);
+      await waitForPathRemoval(originalWorkspacePath, DEFAULT_TIMEOUT_MS);
 
       await unarchiveThread(harness.api, threadA.thread.id);
       await sendTextMessage(harness.api, threadA.thread.id, {

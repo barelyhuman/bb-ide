@@ -5,6 +5,7 @@ import {
   type ThreadEvent,
   type ToolCallRequest,
 } from "@bb/domain";
+import { z } from "zod";
 import type {
   AdapterCommand,
   JsonRpcMessage,
@@ -24,13 +25,14 @@ interface FakeEventMessage {
   params?: Record<string, unknown>;
 }
 
-interface ToolCallParams {
-  arguments?: unknown;
-  callId?: string;
-  threadId?: string;
-  tool?: string;
-  turnId?: string;
-}
+const toolCallParamsSchema = z.object({
+  arguments: z.unknown().optional(),
+  callId: z.string().optional(),
+  threadId: z.string().optional(),
+  tool: z.string().optional(),
+  turnId: z.string().optional(),
+});
+type ToolCallParams = z.infer<typeof toolCallParamsSchema>;
 
 const DEFAULT_ADAPTER_ID = "fake";
 const DEFAULT_DISPLAY_NAME = "Fake Provider";
@@ -195,7 +197,12 @@ function decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null 
     return null;
   }
 
-  const params = request.params as ToolCallParams;
+  const parsedParams = toolCallParamsSchema.safeParse(request.params);
+  if (!parsedParams.success) {
+    return null;
+  }
+
+  const params: ToolCallParams = parsedParams.data;
   return {
     arguments: params.arguments,
     callId: typeof params.callId === "string" ? params.callId : "",

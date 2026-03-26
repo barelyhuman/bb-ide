@@ -33,6 +33,7 @@ import {
   waitForCommandsDrained,
   waitForEventType,
   waitForHostConnected,
+  waitForPathRemoval,
   waitForThreadStatus,
 } from "../helpers/assertions.js";
 import {
@@ -119,21 +120,6 @@ async function expectEnvironmentMissing(
 ): Promise<void> {
   const environment = await getEnvironment(harness.api, environmentId);
   expect(environment.status).toBe("destroying");
-}
-
-async function waitForPathRemoval(pathToCheck: string): Promise<void> {
-  const deadline = Date.now() + DEFAULT_TIMEOUT_MS;
-
-  while (Date.now() <= deadline) {
-    try {
-      await fs.access(pathToCheck);
-    } catch {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  throw new Error(`Timed out waiting for ${pathToCheck} to be removed`);
 }
 
 describe.sequential("fake provider smoke integration", () => {
@@ -521,7 +507,7 @@ describe.sequential("fake provider smoke integration", () => {
         harness.hostId,
         DEFAULT_TIMEOUT_MS,
       );
-      await waitForPathRemoval(workspacePath);
+      await waitForPathRemoval(workspacePath, DEFAULT_TIMEOUT_MS);
       await expectEnvironmentMissing(harness, environment.id);
     } finally {
       await harness.cleanup();

@@ -160,8 +160,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       threadId: context.req.param("id"),
       content: encodeDraftContent(payload.input),
       mode: "auto",
+      ...(payload.model ? { model: payload.model } : {}),
       reasoningLevel: payload.reasoningLevel ?? "medium",
       sandboxMode: payload.sandboxMode ?? "danger-full-access",
+      ...(payload.serviceTier ? { serviceTier: payload.serviceTier } : {}),
     });
     return context.json(toQueuedMessage(draft), 201);
   });
@@ -178,8 +180,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const mode = resolveSendMode(thread.status, payload.mode ?? queuedMessage.mode);
     const execution: ThreadExecutionOptions = {
       source: "client/turn/requested",
+      ...(queuedMessage.model ? { model: queuedMessage.model } : {}),
       reasoningLevel: queuedMessage.reasoningLevel,
       sandboxMode: queuedMessage.sandboxMode,
+      ...(queuedMessage.serviceTier
+        ? { serviceTier: queuedMessage.serviceTier }
+        : {}),
     };
 
     if (environment.status !== "ready" || !environment.path) {
@@ -208,6 +214,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             source: "tell",
           },
         );
+        deleteDraft(deps.db, deps.hub, draft.id);
         return context.json({ ok: true, queuedMessage });
       }
       throw new ApiError(409, "invalid_request", "Environment is not ready");

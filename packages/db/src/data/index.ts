@@ -82,5 +82,6 @@ export type { CreateDraftInput } from "./drafts.js";
 export {
   sweepExpiredCommands,
   sweepExpiredLeases,
+  sweepDestroyingEnvironments,
   sweepManagedEnvironments,
 } from "./sweeps.js";

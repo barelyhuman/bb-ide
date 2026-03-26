@@ -215,12 +215,26 @@ export async function createThreadFromRequest(
     const mergeBaseBranch = await resolveThreadMergeBaseBranch({
       candidatePaths: [environment.path, defaultSource?.path],
     });
-    return createThreadInEnvironment(deps, {
-      environment,
-      mergeBaseBranch,
-      request,
-      threadStatus: "idle",
-    });
+    if (environment.status === "ready") {
+      if (!environment.path) {
+        throw new ApiError(409, "invalid_request", "Environment is not ready");
+      }
+      return createThreadInEnvironment(deps, {
+        environment,
+        mergeBaseBranch,
+        request,
+        threadStatus: "idle",
+      });
+    }
+    if (environment.status === "provisioning") {
+      return createThreadInEnvironment(deps, {
+        environment,
+        mergeBaseBranch,
+        request,
+        threadStatus: "provisioning",
+      });
+    }
+    throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
 
   const hostId = request.environment.hostId;

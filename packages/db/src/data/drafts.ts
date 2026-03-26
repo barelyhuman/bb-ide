@@ -8,8 +8,10 @@ export interface CreateDraftInput {
   threadId: string;
   content: string;
   mode: string;
+  model?: string;
   reasoningLevel: string;
   sandboxMode: string;
+  serviceTier?: string;
 }
 
 export function createDraft(
@@ -25,8 +27,10 @@ export function createDraft(
       threadId: input.threadId,
       content: input.content,
       mode: input.mode,
+      model: input.model ?? null,
       reasoningLevel: input.reasoningLevel,
       sandboxMode: input.sandboxMode,
+      serviceTier: input.serviceTier ?? null,
       createdAt: now,
       updatedAt: now,
     })

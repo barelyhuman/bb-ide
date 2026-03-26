@@ -6,9 +6,11 @@ interface StoredDraftRow {
   content: string;
   createdAt: number;
   id: string;
+  model: string | null;
   mode: string;
   reasoningLevel: string;
   sandboxMode: string;
+  serviceTier: string | null;
   threadId: string;
   updatedAt: number;
 }
@@ -27,6 +29,7 @@ export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
     id: row.id,
     content: decodeDraftContent(row.content),
     mode: row.mode === "start" || row.mode === "steer" ? row.mode : "auto",
+    ...(row.model ? { model: row.model } : {}),
     reasoningLevel:
       row.reasoningLevel === "low" ||
       row.reasoningLevel === "medium" ||
@@ -40,6 +43,9 @@ export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
       row.sandboxMode === "danger-full-access"
         ? row.sandboxMode
         : "danger-full-access",
+    ...(row.serviceTier === "fast" || row.serviceTier === "flex"
+      ? { serviceTier: row.serviceTier }
+      : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

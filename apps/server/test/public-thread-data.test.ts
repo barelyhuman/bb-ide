@@ -1,4 +1,5 @@
-import { getDraft, getThread } from "@bb/db";
+import { eq } from "drizzle-orm";
+import { events, getDraft, getThread } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -248,6 +249,97 @@ describe("public thread data routes", () => {
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
       expect(getDraft(harness.db, draft.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("persists draft model and service tier and clears the draft after reprovision send", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/draft-reprovision",
+        status: "error",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const createResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Draft from test" }],
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "high",
+            sandboxMode: "danger-full-access",
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(201);
+      const createdDraft = await readJson(createResponse) as {
+        id: string;
+        model?: string;
+        serviceTier?: string;
+      };
+      expect(createdDraft).toMatchObject({
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts/${createdDraft.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      expect(sendResponse.status).toBe(200);
+      expect(getDraft(harness.db, createdDraft.id)).toBeNull();
+      const provisionCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
+      );
+      expect(provisionCommand.command.type).toBe("environment.provision");
+      const requestedEvent = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .orderBy(events.sequence)
+        .all()
+        .find((event) => {
+          const parsed = JSON.parse(event.data) as {
+            execution?: { model?: string; serviceTier?: string };
+          };
+          return parsed.execution?.model === "gpt-5";
+        });
+      expect(requestedEvent).toBeTruthy();
+      expect(
+        requestedEvent ? JSON.parse(requestedEvent.data) : null,
+      ).toMatchObject({
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+        },
+      });
     } finally {
       await harness.cleanup();
     }

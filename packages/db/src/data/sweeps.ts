@@ -15,6 +15,9 @@ const STANDARD_COMMAND_TTL_MS = 60_000;
 /** Provision command TTL: 5 minutes */
 const PROVISION_COMMAND_TTL_MS = 5 * 60_000;
 
+/** Destroying environments are hard-deleted after 7 days. */
+const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
+
 /**
  * Sweep expired commands (fetched but not completed past TTL).
  *
@@ -187,4 +190,36 @@ export function sweepManagedEnvironments(db: DbConnection) {
     .all();
 
   return rows;
+}
+
+export function sweepDestroyingEnvironments(
+  db: DbConnection,
+  notifier: DbNotifier,
+  now?: number,
+) {
+  const currentTime = now ?? Date.now();
+  const staleEnvironmentIds = db
+    .select({ id: environments.id })
+    .from(environments)
+    .where(
+      and(
+        eq(environments.status, "destroying"),
+        lt(environments.updatedAt, currentTime - DESTROYING_ENVIRONMENT_TTL_MS),
+      ),
+    )
+    .all()
+    .map((environment) => environment.id);
+
+  if (staleEnvironmentIds.length === 0) {
+    return { deleted: 0 };
+  }
+
+  db.delete(environments)
+    .where(inArray(environments.id, staleEnvironmentIds))
+    .run();
+  notifier.notifySystem(["environment-deleted"]);
+
+  return {
+    deleted: staleEnvironmentIds.length,
+  };
 }

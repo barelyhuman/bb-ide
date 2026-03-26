@@ -3,6 +3,7 @@ import {
   promptInputSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
+  serviceTierSchema,
 } from "./shared-types.js";
 
 export const threadStatusValues = [
@@ -61,8 +62,10 @@ export const threadQueuedMessageSchema = z.object({
   id: z.string(),
   content: z.array(promptInputSchema),
   mode: z.enum(["auto", "start", "steer"]),
+  model: z.string().optional(),
   reasoningLevel: reasoningLevelSchema,
   sandboxMode: sandboxModeSchema,
+  serviceTier: serviceTierSchema.optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

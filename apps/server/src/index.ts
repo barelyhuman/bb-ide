@@ -1,7 +1,12 @@
 import { serve } from "@hono/node-server";
 import { commonConfig, serverConfig } from "@bb/config/server";
 import { createLogger } from "@bb/logger";
-import { sweepExpiredCommands, sweepExpiredLeases, sweepManagedEnvironments } from "@bb/db";
+import {
+  sweepDestroyingEnvironments,
+  sweepExpiredCommands,
+  sweepExpiredLeases,
+  sweepManagedEnvironments,
+} from "@bb/db";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
 import { maybeCleanupEnvironment } from "./services/environment-cleanup.js";
@@ -29,6 +34,7 @@ const { app, injectWebSocket } = createApp({
 setInterval(() => {
   sweepExpiredCommands(db, hub);
   sweepExpiredLeases(db, hub);
+  sweepDestroyingEnvironments(db, hub);
   for (const environment of sweepManagedEnvironments(db)) {
     void maybeCleanupEnvironment({ db, hub }, environment.id);
   }

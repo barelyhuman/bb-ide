@@ -5,6 +5,7 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
+  sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepManagedEnvironments,
@@ -15,7 +16,12 @@ import { createThread, archiveThread } from "../../src/data/threads.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
 import { queueCommand, fetchCommands } from "../../src/data/commands.js";
-import { hostDaemonCommands, threads, hostDaemonSessions } from "../../src/schema.js";
+import {
+  environments,
+  hostDaemonCommands,
+  hostDaemonSessions,
+  threads,
+} from "../../src/schema.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -311,5 +317,47 @@ describe("sweepManagedEnvironments", () => {
 
     const candidates = sweepManagedEnvironments(db);
     expect(candidates).toHaveLength(0);
+  });
+});
+
+describe("sweepDestroyingEnvironments", () => {
+  it("hard-deletes stale destroying environments after the retention window", () => {
+    const { db, host, project } = setup();
+    const now = Date.now();
+
+    const staleEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/stale-destroying",
+      managed: true,
+      status: "destroying",
+    });
+    const freshEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/fresh-destroying",
+      managed: true,
+      status: "destroying",
+    });
+
+    db.update(environments)
+      .set({ updatedAt: now - 8 * 24 * 60 * 60_000 })
+      .where(eq(environments.id, staleEnvironment.id))
+      .run();
+
+    const spy: DbNotifier = {
+      notifyThread: vi.fn(),
+      notifyEnvironment: vi.fn(),
+      notifyCommand: vi.fn(),
+      notifyProject: vi.fn(),
+      notifySystem: vi.fn(),
+    };
+
+    const result = sweepDestroyingEnvironments(db, spy, now);
+    expect(result.deleted).toBe(1);
+    expect(
+      db.select().from(environments).all().map((row) => row.id),
+    ).toEqual([freshEnvironment.id]);
+    expect(spy.notifySystem).toHaveBeenCalledWith(["environment-deleted"]);
   });
 });

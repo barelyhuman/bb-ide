@@ -734,6 +734,8 @@ describe("public thread routes", () => {
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
         content: JSON.stringify([{ type: "text", text: "Draft content" }]),
+        model: "gpt-5",
+        serviceTier: "flex",
       });
       seedEvent(harness.deps, {
         threadId: thread.id,
@@ -761,6 +763,10 @@ describe("public thread routes", () => {
       );
       expect(draftCommand.command).toMatchObject({
         environmentId: environment.id,
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+        },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();
 

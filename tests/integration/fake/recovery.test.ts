@@ -4,6 +4,7 @@ import {
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
+import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { readCommandCursor } from "../../../apps/host-daemon/src/command-cursor.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -355,16 +356,17 @@ describe.sequential("fake provider recovery integration", () => {
       );
 
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
+      const queuedTurnRunCommand = hostDaemonCommandSchema.parse({
+        type: "turn.run",
+        environmentId: environment.id,
+        threadId: thread.id,
+        input: [{ type: "text", text: "queued while offline" }],
+      });
       queueCommand(harness.db, harness.hub, {
         hostId: harness.hostId,
         sessionId: null,
-        type: "turn.run",
-        payload: JSON.stringify({
-          type: "turn.run",
-          environmentId: environment.id,
-          threadId: thread.id,
-          input: [{ type: "text", text: "queued while offline" }],
-        }),
+        type: queuedTurnRunCommand.type,
+        payload: JSON.stringify(queuedTurnRunCommand),
       });
 
       await harness.startDaemon();
