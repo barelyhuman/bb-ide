@@ -175,6 +175,8 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
+    const activeThreads = new Map<string, { providerThreadId?: string }>();
+    const knownThreads = new Map<string, { providerThreadId?: string }>();
     const runtime = this.createRuntime({
       workspacePath: workspace.path,
       adapterFactory: this.options.adapterFactory,
@@ -200,7 +202,11 @@ export class RuntimeManager {
           success: true,
         })),
       onStderr: this.options.onStderr,
-      onProcessExit: this.options.onProcessExit,
+      onProcessExit: (info) => {
+        activeThreads.clear();
+        knownThreads.clear();
+        this.options.onProcessExit?.(info);
+      },
     });
 
     return {
@@ -208,8 +214,8 @@ export class RuntimeManager {
       runtime,
       workspace,
       path: workspace.path,
-      activeThreads: new Map(),
-      knownThreads: new Map(),
+      activeThreads,
+      knownThreads,
     };
   }
 }

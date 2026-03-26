@@ -36,6 +36,7 @@ import {
 import { tryTransition } from "../../services/thread-transitions.js";
 import { parseJsonBody } from "../../services/validation.js";
 import { queueManagedEnvironmentReprovision } from "../../services/environment-provisioning.js";
+import { MANAGED_REPROVISION_QUEUED } from "../../services/environment-provisioning.js";
 
 function ensureThreadIsWritable(thread: Thread): void {
   if (thread.archivedAt) {
@@ -79,6 +80,13 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         environment.workspaceProvisionType &&
         environment.status !== "provisioning"
       ) {
+        const reprovisionResult = queueManagedEnvironmentReprovision(deps, {
+          environment,
+          thread,
+        });
+        if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
+          throw new ApiError(409, "invalid_request", "Environment is already provisioning");
+        }
         appendClientTurnEvent(
           deps,
           thread.id,
@@ -92,10 +100,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             source: "tell",
           },
         );
-        queueManagedEnvironmentReprovision(deps, {
-          environment,
-          thread,
-        });
         return context.json({ ok: true });
       }
       throw new ApiError(409, "invalid_request", "Environment is not ready");
@@ -184,6 +188,13 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         environment.workspaceProvisionType &&
         environment.status !== "provisioning"
       ) {
+        const reprovisionResult = queueManagedEnvironmentReprovision(deps, {
+          environment,
+          thread,
+        });
+        if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
+          throw new ApiError(409, "invalid_request", "Environment is already provisioning");
+        }
         appendClientTurnEvent(
           deps,
           thread.id,
@@ -197,10 +208,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             source: "tell",
           },
         );
-        queueManagedEnvironmentReprovision(deps, {
-          environment,
-          thread,
-        });
         return context.json({ ok: true, queuedMessage });
       }
       throw new ApiError(409, "invalid_request", "Environment is not ready");

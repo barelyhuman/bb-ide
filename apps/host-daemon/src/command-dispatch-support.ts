@@ -1,5 +1,9 @@
 import { createProviderForId, listAvailableProviders } from "@bb/agent-runtime";
-import type { AvailableModel, ProviderInfo } from "@bb/domain";
+import type {
+  AvailableModel,
+  DynamicTool,
+  ProviderInfo,
+} from "@bb/domain";
 import type {
   HostDaemonCommand,
   HostDaemonExecutionOptions,
@@ -17,11 +21,7 @@ export interface ThreadRuntimeResolution {
   providerId?: string;
   providerThreadId?: string;
   options?: HostDaemonExecutionOptions;
-  dynamicTools?: Array<{
-    name: string;
-    description: string;
-    inputSchema: unknown;
-  }>;
+  dynamicTools?: DynamicTool[];
 }
 
 export interface CommandDispatchOptions {

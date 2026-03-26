@@ -7,6 +7,7 @@ import {
   getLastExecutionOptions,
   getLastProviderThreadId,
 } from "../services/thread-events.js";
+import { resolveThreadRuntimeConfig } from "../services/thread-runtime-config.js";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "./session-state.js";
 
@@ -38,13 +39,35 @@ export function registerInternalThreadRuntimeRoutes(
 
     const providerThreadId = getLastProviderThreadId(deps, thread.id);
     const executionOptions = getLastExecutionOptions(deps, thread.id);
+    const runtimeConfig = resolveThreadRuntimeConfig(deps, {
+      environment: {
+        path: environment.path,
+      },
+      thread: {
+        id: thread.id,
+        projectId: thread.projectId,
+        type: thread.type,
+      },
+    });
+    const options =
+      executionOptions || runtimeConfig.instructions
+        ? {
+            ...(executionOptions ?? {}),
+            ...(runtimeConfig.instructions
+              ? { instructions: runtimeConfig.instructions }
+              : {}),
+          }
+        : undefined;
 
     return context.json({
       workspacePath: environment.path,
       projectId: thread.projectId,
       providerId: thread.providerId,
       ...(providerThreadId ? { providerThreadId } : {}),
-      ...(executionOptions ? { options: executionOptions } : {}),
+      ...(options ? { options } : {}),
+      ...(runtimeConfig.dynamicTools
+        ? { dynamicTools: runtimeConfig.dynamicTools }
+        : {}),
     });
   });
 }

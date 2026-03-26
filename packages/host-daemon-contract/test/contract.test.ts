@@ -69,10 +69,23 @@ describe("host-daemon command schemas", () => {
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
         providerId: "codex",
+        options: {
+          instructions: "You are a manager.",
+        },
+        dynamicTools: [
+          {
+            name: "message_user",
+            description: "Send a user-visible update",
+            inputSchema: { type: "object" },
+          },
+        ],
       }),
     ).toMatchObject({
       type: "thread.start",
       workspacePath: "/tmp/workspace",
+      options: {
+        instructions: "You are a manager.",
+      },
     });
   });
 

@@ -1,4 +1,5 @@
-import { updateEnvironment } from "@bb/db";
+import { environments } from "@bb/db";
+import { eq } from "drizzle-orm";
 import type {
   Environment,
   Thread,
@@ -29,13 +30,19 @@ function toProvisioningLabel(
   }
 }
 
+export const MANAGED_REPROVISION_QUEUED = "queued" as const;
+export const MANAGED_REPROVISION_IN_PROGRESS = "already-provisioning" as const;
+export type ManagedReprovisionResult =
+  | typeof MANAGED_REPROVISION_QUEUED
+  | typeof MANAGED_REPROVISION_IN_PROGRESS;
+
 export function queueManagedEnvironmentReprovision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: Environment;
     thread: Thread;
   },
-): void {
+): ManagedReprovisionResult {
   if (
     !args.environment.managed ||
     !args.environment.workspaceProvisionType ||
@@ -67,9 +74,34 @@ export function queueManagedEnvironmentReprovision(
       args.thread.id,
     );
 
-  updateEnvironment(deps.db, deps.hub, args.environment.id, {
-    status: "provisioning",
+  const now = Date.now();
+  let claimed = false;
+  deps.db.transaction((tx) => {
+    const current = tx
+      .select({
+        status: environments.status,
+      })
+      .from(environments)
+      .where(eq(environments.id, args.environment.id))
+      .get();
+    if (!current || current.status === "provisioning") {
+      return;
+    }
+
+    tx.update(environments)
+      .set({
+        status: "provisioning",
+        updatedAt: now,
+      })
+      .where(eq(environments.id, args.environment.id))
+      .run();
+    claimed = true;
   });
+  if (!claimed) {
+    return MANAGED_REPROVISION_IN_PROGRESS;
+  }
+
+  deps.hub.notifyEnvironment(args.environment.id, ["status-changed"]);
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");
   }
@@ -95,4 +127,5 @@ export function queueManagedEnvironmentReprovision(
     targetPath,
     workspaceProvisionType: args.environment.workspaceProvisionType,
   });
+  return MANAGED_REPROVISION_QUEUED;
 }

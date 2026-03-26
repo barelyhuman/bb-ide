@@ -797,6 +797,56 @@ describe("public thread routes", () => {
           command.projectId === project.id,
       );
       expect(managerProvisionCommand.command.type).toBe("environment.provision");
+      if (managerProvisionCommand.command.type !== "environment.provision") {
+        throw new Error("Expected manager provisioning command");
+      }
+      const managerProvisionPath = managerProvisionCommand.command.targetPath;
+      if (!managerProvisionPath) {
+        throw new Error("Expected manager provisioning target path");
+      }
+      const provisionResponse = await reportQueuedCommandSuccess(
+        harness,
+        managerProvisionCommand,
+        {
+          path: managerProvisionPath,
+          branchName: managerProvisionCommand.command.branchName ?? "bb/project-manager",
+          isGitRepo: true,
+          isWorktree: true,
+          ranSetup: false,
+        },
+      );
+      expect(provisionResponse.status).toBe(200);
+
+      const managerSendResponse = await harness.app.request(
+        `/api/v1/threads/${managerThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Start coordinating work" }],
+          }),
+        },
+      );
+      expect(managerSendResponse.status).toBe(200);
+
+      const managerStartCommand = await waitForQueuedCommandAfter(
+        harness,
+        managerProvisionCommand.row.cursor,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === managerThread.id,
+      );
+      expect(managerStartCommand.command.dynamicTools).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: "message_user" }),
+          expect.objectContaining({ name: "spawn_thread" }),
+        ]),
+      );
+      expect(managerStartCommand.command.options).toMatchObject({
+        instructions: expect.stringContaining("You are a manager for this project."),
+      });
     } finally {
       await harness.cleanup();
     }

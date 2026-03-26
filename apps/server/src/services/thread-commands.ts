@@ -4,6 +4,7 @@ import type {
   Thread,
   ThreadExecutionOptions,
 } from "@bb/domain";
+import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
 import type {
   CreateThreadRequest,
   SendMessageRequest,
@@ -11,6 +12,7 @@ import type {
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import { resolveThreadRuntimeConfig } from "./thread-runtime-config.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 
 export function buildExecutionOptions(
@@ -37,7 +39,7 @@ export function queueThreadStartCommand(
       id: string;
       path: string | null;
     };
-    execution: ThreadExecutionOptions;
+    execution: HostDaemonExecutionOptions;
     input?: PromptInput[];
     projectId: string;
     providerId: string;
@@ -47,6 +49,23 @@ export function queueThreadStartCommand(
   if (!args.environment.path) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
+
+  const runtimeConfig = resolveThreadRuntimeConfig(deps, {
+    environment: {
+      path: args.environment.path,
+    },
+    thread: {
+      id: args.thread.id,
+      projectId: args.thread.projectId,
+      type: args.thread.type,
+    },
+  });
+  const options: HostDaemonExecutionOptions = {
+    ...args.execution,
+    ...(runtimeConfig.instructions
+      ? { instructions: runtimeConfig.instructions }
+      : {}),
+  };
   const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -63,7 +82,10 @@ export function queueThreadStartCommand(
         ? { eventSequence: args.eventSequence }
         : {}),
       ...(args.input ? { input: args.input } : {}),
-      options: args.execution,
+      options,
+      ...(runtimeConfig.dynamicTools
+        ? { dynamicTools: runtimeConfig.dynamicTools }
+        : {}),
     }),
   });
 }

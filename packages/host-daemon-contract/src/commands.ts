@@ -40,7 +40,9 @@ export const HOST_DAEMON_COMMAND_TYPES = [
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
 
-export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema;
+export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.extend({
+  instructions: z.string().optional(),
+});
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;

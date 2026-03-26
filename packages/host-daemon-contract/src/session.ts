@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
 import {
+  dynamicToolSchema,
   hostTypeSchema,
   threadEventSchema,
   toolCallRequestSchema,
@@ -136,6 +137,7 @@ export const hostDaemonThreadRuntimeResponseSchema = z.object({
   providerId: z.string().min(1),
   providerThreadId: z.string().min(1).optional(),
   options: hostDaemonExecutionOptionsSchema.optional(),
+  dynamicTools: z.array(dynamicToolSchema).optional(),
 });
 export type HostDaemonThreadRuntimeResponse = z.infer<
   typeof hostDaemonThreadRuntimeResponseSchema

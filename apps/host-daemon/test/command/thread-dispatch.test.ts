@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/command-dispatch.js";
-import { cleanupTempDirs, createHarness } from "./dispatch-helpers.js";
+import { RuntimeManager } from "../../src/runtime-manager.js";
+import {
+  cleanupTempDirs,
+  createFakeRuntime,
+  createFakeWorkspace,
+  createHarness,
+} from "./dispatch-helpers.js";
 
 afterEach(cleanupTempDirs);
 
@@ -122,6 +128,60 @@ describe("thread command dispatch", () => {
     ]);
     expect(harness.runtimeState.resumedProviderThreadId).toBe("provider-1");
     expect(harness.runtimeState.ranTurnText).toBe("hello");
+  });
+
+  it("re-resolves thread runtime after provider exit clears known threads", async () => {
+    const { runtime, state } = createFakeRuntime();
+    const { workspace } = createFakeWorkspace("/tmp/env-exit");
+    let onProcessExit:
+      | ((info: {
+          code: number | null;
+          providerId: string;
+          signal: string | null;
+          threadIds: string[];
+        }) => void)
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => workspace,
+      createRuntime: (options) => {
+        onProcessExit = options.onProcessExit;
+        return runtime;
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-exit",
+      workspacePath: "/tmp/env-exit",
+    });
+    manager.markThreadActive("env-exit", "thread-1", "provider-1");
+    onProcessExit?.({
+      providerId: "fake",
+      threadIds: ["thread-1"],
+      code: 1,
+      signal: null,
+    });
+
+    const result = await dispatchCommand(
+      {
+        type: "turn.run",
+        environmentId: "env-exit",
+        threadId: "thread-1",
+        input: [{ type: "text", text: "after exit" }],
+      },
+      {
+        runtimeManager: manager,
+        resolveThreadRuntime: async () => ({
+          workspacePath: "/tmp/env-exit",
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+        }),
+      },
+    );
+
+    expect(result).toEqual({});
+    expect(state.resumedThreadId).toBe("thread-1");
+    expect(state.ranTurnText).toBe("after exit");
   });
 
   it("covers provider.list", async () => {

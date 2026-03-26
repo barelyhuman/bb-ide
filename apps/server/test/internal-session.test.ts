@@ -344,4 +344,50 @@ describe("internal session routes", () => {
       await harness.cleanup();
     }
   });
+
+  it("returns manager runtime metadata with instructions and dynamic tools", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-manager-runtime",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/manager-runtime-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-runtime-worktree",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      const response = await harness.app.request(
+        `/internal/threads/${managerThread.id}/runtime?sessionId=${session.id}`,
+        {
+          headers: internalAuthHeaders(harness),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        workspacePath: environment.path,
+        projectId: project.id,
+        providerId: managerThread.providerId,
+        options: {
+          instructions: expect.stringContaining("You are a manager for this project."),
+        },
+        dynamicTools: expect.arrayContaining([
+          expect.objectContaining({ name: "message_user" }),
+          expect.objectContaining({ name: "spawn_thread" }),
+        ]),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
