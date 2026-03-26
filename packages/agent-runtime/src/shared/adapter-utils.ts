@@ -86,16 +86,30 @@ export function toNonNegativeNumber(value: unknown): number {
 // Tool call / result → ThreadEventItem translation
 // ---------------------------------------------------------------------------
 
+export interface TranslateToolCallToItemInput {
+  callId: string;
+  toolName: string;
+  args: unknown;
+  parentToolCallId?: string;
+}
+
+export interface TranslateToolResultToItemInput {
+  callId: string;
+  toolName?: string;
+  content: unknown;
+  isError?: boolean;
+  parentToolCallId?: string;
+}
+
 /**
  * Translates a tool call (name + args) into a `ThreadEventItem`.
  * Recognises bash, file-edit, and web-search tools and produces the
  * corresponding specialised item types.
  */
 export function translateToolCallToItem(
-  callId: string,
-  toolName: string,
-  args: unknown,
+  input: TranslateToolCallToItemInput,
 ): ThreadEventItem {
+  const { callId, toolName, args, parentToolCallId } = input;
   if (BASH_TOOLS.has(toolName)) {
     const parsed = bashArgsSchema.safeParse(args);
     return {
@@ -107,6 +121,7 @@ export function translateToolCallToItem(
           ? parsed.data.cwd
           : "",
       status: "pending",
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -120,6 +135,7 @@ export function translateToolCallToItem(
       id: callId,
       changes: [{ path: filePath, kind: "update" as const }],
       status: "pending",
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -128,9 +144,8 @@ export function translateToolCallToItem(
     return {
       type: "webSearch",
       id: callId,
-      query: parsed.success
-        ? String(parsed.data.query ?? parsed.data.url ?? "")
-        : "",
+      query: parsed.success ? String(parsed.data.query ?? parsed.data.url ?? "") : "",
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -140,6 +155,7 @@ export function translateToolCallToItem(
     tool: toolName,
     arguments: args,
     status: "pending",
+    ...(parentToolCallId ? { parentToolCallId } : {}),
   };
 }
 
@@ -150,11 +166,9 @@ export function translateToolCallToItem(
  * bash tools) exit code 1.  When omitted or false the item uses `"completed"`.
  */
 export function translateToolResultToItem(
-  callId: string,
-  toolName: string | undefined,
-  content: unknown,
-  isError?: boolean,
+  input: TranslateToolResultToItemInput,
 ): ThreadEventItem {
+  const { callId, toolName, content, isError, parentToolCallId } = input;
   const outputText = extractResultText(content);
   const status = isError ? ("failed" as const) : ("completed" as const);
 
@@ -167,6 +181,7 @@ export function translateToolResultToItem(
       aggregatedOutput: outputText,
       exitCode: isError ? 1 : 0,
       status,
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -176,6 +191,7 @@ export function translateToolResultToItem(
       id: callId,
       changes: [],
       status,
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -184,6 +200,7 @@ export function translateToolResultToItem(
       type: "webSearch",
       id: callId,
       query: "",
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -193,6 +210,7 @@ export function translateToolResultToItem(
     tool: toolName ?? "unknown",
     status,
     result: outputText,
+    ...(parentToolCallId ? { parentToolCallId } : {}),
   };
 }
 

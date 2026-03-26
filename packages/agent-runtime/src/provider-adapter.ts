@@ -84,7 +84,10 @@ export interface ProviderAdapter {
   process: { command: string; args: string[] };
 
   buildCommand(command: AdapterCommand): JsonRpcMessage | null;
-  translateEvent(event: unknown, context?: { threadId?: string }): ThreadEvent[];
+  translateEvent(
+    event: unknown,
+    context?: { threadId?: string; parentToolCallId?: string },
+  ): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null;
   listModels(): Promise<AvailableModel[]>;
 }

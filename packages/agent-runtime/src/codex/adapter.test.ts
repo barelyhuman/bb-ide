@@ -384,6 +384,86 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("translateEvent item/completed with dynamicToolCall maps to toolCall", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "dynamicToolCall",
+          id: "dyn-1",
+          tool: "bb_test_ping",
+          arguments: {},
+          status: "completed",
+          contentItems: [{ type: "inputText", text: "PONG_FROM_TOOL" }],
+          success: true,
+          durationMs: 3,
+        },
+      }),
+    );
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "toolCall",
+        id: "dyn-1",
+        tool: "bb_test_ping",
+        status: "completed",
+        result: "PONG_FROM_TOOL",
+        durationMs: 3,
+      }),
+    });
+  });
+
+  it("translateEvent item/completed with collabAgentToolCall maps to toolCall", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "collabAgentToolCall",
+          id: "collab-1",
+          tool: "spawnAgent",
+          status: "completed",
+          senderThreadId: "t1",
+          receiverThreadIds: ["sub-thread-1"],
+          prompt: "Inspect the docs directory",
+          model: "gpt-5.4",
+          reasoningEffort: "medium",
+          agentsStates: {
+            "sub-thread-1": { status: "completed", message: "done" },
+          },
+        },
+      }),
+    );
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "toolCall",
+        id: "collab-1",
+        tool: "spawnAgent",
+        status: "completed",
+        arguments: expect.objectContaining({
+          senderThreadId: "t1",
+          receiverThreadIds: ["sub-thread-1"],
+          prompt: "Inspect the docs directory",
+          model: "gpt-5.4",
+          reasoningEffort: "medium",
+        }),
+        result: {
+          "sub-thread-1": { status: "completed", message: "done" },
+        },
+      }),
+    });
+  });
+
   // -- translateEvent: streaming deltas ------------------------------------
 
   it("translateEvent item/agentMessage/delta", () => {

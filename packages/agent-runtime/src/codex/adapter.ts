@@ -242,7 +242,10 @@ export function createCodexProviderAdapter(
 
     // -- Unified event translator ------------------------------------------
 
-    translateEvent(event: unknown, _context?: { threadId?: string }): ThreadEvent[] {
+    translateEvent(
+      event: unknown,
+      _context?: { threadId?: string; parentToolCallId?: string },
+    ): ThreadEvent[] {
       const codexEvent = event as CodexEvent;
       const events: ThreadEvent[] = [];
 
@@ -527,6 +530,42 @@ function translateCodexItem(item: CodexThreadItem): ThreadEventItem {
         error: item.error?.message,
         durationMs: item.durationMs ?? undefined,
       };
+    case "dynamicToolCall": {
+      const result = extractDynamicToolCallResult(item.contentItems);
+      const status = toItemStatus(item.status);
+      return {
+        type: "toolCall",
+        id: item.id,
+        tool: item.tool,
+        arguments: item.arguments,
+        status,
+        result,
+        error: item.success === false && typeof result !== "string"
+          ? "Dynamic tool call failed"
+          : undefined,
+        durationMs: item.durationMs ?? undefined,
+      };
+    }
+    case "collabAgentToolCall":
+      return {
+        type: "toolCall",
+        id: item.id,
+        tool: item.tool,
+        arguments: {
+          senderThreadId: item.senderThreadId,
+          receiverThreadIds: item.receiverThreadIds,
+          prompt: item.prompt ?? undefined,
+          model: item.model ?? undefined,
+          reasoningEffort: item.reasoningEffort ?? undefined,
+        },
+        status:
+          item.status === "inProgress"
+            ? "pending"
+            : item.status === "completed"
+              ? "completed"
+              : "failed",
+        result: item.agentsStates,
+      };
     case "reasoning":
       return {
         type: "reasoning",
@@ -539,7 +578,33 @@ function translateCodexItem(item: CodexThreadItem): ThreadEventItem {
     case "contextCompaction":
       return { type: "contextCompaction", id: item.id };
     default:
-      // imageView, collabAgentToolCall, enteredReviewMode, exitedReviewMode — not mapped yet.
+      // imageView, enteredReviewMode, exitedReviewMode — not mapped yet.
       return { type: "agentMessage", id: (item as { id: string }).id, text: "" };
   }
+}
+
+type CodexDynamicToolCallContentItems = Extract<
+  CodexThreadItem,
+  { type: "dynamicToolCall" }
+>["contentItems"];
+
+function extractDynamicToolCallResult(
+  contentItems: CodexDynamicToolCallContentItems,
+): unknown {
+  if (!contentItems || contentItems.length === 0) {
+    return undefined;
+  }
+
+  const textParts: string[] = [];
+  for (const contentItem of contentItems) {
+    if (contentItem.type === "inputText") {
+      textParts.push(contentItem.text);
+    }
+  }
+
+  if (textParts.length > 0) {
+    return textParts.join("\n");
+  }
+
+  return contentItems;
 }

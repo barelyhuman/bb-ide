@@ -1,0 +1,36 @@
+{
+  "providerId": "codex",
+  "scenarioId": "excalidraw-search-feature",
+  "scenarioDescription": "Provider-neutral feature task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774496678194,
+  "completedAt": 1774496949203,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/codex/search-feature",
+  "threadId": "provider-audit-thread",
+  "projectId": "provider-audit",
+  "turns": [
+    "Add a small result summary to the canvas search sidebar: show `N results` when there are matches, show a clear `No matches found` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
+    "Summarize the files you changed and the validation you ran."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M packages/excalidraw/components/SearchMenu.scss",
+      " M packages/excalidraw/components/SearchMenu.tsx",
+      " M packages/excalidraw/locales/en.json",
+      " M packages/excalidraw/tests/search.test.tsx"
+    ]
+  }
+}

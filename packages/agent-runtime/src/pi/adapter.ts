@@ -301,7 +301,10 @@ export function createPiProviderAdapter(
 
     // -- Unified event translator ------------------------------------------
 
-    translateEvent(event: unknown, context?: { threadId?: string }): ThreadEvent[] {
+    translateEvent(
+      event: unknown,
+      context?: { threadId?: string; parentToolCallId?: string },
+    ): ThreadEvent[] {
       // The runtime passes full JSON-RPC notifications. Unwrap bridge
       // envelope formats so the translation logic sees raw SDK events.
       const envelope = event as { method?: string; params?: Record<string, unknown> };
@@ -402,11 +405,12 @@ export function createPiProviderAdapter(
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId,
-              item: translateToolCallToItem(
-                piEvent.toolCallId,
-                piEvent.toolName,
-                piEvent.args,
-              ),
+              item: translateToolCallToItem({
+                callId: piEvent.toolCallId,
+                toolName: piEvent.toolName,
+                args: piEvent.args,
+                parentToolCallId: context?.parentToolCallId,
+              }),
             });
           }
           break;
@@ -419,12 +423,13 @@ export function createPiProviderAdapter(
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId,
-              item: translateToolResultToItem(
-                piEvent.toolCallId,
-                piEvent.toolName,
-                piEvent.result,
-                piEvent.isError,
-              ),
+              item: translateToolResultToItem({
+                callId: piEvent.toolCallId,
+                toolName: piEvent.toolName,
+                content: piEvent.result,
+                isError: piEvent.isError,
+                parentToolCallId: context?.parentToolCallId,
+              }),
             });
           }
           break;
@@ -528,4 +533,3 @@ function toAssistantUsageBreakdown(
     reasoningOutputTokens: 0,
   };
 }
-

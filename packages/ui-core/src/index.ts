@@ -56,3 +56,16 @@ export {
   type EventMetaItemProps,
   type EventMetaListProps,
 } from "./event-content.js";
+export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
+export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
+export {
+  findLatestActivityMessageId,
+  findLatestActivityRowId,
+  shouldHighlightLatestActivity,
+  shouldPreferOngoingLabelsForRow,
+} from "./thread-timeline/threadDetailActivity.js";
+export type {
+  ThreadTimelineTheme,
+  ThreadTimelineRenderOptions,
+  UserAttachmentImageSrcResolver,
+} from "./thread-timeline/types.js";

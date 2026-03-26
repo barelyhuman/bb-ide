@@ -131,6 +131,7 @@ describe("claude-code provider adapter", () => {
     const events = adapter.translateEvent({
       type: "assistant",
       message: {
+        id: "msg-1",
         role: "assistant",
         content: [{ type: "text", text: "Hello world" }],
       },
@@ -143,7 +144,56 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/completed",
-        item: expect.objectContaining({ type: "agentMessage", text: "Hello world" }),
+        item: expect.objectContaining({
+          type: "agentMessage",
+          id: "msg-1",
+          text: "Hello world",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent keeps assistant message ids distinct within one turn", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const firstEvents = adapter.translateEvent({
+      type: "assistant",
+      message: {
+        id: "msg-1",
+        role: "assistant",
+        content: [{ type: "text", text: "Now let me read the main files:" }],
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    const secondEvents = adapter.translateEvent({
+      type: "assistant",
+      message: {
+        id: "msg-2",
+        role: "assistant",
+        content: [{ type: "text", text: "Now let me read the test file:" }],
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    expect(firstEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          id: "msg-1",
+          text: "Now let me read the main files:",
+        }),
+      }),
+    );
+    expect(secondEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          id: "msg-2",
+          text: "Now let me read the test file:",
+        }),
       }),
     );
   });
@@ -180,6 +230,38 @@ describe("claude-code provider adapter", () => {
     );
   });
 
+  it("translateEvent preserves parent_tool_use_id on nested sdk/message events", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      method: "sdk/message",
+      params: {
+        message: {
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "tool-1", name: "Bash", input: { command: "ls" } },
+            ],
+          },
+          parent_tool_use_id: "agent-parent-1",
+          session_id: "sess-1",
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-1",
+          parentToolCallId: "agent-parent-1",
+        }),
+      }),
+    );
+  });
+
   // -- translateEvent: stream events ---------------------------------------
 
   it("translateEvent emits item/agentMessage/delta for stream text", () => {
@@ -204,6 +286,33 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "item/agentMessage/delta",
         delta: "streaming...",
+      }),
+    );
+  });
+
+  it("translateEvent starts a turn when stream text arrives before the assistant envelope", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        delta: { type: "text_delta", text: "PONG" },
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        turnId: "turn-1",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/agentMessage/delta",
+        turnId: "turn-1",
+        delta: "PONG",
       }),
     );
   });
@@ -284,6 +393,52 @@ describe("claude-code provider adapter", () => {
         type: "item/completed",
         item: expect.objectContaining({
           type: "commandExecution",
+          id: "tool-1",
+          status: "completed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent recovers missing tool names from prior tool uses", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-1",
+            name: "Edit",
+            input: { file_path: "notes/todo.txt" },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            content: "updated",
+          },
+        ],
+      },
+      session_id: "sess-1",
+    } as unknown as SDKMessage);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "fileChange",
           id: "tool-1",
           status: "completed",
         }),

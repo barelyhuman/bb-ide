@@ -1,0 +1,34 @@
+{
+  "providerId": "claude-code",
+  "scenarioId": "excalidraw-search-bugfix",
+  "scenarioDescription": "Provider-neutral bug-fix task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774497491601,
+  "completedAt": 1774497730952,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/claude-code/search-bugfix",
+  "threadId": "provider-audit-thread",
+  "projectId": "provider-audit",
+  "turns": [
+    "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
+    "Explain why the regression would have failed before your change."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M packages/excalidraw/components/SearchMenu.tsx",
+      " M packages/excalidraw/tests/search.test.tsx"
+    ]
+  }
+}

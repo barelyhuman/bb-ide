@@ -7,6 +7,7 @@ import {
   createFakeAdapter as createSharedFakeAdapter,
   fakeProviderScriptPath,
 } from "./test/index.js";
+import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
 
@@ -473,6 +474,74 @@ describe("createAgentRuntime", () => {
     await wait(200);
     await runtime.shutdown();
     // The test passes if no unhandled promise rejection occurs
+  });
+
+  it("captures correlated raw provider events, translated events, and tool call results", async () => {
+    const captures: AgentRuntimeCaptureEntry[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => {},
+      onCapture: (entry) => captures.push(entry),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "tool result" }],
+        success: true,
+      }),
+      adapterFactory: () => createFakeAdapter(scriptPath),
+    });
+
+    await runtime.startThread({
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "call_tool:my_test_tool" }],
+    });
+    await wait(200);
+    await runtime.shutdown();
+
+    const rawEvents = captures.filter(
+      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }> =>
+        entry.kind === "raw-provider-event",
+    );
+    const translatedEvents = captures.filter(
+      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "translated-thread-event" }> =>
+        entry.kind === "translated-thread-event",
+    );
+    const toolRequests = captures.filter(
+      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "tool-call-request" }> =>
+        entry.kind === "tool-call-request",
+    );
+    const toolResults = captures.filter(
+      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "tool-call-result" }> =>
+        entry.kind === "tool-call-result",
+    );
+
+    expect(rawEvents.map((entry) => entry.rawEvent.method)).toEqual(
+      expect.arrayContaining(["thread/identity", "turn/started", "item/completed", "turn/completed"]),
+    );
+    expect(translatedEvents.map((entry) => entry.event.type)).toEqual(
+      expect.arrayContaining(["thread/identity", "turn/started", "item/completed", "turn/completed"]),
+    );
+    expect(toolRequests).toHaveLength(1);
+    expect(toolResults).toHaveLength(1);
+    expect(toolRequests[0]?.request.tool).toBe("my_test_tool");
+    expect(toolResults[0]).toMatchObject({
+      requestCaptureId: toolRequests[0]?.captureId,
+      requestId: toolRequests[0]?.request.requestId,
+      success: true,
+    });
+
+    const turnStartedCapture = rawEvents.find((entry) => entry.rawEvent.method === "turn/started");
+    expect(turnStartedCapture).toBeDefined();
+    expect(
+      translatedEvents.some(
+        (entry) =>
+          entry.rawCaptureId === turnStartedCapture?.captureId &&
+          entry.event.type === "turn/started",
+      ),
+    ).toBe(true);
   });
 
   // ---- Error handling ----

@@ -50,6 +50,20 @@ export function isIgnoredItemStartEvent(decoded: ThreadEvent): boolean {
   return decoded.item.type === "reasoning" || decoded.item.type === "agentMessage";
 }
 
+export function isIgnoredItemCompletedEvent(decoded: ThreadEvent): boolean {
+  if (decoded.type !== "item/completed") return false;
+
+  if (decoded.item.type === "reasoning") {
+    return decoded.item.summary.length === 0 && decoded.item.content.length === 0;
+  }
+
+  if (decoded.item.type === "agentMessage") {
+    return decoded.item.text.length === 0;
+  }
+
+  return false;
+}
+
 export function appendDebugEvent(
   out: ViewMessage[],
   decoded: ThreadEvent,

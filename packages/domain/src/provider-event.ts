@@ -99,11 +99,13 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     type: z.literal("userMessage"),
     id: z.string(),
     content: z.array(threadEventUserContentSchema),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("agentMessage"),
     id: z.string(),
     text: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("commandExecution"),
@@ -114,18 +116,21 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     aggregatedOutput: z.string().optional(),
     exitCode: z.number().optional(),
     durationMs: z.number().optional(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("fileChange"),
     id: z.string(),
     changes: z.array(threadEventFileChangeSchema),
     status: threadEventItemStatusSchema,
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("webSearch"),
     id: z.string(),
     query: z.string(),
     action: z.string().optional(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("toolCall"),
@@ -137,21 +142,25 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     result: z.unknown().optional(),
     error: z.string().optional(),
     durationMs: z.number().optional(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("reasoning"),
     id: z.string(),
     summary: z.array(z.string()),
     content: z.array(z.string()),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("plan"),
     id: z.string(),
     text: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("contextCompaction"),
     id: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
 ]);
 export type ThreadEventItem = z.infer<typeof threadEventItemSchema>;
@@ -216,6 +225,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string().optional(),
     delta: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("item/commandExecution/outputDelta"),
@@ -224,6 +234,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     delta: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("item/fileChange/outputDelta"),
@@ -232,6 +243,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     delta: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("item/reasoning/summaryTextDelta"),
@@ -240,6 +252,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     delta: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("item/reasoning/textDelta"),
@@ -248,6 +261,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     delta: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("item/plan/delta"),
@@ -256,6 +270,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     delta: z.string(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("item/mcpToolCall/progress"),
@@ -264,6 +279,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     turnId: z.string(),
     itemId: z.string(),
     message: z.string().optional(),
+    parentToolCallId: z.string().optional(),
   }),
   z.object({
     type: z.literal("thread/tokenUsage/updated"),

@@ -1,0 +1,42 @@
+{
+  "name": "@bb/provider-audit",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "bb-provider-audit": "./dist/cli.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "ladle:prepare": "pnpm exec turbo run build --filter=@bb/provider-audit --filter=@bb/ui-core --filter=@bb/core-ui --filter=@bb/domain --filter=@bb/agent-runtime && node ./dist/cli.js export-ladle-data --output ./.ladle/fixture-story-data.ts",
+    "ladle": "pnpm run ladle:prepare && ladle serve",
+    "ladle:build": "pnpm run ladle:prepare && ladle build"
+  },
+  "dependencies": {
+    "@bb/agent-runtime": "workspace:*",
+    "@bb/core-ui": "workspace:*",
+    "@bb/domain": "workspace:*",
+    "@bb/ui-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@ladle/react": "^5.0.3",
+    "@bb/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}

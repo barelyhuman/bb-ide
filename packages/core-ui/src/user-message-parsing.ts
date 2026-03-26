@@ -145,6 +145,9 @@ export function parseUserFromItemEvent(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     ...(turnId ? { turnId } : {}),
+    ...(decoded.item.parentToolCallId
+      ? { parentToolCallId: decoded.item.parentToolCallId }
+      : {}),
     text: parsedContent.text,
     attachments: buildAttachments(parsedContent),
   };

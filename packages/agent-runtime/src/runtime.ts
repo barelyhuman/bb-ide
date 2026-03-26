@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ThreadRuntimeExecutionOptions } from "@bb/domain";
+import type { ThreadEvent, ThreadRuntimeExecutionOptions } from "@bb/domain";
+import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
   JsonRpcMessage,
@@ -88,11 +89,22 @@ interface ProviderProcess {
 
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextRequestId = 1;
+  let nextCaptureId = 1;
   const processes = new Map<string, ProviderProcess>();
   const providerStarting = new Map<string, Promise<void>>();
   const threadToProvider = new Map<string, string>();
   const threadToProviderThread = new Map<string, string>();
   let shuttingDown = false;
+
+  function createCaptureId(): string {
+    const captureId = `capture-${nextCaptureId}`;
+    nextCaptureId += 1;
+    return captureId;
+  }
+
+  function emitCapture(entry: AgentRuntimeCaptureEntry): void {
+    options.onCapture?.(entry);
+  }
 
   function getAdapter(providerId: string): ProviderAdapter {
     if (options.adapterFactory) {
@@ -127,6 +139,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     line: string,
     proc: ProviderProcess,
   ): void {
+    const providerId = proc.adapter.id;
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(line) as Record<string, unknown>;
@@ -155,11 +168,31 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
     // JSON-RPC request from provider (has id AND method) — tool call
     if (parsed.id !== undefined && parsed.method) {
+      const rawRequest = parsed as unknown as JsonRpcMessage;
       const toolCallReq = proc.adapter.decodeToolCallRequest(
-        parsed as unknown as JsonRpcMessage,
+        rawRequest,
       );
       if (toolCallReq) {
+        const captureId = createCaptureId();
+        emitCapture({
+          kind: "tool-call-request",
+          captureId,
+          capturedAt: Date.now(),
+          providerId,
+          rawLine: line,
+          rawRequest,
+          request: toolCallReq,
+        });
         void options.onToolCall(toolCallReq).then((response) => {
+          emitCapture({
+            kind: "tool-call-result",
+            capturedAt: Date.now(),
+            providerId,
+            requestCaptureId: captureId,
+            requestId: toolCallReq.requestId,
+            success: true,
+            response,
+          });
           const rpcResponse = {
             jsonrpc: "2.0",
             id: parsed.id,
@@ -167,6 +200,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           };
           proc.child.stdin?.write(JSON.stringify(rpcResponse) + "\n");
         }).catch((err) => {
+          emitCapture({
+            kind: "tool-call-result",
+            capturedAt: Date.now(),
+            providerId,
+            requestCaptureId: captureId,
+            requestId: toolCallReq.requestId,
+            success: false,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
           const rpcError = {
             jsonrpc: "2.0",
             id: parsed.id,
@@ -182,8 +224,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     // the providerThreadId mapping (used by codex, which emits identity via
     // thread/started notification translated to a ThreadEvent).
     function emitTranslatedEvents(
-      events: import("@bb/domain").ThreadEvent[],
+      events: ThreadEvent[],
       sourceThreadId?: string,
+      rawCaptureId?: string,
+      rawMethod?: string,
     ): void {
       for (const event of events) {
         if (event.type !== "thread/identity" || !event.providerThreadId) {
@@ -255,6 +299,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           continue;
         }
 
+        emitCapture({
+          kind: "translated-thread-event",
+          capturedAt: Date.now(),
+          providerId,
+          rawCaptureId,
+          rawMethod,
+          event,
+        });
         options.onEvent(event);
       }
     }
@@ -269,7 +321,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       // Bridges include threadId in params; codex notifications may not.
       const params = parsed.params as Record<string, unknown> | undefined;
       const sourceThreadId = typeof params?.threadId === "string" ? params.threadId : undefined;
-      emitTranslatedEvents(proc.adapter.translateEvent(parsed, { threadId: sourceThreadId }), sourceThreadId);
+      const rawCaptureId = createCaptureId();
+      const rawEvent = parsed as unknown as JsonRpcMessage;
+      emitCapture({
+        kind: "raw-provider-event",
+        captureId: rawCaptureId,
+        capturedAt: Date.now(),
+        providerId,
+        rawLine: line,
+        rawEvent,
+        sourceThreadId,
+      });
+      emitTranslatedEvents(
+        proc.adapter.translateEvent(parsed, { threadId: sourceThreadId }),
+        sourceThreadId,
+        rawCaptureId,
+        rawEvent.method,
+      );
     }
   }
 
@@ -307,6 +375,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       stderrRl.on("line", (line) => {
         proc.stderrChunks.push(line);
         options.onStderr?.(line);
+        emitCapture({
+          kind: "provider-stderr",
+          capturedAt: Date.now(),
+          providerId,
+          line,
+        });
       });
     }
 
@@ -319,6 +393,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       }
       proc.pending.clear();
       proc.pendingIdentity = [];
+
+      emitCapture({
+        kind: "provider-process-error",
+        capturedAt: Date.now(),
+        providerId,
+        message: err.message,
+      });
 
       options.onProcessExit?.({
         providerId,
@@ -343,6 +424,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         pending.reject(new Error(`Provider "${providerId}" exited unexpectedly`));
       }
       proc.pending.clear();
+
+      emitCapture({
+        kind: "provider-process-exit",
+        capturedAt: Date.now(),
+        providerId,
+        threadIds,
+        code: code ?? null,
+        signal: signal ?? null,
+        stderrChunks: [...proc.stderrChunks],
+      });
 
       options.onProcessExit?.({
         providerId,

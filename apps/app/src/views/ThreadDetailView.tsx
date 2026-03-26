@@ -46,6 +46,7 @@ import {
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
+import { findLatestActivityRowId } from "@bb/ui-core";
 import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
 import type {
   EnvironmentActionApiError,
@@ -64,7 +65,6 @@ import {
   isArchiveForceRequiredError,
   requiresArchiveConfirmation,
 } from "@/lib/thread-archive";
-import { findLatestActivityRowId } from "./threadDetailActivity";
 import { extractThreadQueuedMessages, queuedInputToDraft } from "./threadQueuedMessages";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";

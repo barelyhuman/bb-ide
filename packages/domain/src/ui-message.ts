@@ -20,6 +20,7 @@ export interface ViewMessageBase {
   createdAt: number;
   startedAt?: number;
   turnId?: string;
+  parentToolCallId?: string;
 }
 
 export interface ViewUserMessage extends ViewMessageBase {
@@ -171,6 +172,47 @@ export interface ViewOperationMessage extends ViewMessageBase {
   threadOperation?: ViewThreadOperationMetadata;
 }
 
+export const viewTaskStatusValues = [
+  "pending",
+  "active",
+  "completed",
+  "failed",
+] as const;
+export const viewTaskStatusSchema = z.enum(viewTaskStatusValues);
+export type ViewTaskStatus = z.infer<typeof viewTaskStatusSchema>;
+
+export interface ViewTaskEntry {
+  text: string;
+  status: ViewTaskStatus;
+}
+
+export interface ViewTasksMessage extends ViewMessageBase {
+  kind: "tasks";
+  source: "plan" | "todo";
+  callId?: string;
+  status: Extract<
+    ViewMessageStatus,
+    "pending" | "completed" | "error" | "interrupted"
+  >;
+  title: string;
+  tasks: ViewTaskEntry[];
+}
+
+export interface ViewDelegationMessage extends ViewMessageBase {
+  kind: "delegation";
+  toolName: string;
+  callId: string;
+  command?: string;
+  output?: string;
+  duration?: string;
+  durationMs?: number;
+  status: Extract<
+    ViewMessageStatus,
+    "pending" | "completed" | "error" | "interrupted"
+  >;
+  children: ViewMessage[];
+}
+
 export interface ViewErrorMessage extends ViewMessageBase {
   kind: "error";
   message: string;
@@ -193,6 +235,8 @@ export type ViewMessage =
   | ViewWebSearchMessage
   | ViewFileEditMessage
   | ViewOperationMessage
+  | ViewTasksMessage
+  | ViewDelegationMessage
   | ViewErrorMessage
   | ViewDebugRawEventMessage;
 

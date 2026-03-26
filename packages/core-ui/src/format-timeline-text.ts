@@ -1,4 +1,5 @@
 import type {
+  ViewDelegationMessage,
   ViewMessage,
   ViewUserMessage,
   ViewAssistantTextMessage,
@@ -8,6 +9,7 @@ import type {
   ViewFileEditMessage,
   ViewWebSearchMessage,
   ViewOperationMessage,
+  ViewTasksMessage,
   ViewErrorMessage,
 } from "@bb/domain";
 
@@ -44,6 +46,13 @@ function separator(label: string, color: boolean): string {
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return `${text.slice(0, maxLen - 3)}...`;
+}
+
+function indentBlock(text: string, prefix: string): string {
+  return text
+    .split("\n")
+    .map((line) => `${prefix}${line}`)
+    .join("\n");
 }
 
 function statusBadge(status: string, color: boolean): string {
@@ -117,7 +126,8 @@ function formatExploring(msg: ViewToolExploringMessage, verbose: boolean, color:
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   lines.push(separator(`Exploring (${msg.calls.length} call${msg.calls.length === 1 ? "" : "s"})`, color));
-  for (const call of msg.calls) {
+  const visibleCalls = verbose ? msg.calls : msg.calls.slice(0, 8);
+  for (const call of visibleCalls) {
     const cmd = call.command ?? call.callId;
     lines.push(`  ${badge} ${dim(cmd, color)}`);
     if (verbose && call.output) {
@@ -126,6 +136,10 @@ function formatExploring(msg: ViewToolExploringMessage, verbose: boolean, color:
         lines.push(dim(`    ${output.split("\n").join("\n    ")}`, color));
       }
     }
+  }
+  if (!verbose && msg.calls.length > visibleCalls.length) {
+    const remaining = msg.calls.length - visibleCalls.length;
+    lines.push(dim(`  ... ${remaining} more exploration call${remaining === 1 ? "" : "s"}`, color));
   }
   return lines.join("\n");
 }
@@ -165,6 +179,53 @@ function formatOperation(msg: ViewOperationMessage, _verbose: boolean, color: bo
   return lines.join("\n");
 }
 
+function taskStatusGlyph(status: ViewTasksMessage["tasks"][number]["status"]): string {
+  switch (status) {
+    case "completed":
+      return "☒";
+    case "active":
+      return "◼";
+    case "failed":
+      return "⚠";
+    case "pending":
+      return "□";
+  }
+}
+
+function formatTasks(msg: ViewTasksMessage, _verbose: boolean, color: boolean): string {
+  const lines: string[] = [];
+  lines.push(separator(msg.title, color));
+  for (const task of msg.tasks) {
+    lines.push(`  ${taskStatusGlyph(task.status)} ${task.text}`);
+  }
+  return lines.join("\n");
+}
+
+function formatDelegation(msg: ViewDelegationMessage, verbose: boolean, color: boolean): string {
+  const lines: string[] = [];
+  const badge = statusBadge(msg.status, color);
+  const label = msg.command ?? msg.toolName;
+  lines.push(separator(`Delegation: ${msg.toolName}`, color));
+  lines.push(`  ${badge} ${cyan(label, color)}`);
+  if (msg.output) {
+    lines.push(dim(`  ${truncate(msg.output.trim(), verbose ? 2000 : 160)}`, color));
+  }
+
+  const childBlocks = msg.children
+    .map((child) => formatMessage(child, verbose, color))
+    .filter((block) => block.length > 0);
+  const visibleChildBlocks = verbose ? childBlocks : childBlocks.slice(0, 6);
+
+  for (const block of visibleChildBlocks) {
+    lines.push(indentBlock(block, "  "));
+  }
+  if (!verbose && childBlocks.length > visibleChildBlocks.length) {
+    const remaining = childBlocks.length - visibleChildBlocks.length;
+    lines.push(dim(`  ... ${remaining} more nested item${remaining === 1 ? "" : "s"}`, color));
+  }
+  return lines.join("\n");
+}
+
 function formatError(msg: ViewErrorMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator("Error", color));
@@ -190,6 +251,10 @@ function formatMessage(msg: ViewMessage, verbose: boolean, color: boolean): stri
       return formatWebSearch(msg, verbose, color);
     case "operation":
       return formatOperation(msg, verbose, color);
+    case "tasks":
+      return formatTasks(msg, verbose, color);
+    case "delegation":
+      return formatDelegation(msg, verbose, color);
     case "error":
       return formatError(msg, verbose, color);
     case "debug/raw-event":

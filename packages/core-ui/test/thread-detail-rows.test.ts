@@ -187,6 +187,186 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
   });
 
+  it("keeps delegation and tasks rows as standalone message rows", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "delegation",
+        id: "delegation-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        startedAt: 1,
+        turnId: "turn-1",
+        toolName: "Agent",
+        callId: "agent-1",
+        command: "Agent [Explore] Search for SearchMenu references",
+        output: "Subagent report: found SearchMenu component and tests",
+        status: "completed",
+        children: [
+          {
+            kind: "tool-exploring",
+            id: "child-exploring-1",
+            threadId: "thread-1",
+            sourceSeqStart: 2,
+            sourceSeqEnd: 2,
+            createdAt: 2,
+            turnId: "turn-1",
+            label: "Exploring",
+            status: "completed",
+            calls: [
+              {
+                callId: "exec-1",
+                command: 'rg -n "SearchMenu" packages/excalidraw',
+                status: "completed",
+                output: "packages/excalidraw/components/SearchMenu.tsx:14",
+                parsedCmd: [{ type: "search", query: "SearchMenu" }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [
+          { text: "Inspect SearchMenu.tsx", status: "completed" },
+          { text: "Add better empty state", status: "active" },
+        ],
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 5,
+        createdAt: 5,
+        turnId: "turn-1",
+        text: "I found the relevant files and updated the task list.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
+    expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind === "message") {
+      expect(rows[0].message.kind).toBe("delegation");
+    }
+    expect(rows[1]?.kind).toBe("message");
+    if (rows[1]?.kind === "message") {
+      expect(rows[1].message.kind).toBe("tasks");
+    }
+  });
+
+  it("collapses post-assistant tool activity into an expandable tool group", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Fix the bug",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        text: "I found the issue. Now I will validate the fix.",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "npx jest search.test.tsx",
+        status: "error",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-2",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-2",
+        command: "npx vitest run search.test.tsx",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "tool-group"]);
+    expect(rows[2]?.kind).toBe("tool-group");
+    if (rows[2]?.kind !== "tool-group") return;
+    expect(rows[2].summaryCount).toBe(2);
+    expect(rows[2].messages).toHaveLength(2);
+  });
+
+  it("keeps a single post-assistant tool message visible as its own row", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Fix the bug",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        text: "I found the issue. Now I will validate the fix.",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "npx vitest run search.test.tsx",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
+    expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
+  });
+
   it("collapses a promote started/completed pair into a single operation row", () => {
     const rows = getOperationRows([
       primaryCheckoutOperation(

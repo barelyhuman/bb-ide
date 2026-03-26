@@ -10,33 +10,32 @@ import {
   mergeThreadOperationMessages,
 } from "./thread-operation-helpers.js";
 
-type CollapsibleTurnMessage = ViewMessage;
+type CollapsibleTurnMessage = Extract<
+  ViewMessage,
+  { kind: "tool-exploring" | "tool-call" | "web-search" | "file-edit" }
+>;
 
 export interface BuildTimelineRowsOptions {
   includeToolGroupMessages?: boolean;
 }
 
 function isCollapsibleTurnMessage(message: ViewMessage): message is CollapsibleTurnMessage {
-  if (
-    message.kind === "operation" &&
-    (message.opType === "compaction" || message.opType === "thread-title-updated")
-  ) {
-    return false;
-  }
-  if (message.kind === "user" || message.kind === "assistant-text") {
-    return false;
-  }
-  return true;
+  return (
+    message.kind === "tool-exploring" ||
+    message.kind === "tool-call" ||
+    message.kind === "web-search" ||
+    message.kind === "file-edit"
+  );
 }
 
 function isToolExploringMessage(
-  message: CollapsibleTurnMessage,
+  message: ViewMessage,
 ): message is Extract<ViewMessage, { kind: "tool-exploring" }> {
   return message.kind === "tool-exploring";
 }
 
 function isFileEditMessage(
-  message: CollapsibleTurnMessage,
+  message: ViewMessage,
 ): message is Extract<ViewMessage, { kind: "file-edit" }> {
   return message.kind === "file-edit";
 }
@@ -156,9 +155,9 @@ function mergeConsecutiveReconnectErrors(messages: ViewMessage[]): ViewMessage[]
 }
 
 function mergeConsecutiveToolActivityMessages(
-  messages: CollapsibleTurnMessage[],
-): CollapsibleTurnMessage[] {
-  const merged: CollapsibleTurnMessage[] = [];
+  messages: ViewMessage[],
+): ViewMessage[] {
+  const merged: ViewMessage[] = [];
   let active:
     | Extract<ViewMessage, { kind: "tool-exploring" }>
     | Extract<ViewMessage, { kind: "file-edit" }>
@@ -283,22 +282,11 @@ function getCollapsibleTurnMessageStatus(
   message: CollapsibleTurnMessage,
 ): TimelineToolGroupRow["status"] {
   switch (message.kind) {
-    case "user":
-      return "completed";
-    case "assistant-reasoning":
-    case "assistant-text":
-      return "completed";
     case "tool-exploring":
     case "tool-call":
     case "web-search":
     case "file-edit":
       return message.status;
-    case "operation":
-      return message.status ?? "completed";
-    case "error":
-      return "error";
-    case "debug/raw-event":
-      return "completed";
     default:
       return assertNever(message);
   }
@@ -327,14 +315,6 @@ export function buildTimelineRows(
     threadOperationMergedMessages,
   );
   const mergedMessages = mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
-  const lastAssistantIndexByTurn = new Map<string, number>();
-
-  for (const [index, message] of mergedMessages.entries()) {
-    if (!message.turnId) continue;
-    if (message.kind !== "assistant-text") continue;
-    lastAssistantIndexByTurn.set(message.turnId, index);
-  }
-
   const collapsedByFirstIndex = new Map<
     number,
     {
@@ -349,9 +329,6 @@ export function buildTimelineRows(
     const message = mergedMessages[index];
     const turnId = message?.turnId;
     if (!turnId) continue;
-
-    const lastAssistantIndex = lastAssistantIndexByTurn.get(turnId);
-    if (lastAssistantIndex === undefined || index >= lastAssistantIndex) continue;
     if (!isCollapsibleTurnMessage(message)) continue;
 
     const previousMessage = index > 0 ? mergedMessages[index - 1] : undefined;
@@ -361,7 +338,7 @@ export function buildTimelineRows(
       continue;
     }
 
-    const indices = new Set<number>();
+    const groupedIndices: number[] = [];
     const messages: CollapsibleTurnMessage[] = [];
     let scanIndex = index;
     while (scanIndex < mergedMessages.length) {
@@ -369,15 +346,22 @@ export function buildTimelineRows(
       if (
         !candidate ||
         candidate.turnId !== turnId ||
-        !isCollapsibleTurnMessage(candidate) ||
-        scanIndex >= lastAssistantIndex
+        !isCollapsibleTurnMessage(candidate)
       ) {
         break;
       }
-      indices.add(scanIndex);
-      collapsedMessageIndices.add(scanIndex);
+      groupedIndices.push(scanIndex);
       messages.push(candidate);
       scanIndex += 1;
+    }
+
+    if (messages.length <= 1) {
+      continue;
+    }
+
+    const indices = new Set<number>(groupedIndices);
+    for (const groupedIndex of groupedIndices) {
+      collapsedMessageIndices.add(groupedIndex);
     }
 
     collapsedByFirstIndex.set(index, {

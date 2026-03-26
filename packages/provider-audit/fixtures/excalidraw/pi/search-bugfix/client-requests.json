@@ -1,0 +1,18 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/thread/start",
+    "requestMethod": "thread/start",
+    "text": "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
+    "createdAt": 1774497733039
+  },
+  {
+    "id": "audit-client-row-2",
+    "turnIndex": 1,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Explain why the regression would have failed before your change.",
+    "createdAt": 1774497855200
+  }
+]

@@ -111,6 +111,47 @@ describe("toViewMessages replay coverage", () => {
     expect(assistantMessages[0]?.text).toBe("Hello");
   });
 
+  it("reconciles streamed assistant text with a later final message that uses a different item id key", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          turnId: "turn-1",
+          delta: "PONG",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "PONG",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const assistantMessages = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+
+    expect(assistantMessages).toHaveLength(1);
+    expect(assistantMessages[0]?.text).toBe("PONG");
+    expect(assistantMessages[0]?.status).toBe("completed");
+  });
+
   it("projects the direct raw-events fixture with stable, deduplicated output", () => {
     const events = loadFixture("thread-JQh4-pAyGlgHLACZ8AXY2-events.json");
     expect(events.length).toBeGreaterThan(500);
@@ -169,15 +210,23 @@ describe("toViewMessages replay coverage", () => {
     ];
 
     const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
-    const tool = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
-        message.kind === "tool-call",
+    const toolMessage = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" | "tool-exploring" }> =>
+        message.kind === "tool-call" || message.kind === "tool-exploring",
     );
 
-    expect(tool).toBeDefined();
-    expect(tool?.command).toBe("ls plans");
-    expect(tool?.status).toBe("interrupted");
-    expect(tool?.output).toContain("interrupted");
+    expect(toolMessage).toBeDefined();
+    if (toolMessage?.kind === "tool-exploring") {
+      expect(toolMessage.calls).toHaveLength(1);
+      expect(toolMessage.calls[0]?.command).toBe("ls plans");
+      expect(toolMessage.calls[0]?.status).toBe("interrupted");
+      expect(toolMessage.calls[0]?.output).toContain("interrupted");
+      return;
+    }
+
+    expect(toolMessage?.command).toBe("ls plans");
+    expect(toolMessage?.status).toBe("interrupted");
+    expect(toolMessage?.output).toContain("interrupted");
   });
 
   it("strips shell wrappers from string-form exec command lifecycle events", () => {
@@ -229,6 +278,415 @@ describe("toViewMessages replay coverage", () => {
     expect(tool).toBeDefined();
     expect(tool?.command).toBe("npm test -- --runInBand");
     expect(tool?.status).toBe("completed");
+  });
+
+  it("projects provider plan updates into tasks messages", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/plan/updated",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          plan: [
+            { step: "Inspect SearchMenu.tsx", status: "completed" },
+            { step: "Implement better empty state", status: "active" },
+          ],
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const tasks = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tasks" }> =>
+        message.kind === "tasks",
+    );
+
+    expect(tasks).toBeDefined();
+    expect(tasks?.source).toBe("plan");
+    expect(tasks?.title).toBe("Tasks updated");
+    expect(tasks?.tasks).toEqual([
+      { text: "Inspect SearchMenu.tsx", status: "completed" },
+      { text: "Implement better empty state", status: "active" },
+    ]);
+  });
+
+  it("projects TodoWrite tool calls into a compact tasks message", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "todo-1",
+            tool: "TodoWrite",
+            arguments: {
+              todos: [
+                { content: "Trace SearchMenu implementation", status: "completed" },
+                { content: "Add better no-results copy", status: "in_progress" },
+              ],
+            },
+            status: "pending",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "todo-1",
+            tool: "TodoWrite",
+            arguments: {
+              todos: [
+                { content: "Trace SearchMenu implementation", status: "completed" },
+                { content: "Add better no-results copy", status: "completed" },
+              ],
+            },
+            status: "completed",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const tasksMessages = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "tasks" }> =>
+        message.kind === "tasks",
+    );
+
+    expect(tasksMessages).toHaveLength(1);
+    expect(tasksMessages[0]).toMatchObject({
+      source: "todo",
+      title: "Tasks updated",
+      status: "completed",
+      callId: "todo-1",
+      sourceSeqStart: 1,
+      sourceSeqEnd: 2,
+    });
+    expect(tasksMessages[0]?.tasks).toEqual([
+      { text: "Trace SearchMenu implementation", status: "completed" },
+      { text: "Add better no-results copy", status: "completed" },
+    ]);
+  });
+
+  it("suppresses low-value TodoRead tool churn", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "todo-read-1",
+            tool: "TodoRead",
+            status: "pending",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "todo-read-1",
+            tool: "TodoRead",
+            status: "completed",
+            result: {
+              todos: [{ content: "Read me", status: "completed" }],
+            },
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+
+    expect(projected).toEqual([]);
+  });
+
+  it("nests delegated child activity under a delegation message", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "agent-1",
+            tool: "Agent",
+            arguments: {
+              description: "Explore SearchMenu implementation",
+            },
+            status: "pending",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/started",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "exec-1",
+            command: "/bin/zsh -lc 'rg -n \"SearchMenu\" packages/excalidraw'",
+            cwd: "/repo",
+            status: "pending",
+            parentToolCallId: "agent-1",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "exec-1",
+            command: "/bin/zsh -lc 'rg -n \"SearchMenu\" packages/excalidraw'",
+            cwd: "/repo",
+            aggregatedOutput: "packages/excalidraw/components/SearchMenu.tsx:14:export function SearchMenu()",
+            exitCode: 0,
+            status: "completed",
+            parentToolCallId: "agent-1",
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "agent-1",
+            tool: "Agent",
+            status: "completed",
+            result: "Found the SearchMenu component and surrounding tests.",
+          },
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const delegation = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "delegation" }> =>
+        message.kind === "delegation",
+    );
+
+    expect(delegation).toBeDefined();
+    expect(delegation).toMatchObject({
+      toolName: "Agent",
+      callId: "agent-1",
+      status: "completed",
+      sourceSeqStart: 1,
+      sourceSeqEnd: 4,
+    });
+    expect(delegation?.children).toHaveLength(1);
+    expect(delegation?.children[0]?.kind).toBe("tool-exploring");
+    if (delegation?.children[0]?.kind === "tool-exploring") {
+      expect(delegation.children[0].calls).toHaveLength(1);
+      expect(delegation.children[0].calls[0]?.callId).toBe("exec-1");
+      expect(delegation.children[0].calls[0]?.status).toBe("completed");
+    }
+  });
+
+  it("infers delegated child activity from provider child thread ids", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "agent-1",
+            tool: "spawnAgent",
+            arguments: {
+              receiverThreadIds: ["provider-thread-child-1"],
+              prompt: "Explore SearchMenu implementation",
+            },
+            status: "pending",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "agent-1",
+            tool: "spawnAgent",
+            arguments: {
+              receiverThreadIds: ["provider-thread-child-1"],
+              prompt: "Explore SearchMenu implementation",
+            },
+            status: "completed",
+            result: {
+              "provider-thread-child-1": {
+                status: "completed",
+              },
+            },
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/started",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-child-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "exec-1",
+            command: "/bin/zsh -lc 'rg -n \"SearchMenu\" packages/excalidraw'",
+            cwd: "/repo",
+            status: "pending",
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-child-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "exec-1",
+            command: "/bin/zsh -lc 'rg -n \"SearchMenu\" packages/excalidraw'",
+            cwd: "/repo",
+            aggregatedOutput:
+              "packages/excalidraw/components/SearchMenu.tsx:14:export function SearchMenu()",
+            exitCode: 0,
+            status: "completed",
+          },
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "wait-1",
+            tool: "wait",
+            arguments: {
+              receiverThreadIds: ["provider-thread-child-1"],
+            },
+            status: "completed",
+            result: {
+              "provider-thread-child-1": {
+                status: "completed",
+              },
+            },
+          },
+        },
+        createdAt: 5,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const delegation = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "delegation" }> =>
+        message.kind === "delegation",
+    );
+
+    expect(delegation).toBeDefined();
+    expect(delegation?.callId).toBe("agent-1");
+    expect(delegation?.children).toHaveLength(2);
+    expect(delegation?.children[0]?.kind).toBe("tool-exploring");
+    expect(delegation?.children[1]?.kind).toBe("tool-call");
+
+    if (delegation?.children[0]?.kind === "tool-exploring") {
+      expect(delegation.children[0].calls).toHaveLength(1);
+      expect(delegation.children[0].calls[0]?.callId).toBe("exec-1");
+      expect(delegation.children[0].calls[0]?.status).toBe("completed");
+    }
+
+    if (delegation?.children[1]?.kind === "tool-call") {
+      expect(delegation.children[1].toolName).toBe("wait");
+      expect(delegation.children[1].parentToolCallId).toBe("agent-1");
+    }
   });
 
   it("updates flushed pending tool calls in place without appending duplicate interrupted rows", () => {
@@ -312,13 +770,19 @@ describe("toViewMessages replay coverage", () => {
     ];
 
     const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
-    const tool = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
-        message.kind === "tool-call",
+    const toolMessage = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" | "tool-exploring" }> =>
+        message.kind === "tool-call" || message.kind === "tool-exploring",
     );
 
-    expect(tool).toBeDefined();
-    expect(tool?.status).toBe("pending");
+    expect(toolMessage).toBeDefined();
+    if (toolMessage?.kind === "tool-exploring") {
+      expect(toolMessage.calls).toHaveLength(1);
+      expect(toolMessage.calls[0]?.status).toBe("pending");
+      return;
+    }
+
+    expect(toolMessage?.status).toBe("pending");
   });
 
   it("keeps provisioning operations pending while thread provisioning is still in progress", () => {
@@ -736,15 +1200,23 @@ describe("toViewMessages replay coverage", () => {
     ];
 
     const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
-    const tool = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
-        message.kind === "tool-call",
+    const toolMessage = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" | "tool-exploring" }> =>
+        message.kind === "tool-call" || message.kind === "tool-exploring",
     );
 
-    expect(tool).toBeDefined();
-    expect(tool?.status).toBe("completed");
-    expect(tool?.output).toContain("first");
-    expect(tool?.output).toContain("second");
+    expect(toolMessage).toBeDefined();
+    if (toolMessage?.kind === "tool-exploring") {
+      expect(toolMessage.calls).toHaveLength(1);
+      expect(toolMessage.calls[0]?.status).toBe("completed");
+      expect(toolMessage.calls[0]?.output).toContain("first");
+      expect(toolMessage.calls[0]?.output).toContain("second");
+      return;
+    }
+
+    expect(toolMessage?.status).toBe("completed");
+    expect(toolMessage?.output).toContain("first");
+    expect(toolMessage?.output).toContain("second");
   });
 
   it("coalesces consecutive exploring toolCall calls into one exploring cell", () => {
@@ -1287,7 +1759,7 @@ describe("toViewMessages replay coverage", () => {
     );
   });
 
-  it("projects turn plan updates as operation rows", () => {
+  it("projects turn plan updates as tasks rows", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -1310,16 +1782,21 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const op = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
-        message.kind === "operation",
+    const tasks = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tasks" }> =>
+        message.kind === "tasks",
     );
 
-    expect(op).toBeDefined();
-    expect(op?.opType).toBe("plan-updated");
-    expect(op?.title).toBe("Plan updated");
-    expect(op?.detail).toContain("Plan is now clearer");
-    expect(op?.detail).toContain("• [In progress] Apply fix");
+    expect(tasks).toBeDefined();
+    expect(tasks).toMatchObject({
+      source: "plan",
+      title: "Tasks updated",
+      status: "completed",
+    });
+    expect(tasks?.tasks).toEqual([
+      { text: "Inspect project", status: "completed" },
+      { text: "Apply fix", status: "active" },
+    ]);
   });
 
   it("treats raw reasoning text deltas as reasoning stream updates", () => {
@@ -1981,6 +2458,36 @@ describe("toViewMessages replay coverage", () => {
         threadId: "thread-1",
         seq: 2,
         type: "item/started",
+        data: {
+          item: { type: "agentMessage", id: "msg-1", text: "" },
+          turnId: "turn-1",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
+    expect(withDebug).toEqual([]);
+  });
+
+  it("drops empty completed placeholder items in debug mode", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          item: { type: "reasoning", id: "rs-1", summary: [], content: [] },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
         data: {
           item: { type: "agentMessage", id: "msg-1", text: "" },
           turnId: "turn-1",
@@ -3319,7 +3826,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
     }
   });
 
-  it("projects bridge Bash tool via commandExecution (not custom_tool_call)", () => {
+  it("projects bridge Bash commandExecution with shell exploration intent", () => {
     // When bridges emit Bash as commandExecution, it should go through
     // the exec lifecycle path directly
     const events: ThreadEventRow[] = [
@@ -3362,13 +3869,22 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
     ];
 
     const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
-    const toolCalls = projected.filter((m) => m.kind === "tool-call");
-    expect(toolCalls).toHaveLength(1);
-    if (toolCalls[0]?.kind === "tool-call") {
-      expect(toolCalls[0].command).toBe("ls -la");
-      expect(toolCalls[0].output).toBe("total 8\ndrwxr-xr-x");
-      expect(toolCalls[0].exitCode).toBe(0);
+    const toolMessages = projected.filter(
+      (m): m is Extract<ViewMessage, { kind: "tool-call" | "tool-exploring" }> =>
+        m.kind === "tool-call" || m.kind === "tool-exploring",
+    );
+    expect(toolMessages).toHaveLength(1);
+    if (toolMessages[0]?.kind === "tool-exploring") {
+      expect(toolMessages[0].calls).toHaveLength(1);
+      expect(toolMessages[0].calls[0]?.command).toBe("ls -la");
+      expect(toolMessages[0].calls[0]?.output).toBe("total 8\ndrwxr-xr-x");
+      expect(toolMessages[0].calls[0]?.exitCode).toBe(0);
+      return;
     }
+
+    expect(toolMessages[0]?.command).toBe("ls -la");
+    expect(toolMessages[0]?.output).toBe("total 8\ndrwxr-xr-x");
+    expect(toolMessages[0]?.exitCode).toBe(0);
   });
 
   it("projects toolCall with result into tool-call message", () => {

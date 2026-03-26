@@ -3,6 +3,54 @@ import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
 
+export const imageLightboxKeyActionValues = [
+  "close",
+  "next",
+  "previous",
+] as const
+export type ImageLightboxKeyAction =
+  (typeof imageLightboxKeyActionValues)[number]
+
+export interface ImageLightboxKeyActionInput {
+  event: Pick<
+    KeyboardEvent,
+    "altKey" | "ctrlKey" | "defaultPrevented" | "key" | "metaKey"
+  >
+  hasNavigation: boolean
+}
+
+export function getImageLightboxKeyAction({
+  event,
+  hasNavigation,
+}: ImageLightboxKeyActionInput): ImageLightboxKeyAction | null {
+  if (
+    event.defaultPrevented ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey
+  ) {
+    return null
+  }
+
+  if (event.key === "Escape") {
+    return "close"
+  }
+
+  if (!hasNavigation) {
+    return null
+  }
+
+  if (event.key === "ArrowLeft") {
+    return "previous"
+  }
+
+  if (event.key === "ArrowRight") {
+    return "next"
+  }
+
+  return null
+}
+
 export function getWrappedImageIndex({
   currentIndex,
   direction,
@@ -41,28 +89,38 @@ export function ImageLightbox({
   const hasNavigation = hasMultipleImages && onPrevious !== undefined && onNext !== undefined
 
   useEffect(() => {
-    if (!imageSrc || !hasMultipleImages || !onPrevious || !onNext) return
+    if (!imageSrc) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) {
-        return
-      }
+      const action = getImageLightboxKeyAction({
+        event,
+        hasNavigation,
+      })
+      if (!action) return
 
-      if (event.key === "ArrowLeft") {
-        event.preventDefault()
-        onPrevious()
-        return
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault()
-        onNext()
+      switch (action) {
+        case "close":
+          event.preventDefault()
+          onClose()
+          return
+        case "previous":
+          if (!onPrevious) return
+          event.preventDefault()
+          onPrevious()
+          return
+        case "next":
+          if (!onNext) return
+          event.preventDefault()
+          onNext()
+          return
+        default:
+          return
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [hasMultipleImages, imageSrc, onNext, onPrevious])
+  }, [hasNavigation, imageSrc, onClose, onNext, onPrevious])
 
   if (!imageSrc) return null
 

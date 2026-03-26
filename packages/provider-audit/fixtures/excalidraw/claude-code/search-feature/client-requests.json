@@ -1,0 +1,18 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/thread/start",
+    "requestMethod": "thread/start",
+    "text": "Add a small result summary to the canvas search sidebar: show `N results` when there are matches, show a clear `No matches found` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
+    "createdAt": 1774496951036
+  },
+  {
+    "id": "audit-client-row-2",
+    "turnIndex": 1,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Summarize the files you changed and the validation you ran.",
+    "createdAt": 1774497117047
+  }
+]

@@ -97,6 +97,27 @@ const CLAUDE_DEFAULT_MODEL_PREFERENCES = [
   "claude-haiku-4-5",
 ] as const;
 
+function getNestedParentToolUseId(message: unknown): string | undefined {
+  if (typeof message !== "object" || message === null) {
+    return undefined;
+  }
+  if (!("parent_tool_use_id" in message)) {
+    return undefined;
+  }
+  return typeof message.parent_tool_use_id === "string"
+    ? message.parent_tool_use_id
+    : undefined;
+}
+
+const messageIdSchema = z.object({
+  id: z.string(),
+});
+
+function getNestedMessageId(message: unknown): string | undefined {
+  const parsed = messageIdSchema.safeParse(message);
+  return parsed.success ? parsed.data.id : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Claude Code–specific helpers
 // ---------------------------------------------------------------------------
@@ -219,6 +240,13 @@ export interface CreateClaudeCodeProviderAdapterOptions {
   listModels?: () => Promise<AvailableModel[]>;
 }
 
+interface ClaudeTurnState {
+  counter: number;
+  currentTurnId: string | undefined;
+  cumulativeTokens: ThreadEventTokenUsageBreakdown;
+  toolNamesByCallId: Map<string, string>;
+}
+
 export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
@@ -233,21 +261,36 @@ export function createClaudeCodeProviderAdapter(
   // one adapter instance don't corrupt each other's counters.
   // TODO: turnState grows unboundedly — needs a removeThread(threadId) method
   // on the adapter interface to clean up entries when threads are removed.
-  const turnState = new Map<string, {
-    counter: number;
-    currentTurnId: string | undefined;
-    cumulativeTokens: ThreadEventTokenUsageBreakdown;
-  }>();
+  const turnState = new Map<string, ClaudeTurnState>();
 
-  function getTurnState(threadId: string) {
+  function getTurnState(threadId: string): ClaudeTurnState {
     if (!turnState.has(threadId)) {
       turnState.set(threadId, {
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+        toolNamesByCallId: new Map(),
       });
     }
     return turnState.get(threadId)!;
+  }
+
+  function ensureTurnStarted(
+    events: ThreadEvent[],
+    threadId: string,
+    state: ClaudeTurnState,
+  ): string {
+    if (!state.currentTurnId) {
+      state.counter += 1;
+      state.currentTurnId = `turn-${state.counter}`;
+      events.push({
+        type: "turn/started",
+        threadId,
+        providerThreadId: "",
+        turnId: state.currentTurnId,
+      });
+    }
+    return state.currentTurnId;
   }
 
   return {
@@ -344,14 +387,27 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Unified event translator ------------------------------------------
 
-    translateEvent(event: unknown, context?: { threadId?: string }): ThreadEvent[] {
+    translateEvent(
+      event: unknown,
+      context?: { threadId?: string; parentToolCallId?: string },
+    ): ThreadEvent[] {
       // The runtime passes full JSON-RPC notifications. Unwrap bridge
       // envelope formats so the translation logic sees raw SDK messages.
       const envelope = event as { method?: string; params?: Record<string, unknown> };
       if (envelope.method === "sdk/message") {
         const sdkMessage = envelope.params?.message;
         if (!sdkMessage) return [];
-        return this.translateEvent(sdkMessage, context);
+        const nestedParentToolCallId = getNestedParentToolUseId(sdkMessage);
+        const parentToolCallId =
+          nestedParentToolCallId
+            ? nestedParentToolCallId
+            : typeof envelope.params?.parent_tool_use_id === "string"
+              ? envelope.params.parent_tool_use_id
+            : context?.parentToolCallId;
+        return this.translateEvent(sdkMessage, {
+          ...context,
+          ...(parentToolCallId ? { parentToolCallId } : {}),
+        });
       }
       if (envelope.method === "thread/identity") {
         const threadId = (envelope.params?.threadId as string) ?? "";
@@ -376,6 +432,7 @@ export function createClaudeCodeProviderAdapter(
       // Resolve per-thread turn state using the context threadId.
       const stateKey = context?.threadId ?? "";
       const state = getTurnState(stateKey);
+      const parentToolCallId = context?.parentToolCallId;
 
       switch (message.type) {
         case "system":
@@ -383,11 +440,8 @@ export function createClaudeCodeProviderAdapter(
           break;
 
         case "assistant": {
-          if (!state.currentTurnId) {
-            state.counter += 1;
-            state.currentTurnId = `turn-${state.counter}`;
-            events.push({ type: "turn/started", threadId, providerThreadId: "", turnId: state.currentTurnId });
-          }
+          const turnId = ensureTurnStarted(events, threadId, state);
+          const assistantMessageId = getNestedMessageId(message.message);
 
           const text = extractAssistantText(message);
           if (text) {
@@ -395,19 +449,30 @@ export function createClaudeCodeProviderAdapter(
               type: "item/completed",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
-              item: { type: "agentMessage", id: `msg-${state.counter}`, text },
+              turnId,
+              item: {
+                type: "agentMessage",
+                id: assistantMessageId ?? `msg-${state.counter}`,
+                text,
+                ...(parentToolCallId ? { parentToolCallId } : {}),
+              },
             });
           }
 
           const toolUses = extractToolUses(message);
           for (const toolUse of toolUses) {
+            state.toolNamesByCallId.set(toolUse.id, toolUse.name);
             events.push({
               type: "item/started",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
-              item: translateToolCallToItem(toolUse.id, toolUse.name, toolUse.input),
+              turnId,
+              item: translateToolCallToItem({
+                callId: toolUse.id,
+                toolName: toolUse.name,
+                args: toolUse.input,
+                parentToolCallId,
+              }),
             });
           }
           break;
@@ -415,13 +480,15 @@ export function createClaudeCodeProviderAdapter(
 
         case "stream_event": {
           const delta = extractStreamTextDelta(message);
-          if (delta && state.currentTurnId) {
+          if (delta) {
+            const turnId = ensureTurnStarted(events, threadId, state);
             events.push({
               type: "item/agentMessage/delta",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId,
+              turnId,
               delta,
+              ...(parentToolCallId ? { parentToolCallId } : {}),
             });
           }
           break;
@@ -430,16 +497,19 @@ export function createClaudeCodeProviderAdapter(
         case "user": {
           const toolResults = extractToolResults(message);
           for (const result of toolResults) {
+            const toolName =
+              result.toolName ?? state.toolNamesByCallId.get(result.toolUseId);
             events.push({
               type: "item/completed",
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId ?? "",
-              item: translateToolResultToItem(
-                result.toolUseId,
-                result.toolName,
-                result.content,
-              ),
+              item: translateToolResultToItem({
+                callId: result.toolUseId,
+                toolName,
+                content: result.content,
+                parentToolCallId,
+              }),
             });
           }
           break;

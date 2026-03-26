@@ -1,8 +1,14 @@
 import type { ThreadEvent, ThreadEventItemStatus } from "@bb/domain";
-import type { EventMeta } from "./event-decode.js";
+import { getEventParentToolCallId, type EventMeta } from "./event-decode.js";
 import type { ViewFileEditMessage, ViewToolCallMessage, ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { durationToString } from "./format-helpers.js";
-import { extractShellCommandFromString, formatToolCallCommand, toolNameToParsedIntents } from "./tool-call-parsing.js";
+import {
+  extractShellCommandFromString,
+  formatToolCallCommand,
+  formatToolCallOutput,
+  parseShellCommandIntents,
+  toolNameToParsedIntents,
+} from "./tool-call-parsing.js";
 import { toRecord } from "./unknown-helpers.js";
 
 export function itemStatusToToolStatus(status: ThreadEventItemStatus): ViewToolCallMessage["status"] {
@@ -27,6 +33,7 @@ export interface ExecCallPartial extends Partial<ViewToolCallSummary> {
   callId: string;
   toolName?: string;
   parsedCmd: ViewToolParsedIntent[];
+  parentToolCallId?: string;
 }
 
 export interface ExecLifecycleEvent {
@@ -43,7 +50,10 @@ function toExecDefaultStatus(kind: "begin" | "end"): ViewToolCallMessage["status
 export function parseExecLifecycleEvent(
   decoded: ThreadEvent,
   _meta: EventMeta,
+  parentToolCallIdOverride?: string,
 ): ExecLifecycleEvent | null {
+  const parentToolCallId =
+    parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
   if (decoded.type === "item/commandExecution/outputDelta") {
     const callId = decoded.itemId;
     if (!callId) return null;
@@ -54,6 +64,7 @@ export function parseExecLifecycleEvent(
         parsedCmd: [],
         output: decoded.delta,
         status: "pending",
+        ...(parentToolCallId ? { parentToolCallId } : {}),
       },
       appendOutput: true,
     };
@@ -74,18 +85,20 @@ export function parseExecLifecycleEvent(
         : (itemStatusToToolStatus(decoded.item.status) ??
             toExecDefaultStatus(kind));
 
+    const command = extractShellCommandFromString(decoded.item.command);
     return {
       kind,
       call: {
         callId,
-        command: extractShellCommandFromString(decoded.item.command),
+        command,
         cwd: decoded.item.cwd,
-        parsedCmd: [],
+        parsedCmd: parseShellCommandIntents(command),
         output: decoded.item.aggregatedOutput,
         exitCode,
         durationMs: decoded.item.durationMs,
         duration: durationToString(decoded.item.durationMs),
         status,
+        ...(parentToolCallId ? { parentToolCallId } : {}),
       },
     };
   }
@@ -96,7 +109,10 @@ export function parseExecLifecycleEvent(
 export function parseToolCallLifecycleEvent(
   decoded: ThreadEvent,
   _meta: EventMeta,
+  parentToolCallIdOverride?: string,
 ): ExecLifecycleEvent | null {
+  const parentToolCallId =
+    parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
   if (decoded.type === "item/started" || decoded.type === "item/completed") {
     if (decoded.item.type !== "toolCall") return null;
 
@@ -112,7 +128,12 @@ export function parseToolCallLifecycleEvent(
       ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
       : "pending";
     const result = decoded.item.result;
-    const output = typeof result === "string" ? result : (result !== undefined ? JSON.stringify(result) : undefined);
+    const rawOutput = typeof result === "string"
+      ? result
+      : (result !== undefined ? JSON.stringify(result) : undefined);
+    const output = rawOutput !== undefined
+      ? formatToolCallOutput(fullToolName, rawOutput)
+      : undefined;
     const errorField = decoded.item.error;
 
     return {
@@ -126,6 +147,7 @@ export function parseToolCallLifecycleEvent(
         durationMs: decoded.item.durationMs,
         duration: durationToString(decoded.item.durationMs),
         status,
+        ...(parentToolCallId ? { parentToolCallId } : {}),
       },
     };
   }

@@ -92,6 +92,44 @@ describe("formatTimelineAsText", () => {
     expect(verbose).toContain("found 3 matches");
   });
 
+  it("limits large exploring groups in minimal mode", () => {
+    const calls = Array.from({ length: 10 }, (_, index) => ({
+      callId: `c${index + 1}`,
+      command: `Read /src/file-${index + 1}.ts`,
+      parsedCmd: [
+        {
+          type: "read" as const,
+          cmd: `Read /src/file-${index + 1}.ts`,
+          name: "Read",
+          path: `/src/file-${index + 1}.ts`,
+        },
+      ],
+      status: "completed" as const,
+    }));
+
+    const minimal = formatTimelineAsText(
+      [
+        {
+          kind: "tool-exploring",
+          id: "exp-large",
+          threadId: "t1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 10,
+          createdAt: 1,
+          status: "completed",
+          calls,
+        },
+      ],
+      { color: false },
+    );
+
+    expect(minimal).toContain("Exploring (10 calls)");
+    expect(minimal).toContain("Read /src/file-1.ts");
+    expect(minimal).toContain("Read /src/file-8.ts");
+    expect(minimal).not.toContain("Read /src/file-9.ts");
+    expect(minimal).toContain("... 2 more exploration calls");
+  });
+
   it("renders file edit with path", () => {
     const messages: ViewMessage[] = [
       {

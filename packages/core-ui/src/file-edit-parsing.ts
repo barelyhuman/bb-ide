@@ -1,5 +1,6 @@
 import type { ThreadEvent, ThreadEventFileChange } from "@bb/domain";
 import { itemStatusToFileEditStatus } from "./exec-lifecycle.js";
+import { getEventParentToolCallId } from "./event-decode.js";
 import type { ViewFileEditChange, ViewFileEditMessage } from "@bb/domain";
 
 export function mapFileChanges(changes: ThreadEventFileChange[]): ViewFileEditChange[] {
@@ -14,11 +15,15 @@ export function mapFileChanges(changes: ThreadEventFileChange[]): ViewFileEditCh
 export interface FileEditPartial extends Partial<ViewFileEditMessage> {
   callId: string;
   appendStdout?: boolean;
+  parentToolCallId?: string;
 }
 
 export function parseFileEditFromItemEvent(
   decoded: ThreadEvent,
+  parentToolCallIdOverride?: string,
 ): FileEditPartial | null {
+  const parentToolCallId =
+    parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
   if (decoded.type === "item/fileChange/outputDelta") {
     const callId = decoded.itemId;
     if (!callId) return null;
@@ -28,6 +33,7 @@ export function parseFileEditFromItemEvent(
       stdout: decoded.delta,
       appendStdout: true,
       status: "pending",
+      ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
 
@@ -46,5 +52,6 @@ export function parseFileEditFromItemEvent(
     callId,
     changes,
     status: itemStatusToFileEditStatus(decoded.item.status) ?? defaultStatus,
+    ...(parentToolCallId ? { parentToolCallId } : {}),
   };
 }
