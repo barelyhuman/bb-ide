@@ -1,7 +1,9 @@
 // Phase 7e: Real provider end-to-end coverage (plans/rebuild.md)
+import { execFile as execFileCb } from "node:child_process";
 import fs from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type {
   ThreadEventRow,
@@ -81,10 +83,6 @@ function countTurnEvents(
   return events.filter((event) => event.type === type).length;
 }
 
-async function assertPathExists(targetPath: string): Promise<void> {
-  await fs.access(targetPath);
-}
-
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -98,29 +96,20 @@ async function assertProviderPrerequisites(
   providerId: RealProviderId,
 ): Promise<void> {
   await loadProjectEnvFile();
+  await assertCliInstalled(providerId === "claude-code" ? "claude" : providerId);
+}
 
-  if (providerId === "codex") {
-    await assertPathExists(path.join(homedir(), ".bun", "bin", "codex"));
-    if (process.env.OPENAI_API_KEY?.trim()) {
-      return;
+const execFile = promisify(execFileCb);
+
+async function assertCliInstalled(command: string): Promise<void> {
+  try {
+    await execFile(command, ["--help"]);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`${command} CLI is not installed or not on PATH`);
     }
-    await assertPathExists(path.join(homedir(), ".codex", "auth.json"));
-    return;
+    // --help returned non-zero but the binary exists — that's fine
   }
-
-  if (providerId === "claude-code") {
-    const hasOauthToken = !!process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
-    const hasApiKey = !!process.env.ANTHROPIC_API_KEY?.trim();
-    if (!hasOauthToken && !hasApiKey) {
-      throw new Error(
-        "Claude Code integration requires CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY",
-      );
-    }
-    return;
-  }
-
-  await assertPathExists(path.join(homedir(), ".pi", "agent", "auth.json"));
-  await assertPathExists("/opt/homebrew/bin/pi");
 }
 
 function getExecutionOptions(

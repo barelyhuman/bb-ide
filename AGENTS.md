@@ -32,6 +32,7 @@
 - Never mock the database. Use in-memory SQLite via `createConnection(":memory:")` + `migrate(db)`.
 - Almost never mock our own code. Mock only at true external boundaries: network calls to third-party providers, timers, and similar unpredictable externals.
 - Never mock the module under test or its private methods.
+- Pipe slow test output to a file, then read the file. Never grep or tail inline on slow tests — if the pattern misses, you've wasted an entire run. Example: `pnpm exec turbo run test --filter=@bb/integration-tests --force > /tmp/test-out.txt 2>&1`, then read `/tmp/test-out.txt`.
 
 ## Debugging
 

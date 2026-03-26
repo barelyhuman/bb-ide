@@ -9,14 +9,13 @@
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
-      "passThroughEnv": [
-        "BB_RUNTIME_MODE",
-        "BB_ROOT",
-        "BB_SERVER_PORT",
-        "BB_APP_PORT",
-        "BB_PROVIDER",
-        "BB_DEFAULT_PROVIDER"
-      ]
+      "passThroughEnv": ["*"]
+    },
+    "start:prod": {
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
     },
     "clean": {
       "cache": false

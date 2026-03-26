@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   createProviderForId,
   listAvailableProviderInfos,
-  resolveDefaultProviderId,
 } from "./provider-registry.js";
 
 describe("provider registry", () => {
@@ -44,12 +43,4 @@ describe("provider registry", () => {
     expect(ids).toEqual(["codex", "claude-code", "pi"]);
   });
 
-  it("prefers BB_DEFAULT_PROVIDER when resolving the default provider", () => {
-    expect(resolveDefaultProviderId({ BB_DEFAULT_PROVIDER: "pi" })).toBe("pi");
-    expect(resolveDefaultProviderId({ BB_DEFAULT_PROVIDER: "claude-code" })).toBe("claude-code");
-  });
-
-  it("falls back to BB_E2E_PROVIDER when no default provider override is set", () => {
-    expect(resolveDefaultProviderId({ BB_E2E_PROVIDER: "pi" })).toBe("pi");
-  });
 });

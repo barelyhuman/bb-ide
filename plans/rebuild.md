@@ -973,13 +973,7 @@ From old `qa/env-daemon/recovery.md`: late traffic from an old daemon session mu
 
 Real providers running through the full stack: server → daemon → provider process → events → back to server → API response. These tests are slower and non-deterministic, but they catch integration issues that fake providers can't: real process lifecycle, real event formats, real streaming behavior, real tool execution.
 
-**All three providers are required.** Credentials are available in this checkout:
-
-- **Codex:** `OPENAI_API_KEY` in `.env` + `~/.codex/auth.json` on disk. Binary at `~/.bun/bin/codex`.
-- **Claude Code:** `CLAUDE_CODE_OAUTH_TOKEN` in `.env`. Uses the Claude Agent SDK bridge (no external binary).
-- **Pi:** `~/.pi/agent/auth.json` on disk. Binary at `/opt/homebrew/bin/pi`.
-
-The harness must load `.env` from the project root (e.g., via `dotenv`) so that `OPENAI_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN` are available in the daemon's environment. The daemon spawns provider child processes — these inherit the daemon's env, so the keys propagate automatically.
+**All three providers are required.** Each provider must be authenticated in the current environment (see provider docs for setup). The daemon spawns provider child processes that inherit the daemon's environment, so credentials propagate automatically.
 
 **Test configuration:** Uses `createIntegrationHarness({ adapterFactory: undefined })` — no adapter override, so the daemon uses the real provider registry. The daemon resolves adapters from the installed provider binaries.
 

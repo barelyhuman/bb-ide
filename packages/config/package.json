@@ -18,6 +18,10 @@
     "./cli": {
       "import": "./dist/cli.js",
       "types": "./dist/cli.d.ts"
+    },
+    "./defaults": {
+      "import": "./dist/defaults.js",
+      "types": "./dist/defaults.d.ts"
     }
   },
   "files": [

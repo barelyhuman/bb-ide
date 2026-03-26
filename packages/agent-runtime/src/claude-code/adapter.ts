@@ -9,13 +9,10 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import Anthropic from "@anthropic-ai/sdk";
-import type { ModelInfo } from "@anthropic-ai/sdk/resources/models";
 import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type {
   AvailableModel,
-  ModelReasoningEffort,
   ProviderCapabilities,
   ThreadEvent,
   ThreadEventTokenUsage,
@@ -89,14 +86,6 @@ const STATIC_CLAUDE_CODE_MODELS: AvailableModel[] = [
   },
 ];
 
-const CLAUDE_DEFAULT_MODEL_PREFERENCES = [
-  "claude-sonnet-4-6",
-  "claude-sonnet-4-5",
-  "claude-sonnet-4",
-  "claude-opus-4-6",
-  "claude-haiku-4-5",
-] as const;
-
 function getNestedParentToolUseId(message: unknown): string | undefined {
   if (typeof message !== "object" || message === null) {
     return undefined;
@@ -149,79 +138,8 @@ function buildClaudeCodeConfig(envVars?: Record<string, string>): Record<string,
 // Model catalog
 // ---------------------------------------------------------------------------
 
-export function buildClaudeCodeAvailableModels(
-  modelInfos: ModelInfo[],
-): AvailableModel[] {
-  const models = modelInfos
-    .filter((model) => model.id.startsWith("claude-"))
-    .map((model) => {
-      const supportedReasoningEfforts = getClaudeReasoningEfforts(model.id);
-      return {
-        id: model.id,
-        model: model.id,
-        displayName: model.display_name,
-        description: describeClaudeModel(model.id),
-        supportedReasoningEfforts,
-        defaultReasoningEffort: supportedReasoningEfforts.some(
-          (e) => e.reasoningEffort === "medium",
-        )
-          ? ("medium" as const)
-          : supportedReasoningEfforts[0].reasoningEffort,
-        isDefault: false,
-      };
-    });
-
-  const defaultId = resolveDefaultClaudeModelId(models);
-  return models.map((m) => (m.id === defaultId ? { ...m, isDefault: true } : m));
-}
-
-async function listClaudeCodeModels(): Promise<AvailableModel[]> {
-  if (!shouldFetchClaudeCodeModelsFromAnthropic(process.env)) {
-    return [...STATIC_CLAUDE_CODE_MODELS];
-  }
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  const client = new Anthropic({ ...(apiKey ? { apiKey } : {}) });
-  const page = await client.models.list();
-  const models = buildClaudeCodeAvailableModels(page.data);
-  return models.length > 0 ? models : [...STATIC_CLAUDE_CODE_MODELS];
-}
-
-function shouldUseStaticClaudeModelList(env: NodeJS.ProcessEnv): boolean {
-  return (
-    env.CLAUDE_CODE_USE_BEDROCK === "1" ||
-    env.CLAUDE_CODE_USE_VERTEX === "1" ||
-    env.CLAUDE_CODE_USE_FOUNDRY === "1"
-  );
-}
-
-export function shouldFetchClaudeCodeModelsFromAnthropic(
-  env: NodeJS.ProcessEnv,
-): boolean {
-  if (shouldUseStaticClaudeModelList(env)) return false;
-  return !!env.ANTHROPIC_API_KEY?.trim();
-}
-
-function getClaudeReasoningEfforts(modelId: string): ModelReasoningEffort[] {
-  if (modelId.startsWith("claude-haiku")) {
-    return [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT];
-  }
-  if (modelId.startsWith("claude-opus-4-6")) {
-    return [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT, XHIGH_REASONING_EFFORT];
-  }
-  return [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT];
-}
-
-function describeClaudeModel(modelId: string): string {
-  if (modelId.startsWith("claude-opus")) return "Most capable Claude model for complex coding tasks";
-  if (modelId.startsWith("claude-haiku")) return "Fast Claude model for lightweight coding tasks";
-  return "Fast, intelligent Claude model for everyday coding tasks";
-}
-
-function resolveDefaultClaudeModelId(models: AvailableModel[]): string | undefined {
-  for (const preferred of CLAUDE_DEFAULT_MODEL_PREFERENCES) {
-    if (models.some((m) => m.id === preferred)) return preferred;
-  }
-  return models[0]?.id;
+function listClaudeCodeModels(): Promise<AvailableModel[]> {
+  return Promise.resolve([...STATIC_CLAUDE_CODE_MODELS]);
 }
 
 // ---------------------------------------------------------------------------

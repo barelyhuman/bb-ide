@@ -1,6 +1,7 @@
 import { envsafe, port, str } from "envsafe";
 import { join } from "node:path";
 import { commonConfig } from "./common.js";
+import { DEFAULTS } from "./defaults.js";
 
 export { commonConfig };
 
@@ -14,10 +15,15 @@ function validateInferenceModel(value: string): string {
 }
 
 const rawServerConfig = envsafe({
+  BB_HOST_DAEMON_PORT: port({
+    desc: "Port the host daemon listens on for local API requests",
+    default: DEFAULTS.hostDaemonPort.prod,
+    devDefault: DEFAULTS.hostDaemonPort.dev,
+  }),
   BB_SERVER_PORT: port({
     desc: "HTTP port for the server",
-    default: 3000,
-    devDefault: 3000,
+    default: DEFAULTS.serverPort.prod,
+    devDefault: DEFAULTS.serverPort.dev,
   }),
   BB_DATABASE_URL: str({
     desc: "SQLite database path. Defaults to $BB_DATA_DIR/bb.db",
@@ -35,11 +41,14 @@ const rawServerConfig = envsafe({
   }),
   BB_INFERENCE_MODEL: str({
     desc: "Inference model used for server-side completions in provider/model format",
-    default: "openai/gpt-4o-mini",
-    devDefault: "openai/gpt-4o-mini",
+    default: DEFAULTS.inferenceModel,
+    devDefault: DEFAULTS.inferenceModel,
   }),
   OPENAI_API_KEY: str({
-    desc: "OpenAI API key used for voice transcription and OpenAI-backed inference",
+    desc: "OpenAI API key used for voice transcription and OpenAI-backed inference (optional)",
+    default: "",
+    allowEmpty: true,
+    devDefault: "",
   }),
 });
 

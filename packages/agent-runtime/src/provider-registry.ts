@@ -62,33 +62,3 @@ export function listAvailableProviderInfos(): ProviderInfo[] {
 
   return infos;
 }
-
-/**
- * Resolve the default provider ID from environment variables.
- *
- * Checks `BB_DEFAULT_PROVIDER`, then `BB_E2E_PROVIDER`, then falls back
- * to the compile-time default (codex).
- */
-export function resolveDefaultProviderId(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
-  const configuredDefault = env.BB_DEFAULT_PROVIDER?.trim().toLowerCase();
-  if (configuredDefault && isKnownProviderId(configuredDefault)) {
-    return configuredDefault;
-  }
-
-  const testOverride = env.BB_E2E_PROVIDER?.trim().toLowerCase();
-  if (testOverride && isKnownProviderId(testOverride)) {
-    return testOverride;
-  }
-
-  return "codex";
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function isKnownProviderId(id: string): boolean {
-  return builtInFactories.has(id);
-}

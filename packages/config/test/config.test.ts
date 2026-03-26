@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 describe("commonConfig", () => {
-  it("defaults BB_DATA_DIR to ~/.bb and uses raw env names", async () => {
+  it("defaults BB_DATA_DIR to ~/.bb-dev and uses raw env names", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DATA_DIR", undefined);
     vi.stubEnv("BB_LOG_LEVEL", undefined);
@@ -22,32 +22,19 @@ describe("commonConfig", () => {
       "../src/common.js",
     );
 
-    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb"));
+    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb-dev"));
     expect(commonConfig.BB_LOG_LEVEL).toBe("debug");
     expect(commonConfig.BB_SECRET_TOKEN).toBe("dev-secret");
   });
 
-  it("does not support the legacy BB_ROOT migration path", async () => {
-    vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("BB_ROOT", "/tmp/bb-root");
-    vi.stubEnv("BB_DATA_DIR", undefined);
 
-    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
-      "../src/common.js",
-    );
-
-    expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb"));
-  });
-
-  it("does not enforce BB_SECRET_TOKEN in production", async () => {
+  it("requires BB_SECRET_TOKEN in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_SECRET_TOKEN", "");
+    vi.stubEnv("BB_SECRET_TOKEN", undefined);
 
-    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
-      "../src/common.js",
-    );
-
-    expect(commonConfig.BB_SECRET_TOKEN).toBe("");
+    await expect(
+      importFresh<typeof import("../src/common.js")>("../src/common.js"),
+    ).rejects.toThrow(/BB_SECRET_TOKEN/u);
   });
 });
 
@@ -66,7 +53,7 @@ describe("consumer-specific config", () => {
       "../src/server.js",
     );
 
-    expect(serverConfig.BB_SERVER_PORT).toBe(3000);
+    expect(serverConfig.BB_SERVER_PORT).toBe(3334);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
     expect(serverConfig.BB_E2B_API_KEY).toBe("");
     expect(serverConfig.BB_E2B_TEMPLATE).toBe("");

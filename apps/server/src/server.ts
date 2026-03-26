@@ -1,4 +1,6 @@
 import { createNodeWebSocket } from "@hono/node-ws";
+import { readFile, stat } from "node:fs/promises";
+import { extname, join, resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { AppDeps } from "./types.js";
@@ -36,7 +38,11 @@ function unauthorizedResponse(): Response {
   );
 }
 
-export function createApp(deps: AppDeps): ServerApp {
+interface CreateAppOptions {
+  staticDir?: string;
+}
+
+export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp {
   const app = new Hono();
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
@@ -99,6 +105,43 @@ export function createApp(deps: AppDeps): ServerApp {
       };
     }),
   );
+
+  if (options?.staticDir) {
+    const root = resolve(options.staticDir);
+    const MIME: Record<string, string> = {
+      ".html": "text/html",
+      ".js": "application/javascript",
+      ".css": "text/css",
+      ".json": "application/json",
+      ".png": "image/png",
+      ".svg": "image/svg+xml",
+      ".ico": "image/x-icon",
+      ".woff": "font/woff",
+      ".woff2": "font/woff2",
+      ".webp": "image/webp",
+      ".map": "application/json",
+    };
+
+    app.get("*", async (context) => {
+      const urlPath = context.req.path === "/" ? "/index.html" : context.req.path;
+      const filePath = join(root, urlPath);
+      if (!filePath.startsWith(root)) {
+        return context.notFound();
+      }
+      try {
+        const fileStat = await stat(filePath);
+        if (fileStat.isFile()) {
+          const content = await readFile(filePath);
+          const contentType = MIME[extname(filePath)] ?? "application/octet-stream";
+          return new Response(content, { headers: { "content-type": contentType } });
+        }
+      } catch {
+        // File not found — fall through to SPA fallback
+      }
+      const indexHtml = await readFile(join(root, "index.html"));
+      return new Response(indexHtml, { headers: { "content-type": "text/html" } });
+    });
+  }
 
   return {
     app,

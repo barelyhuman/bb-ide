@@ -110,7 +110,6 @@ describe("CLI command output contracts", () => {
 
     delete process.env.BB_PROJECT_ID;
     delete process.env.BB_THREAD_ID;
-    delete process.env.BB_ENVIRONMENT;
   });
 
   afterEach(() => {
@@ -719,44 +718,6 @@ describe("CLI command output contracts", () => {
         providerId: "codex",
         input: undefined,
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "managed-worktree" } },
-      },
-    });
-  });
-
-  it("bb thread spawn does not read BB_ENVIRONMENT", async () => {
-    process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BB_ENVIRONMENT = "/tmp/project-root";
-    const thread: Thread = makeThread({
-      id: "thread-env-2",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "created",
-      environmentId: "env-local-001",
-      createdAt: 1,
-      updatedAt: 1,
-    });
-    const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
-          },
-        },
-      },
-    }));
-
-    await runCommand(["thread", "spawn", "--provider", "codex"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
-    );
-
-    expect(post).toHaveBeenCalledWith({
-      json: {
-        projectId: "proj-1",
-        providerId: "codex",
-        input: undefined,
-        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
     });
   });

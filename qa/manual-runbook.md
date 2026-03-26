@@ -10,16 +10,13 @@ Build the server, daemon, and CLI:
 pnpm exec turbo run build --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli
 ```
 
-Verify provider auth before running real-provider checks:
+Verify provider CLIs are installed before running real-provider checks:
 
 ```bash
-test -n "$OPENAI_API_KEY"
-test -n "$CLAUDE_CODE_OAUTH_TOKEN"
-test -f "$HOME/.codex/auth.json"
-test -f "$HOME/.pi/agent/auth.json"
-test -x "$HOME/.bun/bin/codex"
-test -x "/opt/homebrew/bin/pi"
-command -v jq
+codex --help
+claude --help
+pi --help
+jq --help
 ```
 
 ## Standalone Setup

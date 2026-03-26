@@ -61,11 +61,11 @@ bb uses whichever providers you have configured. If you need to set one up:
 
 | Provider      | Setup                                                                                                                                                                                                                                                                            |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then either set `OPENAI_API_KEY` in your environment or `.env`, or run `codex login`.                                                                                                                          |
-| `claude-code` | Either set `ANTHROPIC_API_KEY` in your environment or `.env`, or run `claude setup-token` and then set the resulting token as `CLAUDE_CODE_OAUTH_TOKEN` in your environment or `.env`.                                                                                           |
-| `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Pi supports API keys in the environment, or interactive login through `pi` and then `/login`.                                                                              |
+| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then run `codex login` or configure credentials per the Codex docs.                                                                                                                                            |
+| `claude-code` | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and authenticate per its docs.                                                                                                                                                                             |
+| `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Run `pi` and then `/login` for interactive setup.                                                                                                                          |
 
-bb also uses `OPENAI_API_KEY` for non-agent features like thread title generation and commit message generation. See [.env.example](./.env.example) for the full set of options.
+Server configuration (ports, data directory, inference model, etc.) is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults for dev and production.
 
 <details>
 <summary>Development setup</summary>
@@ -124,7 +124,7 @@ be read as current architecture, not as a frozen public platform surface.
 
 ## Configuration
 
-Most runtime configuration lives in [.env.example](./.env.example), including provider selection, authentication, server settings, worktree settings, and inference options.
+Runtime configuration is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults. Environment variables can be overridden in a `.env` file at the repo root (gitignored).
 
 Local state defaults to `~/.bb/`. `pnpm dev` uses `~/.bb-dev/` by default so it can run alongside the production-style server. Thread execution context also exposes `BB_PROJECT_ID`, `BB_THREAD_ID`, and `BB_ENVIRONMENT_ID`.
 
@@ -136,8 +136,6 @@ Local state defaults to `~/.bb/`. `pnpm dev` uses `~/.bb-dev/` by default so it 
 - [Contracts](docs/contracts/README.md)
 - [QA docs](qa/README.md)
 - [Vision](docs/VISION.md)
-- [.env.example](./.env.example)
-
 ## Contributing
 
 While bb is still pre-alpha, the most useful contributions are feature requests and bug reports. If you run into something broken, confusing, or missing, open an issue with the workflow you were trying to accomplish and what happened instead.

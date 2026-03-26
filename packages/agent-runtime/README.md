@@ -7,11 +7,10 @@ Consumers say "start a thread, run a turn, give me events" — they never touch 
 ## Public API
 
 ```typescript
-import { createAgentRuntime, listAvailableProviders, resolveDefaultProviderId } from "@bb/agent-runtime";
+import { createAgentRuntime, listAvailableProviders } from "@bb/agent-runtime";
 
 // Discovery
 const providers = listAvailableProviders();   // [{ id: "codex", ... }, { id: "claude-code", ... }, { id: "pi", ... }]
-const defaultId = resolveDefaultProviderId(); // "codex" (or BB_DEFAULT_PROVIDER env var)
 
 // Runtime — supports multiple providers and threads simultaneously
 const runtime = createAgentRuntime({
@@ -70,46 +69,6 @@ The runtime fails fast when providers crash or are unavailable:
 
 A single runtime can manage multiple threads across multiple providers simultaneously. Each provider process is spawned once and shared across threads. The runtime stamps every event with the correct bb `threadId` and `providerThreadId` regardless of how the provider internally identifies threads.
 
-## Package Structure
-
-```
-src/
-├── index.ts                  Public exports
-├── types.ts                  AgentRuntime, AgentRuntimeOptions, ProviderInfo
-├── runtime.ts                createAgentRuntime implementation
-├── provider-adapter.ts       ProviderAdapter interface, AdapterCommand, JsonRpcMessage
-├── provider-registry.ts      Built-in adapter registry
-├── codex/
-│   ├── adapter.ts            Codex adapter (event translation, command building)
-│   ├── adapter.test.ts       Codex adapter unit tests
-│   ├── models.ts             Codex model discovery
-│   └── generated/            Codex JSON-RPC protocol types
-├── claude-code/
-│   ├── adapter.ts            Claude Code adapter
-│   ├── adapter.test.ts       Claude Code adapter unit tests
-│   └── bridge/               Bridge process (spawned as child)
-│       ├── bridge.ts         JSON-RPC entry point
-│       ├── sdk-session.ts    Claude Agent SDK session management
-│       └── tool-proxy-mcp.ts MCP server for tool call forwarding
-├── pi/
-│   ├── adapter.ts            Pi adapter
-│   ├── adapter.test.ts       Pi adapter unit tests
-│   └── bridge/               Bridge process (spawned as child)
-│       ├── bridge.ts         JSON-RPC entry point
-│       ├── sdk-session.ts    Pi SDK session management
-│       └── tool-proxy.ts     Tool call forwarding
-├── shared/
-│   ├── adapter-utils.ts      Shared adapter utilities (base instructions, tool translation, etc.)
-│   ├── bridge-tool-calls.ts  Shared JSON-RPC tool call utilities
-│   ├── provider-tool-call-contract.ts  Tool call request/response codec
-│   ├── tool-arg-schemas.ts   Zod schemas for tool arguments
-│   └── parse-utils.ts        JSON parsing helpers
-├── __fixtures__/             Shared test fixtures (SDK message samples)
-├── runtime.test.ts           Runtime unit tests (110 tests, fake provider process)
-├── provider-registry.test.ts Registry unit tests
-└── integration.test.ts       Integration tests (27 tests, real providers)
-```
-
 ## Running Tests
 
 ```bash
@@ -125,13 +84,7 @@ pnpm --filter @bb/agent-runtime test
 
 ### Integration test requirements
 
-| Provider | Credentials |
-|----------|-------------|
-| codex | `OPENAI_API_KEY` env var or `~/.codex/auth.json` (run `codex login`) |
-| claude-code | `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` env var |
-| pi | `~/.pi/agent/auth.json` (run `pi login`) |
-
-Credentials can be set in the repo root `.env` file — the integration test config loads it automatically.
+All providers must be authenticated in the current environment before running integration tests. Each provider manages its own credentials (auth files, env vars, etc.).
 
 ### Working with integration tests
 
@@ -145,12 +98,6 @@ pnpm --filter @bb/agent-runtime test:integration -- --reporter=verbose > /tmp/in
 # Then inspect:
 grep -E "(✓|×|Test Files|Tests )" /tmp/integ-out.txt
 ```
-
-**Credentials live in `.env` at the repo root.** The integration vitest config loads this file automatically. Check what's available:
-```bash
-grep -E "OPENAI_API_KEY|CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY" .env | sed 's/=.*/=<set>/'
-```
-For pi, check `~/.pi/agent/auth.json` exists. For codex, `~/.codex/auth.json` or `OPENAI_API_KEY`.
 
 **Build before running integration tests.** Bridge processes (claude-code, pi) run from `dist/`, not `src/`. If you change bridge or adapter code, rebuild first:
 ```bash
@@ -211,6 +158,6 @@ The runtime never interprets provider-specific wire content. Each adapter owns i
 
 - `@bb/domain` — shared types (ThreadEvent, ProviderThreadEvent, PromptInput, ToolCallRequest, etc.)
 - `@bb/templates` — markdown templates for provider instructions
-- `@anthropic-ai/sdk`, `@anthropic-ai/claude-agent-sdk` — Claude Code
+- `@anthropic-ai/claude-agent-sdk` — Claude Code
 - `@mariozechner/pi-ai`, `@mariozechner/pi-coding-agent` — Pi
 - `zod` — schema validation at provider boundaries

@@ -73,18 +73,15 @@ export async function generateThreadTitle(
 
   try {
     const modelInfo = parseInferenceModel(deps.config.inferenceModel);
-    const model = (() => {
-      switch (modelInfo.provider) {
-        case "anthropic":
-          return getModel("anthropic", modelInfo.modelId as never);
-        case "google":
-          return getModel("google", modelInfo.modelId as never);
-        case "openai":
-          return getModel("openai", modelInfo.modelId as never);
-        default:
-          throw new Error(`Unsupported inference provider: ${modelInfo.provider}`);
-      }
-    })();
+    if (modelInfo.provider === "openai" && !deps.config.openAiApiKey) {
+      return;
+    }
+    // @ts-expect-error — pi-ai overloads getModel per provider; our provider string is dynamic
+    const model = getModel(modelInfo.provider, modelInfo.modelId);
+    if (!model) {
+      deps.logger.warn({ provider: modelInfo.provider }, "Unsupported inference provider");
+      return;
+    }
     const prompt = renderTemplate("generateThreadMetadata", {
       cleanedPrompt: fallback,
     });

@@ -2,6 +2,7 @@ import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
+import { ApiError } from "../errors.js";
 import { requireEnvironment, requireDefaultConnectedHostId } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { transcribeVoiceInput } from "../services/voice-transcription.js";
@@ -18,7 +19,10 @@ function resolveHostId(deps: AppDeps, query: Record<string, string | undefined>)
 
 export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
   app.get("/system/config", (context) =>
-    context.json({ hostDaemonPort: deps.config.hostDaemonPort }),
+    context.json({
+      hostDaemonPort: deps.config.hostDaemonPort,
+      voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
+    }),
   );
 
   app.get("/system/providers", async (context) => {
@@ -81,6 +85,9 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
   });
 
   app.post("/system/voice-transcription", async (context) => {
+    if (!deps.config.openAiApiKey) {
+      throw new ApiError(501, "not_configured", "Voice transcription requires OPENAI_API_KEY to be configured");
+    }
     const formData = await context.req.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {

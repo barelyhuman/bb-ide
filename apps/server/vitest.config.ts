@@ -6,6 +6,9 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
+    env: {
+      BB_SECRET_TOKEN: "test-server-token",
+    },
     silent: "passed-only",
     name: "@bb/server",
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],

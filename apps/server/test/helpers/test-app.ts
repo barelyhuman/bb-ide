@@ -44,7 +44,6 @@ export async function createTestAppHarness(
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: "test-openai-key",
-    serverUrl: "http://127.0.0.1:0",
     ...overrides,
   };
   const deps: AppDeps = {

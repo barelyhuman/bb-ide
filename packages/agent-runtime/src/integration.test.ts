@@ -5,10 +5,8 @@
  * real runtime: process spawning, JSON-RPC framing, event routing, and
  * tool call round-trips.
  *
- * Requirements per provider:
- *   - codex:       OPENAI_API_KEY or ~/.codex/auth.json
- *   - claude-code: ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN
- *   - pi:          ~/.pi/agent/auth.json (run `pi login`)
+ * All providers must be authenticated in the current environment before
+ * running these tests.
  *
  * Run with: pnpm test:integration
  */

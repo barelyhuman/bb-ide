@@ -7,10 +7,9 @@ export type ServerLogger = Pick<Logger, "error" | "info" | "warn">;
 export interface ServerRuntimeConfig {
   authToken: string;
   dataDir: string;
-  hostDaemonPort: number | null;
+  hostDaemonPort: number;
   inferenceModel: string;
   openAiApiKey: string;
-  serverUrl: string;
 }
 
 export interface AppDeps {

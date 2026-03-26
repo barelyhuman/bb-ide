@@ -379,6 +379,7 @@ describe("public environment and system routes", () => {
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
         hostDaemonPort: 4010,
+        voiceTranscriptionEnabled: true,
       });
     } finally {
       await harness.cleanup();
@@ -467,22 +468,6 @@ describe("public environment and system routes", () => {
   });
 
   it("rejects voice transcription requests when the API key is not configured", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          error: {
-            message: "Missing API key",
-          },
-        }),
-        {
-          status: 401,
-          headers: {
-            "content-type": "application/json",
-          },
-        },
-      ));
-    vi.stubGlobal("fetch", fetchMock);
-
     const harness = await createTestAppHarness({
       openAiApiKey: "",
     });
@@ -504,12 +489,11 @@ describe("public environment and system routes", () => {
         },
       );
 
-      expect(response.status).toBe(502);
+      expect(response.status).toBe(501);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "provider_rpc_error",
-        message: "Missing API key",
+        code: "not_configured",
+        message: "Voice transcription requires OPENAI_API_KEY to be configured",
       });
-      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
     }

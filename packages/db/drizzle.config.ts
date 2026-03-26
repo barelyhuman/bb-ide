@@ -1,6 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { DEFAULTS } from "../config/src/defaults.js";
 
 function expandHomeDirectory(path: string): string {
   if (path === "~") return homedir();
@@ -8,17 +9,19 @@ function expandHomeDirectory(path: string): string {
   return path;
 }
 
-function resolveBbRoot(): string {
-  const configuredRoot = (process.env.BB_ROOT ?? process.env.BB_ROOT)?.trim();
-  if (!configuredRoot) {
-    return resolve(homedir(), ".bb");
+const isDev = process.env.NODE_ENV !== "production";
+
+function resolveDataDir(): string {
+  const configured = process.env.BB_DATA_DIR?.trim();
+  if (!configured) {
+    return resolve(homedir(), isDev ? DEFAULTS.dataDir.dev : DEFAULTS.dataDir.prod);
   }
-  return resolve(expandHomeDirectory(configuredRoot));
+  return resolve(expandHomeDirectory(configured));
 }
 
-const defaultDbPath = resolve(resolveBbRoot(), "bb.db");
-const dbPath = process.env.BB_DB_PATH
-  ? resolve(process.env.BB_DB_PATH)
+const defaultDbPath = resolve(resolveDataDir(), "bb.db");
+const dbPath = process.env.BB_DATABASE_URL
+  ? resolve(process.env.BB_DATABASE_URL)
   : defaultDbPath;
 
 export default defineConfig({

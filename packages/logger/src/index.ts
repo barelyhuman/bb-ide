@@ -9,9 +9,7 @@ export type { Logger };
 const LOG_DIR = join(commonConfig.BB_DATA_DIR, "logs");
 mkdirSync(LOG_DIR, { recursive: true });
 
-const LOG_FORMAT =
-  process.env.BB_LOG_FORMAT ??
-  (process.env.NODE_ENV === "production" ? "json" : "pretty");
+const LOG_FORMAT = commonConfig.BB_LOG_FORMAT;
 
 export interface CreateLoggerOptions {
   component: string;

@@ -3,11 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "BB_RUNTIME_MODE=development BB_ROOT=${BB_ROOT:-$HOME/.bb-dev} BB_SERVER_PORT=${BB_SERVER_PORT:-3334} BB_APP_PORT=${BB_APP_PORT:-5173} turbo run dev --ui tui --concurrency 20",
+    "dev": "turbo run dev --ui tui --concurrency 20",
     "build": "turbo run build",
-    "start": "BB_RUNTIME_MODE=production pnpm exec turbo run build --filter=@bb/app --filter=@bb/server --filter=@bb/cli && node apps/server/dist/index.js",
-    "reset": "BB_ROOT=${BB_ROOT:-$HOME/.bb} node scripts/reset-bb-data.mjs",
-    "reset:dev": "BB_ROOT=${BB_ROOT:-$HOME/.bb-dev} node scripts/reset-bb-data.mjs",
+    "start": "turbo run build --filter=@bb/app --filter=@bb/cli && turbo run start:prod --filter=@bb/server --filter=@bb/host-daemon --concurrency 20",
+    "reset": "BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb} node scripts/reset-bb-data.mjs",
+    "reset:dev": "BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb-dev} node scripts/reset-bb-data.mjs",
     "reset:all": "node scripts/reset-bb-data.mjs --all",
     "clean": "turbo run clean",
     "lint": "turbo run lint",
@@ -17,8 +17,8 @@
     "test:integration": "turbo run test:integration test:e2e",
     "test:e2e": "turbo run test:e2e",
     "bb": "node apps/cli/dist/index.js",
-    "bb:dev": "BB_SERVER_URL=${BB_SERVER_URL:-http://localhost:3334} pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
-    "server": "node apps/server/dist/index.js",
+    "bb:dev": "pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
+    "server": "pnpm --filter @bb/server start",
     "drizzle-studio": "pnpm --filter @bb/db db:studio"
   },
   "devDependencies": {

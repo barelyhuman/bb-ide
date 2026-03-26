@@ -55,7 +55,6 @@ async function main() {
         BB_DATA_DIR: serverDataDir,
         BB_SECRET_TOKEN: token,
         BB_SERVER_PORT: String(serverPort),
-        BB_SERVER_URL: serverUrl,
         [STANDALONE_INSTANCE_ENV]: instanceId,
         [STANDALONE_PARENT_PID_ENV]: String(parentPid),
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",

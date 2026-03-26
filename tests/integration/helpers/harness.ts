@@ -176,10 +176,9 @@ async function startIntegrationServer(
   const config: ServerRuntimeConfig = {
     authToken: TEST_AUTH_TOKEN,
     dataDir: serverDataDir,
-    hostDaemonPort: null,
+    hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
-    serverUrl: "http://127.0.0.1:0",
   };
   const { app, injectWebSocket } = createApp({
     config,
@@ -205,7 +204,6 @@ async function startIntegrationServer(
   }
 
   const baseUrl = `http://127.0.0.1:${requireListeningAddress(addressInfo).port}`;
-  config.serverUrl = baseUrl;
 
   return {
     baseUrl,

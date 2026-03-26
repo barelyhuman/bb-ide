@@ -1,12 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
-  buildClaudeCodeAvailableModels,
   createClaudeCodeProviderAdapter,
-  shouldFetchClaudeCodeModelsFromAnthropic,
 } from "./adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -17,10 +15,6 @@ function loadFixture(name: string): SDKMessage {
 }
 
 describe("claude-code provider adapter", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   // -- Identity & capabilities ---------------------------------------------
 
   it("has correct identity", () => {
@@ -633,48 +627,4 @@ describe("claude-code provider adapter", () => {
     expect(events).toEqual([]);
   });
 
-  // -- Model catalog -------------------------------------------------------
-
-  it("builds a dynamic Claude model list from the Anthropic models API", () => {
-    const models = buildClaudeCodeAvailableModels([
-      {
-        id: "claude-sonnet-4-6",
-        created_at: "2026-01-01T00:00:00Z",
-        display_name: "Claude Sonnet 4.6",
-        type: "model",
-      },
-      {
-        id: "claude-opus-4-6",
-        created_at: "2026-01-02T00:00:00Z",
-        display_name: "Claude Opus 4.6",
-        type: "model",
-      },
-      {
-        id: "text-embedding-3-large",
-        created_at: "2026-01-04T00:00:00Z",
-        display_name: "Embedding",
-        type: "model",
-      },
-    ]);
-
-    const ids = models.map((model) => model.id);
-    expect(ids).toContain("claude-sonnet-4-6");
-    expect(ids).toContain("claude-opus-4-6");
-    expect(ids).not.toContain("text-embedding-3-large");
-    expect(models.find((model) => model.isDefault)?.id).toBe("claude-sonnet-4-6");
-  });
-
-  it("recognizes when Anthropic-backed model fetching should be skipped", () => {
-    expect(
-      shouldFetchClaudeCodeModelsFromAnthropic({
-        ANTHROPIC_API_KEY: "key",
-      }),
-    ).toBe(true);
-    expect(
-      shouldFetchClaudeCodeModelsFromAnthropic({
-        ANTHROPIC_AUTH_TOKEN: "token",
-      }),
-    ).toBe(false);
-    expect(shouldFetchClaudeCodeModelsFromAnthropic({})).toBe(false);
-  });
 });
