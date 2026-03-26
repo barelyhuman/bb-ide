@@ -30,6 +30,116 @@ describe("createAgentRuntime", () => {
     return createSharedFakeAdapter({ scriptPath });
   }
 
+  function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
+    return {
+      id: "warning-fake",
+      displayName: "Warning Fake",
+      capabilities: {
+        supportsRename: false,
+        supportsServiceTier: false,
+      },
+      process: {
+        command: "node",
+        args: [scriptPath],
+      },
+      buildCommand(command) {
+        switch (command.type) {
+          case "initialize":
+            return {
+              jsonrpc: "2.0",
+              method: "initialize",
+            };
+          case "thread/start":
+            return {
+              jsonrpc: "2.0",
+              method: "thread/start",
+              params: {
+                threadId: command.threadId,
+              },
+            };
+          case "turn/start":
+            return {
+              jsonrpc: "2.0",
+              method: "turn/start",
+              params: {
+                threadId: command.providerThreadId ?? command.threadId,
+              },
+            };
+          case "thread/resume":
+          case "turn/steer":
+          case "thread/stop":
+          case "thread/name/set":
+            return null;
+        }
+      },
+      translateEvent(event) {
+        const message = event as {
+          method?: string;
+          params?: {
+            providerThreadId?: string;
+            threadId?: string;
+            turnId?: string;
+          };
+        };
+
+        switch (message.method) {
+          case "warning":
+            return [
+              {
+                type: "warning",
+                threadId: "",
+                providerThreadId: "",
+                category: "config",
+                summary: "provider warning",
+              },
+            ];
+          case "turn/started":
+            return [
+              {
+                type: "turn/started",
+                threadId: message.params?.threadId ?? "",
+                providerThreadId: message.params?.providerThreadId ?? "",
+                turnId: message.params?.turnId ?? "",
+              },
+            ];
+          case "turn/completed":
+            return [
+              {
+                type: "turn/completed",
+                threadId: message.params?.threadId ?? "",
+                providerThreadId: message.params?.providerThreadId ?? "",
+                turnId: message.params?.turnId ?? "",
+                status: "completed",
+              },
+            ];
+          default:
+            return [];
+        }
+      },
+      decodeToolCallRequest() {
+        return null;
+      },
+      async listModels() {
+        return [
+          {
+            id: "warning-fake-default",
+            model: "warning-fake-default",
+            displayName: "Warning Fake Default",
+            description: "Test model",
+            supportedReasoningEfforts: [
+              {
+                reasoningEffort: "low",
+                description: "Fastest",
+              },
+            ],
+            defaultReasoningEffort: "low",
+            isDefault: true,
+          },
+        ];
+      },
+    };
+  }
+
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "bb-runtime-test-"));
     scriptPath = fakeProviderScriptPath;
@@ -663,6 +773,106 @@ describe("createAgentRuntime", () => {
     for (const e of t2Events) {
       expect((e as Record<string, unknown>).providerThreadId).toBe(r2.providerThreadId);
     }
+
+    await runtime.shutdown();
+  });
+
+  it("drops unscoped provider events when multiple threads share one provider", async () => {
+    const events: ThreadEvent[] = [];
+    const warningScriptPath = join(tmpDir, "warning-provider.cjs");
+    writeFileSync(
+      warningScriptPath,
+      `
+let nextThreadId = 1;
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { providerThreadId },
+    });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const providerThreadId = message.params.threadId;
+    const turnId = "turn-" + providerThreadId;
+    send({ jsonrpc: "2.0", method: "warning", params: {} });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: providerThreadId, providerThreadId, turnId },
+    });
+    send({
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: { threadId: providerThreadId, providerThreadId, turnId },
+    });
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (e) => events.push(e),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createWarningEventAdapter(warningScriptPath),
+    });
+
+    await runtime.startThread({
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "warning-fake",
+    });
+    await runtime.startThread({
+      threadId: "t2",
+      projectId: "p1",
+      providerId: "warning-fake",
+    });
+
+    await Promise.all([
+      runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "from t1" }],
+      }),
+      runtime.runTurn({
+        threadId: "t2",
+        input: [{ type: "text", text: "from t2" }],
+      }),
+    ]);
+    await wait(100);
+
+    expect(events.find((event) => event.type === "warning")).toBeUndefined();
+    expect(
+      events.filter(
+        (event) => event.type === "turn/completed" && event.threadId === "t1",
+      ),
+    ).toHaveLength(1);
+    expect(
+      events.filter(
+        (event) => event.type === "turn/completed" && event.threadId === "t2",
+      ),
+    ).toHaveLength(1);
 
     await runtime.shutdown();
   });

@@ -242,6 +242,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           }
         }
 
+        if (
+          typeof eventRecord.threadId !== "string" ||
+          eventRecord.threadId.length === 0
+        ) {
+          options.onStderr?.(
+            `Dropping unscoped provider event ${event.type}; no bb thread could be resolved`,
+          );
+          continue;
+        }
+
         options.onEvent(event);
       }
     }

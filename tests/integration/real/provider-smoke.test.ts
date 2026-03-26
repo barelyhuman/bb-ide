@@ -162,16 +162,30 @@ async function sendAndWaitForIdle(args: {
   text: string;
   harness: Awaited<ReturnType<typeof createIntegrationHarness>>;
 }) {
+  const baselineCompletedTurns = countTurnEvents(
+    await getThreadEvents(args.harness.api, args.threadId),
+    "turn/completed",
+  );
   await sendTextMessage(args.harness.api, args.threadId, {
     execution: getExecutionOptions(args.providerId),
     text: args.text,
   });
   try {
     const startedAt = Date.now();
+    let sawNonIdle = false;
     while (Date.now() - startedAt <= TURN_TIMEOUT_MS) {
-      const thread = await getThread(args.harness.api, args.threadId);
+      const [thread, events] = await Promise.all([
+        getThread(args.harness.api, args.threadId),
+        getThreadEvents(args.harness.api, args.threadId),
+      ]);
+      if (thread.status !== "idle") {
+        sawNonIdle = true;
+      }
       if (thread.status === "idle") {
-        break;
+        const completedTurns = countTurnEvents(events, "turn/completed");
+        if (sawNonIdle || completedTurns > baselineCompletedTurns) {
+          break;
+        }
       }
       if (thread.status === "error") {
         throw new Error(
