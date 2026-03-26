@@ -9,14 +9,15 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <script>
       (function () {
+        var dev = "%MODE%" === "development";
         function setFavicon(dark) {
-          var s = dark ? "-dark" : "";
+          var s = dev ? "-dev" : dark ? "-dark" : "";
           document.getElementById("favicon-32").href = "/favicon-32x32" + s + ".png";
           document.getElementById("favicon-16").href = "/favicon-16x16" + s + ".png";
         }
         var mq = window.matchMedia("(prefers-color-scheme: dark)");
         setFavicon(mq.matches);
-        mq.addEventListener("change", function (e) { setFavicon(e.matches); });
+        if (!dev) mq.addEventListener("change", function (e) { setFavicon(e.matches); });
       })();
     </script>
   </head>
