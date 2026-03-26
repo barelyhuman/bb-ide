@@ -17,7 +17,6 @@ export {
   CommandDispatchError,
   getErrorCode,
   type CommandDispatchOptions,
-  type ThreadRuntimeResolution,
 } from "./command-dispatch-support.js";
 
 function seedThreadHighWaterMarkIfPresent(
@@ -48,11 +47,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return resumeThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "turn.run": {
       seedThreadHighWaterMarkIfPresent(command, options);
-      const entry = await ensureThreadRuntime(
-        command.environmentId,
-        command.threadId,
-        options,
-      );
+      const entry = await ensureThreadRuntime(command, options);
       await entry.runtime.runTurn({
         threadId: command.threadId,
         input: command.input,
@@ -62,11 +57,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     }
     case "turn.steer": {
       seedThreadHighWaterMarkIfPresent(command, options);
-      const entry = await ensureThreadRuntime(
-        command.environmentId,
-        command.threadId,
-        options,
-      );
+      const entry = await ensureThreadRuntime(command, options);
       await entry.runtime.steerTurn({
         threadId: command.threadId,
         expectedTurnId: command.expectedTurnId,

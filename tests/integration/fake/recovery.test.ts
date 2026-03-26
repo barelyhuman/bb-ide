@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import {
+  events,
   hostDaemonSessions,
   queueCommand,
   transitionThreadStatus,
@@ -356,10 +357,32 @@ describe.sequential("fake provider recovery integration", () => {
       );
 
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
+      const providerThreadId =
+        harness.db
+          .select({ providerThreadId: events.providerThreadId })
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, thread.id),
+              isNotNull(events.providerThreadId),
+            ),
+          )
+          .orderBy(desc(events.sequence))
+          .limit(1)
+          .get()
+          ?.providerThreadId ?? null;
+      if (!providerThreadId || !environment.path) {
+        throw new Error("Expected queued recovery turn to have provider context");
+      }
       const queuedTurnRunCommand = hostDaemonCommandSchema.parse({
         type: "turn.run",
         environmentId: environment.id,
         threadId: thread.id,
+        workspacePath: environment.path,
+        projectId: thread.projectId,
+        providerId: thread.providerId,
+        providerThreadId,
+        eventSequence: eventsBefore.length + 1,
         input: [{ type: "text", text: "queued while offline" }],
       });
       queueCommand(harness.db, harness.hub, {

@@ -52,6 +52,15 @@ const hostDaemonThreadTargetSchema = z.object({
   threadId: z.string().min(1),
 });
 
+const hostDaemonThreadRuntimeContextSchema = z.object({
+  workspacePath: z.string().min(1),
+  projectId: z.string().min(1),
+  providerId: z.string().min(1),
+  providerThreadId: z.string().min(1).optional(),
+  options: hostDaemonExecutionOptionsSchema.optional(),
+  dynamicTools: z.array(dynamicToolSchema).optional(),
+});
+
 const hostDaemonEnvironmentTargetSchema = z.object({
   environmentId: z.string().min(1),
 });
@@ -68,27 +77,26 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
 });
 
 /** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */
-export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("thread.resume"),
-  workspacePath: z.string().min(1),
-  projectId: z.string().min(1).optional(),
-  providerThreadId: z.string().min(1).optional(),
-  providerId: z.string().min(1).optional(),
-  options: hostDaemonExecutionOptionsSchema.optional(),
-  dynamicTools: z.array(dynamicToolSchema).optional(),
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
-export const turnRunCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("turn.run"),
-  eventSequence: z.number().int().nonnegative().optional(),
+  eventSequence: z.number().int().nonnegative(),
   input: z.array(promptInputSchema).min(1),
-  options: hostDaemonExecutionOptionsSchema.optional(),
 });
 
-export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.merge(
+  hostDaemonThreadRuntimeContextSchema,
+).extend({
   type: z.literal("turn.steer"),
-  eventSequence: z.number().int().nonnegative().optional(),
+  eventSequence: z.number().int().nonnegative(),
   expectedTurnId: z.string().min(1),
   input: z.array(promptInputSchema).min(1),
 });

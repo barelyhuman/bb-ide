@@ -1,6 +1,6 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { RuntimeEntry } from "../runtime-manager.js";
-import { CommandDispatchError, type CommandDispatchOptions, type CommandOf, type ThreadRuntimeResolution } from "../command-dispatch-support.js";
+import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
 
 export async function startThread(
   command: CommandOf<"thread.start">,
@@ -52,57 +52,37 @@ export async function resumeThread(
 }
 
 export async function ensureThreadRuntime(
-  environmentId: string,
-  threadId: string,
+  command: CommandOf<"turn.run"> | CommandOf<"turn.steer">,
   options: CommandDispatchOptions,
 ): Promise<RuntimeEntry> {
-  let entry = options.runtimeManager.get(environmentId);
-  let resolution: ThreadRuntimeResolution | null = null;
-
-  if (!entry || !options.runtimeManager.hasThread(environmentId, threadId)) {
-    resolution = (await options.resolveThreadRuntime?.({
-      environmentId,
-      threadId,
-    })) ?? null;
-  }
+  let entry = options.runtimeManager.get(command.environmentId);
   if (!entry) {
-    if (!resolution?.workspacePath) {
-      throw new CommandDispatchError(
-        "unknown_environment",
-        `No workspace path available for environment ${environmentId}`,
-      );
-    }
     entry = await options.runtimeManager.ensureEnvironment({
-      environmentId,
-      workspacePath: resolution.workspacePath,
+      environmentId: command.environmentId,
+      workspacePath: command.workspacePath,
     });
   }
-  if (!options.runtimeManager.hasThread(environmentId, threadId)) {
-    if (!resolution) {
-      resolution = (await options.resolveThreadRuntime?.({
-        environmentId,
-        threadId,
-      })) ?? null;
-    }
-    if (!resolution?.workspacePath) {
+
+  if (!options.runtimeManager.hasThread(command.environmentId, command.threadId)) {
+    if (!command.providerThreadId) {
       throw new CommandDispatchError(
-        "unknown_environment",
-        `No runtime metadata available for thread ${threadId}`,
+        "unknown_thread_runtime",
+        `No provider thread id available for thread ${command.threadId}`,
       );
     }
-    await entry.runtime.resumeThread({
-      threadId,
-      projectId: resolution.projectId,
-      providerThreadId: resolution.providerThreadId,
-      providerId: resolution.providerId,
-      options: resolution.options,
-      resumePath: resolution.workspacePath,
-      dynamicTools: resolution.dynamicTools,
+    const result = await entry.runtime.resumeThread({
+      threadId: command.threadId,
+      projectId: command.projectId,
+      providerThreadId: command.providerThreadId,
+      providerId: command.providerId,
+      options: command.options,
+      resumePath: command.workspacePath,
+      dynamicTools: command.dynamicTools,
     });
     options.runtimeManager.markThreadActive(
-      environmentId,
-      threadId,
-      resolution.providerThreadId,
+      command.environmentId,
+      command.threadId,
+      result.providerThreadId ?? command.providerThreadId,
     );
   }
   return entry;

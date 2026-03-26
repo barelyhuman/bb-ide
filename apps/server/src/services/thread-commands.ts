@@ -1,5 +1,6 @@
 import { getActiveSession, queueCommand, transitionThreadStatus } from "@bb/db";
 import type {
+  DynamicTool,
   PromptInput,
   Thread,
   ThreadExecutionOptions,
@@ -46,26 +47,11 @@ export function queueThreadStartCommand(
     thread: Thread;
   },
 ): void {
-  if (!args.environment.path) {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
-  }
-
-  const runtimeConfig = resolveThreadRuntimeConfig(deps, {
-    environment: {
-      path: args.environment.path,
-    },
-    thread: {
-      id: args.thread.id,
-      projectId: args.thread.projectId,
-      type: args.thread.type,
-    },
+  const runtimeContext = buildThreadRuntimeContext(deps, {
+    thread: args.thread,
+    environment: args.environment,
+    execution: args.execution,
   });
-  const options: HostDaemonExecutionOptions = {
-    ...args.execution,
-    ...(runtimeConfig.instructions
-      ? { instructions: runtimeConfig.instructions }
-      : {}),
-  };
   const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -75,34 +61,101 @@ export function queueThreadStartCommand(
       type: "thread.start",
       environmentId: args.environment.id,
       threadId: args.thread.id,
-      workspacePath: args.environment.path,
+      workspacePath: runtimeContext.workspacePath,
       projectId: args.projectId,
       providerId: args.providerId,
       ...(args.eventSequence !== undefined
         ? { eventSequence: args.eventSequence }
         : {}),
       ...(args.input ? { input: args.input } : {}),
-      options,
-      ...(runtimeConfig.dynamicTools
-        ? { dynamicTools: runtimeConfig.dynamicTools }
+      ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
+      ...(runtimeContext.dynamicTools
+        ? { dynamicTools: runtimeContext.dynamicTools }
         : {}),
     }),
   });
 }
 
-export function queueStartOrRunCommand(
+interface ThreadCommandEnvironment {
+  hostId: string;
+  id: string;
+  path: string | null;
+}
+
+interface ReadyThreadCommandEnvironment {
+  hostId: string;
+  id: string;
+  path: string;
+}
+
+interface ThreadRuntimeContext {
+  dynamicTools?: DynamicTool[];
+  options?: HostDaemonExecutionOptions;
+  projectId: string;
+  providerId: string;
+  providerThreadId?: string;
+  workspacePath: string;
+}
+
+function requireEnvironmentPath(
+  environment: ThreadCommandEnvironment,
+): string {
+  if (!environment.path) {
+    throw new ApiError(409, "invalid_request", "Environment is not ready");
+  }
+
+  return environment.path;
+}
+
+function buildThreadRuntimeContext(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    environment: ThreadCommandEnvironment;
+    execution?: HostDaemonExecutionOptions;
+    providerThreadId?: string;
+    thread: Thread;
+  },
+): ThreadRuntimeContext {
+  const workspacePath = requireEnvironmentPath(args.environment);
+  const runtimeConfig = resolveThreadRuntimeConfig(deps, {
+    environment: { path: workspacePath },
+    thread: {
+      id: args.thread.id,
+      projectId: args.thread.projectId,
+      type: args.thread.type,
+    },
+  });
+  const options =
+    args.execution || runtimeConfig.instructions
+      ? {
+          ...(args.execution ?? {}),
+          ...(runtimeConfig.instructions
+            ? { instructions: runtimeConfig.instructions }
+            : {}),
+        }
+      : undefined;
+
+  return {
+    workspacePath,
+    projectId: args.thread.projectId,
+    providerId: args.thread.providerId,
+    ...(args.providerThreadId
+      ? { providerThreadId: args.providerThreadId }
+      : {}),
+    ...(options ? { options } : {}),
+    ...(runtimeConfig.dynamicTools
+      ? { dynamicTools: runtimeConfig.dynamicTools }
+      : {}),
+  };
+}
+
+export function queueReadyThreadTurnCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    environment: {
-      hostId: string;
-      id: string;
-      path: string | null;
-    };
+    environment: ReadyThreadCommandEnvironment;
     eventSequence: number;
     execution: ThreadExecutionOptions;
     input: PromptInput[];
-    projectId: string;
-    providerId: string;
     thread: Thread;
   },
 ): void {
@@ -116,7 +169,9 @@ export function queueStartOrRunCommand(
       environment: {
         id: args.environment.id,
         hostId: args.environment.hostId,
+        path: args.environment.path,
       },
+      providerThreadId,
     });
     return;
   }
@@ -131,25 +186,31 @@ export function queueStartOrRunCommand(
     input: args.input,
     eventSequence: args.eventSequence,
     execution: args.execution,
-    projectId: args.projectId,
-    providerId: args.providerId,
+    projectId: args.thread.projectId,
+    providerId: args.thread.providerId,
   });
 }
 
 export function queueTurnRunCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    eventSequence?: number;
-    environment: {
-      hostId: string;
-      id: string;
-    };
+    eventSequence: number;
+    environment: ThreadCommandEnvironment;
     execution: ThreadExecutionOptions;
     input: PromptInput[];
+    providerThreadId?: string;
     thread: Thread;
   },
 ): void {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
+  const providerThreadId =
+    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id) ?? undefined;
+  const runtimeContext = buildThreadRuntimeContext(deps, {
+    thread: args.thread,
+    environment: args.environment,
+    execution: args.execution,
+    providerThreadId,
+  });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
@@ -158,11 +219,18 @@ export function queueTurnRunCommand(
       type: "turn.run",
       environmentId: args.environment.id,
       threadId: args.thread.id,
-      ...(args.eventSequence !== undefined
-        ? { eventSequence: args.eventSequence }
+      eventSequence: args.eventSequence,
+      workspacePath: runtimeContext.workspacePath,
+      projectId: runtimeContext.projectId,
+      providerId: runtimeContext.providerId,
+      ...(runtimeContext.providerThreadId
+        ? { providerThreadId: runtimeContext.providerThreadId }
         : {}),
       input: args.input,
-      options: args.execution,
+      ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
+      ...(runtimeContext.dynamicTools
+        ? { dynamicTools: runtimeContext.dynamicTools }
+        : {}),
     }),
   });
 
@@ -174,17 +242,24 @@ export function queueTurnRunCommand(
 export function queueTurnSteerCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    eventSequence?: number;
-    environment: {
-      hostId: string;
-      id: string;
-    };
+    eventSequence: number;
+    environment: ThreadCommandEnvironment;
+    execution: ThreadExecutionOptions;
     expectedTurnId: string;
     input: PromptInput[];
+    providerThreadId?: string;
     thread: Thread;
   },
 ): void {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
+  const providerThreadId =
+    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id) ?? undefined;
+  const runtimeContext = buildThreadRuntimeContext(deps, {
+    thread: args.thread,
+    environment: args.environment,
+    execution: args.execution,
+    providerThreadId,
+  });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
@@ -193,11 +268,19 @@ export function queueTurnSteerCommand(
       type: "turn.steer",
       environmentId: args.environment.id,
       threadId: args.thread.id,
-      ...(args.eventSequence !== undefined
-        ? { eventSequence: args.eventSequence }
+      eventSequence: args.eventSequence,
+      workspacePath: runtimeContext.workspacePath,
+      projectId: runtimeContext.projectId,
+      providerId: runtimeContext.providerId,
+      ...(runtimeContext.providerThreadId
+        ? { providerThreadId: runtimeContext.providerThreadId }
         : {}),
       expectedTurnId: args.expectedTurnId,
       input: args.input,
+      ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
+      ...(runtimeContext.dynamicTools
+        ? { dynamicTools: runtimeContext.dynamicTools }
+        : {}),
     }),
   });
 }

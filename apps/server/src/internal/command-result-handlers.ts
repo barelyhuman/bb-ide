@@ -1,5 +1,6 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
+  deleteEnvironment,
   events,
   getThread,
   hostDaemonCursors,
@@ -18,7 +19,7 @@ import {
   appendSystemErrorEvent,
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
-import { queueStartOrRunCommand } from "../services/thread-commands.js";
+import { queueThreadStartCommand } from "../services/thread-commands.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 function parseCommand(
@@ -165,7 +166,7 @@ function handleProvisionCommandResult(
         continue;
       }
 
-      queueStartOrRunCommand(deps, {
+      queueThreadStartCommand(deps, {
         thread,
         environment: {
           id: command.environmentId,
@@ -228,9 +229,7 @@ function handleEnvironmentDestroyResult(
   if (command.type !== "environment.destroy") {
     return;
   }
-  updateEnvironment(deps.db, deps.hub, command.environmentId, {
-    status: "destroying",
-  });
+  deleteEnvironment(deps.db, deps.hub, command.environmentId);
 }
 
 function handleThreadStopResult(

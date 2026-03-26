@@ -446,6 +446,10 @@ describe("public thread routes", () => {
       );
       expect(runCommand.command).toMatchObject({
         environmentId: environment.id,
+        workspacePath: environment.path,
+        projectId: project.id,
+        providerId: idleThread.providerId,
+        providerThreadId: "provider-idle",
       });
       expect(getThread(harness.db, idleThread.id)?.status).toBe("active");
 
@@ -471,6 +475,10 @@ describe("public thread routes", () => {
       expect(steerCommand.command).toMatchObject({
         expectedTurnId: "turn-1",
         environmentId: environment.id,
+        workspacePath: environment.path,
+        projectId: project.id,
+        providerId: activeThread.providerId,
+        providerThreadId: "provider-turn",
       });
     } finally {
       await harness.cleanup();

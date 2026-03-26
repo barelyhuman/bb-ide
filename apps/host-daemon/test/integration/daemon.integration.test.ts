@@ -132,6 +132,11 @@ describe("host daemon integration", () => {
         type: "turn.run",
         environmentId: "env-a",
         threadId: "thread-a",
+        workspacePath: harness.envAPath,
+        projectId: "project-1",
+        providerId: "fake",
+        providerThreadId: "provider-thread-a",
+        eventSequence: 1,
         input: [{ type: "text", text: "hello" }],
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -230,12 +235,22 @@ describe("host daemon integration", () => {
         type: "turn.run",
         environmentId: "env-a",
         threadId: "thread-a",
+        workspacePath: harness.envAPath,
+        projectId: "project-1",
+        providerId: "fake",
+        providerThreadId: "provider-thread-a",
+        eventSequence: 1,
         input: [{ type: "text", text: "delay:200 slow" }],
       });
       harness.server.queueCommand({
         type: "turn.run",
         environmentId: "env-b",
         threadId: "thread-b",
+        workspacePath: harness.envBPath,
+        projectId: "project-1",
+        providerId: "fake",
+        providerThreadId: "provider-thread-b",
+        eventSequence: 1,
         input: [{ type: "text", text: "fast" }],
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });

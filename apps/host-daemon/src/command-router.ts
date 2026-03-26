@@ -15,7 +15,6 @@ type RoutedCommandResult = Omit<HostDaemonCommandResultReport, "sessionId">;
 export interface CommandRouterOptions {
   runtimeManager: RuntimeManager;
   reportResult?: (result: RoutedCommandResult) => Promise<void>;
-  resolveThreadRuntime?: CommandDispatchOptions["resolveThreadRuntime"];
   seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
   listModels?: CommandDispatchOptions["listModels"];
   logger: Pick<HostDaemonLogger, "warn">;
@@ -141,7 +140,6 @@ export class CommandRouter {
     try {
       const result = await dispatchCommand(envelope.command, {
         runtimeManager: this.options.runtimeManager,
-        resolveThreadRuntime: this.options.resolveThreadRuntime,
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,
         listModels: this.options.listModels,
       });

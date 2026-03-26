@@ -72,7 +72,6 @@ export {
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
-  hostDaemonThreadRuntimeResponseSchema,
 } from "./session.js";
 export type {
   HostDaemonActiveThread,
@@ -88,7 +87,6 @@ export type {
   HostDaemonServerWsMessage,
   HostDaemonSessionOpenRequest,
   HostDaemonSessionOpenResponse,
-  HostDaemonThreadRuntimeResponse,
   HostDaemonToolCallRequest,
   HostDaemonToolCallResponse,
 } from "./session.js";

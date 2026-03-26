@@ -96,11 +96,64 @@ describe("host-daemon command schemas", () => {
         environmentId: "env_123",
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        providerId: "codex",
       }),
     ).toMatchObject({
       type: "thread.resume",
       workspacePath: "/tmp/workspace",
     });
+  });
+
+  it("requires eventSequence and runtime context for turn.run and turn.steer", () => {
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "turn.run",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        providerId: "codex",
+        providerThreadId: "provider_123",
+        eventSequence: 12,
+        input: [{ type: "text", text: "hello" }],
+      }),
+    ).toMatchObject({
+      type: "turn.run",
+      eventSequence: 12,
+      workspacePath: "/tmp/workspace",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "turn.steer",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        providerId: "codex",
+        providerThreadId: "provider_123",
+        eventSequence: 13,
+        expectedTurnId: "turn_123",
+        input: [{ type: "text", text: "adjust" }],
+      }),
+    ).toMatchObject({
+      type: "turn.steer",
+      eventSequence: 13,
+      expectedTurnId: "turn_123",
+    });
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "turn.run",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
+        providerId: "codex",
+        input: [{ type: "text", text: "hello" }],
+      }),
+    ).toThrow();
   });
 
   it("parses promote and demote commands", () => {

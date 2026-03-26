@@ -12,7 +12,6 @@ import { registerInternalCommandRoutes } from "./internal/commands.js";
 import { registerInternalCommandResultRoutes } from "./internal/command-result-route.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalSessionRoutes } from "./internal/session.js";
-import { registerInternalThreadRuntimeRoutes } from "./internal/thread-runtime.js";
 import { registerInternalToolCallRoutes } from "./internal/tool-calls.js";
 import { onClientSocketClose, onClientSocketMessage, onClientSocketOpen } from "./ws/client-protocol.js";
 import {
@@ -67,7 +66,6 @@ export function createApp(deps: AppDeps): ServerApp {
   registerInternalCommandRoutes(internalApi, deps);
   registerInternalCommandResultRoutes(internalApi, deps);
   registerInternalEventRoutes(internalApi, deps);
-  registerInternalThreadRuntimeRoutes(internalApi, deps);
   registerInternalToolCallRoutes(internalApi, deps);
   app.route("/internal", internalApi);
 

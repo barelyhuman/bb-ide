@@ -26,7 +26,7 @@ import { requireThreadEnvironment } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
 import {
   buildExecutionOptions,
-  queueStartOrRunCommand,
+  queueReadyThreadTurnCommand,
   queueTurnSteerCommand,
 } from "../../services/thread-commands.js";
 import {
@@ -120,13 +120,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     );
 
     if (mode === "start") {
-      queueStartOrRunCommand(deps, {
+      queueReadyThreadTurnCommand(deps, {
         thread,
         input: payload.input,
         eventSequence,
         execution,
-        projectId: thread.projectId,
-        providerId: thread.providerId,
         environment: {
           id: environment.id,
           hostId: environment.hostId,
@@ -143,10 +141,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         thread,
         input: payload.input,
         eventSequence,
+        execution,
         expectedTurnId,
         environment: {
           id: environment.id,
           hostId: environment.hostId,
+          path: environment.path,
         },
       });
     }
@@ -235,13 +235,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     );
 
     if (mode === "start") {
-      queueStartOrRunCommand(deps, {
+      queueReadyThreadTurnCommand(deps, {
         thread,
         input: queuedMessage.content,
         eventSequence,
         execution,
-        projectId: thread.projectId,
-        providerId: thread.providerId,
         environment: {
           id: environment.id,
           hostId: environment.hostId,
@@ -258,8 +256,13 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         thread,
         input: queuedMessage.content,
         eventSequence,
+        execution,
         expectedTurnId,
-        environment: { id: environment.id, hostId: environment.hostId },
+        environment: {
+          id: environment.id,
+          hostId: environment.hostId,
+          path: environment.path,
+        },
       });
     }
 

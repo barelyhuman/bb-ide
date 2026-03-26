@@ -1,12 +1,10 @@
 import { createProviderForId, listAvailableProviders } from "@bb/agent-runtime";
 import type {
   AvailableModel,
-  DynamicTool,
   ProviderInfo,
 } from "@bb/domain";
 import type {
   HostDaemonCommand,
-  HostDaemonExecutionOptions,
 } from "@bb/host-daemon-contract";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 
@@ -15,25 +13,12 @@ export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
   { type: TType }
 >;
 
-export interface ThreadRuntimeResolution {
-  workspacePath: string;
-  projectId?: string;
-  providerId?: string;
-  providerThreadId?: string;
-  options?: HostDaemonExecutionOptions;
-  dynamicTools?: DynamicTool[];
-}
-
 export interface CommandDispatchOptions {
   runtimeManager: RuntimeManager;
   seedThreadHighWaterMark?: (args: {
     sequence: number;
     threadId: string;
   }) => void;
-  resolveThreadRuntime?: (args: {
-    environmentId: string;
-    threadId: string;
-  }) => Promise<ThreadRuntimeResolution | null>;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
 }
