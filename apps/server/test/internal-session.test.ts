@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import {
+  events,
   getEnvironment,
   getThread,
   hostDaemonCommands,
@@ -277,6 +278,19 @@ describe("internal session routes", () => {
       expect(failureResponse.status).toBe(200);
       expect(getEnvironment(harness.db, failureEnvironment.id)?.status).toBe("error");
       expect(getThread(harness.db, failureThread.id)?.status).toBe("error");
+      const failureEvent = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, failureThread.id))
+        .all()
+        .find((event) => event.type === "system/error");
+      expect(failureEvent).toBeTruthy();
+      expect(
+        failureEvent ? JSON.parse(failureEvent.data) : null,
+      ).toMatchObject({
+        code: "thread_provisioning_failed",
+        detail: "Provisioning failed",
+      });
     } finally {
       await harness.cleanup();
     }

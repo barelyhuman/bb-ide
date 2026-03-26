@@ -1,7 +1,16 @@
 import { eq } from "drizzle-orm";
 import { hostDaemonSessions } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { seedHost, seedHostSession } from "./helpers/seed.js";
+import {
+  reportQueuedCommandSuccess,
+  waitForQueuedCommand,
+} from "./helpers/commands.js";
+import {
+  seedEnvironment,
+  seedHost,
+  seedHostSession,
+  seedProjectWithSource,
+} from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
 async function readJson(response: Response): Promise<unknown> {
@@ -208,6 +217,104 @@ describe("public project and host routes", () => {
         id: connected.host.id,
         status: "connected",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues workspace.list_files for the default project source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-files",
+      });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-files",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path ?? "/tmp/project-files",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/files?query=src&limit=1`,
+      );
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.list_files" &&
+          command.environmentId === environment.id,
+      );
+      expect(queued.command).toMatchObject({
+        query: "src",
+      });
+      await reportQueuedCommandSuccess(harness, queued, {
+        files: [
+          { path: "src/index.ts", name: "index.ts" },
+          { path: "src/routes.ts", name: "routes.ts" },
+        ],
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual([
+        { path: "src/index.ts", name: "index.ts" },
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("stores project attachments and serves their content", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-attachments",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-attachments",
+      });
+
+      const formData = new FormData();
+      formData.set(
+        "file",
+        new File(["attachment body"], "notes.txt", {
+          type: "text/plain",
+        }),
+        "notes.txt",
+      );
+
+      const uploadResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/attachments`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+      expect(uploadResponse.status).toBe(201);
+      const uploaded = await readJson(uploadResponse) as {
+        mimeType?: string;
+        name: string;
+        path: string;
+        type: string;
+      };
+      expect(uploaded).toMatchObject({
+        type: "localFile",
+        name: "notes.txt",
+        mimeType: "text/plain",
+      });
+      expect(uploaded.path).toBeTruthy();
+
+      const contentResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/attachments/content?path=${encodeURIComponent(uploaded.path)}`,
+      );
+      expect(contentResponse.status).toBe(200);
+      expect(
+        Buffer.from(await contentResponse.arrayBuffer()).toString("utf8"),
+      ).toBe("attachment body");
     } finally {
       await harness.cleanup();
     }

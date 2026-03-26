@@ -330,6 +330,10 @@ describe("public thread routes", () => {
         },
       );
       expect(startOnActive.status).toBe(409);
+      await expect(readJson(startOnActive)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Thread is already active",
+      });
 
       const steerOnIdle = await harness.app.request(
         `/api/v1/threads/${idleThread.id}/send`,
@@ -345,6 +349,10 @@ describe("public thread routes", () => {
         },
       );
       expect(steerOnIdle.status).toBe(409);
+      await expect(readJson(steerOnIdle)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Thread is not active",
+      });
     } finally {
       await harness.cleanup();
     }
@@ -409,6 +417,10 @@ describe("public thread routes", () => {
       });
       const dirtyArchiveResponse = await dirtyArchivePromise;
       expect(dirtyArchiveResponse.status).toBe(409);
+      await expect(readJson(dirtyArchiveResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Thread has uncommitted or unmerged changes",
+      });
 
       const archivePromise = harness.app.request(`/api/v1/threads/${thread.id}/archive`, {
         method: "POST",

@@ -31,7 +31,10 @@ export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
     }
 
     if (commands.length === 0) {
-      return new Response(null, { status: 204 });
+      if (waitMs > 0) {
+        return new Response(null, { status: 204 });
+      }
+      return context.json({ commands: [] });
     }
 
     return context.json({
