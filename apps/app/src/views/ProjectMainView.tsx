@@ -25,7 +25,7 @@ export function ProjectMainView() {
   const navigate = useNavigate();
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const createThread = useCreateThread();
-  const { localHostId, hasDaemon } = useHostDaemon();
+  const { localHostId } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const promptMentions = usePromptMentions(projectId);
@@ -87,10 +87,6 @@ export function ProjectMainView() {
 
     return knownOptions;
   }, [projectId, projects, projectsLoading]);
-  const selectedProject = useMemo(
-    () => projects?.find((project) => project.id === projectId),
-    [projectId, projects],
-  );
   const selectedEnvironment = useMemo((): CreateThreadRequest["environment"] | null => {
     if (!projectId || !localHostId) {
       return null;

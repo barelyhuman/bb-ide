@@ -4,7 +4,7 @@ import {
   ExpandablePanel,
   EventCodeBlock,
 } from "@bb/ui-core";
-import type { ViewOperationMessage, ViewProvisioningMetadata, ViewProvisioningTranscriptEntry } from "@bb/domain";
+import type { ViewOperationMessage, ViewProvisioningTranscriptEntry } from "@bb/domain";
 import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
