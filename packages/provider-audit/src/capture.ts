@@ -285,9 +285,6 @@ function applyScenarioOverride(
   return {
     ...scenario,
     ...(override.turns ? { turns: override.turns.slice() } : {}),
-    ...(override.instructions !== undefined
-      ? { instructions: override.instructions }
-      : {}),
     ...(override.execution
       ? { execution: { ...override.execution } }
       : {}),
@@ -395,13 +392,11 @@ function prepareScenarioWorkspace(args: {
 function buildExecutionOptions(args: {
   model?: string;
   execution?: ProviderAuditScenarioExecutionOptions;
-  instructions?: string;
 }): {
   model?: string;
   serviceTier?: ProviderAuditScenarioExecutionOptions["serviceTier"];
   reasoningLevel?: ProviderAuditScenarioExecutionOptions["reasoningLevel"];
   sandboxMode: NonNullable<ProviderAuditScenarioExecutionOptions["sandboxMode"]>;
-  instructions?: string;
 } {
   return {
     sandboxMode: args.execution?.sandboxMode ?? "danger-full-access",
@@ -412,7 +407,6 @@ function buildExecutionOptions(args: {
       ? { serviceTier: args.execution.serviceTier }
       : {}),
     ...(args.model ? { model: args.model } : {}),
-    ...(args.instructions ? { instructions: args.instructions } : {}),
   };
 }
 
@@ -936,7 +930,6 @@ async function runScenario(args: {
   const executionOptions = buildExecutionOptions({
     model: args.model,
     execution: args.scenario.execution,
-    instructions: args.scenario.instructions,
   });
 
   await args.runtime.startThread({

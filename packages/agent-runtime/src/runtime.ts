@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ThreadEvent, ThreadRuntimeExecutionOptions } from "@bb/domain";
+import type { ThreadEvent, ThreadExecutionOptions } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
@@ -60,16 +60,17 @@ function sendRequest(
 // ---------------------------------------------------------------------------
 
 function toAdapterOptions(
-  execOpts: ThreadRuntimeExecutionOptions | undefined,
+  execOpts: ThreadExecutionOptions | undefined,
+  instructions: string | undefined,
   envVars: Record<string, string>,
 ): AdapterOptions | undefined {
-  if (!execOpts && Object.keys(envVars).length === 0) return undefined;
+  if (!execOpts && !instructions && Object.keys(envVars).length === 0) return undefined;
   return {
     model: execOpts?.model,
     serviceTier: execOpts?.serviceTier,
     reasoningLevel: execOpts?.reasoningLevel,
     sandboxMode: execOpts?.sandboxMode,
-    instructions: execOpts?.instructions,
+    instructions,
     envVars,
   };
 }
@@ -496,6 +497,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       providerId,
       input,
       options: execOpts,
+      instructions,
       dynamicTools,
     }) {
       const pid = providerId ?? "codex";
@@ -514,7 +516,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const cmd = proc.adapter.buildCommand({
         type: "thread/start",
         threadId,
-        options: toAdapterOptions(execOpts, envVars),
+        options: toAdapterOptions(execOpts, instructions, envVars),
         dynamicTools,
       });
 
@@ -558,6 +560,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           threadId,
           input,
           options: execOpts,
+          instructions,
         });
       }
 
@@ -570,6 +573,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       providerThreadId,
       providerId,
       options: execOpts,
+      instructions,
       resumePath,
       dynamicTools,
     }) {
@@ -596,7 +600,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
         providerThreadId:
           providerThreadId ?? threadToProviderThread.get(threadId),
-        options: toAdapterOptions(execOpts, envVars),
+        options: toAdapterOptions(execOpts, instructions, envVars),
         resumePath,
         dynamicTools,
       });
@@ -613,7 +617,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return { providerThreadId: resolvedId };
     },
 
-    async runTurn({ threadId, input, options: execOpts }) {
+    async runTurn({ threadId, input, options: execOpts, instructions }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
 
@@ -622,7 +626,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
         providerThreadId: threadToProviderThread.get(threadId),
         input,
-        options: toAdapterOptions(execOpts, {}),
+        options: toAdapterOptions(execOpts, instructions, {}),
       });
 
       if (!cmd) return;

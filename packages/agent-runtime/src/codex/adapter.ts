@@ -28,9 +28,6 @@ import { listCodexModels } from "./models.js";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
-import {
-  resolveBaseInstructions,
-} from "../shared/adapter-utils.js";
 import type {
   AdapterCommand,
   AdapterOptions,
@@ -175,7 +172,7 @@ export function createCodexProviderAdapter(
             params: {
               approvalPolicy: "never",
               sandbox: command.options?.sandboxMode ?? "danger-full-access",
-              baseInstructions: resolveBaseInstructions(command.options?.instructions),
+              baseInstructions: command.options?.instructions ?? "",
               model: command.options?.model ?? undefined,
               serviceTier: command.options?.serviceTier ?? undefined,
               config: buildCodexConfig(command.threadId, command.options) ?? undefined,

@@ -69,7 +69,9 @@ describe("thread command dispatch", () => {
     expect(renameResult).toEqual({});
     expect(stopResult).toEqual({});
     expect(harness.runtimeState.startedThreadId).toBe("thread-1");
+    expect(harness.runtimeState.startedInstructions).toContain("coding agent");
     expect(harness.runtimeState.resumedThreadId).toBe("thread-1");
+    expect(harness.runtimeState.resumedInstructions).toContain("coding agent");
     expect(harness.runtimeState.renamedTitle).toBe("Renamed");
     expect(harness.runtimeState.stoppedThreadId).toBe("thread-1");
     expect(harness.manager.listActiveThreads()).toEqual([]);
@@ -318,19 +320,19 @@ describe("thread command dispatch", () => {
         expect.objectContaining({ name: "spawn_thread" }),
       ]),
     );
-    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+    expect(harness.runtimeState.startedInstructions).toContain(
       "You are a manager for this project.",
     );
-    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+    expect(harness.runtimeState.startedInstructions).toContain(
       "Prefer concise user updates.",
     );
-    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+    expect(harness.runtimeState.startedInstructions).toContain(
       "Delegate implementation quickly.",
     );
-    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+    expect(harness.runtimeState.startedInstructions).toContain(
       "Manager Project",
     );
-    expect(harness.runtimeState.startedOptions?.instructions).toContain(
+    expect(harness.runtimeState.startedInstructions).toContain(
       managerWorkspace,
     );
   });

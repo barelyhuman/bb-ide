@@ -2,10 +2,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   DynamicTool,
-  ThreadRuntimeExecutionOptions,
+  ThreadExecutionOptions,
 } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
+
+const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
+  "standardAgentInstructions",
+  {},
+);
 
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
 const NO_MANAGER_PREFERENCES = "No preferences yet.";
@@ -89,7 +94,8 @@ type ThreadRuntimeConfigCommand = Extract<
 
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
-  options?: ThreadRuntimeExecutionOptions;
+  instructions?: string;
+  options?: ThreadExecutionOptions;
 }
 
 async function readManagerPreferences(workspacePath: string): Promise<string> {
@@ -123,6 +129,7 @@ export async function resolveThreadRuntimeConfig(
   if (command.threadType !== "manager") {
     return {
       ...(command.dynamicTools ? { dynamicTools: command.dynamicTools } : {}),
+      instructions: STANDARD_AGENT_INSTRUCTIONS,
       ...(command.options ? { options: command.options } : {}),
     };
   }
@@ -138,9 +145,7 @@ export async function resolveThreadRuntimeConfig(
 
   return {
     dynamicTools: mergeDynamicTools(command.dynamicTools),
-    options: {
-      ...(command.options ?? {}),
-      instructions,
-    },
+    instructions,
+    ...(command.options ? { options: command.options } : {}),
   };
 }

@@ -235,8 +235,8 @@ for (const providerId of providers) {
           providerId,
           options: {
             sandboxMode: "danger-full-access",
-            instructions: "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
           },
+          instructions: "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
         });
 
         await ctx.runtime.runTurn({

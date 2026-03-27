@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
-import type { AvailableModel, DynamicTool, ThreadRuntimeExecutionOptions } from "@bb/domain";
+import type { AvailableModel, DynamicTool, ThreadExecutionOptions } from "@bb/domain";
 import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 
@@ -112,13 +112,16 @@ export function createFakeRuntime() {
   const state = {
     startedThreadId: undefined as string | undefined,
     startedDynamicTools: undefined as DynamicTool[] | undefined,
-    startedOptions: undefined as ThreadRuntimeExecutionOptions | undefined,
+    startedOptions: undefined as ThreadExecutionOptions | undefined,
+    startedInstructions: undefined as string | undefined,
     resumedThreadId: undefined as string | undefined,
     resumedDynamicTools: undefined as DynamicTool[] | undefined,
-    resumedOptions: undefined as ThreadRuntimeExecutionOptions | undefined,
+    resumedOptions: undefined as ThreadExecutionOptions | undefined,
+    resumedInstructions: undefined as string | undefined,
     resumedProviderThreadId: undefined as string | undefined,
     ranTurnText: undefined as string | undefined,
-    ranTurnOptions: undefined as ThreadRuntimeExecutionOptions | undefined,
+    ranTurnOptions: undefined as ThreadExecutionOptions | undefined,
+    ranTurnInstructions: undefined as string | undefined,
     steeredTurnId: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
     renamedTitle: undefined as string | undefined,
@@ -129,32 +132,38 @@ export function createFakeRuntime() {
     async ensureProvider() {},
     async startThread(args: {
       dynamicTools?: DynamicTool[];
-      options?: ThreadRuntimeExecutionOptions;
+      instructions?: string;
+      options?: ThreadExecutionOptions;
       threadId: string;
     }) {
       state.startedThreadId = args.threadId;
       state.startedDynamicTools = args.dynamicTools;
       state.startedOptions = args.options;
+      state.startedInstructions = args.instructions;
       return { providerThreadId: `provider-${args.threadId}` };
     },
     async resumeThread(args: {
       dynamicTools?: DynamicTool[];
-      options?: ThreadRuntimeExecutionOptions;
+      instructions?: string;
+      options?: ThreadExecutionOptions;
       providerThreadId?: string;
       threadId: string;
     }) {
       state.resumedThreadId = args.threadId;
       state.resumedDynamicTools = args.dynamicTools;
       state.resumedOptions = args.options;
+      state.resumedInstructions = args.instructions;
       state.resumedProviderThreadId = args.providerThreadId;
       return { providerThreadId: args.providerThreadId };
     },
     async runTurn(args: {
       input: Array<{ text?: string; type: string }>;
-      options?: ThreadRuntimeExecutionOptions;
+      instructions?: string;
+      options?: ThreadExecutionOptions;
     }) {
       state.ranTurnText = args.input[0]?.text;
       state.ranTurnOptions = args.options;
+      state.ranTurnInstructions = args.instructions;
     },
     async steerTurn(args: { expectedTurnId: string }) {
       state.steeredTurnId = args.expectedTurnId;

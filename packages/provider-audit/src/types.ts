@@ -27,7 +27,6 @@ export interface ProviderAuditScenarioToolFixture {
 
 export interface ProviderAuditScenarioOverride {
   turns?: string[];
-  instructions?: string;
   execution?: ProviderAuditScenarioExecutionOptions;
   workspaceMode?: "repo" | "scratch";
   workspaceFiles?: ProviderAuditScenarioWorkspaceFile[];
@@ -38,7 +37,6 @@ export interface ProviderAuditScenario {
   id: string;
   description: string;
   turns: string[];
-  instructions?: string;
   execution?: ProviderAuditScenarioExecutionOptions;
   workspaceMode?: "repo" | "scratch";
   workspaceFiles?: ProviderAuditScenarioWorkspaceFile[];

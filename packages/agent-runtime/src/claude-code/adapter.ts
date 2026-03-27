@@ -30,7 +30,6 @@ import {
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
-  resolveBaseInstructions,
   toNonNegativeNumber,
   translateToolCallToItem,
   translateToolResultToItem,
@@ -233,7 +232,7 @@ export function createClaudeCodeProviderAdapter(
             params: { clientInfo: { name: "bb", version: "1.0.0" } },
           };
         case "thread/start": {
-          const baseInstructions = resolveBaseInstructions(command.options?.instructions);
+          const baseInstructions = command.options?.instructions ?? "";
           const config = buildClaudeCodeConfig(command.options?.envVars);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
           if (command.options?.reasoningLevel) {

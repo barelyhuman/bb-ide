@@ -56,10 +56,3 @@ export type ThreadExecutionOptions = z.infer<
   typeof threadExecutionOptionsSchema
 >;
 
-export const threadRuntimeExecutionOptionsSchema =
-  threadExecutionOptionsSchema.extend({
-    instructions: z.string().optional(),
-  });
-export type ThreadRuntimeExecutionOptions = z.infer<
-  typeof threadRuntimeExecutionOptionsSchema
->;

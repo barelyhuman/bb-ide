@@ -5,7 +5,6 @@
  * adapters are extracted here so each adapter imports from one place.
  */
 
-import { renderTemplate } from "@bb/templates";
 import type { ModelReasoningEffort, ThreadEventItem } from "@bb/domain";
 import {
   bashArgsSchema,
@@ -35,34 +34,6 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   reasoningEffort: "xhigh",
   description: "Extra high reasoning effort",
 };
-
-// ---------------------------------------------------------------------------
-// Base instructions
-// ---------------------------------------------------------------------------
-
-const DEFAULT_BASE_INSTRUCTIONS = renderTemplate(
-  "standardAgentInstructions",
-  {},
-);
-
-/**
- * Resolves base instructions with optional developer instructions appended.
- * If `developerInstructions` already starts with the default base instructions,
- * it is returned as-is to avoid duplication.
- */
-export function resolveBaseInstructions(
-  developerInstructions?: string,
-): string {
-  const trimmed = developerInstructions?.trim();
-  if (!trimmed) return DEFAULT_BASE_INSTRUCTIONS;
-  if (
-    trimmed === DEFAULT_BASE_INSTRUCTIONS ||
-    trimmed.startsWith(`${DEFAULT_BASE_INSTRUCTIONS}\n`)
-  ) {
-    return trimmed;
-  }
-  return `${DEFAULT_BASE_INSTRUCTIONS}\n\n${trimmed}`;
-}
 
 // ---------------------------------------------------------------------------
 // Tool category sets

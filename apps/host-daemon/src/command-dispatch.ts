@@ -55,6 +55,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         threadId: command.threadId,
         input: command.input,
         options: runtimeConfig.options,
+        instructions: runtimeConfig.instructions,
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }

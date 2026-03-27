@@ -4,7 +4,7 @@ import {
   dynamicToolSchema,
   promptInputSchema,
   threadTypeSchema,
-  threadRuntimeExecutionOptionsSchema,
+  threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
   workspaceProvisionTypeSchema,
@@ -41,7 +41,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
 
-export const hostDaemonExecutionOptionsSchema = threadRuntimeExecutionOptionsSchema;
+export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema;
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;

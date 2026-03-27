@@ -18,6 +18,7 @@ export async function startThread(
     providerId: command.providerId,
     input: command.input,
     options: runtimeConfig.options,
+    instructions: runtimeConfig.instructions,
     dynamicTools: runtimeConfig.dynamicTools,
   });
   options.runtimeManager.markThreadActive(
@@ -43,6 +44,7 @@ export async function resumeThread(
     providerThreadId: command.providerThreadId,
     providerId: command.providerId,
     options: runtimeConfig.options,
+    instructions: runtimeConfig.instructions,
     resumePath: command.workspacePath,
     dynamicTools: runtimeConfig.dynamicTools,
   });
@@ -80,6 +82,7 @@ export async function ensureThreadRuntime(
       providerThreadId: command.providerThreadId,
       providerId: command.providerId,
       options: runtimeConfig.options,
+      instructions: runtimeConfig.instructions,
       resumePath: command.workspacePath,
       dynamicTools: runtimeConfig.dynamicTools,
     });

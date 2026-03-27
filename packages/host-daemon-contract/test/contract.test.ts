@@ -98,9 +98,6 @@ describe("host-daemon command schemas", () => {
         projectRootPath: "/tmp/project",
         providerId: "codex",
         threadType: "manager",
-        options: {
-          instructions: "You are a manager.",
-        },
         dynamicTools: [
           {
             name: "message_user",
@@ -112,9 +109,6 @@ describe("host-daemon command schemas", () => {
     ).toMatchObject({
       type: "thread.start",
       workspacePath: "/tmp/workspace",
-      options: {
-        instructions: "You are a manager.",
-      },
     });
   });
 

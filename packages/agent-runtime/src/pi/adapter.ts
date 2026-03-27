@@ -31,7 +31,6 @@ import {
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
-  resolveBaseInstructions,
   toNonNegativeNumber,
   translateToolCallToItem,
   translateToolResultToItem,
@@ -235,7 +234,7 @@ export function createPiProviderAdapter(
             params: { clientInfo: { name: "bb", version: "1.0.0" } },
           };
         case "thread/start": {
-          const baseInstructions = resolveBaseInstructions(command.options?.instructions);
+          const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
           if (command.options?.reasoningLevel) {

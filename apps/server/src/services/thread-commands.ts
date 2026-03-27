@@ -9,7 +9,6 @@ import type {
   PromptInput,
   Thread,
   ThreadExecutionOptions,
-  ThreadRuntimeExecutionOptions,
 } from "@bb/domain";
 import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
 import type {
@@ -118,7 +117,7 @@ async function buildThreadRuntimeContext(
   deps: Pick<AppDeps, "db">,
   args: {
     environment: ThreadCommandEnvironment;
-    execution?: ThreadRuntimeExecutionOptions;
+    execution?: ThreadExecutionOptions;
     providerThreadId?: string;
     thread: Thread;
   },
