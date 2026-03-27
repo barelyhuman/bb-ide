@@ -11,6 +11,7 @@ export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
 export type { ApiError, DomainErrorCode } from "./errors.js";
 
 export {
+  archiveThreadRequestSchema,
   commitActionResponseSchema,
   commitOptionsSchema,
   createDraftRequestSchema,
@@ -54,6 +55,7 @@ export {
   workspaceFileSchema,
 } from "./api-types.js";
 export type {
+  ArchiveThreadRequest,
   CommitActionResponse,
   CommitOptions,
   CreateDraftRequest,
@@ -92,6 +94,7 @@ export type {
 } from "./api-types.js";
 
 export { createApiClient, createPublicApiClient } from "./public-api.js";
+export { typedRoutes } from "@bb/hono-typed-routes";
 export type {
   ApiClient,
   PublicApiRoutes,

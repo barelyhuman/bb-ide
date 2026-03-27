@@ -1,28 +1,6 @@
-import type { Context } from "hono";
-import type { ZodType, ZodTypeAny } from "zod";
+import type { ZodTypeAny } from "zod";
 import { ZodError } from "zod";
 import { ApiError } from "../errors.js";
-
-export async function parseJsonBody<T>(
-  context: Context,
-  schema: ZodType<T>,
-): Promise<T> {
-  let payload: unknown;
-  try {
-    payload = await context.req.json();
-  } catch {
-    throw new ApiError(400, "invalid_request", "Invalid JSON request body");
-  }
-
-  try {
-    return schema.parse(payload);
-  } catch (error) {
-    if (error instanceof ZodError) {
-      throw new ApiError(400, "invalid_request", error.issues[0]?.message ?? "Invalid request");
-    }
-    throw error;
-  }
-}
 
 export function parseValue<TSchema extends ZodTypeAny>(
   value: unknown,

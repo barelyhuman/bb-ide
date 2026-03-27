@@ -1,6 +1,7 @@
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
+import { typedRoutes, type PublicApiSchema } from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
@@ -33,7 +34,9 @@ function requireReadyWorkspaceEnvironment(environment: Environment): Environment
 }
 
 export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
-  app.get("/threads/:id/timeline", (context) =>
+  const { get } = typedRoutes<PublicApiSchema>(app);
+
+  get("/threads/:id/timeline", (context) =>
     context.json(
       buildThreadTimeline(deps.db, requireThread(deps.db, context.req.param("id")), {
         limit: parseOptionalInteger(context.req.query("limit"), "limit"),
@@ -43,7 +46,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
-  app.get("/threads/:id/timeline/tool-details", (context) =>
+  get("/threads/:id/timeline/tool-details", (context) =>
     context.json(
       buildTimelineToolDetails(
         deps.db,
@@ -57,11 +60,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
-  app.get("/threads/:id/output", (context) =>
+  get("/threads/:id/output", (context) =>
     context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) }),
   );
 
-  app.get("/threads/:id/events", (context) =>
+  get("/threads/:id/events", (context) =>
     context.json(
       listThreadEventRows(deps.db, {
         threadId: context.req.param("id"),
@@ -71,11 +74,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
-  app.get("/threads/:id/default-execution-options", (context) =>
+  get("/threads/:id/default-execution-options", (context) =>
     context.json(getLastExecutionOptions(deps, context.req.param("id"))),
   );
 
-  app.get("/threads/:id/workspace/files", async (context) => {
+  get("/threads/:id/workspace/files", async (context) => {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
     const readyEnvironment = requireReadyWorkspaceEnvironment(environment);
     const rawResult = await queueCommandAndWait(deps, {
@@ -94,7 +97,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.get("/threads/:id/workspace/file", async (context) => {
+  get("/threads/:id/workspace/file", async (context) => {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
     const readyEnvironment = requireReadyWorkspaceEnvironment(environment);
     const rawResult = await queueCommandAndWait(deps, {

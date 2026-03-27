@@ -1,18 +1,22 @@
 import { getHighWaterMarks, getActiveSession, openSession, upsertHost } from "@bb/db";
-import { hostDaemonSessionOpenRequestSchema } from "@bb/host-daemon-contract";
+import {
+  hostDaemonSessionOpenRequestSchema,
+  typedRoutes,
+  type HostDaemonInternalSchema,
+} from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { HEARTBEAT_INTERVAL_MS, LEASE_TIMEOUT_MS } from "../constants.js";
+import { ApiError } from "../errors.js";
 import { listHostThreadIds } from "../services/entity-lookup.js";
-import { parseJsonBody } from "../services/validation.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
-  app.post("/session/open", async (context) => {
-    const payload = await parseJsonBody(
-      context,
-      hostDaemonSessionOpenRequestSchema,
-    );
+  const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
+
+  post("/session/open", hostDaemonSessionOpenRequestSchema, async (context, payload) => {
 
     const existingSession = getActiveSession(deps.db, payload.hostId);
     upsertHost(deps.db, deps.hub, {

@@ -1,4 +1,5 @@
 export type { EmptyInput, Endpoint, Untyped } from "./common.js";
+export { typedRoutes } from "@bb/hono-typed-routes";
 
 export {
   createHostDaemonLocalClient,

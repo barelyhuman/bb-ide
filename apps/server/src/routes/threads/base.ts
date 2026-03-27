@@ -6,6 +6,8 @@ import {
 import {
   createThreadRequestSchema,
   updateThreadRequestSchema,
+  typedRoutes,
+  type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
@@ -17,10 +19,14 @@ import {
 } from "../../services/entity-lookup.js";
 import { queueThreadRenameCommand } from "../../services/thread-commands.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
-import { parseJsonBody, parseOptionalBoolean } from "../../services/validation.js";
+import { parseOptionalBoolean } from "../../services/validation.js";
 
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
-  app.get("/threads", (context) => {
+  const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
+
+  get("/threads", (context) => {
     const queryType = context.req.query("type");
     const threadType =
       queryType === "manager" || queryType === "standard"
@@ -40,23 +46,16 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.post("/threads", async (context) =>
-    context.json(
-      await createThreadFromRequest(
-        deps,
-        await parseJsonBody(context, createThreadRequestSchema),
-      ),
-      201,
-    ),
+  post("/threads", createThreadRequestSchema, async (context, payload) =>
+    context.json(await createThreadFromRequest(deps, payload), 201),
   );
 
-  app.get("/threads/:id", (context) =>
+  get("/threads/:id", (context) =>
     context.json(requireThread(deps.db, context.req.param("id"))),
   );
 
-  app.patch("/threads/:id", async (context) => {
+  patch("/threads/:id", updateThreadRequestSchema, async (context, payload) => {
     const thread = requireThread(deps.db, context.req.param("id"));
-    const payload = await parseJsonBody(context, updateThreadRequestSchema);
     const updated = updateThread(deps.db, deps.hub, thread.id, payload);
     if (!updated) {
       throw new ApiError(404, "thread_not_found", "Thread not found");
@@ -83,7 +82,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     return context.json(updated);
   });
 
-  app.delete("/threads/:id", async (context) => {
+  del("/threads/:id", async (context) => {
     const thread = requireThread(deps.db, context.req.param("id"));
     deleteThread(deps.db, deps.hub, thread.id);
     await maybeCleanupEnvironment(deps, thread.environmentId);

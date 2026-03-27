@@ -1,12 +1,13 @@
 import { execFile, spawn } from "node:child_process";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { promisify } from "node:util";
+import { serve } from "@hono/node-server";
 import {
-  hostIdResponseSchema,
   openRequestSchema,
-  pickFolderResponseSchema,
-  statusResponseSchema,
+  typedRoutes,
+  type HostDaemonLocalSchema,
 } from "@bb/host-daemon-contract";
+import { Hono } from "hono";
+import { cors } from "hono/cors";
 
 const execFileAsync = promisify(execFile);
 
@@ -29,31 +30,52 @@ export interface LocalApiServer {
 export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
-  const server = createServer(async (request, response) => {
-    try {
-      await handleRequest(options, request, response);
-    } catch (error) {
-      writeJson(response, 500, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  const app = new Hono();
+  app.use("*", cors());
+
+  const { get, post } = typedRoutes<HostDaemonLocalSchema>(app);
+
+  get("/host-id", (c) =>
+    c.json({ hostId: options.hostId }),
+  );
+
+  get("/status", (c) =>
+    c.json({
+      connected: options.getConnected(),
+      serverUrl: options.serverUrl,
+    }),
+  );
+
+  post("/open", openRequestSchema, async (c, payload) => {
+    await (options.openPath ?? openLocalPath)(payload.path);
+    return c.json({});
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(options.port, "localhost", () => {
-      server.off("error", reject);
-      resolve();
+  post("/pick-folder", async (c) => {
+    const path = await (options.pickFolder ?? pickLocalFolder)();
+    return c.json({ path });
+  });
+
+  post("/restart", (c) => {
+    (options.scheduleRestart ?? defaultScheduleRestart)(() => {
+      void options.restart();
     });
+    return c.json({});
   });
 
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("Failed to bind local API server");
-  }
+  const { server, port: boundPort } = await new Promise<{
+    server: ReturnType<typeof serve>;
+    port: number;
+  }>((resolve, reject) => {
+    const s = serve(
+      { fetch: app.fetch, port: options.port, hostname: "localhost" },
+      (info) => resolve({ server: s, port: info.port }),
+    );
+    s.on("error", reject);
+  });
 
   return {
-    port: address.port,
+    port: boundPort,
     async close(): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -66,89 +88,6 @@ export async function startLocalApiServer(
       });
     },
   };
-}
-
-function setCorsHeaders(response: ServerResponse): void {
-  response.setHeader("access-control-allow-origin", "*");
-  response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
-  response.setHeader("access-control-allow-headers", "content-type");
-}
-
-async function handleRequest(
-  options: StartLocalApiServerOptions,
-  request: IncomingMessage,
-  response: ServerResponse,
-): Promise<void> {
-  const method = request.method ?? "GET";
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
-
-  setCorsHeaders(response);
-
-  if (method === "OPTIONS") {
-    response.statusCode = 204;
-    response.end();
-    return;
-  }
-
-  if (method === "GET" && url.pathname === "/host-id") {
-    writeJson(response, 200, hostIdResponseSchema.parse({ hostId: options.hostId }));
-    return;
-  }
-
-  if (method === "GET" && url.pathname === "/status") {
-    writeJson(
-      response,
-      200,
-      statusResponseSchema.parse({
-        connected: options.getConnected(),
-        serverUrl: options.serverUrl,
-      }),
-    );
-    return;
-  }
-
-  if (method === "POST" && url.pathname === "/open") {
-    const payload = openRequestSchema.parse(await readJsonBody(request));
-    await (options.openPath ?? openLocalPath)(payload.path);
-    writeJson(response, 200, {});
-    return;
-  }
-
-  if (method === "POST" && url.pathname === "/pick-folder") {
-    const path = await (options.pickFolder ?? pickLocalFolder)();
-    writeJson(response, 200, pickFolderResponseSchema.parse({ path }));
-    return;
-  }
-
-  if (method === "POST" && url.pathname === "/restart") {
-    (options.scheduleRestart ?? defaultScheduleRestart)(() => {
-      void options.restart();
-    });
-    writeJson(response, 200, {});
-    return;
-  }
-
-  writeJson(response, 404, { error: "Not found" });
-}
-
-async function readJsonBody(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-
-  const body = Buffer.concat(chunks).toString("utf8").trim();
-  return body === "" ? {} : JSON.parse(body);
-}
-
-function writeJson(
-  response: ServerResponse,
-  statusCode: number,
-  payload: unknown,
-): void {
-  response.statusCode = statusCode;
-  response.setHeader("content-type", "application/json");
-  response.end(JSON.stringify(payload));
 }
 
 function defaultScheduleRestart(restart: () => void): void {

@@ -8,17 +8,20 @@ import {
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
+  archiveThreadRequestSchema,
   createDraftRequestSchema,
   sendDraftRequestSchema,
   sendMessageRequestSchema,
+  typedRoutes,
+  type PublicApiSchema,
 } from "@bb/server-contract";
+import type { Hono } from "hono";
 import type {
   Environment,
   PromptInput,
   Thread,
   ThreadExecutionOptions,
 } from "@bb/domain";
-import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
@@ -36,7 +39,6 @@ import {
   getLastTurnId,
 } from "../../services/thread-events.js";
 import { tryTransition } from "../../services/thread-transitions.js";
-import { parseJsonBody } from "../../services/validation.js";
 import { queueManagedEnvironmentReprovision } from "../../services/environment-provisioning.js";
 import { MANAGED_REPROVISION_QUEUED } from "../../services/environment-provisioning.js";
 
@@ -130,8 +132,9 @@ function requireReadyThreadEnvironment(environment: Environment): Environment & 
 }
 
 export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
-  app.post("/threads/:id/send", async (context) => {
-    const payload = await parseJsonBody(context, sendMessageRequestSchema);
+  const { post, del } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
+
+  post("/threads/:id/send", sendMessageRequestSchema, async (context, payload) => {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const mode = resolveSendMode(thread.status, payload.mode);
@@ -196,8 +199,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  app.post("/threads/:id/drafts", async (context) => {
-    const payload = await parseJsonBody(context, createDraftRequestSchema);
+  post("/threads/:id/drafts", createDraftRequestSchema, async (context, payload) => {
     const draft = createDraft(deps.db, deps.hub, {
       threadId: context.req.param("id"),
       content: encodeDraftContent(payload.input),
@@ -210,8 +212,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json(toQueuedMessage(draft), 201);
   });
 
-  app.post("/threads/:id/drafts/:draftId/send", async (context) => {
-    const payload = await parseJsonBody(context, sendDraftRequestSchema);
+  post("/threads/:id/drafts/:draftId/send", sendDraftRequestSchema, async (context, payload) => {
     const draft = getDraft(deps.db, context.req.param("draftId"));
     if (!draft || draft.threadId !== context.req.param("id")) {
       throw new ApiError(404, "invalid_request", "Draft not found");
@@ -293,7 +294,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true, queuedMessage });
   });
 
-  app.delete("/threads/:id/drafts/:draftId", (context) => {
+  del("/threads/:id/drafts/:draftId", (context) => {
     const draft = getDraft(deps.db, context.req.param("draftId"));
     if (!draft || draft.threadId !== context.req.param("id")) {
       throw new ApiError(404, "invalid_request", "Draft not found");
@@ -305,7 +306,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  app.post("/threads/:id/stop", async (context) => {
+  post("/threads/:id/stop", async (context) => {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -319,13 +320,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  app.post("/threads/:id/archive", async (context) => {
-    const body = await context.req.json().catch(() => ({}));
-    const force =
-      !!body &&
-      typeof body === "object" &&
-      "force" in body &&
-      body.force === true;
+  post("/threads/:id/archive", archiveThreadRequestSchema, async (context, payload) => {
+    const force = payload.force === true;
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     if (!force && environment.status === "ready" && environment.path) {
       const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
@@ -370,12 +366,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  app.post("/threads/:id/unarchive", (context) => {
+  post("/threads/:id/unarchive", (context) => {
     unarchiveThread(deps.db, deps.hub, context.req.param("id"));
     return context.json({ ok: true });
   });
 
-  app.post("/threads/:id/read", (context) => {
+  post("/threads/:id/read", (context) => {
     const thread = updateThread(deps.db, deps.hub, context.req.param("id"), {
       lastReadAt: Date.now(),
     });
@@ -385,7 +381,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json(thread);
   });
 
-  app.post("/threads/:id/unread", (context) => {
+  post("/threads/:id/unread", (context) => {
     const thread = updateThread(deps.db, deps.hub, context.req.param("id"), {
       lastReadAt: null,
     });

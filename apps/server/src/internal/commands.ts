@@ -1,5 +1,10 @@
 import { fetchCommands } from "@bb/db";
-import { hostDaemonCommandSchema, hostDaemonCommandsQuerySchema } from "@bb/host-daemon-contract";
+import {
+  hostDaemonCommandSchema,
+  hostDaemonCommandsQuerySchema,
+  typedRoutes,
+  type HostDaemonInternalSchema,
+} from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "./session-state.js";
@@ -13,7 +18,9 @@ function parseOptionalInteger(value: string | undefined, fallback: number): numb
 }
 
 export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
-  app.get("/session/commands", async (context) => {
+  const { get } = typedRoutes<HostDaemonInternalSchema>(app);
+
+  get("/session/commands", async (context) => {
     const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
     const session = requireActiveSession(deps.db, query.sessionId);
     const waitMs = parseOptionalInteger(query.waitMs, 0);

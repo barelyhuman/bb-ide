@@ -9,13 +9,14 @@ import {
 } from "@bb/db";
 import {
   hostDaemonEventBatchRequestSchema,
+  typedRoutes,
   type HostDaemonEventEnvelope,
+  type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { tryTransition } from "../services/thread-transitions.js";
-import { parseJsonBody } from "../services/validation.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
 import { requireActiveSession } from "./session-state.js";
 
@@ -160,11 +161,11 @@ function validateEventBatchOwnership(
 }
 
 export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
-  app.post("/session/events", async (context) => {
-    const payload = await parseJsonBody(
-      context,
-      hostDaemonEventBatchRequestSchema,
-    );
+  const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
+
+  post("/session/events", hostDaemonEventBatchRequestSchema, async (context, payload) => {
     const session = requireActiveSession(deps.db, payload.sessionId);
     validateEventBatchOwnership(deps, {
       hostId: session.hostId,

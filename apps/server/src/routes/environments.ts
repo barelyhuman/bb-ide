@@ -1,5 +1,6 @@
 import { archiveThread, getDefaultProjectSource } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import { typedRoutes, environmentActionRequestSchema, type PublicApiSchema } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -11,8 +12,6 @@ import {
   requireThreadInEnvironment,
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
-import { parseJsonBody } from "../services/validation.js";
-import { environmentActionRequestSchema } from "@bb/server-contract";
 
 function resolveDiffSelection(query: Record<string, string | undefined>) {
   if (query.selection === "commit" && query.commitSha) {
@@ -28,11 +27,13 @@ function resolveDiffSelection(query: Record<string, string | undefined>) {
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
-  app.get("/environments/:id", (context) =>
+  const { get, post } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
+
+  get("/environments/:id", (context) =>
     context.json(requireEnvironment(deps.db, context.req.param("id"))),
   );
 
-  app.get("/environments/:id/status", async (context) => {
+  get("/environments/:id/status", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -51,7 +52,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ workspace: result.workspaceStatus });
   });
 
-  app.get("/environments/:id/diff", async (context) => {
+  get("/environments/:id/diff", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -72,7 +73,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.get("/environments/:id/diff/branches", async (context) => {
+  get("/environments/:id/diff/branches", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -89,9 +90,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.post("/environments/:id/actions", async (context) => {
+  post("/environments/:id/actions", environmentActionRequestSchema, async (context, payload) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
-    const payload = await parseJsonBody(context, environmentActionRequestSchema);
     const actingThread = requireThreadInEnvironment(
       deps.db,
       environment.id,

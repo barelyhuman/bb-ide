@@ -1,5 +1,9 @@
 import { getDefaultProjectSource } from "@bb/db";
-import { hostDaemonToolCallRequestSchema } from "@bb/host-daemon-contract";
+import {
+  hostDaemonToolCallRequestSchema,
+  typedRoutes,
+  type HostDaemonInternalSchema,
+} from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import {
   messageUserToolArgumentsSchema,
@@ -7,18 +11,18 @@ import {
 } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { parseJsonBody, parseValue } from "../services/validation.js";
+import { parseValue } from "../services/validation.js";
 import { appendThreadEvent } from "../services/thread-events.js";
 import { createThreadFromRequest } from "../services/thread-create.js";
 import { requireThreadEnvironment } from "../services/entity-lookup.js";
 import { requireActiveSession } from "./session-state.js";
 
 export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
-  app.post("/session/tool-call", async (context) => {
-    const payload = await parseJsonBody(
-      context,
-      hostDaemonToolCallRequestSchema,
-    );
+  const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
+
+  post("/session/tool-call", hostDaemonToolCallRequestSchema, async (context, payload) => {
     const session = requireActiveSession(deps.db, payload.sessionId);
     const { environment, thread: targetThread } = requireThreadEnvironment(
       deps.db,

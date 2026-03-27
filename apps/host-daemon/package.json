@@ -26,6 +26,7 @@
     "@bb/logger": "workspace:*",
     "@bb/templates": "workspace:*",
     "@bb/workspace": "workspace:*",
+    "@hono/node-server": "^1.19.11",
     "p-debounce": "^5.1.0",
     "p-retry": "^6.2.1",
     "partysocket": "^1.1.16",

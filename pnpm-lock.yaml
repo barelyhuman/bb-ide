@@ -223,6 +223,9 @@ importers:
       '@bb/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
+      '@hono/node-server':
+        specifier: ^1.19.11
+        version: 1.19.11(hono@4.11.9)
       p-debounce:
         specifier: ^5.1.0
         version: 5.1.0
@@ -438,11 +441,30 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/hono-typed-routes:
+    dependencies:
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/host-daemon-contract:
     dependencies:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/hono-typed-routes':
+        specifier: workspace:*
+        version: link:../hono-typed-routes
       hono:
         specifier: ^4.7.0
         version: 4.11.9
@@ -555,6 +577,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/hono-typed-routes':
+        specifier: workspace:*
+        version: link:../hono-typed-routes
       hono:
         specifier: ^4.7.0
         version: 4.11.9

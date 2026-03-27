@@ -114,6 +114,11 @@ export const sendDraftResponseSchema = z.object({
 });
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
 
+export const archiveThreadRequestSchema = z.object({
+  force: z.boolean().optional(),
+});
+export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
+
 export const updateThreadRequestSchema = z
   .object({
     title: z.string().min(1).nullable().optional(),
@@ -328,6 +333,7 @@ export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
 export const systemConfigResponseSchema = z.object({
   hostDaemonPort: z.number().nullable(),
+  voiceTranscriptionEnabled: z.boolean(),
 });
 export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
 

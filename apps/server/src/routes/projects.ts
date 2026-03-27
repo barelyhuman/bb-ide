@@ -14,10 +14,12 @@ import {
   createManagerThreadRequestSchema,
   createProjectRequestSchema,
   createProjectSourceRequestSchema,
+  typedRoutes,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
   workspaceFileSchema,
   type ProjectResponse,
+  type PublicApiSchema,
 } from "@bb/server-contract";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
@@ -28,7 +30,7 @@ import { deleteProjectAttachments, readAttachment, storeAttachment } from "../se
 import { requireHostWithStatus, requireProject } from "../services/entity-lookup.js";
 import { ensureProjectSourceEnvironment, createThreadFromRequest } from "../services/thread-create.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
-import { parseJsonBody, parseOptionalInteger, parseQueryValue } from "../services/validation.js";
+import { parseOptionalInteger, parseQueryValue } from "../services/validation.js";
 
 function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectResponse[] {
   const projects = projectId ? [requireProject(deps.db, projectId)] : listProjects(deps.db);
@@ -66,10 +68,13 @@ function requireProjectSource(
 }
 
 export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
-  app.get("/projects", (context) => context.json(buildProjectResponses(deps)));
+  const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
 
-  app.post("/projects", async (context) => {
-    const payload = await parseJsonBody(context, createProjectRequestSchema);
+  get("/projects", (context) => context.json(buildProjectResponses(deps)));
+
+  post("/projects", createProjectRequestSchema, async (context, payload) => {
     requireHostWithStatus(deps.db, payload.hostId);
     const project = createProject(deps.db, deps.hub, {
       name: payload.name,
@@ -84,13 +89,12 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json(buildProjectResponses(deps, project.id)[0], 201);
   });
 
-  app.get("/projects/:id", (context) =>
+  get("/projects/:id", (context) =>
     context.json(buildProjectResponses(deps, context.req.param("id"))[0]),
   );
 
-  app.patch("/projects/:id", async (context) => {
+  patch("/projects/:id", updateProjectRequestSchema, async (context, payload) => {
     requireProject(deps.db, context.req.param("id"));
-    const payload = await parseJsonBody(context, updateProjectRequestSchema);
     const project = updateProject(deps.db, deps.hub, context.req.param("id"), payload);
     if (!project) {
       throw new ApiError(404, "project_not_found", "Project not found");
@@ -98,16 +102,15 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json(buildProjectResponses(deps, project.id)[0]);
   });
 
-  app.delete("/projects/:id", async (context) => {
+  del("/projects/:id", async (context) => {
     requireProject(deps.db, context.req.param("id"));
     await deleteProjectAttachments(deps.config.dataDir, context.req.param("id"));
     deleteProject(deps.db, deps.hub, context.req.param("id"));
     return context.json({ ok: true });
   });
 
-  app.post("/projects/:id/sources", async (context) => {
+  post("/projects/:id/sources", createProjectSourceRequestSchema, async (context, payload) => {
     requireProject(deps.db, context.req.param("id"));
-    const payload = await parseJsonBody(context, createProjectSourceRequestSchema);
     requireHostWithStatus(deps.db, payload.hostId);
     const source = createProjectSource(deps.db, deps.hub, {
       projectId: context.req.param("id"),
@@ -119,9 +122,8 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json(source, 201);
   });
 
-  app.patch("/projects/:id/sources/:sourceId", async (context) => {
+  patch("/projects/:id/sources/:sourceId", updateProjectSourceRequestSchema, async (context, payload) => {
     requireProject(deps.db, context.req.param("id"));
-    const payload = await parseJsonBody(context, updateProjectSourceRequestSchema);
     requireProjectSource(deps, {
       projectId: context.req.param("id"),
       sourceId: context.req.param("sourceId"),
@@ -138,7 +140,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json(source);
   });
 
-  app.delete("/projects/:id/sources/:sourceId", (context) => {
+  del("/projects/:id/sources/:sourceId", (context) => {
     requireProject(deps.db, context.req.param("id"));
     requireProjectSource(deps, {
       projectId: context.req.param("id"),
@@ -151,7 +153,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  app.get("/projects/:id/files", async (context) => {
+  get("/projects/:id/files", async (context) => {
     requireProject(deps.db, context.req.param("id"));
     const source = getDefaultProjectSource(deps.db, context.req.param("id"));
     if (!source || !source.path) {
@@ -183,7 +185,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.post("/projects/:id/attachments", async (context) => {
+  post("/projects/:id/attachments", async (context) => {
     requireProject(deps.db, context.req.param("id"));
     const formData = await context.req.formData();
     const file = formData.get("file");
@@ -196,7 +198,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.get("/projects/:id/attachments/content", async (context) => {
+  get("/projects/:id/attachments/content", async (context) => {
     requireProject(deps.db, context.req.param("id"));
     const path = parseQueryValue(context.req.query("path"), "path");
     const attachment = await readAttachment(deps.config.dataDir, context.req.param("id"), path);
@@ -208,9 +210,8 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     });
   });
 
-  app.post("/projects/:id/managers", async (context) => {
+  post("/projects/:id/managers", createManagerThreadRequestSchema, async (context, payload) => {
     requireProject(deps.db, context.req.param("id"));
-    const payload = await parseJsonBody(context, createManagerThreadRequestSchema);
     const source = getDefaultProjectSource(deps.db, context.req.param("id"));
     if (!source) {
       throw new ApiError(409, "invalid_request", "Project has no default source");

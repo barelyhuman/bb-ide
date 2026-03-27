@@ -1,4 +1,5 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import { typedRoutes, type PublicApiSchema } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -18,14 +19,18 @@ function resolveHostId(deps: AppDeps, query: Record<string, string | undefined>)
 }
 
 export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
-  app.get("/system/config", (context) =>
+  const { get, post } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
+
+  get("/system/config", (context) =>
     context.json({
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
     }),
   );
 
-  app.get("/system/providers", async (context) => {
+  get("/system/providers", async (context) => {
     const hostId = resolveHostId(deps, context.req.query());
     const rawResult = await queueCommandAndWait(deps, {
       hostId,
@@ -37,7 +42,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  app.get("/system/models", async (context) => {
+  get("/system/models", async (context) => {
     const hostId = resolveHostId(deps, context.req.query());
     const providerId = context.req.query("providerId");
     if (providerId) {
@@ -84,7 +89,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     return context.json(models.flat());
   });
 
-  app.post("/system/voice-transcription", async (context) => {
+  post("/system/voice-transcription", async (context) => {
     if (!deps.config.openAiApiKey) {
       throw new ApiError(501, "not_configured", "Voice transcription requires OPENAI_API_KEY to be configured");
     }
