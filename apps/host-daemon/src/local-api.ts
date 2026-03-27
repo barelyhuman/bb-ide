@@ -68,6 +68,12 @@ export async function startLocalApiServer(
   };
 }
 
+function setCorsHeaders(response: ServerResponse): void {
+  response.setHeader("access-control-allow-origin", "*");
+  response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+  response.setHeader("access-control-allow-headers", "content-type");
+}
+
 async function handleRequest(
   options: StartLocalApiServerOptions,
   request: IncomingMessage,
@@ -75,6 +81,14 @@ async function handleRequest(
 ): Promise<void> {
   const method = request.method ?? "GET";
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
+
+  setCorsHeaders(response);
+
+  if (method === "OPTIONS") {
+    response.statusCode = 204;
+    response.end();
+    return;
+  }
 
   if (method === "GET" && url.pathname === "/host-id") {
     writeJson(response, 200, hostIdResponseSchema.parse({ hostId: options.hostId }));

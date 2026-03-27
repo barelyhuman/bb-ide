@@ -1,4 +1,5 @@
-import { atomFamily, atomWithStorage } from "jotai/utils";
+import { atomFamily } from "jotai-family";
+import { atomWithStorage } from "jotai/utils";
 import { getProjectScopedStorageKey } from "./project-scoped-storage";
 
 type ProjectScopedStorageParam = string | null | undefined;
