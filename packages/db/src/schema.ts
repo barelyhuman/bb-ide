@@ -173,13 +173,15 @@ export const queuedThreadMessages = sqliteTable(
     reasoningLevel: text("reasoning_level").notNull(),
     sandboxMode: text("sandbox_mode").notNull(),
     serviceTier: text("service_tier").notNull(),
+    claimedAt: integer("claimed_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    index("queued_thread_messages_thread_updated_idx").on(
+    index("queued_thread_messages_thread_created_idx").on(
       table.threadId,
-      table.updatedAt,
+      table.createdAt,
+      table.id,
     ),
   ],
 );

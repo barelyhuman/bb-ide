@@ -1,8 +1,10 @@
 import {
+  claimDraft,
+  claimNextDraft,
   deleteDraft,
   getDraft,
   getThread,
-  listDrafts,
+  releaseDraftClaim,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
 import type { AppDeps } from "../types.js";
@@ -29,6 +31,8 @@ interface SendQueuedDraftArgs {
   threadId: string;
 }
 
+type ClaimedDraft = Exclude<ReturnType<typeof claimDraft>, null>;
+
 function resolveQueuedDraftSendMode(
   threadStatus: Thread["status"],
 ): "start" | "steer" {
@@ -39,15 +43,35 @@ function resolveQueuedDraftSendMode(
   return "start";
 }
 
-export async function sendQueuedDraft(
+function claimDraftForSend(
   deps: Pick<AppDeps, "db" | "hub">,
   args: SendQueuedDraftArgs,
-): Promise<ThreadQueuedMessage> {
-  const draft = getDraft(deps.db, args.draftId);
-  if (!draft || draft.threadId !== args.threadId) {
+): ClaimedDraft {
+  const existingDraft = getDraft(deps.db, args.draftId);
+  if (!existingDraft || existingDraft.threadId !== args.threadId) {
     throw new ApiError(404, "invalid_request", "Draft not found");
   }
 
+  const claimedDraft = claimDraft(deps.db, deps.hub, args.draftId);
+  if (claimedDraft) {
+    return claimedDraft;
+  }
+
+  const latestDraft = getDraft(deps.db, args.draftId);
+  if (!latestDraft || latestDraft.threadId !== args.threadId) {
+    throw new ApiError(404, "invalid_request", "Draft not found");
+  }
+  throw new ApiError(409, "invalid_request", "Draft is already being sent");
+}
+
+async function sendClaimedDraft(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    draft: ClaimedDraft;
+    threadId: string;
+  },
+): Promise<ThreadQueuedMessage> {
+  const draft = args.draft;
   const queuedMessage = toQueuedMessage(draft);
   const { environment, thread } = requireThreadEnvironment(deps.db, args.threadId);
   const execution = await buildExecutionOptions(
@@ -122,6 +146,22 @@ export async function sendQueuedDraft(
   return queuedMessage;
 }
 
+export async function sendQueuedDraft(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: SendQueuedDraftArgs,
+): Promise<ThreadQueuedMessage> {
+  const draft = claimDraftForSend(deps, args);
+  try {
+    return await sendClaimedDraft(deps, {
+      draft,
+      threadId: args.threadId,
+    });
+  } catch (error) {
+    releaseDraftClaim(deps.db, deps.hub, draft.id);
+    throw error;
+  }
+}
+
 export async function sendNextQueuedDraftIfPresent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: { threadId: string },
@@ -131,14 +171,19 @@ export async function sendNextQueuedDraftIfPresent(
     return false;
   }
 
-  const [nextDraft] = listDrafts(deps.db, args.threadId);
+  const nextDraft = claimNextDraft(deps.db, deps.hub, args.threadId);
   if (!nextDraft) {
     return false;
   }
 
-  await sendQueuedDraft(deps, {
-    draftId: nextDraft.id,
-    threadId: args.threadId,
-  });
+  try {
+    await sendClaimedDraft(deps, {
+      draft: nextDraft,
+      threadId: args.threadId,
+    });
+  } catch (error) {
+    releaseDraftClaim(deps.db, deps.hub, nextDraft.id);
+    throw error;
+  }
   return true;
 }
