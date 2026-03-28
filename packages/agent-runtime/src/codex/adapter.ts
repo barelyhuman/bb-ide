@@ -114,14 +114,6 @@ function buildCodexConfig(
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
-type ThreadStartParamsWithDynamicTools = ThreadStartParams & {
-  dynamicTools?: DynamicToolSpec[];
-};
-
-type ThreadResumeParamsWithDynamicTools = ThreadResumeParams & {
-  dynamicTools?: DynamicToolSpec[];
-};
-
 type CodexDynamicToolCommand = Extract<
   AdapterCommand,
   { type: "thread/start" | "thread/resume" }
@@ -188,7 +180,7 @@ export function createCodexProviderAdapter(
           };
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const params: ThreadStartParamsWithDynamicTools = {
+          const params: ThreadStartParams = {
             approvalPolicy: "never",
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
             baseInstructions: command.options?.instructions ?? "",
@@ -207,7 +199,7 @@ export function createCodexProviderAdapter(
         }
         case "thread/resume": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const params: ThreadResumeParamsWithDynamicTools = {
+          const params: ThreadResumeParams = {
             threadId: command.providerThreadId ?? command.threadId,
             approvalPolicy: "never",
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
