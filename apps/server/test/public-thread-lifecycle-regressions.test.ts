@@ -33,7 +33,10 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
           title: "Worker Thread",
+          input: [{ type: "text", text: "Implement the worker task" }],
           environment: {
             type: "host",
             hostId: host.id,
@@ -56,7 +59,10 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
           title: "Worker Thread",
+          input: [{ type: "text", text: "Implement the worker task again" }],
           environment: {
             type: "host",
             hostId: host.id,
@@ -117,6 +123,8 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
           input: [{ type: "text", text: "Start immediately" }],
           environment: {
             type: "reuse",
@@ -153,6 +161,9 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "First reused thread" }],
           environment: {
             type: "reuse",
             environmentId: environment.id,
@@ -165,6 +176,9 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Second reused thread" }],
           environment: {
             type: "reuse",
             environmentId: environment.id,
@@ -244,6 +258,8 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
           input: [{ type: "text", text: "Wait for provisioning" }],
           environment: {
             type: "reuse",

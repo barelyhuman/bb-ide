@@ -85,6 +85,10 @@ describe.sequential("fake provider multi-thread integration", () => {
         projectId: project.id,
         timeoutMs: DEFAULT_TIMEOUT_MS,
       });
+      const baselineEventsA = await getThreadEvents(harness.api, threadA.thread.id);
+      const baselineEventsB = await getThreadEvents(harness.api, threadB.thread.id);
+      const baselineCompletedA = countTurnEvents(baselineEventsA, "turn/completed");
+      const baselineCompletedB = countTurnEvents(baselineEventsB, "turn/completed");
 
       await Promise.all([
         sendTextMessage(harness.api, threadA.thread.id, {
@@ -118,8 +122,12 @@ describe.sequential("fake provider multi-thread integration", () => {
       const eventsB = await getThreadEvents(harness.api, threadB.thread.id);
       assertEventsBelongToThread(eventsA, threadA.thread.id);
       assertEventsBelongToThread(eventsB, threadB.thread.id);
-      expect(countTurnEvents(eventsA, "turn/completed")).toBe(1);
-      expect(countTurnEvents(eventsB, "turn/completed")).toBe(1);
+      expect(countTurnEvents(eventsA, "turn/completed")).toBe(
+        baselineCompletedA + 1,
+      );
+      expect(countTurnEvents(eventsB, "turn/completed")).toBe(
+        baselineCompletedB + 1,
+      );
 
       const outputA = await getThreadOutput(harness.api, threadA.thread.id);
       const outputB = await getThreadOutput(harness.api, threadB.thread.id);
@@ -145,6 +153,12 @@ describe.sequential("fake provider multi-thread integration", () => {
         projectId: project.id,
         timeoutMs: DEFAULT_TIMEOUT_MS,
       });
+      const baselineEventsA = await getThreadEvents(harness.api, threadA.thread.id);
+      const baselineEventsB = await getThreadEvents(harness.api, threadB.thread.id);
+      const baselineStartedA = countTurnEvents(baselineEventsA, "turn/started");
+      const baselineCompletedA = countTurnEvents(baselineEventsA, "turn/completed");
+      const baselineStartedB = countTurnEvents(baselineEventsB, "turn/started");
+      const baselineCompletedB = countTurnEvents(baselineEventsB, "turn/completed");
 
       await sendTextMessage(harness.api, threadA.thread.id, {
         text: "thread-a first",
@@ -172,10 +186,18 @@ describe.sequential("fake provider multi-thread integration", () => {
       const eventsB = await getThreadEvents(harness.api, threadB.thread.id);
       assertEventsBelongToThread(eventsA, threadA.thread.id);
       assertEventsBelongToThread(eventsB, threadB.thread.id);
-      expect(countTurnEvents(eventsA, "turn/started")).toBe(2);
-      expect(countTurnEvents(eventsA, "turn/completed")).toBe(2);
-      expect(countTurnEvents(eventsB, "turn/started")).toBe(2);
-      expect(countTurnEvents(eventsB, "turn/completed")).toBe(2);
+      expect(countTurnEvents(eventsA, "turn/started")).toBe(
+        baselineStartedA + 2,
+      );
+      expect(countTurnEvents(eventsA, "turn/completed")).toBe(
+        baselineCompletedA + 2,
+      );
+      expect(countTurnEvents(eventsB, "turn/started")).toBe(
+        baselineStartedB + 2,
+      );
+      expect(countTurnEvents(eventsB, "turn/completed")).toBe(
+        baselineCompletedB + 2,
+      );
     }));
 
   it("keeps a shared environment alive while one sibling remains unarchived", () =>
@@ -340,7 +362,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadA.thread.id,
           options: {
-            includeUnstaged: true,
+            autoArchiveOnSuccess: false,
             message: "env-a commit",
           },
         }),
@@ -348,7 +370,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadB.thread.id,
           options: {
-            includeUnstaged: true,
+            autoArchiveOnSuccess: false,
             message: "env-b commit",
           },
         }),
@@ -569,7 +591,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadA.thread.id,
           options: {
-            includeUnstaged: true,
+            autoArchiveOnSuccess: false,
             message: "instance-a commit",
           },
         }),
@@ -577,7 +599,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadB.thread.id,
           options: {
-            includeUnstaged: true,
+            autoArchiveOnSuccess: false,
             message: "instance-b commit",
           },
         }),

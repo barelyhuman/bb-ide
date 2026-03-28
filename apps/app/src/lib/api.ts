@@ -7,17 +7,17 @@ import type {
   Host,
   Project,
   ProjectSource,
+  ResolvedThreadExecutionOptions,
   Thread,
   ThreadType,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
   ThreadQueuedMessage,
   WorkspaceStatus,
   AvailableModel,
-  ReasoningLevel,
 } from "@bb/domain";
 import type {
+  CreateManagerThreadRequest,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateDraftRequest,
@@ -25,7 +25,6 @@ import type {
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
   ProjectFileSuggestion,
-  SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
   SystemProviderInfo,
@@ -207,12 +206,12 @@ export async function createProject(req: CreateProjectRequest): Promise<Project>
 
 export async function hireProjectManager(
   projectId: string,
-  options?: { title?: string; providerId?: string; model?: string; reasoningLevel?: ReasoningLevel },
+  options: CreateManagerThreadRequest,
 ): Promise<Thread> {
   return request<Thread>(
     apiClient.projects[":id"].managers.$post({
       param: { id: projectId },
-      json: options ?? {},
+      json: options,
     }),
   );
 }
@@ -370,8 +369,8 @@ export async function updateThread(
 
 export async function getThreadDefaultExecutionOptions(
   id: string,
-): Promise<ThreadExecutionOptions | null> {
-  return request<ThreadExecutionOptions | null>(
+): Promise<ResolvedThreadExecutionOptions | null> {
+  return request<ResolvedThreadExecutionOptions | null>(
     apiClient.threads[":id"]["default-execution-options"].$get({ param: { id } }),
   );
 }
@@ -392,12 +391,11 @@ export async function createThreadDraft(
 export async function sendThreadDraft(
   id: string,
   queuedMessageId: string,
-  req?: SendDraftRequest,
 ): Promise<SendDraftResponse> {
   return request<SendDraftResponse>(
     apiClient.threads[":id"].drafts[":draftId"].send.$post({
       param: { id, draftId: queuedMessageId },
-      json: req ?? {},
+      json: {},
     }),
   );
 }
@@ -419,12 +417,12 @@ export async function stopThread(id: string): Promise<void> {
 
 export async function archiveThread(
   id: string,
-  opts?: { force?: boolean },
+  opts: { force: boolean },
 ): Promise<void> {
   await request<unknown>(
     apiClient.threads[":id"].archive.$post({
       param: { id },
-      json: { force: opts?.force === true },
+      json: { force: opts.force },
     }),
   );
 }
@@ -451,14 +449,12 @@ export async function getEnvironment(id: string): Promise<Environment> {
 
 export async function getEnvironmentWorkStatus(
   environmentId: string,
-  mergeBaseBranch?: string,
+  mergeBaseBranch: string,
 ): Promise<WorkspaceStatus | null> {
   const res = await request<EnvironmentStatusResponse>(
     apiClient.environments[":id"].status.$get({
       param: { id: environmentId },
-      query: {
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      },
+      query: { mergeBaseBranch },
     }),
   );
   return res.workspace;
@@ -519,20 +515,25 @@ export async function getThreadTimelineToolDetails(
 
 export async function getEnvironmentDiff(
   id: string,
-  selection?: ThreadGitDiffSelection,
-  mergeBaseBranch?: string,
+  selection: ThreadGitDiffSelection,
+  mergeBaseBranch: string,
 ): Promise<ThreadGitDiffResponse> {
+  const query =
+    selection.type === "commit"
+      ? {
+          selection: "commit" as const,
+          commitSha: selection.sha,
+          mergeBaseBranch,
+        }
+      : {
+          selection: "combined" as const,
+          mergeBaseBranch,
+        };
+
   return request<ThreadGitDiffResponse>(
     apiClient.environments[":id"].diff.$get({
       param: { id },
-      query: {
-        ...(selection?.type === "commit"
-          ? { selection: "commit", commitSha: selection.sha }
-          : selection?.type === "combined"
-            ? { selection: "combined" }
-            : {}),
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      },
+      query,
     }),
   );
 }

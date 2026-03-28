@@ -69,6 +69,7 @@ describe("internal session routes", () => {
           hostName: "Reconnected Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         }),
       });
 
@@ -119,7 +120,7 @@ describe("internal session routes", () => {
       });
 
       const fetchResponse = await harness.app.request(
-        `/internal/session/commands?sessionId=${session.id}&afterCursor=0&limit=10`,
+        `/internal/session/commands?sessionId=${session.id}&afterCursor=0&limit=10&waitMs=0`,
         {
           headers: {
             authorization: `Bearer ${harness.config.authToken}`,
@@ -148,7 +149,7 @@ describe("internal session routes", () => {
       expect(fetched?.state).toBe("fetched");
 
       const timeoutResponse = await harness.app.request(
-        `/internal/session/commands?sessionId=${session.id}&afterCursor=${command.cursor}&waitMs=1`,
+        `/internal/session/commands?sessionId=${session.id}&afterCursor=${command.cursor}&limit=100&waitMs=1`,
         {
           headers: {
             authorization: `Bearer ${harness.config.authToken}`,
@@ -185,7 +186,13 @@ describe("internal session routes", () => {
         environmentId: successEnvironment.id,
         type: "client/thread/start",
         input: [{ type: "text", text: "Start when ready" }],
-        execution: { source: "client/thread/start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/thread/start",
+        },
         initiator: "user",
         requestMethod: "thread/start",
         source: "spawn",
@@ -330,7 +337,13 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         type: "client/turn/requested",
         input: [{ type: "text", text: "Resume after reprovision" }],
-        execution: { source: "client/turn/requested" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
         initiator: "user",
         requestMethod: "turn/start",
         source: "tell",
@@ -378,6 +391,138 @@ describe("internal session routes", () => {
         ({ command }) => command.threadId === thread.id,
       );
       expect(queuedRestart.command.type).toBe("thread.start");
+      const followupCommands = harness.db
+        .select({
+          cursor: hostDaemonCommands.cursor,
+          payload: hostDaemonCommands.payload,
+        })
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.hostId, host.id))
+        .all()
+        .filter((row) => row.cursor > provisionCommand.cursor)
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+      expect(followupCommands).toEqual([
+        expect.objectContaining({
+          type: "thread.start",
+          threadId: thread.id,
+        }),
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails reprovision restart loudly when the latest stored request event is malformed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-reprovision-malformed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-malformed",
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Valid earlier request" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Malformed latest request" }],
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      const provisionCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.provision",
+        payload: JSON.stringify({
+          type: "environment.provision",
+          environmentId: environment.id,
+          projectId: project.id,
+          workspaceProvisionType: "managed-worktree",
+          targetPath: "/tmp/reprovision-malformed",
+          sourcePath: "/tmp/reprovision-malformed-source",
+          branchName: "bb/reprovision-malformed",
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: provisionCommand.id,
+          cursor: provisionCommand.cursor,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/reprovision-malformed",
+            branchName: "bb/reprovision-malformed",
+            defaultBranch: "main",
+            isGitRepo: true,
+            isWorktree: true,
+            ranSetup: false,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "internal_error",
+        message: expect.stringContaining(`thread ${thread.id}`),
+      });
+      const followupCommands = harness.db
+        .select({
+          cursor: hostDaemonCommands.cursor,
+          payload: hostDaemonCommands.payload,
+        })
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.hostId, host.id))
+        .all()
+        .filter((row) => row.cursor > provisionCommand.cursor)
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+      expect(followupCommands).toEqual([]);
     } finally {
       await harness.cleanup();
     }
@@ -413,7 +558,13 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         type: "client/turn/requested",
         input: [{ type: "text", text: "Resume provisioning thread" }],
-        execution: { source: "client/turn/requested" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
         initiator: "user",
         requestMethod: "turn/start",
         source: "tell",
@@ -423,7 +574,13 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         type: "client/turn/requested",
         input: [{ type: "text", text: "Do not restart this sibling" }],
-        execution: { source: "client/turn/requested" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
         initiator: "user",
         requestMethod: "turn/start",
         source: "tell",

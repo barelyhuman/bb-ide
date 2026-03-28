@@ -29,7 +29,6 @@ import {
   buildBridgeMcpServer,
   getAllowedToolNames,
   BRIDGE_MCP_SERVER_NAME,
-  type DynamicToolDefinition,
   type ToolCallForwarder,
 } from "./tool-proxy-mcp.js";
 
@@ -64,8 +63,14 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
     params: z.object({
       threadId: z.string(),
       providerThreadId: z.string().nullable(),
+      baseInstructions: z.string().optional(),
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
+      dynamicTools: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        inputSchema: z.unknown(),
+      })).optional(),
     }),
   }),
   z.object({
@@ -320,11 +325,11 @@ function handleThreadStart(
   const sessionOptions = buildSessionOptions(params, sessionEnv);
   if (params.dynamicTools && params.dynamicTools.length > 0) {
     const mcpServer = buildBridgeMcpServer(
-      params.dynamicTools as DynamicToolDefinition[],
+      params.dynamicTools,
       createForwardToolCall(threadIdRef),
     );
     sessionOptions.mcpServers = { [BRIDGE_MCP_SERVER_NAME]: mcpServer };
-    sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools as DynamicToolDefinition[]);
+    sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
 
   const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
@@ -368,6 +373,14 @@ function handleThreadResume(
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv);
   const threadIdRef = { current: threadId };
+  if (params.dynamicTools && params.dynamicTools.length > 0) {
+    const mcpServer = buildBridgeMcpServer(
+      params.dynamicTools,
+      createForwardToolCall(threadIdRef),
+    );
+    sessionOptions.mcpServers = { [BRIDGE_MCP_SERVER_NAME]: mcpServer };
+    sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
+  }
   const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
 
   session.start(providerThreadId);

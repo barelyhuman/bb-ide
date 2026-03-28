@@ -68,7 +68,7 @@ export interface TestServer {
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
     sessionId: string;
-    message: { bufferDepth: number; lastCommandCursor?: number };
+    message: { bufferDepth: number; lastCommandCursor: number | null };
   }>;
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
@@ -88,7 +88,7 @@ export async function createTestServer(
   const sessionOpenCalls: HostDaemonSessionOpenRequest[] = [];
   const heartbeats: Array<{
     sessionId: string;
-    message: { bufferDepth: number; lastCommandCursor?: number };
+    message: { bufferDepth: number; lastCommandCursor: number | null };
   }> = [];
   const commandFetches: Array<{ sessionId: string; afterCursor: number }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
@@ -129,7 +129,7 @@ export async function createTestServer(
   });
   app.get("/internal/session/commands", (context) => {
     const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
-    const afterCursor = Number.parseInt(query.afterCursor ?? "0", 10);
+    const afterCursor = Number.parseInt(query.afterCursor, 10);
     commandFetches.push({
       sessionId: query.sessionId,
       afterCursor,

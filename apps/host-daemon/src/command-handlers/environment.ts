@@ -32,7 +32,7 @@ export async function provisionEnvironment(
 export async function detectSetupScript(
   command: typeof environmentProvisionCommandSchema._type,
 ): Promise<boolean> {
-  const scriptName = command.scriptName ?? ".bb-env-setup.sh";
+  const scriptName = ".bb-env-setup.sh";
   let scriptParentPath: string;
   switch (command.workspaceProvisionType) {
     case "unmanaged":
@@ -74,8 +74,6 @@ export function toProvisionWorkspaceOptions(
         sourcePath: command.sourcePath,
         targetPath: command.targetPath,
         branchName: command.branchName,
-        scriptName: command.scriptName,
-        timeoutMs: command.timeoutMs,
       };
     }
   }

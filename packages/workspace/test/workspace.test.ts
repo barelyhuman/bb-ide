@@ -67,6 +67,11 @@ describe("Workspace", () => {
     await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+    expect(status.mergeBaseBranch).toBe("main");
+    expect(status.aheadCount).toBe(1);
+    expect(status.behindCount).toBe(0);
+
     const combined = await workspace.getDiff({ mergeBaseBranch: "main" });
     expect(combined.mode).toBe("worktree_commits");
     expect(combined.commits[0]?.subject).toBe("Feature commit");
@@ -87,7 +92,6 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "commit me\n", "utf8");
     const commit = await workspace.commit({
       message: "Commit from workspace",
-      includeUnstaged: true,
     });
     const head = (
       await runGit(["rev-parse", "HEAD"], { cwd: repoPath })
@@ -131,7 +135,6 @@ describe("Workspace", () => {
     const workspace = new Workspace(repoPath);
     const checkpoint = await workspace.checkpoint({
       commitMessage: "Checkpoint feature",
-      remoteName: "origin",
     });
 
     const remoteHead = (
@@ -149,19 +152,25 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "squash\n", "utf8");
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature work"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "squash plus local changes\n", "utf8");
     await runGit(["branch", "-D", "main"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
     const result = await workspace.squashMergeInto({
       targetBranch: "main",
-      commitMessage: "Squash feature",
     });
 
-    const subject = (
+    const sourceBranchSubject = (
+      await runGit(["log", "-1", "--pretty=%s", "feature"], { cwd: repoPath })
+    ).stdout.trim();
+    const targetBranchSubject = (
       await runGit(["log", "-1", "--pretty=%s", "main"], { cwd: repoPath })
     ).stdout.trim();
+    const mergedReadme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
     expect(result.merged).toBe(true);
-    expect(subject).toBe("Squash feature");
+    expect(sourceBranchSubject).toBe("bb squash merge prep");
+    expect(targetBranchSubject).toBe("bb squash merge");
+    expect(mergedReadme).toBe("squash plus local changes\n");
   });
 
   it("rejects git mutations for non-git directories", async () => {
@@ -171,7 +180,7 @@ describe("Workspace", () => {
     expect(await workspace.isGitRepo).toBe(false);
     expect(await workspace.currentBranch).toBeUndefined();
     await expect(
-      workspace.commit({ message: "nope", includeUnstaged: true }),
+      workspace.commit({ message: "nope" }),
     ).rejects.toThrow(/not a git repository/u);
     await expect(workspace.getStatus()).rejects.toThrow(WorkspaceError);
   });

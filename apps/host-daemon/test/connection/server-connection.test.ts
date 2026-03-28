@@ -291,7 +291,7 @@ describe("ServerConnection", () => {
       threadId: "thread-1",
       turnId: "turn-1",
       callId: "call-1",
-      tool: "spawn_thread",
+      tool: "message_user",
       arguments: { foo: "bar" },
     });
 
@@ -302,7 +302,7 @@ describe("ServerConnection", () => {
     expect(testServer.toolCalls).toEqual([
       {
         sessionId: "session-1",
-        tool: "spawn_thread",
+        tool: "message_user",
       },
     ]);
 

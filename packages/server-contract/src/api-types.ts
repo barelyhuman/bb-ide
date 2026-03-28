@@ -71,16 +71,15 @@ export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
   providerId: z.string().min(1),
-  type: threadTypeSchema.optional(),
+  type: threadTypeSchema,
   title: z.string().min(1).optional(),
-  input: z.array(promptInputSchema).min(1).optional(),
-  model: z.string().optional(),
+  input: z.array(promptInputSchema).min(1),
+  model: z.string().min(1),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
-  spawnInitiator: z.enum(["user", "agent", "system"]).optional(),
 });
 export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
 
@@ -90,7 +89,7 @@ export const sendMessageRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
-  mode: sendMessageModeSchema.optional(),
+  mode: sendMessageModeSchema,
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 
@@ -103,9 +102,7 @@ export const createDraftRequestSchema = z.object({
 });
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
 
-export const sendDraftRequestSchema = z.object({
-  mode: sendMessageModeSchema.optional(),
-});
+export const sendDraftRequestSchema = z.object({});
 export type SendDraftRequest = z.infer<typeof sendDraftRequestSchema>;
 
 export const sendDraftResponseSchema = z.object({
@@ -115,16 +112,17 @@ export const sendDraftResponseSchema = z.object({
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
 
 export const archiveThreadRequestSchema = z.object({
-  force: z.boolean().optional(),
+  force: z.boolean(),
 });
 export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
 
 export const updateThreadRequestSchema = z
   .object({
-    title: z.string().min(1).nullable().optional(),
-    mergeBaseBranch: z.string().min(1).nullable().optional(),
-    parentThreadId: z.string().min(1).nullable().optional(),
+    title: z.string().min(1).nullable(),
+    mergeBaseBranch: z.string().min(1).nullable(),
+    parentThreadId: z.string().min(1).nullable(),
   })
+  .partial()
   .refine(
     (value) =>
       value.title !== undefined ||
@@ -142,38 +140,152 @@ export const createProjectRequestSchema = z.object({
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
 export const createManagerThreadRequestSchema = z.object({
-  title: z.string().min(1).optional(),
-  providerId: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  reasoningLevel: reasoningLevelSchema.optional(),
+  name: z.string().min(1).optional(),
+  providerId: z.string().min(1),
+  model: z.string().min(1),
+  reasoningLevel: reasoningLevelSchema,
 });
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
 >;
 
+export const projectFilesQuerySchema = z.object({
+  query: z.string().min(1),
+  limit: z.string().regex(/^\d+$/),
+}).partial();
+export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
+
+export const projectAttachmentContentQuerySchema = z.object({
+  path: z.string().min(1),
+});
+export type ProjectAttachmentContentQuery = z.infer<
+  typeof projectAttachmentContentQuerySchema
+>;
+
+const mergeBaseBranchQuerySchema = z
+  .string({ required_error: "A merge base branch is required" })
+  .min(1, "A merge base branch is required");
+
+export const environmentStatusQuerySchema = z.object({
+  mergeBaseBranch: mergeBaseBranchQuerySchema,
+});
+export type EnvironmentStatusQuery = z.infer<typeof environmentStatusQuerySchema>;
+
+export const environmentDiffQuerySchema = z.discriminatedUnion("selection", [
+  z.object({
+    selection: z.literal("combined"),
+    mergeBaseBranch: mergeBaseBranchQuerySchema,
+  }),
+  z.object({
+    selection: z.literal("commit"),
+    commitSha: z.string().min(1),
+    mergeBaseBranch: mergeBaseBranchQuerySchema,
+  }),
+]);
+export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
+
+export const threadListQuerySchema = z.object({
+  projectId: z.string().min(1),
+  type: threadTypeSchema,
+  parentThreadId: z.string().min(1),
+  archived: z.enum(["true", "false"]),
+}).partial();
+export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
+
+export const threadTimelineQuerySchema = z.object({
+  limit: z.string().regex(/^\d+$/),
+  includeManagerDebugView: z.enum(["true", "false"]),
+  includeToolGroupMessages: z.enum(["true", "false"]),
+}).partial();
+export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
+
+export const timelineToolDetailsQuerySchema = z.object({
+  turnId: z.string().min(1),
+  sourceSeqStart: z.string().regex(/^\d+$/),
+  sourceSeqEnd: z.string().regex(/^\d+$/),
+  includeManagerDebugView: z.enum(["true", "false"]).optional(),
+});
+export type TimelineToolDetailsQuery = z.infer<
+  typeof timelineToolDetailsQuerySchema
+>;
+
+export const threadEventsQuerySchema = z.object({
+  afterSeq: z.string().regex(/^\d+$/),
+  limit: z.string().regex(/^\d+$/),
+}).partial();
+export type ThreadEventsQuery = z.infer<typeof threadEventsQuerySchema>;
+
+export const threadWorkspaceFilesQuerySchema = z.object({
+  query: z.string().min(1),
+  limit: z.string().regex(/^\d+$/),
+}).partial();
+export type ThreadWorkspaceFilesQuery = z.infer<
+  typeof threadWorkspaceFilesQuerySchema
+>;
+
+export const threadWorkspaceFileQuerySchema = z.object({
+  path: z.string().min(1),
+});
+export type ThreadWorkspaceFileQuery = z.infer<
+  typeof threadWorkspaceFileQuerySchema
+>;
+
+export const systemModelsQuerySchema = z.object({
+  providerId: z.string().min(1),
+  hostId: z.string().min(1),
+  environmentId: z.string().min(1),
+}).partial();
+export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
+
+export const systemProvidersQuerySchema = z.object({
+  hostId: z.string().min(1),
+  environmentId: z.string().min(1),
+}).partial();
+export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
+
+export interface ProjectAttachmentUploadForm {
+  [key: string]: string | Blob;
+}
+
+export interface SystemVoiceTranscriptionForm {
+  [key: string]: string | Blob;
+}
+
 export const updateProjectRequestSchema = z
   .object({
-    name: z.string().min(1).optional(),
+    name: z.string().min(1),
   })
+  .partial()
   .refine(
     (value) => value.name !== undefined,
     "At least one field must be provided",
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
-export const createProjectSourceRequestSchema = z.object({
+const createLocalPathProjectSourceRequestSchema = z.object({
   hostId: z.string().min(1),
-  type: z.enum(["local_path", "github_repo"]).optional(),
-  path: z.string().min(1).optional(),
-  repoUrl: z.string().url().optional(),
+  type: z.literal("local_path"),
+  path: z.string().min(1),
 });
+
+const createGitHubRepoProjectSourceRequestSchema = z.object({
+  hostId: z.string().min(1),
+  type: z.literal("github_repo"),
+  repoUrl: z.string().url(),
+});
+
+export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
+  createLocalPathProjectSourceRequestSchema,
+  createGitHubRepoProjectSourceRequestSchema,
+]);
 export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceRequestSchema>;
 
 export const updateProjectSourceRequestSchema = z
   .object({
-    path: z.string().min(1).optional(),
-    repoUrl: z.string().url().optional(),
+    path: z.string().min(1),
+    repoUrl: z.string().url(),
   })
+  .partial()
   .refine(
     (value) => value.path !== undefined || value.repoUrl !== undefined,
     "At least one field must be provided",
@@ -189,19 +301,14 @@ export const environmentActionTypeSchema = z.enum([
 export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const commitOptionsSchema = z.object({
-  message: z.string().min(1).optional(),
-  includeUnstaged: z.boolean().optional(),
-  autoArchiveOnSuccess: z.boolean().optional(),
+  message: z.string().min(1),
+  autoArchiveOnSuccess: z.boolean(),
 });
 export type CommitOptions = z.infer<typeof commitOptionsSchema>;
 
 export const squashMergeOptionsSchema = z.object({
-  commitIfNeeded: z.boolean().optional(),
-  includeUnstaged: z.boolean().optional(),
-  commitMessage: z.string().min(1).optional(),
-  squashMessage: z.string().min(1).optional(),
-  mergeBaseBranch: z.string().min(1).optional(),
-  autoArchiveOnSuccess: z.boolean().optional(),
+  mergeBaseBranch: z.string().min(1),
+  autoArchiveOnSuccess: z.boolean(),
 });
 export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;
 
@@ -218,11 +325,11 @@ export const environmentActionRequestSchema = z.discriminatedUnion("action", [
   }),
   environmentActionTargetSchema.extend({
     action: z.literal("commit"),
-    options: commitOptionsSchema.optional(),
+    options: commitOptionsSchema,
   }),
   environmentActionTargetSchema.extend({
     action: z.literal("squash_merge"),
-    options: squashMergeOptionsSchema.optional(),
+    options: squashMergeOptionsSchema,
   }),
 ]);
 export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSchema>;
@@ -230,11 +337,10 @@ export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSc
 export const commitActionResponseSchema = z.object({
   ok: z.literal(true),
   action: z.literal("commit"),
-  commitCreated: z.boolean(),
   message: z.string(),
   autoArchived: z.boolean(),
-  commitSha: z.string().optional(),
-  commitSubject: z.string().optional(),
+  commitSha: z.string().min(1),
+  commitSubject: z.string().min(1),
 });
 export type CommitActionResponse = z.infer<typeof commitActionResponseSchema>;
 
@@ -244,8 +350,7 @@ export const squashMergeActionResponseSchema = z.object({
   merged: z.boolean(),
   message: z.string(),
   autoArchived: z.boolean(),
-  commitSha: z.string().optional(),
-  commitSubject: z.string().optional(),
+  commitSha: z.string().min(1),
 });
 export type SquashMergeActionResponse = z.infer<typeof squashMergeActionResponseSchema>;
 
@@ -306,7 +411,7 @@ export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResp
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
-  contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
+  contextWindowUsage: threadContextWindowUsageSchema.optional(),
 });
 export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
 

@@ -216,7 +216,7 @@ describe("RuntimeManager", () => {
     expect(manager.hasThread("env-1", "thread-1")).toBe(true);
     expect(manager.listActiveThreads()).toEqual([]);
 
-    manager.markThreadActive("env-1", "thread-1");
+    manager.markThreadActive("env-1", "thread-1", "provider-1");
     expect(manager.listActiveThreads()).toEqual([
       {
         environmentId: "env-1",

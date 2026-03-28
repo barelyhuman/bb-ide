@@ -47,7 +47,13 @@ describe("internal authorization regressions", () => {
         environmentId: environment.id,
         type: "client/thread/start",
         input: [{ type: "text", text: "Start after provisioning" }],
-        execution: { source: "client/thread/start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/thread/start",
+        },
         initiator: "user",
         requestMethod: "thread/start",
         source: "spawn",
@@ -191,6 +197,9 @@ describe("internal authorization regressions", () => {
         body: JSON.stringify({
           projectId: projectA.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Reuse the other project environment" }],
           environment: {
             type: "reuse",
             environmentId: environment.id,

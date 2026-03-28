@@ -1,4 +1,6 @@
+import { collectOptionalFieldPaths } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
+import * as contract from "../src/index.js";
 import {
   createHostDaemonClient,
   hostDaemonCommandEnvelopeSchema,
@@ -13,6 +15,13 @@ import {
   hostDaemonSessionOpenResponseSchema,
 } from "../src/index.js";
 
+const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
+  "hostDaemonCommandSchema.options.approvalPolicy": "Daemon command metadata may omit approval policy when the server does not need to override the default.",
+  "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
+  "hostDaemonCommandSchema.options.source": "Daemon command metadata may omit source when the command origin is not being tracked.",
+  "hostDaemonCommandSchema.query": "workspace.list_files may omit a search string to list files without filtering.",
+};
+
 describe("host-daemon command schemas", () => {
   it("parses valid workspace and provisioning commands", () => {
     expect(
@@ -23,7 +32,6 @@ describe("host-daemon command schemas", () => {
         workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         message: "Checkpoint work",
-        includeUnstaged: true,
       }),
     ).toMatchObject({
       type: "workspace.commit",
@@ -62,6 +70,18 @@ describe("host-daemon command schemas", () => {
       id: "hcmd_123",
       cursor: 7,
     });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "workspace.list_files",
+        environmentId: "env_123",
+        environmentStatus: "ready",
+        workspacePath: "/tmp/workspace",
+      }),
+    ).toMatchObject({
+      type: "workspace.list_files",
+      workspacePath: "/tmp/workspace",
+    });
   });
 
   it("rejects malformed environment.provision commands at parse time", () => {
@@ -94,10 +114,16 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
-        projectName: "Project 123",
-        projectRootPath: "/tmp/project",
         providerId: "codex",
-        threadType: "manager",
+        eventSequence: 1,
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful manager.",
         dynamicTools: [
           {
             name: "message_user",
@@ -112,6 +138,30 @@ describe("host-daemon command schemas", () => {
     });
   });
 
+  it("keeps contract optional fields on an explicit allowlist", () => {
+    const optionalFieldPaths = collectOptionalFieldPaths({
+      hostDaemonActiveThreadSchema: contract.hostDaemonActiveThreadSchema,
+      hostDaemonCommandSchema: contract.hostDaemonCommandSchema,
+      threadResumeResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["thread.resume"],
+      workspaceCommitResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
+      workspaceCheckpointResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["workspace.checkpoint"],
+      workspaceSquashMergeResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["workspace.squash_merge"],
+    });
+
+    expect(optionalFieldPaths).toEqual(
+      Object.keys(INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS).sort(),
+    );
+    expect(
+      Object.values(INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS).every(
+        (reason) => reason.trim().length > 0,
+      ),
+    ).toBe(true);
+  });
+
   it("parses thread.resume with workspacePath", () => {
     expect(
       hostDaemonCommandSchema.parse({
@@ -120,10 +170,16 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
-        projectName: "Project 123",
-        projectRootPath: "/tmp/project",
         providerId: "codex",
-        threadType: "standard",
+        providerThreadId: "provider_123",
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       }),
     ).toMatchObject({
       type: "thread.resume",
@@ -139,13 +195,18 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
-        projectName: "Project 123",
-        projectRootPath: "/tmp/project",
         providerId: "codex",
-        threadType: "standard",
         providerThreadId: "provider_123",
         eventSequence: 12,
         input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       }),
     ).toMatchObject({
       type: "turn.run",
@@ -160,14 +221,19 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
-        projectName: "Project 123",
-        projectRootPath: "/tmp/project",
         providerId: "codex",
-        threadType: "standard",
         providerThreadId: "provider_123",
         eventSequence: 13,
         expectedTurnId: "turn_123",
         input: [{ type: "text", text: "adjust" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       }),
     ).toMatchObject({
       type: "turn.steer",
@@ -182,11 +248,16 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
-        projectName: "Project 123",
-        projectRootPath: "/tmp/project",
         providerId: "codex",
-        threadType: "standard",
         input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       }),
     ).toThrow();
   });
@@ -288,10 +359,28 @@ describe("host-daemon session schemas", () => {
       hostType: "persistent",
     });
 
+    expect(() =>
+      hostDaemonSessionOpenRequestSchema.parse({
+        hostId: "host_123",
+        instanceId: "instance_1",
+        hostName: "Michael's MacBook",
+        hostType: "persistent",
+        protocolVersion: 2,
+        activeThreads: [
+          {
+            environmentId: "env_124",
+            threadId: "thr_124",
+          },
+        ],
+      }),
+    ).toThrow();
+
     expect(
       hostDaemonCommandsQuerySchema.parse({
         sessionId: "session_123",
         afterCursor: "12",
+        limit: "100",
+        waitMs: "0",
       }),
     ).toMatchObject({
       sessionId: "session_123",
@@ -391,6 +480,16 @@ describe("host-daemon session schemas", () => {
       }),
     ).toMatchObject({
       type: "heartbeat",
+    });
+
+    expect(
+      hostDaemonDaemonWsMessageSchema.parse({
+        type: "heartbeat",
+        bufferDepth: 0,
+        lastCommandCursor: null,
+      }),
+    ).toMatchObject({
+      lastCommandCursor: null,
     });
   });
 

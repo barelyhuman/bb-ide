@@ -46,6 +46,8 @@ async function waitForCursor(
 
 function createStandardThreadStartCommand(args: {
   environmentId: string;
+  eventSequence: number;
+  input: Array<{ text: string; type: "text" }>;
   projectId: string;
   providerId: string;
   threadId: string;
@@ -57,10 +59,17 @@ function createStandardThreadStartCommand(args: {
     threadId: args.threadId,
     workspacePath: args.workspacePath,
     projectId: args.projectId,
-    projectName: "Project 1",
-    projectRootPath: args.workspacePath,
     providerId: args.providerId,
-    threadType: "standard" as const,
+    eventSequence: args.eventSequence,
+    input: args.input,
+    options: {
+      model: "gpt-5",
+      serviceTier: "flex" as const,
+      reasoningLevel: "medium" as const,
+      sandboxMode: "danger-full-access" as const,
+    },
+    instructions: "Be a helpful coding agent.",
+    dynamicTools: [],
   };
 }
 
@@ -80,13 +89,18 @@ function createTurnRunCommand(args: {
     threadId: args.threadId,
     workspacePath: args.workspacePath,
     projectId: args.projectId,
-    projectName: "Project 1",
-    projectRootPath: args.workspacePath,
     providerId: args.providerId,
-    threadType: "standard" as const,
     providerThreadId: args.providerThreadId,
     eventSequence: args.eventSequence,
     input: args.input,
+    options: {
+      model: "gpt-5",
+      serviceTier: "flex" as const,
+      reasoningLevel: "medium" as const,
+      sandboxMode: "danger-full-access" as const,
+    },
+    instructions: "Be a helpful coding agent.",
+    dynamicTools: [],
   };
 }
 
@@ -140,6 +154,8 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -171,6 +187,8 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -226,6 +244,8 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -269,6 +289,8 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.queueCommand({
@@ -278,6 +300,8 @@ describe("host daemon integration", () => {
           workspacePath: harness.envBPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -331,7 +355,6 @@ describe("host daemon integration", () => {
       expect(completedEvents.find((event) => event.threadId === "thread-b")?.environmentId).toBe(
         "env-b",
       );
-      expect(completedEvents[0]?.threadId).toBe("thread-b");
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();

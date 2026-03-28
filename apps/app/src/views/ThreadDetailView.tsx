@@ -105,7 +105,11 @@ function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFai
   }
 }
 
-function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | undefined {
+function buildAskAgentInputForGitOperation(args: {
+  error: unknown;
+  mergeBaseBranch?: string;
+}): PromptInput[] | undefined {
+  const { error, mergeBaseBranch } = args;
   const details = toEnvironmentActionFailureDetails(error);
   if (!details) {
     return undefined;
@@ -119,13 +123,19 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "commit",
               threadId: "thread",
-              options: {},
+              options: {
+                message: "Checkpoint changes",
+                autoArchiveOnSuccess: false,
+              },
             },
             { errorMessage: details.errorMessage },
           ),
         },
       ];
     case "squash_merge_conflict":
+      if (!mergeBaseBranch) {
+        return undefined;
+      }
       return [
         {
           type: "text",
@@ -133,13 +143,19 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "squash_merge",
               threadId: "thread",
-              options: {},
+              options: {
+                mergeBaseBranch,
+                autoArchiveOnSuccess: false,
+              },
             },
             { conflictFiles: details.conflictFiles },
           ),
         },
       ];
     case "squash_merge_commit_failed":
+      if (!mergeBaseBranch) {
+        return undefined;
+      }
       return [
         {
           type: "text",
@@ -147,7 +163,10 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "squash_merge",
               threadId: "thread",
-              options: {},
+              options: {
+                mergeBaseBranch,
+                autoArchiveOnSuccess: false,
+              },
             },
             {
               stage: details.stage,
@@ -161,11 +180,18 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
   }
 }
 
-function toThreadGitActionDialogError(error: unknown): ThreadGitActionDialogError {
+function toThreadGitActionDialogError(args: {
+  error: unknown;
+  mergeBaseBranch?: string;
+}): ThreadGitActionDialogError {
+  const { error, mergeBaseBranch } = args;
   const message =
     error instanceof Error ? error.message : "Failed to start git action";
   return new ThreadGitActionDialogError(message, {
-    askAgentInput: buildAskAgentInputForGitOperation(error),
+    askAgentInput: buildAskAgentInputForGitOperation({
+      error,
+      mergeBaseBranch,
+    }),
   });
 }
 
@@ -282,6 +308,8 @@ export function ThreadDetailView() {
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
   );
+  const environmentQuery = useEnvironment(thread?.environmentId);
+  const environment = environmentQuery.data;
   const {
     activeSecondaryPanel,
     areAllGitDiffFilesCollapsed,
@@ -329,13 +357,17 @@ export function ThreadDetailView() {
       captureTimelineScrollPositionRef.current();
     },
     preferredTheme,
+    defaultMergeBaseBranch: thread?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
   });
-  const environmentQuery = useEnvironment(thread?.environmentId);
-  const environment = environmentQuery.data;
+  const requestedMergeBaseBranch =
+    selectedMergeBaseBranch ??
+    thread?.mergeBaseBranch ??
+    environment?.defaultBranch ??
+    undefined;
   const workStatusQuery = useEnvironmentWorkStatus(
     thread?.environmentId,
-    selectedMergeBaseBranch,
+    requestedMergeBaseBranch,
   );
   const workStatus = workStatusQuery.data;
   const workspaceStatusError = workStatusQuery.error;
@@ -456,7 +488,7 @@ export function ThreadDetailView() {
     }
 
     archiveThread.mutate(
-      { id: thread.id },
+      { id: thread.id, force: false },
       {
         onSuccess: () => {
           navigate(`/projects/${thread.projectId}`);
@@ -490,7 +522,7 @@ export function ThreadDetailView() {
   const sendFollowUpInput = useCallback(
     async ({
       input,
-      mode,
+      mode = "auto",
       model,
       serviceTier: executionServiceTier,
       reasoningLevel: executionReasoningLevel,
@@ -508,7 +540,7 @@ export function ThreadDetailView() {
       await sendMessage.mutateAsync({
         id: threadId,
         input,
-        ...(mode ? { mode } : {}),
+        mode,
         ...(mode === "steer"
           ? {}
           : {
@@ -800,11 +832,7 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
-  const handleCommitThread = async ({
-    includeUnstaged,
-  }: {
-    includeUnstaged: boolean;
-  }) => {
+  const handleCommitThread = async () => {
     const attachedEnvironmentId = thread.environmentId;
     if (!threadId || !attachedEnvironmentId) {
       return;
@@ -816,22 +844,18 @@ export function ThreadDetailView() {
         threadId,
         action: "commit",
         options: {
-          includeUnstaged,
+          message: "Checkpoint changes",
           autoArchiveOnSuccess,
         },
       });
     } catch (nextError) {
-      throw toThreadGitActionDialogError(nextError);
+      throw toThreadGitActionDialogError({ error: nextError });
     }
   };
   const handleSquashMergeThread = async ({
-    commitIfNeeded,
-    includeUnstaged,
     mergeBaseBranch,
   }: {
-    commitIfNeeded: boolean;
-    includeUnstaged: boolean;
-    mergeBaseBranch?: string;
+    mergeBaseBranch: string;
   }) => {
     const attachedEnvironmentId = thread.environmentId;
     if (!threadId || !attachedEnvironmentId) {
@@ -844,14 +868,15 @@ export function ThreadDetailView() {
         threadId,
         action: "squash_merge",
         options: {
-          commitIfNeeded,
-          includeUnstaged,
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          mergeBaseBranch,
           autoArchiveOnSuccess,
         },
       });
     } catch (nextError) {
-      throw toThreadGitActionDialogError(nextError);
+      throw toThreadGitActionDialogError({
+        error: nextError,
+        mergeBaseBranch,
+      });
     }
   };
   const handleAskAgentToFixGitAction = async (input: PromptInput[]) => {
@@ -861,6 +886,7 @@ export function ThreadDetailView() {
     await sendMessage.mutateAsync({
       id: threadId,
       input,
+      mode: "auto",
     });
   };
   const threadActionsMenu = (
@@ -938,7 +964,6 @@ export function ThreadDetailView() {
       .mutateAsync({
         id: thread.id,
         queuedMessageId: messageId,
-        mode: "auto",
       })
       .then(() => {
         setAttachmentError(null);

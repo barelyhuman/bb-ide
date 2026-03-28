@@ -213,6 +213,9 @@ describe.sequential("fake provider recovery integration", () => {
 
       const cursorBefore = await readCommandCursor(harness.daemonDataDir);
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
+      const baselineCompletedCount = eventsBefore.filter(
+        (event) => event.type === "turn/completed",
+      ).length;
       expect(cursorBefore).toBeGreaterThan(0);
 
       await harness.restartDaemon("cursor-restart");
@@ -230,7 +233,7 @@ describe.sequential("fake provider recovery integration", () => {
       assertMonotonicSequences(eventsAfter);
       expect(
         eventsAfter.filter((event) => event.type === "turn/completed"),
-      ).toHaveLength(2);
+      ).toHaveLength(baselineCompletedCount + 1);
     }));
 
   it("does not revive an idle thread that was manually marked errored before reconnect", () =>
@@ -335,10 +338,15 @@ describe.sequential("fake provider recovery integration", () => {
         threadId: thread.id,
         workspacePath: environment.path,
         projectId: thread.projectId,
-        projectName,
-        projectRootPath,
         providerId: thread.providerId,
-        threadType: thread.type,
+        options: {
+          model: `${thread.providerId}-model`,
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          serviceTier: "flex",
+        },
+        instructions: `Recovered queued work for ${projectName} in ${projectRootPath}`,
+        dynamicTools: [],
         providerThreadId,
         eventSequence: eventsBefore.length + 1,
         input: [{ type: "text", text: "queued while offline" }],

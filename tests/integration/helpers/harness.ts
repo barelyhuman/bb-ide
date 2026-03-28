@@ -27,6 +27,8 @@ import { removePathWithRetry } from "./remove-path.js";
 import { createTestGitRepo } from "./seed.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const HARNESS_DAEMON_START_RETRY_DELAY_MS = 50;
+const HARNESS_DAEMON_START_MAX_ATTEMPTS = 2;
 const TEST_SERVER_HOST = "127.0.0.1";
 const DEFAULT_TEST_AUTH_TOKEN = "test-integration-token";
 
@@ -112,6 +114,13 @@ function resolveAdapterFactory(
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error;
+}
+
+function isRetryableSessionOpenFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.startsWith("Failed to open session: 401 Unauthorized")
+  );
 }
 
 async function resolveProjectEnvCandidates(): Promise<string[]> {
@@ -256,7 +265,22 @@ async function startHarnessDaemon(
       restart: async () => undefined,
       serverUrl,
     });
-    await daemonApp.daemon.start();
+    for (let attempt = 1; attempt <= HARNESS_DAEMON_START_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        await daemonApp.daemon.start();
+        break;
+      } catch (error) {
+        if (
+          attempt === HARNESS_DAEMON_START_MAX_ATTEMPTS ||
+          !isRetryableSessionOpenFailure(error)
+        ) {
+          throw error;
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, HARNESS_DAEMON_START_RETRY_DELAY_MS),
+        );
+      }
+    }
     return {
       daemon: daemonApp.daemon,
       daemonApp,

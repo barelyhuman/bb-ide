@@ -5,11 +5,13 @@ import {
 } from "@bb/db";
 import type {
   PromptInput,
+  TurnRequestEventData,
   ThreadEventType,
-  ThreadExecutionOptions,
+  ResolvedThreadExecutionOptions,
   ThreadTurnInitiator,
 } from "@bb/domain";
 import { turnRequestEventDataSchema } from "@bb/domain";
+import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 
 export interface AppendThreadEventArgs {
@@ -23,13 +25,20 @@ export interface AppendThreadEventArgs {
 
 export interface ClientTurnEventArgs {
   environmentId: string | null;
-  execution: ThreadExecutionOptions;
+  execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
-  input: PromptInput[];
+  input?: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
   source: "spawn" | "tell";
   threadId: string;
   type: "client/thread/start" | "client/turn/requested" | "client/turn/start";
+}
+
+export interface StoredTurnRequestEventRow {
+  data: string;
+  sequence: number;
+  threadId: string;
+  type: string;
 }
 
 export function appendThreadEvent(
@@ -83,7 +92,7 @@ export function appendClientTurnEvent(
       direction: "outbound",
       source: args.source,
       initiator: args.initiator,
-      input: args.input,
+      ...(args.input ? { input: args.input } : {}),
       request: {
         method: args.requestMethod,
         params: {},
@@ -91,6 +100,32 @@ export function appendClientTurnEvent(
       execution: args.execution,
     },
   });
+}
+
+export function parseStoredTurnRequestEvent(
+  row: StoredTurnRequestEventRow,
+): TurnRequestEventData {
+  let eventData: unknown;
+  try {
+    eventData = JSON.parse(row.data);
+  } catch {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is not valid JSON`,
+    );
+  }
+
+  const parsed = turnRequestEventDataSchema.safeParse(eventData);
+  if (!parsed.success) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+    );
+  }
+
+  return parsed.data;
 }
 
 export function appendProvisioningEvent(
@@ -209,9 +244,14 @@ export function getLastProviderThreadId(
 export function getLastExecutionOptions(
   deps: Pick<AppDeps, "db">,
   threadId: string,
-): ThreadExecutionOptions | null {
+): ResolvedThreadExecutionOptions | null {
   const row = deps.db
-    .select({ data: events.data })
+    .select({
+      data: events.data,
+      sequence: events.sequence,
+      threadId: events.threadId,
+      type: events.type,
+    })
     .from(events)
     .where(
       sql`${events.threadId} = ${threadId}
@@ -221,21 +261,12 @@ export function getLastExecutionOptions(
     .limit(1)
     .get();
 
-  if (!row) {
-    return null;
-  }
-
-  let eventData: unknown;
-  try {
-    eventData = JSON.parse(row.data);
-  } catch {
-    return null;
-  }
-
-  const parsed = turnRequestEventDataSchema.safeParse(eventData);
-  if (!parsed.success) {
-    return null;
-  }
-
-  return parsed.data.execution;
+  return row
+    ? parseStoredTurnRequestEvent({
+        data: row.data,
+        sequence: row.sequence,
+        threadId: row.threadId,
+        type: row.type,
+      }).execution
+    : null;
 }

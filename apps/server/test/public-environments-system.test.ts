@@ -20,6 +20,45 @@ describe("public environment and system routes", () => {
     vi.unstubAllGlobals();
   });
 
+  it("rejects status and diff requests without an explicit merge-base branch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-merge-base-required",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/environment-merge-base-required/worktree",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/merge-base",
+      });
+
+      const statusResponse = await harness.app.request(
+        `/api/v1/environments/${environment.id}/status`,
+      );
+      expect(statusResponse.status).toBe(400);
+      await expect(readJson(statusResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "A merge base branch is required",
+      });
+
+      const diffResponse = await harness.app.request(
+        `/api/v1/environments/${environment.id}/diff?selection=combined`,
+      );
+      expect(diffResponse.status).toBe(400);
+      await expect(readJson(diffResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "A merge base branch is required",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns environment details and queues status, diff, and branch queries", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -86,7 +125,7 @@ describe("public environment and system routes", () => {
       });
 
       const diffPromise = harness.app.request(
-        `/api/v1/environments/${environment.id}/diff?selection=combined`,
+        `/api/v1/environments/${environment.id}/diff?selection=combined&mergeBaseBranch=main`,
       );
       const diffCommand = await waitForQueuedCommand(
         harness,
@@ -96,6 +135,7 @@ describe("public environment and system routes", () => {
       );
       expect(diffCommand.command).toMatchObject({
         workspacePath: "/tmp/environment-details/worktree",
+        mergeBaseBranch: "main",
         selection: { type: "combined" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
@@ -176,6 +216,7 @@ describe("public environment and system routes", () => {
             threadId: thread.id,
             options: {
               message: "Checkpoint changes",
+              autoArchiveOnSuccess: false,
             },
           }),
         },
@@ -334,7 +375,8 @@ describe("public environment and system routes", () => {
             action: "squash_merge",
             threadId: thread.id,
             options: {
-              squashMessage: "Squash merge from tests",
+              mergeBaseBranch: "main",
+              autoArchiveOnSuccess: false,
             },
           }),
         },
@@ -349,12 +391,10 @@ describe("public environment and system routes", () => {
       expect(queued.command).toMatchObject({
         workspacePath: "/tmp/test-environment",
         targetBranch: "main",
-        commitMessage: "Squash merge from tests",
       });
       await reportQueuedCommandSuccess(harness, queued, {
         merged: true,
         commitSha: "merge123",
-        message: "Merge complete",
       });
 
       const response = await responsePromise;
@@ -462,6 +502,21 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid system query params with a 400", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request(
+        "/api/v1/system/models?providerId=",
+      );
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
     } finally {
       await harness.cleanup();
     }

@@ -105,6 +105,7 @@ export function ProjectMainView() {
       workspace: { type: "unmanaged", path: null },
     };
   }, [environmentSelectionValue, localHostId, projectId]);
+  const selectedThreadModel = activeModel?.model ?? selectedModel;
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
     navigate(`/projects/${nextProjectId}`);
@@ -162,7 +163,15 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    if (submittedInput.length === 0 || createThread.isPending || !selectedEnvironment || !selectedProviderId) return;
+    if (
+      submittedInput.length === 0 ||
+      createThread.isPending ||
+      !selectedEnvironment ||
+      !selectedProviderId ||
+      !selectedThreadModel
+    ) {
+      return;
+    }
 
     // Match thread follow-up behavior: clear immediately, then restore only if the
     // request fails and the user has not started a new draft in the meantime.
@@ -171,10 +180,11 @@ export function ProjectMainView() {
 
     try {
       await createThread.mutateAsync({
+        type: "standard",
         input: submittedInput,
         projectId,
         providerId: selectedProviderId,
-        model: activeModel?.model,
+        model: selectedThreadModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
         sandboxMode,
@@ -186,7 +196,12 @@ export function ProjectMainView() {
     }
   };
 
-  const isSubmitDisabled = createThread.isPending || promptInput.length === 0 || !selectedEnvironment || !selectedProviderId;
+  const isSubmitDisabled =
+    createThread.isPending ||
+    promptInput.length === 0 ||
+    !selectedEnvironment ||
+    !selectedProviderId ||
+    !selectedThreadModel;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">

@@ -7,10 +7,13 @@ import {
   queueCommand,
 } from "@bb/db";
 import type { ProjectSource } from "@bb/domain";
-import type { CreateThreadRequest } from "@bb/server-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import {
+  hasThreadStartInput,
+  type ThreadCreateServiceRequest,
+} from "./thread-create-request.js";
 import { deriveTitleFallback } from "./title-generation.js";
 
 export interface ResolvedProjectSource extends ProjectSource {
@@ -33,10 +36,12 @@ export function buildManagedBranchNameFromSeed(
 }
 
 export function buildManagedBranchName(
-  request: CreateThreadRequest,
+  request: ThreadCreateServiceRequest,
   threadId: string,
 ): string {
-  const seed = request.title ?? deriveTitleFallback(request.input) ?? threadId;
+  const seed = request.title
+    ?? deriveTitleFallback(hasThreadStartInput(request) ? request.input : undefined)
+    ?? threadId;
   return buildManagedBranchNameFromSeed(seed, threadId);
 }
 
@@ -88,10 +93,8 @@ export function queueEnvironmentProvision(
     hostId: string;
     path?: string;
     projectId: string;
-    scriptName?: string;
     sourcePath?: string;
     targetPath?: string;
-    timeoutMs?: number;
     workspaceProvisionType: "managed-clone" | "managed-worktree" | "unmanaged";
   },
 ): void {
@@ -105,8 +108,6 @@ export function queueEnvironmentProvision(
     ...(args.sourcePath ? { sourcePath: args.sourcePath } : {}),
     ...(args.targetPath ? { targetPath: args.targetPath } : {}),
     ...(args.branchName ? { branchName: args.branchName } : {}),
-    ...(args.scriptName ? { scriptName: args.scriptName } : {}),
-    ...(args.timeoutMs ? { timeoutMs: args.timeoutMs } : {}),
   };
   queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
@@ -118,7 +119,7 @@ export function queueEnvironmentProvision(
 
 export function createThreadRecord(
   deps: Pick<AppDeps, "db" | "hub">,
-  request: CreateThreadRequest,
+  request: ThreadCreateServiceRequest,
   environmentId: string | null,
   mergeBaseBranch: string | null,
 ) {
@@ -128,7 +129,9 @@ export function createThreadRecord(
     providerId: request.providerId,
     type: request.type,
     title: request.title ?? null,
-    titleFallback: deriveTitleFallback(request.input),
+    titleFallback: deriveTitleFallback(
+      hasThreadStartInput(request) ? request.input : undefined,
+    ),
     parentThreadId: request.parentThreadId ?? null,
     status: "created",
     mergeBaseBranch,

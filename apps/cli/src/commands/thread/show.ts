@@ -4,6 +4,7 @@ import {
   type TimelineFormat,
 } from "@bb/core-ui";
 import {
+  type Environment,
   type Thread,
   type ThreadEventRow,
   type ThreadGitDiffResponse,
@@ -86,7 +87,7 @@ export function registerShowCommand(
     .option("--git-diff", "Include git diff in output")
     .option(
       "--diff-selection <type>",
-      "Diff selection type: combined or commit (used with --git-diff)",
+      "Diff selection type: combined (used with --git-diff)",
     )
     .option(
       "--diff-merge-base <branch>",
@@ -121,13 +122,40 @@ export function registerShowCommand(
         eventMode,
         includeLowSignal: Boolean(opts.includeLowSignal),
       });
+      let environment: Environment | null | undefined;
+      const getEnvironment = async () => {
+        if (!thread.environmentId) {
+          return null;
+        }
+        if (environment !== undefined) {
+          return environment;
+        }
+        environment = await unwrap<Environment>(
+          client.api.v1.environments[":id"].$get({
+            param: { id: thread.environmentId },
+          }),
+        );
+        return environment;
+      };
+      const requireMergeBaseBranch = async (override?: string) => {
+        const mergeBaseBranch =
+          override ??
+          thread.mergeBaseBranch ??
+          (await getEnvironment())?.defaultBranch ??
+          undefined;
+        if (!mergeBaseBranch) {
+          throw new Error("Thread environment does not have a merge base branch");
+        }
+        return mergeBaseBranch;
+      };
 
       let workStatus: WorkspaceStatus | null | undefined;
       if (opts.workStatus && thread.environmentId) {
+        const mergeBaseBranch = await requireMergeBaseBranch();
         const environmentStatus = await unwrap<EnvironmentStatusResponse>(
           client.api.v1.environments[":id"].status.$get({
             param: { id: thread.environmentId },
-            query: {},
+            query: { mergeBaseBranch },
           }),
         );
         workStatus = environmentStatus.workspace;
@@ -135,14 +163,18 @@ export function registerShowCommand(
 
       let gitDiff: ThreadGitDiffResponse | undefined;
       if (opts.gitDiff && thread.environmentId) {
+        const mergeBaseBranch = await requireMergeBaseBranch(opts.diffMergeBase);
+        if (opts.diffSelection !== undefined && opts.diffSelection !== "combined") {
+          throw new Error(
+            "Only --diff-selection combined is currently supported by bb thread show.",
+          );
+        }
         gitDiff = await unwrap<ThreadGitDiffResponse>(
           client.api.v1.environments[":id"].diff.$get({
             param: { id: thread.environmentId },
             query: {
-              ...(opts.diffSelection ? { selection: opts.diffSelection } : {}),
-              ...(opts.diffMergeBase
-                ? { mergeBaseBranch: opts.diffMergeBase }
-                : {}),
+              selection: "combined",
+              mergeBaseBranch,
             },
           }),
         );

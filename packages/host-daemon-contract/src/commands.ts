@@ -3,12 +3,14 @@ import {
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   promptInputSchema,
-  threadTypeSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
   workspaceProvisionTypeSchema,
   providerInfoSchema,
+  reasoningLevelSchema,
+  sandboxModeSchema,
+  serviceTierSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { z } from "zod";
@@ -41,7 +43,12 @@ export const HOST_DAEMON_COMMAND_TYPES = [
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
 
-export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema;
+export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.extend({
+  model: z.string().min(1),
+  serviceTier: serviceTierSchema,
+  reasoningLevel: reasoningLevelSchema,
+  sandboxMode: sandboxModeSchema,
+});
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;
@@ -54,14 +61,16 @@ const hostDaemonThreadTargetSchema = z.object({
 const hostDaemonThreadRuntimeContextSchema = z.object({
   workspacePath: z.string().min(1),
   projectId: z.string().min(1),
-  projectName: z.string().min(1),
-  projectRootPath: z.string().min(1),
   providerId: z.string().min(1),
-  threadType: threadTypeSchema,
-  providerThreadId: z.string().min(1).optional(),
-  options: hostDaemonExecutionOptionsSchema.optional(),
-  dynamicTools: z.array(dynamicToolSchema).optional(),
+  options: hostDaemonExecutionOptionsSchema,
+  instructions: z.string().min(1),
+  dynamicTools: z.array(dynamicToolSchema),
 });
+
+const hostDaemonExistingThreadRuntimeContextSchema =
+  hostDaemonThreadRuntimeContextSchema.extend({
+    providerThreadId: z.string().min(1),
+  });
 
 const hostDaemonEnvironmentTargetSchema = z.object({
   environmentId: z.string().min(1),
@@ -76,20 +85,20 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
   hostDaemonThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("thread.start"),
-  eventSequence: z.number().int().nonnegative().optional(),
-  input: z.array(promptInputSchema).min(1).optional(),
+  eventSequence: z.number().int().nonnegative(),
+  input: z.array(promptInputSchema).min(1),
 });
 
 /** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */
 export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonThreadRuntimeContextSchema,
+  hostDaemonExistingThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("thread.resume"),
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
 export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonThreadRuntimeContextSchema,
+  hostDaemonExistingThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("turn.run"),
   eventSequence: z.number().int().nonnegative(),
@@ -97,7 +106,7 @@ export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
 });
 
 export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonThreadRuntimeContextSchema,
+  hostDaemonExistingThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("turn.steer"),
   eventSequence: z.number().int().nonnegative(),
@@ -121,16 +130,11 @@ export const providerListCommandSchema = z.object({
 export const providerListModelsCommandSchema = z.object({
   type: z.literal("provider.list_models"),
   providerId: z.string().min(1),
-  environmentId: z.string().min(1).optional(),
 });
 
 const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.provision"),
   projectId: z.string().min(1),
-  /** Setup script filename */
-  scriptName: z.string().min(1).optional(),
-  /** Setup script timeout in ms */
-  timeoutMs: z.number().int().positive().optional(),
 });
 
 const unmanagedEnvironmentProvisionCommandSchema =
@@ -197,25 +201,23 @@ export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema
 
 export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.status"),
-  mergeBaseBranch: z.string().min(1).optional(),
+  mergeBaseBranch: z.string().min(1),
 });
 
 export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diff"),
-  selection: threadGitDiffSelectionSchema.optional(),
-  mergeBaseBranch: z.string().min(1).optional(),
+  selection: threadGitDiffSelectionSchema,
+  mergeBaseBranch: z.string().min(1),
 });
 
 export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.commit"),
   message: z.string().min(1),
-  includeUnstaged: z.boolean().optional(),
 });
 
 export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.squash_merge"),
   targetBranch: z.string().min(1),
-  commitMessage: z.string().min(1),
 });
 
 /** Discard all uncommitted changes. Internal use only — not exposed via public API. */
@@ -227,7 +229,6 @@ export const workspaceResetCommandSchema = hostDaemonWorkspaceTargetSchema.exten
 export const workspaceCheckpointCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.checkpoint"),
   commitMessage: z.string().min(1),
-  remoteName: z.string().min(1).optional(),
 });
 
 /** Switch the project's primary checkout to the environment's branch so the user can work with the changes directly. */
@@ -293,7 +294,7 @@ export const hostDaemonCommandResultSchemaByType = {
     providerThreadId: z.string().min(1),
   }),
   "thread.resume": z.object({
-    providerThreadId: z.string().min(1).optional(),
+    providerThreadId: z.string().min(1),
   }),
   "turn.run": z.object({}),
   "turn.steer": z.object({}),
@@ -317,18 +318,17 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.commit": z.object({
     commitSha: z.string().min(1),
-    commitSubject: z.string().min(1).optional(),
+    commitSubject: z.string().min(1),
   }),
   "workspace.squash_merge": z.object({
     merged: z.boolean(),
-    commitSha: z.string().min(1).optional(),
-    message: z.string().optional(),
+    commitSha: z.string().min(1),
   }),
   "workspace.reset": z.object({}),
   "workspace.checkpoint": z.object({
     commitSha: z.string().min(1),
     remoteName: z.string().min(1),
-    branchName: z.string().min(1).optional(),
+    branchName: z.string().min(1),
   }),
   "workspace.promote": z.object({
     ok: z.boolean(),

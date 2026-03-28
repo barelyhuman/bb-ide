@@ -29,8 +29,9 @@ export function createFakeWorkspace(pathname: string) {
     async currentBranch() {
       return "main";
     },
-    async getStatus() {
+    async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
+      const mergeBaseBranch = options?.mergeBaseBranch ?? "main";
       return {
         state: "clean" as const,
         changedFiles: 0,
@@ -45,19 +46,20 @@ export function createFakeWorkspace(pathname: string) {
         behindCount: 0,
         currentBranch: "main",
         defaultBranch: "main",
-        mergeBaseBranch: "main",
+        mergeBaseBranch,
         mergeBaseBranches: [],
-        baseRef: "main",
+        baseRef: mergeBaseBranch,
         files: [],
       };
     },
-    async getDiff(options?: { selection?: unknown }) {
+    async getDiff(options?: { mergeBaseBranch?: string; selection?: unknown }) {
       state.lastDiffSelection = options?.selection;
+      const mergeBaseBranch = options?.mergeBaseBranch ?? "main";
       return {
         mode: "combined" as const,
         currentBranch: "main",
-        mergeBaseBranch: "main",
-        mergeBaseRef: "main",
+        mergeBaseBranch,
+        mergeBaseRef: mergeBaseBranch,
         commits: [],
         selection: { type: "combined" as const },
         diff: "",
@@ -78,12 +80,12 @@ export function createFakeWorkspace(pathname: string) {
       state.resetCount += 1;
     },
     async fetch() {},
-    async checkpoint(options: { commitMessage: string; remoteName?: string }) {
+    async checkpoint(options: { commitMessage: string }) {
       state.lastCheckpointMessage = options.commitMessage;
       return {
         commitSha: "checkpoint-1",
         branchName: "main",
-        remoteName: options.remoteName ?? "origin",
+        remoteName: "origin",
       };
     },
     async squashMergeInto(options: { targetBranch: string }) {
@@ -123,6 +125,8 @@ export function createFakeRuntime() {
     ranTurnOptions: undefined as ThreadExecutionOptions | undefined,
     ranTurnInstructions: undefined as string | undefined,
     steeredTurnId: undefined as string | undefined,
+    steeredTurnOptions: undefined as ThreadExecutionOptions | undefined,
+    steeredTurnInstructions: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
     renamedTitle: undefined as string | undefined,
     runningProviders: [] as string[],
@@ -154,7 +158,7 @@ export function createFakeRuntime() {
       state.resumedOptions = args.options;
       state.resumedInstructions = args.instructions;
       state.resumedProviderThreadId = args.providerThreadId;
-      return { providerThreadId: args.providerThreadId };
+      return { providerThreadId: args.providerThreadId ?? `provider-${args.threadId}` };
     },
     async runTurn(args: {
       input: Array<{ text?: string; type: string }>;
@@ -165,8 +169,14 @@ export function createFakeRuntime() {
       state.ranTurnOptions = args.options;
       state.ranTurnInstructions = args.instructions;
     },
-    async steerTurn(args: { expectedTurnId: string }) {
+    async steerTurn(args: {
+      expectedTurnId: string;
+      instructions?: string;
+      options?: ThreadExecutionOptions;
+    }) {
       state.steeredTurnId = args.expectedTurnId;
+      state.steeredTurnOptions = args.options;
+      state.steeredTurnInstructions = args.instructions;
     },
     async stopThread(args: { threadId: string }) {
       state.stoppedThreadId = args.threadId;

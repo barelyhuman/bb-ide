@@ -21,14 +21,14 @@ import {
 } from "./helpers.js";
 
 interface ThreadSpawnCommandOptions {
-  prompt?: string;
+  prompt: string;
   json?: boolean;
   project?: string;
   environment?: string;
   newEnvironment?: string;
   parentThread?: string;
   provider: string;
-  model?: string;
+  model: string;
   reasoningLevel?: string;
   title?: string;
   serviceTier?: string;
@@ -100,7 +100,7 @@ export function registerSpawnCommand(
   parent
     .command("spawn")
     .description("Spawn a new thread for a project")
-    .option("--prompt <prompt>", "Initial prompt for the thread")
+    .requiredOption("--prompt <prompt>", "Initial prompt for the thread")
     .option("--json", "Print machine-readable JSON output")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option(
@@ -119,7 +119,7 @@ export function registerSpawnCommand(
       "--provider <id>",
       "Provider ID for the thread (e.g. codex, claude-code, pi)",
     )
-    .option("--model <model>", "Model ID for the thread")
+    .requiredOption("--model <model>", "Model ID for the thread")
     .option(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
@@ -164,10 +164,9 @@ export function registerSpawnCommand(
             json: {
               projectId,
               providerId: opts.provider,
-              input: opts.prompt
-                ? [{ type: "text", text: opts.prompt }]
-                : undefined,
-              ...(opts.model ? { model: opts.model } : {}),
+              type: "standard",
+              model: opts.model,
+              input: [{ type: "text", text: opts.prompt }],
               ...(reasoningLevel ? { reasoningLevel } : {}),
               ...(opts.title ? { title: opts.title } : {}),
               ...(serviceTier ? { serviceTier } : {}),

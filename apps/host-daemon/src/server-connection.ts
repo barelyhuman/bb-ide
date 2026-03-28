@@ -110,7 +110,7 @@ export class ServerConnection {
       hostType: this.options.hostType,
       protocolVersion:
         this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
-      activeThreads: this.options.getActiveThreads?.(),
+      activeThreads: this.options.getActiveThreads?.() ?? [],
     });
     this.session = session;
     this.options.setSession?.(session);
@@ -238,7 +238,7 @@ export class ServerConnection {
 
       const payload = hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
-        ...(this.options.getHeartbeatPayload?.() ?? { bufferDepth: 0 }),
+        ...(this.options.getHeartbeatPayload?.() ?? { bufferDepth: 0, lastCommandCursor: null }),
       });
       this.websocket.send(JSON.stringify(payload));
     }, this.session.heartbeatIntervalMs);

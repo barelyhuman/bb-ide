@@ -230,13 +230,32 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["manager", "hire", "project-123"], (program) =>
+    await runCommand(
+      [
+        "manager",
+        "hire",
+        "project-123",
+        "--name",
+        "Manager",
+        "--provider",
+        "claude-code",
+        "--model",
+        "claude-opus-4-6",
+        "--reasoning-level",
+        "high",
+      ],
+      (program) =>
       registerManagerCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       param: { id: "project-123" },
-      json: {},
+      json: {
+        model: "claude-opus-4-6",
+        name: "Manager",
+        providerId: "claude-code",
+        reasoningLevel: "high",
+      },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-1");
   });
@@ -423,7 +442,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -431,6 +450,8 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
+        type: "standard",
+        model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
@@ -573,7 +594,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--json", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--json", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -598,7 +619,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await expect(
-      runCommand(["thread", "spawn", "--provider", "codex"], (program) =>
+      runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
         registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -632,7 +653,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--parent-thread", "thread-parent", "--provider", "codex"],
+      ["thread", "spawn", "--parent-thread", "thread-parent", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -640,7 +661,9 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        input: undefined,
+        type: "standard",
+        model: "gpt-5",
+        input: [{ type: "text", text: "hello" }],
         parentThreadId: "thread-parent",
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
@@ -670,7 +693,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--environment", "env-worktree-001", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--environment", "env-worktree-001", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -678,7 +701,9 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        input: undefined,
+        type: "standard",
+        model: "gpt-5",
+        input: [{ type: "text", text: "hello" }],
         environment: { type: "reuse", environmentId: "env-worktree-001" },
       },
     });
@@ -708,7 +733,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--new-environment", "worktree", "--provider", "codex"],
+      ["thread", "spawn", "--new-environment", "worktree", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -716,7 +741,9 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        input: undefined,
+        type: "standard",
+        model: "gpt-5",
+        input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "managed-worktree" } },
       },
     });
@@ -744,7 +771,7 @@ describe("CLI command output contracts", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
-      json: {},
+      json: { force: false },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived",
@@ -805,6 +832,10 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.error))).toContain(
       "Error: Failed to archive thread thread-archive-1: HTTP 404: missing",
     );
+    expect(archivePost).toHaveBeenCalledWith({
+      param: { id: "thread-archive-1" },
+      json: { force: false },
+    });
   });
 
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {

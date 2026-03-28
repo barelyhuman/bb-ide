@@ -33,6 +33,13 @@ async function waitForOpen(socket: WebSocket): Promise<void> {
   });
 }
 
+async function waitForClose(socket: WebSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    socket.once("close", () => resolve());
+    socket.once("error", reject);
+  });
+}
+
 async function waitForSessionStatus(
   args: {
     server: Awaited<ReturnType<typeof startTestServer>>;
@@ -212,7 +219,7 @@ describe("internal session correctness", () => {
       });
 
       const response = await harness.app.request(
-        `/internal/session/commands?sessionId=${session.id}&afterCursor=0`,
+        `/internal/session/commands?sessionId=${session.id}&afterCursor=0&limit=100&waitMs=0`,
         {
           headers: {
             authorization: `Bearer ${harness.config.authToken}`,
@@ -243,6 +250,7 @@ describe("internal session correctness", () => {
           hostName: "Heartbeat Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);
@@ -263,6 +271,7 @@ describe("internal session correctness", () => {
         JSON.stringify({
           type: "heartbeat",
           bufferDepth: 0,
+          lastCommandCursor: 0,
         }),
       );
       await sleep(25);
@@ -273,7 +282,9 @@ describe("internal session correctness", () => {
         .where(eq(hostDaemonSessions.id, session.sessionId))
         .get()?.leaseExpiresAt;
       expect(updatedLease).toBeGreaterThan(initialLease ?? 0);
+      const closed = waitForClose(socket);
       socket.close();
+      await closed;
     } finally {
       await server.close();
     }
@@ -293,6 +304,7 @@ describe("internal session correctness", () => {
           hostName: "Disconnect Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);
@@ -329,6 +341,7 @@ describe("internal session correctness", () => {
           hostName: "Disconnect Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);

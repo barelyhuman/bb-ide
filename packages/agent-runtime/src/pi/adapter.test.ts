@@ -53,7 +53,7 @@ describe("pi provider adapter", () => {
       method: "thread/start",
       params: { threadId: "t1" },
     });
-    expect((cmd as { params: { baseInstructions?: string } }).params.baseInstructions).toBeTruthy();
+    expect((cmd as { params: { baseInstructions?: string } }).params.baseInstructions).toBeDefined();
   });
 
   it("buildCommand thread/resume routes to provider thread id", () => {

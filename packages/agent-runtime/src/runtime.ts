@@ -1,6 +1,10 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ThreadEvent, ThreadExecutionOptions } from "@bb/domain";
+import type {
+  DynamicTool,
+  ThreadEvent,
+  ThreadExecutionOptions,
+} from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
@@ -88,6 +92,15 @@ interface ProviderProcess {
   pendingIdentity: string[];
 }
 
+interface ThreadRuntimeConfig {
+  dynamicTools?: DynamicTool[];
+  instructions?: string;
+  options?: ThreadExecutionOptions;
+  projectId?: string;
+  providerId: string;
+  resumePath?: string;
+}
+
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextRequestId = 1;
   let nextCaptureId = 1;
@@ -95,6 +108,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const providerStarting = new Map<string, Promise<void>>();
   const threadToProvider = new Map<string, string>();
   const threadToProviderThread = new Map<string, string>();
+  const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
   let shuttingDown = false;
 
   function createCaptureId(): string {
@@ -134,6 +148,90 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       throw new Error(`No provider associated with thread "${threadId}"`);
     }
     return providerId;
+  }
+
+  function sameExecutionSettings(
+    left: ThreadExecutionOptions | undefined,
+    right: ThreadExecutionOptions | undefined,
+  ): boolean {
+    return (
+      left?.model === right?.model &&
+      left?.serviceTier === right?.serviceTier &&
+      left?.reasoningLevel === right?.reasoningLevel &&
+      left?.sandboxMode === right?.sandboxMode
+    );
+  }
+
+  function setThreadRuntimeConfig(
+    threadId: string,
+    config: ThreadRuntimeConfig,
+  ): void {
+    threadRuntimeConfigs.set(threadId, config);
+  }
+
+  function clearThreadRuntimeConfig(threadId: string): void {
+    threadRuntimeConfigs.delete(threadId);
+  }
+
+  async function reconfigureThreadIfNeeded(args: {
+    instructions: string | undefined;
+    options: ThreadExecutionOptions | undefined;
+    threadId: string;
+  }): Promise<void> {
+    const currentConfig = threadRuntimeConfigs.get(args.threadId);
+    if (!currentConfig) {
+      return;
+    }
+
+    const nextOptions = args.options ?? currentConfig.options;
+    const nextInstructions = args.instructions ?? currentConfig.instructions;
+
+    if (
+      sameExecutionSettings(currentConfig.options, nextOptions) &&
+      currentConfig.instructions === nextInstructions
+    ) {
+      return;
+    }
+
+    const proc = requireProviderProcess(currentConfig.providerId);
+    const envVars: Record<string, string> = {
+      BB_THREAD_ID: args.threadId,
+      ...(currentConfig.projectId
+        ? { BB_PROJECT_ID: currentConfig.projectId }
+        : {}),
+    };
+
+    const command = proc.adapter.buildCommand({
+      type: "thread/resume",
+      threadId: args.threadId,
+      providerThreadId: threadToProviderThread.get(args.threadId),
+      options: toAdapterOptions(nextOptions, nextInstructions, envVars),
+      resumePath: currentConfig.resumePath,
+      dynamicTools: currentConfig.dynamicTools,
+    });
+
+    if (command) {
+      const result = await sendRequest(
+        proc.child,
+        command,
+        proc.pending,
+        () => nextRequestId++,
+      );
+      const response = result as
+        | { providerThreadId?: string; threadId?: string }
+        | undefined;
+      const providerThreadId =
+        response?.providerThreadId ?? response?.threadId;
+      if (providerThreadId) {
+        threadToProviderThread.set(args.threadId, providerThreadId);
+      }
+    }
+
+    setThreadRuntimeConfig(args.threadId, {
+      ...currentConfig,
+      instructions: nextInstructions,
+      options: nextOptions,
+    });
   }
 
   function handleStdoutLine(
@@ -418,6 +516,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       for (const tid of threadIds) {
         threadToProvider.delete(tid);
         threadToProviderThread.delete(tid);
+        clearThreadRuntimeConfig(tid);
       }
       proc.pendingIdentity = [];
       // Reject any pending requests
@@ -507,6 +606,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadToProvider.set(threadId, pid);
       proc.threadIds.add(threadId);
       proc.pendingIdentity.push(threadId);
+      setThreadRuntimeConfig(threadId, {
+        dynamicTools,
+        instructions,
+        options: execOpts,
+        projectId,
+        providerId: pid,
+      });
 
       const envVars: Record<string, string> = {
         BB_PROJECT_ID: projectId,
@@ -583,6 +689,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const proc = requireProviderProcess(pid);
       threadToProvider.set(threadId, pid);
       proc.threadIds.add(threadId);
+      setThreadRuntimeConfig(threadId, {
+        dynamicTools,
+        instructions,
+        options: execOpts,
+        projectId,
+        providerId: pid,
+        resumePath,
+      });
 
       if (providerThreadId) {
         threadToProviderThread.set(threadId, providerThreadId);
@@ -605,14 +719,26 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         dynamicTools,
       });
 
-      if (!cmd) return { providerThreadId: undefined };
+      if (!cmd) {
+        const currentProviderThreadId =
+          providerThreadId ?? threadToProviderThread.get(threadId);
+        if (!currentProviderThreadId) {
+          throw new Error(`No provider thread id available for ${threadId}`);
+        }
+        return { providerThreadId: currentProviderThreadId };
+      }
 
       const result = await sendRequest(proc.child, cmd, proc.pending, () => nextRequestId++);
       const res = result as { threadId?: string; providerThreadId?: string } | undefined;
-      const resolvedId = res?.providerThreadId ?? res?.threadId;
-      if (resolvedId) {
-        threadToProviderThread.set(threadId, resolvedId);
+      const resolvedId =
+        res?.providerThreadId ??
+        res?.threadId ??
+        providerThreadId ??
+        threadToProviderThread.get(threadId);
+      if (!resolvedId) {
+        throw new Error(`Provider resume did not return a thread id for ${threadId}`);
       }
+      threadToProviderThread.set(threadId, resolvedId);
 
       return { providerThreadId: resolvedId };
     },
@@ -620,6 +746,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async runTurn({ threadId, input, options: execOpts, instructions }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      await reconfigureThreadIfNeeded({
+        threadId,
+        options: execOpts,
+        instructions,
+      });
 
       const cmd = proc.adapter.buildCommand({
         type: "turn/start",
@@ -633,9 +764,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await sendRequest(proc.child, cmd, proc.pending, () => nextRequestId++);
     },
 
-    async steerTurn({ threadId, expectedTurnId, input }) {
+    async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      await reconfigureThreadIfNeeded({
+        threadId,
+        options: execOpts,
+        instructions,
+      });
 
       const cmd = proc.adapter.buildCommand({
         type: "turn/steer",
@@ -643,6 +779,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         providerThreadId: threadToProviderThread.get(threadId),
         expectedTurnId,
         input,
+        options: toAdapterOptions(execOpts, instructions, {}),
       });
 
       if (!cmd) return;
@@ -718,6 +855,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         for (const tid of proc.threadIds) {
           threadToProvider.delete(tid);
           threadToProviderThread.delete(tid);
+          clearThreadRuntimeConfig(tid);
         }
         proc.pendingIdentity = [];
         processes.delete(providerId);

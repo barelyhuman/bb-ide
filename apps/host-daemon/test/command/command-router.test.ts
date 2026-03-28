@@ -66,7 +66,7 @@ function createFakeRuntime() {
       providerThreadId: `provider-${threadId}`,
     })),
     resumeThread: vi.fn(async ({ providerThreadId }: { providerThreadId?: string }) => ({
-      providerThreadId,
+      providerThreadId: providerThreadId ?? "provider-resumed",
     })),
     runTurn: vi.fn(async (_args: { threadId: string }) => undefined),
     steerTurn: vi.fn(async (_args: unknown) => undefined),
@@ -80,6 +80,28 @@ function createFakeRuntime() {
 function createLogger() {
   return {
     warn: vi.fn(),
+  };
+}
+
+function createStandardRuntimeCommandContext(args: {
+  providerThreadId?: string;
+  workspacePath: string;
+}) {
+  return {
+    workspacePath: args.workspacePath,
+    projectId: "project-1",
+    providerId: "fake",
+    ...(args.providerThreadId
+      ? { providerThreadId: args.providerThreadId }
+      : {}),
+    options: {
+      model: "gpt-5",
+      serviceTier: "flex" as const,
+      reasoningLevel: "medium" as const,
+      sandboxMode: "danger-full-access" as const,
+    },
+    instructions: "Be a helpful coding agent.",
+    dynamicTools: [],
   };
 }
 
@@ -164,8 +186,8 @@ describe("CommandRouter", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-1", "thread-a");
-    manager.markThreadActive("env-1", "thread-b");
+    manager.markThreadActive("env-1", "thread-a", "provider-a");
+    manager.markThreadActive("env-1", "thread-b", "provider-b");
 
     const router = new CommandRouter({
       runtimeManager: manager,
@@ -179,13 +201,10 @@ describe("CommandRouter", () => {
           type: "turn.run",
           environmentId: "env-1",
           threadId: "thread-a",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
-          providerThreadId: "provider-a",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+            providerThreadId: "provider-a",
+          }),
           eventSequence: 1,
           input: [{ type: "text", text: "A" }],
         },
@@ -197,13 +216,10 @@ describe("CommandRouter", () => {
           type: "turn.run",
           environmentId: "env-1",
           threadId: "thread-b",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
-          providerThreadId: "provider-b",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+            providerThreadId: "provider-b",
+          }),
           eventSequence: 2,
           input: [{ type: "text", text: "B" }],
         },
@@ -251,12 +267,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-1",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 5,
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
       {
@@ -266,12 +281,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-2",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 6,
+          input: [{ type: "text", text: "start thread 2" }],
         },
       },
       {
@@ -281,12 +295,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-3",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 7,
+          input: [{ type: "text", text: "start thread 3" }],
         },
       },
     ]);
@@ -342,12 +355,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-1",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 1,
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
       {
@@ -357,12 +369,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-2",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 2,
+          input: [{ type: "text", text: "start thread 2" }],
         },
       },
     ]);
@@ -442,12 +453,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-1",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 1,
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
       {
@@ -457,12 +467,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-3",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 3,
+          input: [{ type: "text", text: "start thread 3" }],
         },
       },
     ]);
@@ -510,12 +519,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-1",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 1,
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
     ]);
@@ -530,12 +538,11 @@ describe("CommandRouter", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-2",
-          workspacePath: "/tmp/env-1",
-          projectId: "project-1",
-          projectName: "Project 1",
-          projectRootPath: "/tmp/project-1",
-          providerId: "fake",
-          threadType: "standard",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          eventSequence: 2,
+          input: [{ type: "text", text: "start thread 2" }],
         },
       },
     ]);

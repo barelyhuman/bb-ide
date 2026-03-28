@@ -9,26 +9,25 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "./session-state.js";
 
-function parseOptionalInteger(value: string | undefined, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
+function parseInteger(value: string): number {
   const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Expected integer string, received ${value}`);
+  }
+  return parsed;
 }
 
 export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
   const { get } = typedRoutes<HostDaemonInternalSchema>(app);
 
-  get("/session/commands", async (context) => {
-    const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
+  get("/session/commands", hostDaemonCommandsQuerySchema, async (context, query) => {
     const session = requireActiveSession(deps.db, query.sessionId);
-    const waitMs = parseOptionalInteger(query.waitMs, 0);
+    const waitMs = parseInteger(query.waitMs);
     const fetchPending = () =>
       fetchCommands(deps.db, deps.hub, {
         hostId: session.hostId,
-        afterCursor: parseOptionalInteger(query.afterCursor, 0),
-        limit: parseOptionalInteger(query.limit, 100),
+        afterCursor: parseInteger(query.afterCursor),
+        limit: parseInteger(query.limit),
       });
 
     let commands = fetchPending();

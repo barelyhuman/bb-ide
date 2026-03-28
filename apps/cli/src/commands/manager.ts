@@ -15,10 +15,10 @@ import {
 interface ManagerHireCommandOptions {
   json?: boolean;
   project?: string;
-  title?: string;
-  provider?: string;
-  model?: string;
-  reasoningLevel?: string;
+  name?: string;
+  provider: string;
+  model: string;
+  reasoningLevel: string;
 }
 
 interface ManagerListCommandOptions {
@@ -42,10 +42,10 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .command("hire [projectId]")
     .description("Hire a new manager for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .option("--title <title>", "Manager name")
-    .option("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
-    .option("--model <model>", "Model ID for the manager")
-    .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
+    .option("--name <name>", "Manager name")
+    .requiredOption("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
+    .requiredOption("--model <model>", "Model ID for the manager")
+    .requiredOption("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
       projectIdArg: string | undefined,
@@ -56,14 +56,17 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       const projectId = resolvedProject.id;
       printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
       const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
+      if (!reasoningLevel) {
+        throw new Error("Manager reasoning level is required");
+      }
       const thread = await unwrap<Thread>(
         client.api.v1.projects[":id"].managers.$post({
           param: { id: projectId },
           json: {
-            ...(opts.title ? { title: opts.title } : {}),
-            ...(opts.provider ? { providerId: opts.provider } : {}),
-            ...(opts.model ? { model: opts.model } : {}),
-            ...(reasoningLevel ? { reasoningLevel } : {}),
+            ...(opts.name ? { name: opts.name } : {}),
+            providerId: opts.provider,
+            model: opts.model,
+            reasoningLevel,
           },
         }),
       );

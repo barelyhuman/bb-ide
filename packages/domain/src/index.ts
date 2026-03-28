@@ -5,10 +5,12 @@ export {
   promptInputSchema,
   threadExecutionSourceSchema,
   threadExecutionOptionsSchema,
+  resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 export type {
   PromptInput,
   ReasoningLevel,
+  ResolvedThreadExecutionOptions,
   SandboxMode,
   ServiceTier,
   ThreadExecutionOptions,
@@ -22,7 +24,6 @@ export {
   messageUserToolArgumentsSchema,
   providerCapabilitiesSchema,
   providerInfoSchema,
-  spawnThreadToolArgumentsSchema,
   toolCallOutputItemSchema,
   toolCallRequestSchema,
   toolCallResponseSchema,
@@ -34,7 +35,6 @@ export type {
   ModelReasoningEffort,
   ProviderCapabilities,
   ProviderInfo,
-  SpawnThreadToolArguments,
   ToolCallOutputItem,
   ToolCallRequest,
   ToolCallResponse,

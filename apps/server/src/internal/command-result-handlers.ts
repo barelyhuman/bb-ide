@@ -9,7 +9,6 @@ import {
   updateEnvironment,
   updateThread,
 } from "@bb/db";
-import { turnRequestEventDataSchema } from "@bb/domain";
 import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
@@ -17,6 +16,7 @@ import {
 import type { AppDeps } from "../types.js";
 import {
   appendProvisioningEvent,
+  parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
@@ -158,6 +158,7 @@ async function handleProvisionCommandResult(
         .select({
           data: events.data,
           sequence: events.sequence,
+          threadId: events.threadId,
           type: events.type,
         })
         .from(events)
@@ -177,14 +178,13 @@ async function handleProvisionCommandResult(
         continue;
       }
 
-      const parsedStartEvent = turnRequestEventDataSchema.safeParse(
-        JSON.parse(startEvent.data),
-      );
-      if (
-        !parsedStartEvent.success ||
-        !parsedStartEvent.data.input ||
-        parsedStartEvent.data.input.length === 0
-      ) {
+      const parsedStartEvent = parseStoredTurnRequestEvent({
+        data: startEvent.data,
+        sequence: startEvent.sequence,
+        threadId: startEvent.threadId,
+        type: startEvent.type,
+      });
+      if (!parsedStartEvent.input || parsedStartEvent.input.length === 0) {
         continue;
       }
 
@@ -196,8 +196,8 @@ async function handleProvisionCommandResult(
           path: report.result.path,
         },
         eventSequence: startEvent.sequence,
-        input: parsedStartEvent.data.input,
-        execution: parsedStartEvent.data.execution,
+        input: parsedStartEvent.input,
+        execution: parsedStartEvent.execution,
         projectId: thread.projectId,
         providerId: thread.providerId,
       });

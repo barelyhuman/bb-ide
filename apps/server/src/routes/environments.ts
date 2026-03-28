@@ -1,6 +1,13 @@
 import { archiveThread, getDefaultProjectSource } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
-import { typedRoutes, environmentActionRequestSchema, type PublicApiSchema } from "@bb/server-contract";
+import {
+  environmentActionRequestSchema,
+  environmentDiffQuerySchema,
+  environmentStatusQuerySchema,
+  typedRoutes,
+  type EnvironmentDiffQuery,
+  type PublicApiSchema,
+} from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -13,17 +20,14 @@ import {
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 
-function resolveDiffSelection(query: Record<string, string | undefined>) {
-  if (query.selection === "commit" && query.commitSha) {
+function toWorkspaceDiffSelection(query: EnvironmentDiffQuery) {
+  if (query.selection === "commit") {
     return {
       type: "commit" as const,
       sha: query.commitSha,
     };
   }
-  if (query.selection === "combined") {
-    return { type: "combined" as const };
-  }
-  return undefined;
+  return { type: "combined" as const };
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
@@ -33,7 +37,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     context.json(requireEnvironment(deps.db, context.req.param("id"))),
   );
 
-  get("/environments/:id/status", async (context) => {
+  get("/environments/:id/status", environmentStatusQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -43,16 +47,14 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: environment.status,
         workspacePath: environment.path,
-        ...(context.req.query("mergeBaseBranch")
-          ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
-          : {}),
+        mergeBaseBranch: query.mergeBaseBranch,
       },
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
     return context.json({ workspace: result.workspaceStatus });
   });
 
-  get("/environments/:id/diff", async (context) => {
+  get("/environments/:id/diff", environmentDiffQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -62,10 +64,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: environment.status,
         workspacePath: environment.path,
-        ...(resolveDiffSelection(context.req.query()) ? { selection: resolveDiffSelection(context.req.query()) } : {}),
-        ...(context.req.query("mergeBaseBranch")
-          ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
-          : {}),
+        selection: toWorkspaceDiffSelection(query),
+        mergeBaseBranch: query.mergeBaseBranch,
       },
     });
     return context.json(
@@ -108,14 +108,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             environmentId: environment.id,
             environmentStatus: environment.status,
             workspacePath: environment.path,
-            message: payload.options?.message ?? "Checkpoint changes",
-            ...(payload.options?.includeUnstaged !== undefined
-              ? { includeUnstaged: payload.options.includeUnstaged }
-              : {}),
+            message: payload.options.message,
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);
-        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess);
+        const autoArchiveRequested = payload.options.autoArchiveOnSuccess;
         const archivedThread = autoArchiveRequested
           ? archiveThread(deps.db, deps.hub, actingThread.id)
           : null;
@@ -125,7 +122,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         return context.json({
           ok: true,
           action: "commit",
-          commitCreated: true,
           message: `Created commit ${result.commitSha}`,
           autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
@@ -133,9 +129,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "squash_merge": {
-        if (!actingThread.mergeBaseBranch) {
-          throw new ApiError(409, "invalid_request", "Environment has no merge base branch");
-        }
         const rawResult = await queueCommandAndWait(deps, {
           hostId: environment.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
@@ -144,15 +137,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             environmentId: environment.id,
             environmentStatus: environment.status,
             workspacePath: environment.path,
-            targetBranch: payload.options?.mergeBaseBranch ?? actingThread.mergeBaseBranch,
-            commitMessage:
-              payload.options?.squashMessage ??
-              payload.options?.commitMessage ??
-              "bb squash merge",
+            targetBranch: payload.options.mergeBaseBranch,
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);
-        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess);
+        const autoArchiveRequested = payload.options.autoArchiveOnSuccess;
         const archivedThread = autoArchiveRequested
           ? archiveThread(deps.db, deps.hub, actingThread.id)
           : null;
@@ -163,7 +152,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           ok: true,
           action: "squash_merge",
           merged: result.merged,
-          message: result.message ?? "Squash merge completed",
+          message: "Squash merge completed",
           autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
         });

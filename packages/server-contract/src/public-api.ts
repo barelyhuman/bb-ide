@@ -4,13 +4,12 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  ResolvedThreadExecutionOptions,
   Thread,
   ThreadEventRow,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ProjectSource,
   ThreadQueuedMessage,
-  ThreadType,
 } from "@bb/domain";
 import type {
   EmptyInput,
@@ -20,24 +19,39 @@ import type {
   PathThreadAndDraft,
 } from "./common.js";
 import type {
+  ArchiveThreadRequest,
   CreateDraftRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
   CreateThreadRequest,
+  EnvironmentDiffQuery,
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentStatusQuery,
   EnvironmentStatusResponse,
+  ProjectAttachmentContentQuery,
+  ProjectAttachmentUploadForm,
+  ProjectFilesQuery,
   ProjectFileSuggestion,
   ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
   SystemConfigResponse,
+  SystemModelsQuery,
   SystemProviderInfo,
+  SystemProvidersQuery,
+  SystemVoiceTranscriptionForm,
   SystemVoiceTranscriptionResponse,
+  ThreadEventsQuery,
+  ThreadListQuery,
+  ThreadTimelineQuery,
   ThreadTimelineResponse,
+  ThreadWorkspaceFileQuery,
+  ThreadWorkspaceFilesQuery,
+  TimelineToolDetailsQuery,
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
@@ -74,15 +88,12 @@ export type PublicApiSchema = {
      * Search files in the project. Used for file mentions in the prompt box.
      * Proxies to `workspace.list_files` on the project's default source host.
      */
-    $get: Endpoint<
-      PathProjectId & { query: { query?: string; limit?: string } },
-      ProjectFileSuggestion[]
-    >;
+    $get: Endpoint<PathProjectId & { query: ProjectFilesQuery }, ProjectFileSuggestion[]>;
   };
   "/projects/:id/attachments": {
     /** Upload a file attachment. Used to attach files to user messages. */
     $post: Endpoint<
-      PathProjectId & { form: Record<string, string | Blob> },
+      PathProjectId & { form: ProjectAttachmentUploadForm },
       UploadedPromptAttachment,
       201
     >;
@@ -90,7 +101,7 @@ export type PublicApiSchema = {
   "/projects/:id/attachments/content": {
     /** Serve an uploaded attachment's content. Used to render attachment previews. */
     $get: Endpoint<
-      PathProjectId & { query: { path: string } },
+      PathProjectId & { query: ProjectAttachmentContentQuery },
       string,
       200,
       "text"
@@ -124,22 +135,11 @@ export type PublicApiSchema = {
   };
   "/environments/:id/status": {
     /** Get workspace status (git state) for an environment. Proxies to `workspace.status`. */
-    $get: Endpoint<
-      PathId & { query?: { mergeBaseBranch?: string } },
-      EnvironmentStatusResponse
-    >;
+    $get: Endpoint<PathId & { query: EnvironmentStatusQuery }, EnvironmentStatusResponse>;
   };
   "/environments/:id/diff": {
     /** Get git diff for an environment's workspace. Proxies to `workspace.diff`. */
-    $get: Endpoint<
-      PathId & {
-        query?: {
-          selection?: string;
-          mergeBaseBranch?: string;
-        };
-      },
-      ThreadGitDiffResponse
-    >;
+    $get: Endpoint<PathId & { query: EnvironmentDiffQuery }, ThreadGitDiffResponse>;
   };
   "/environments/:id/diff/branches": {
     /** List git branches. Proxies to `workspace.list_branches`. */
@@ -168,17 +168,7 @@ export type PublicApiSchema = {
 
   "/threads": {
     /** List threads. Supports filters: projectId, type, parentThreadId, archived. */
-    $get: Endpoint<
-      {
-        query?: {
-          projectId?: string;
-          type?: ThreadType;
-          parentThreadId?: string;
-          archived?: "true" | "false";
-        };
-      },
-      Thread[]
-    >;
+    $get: Endpoint<{ query?: ThreadListQuery }, Thread[]>;
     /**
      * Create a thread with environment provisioning.
      *
@@ -229,7 +219,7 @@ export type PublicApiSchema = {
      * Stops the thread if active. If its managed environment now has zero
      * non-archived threads, destroys the environment.
      */
-    $post: Endpoint<PathId & { json: { force?: boolean } }, { ok: true }>;
+    $post: Endpoint<PathId & { json: ArchiveThreadRequest }, { ok: true }>;
   };
   "/threads/:id/unarchive": {
     $post: Endpoint<PathId, { ok: true }>;
@@ -242,40 +232,22 @@ export type PublicApiSchema = {
   };
   "/threads/:id/timeline": {
     /** Get thread timeline for UI rendering. Events transformed via `@bb/core-ui`. */
-    $get: Endpoint<
-      PathId & {
-        query?: {
-          limit?: string;
-          includeManagerDebugView?: "true" | "false";
-        };
-      },
-      ThreadTimelineResponse
-    >;
+    $get: Endpoint<PathId & { query?: ThreadTimelineQuery }, ThreadTimelineResponse>;
   };
   "/threads/:id/timeline/tool-details": {
     /** Get tool call details for a turn. Used by the UI to lazy-load expanded tool information. */
-    $get: Endpoint<
-      PathId & {
-        query: {
-          turnId: string;
-          sourceSeqStart: string;
-          sourceSeqEnd: string;
-          includeManagerDebugView?: "true" | "false";
-        };
-      },
-      TimelineToolDetailsResponse
-    >;
+    $get: Endpoint<PathId & { query: TimelineToolDetailsQuery }, TimelineToolDetailsResponse>;
   };
   "/threads/:id/output": {
     $get: Endpoint<PathId, { output: string | null }>;
   };
   "/threads/:id/events": {
     /** Get raw thread events. Supports `afterSeq` and `limit` pagination. */
-    $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
+    $get: Endpoint<PathId & { query?: ThreadEventsQuery }, ThreadEventRow[]>;
   };
   "/threads/:id/default-execution-options": {
     /** Returns the last used options for the thread for use as defaults in the UI. */
-    $get: Endpoint<PathId, ThreadExecutionOptions | null>;
+    $get: Endpoint<PathId, ResolvedThreadExecutionOptions | null>;
   };
   "/threads/:id/workspace/files": {
     /**
@@ -283,15 +255,12 @@ export type PublicApiSchema = {
      * Resolves thread -> environmentId -> environment -> hostId, queues
      * `workspace.list_files` to the host daemon, and waits for the result.
      */
-    $get: Endpoint<
-      PathId & { query?: { query?: string; limit?: string } },
-      WorkspaceFile[]
-    >;
+    $get: Endpoint<PathId & { query?: ThreadWorkspaceFilesQuery }, WorkspaceFile[]>;
   };
   "/threads/:id/workspace/file": {
     /** Read a single file from the thread's workspace. Proxies to `workspace.read_file`. */
     $get: Endpoint<
-      PathId & { query: { path: string } },
+      PathId & { query: ThreadWorkspaceFileQuery },
       { path: string; content: string }
     >;
   };
@@ -303,21 +272,15 @@ export type PublicApiSchema = {
   };
   "/system/models": {
     /** List available models. Proxies to `provider.list_models`. Can target a specific host or environment. */
-    $get: Endpoint<
-      { query?: { providerId?: string; hostId?: string; environmentId?: string } },
-      AvailableModel[]
-    >;
+    $get: Endpoint<{ query?: SystemModelsQuery }, AvailableModel[]>;
   };
   "/system/providers": {
     /** List available providers. Proxies to `provider.list`. Can target a specific host or environment. */
-    $get: Endpoint<
-      { query?: { hostId?: string; environmentId?: string } },
-      SystemProviderInfo[]
-    >;
+    $get: Endpoint<{ query?: SystemProvidersQuery }, SystemProviderInfo[]>;
   };
   "/system/voice-transcription": {
     /** Transcribe audio to text. Accepts audio file and optional prompt context. */
-    $post: Endpoint<{ form: Record<string, string | Blob> }, SystemVoiceTranscriptionResponse>;
+    $post: Endpoint<{ form: SystemVoiceTranscriptionForm }, SystemVoiceTranscriptionResponse>;
   };
 };
 

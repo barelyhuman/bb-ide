@@ -12,7 +12,6 @@ import {
   hasRef,
   hasUncommittedChanges,
   listBranches,
-  parseBranchStatus,
   parsePorcelainEntries,
   pathExists,
   readDefaultBranch,
@@ -30,11 +29,14 @@ export interface DiffOptions {
   maxBytes?: number;
 }
 
+export interface StatusOptions {
+  mergeBaseBranch?: string;
+}
+
 export type DiffResult = ThreadGitDiffResponse;
 
 export interface CommitOptions {
   message: string;
-  includeUnstaged?: boolean;
 }
 
 export interface CommitResult {
@@ -49,7 +51,6 @@ export interface FetchOptions {
 
 export interface CheckpointOptions {
   commitMessage: string;
-  remoteName?: string;
 }
 
 export interface CheckpointResult {
@@ -60,7 +61,6 @@ export interface CheckpointResult {
 
 export interface SquashMergeOptions {
   targetBranch: string;
-  commitMessage: string;
 }
 
 export interface SquashMergeResult {
@@ -76,6 +76,9 @@ type DiffSummary = {
   selection: ThreadGitDiffSelection;
   truncated: boolean;
 };
+
+const SQUASH_MERGE_PREP_COMMIT_MESSAGE = "bb squash merge prep";
+const SQUASH_MERGE_COMMIT_MESSAGE = "bb squash merge";
 
 function countWorktrees(porcelainOutput: string): number {
   return porcelainOutput
@@ -103,9 +106,10 @@ export class Workspace {
     return getCurrentBranch(this.path);
   }
 
-  async getStatus(): Promise<WorkspaceStatus> {
+  async getStatus(options: StatusOptions = {}): Promise<WorkspaceStatus> {
     await ensureGitRepo(this.path);
 
+    const mergeBaseBranch = options.mergeBaseBranch ?? await readDefaultBranch(this.path);
     const [statusOutput, diffOutput, currentBranch, defaultBranch, branches] =
       await Promise.all([
         runGit(
@@ -118,7 +122,6 @@ export class Workspace {
         listBranches(this.path),
       ]);
 
-    const branchInfo = parseBranchStatus(statusOutput.stdout.split("\n")[0]);
     const entries = parsePorcelainEntries(statusOutput.stdout);
     const workingTreeSummary = summarizeNumstat(diffOutput.stdout);
     const hasUntracked = entries.some((entry) => entry.status === "??");
@@ -126,10 +129,21 @@ export class Workspace {
       (entry) => entry.indexStatus === "D" || entry.worktreeStatus === "D",
     );
     const hasDirtyEntries = entries.length > 0;
-    const hasCommittedChanges = branchInfo.aheadCount > 0;
-    const mergeBaseRef = defaultBranch
-      ? await readMergeBaseRef(this.path, defaultBranch)
+    const mergeBaseRef = mergeBaseBranch
+      ? await readMergeBaseRef(this.path, mergeBaseBranch)
       : undefined;
+    const aheadBehindCounts = mergeBaseBranch
+      ? await runGit(
+        ["rev-list", "--left-right", "--count", `${mergeBaseBranch}...HEAD`],
+        { cwd: this.path },
+      )
+      : undefined;
+    const [behindCount, aheadCount] =
+      aheadBehindCounts?.stdout.trim().split(/\s+/).map((value) => Number.parseInt(value, 10)) ??
+      [0, 0];
+    const normalizedAheadCount = Number.isFinite(aheadCount) ? aheadCount : 0;
+    const normalizedBehindCount = Number.isFinite(behindCount) ? behindCount : 0;
+    const hasCommittedChanges = normalizedAheadCount > 0;
 
     const state = (() => {
       if (!hasDirtyEntries && !hasCommittedChanges) {
@@ -157,13 +171,13 @@ export class Workspace {
       workspaceDeletions: workingTreeSummary.deletions,
       hasUncommittedChanges: hasDirtyEntries,
       hasCommittedUnmergedChanges: hasCommittedChanges,
-      aheadCount: branchInfo.aheadCount,
-      behindCount: branchInfo.behindCount,
+      aheadCount: normalizedAheadCount,
+      behindCount: normalizedBehindCount,
       currentBranch,
       defaultBranch,
-      mergeBaseBranch: defaultBranch,
+      mergeBaseBranch,
       mergeBaseBranches: branches.filter((branch) => branch !== currentBranch),
-      baseRef: mergeBaseRef ?? defaultBranch,
+      baseRef: mergeBaseRef ?? mergeBaseBranch,
       files: entries.map((entry) => ({
         path: entry.path,
         status: entry.status,
@@ -206,10 +220,7 @@ export class Workspace {
   async commit(options: CommitOptions): Promise<CommitResult> {
     await ensureGitRepo(this.path);
 
-    if (options.includeUnstaged !== false) {
-      await runGit(["add", "-A"], { cwd: this.path });
-    }
-
+    await runGit(["add", "-A"], { cwd: this.path });
     await runGit(["commit", "-m", options.message], { cwd: this.path });
     const commitSha = await revParse(this.path, "HEAD");
     const commitSubject = (
@@ -250,14 +261,13 @@ export class Workspace {
       commitSha = (
         await this.commit({
           message: options.commitMessage,
-          includeUnstaged: true,
         })
       ).commitSha;
     } else {
       commitSha = await revParse(this.path, "HEAD");
     }
 
-    const remoteName = options.remoteName ?? "origin";
+    const remoteName = "origin";
     await runGit(["push", remoteName, branchName], { cwd: this.path });
 
     return {
@@ -337,6 +347,10 @@ export class Workspace {
       throw new WorkspaceError("Cannot squash merge from a detached workspace");
     }
 
+    if (await hasUncommittedChanges(this.path)) {
+      await this.commit({ message: SQUASH_MERGE_PREP_COMMIT_MESSAGE });
+    }
+
     await this.fetch({ remote: "origin", branch: options.targetBranch }).catch(
       () => undefined,
     );
@@ -370,7 +384,7 @@ export class Workspace {
       }
 
       await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
-      await runGit(["commit", "-m", options.commitMessage], { cwd: tempDir });
+      await runGit(["commit", "-m", SQUASH_MERGE_COMMIT_MESSAGE], { cwd: tempDir });
       const commitSha = await revParse(tempDir, "HEAD");
 
       return {

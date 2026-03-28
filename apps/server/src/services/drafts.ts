@@ -1,16 +1,16 @@
-import { promptInputSchema } from "@bb/domain";
+import { promptInputSchema, threadQueuedMessageSchema } from "@bb/domain";
 import type { PromptInput, ThreadQueuedMessage } from "@bb/domain";
 import { z } from "zod";
+import { ApiError } from "../errors.js";
 
 interface StoredDraftRow {
   content: string;
   createdAt: number;
   id: string;
-  model: string | null;
-  mode: string;
+  model: string;
   reasoningLevel: string;
   sandboxMode: string;
-  serviceTier: string | null;
+  serviceTier: string;
   threadId: string;
   updatedAt: number;
 }
@@ -19,34 +19,41 @@ export function encodeDraftContent(input: PromptInput[]): string {
   return JSON.stringify(input);
 }
 
-export function decodeDraftContent(content: string): PromptInput[] {
-  const parsed = z.array(promptInputSchema).safeParse(JSON.parse(content));
-  return parsed.success ? parsed.data : [];
+function parseStoredDraftContent(
+  row: Pick<StoredDraftRow, "content" | "id" | "threadId">,
+): PromptInput[] {
+  let content: unknown;
+  try {
+    content = JSON.parse(row.content);
+  } catch {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Stored draft ${row.id} for thread ${row.threadId} is not valid JSON`,
+    );
+  }
+
+  const parsed = z.array(promptInputSchema).min(1).safeParse(content);
+  if (!parsed.success) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Stored draft ${row.id} for thread ${row.threadId} is malformed`,
+    );
+  }
+
+  return parsed.data;
 }
 
 export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
-  return {
+  return threadQueuedMessageSchema.parse({
     id: row.id,
-    content: decodeDraftContent(row.content),
-    mode: row.mode === "start" || row.mode === "steer" ? row.mode : "auto",
-    ...(row.model ? { model: row.model } : {}),
-    reasoningLevel:
-      row.reasoningLevel === "low" ||
-      row.reasoningLevel === "medium" ||
-      row.reasoningLevel === "high" ||
-      row.reasoningLevel === "xhigh"
-        ? row.reasoningLevel
-        : "medium",
-    sandboxMode:
-      row.sandboxMode === "read-only" ||
-      row.sandboxMode === "workspace-write" ||
-      row.sandboxMode === "danger-full-access"
-        ? row.sandboxMode
-        : "danger-full-access",
-    ...(row.serviceTier === "fast" || row.serviceTier === "flex"
-      ? { serviceTier: row.serviceTier }
-      : {}),
+    content: parseStoredDraftContent(row),
+    model: row.model,
+    reasoningLevel: row.reasoningLevel,
+    sandboxMode: row.sandboxMode,
+    serviceTier: row.serviceTier,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-  };
+  });
 }

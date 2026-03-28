@@ -21,6 +21,7 @@ describe("workspace command dispatch", () => {
         environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
+        mergeBaseBranch: "main",
       },
       { runtimeManager: harness.manager },
     );
@@ -31,6 +32,8 @@ describe("workspace command dispatch", () => {
         environmentStatus: "ready",
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
+        mergeBaseBranch: "main",
+        selection: { type: "combined" },
       },
       { runtimeManager: harness.manager },
     );
@@ -53,7 +56,6 @@ describe("workspace command dispatch", () => {
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         targetBranch: "main",
-        commitMessage: "Squash",
       },
       { runtimeManager: harness.manager },
     );
@@ -128,6 +130,7 @@ describe("workspace command dispatch", () => {
         environmentStatus: "ready",
         workspacePath: "/tmp/env-rehydrate",
         threadId: "thread-1",
+        mergeBaseBranch: "main",
       },
       { runtimeManager: harness.manager },
     );

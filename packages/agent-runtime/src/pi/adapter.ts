@@ -259,15 +259,27 @@ export function createPiProviderAdapter(
         }
         case "thread/resume": {
           const threadId = command.providerThreadId ?? command.threadId;
+          const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
+          const finalConfig: Record<string, unknown> = config ? { ...config } : {};
+          if (command.options?.reasoningLevel) {
+            finalConfig.model_reasoning_effort = command.options.reasoningLevel;
+          }
+          const dynamicTools = command.dynamicTools?.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
+          }));
           return {
             jsonrpc: "2.0" as const,
             method: "thread/resume",
             params: {
               threadId,
-              ...(config ? { config } : {}),
+              baseInstructions,
+              ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(command.resumePath ? { sessionPath: command.resumePath } : {}),
+              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };
         }

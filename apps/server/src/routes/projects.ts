@@ -14,6 +14,8 @@ import {
   createManagerThreadRequestSchema,
   createProjectRequestSchema,
   createProjectSourceRequestSchema,
+  projectAttachmentContentQuerySchema,
+  projectFilesQuerySchema,
   typedRoutes,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
@@ -30,7 +32,7 @@ import { deleteProjectAttachments, readAttachment, storeAttachment } from "../se
 import { requireHostWithStatus, requireProject } from "../services/entity-lookup.js";
 import { ensureProjectSourceEnvironment, createThreadFromRequest } from "../services/thread-create.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
-import { parseOptionalInteger, parseQueryValue } from "../services/validation.js";
+import { parseOptionalInteger } from "../services/validation.js";
 
 function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectResponse[] {
   const projects = projectId ? [requireProject(deps.db, projectId)] : listProjects(deps.db);
@@ -115,9 +117,9 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     const source = createProjectSource(deps.db, deps.hub, {
       projectId: context.req.param("id"),
       hostId: payload.hostId,
-      type: payload.type ?? "local_path",
-      path: payload.path ?? null,
-      repoUrl: payload.repoUrl ?? null,
+      type: payload.type,
+      path: payload.type === "local_path" ? payload.path : null,
+      repoUrl: payload.type === "github_repo" ? payload.repoUrl : null,
     });
     return context.json(source, 201);
   });
@@ -153,7 +155,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  get("/projects/:id/files", async (context) => {
+  get("/projects/:id/files", projectFilesQuerySchema, async (context, query) => {
     requireProject(deps.db, context.req.param("id"));
     const source = getDefaultProjectSource(deps.db, context.req.param("id"));
     if (!source || !source.path) {
@@ -173,11 +175,11 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: "ready",
         workspacePath: source.path,
-        ...(context.req.query("query") ? { query: context.req.query("query") } : {}),
+        ...(query.query ? { query: query.query } : {}),
       },
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.list_files"].parse(rawResult);
-    const limit = parseOptionalInteger(context.req.query("limit"), "limit");
+    const limit = parseOptionalInteger(query.limit, "limit");
     return context.json(
       result.files
         .slice(0, limit ?? result.files.length)
@@ -198,10 +200,9 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  get("/projects/:id/attachments/content", async (context) => {
+  get("/projects/:id/attachments/content", projectAttachmentContentQuerySchema, async (context, query) => {
     requireProject(deps.db, context.req.param("id"));
-    const path = parseQueryValue(context.req.query("path"), "path");
-    const attachment = await readAttachment(deps.config.dataDir, context.req.param("id"), path);
+    const attachment = await readAttachment(deps.config.dataDir, context.req.param("id"), query.path);
     return new Response(new Uint8Array(attachment.content), {
       status: 200,
       headers: {
@@ -218,11 +219,11 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     }
     const thread = await createThreadFromRequest(deps, {
       projectId: context.req.param("id"),
-      providerId: payload.providerId ?? "claude-code",
+      providerId: payload.providerId,
       type: "manager",
-      ...(payload.title ? { title: payload.title } : {}),
-      ...(payload.model ? { model: payload.model } : {}),
-      ...(payload.reasoningLevel ? { reasoningLevel: payload.reasoningLevel } : {}),
+      ...(payload.name ? { title: payload.name } : {}),
+      model: payload.model,
+      reasoningLevel: payload.reasoningLevel,
       environment: {
         type: "host",
         hostId: source.hostId,

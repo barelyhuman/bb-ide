@@ -11,10 +11,10 @@ import type {
   PromptInput,
   Project,
   ReasoningLevel,
+  ResolvedThreadExecutionOptions,
   Thread,
   TimelineRow,
   AvailableModel,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
   WorkspaceStatus,
@@ -28,7 +28,6 @@ import type {
   EnvironmentActionResponse,
   ProjectFileSuggestion,
   ProjectResponse,
-  SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
   SystemProviderInfo,
@@ -409,17 +408,17 @@ export function useHireProjectManager() {
   return useMutation({
     mutationFn: ({
       projectId,
-      title,
+      name,
       providerId,
       model,
       reasoningLevel,
     }: {
       projectId: string;
-      title?: string;
-      providerId?: string;
-      model?: string;
-      reasoningLevel?: ReasoningLevel;
-    }) => api.hireProjectManager(projectId, { title, providerId, model, reasoningLevel }),
+      name?: string;
+      providerId: string;
+      model: string;
+      reasoningLevel: ReasoningLevel;
+    }) => api.hireProjectManager(projectId, { name, providerId, model, reasoningLevel }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
 
@@ -543,7 +542,7 @@ export function useThreadDefaultExecutionOptions(
   id: string,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<ThreadExecutionOptions | null>({
+  return useQuery<ResolvedThreadExecutionOptions | null>({
     queryKey: ["threadDefaultExecutionOptions", id],
     queryFn: () => api.getThreadDefaultExecutionOptions(id),
     enabled: (options?.enabled ?? true) && !!id,
@@ -592,8 +591,8 @@ export function useEnvironmentWorkStatus(
 ) {
   return useQuery<WorkspaceStatus | null>({
     queryKey: [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId, mergeBaseBranch ?? null],
-    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch),
-    enabled: (options?.enabled ?? true) && !!environmentId,
+    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch!),
+    enabled: (options?.enabled ?? true) && !!environmentId && !!mergeBaseBranch,
     refetchOnWindowFocus: false,
   });
 }
@@ -667,26 +666,26 @@ export function useThreadTimelineToolDetails() {
 
 export function useEnvironmentGitDiff(
   id: string,
-  options?: {
+  options: {
     enabled?: boolean;
-    selection?: ThreadGitDiffSelection;
+    selection: ThreadGitDiffSelection;
     mergeBaseBranch?: string;
   },
 ) {
   const selectionKey =
-    options?.selection?.type === "commit"
+    options.selection.type === "commit"
       ? options.selection.sha
       : "combined";
   return useQuery<ThreadGitDiffResponse>({
     queryKey: [
       ENVIRONMENT_GIT_DIFF_QUERY_KEY,
       id,
-      options?.selection?.type ?? "combined",
+      options.selection.type,
       selectionKey,
-      options?.mergeBaseBranch ?? null,
+      options.mergeBaseBranch ?? null,
     ],
-    queryFn: () => api.getEnvironmentDiff(id, options?.selection, options?.mergeBaseBranch),
-    enabled: (options?.enabled ?? true) && !!id,
+    queryFn: () => api.getEnvironmentDiff(id, options.selection, options.mergeBaseBranch!),
+    enabled: (options?.enabled ?? true) && !!id && !!options.mergeBaseBranch,
     placeholderData: (previousData, previousQuery) =>
       resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,
@@ -836,12 +835,11 @@ export function useSendThreadDraft() {
     mutationFn: ({
       id,
       queuedMessageId,
-      mode,
     }: {
       id: string;
       queuedMessageId: string;
-    } & SendDraftRequest): Promise<SendDraftResponse> =>
-      api.sendThreadDraft(id, queuedMessageId, { mode }),
+    }): Promise<SendDraftResponse> =>
+      api.sendThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
@@ -905,7 +903,7 @@ export function useUpdateThread() {
 export function useArchiveThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { id: string; force?: boolean }) =>
+    mutationFn: (args: { id: string; force: boolean }) =>
       api.archiveThread(args.id, { force: args.force }),
     onMutate: async (args) => {
       await queryClient.cancelQueries({ queryKey: ["thread", args.id] });

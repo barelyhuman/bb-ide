@@ -11,7 +11,7 @@ export function buildSquashMergeConflictFollowUpInstruction(
   },
 ): string {
   const conflictFiles = options?.conflictFiles?.filter((file) => file.trim().length > 0) ?? [];
-  const mergeBaseBranch = request.options?.mergeBaseBranch?.trim() || "the default branch";
+  const mergeBaseBranch = request.options.mergeBaseBranch.trim();
   const conflictFilesText = conflictFiles.length > 0 ? conflictFiles.join(", ") : undefined;
 
   return renderTemplate("threadOperationSquashMergeConflictFollowUp", {
@@ -27,7 +27,7 @@ export function buildSquashMergeCommitFailureFollowUpInstruction(
     errorMessage?: string;
   },
 ): string {
-  const mergeBaseBranch = request.options?.mergeBaseBranch?.trim() || "the default branch";
+  const mergeBaseBranch = request.options.mergeBaseBranch.trim();
   const errorMessage = options.errorMessage?.trim() || undefined;
 
   switch (options.stage) {

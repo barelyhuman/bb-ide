@@ -76,8 +76,16 @@ export type { OpenSessionInput } from "./sessions.js";
 
 export { getCursor, setCursor } from "./cursors.js";
 
-export { createDraft, getDraft, listDrafts, deleteDraft } from "./drafts.js";
-export type { CreateDraftInput } from "./drafts.js";
+export {
+  claimDraft,
+  claimNextDraft,
+  createDraft,
+  deleteDraft,
+  getDraft,
+  listDrafts,
+  releaseDraftClaim,
+} from "./drafts.js";
+export type { CreateDraftInput, DraftRow } from "./drafts.js";
 
 export {
   sweepExpiredCommands,

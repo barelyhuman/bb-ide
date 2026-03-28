@@ -14,10 +14,12 @@ import {
   hostDaemonCommandResultReportSchema,
 } from "./commands.js";
 
+const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
+
 export const hostDaemonActiveThreadSchema = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
-  providerThreadId: z.string().min(1).optional(),
+  providerThreadId: z.string().min(1),
 });
 export type HostDaemonActiveThread = z.infer<typeof hostDaemonActiveThreadSchema>;
 
@@ -27,7 +29,7 @@ export const hostDaemonSessionOpenRequestSchema = z.object({
   hostName: z.string().min(1),
   hostType: hostTypeSchema,
   protocolVersion: z.literal(HOST_DAEMON_PROTOCOL_VERSION),
-  activeThreads: z.array(hostDaemonActiveThreadSchema).optional(),
+  activeThreads: z.array(hostDaemonActiveThreadSchema),
 });
 export type HostDaemonSessionOpenRequest = z.infer<
   typeof hostDaemonSessionOpenRequestSchema
@@ -45,9 +47,9 @@ export type HostDaemonSessionOpenResponse = z.infer<
 
 export const hostDaemonCommandsQuerySchema = z.object({
   sessionId: z.string().min(1),
-  afterCursor: z.string().optional(),
-  limit: z.string().optional(),
-  waitMs: z.string().optional(),
+  afterCursor: nonNegativeIntegerStringSchema,
+  limit: nonNegativeIntegerStringSchema,
+  waitMs: nonNegativeIntegerStringSchema,
 });
 export type HostDaemonCommandsQuery = z.infer<
   typeof hostDaemonCommandsQuerySchema
@@ -87,7 +89,7 @@ export type HostDaemonEventBatchResponse = z.infer<
 
 export const hostDaemonHeartbeatPayloadSchema = z.object({
   bufferDepth: z.number().int().nonnegative(),
-  lastCommandCursor: z.number().int().nonnegative().optional(),
+  lastCommandCursor: z.number().int().nonnegative().nullable(),
 });
 export type HostDaemonHeartbeatPayload = z.infer<
   typeof hostDaemonHeartbeatPayloadSchema
@@ -109,7 +111,7 @@ export type HostDaemonServerWsMessage = z.infer<
 export const hostDaemonDaemonWsMessageSchema = z.object({
   type: z.literal("heartbeat"),
   bufferDepth: z.number().int().nonnegative(),
-  lastCommandCursor: z.number().int().nonnegative().optional(),
+  lastCommandCursor: z.number().int().nonnegative().nullable(),
 });
 export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema
@@ -159,7 +161,7 @@ export type HostDaemonInternalSchema = {
     >;
   };
   "/session/tool-call": {
-    /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. spawn_thread). */
+    /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. message_user). */
     $post: Endpoint<
       { json: HostDaemonToolCallRequest },
       HostDaemonToolCallResponse
