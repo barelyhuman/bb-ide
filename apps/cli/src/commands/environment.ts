@@ -58,8 +58,8 @@ export function registerEnvironmentCommands(
               action: "commit",
               threadId: opts.thread,
               options: {
+                message: opts.message ?? "Checkpoint changes",
                 autoArchiveOnSuccess: false,
-                ...(opts.message ? { message: opts.message } : {}),
               },
             },
           }),

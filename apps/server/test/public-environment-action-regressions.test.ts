@@ -244,6 +244,7 @@ describe("public environment action regressions", () => {
             action: "commit",
             threadId: actingThread.id,
             options: {
+              message: "Checkpoint changes",
               autoArchiveOnSuccess: true,
             },
           }),
@@ -275,6 +276,7 @@ describe("public environment action regressions", () => {
             action: "commit",
             threadId: mismatchedThread.id,
             options: {
+              message: "Checkpoint changes",
               autoArchiveOnSuccess: false,
             },
           }),

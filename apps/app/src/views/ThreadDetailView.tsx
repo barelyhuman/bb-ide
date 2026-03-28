@@ -120,6 +120,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
               action: "commit",
               threadId: "thread",
               options: {
+                message: "Checkpoint changes",
                 autoArchiveOnSuccess: false,
               },
             },
@@ -826,6 +827,7 @@ export function ThreadDetailView() {
         threadId,
         action: "commit",
         options: {
+          message: "Checkpoint changes",
           autoArchiveOnSuccess,
         },
       });
