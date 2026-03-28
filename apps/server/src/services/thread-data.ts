@@ -6,6 +6,7 @@ import {
 } from "@bb/domain";
 import type { ThreadEventRow } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
+import { ApiError } from "../errors.js";
 
 interface StoredEventRow {
   createdAt: number;
@@ -112,27 +113,71 @@ export function getLastThreadOutput(
 
   for (const row of rows) {
     if (row.type === "system/manager/user_message") {
+      let messageData: unknown;
+      try {
+        messageData = JSON.parse(row.data);
+      } catch {
+        throw new ApiError(
+          500,
+          "internal_error",
+          `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is not valid JSON`,
+        );
+      }
       const parsedMessage = systemManagerUserMessageEventDataSchema.safeParse(
-        JSON.parse(row.data),
+        messageData,
       );
-      if (parsedMessage.success && parsedMessage.data.text.length > 0) {
+      if (!parsedMessage.success) {
+        throw new ApiError(
+          500,
+          "internal_error",
+          `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+        );
+      }
+      if (parsedMessage.data.text.length > 0) {
         return parsedMessage.data.text;
       }
       continue;
     }
 
     if (!row.providerThreadId || !row.turnId) {
-      continue;
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is missing provider context`,
+      );
+    }
+    let providerData: unknown;
+    try {
+      providerData = JSON.parse(row.data);
+    } catch {
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is not valid JSON`,
+      );
+    }
+    if (!providerData || typeof providerData !== "object" || Array.isArray(providerData)) {
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+      );
     }
     const parsedEvent = providerEventSchema.safeParse({
-      ...JSON.parse(row.data),
+      ...providerData,
       type: row.type,
       threadId: row.threadId,
       providerThreadId: row.providerThreadId,
       turnId: row.turnId,
     });
+    if (!parsedEvent.success) {
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+      );
+    }
     if (
-      parsedEvent.success &&
       parsedEvent.data.type === "item/completed" &&
       parsedEvent.data.item.type === "agentMessage" &&
       parsedEvent.data.item.text.length > 0

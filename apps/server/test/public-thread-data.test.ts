@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { events, getDraft, getThread } from "@bb/db";
+import { createDraft, events, getDraft, getThread } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -189,6 +189,63 @@ describe("public thread data routes", () => {
         sandboxMode: "danger-full-access",
         serviceTier: "fast",
         source: "client/turn/requested",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails loudly when the latest stored output event is malformed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-output",
+        turnId: "turn-1",
+        sequence: 1,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "Earlier assistant reply",
+          },
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-output",
+        turnId: "turn-2",
+        sequence: 2,
+        type: "item/completed",
+        data: {
+          item: {
+            id: "msg-2",
+          },
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/output`,
+      );
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "internal_error",
+        message: expect.stringContaining(`thread ${thread.id}`),
       });
     } finally {
       await harness.cleanup();
@@ -673,6 +730,49 @@ describe("public thread data routes", () => {
       await expect(readJson(fileResponse)).resolves.toEqual({
         path: "src/index.ts",
         content: "export const value = 1;\n",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails loudly when stored draft content is malformed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const draft = createDraft(harness.db, harness.hub, {
+        threadId: thread.id,
+        content: "not-json",
+        model: "gpt-5",
+        serviceTier: "flex",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "internal_error",
+        message: expect.stringContaining(`draft ${draft.id}`),
       });
     } finally {
       await harness.cleanup();
