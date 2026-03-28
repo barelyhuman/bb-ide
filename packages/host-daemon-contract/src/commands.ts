@@ -127,10 +127,6 @@ export const providerListModelsCommandSchema = z.object({
 const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.provision"),
   projectId: z.string().min(1),
-  /** Setup script filename */
-  scriptName: z.string().min(1).optional(),
-  /** Setup script timeout in ms */
-  timeoutMs: z.number().int().positive().optional(),
 });
 
 const unmanagedEnvironmentProvisionCommandSchema =

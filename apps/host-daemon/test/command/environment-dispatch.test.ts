@@ -49,8 +49,6 @@ describe("environment command dispatch", () => {
         sourcePath,
         targetPath: "/tmp/worktree",
         branchName: "bb/test",
-        scriptName: "setup.sh",
-        timeoutMs: 60_000,
       },
       { runtimeManager: harness.manager },
     );
@@ -69,8 +67,6 @@ describe("environment command dispatch", () => {
         sourcePath,
         targetPath: "/tmp/worktree",
         branchName: "bb/test",
-        scriptName: "setup.sh",
-        timeoutMs: 60_000,
       },
     ]);
   });
@@ -106,8 +102,6 @@ describe("environment command dispatch", () => {
         sourcePath,
         targetPath: "/tmp/clone",
         branchName: "bb/clone",
-        scriptName: undefined,
-        timeoutMs: undefined,
       },
     ]);
   });

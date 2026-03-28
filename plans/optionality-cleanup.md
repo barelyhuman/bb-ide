@@ -164,10 +164,10 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 5. Delete Or Move Unused Provisioning Knobs
 
-- [ ] Delete `environment.provision.scriptName`.
+- [x] Delete `environment.provision.scriptName`.
   Purpose: override the setup script filename searched/run during provisioning.
   Current: production server provisioning calls do not set it; only tests exercise custom script names. The daemon still defaults it to `.bb-env-setup.sh` in [apps/host-daemon/src/command-handlers/environment.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/command-handlers/environment.ts#L32) and workspace provisioning does the same in [packages/workspace/src/provisioning.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/workspace/src/provisioning.ts#L145).
-- [ ] Delete `environment.provision.timeoutMs`.
+- [x] Delete `environment.provision.timeoutMs`.
   Purpose: override the setup script timeout during provisioning.
   Current: production server provisioning calls do not set it; only tests cover it. Workspace provisioning defaults to five minutes in [packages/workspace/src/provisioning.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/workspace/src/provisioning.ts#L153).
 

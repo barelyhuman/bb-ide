@@ -88,10 +88,8 @@ export function queueEnvironmentProvision(
     hostId: string;
     path?: string;
     projectId: string;
-    scriptName?: string;
     sourcePath?: string;
     targetPath?: string;
-    timeoutMs?: number;
     workspaceProvisionType: "managed-clone" | "managed-worktree" | "unmanaged";
   },
 ): void {
@@ -105,8 +103,6 @@ export function queueEnvironmentProvision(
     ...(args.sourcePath ? { sourcePath: args.sourcePath } : {}),
     ...(args.targetPath ? { targetPath: args.targetPath } : {}),
     ...(args.branchName ? { branchName: args.branchName } : {}),
-    ...(args.scriptName ? { scriptName: args.scriptName } : {}),
-    ...(args.timeoutMs ? { timeoutMs: args.timeoutMs } : {}),
   };
   queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
