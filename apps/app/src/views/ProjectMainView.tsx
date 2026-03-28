@@ -105,6 +105,7 @@ export function ProjectMainView() {
       workspace: { type: "unmanaged", path: null },
     };
   }, [environmentSelectionValue, localHostId, projectId]);
+  const selectedThreadModel = activeModel?.model ?? selectedModel;
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
     navigate(`/projects/${nextProjectId}`);
@@ -162,7 +163,6 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    const selectedThreadModel = activeModel?.model ?? selectedModel;
     if (
       submittedInput.length === 0 ||
       createThread.isPending ||
@@ -201,7 +201,7 @@ export function ProjectMainView() {
     promptInput.length === 0 ||
     !selectedEnvironment ||
     !selectedProviderId ||
-    !selectedModel;
+    !selectedThreadModel;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">

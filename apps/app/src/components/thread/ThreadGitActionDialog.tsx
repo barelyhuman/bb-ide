@@ -184,13 +184,7 @@ function ThreadGitActionDialogContent({
     dialogCopy.showMergeBase &&
     showMergeBaseDetails === true &&
     (canSelectMergeBase || Boolean(selectedMergeBaseBranch));
-  const isStagedOnlyCommitScope = false;
-  const displayedGitStatusLabel = isStagedOnlyCommitScope ? "Staged only" : gitStatusLabel;
-  const displayedGitStatusSummary = isStagedOnlyCommitScope
-    ? "Only staged changes will be included. Unstaged edits stay in the workspace."
-    : gitStatusSummary;
-  const shouldShowChangedFilesRow =
-    Boolean(changedFiles && changedFiles.length > 0) || isStagedOnlyCommitScope;
+  const shouldShowChangedFilesRow = Boolean(changedFiles && changedFiles.length > 0);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -256,7 +250,7 @@ function ThreadGitActionDialogContent({
         <DialogDescription>{dialogCopy.description}</DialogDescription>
       </DialogHeader>
       <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
-        {branchName || displayedGitStatusLabel || canShowMergeBase || shouldShowChangedFilesRow ? (
+        {branchName || gitStatusLabel || canShowMergeBase || shouldShowChangedFilesRow ? (
           <DetailCard className="border-border/70 bg-muted/20">
             {branchName ? (
               <DetailRow label="Branch" valueClassName="min-w-0 truncate">
@@ -265,16 +259,16 @@ function ThreadGitActionDialogContent({
                 </span>
               </DetailRow>
             ) : null}
-            {displayedGitStatusLabel ? (
+            {gitStatusLabel ? (
               <DetailRow label="Git status" valueClassName="min-w-0">
                 <div
                   className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-                  title={[displayedGitStatusLabel, displayedGitStatusSummary].filter(Boolean).join(" ")}
+                  title={[gitStatusLabel, gitStatusSummary].filter(Boolean).join(" ")}
                 >
-                  <span className="shrink-0 font-medium">{displayedGitStatusLabel}</span>
-                  {displayedGitStatusSummary ? (
+                  <span className="shrink-0 font-medium">{gitStatusLabel}</span>
+                  {gitStatusSummary ? (
                     <span className="min-w-0 truncate text-muted-foreground">
-                      {displayedGitStatusSummary}
+                      {gitStatusSummary}
                     </span>
                   ) : null}
                 </div>
@@ -305,16 +299,10 @@ function ThreadGitActionDialogContent({
                 layout="vertical"
                 valueClassName="pt-0.5"
               >
-                {isStagedOnlyCommitScope ? (
-                  <p className="ui-text-sm leading-5 text-muted-foreground">
-                    Only staged changes will be committed. Per-file staged preview is not available here.
-                  </p>
-                ) : (
-                  <WorkspaceChangesList
-                    files={changedFiles}
-                    maxHeightClassName="max-h-40"
-                  />
-                )}
+                <WorkspaceChangesList
+                  files={changedFiles}
+                  maxHeightClassName="max-h-40"
+                />
               </DetailRow>
             ) : null}
           </DetailCard>
