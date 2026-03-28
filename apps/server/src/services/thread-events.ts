@@ -27,7 +27,7 @@ export interface ClientTurnEventArgs {
   environmentId: string | null;
   execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
-  input: PromptInput[];
+  input?: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
   source: "spawn" | "tell";
   threadId: string;
@@ -92,7 +92,7 @@ export function appendClientTurnEvent(
       direction: "outbound",
       source: args.source,
       initiator: args.initiator,
-      input: args.input,
+      ...(args.input ? { input: args.input } : {}),
       request: {
         method: args.requestMethod,
         params: {},

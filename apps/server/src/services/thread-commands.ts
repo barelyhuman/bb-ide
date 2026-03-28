@@ -32,15 +32,11 @@ export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ExecutionOptionsRequest,
   args: {
-    hostId: string;
-    providerId: string;
     threadId: string;
   },
   source: "client/thread/start" | "client/turn/requested" | "client/turn/start",
 ): Promise<ResolvedThreadExecutionOptions> {
   return resolveExecutionOptions(deps, {
-    hostId: args.hostId,
-    providerId: args.providerId,
     requestedExecution: {
       ...(request.model ? { model: request.model } : {}),
       ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),

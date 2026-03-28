@@ -55,8 +55,6 @@ export interface ThreadRuntimeCommandEnvironment {
 }
 
 export interface ResolveExecutionOptionsArgs {
-  hostId: string;
-  providerId: string;
   requestedExecution: RequestedExecutionOptions;
   threadId: string;
 }
@@ -84,35 +82,6 @@ function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): str
   }
 
   return environment.path;
-}
-
-async function resolveDefaultModel(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    hostId: string;
-    providerId: string;
-  },
-): Promise<string> {
-  const rawResult = await queueCommandAndWait(deps, {
-    hostId: args.hostId,
-    timeoutMs: COMMAND_TIMEOUT_MS,
-    command: {
-      type: "provider.list_models",
-      providerId: args.providerId,
-    },
-  });
-  const result = hostDaemonCommandResultSchemaByType["provider.list_models"].parse(rawResult);
-  const model =
-    result.models.find((candidate) => candidate.isDefault)?.model ??
-    result.models[0]?.model;
-  if (!model) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      `Provider ${args.providerId} has no available models`,
-    );
-  }
-  return model;
 }
 
 async function readManagerPreferences(
@@ -145,17 +114,18 @@ async function readManagerPreferences(
 }
 
 export async function resolveExecutionOptions(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db">,
   args: ResolveExecutionOptionsArgs,
 ): Promise<ResolvedThreadExecutionOptions> {
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
-  const model =
-    args.requestedExecution.model ??
-    lastExecution?.model ??
-    await resolveDefaultModel(deps, {
-      hostId: args.hostId,
-      providerId: args.providerId,
-    });
+  const model = args.requestedExecution.model ?? lastExecution?.model;
+  if (!model) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Thread ${args.threadId} has no stored execution model`,
+    );
+  }
 
   return {
     model,

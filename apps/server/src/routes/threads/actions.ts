@@ -79,8 +79,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       deps,
       payload,
       {
-        hostId: environment.hostId,
-        providerId: thread.providerId,
         threadId: thread.id,
       },
       "client/turn/requested",
@@ -146,14 +144,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/drafts", createDraftRequestSchema, async (context, payload) => {
-    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const { thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const execution = await buildExecutionOptions(
       deps,
       payload,
       {
-        hostId: environment.hostId,
-        providerId: thread.providerId,
         threadId: thread.id,
       },
       "client/turn/requested",
@@ -210,31 +206,33 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     if (!force && environment.status === "ready" && environment.path) {
       const mergeBaseBranch = thread.mergeBaseBranch ?? environment.defaultBranch;
-      if (!mergeBaseBranch) {
+      if (!mergeBaseBranch && environment.isGitRepo) {
         throw new ApiError(409, "invalid_request", "Thread archive requires a merge base branch");
       }
-      const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
-        await queueCommandAndWait(deps, {
-          hostId: environment.hostId,
-          timeoutMs: COMMAND_TIMEOUT_MS,
-          command: {
-            type: "workspace.status",
-            environmentId: environment.id,
-            environmentStatus: environment.status,
-            workspacePath: environment.path,
-            mergeBaseBranch,
-          },
-        }),
-      );
-      if (
-        status.workspaceStatus?.hasUncommittedChanges ||
-        status.workspaceStatus?.hasCommittedUnmergedChanges
-      ) {
-        throw new ApiError(
-          409,
-          "invalid_request",
-          "Thread has uncommitted or unmerged changes",
+      if (mergeBaseBranch) {
+        const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
+          await queueCommandAndWait(deps, {
+            hostId: environment.hostId,
+            timeoutMs: COMMAND_TIMEOUT_MS,
+            command: {
+              type: "workspace.status",
+              environmentId: environment.id,
+              environmentStatus: environment.status,
+              workspacePath: environment.path,
+              mergeBaseBranch,
+            },
+          }),
         );
+        if (
+          status.workspaceStatus?.hasUncommittedChanges ||
+          status.workspaceStatus?.hasCommittedUnmergedChanges
+        ) {
+          throw new ApiError(
+            409,
+            "invalid_request",
+            "Thread has uncommitted or unmerged changes",
+          );
+        }
       }
     }
     if (thread.status === "active") {

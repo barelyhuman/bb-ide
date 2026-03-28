@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
   createEnvironment,
+  createThread,
   getDraft,
   getEnvironment,
   getThread,
@@ -976,29 +977,9 @@ describe("public thread routes", () => {
           }),
         },
       );
-      const managerModelsCommand = await waitForQueuedCommandAfter(
-        harness,
-        managerProvisionCommand.row.cursor,
-        ({ command }) =>
-          command.type === "provider.list_models" &&
-          command.providerId === "codex",
-      );
-      await reportQueuedCommandSuccess(harness, managerModelsCommand, {
-        models: [
-          {
-            id: "gpt-5",
-            model: "gpt-5",
-            displayName: "GPT-5",
-            description: "Default manager model",
-            supportedReasoningEfforts: [],
-            defaultReasoningEffort: "medium",
-            isDefault: true,
-          },
-        ],
-      });
       const managerPreferencesCommand = await waitForQueuedCommandAfter(
         harness,
-        managerModelsCommand.row.cursor,
+        managerProvisionCommand.row.cursor,
         ({ command }) =>
           command.type === "workspace.read_file" &&
           command.environmentId === managerThread.environmentId,
@@ -1035,6 +1016,57 @@ describe("public thread routes", () => {
       );
       expect(managerStartCommand.command.instructions).toContain(project.name);
       expect(managerStartCommand.command.instructions).toContain("/tmp/thread-data-project");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives non-git threads without requiring workspace status", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        projectId: project.id,
+        hostId: host.id,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/non-git-thread",
+        status: "ready",
+        isGitRepo: false,
+        defaultBranch: null,
+      });
+      const thread = createThread(harness.db, harness.hub, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+        status: "idle",
+        mergeBaseBranch: null,
+        title: "Non-git thread",
+        titleFallback: "Non-git thread",
+      });
+      const commandCountBefore = harness.db
+        .select({ id: hostDaemonCommands.id })
+        .from(hostDaemonCommands)
+        .all().length;
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
+      const commandCountAfter = harness.db
+        .select({ id: hostDaemonCommands.id })
+        .from(hostDaemonCommands)
+        .all().length;
+      expect(commandCountAfter).toBe(commandCountBefore);
     } finally {
       await harness.cleanup();
     }

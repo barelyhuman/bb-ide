@@ -54,29 +54,24 @@ async function createThreadInEnvironment(
   );
   transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
 
-  const execution =
-    args.request.input && args.request.input.length > 0
-      ? await buildExecutionOptions(
-        deps,
-        args.request,
-        {
-          hostId: args.environment.hostId,
-          providerId: thread.providerId,
-          threadId: thread.id,
-        },
-        "client/thread/start",
-      )
-      : null;
+  const execution = await buildExecutionOptions(
+    deps,
+    args.request,
+    {
+      threadId: thread.id,
+    },
+    "client/thread/start",
+  );
 
   let eventSequence: number | undefined;
-  if (args.request.input && args.request.input.length > 0 && execution) {
+  if (execution) {
     eventSequence = appendClientTurnEvent(
       deps,
       {
         threadId: thread.id,
         environmentId: args.environment.id,
         type: "client/thread/start",
-        input: args.request.input,
+        ...(args.request.input ? { input: args.request.input } : {}),
         execution,
         initiator: args.request.spawnInitiator ?? "user",
         requestMethod: "thread/start",
@@ -301,28 +296,24 @@ export async function createThreadFromRequest(
   );
   transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
 
-  if (request.input && request.input.length > 0) {
-    const execution = await buildExecutionOptions(
-      deps,
-      request,
-      {
-        hostId,
-        providerId: thread.providerId,
-        threadId: thread.id,
-      },
-      "client/thread/start",
-    );
-    appendClientTurnEvent(deps, {
+  const execution = await buildExecutionOptions(
+    deps,
+    request,
+    {
       threadId: thread.id,
-      environmentId: environment.id,
-      type: "client/thread/start",
-      input: request.input,
-      execution,
-      initiator: request.spawnInitiator ?? "user",
-      requestMethod: "thread/start",
-      source: "spawn",
-    });
-  }
+    },
+    "client/thread/start",
+  );
+  appendClientTurnEvent(deps, {
+    threadId: thread.id,
+    environmentId: environment.id,
+    type: "client/thread/start",
+    ...(request.input ? { input: request.input } : {}),
+    execution,
+    initiator: request.spawnInitiator ?? "user",
+    requestMethod: "thread/start",
+    source: "spawn",
+  });
 
   const provisioningLabel = workspace.type === "unmanaged"
     ? "Direct"

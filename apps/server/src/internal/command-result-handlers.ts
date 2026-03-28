@@ -185,9 +185,7 @@ async function handleProvisionCommandResult(
         type: startEvent.type,
       });
       if (!parsedStartEvent.input || parsedStartEvent.input.length === 0) {
-        throw new Error(
-          `Stored ${startEvent.type} event #${startEvent.sequence} for thread ${startEvent.threadId} is missing input`,
-        );
+        continue;
       }
 
       await queueThreadStartCommand(deps, {

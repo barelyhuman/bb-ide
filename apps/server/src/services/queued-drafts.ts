@@ -54,8 +54,6 @@ export async function sendQueuedDraft(
     deps,
     queuedMessage,
     {
-      hostId: environment.hostId,
-      providerId: thread.providerId,
       threadId: thread.id,
     },
     "client/turn/requested",
