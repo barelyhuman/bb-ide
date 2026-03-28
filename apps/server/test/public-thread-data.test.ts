@@ -272,6 +272,74 @@ describe("public thread data routes", () => {
     }
   });
 
+  it("fails loudly when the latest stored request event is malformed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Earlier valid request" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Malformed latest request" }],
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/default-execution-options`,
+      );
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "internal_error",
+        message: expect.stringContaining(`thread ${thread.id}`),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("marks threads as read and unread", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -412,6 +412,122 @@ describe("internal session routes", () => {
     }
   });
 
+  it("fails reprovision restart loudly when the latest stored request event is malformed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-reprovision-malformed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reprovision-malformed",
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Valid earlier request" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Malformed latest request" }],
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      const provisionCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.provision",
+        payload: JSON.stringify({
+          type: "environment.provision",
+          environmentId: environment.id,
+          projectId: project.id,
+          workspaceProvisionType: "managed-worktree",
+          targetPath: "/tmp/reprovision-malformed",
+          sourcePath: "/tmp/reprovision-malformed-source",
+          branchName: "bb/reprovision-malformed",
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: provisionCommand.id,
+          cursor: provisionCommand.cursor,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/reprovision-malformed",
+            branchName: "bb/reprovision-malformed",
+            defaultBranch: "main",
+            isGitRepo: true,
+            isWorktree: true,
+            ranSetup: false,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(500);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "internal_error",
+        message: expect.stringContaining(`thread ${thread.id}`),
+      });
+      const followupCommands = harness.db
+        .select({
+          cursor: hostDaemonCommands.cursor,
+          payload: hostDaemonCommands.payload,
+        })
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.hostId, host.id))
+        .all()
+        .filter((row) => row.cursor > provisionCommand.cursor)
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+      expect(followupCommands).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("only restarts threads that are still provisioning when reprovision completes", async () => {
     const harness = await createTestAppHarness();
     try {
