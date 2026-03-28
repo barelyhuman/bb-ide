@@ -46,6 +46,25 @@
 - When adding a new route or command type with non-obvious behavior, add the documentation in the same commit.
 - When changing a route's behavior, update any existing documentation to match.
 
+## Contracts And Boundaries
+
+- Optional contract fields are allowed only when leaving the field out has its own real semantic meaning. Do not use optional fields to hide defaults.
+- Use `required + nullable` only when `null` has a distinct meaning such as “clear this value” or “unknown”. Do not use nullable as a stand-in for defaulting.
+- If a field has a default, fill it in once at the server boundary, then pass an explicit value through internal routes, commands, and persisted events.
+- Accepted-but-ignored route or command fields are forbidden. Delete them or implement them end to end in the same change.
+- For new APIs and commands, answer “why is this optional?” during design and review.
+
+## Server And Daemon Ownership
+
+- The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior.
+- The host daemon owns host-local primitives, provider translation, runtime/session management, and workspace execution.
+- If the server needs host-local data, the daemon should return the raw data and the server should assemble the final behavior.
+- When changing a server/daemon boundary, ask “should this decision live on the server instead?”
+
+## Reuse Discipline
+
+- Do not add optional function, component, route, or helper arguments just to support a new caller without first considering a wrapper, a new object type, or a separate helper.
+
 ## Planning Workflow
 
 - When asked to "make a plan", create or update a Markdown file under `plans/`.
