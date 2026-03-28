@@ -46,7 +46,7 @@ describe("server-contract canonical schemas", () => {
       environmentActionRequestSchema.parse({
         action: "commit",
         threadId: "thr_123",
-        options: { message: "Checkpoint" },
+        options: { message: "Checkpoint", autoArchiveOnSuccess: false },
       }),
     ).toMatchObject({
       action: "commit",
@@ -242,11 +242,6 @@ describe("server-contract clients", () => {
       "path: z.string().min(1).optional(),",
       "repoUrl: z.string().url().optional(),",
       "message: z.string().min(1).optional(),",
-      "autoArchiveOnSuccess: z.boolean().optional(),",
-      "mergeBaseBranch: z.string().min(1).optional(),",
-      "autoArchiveOnSuccess: z.boolean().optional(),",
-      "options: commitOptionsSchema.optional(),",
-      "options: squashMergeOptionsSchema.optional(),",
       "commitSha: z.string().optional(),",
       "commitSubject: z.string().optional(),",
       "commitSha: z.string().optional(),",

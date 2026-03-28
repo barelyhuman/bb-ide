@@ -108,11 +108,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             environmentId: environment.id,
             environmentStatus: environment.status,
             workspacePath: environment.path,
-            message: payload.options?.message ?? "Checkpoint changes",
+            message: payload.options.message ?? "Checkpoint changes",
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);
-        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess);
+        const autoArchiveRequested = payload.options.autoArchiveOnSuccess;
         const archivedThread = autoArchiveRequested
           ? archiveThread(deps.db, deps.hub, actingThread.id)
           : null;
@@ -130,9 +130,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "squash_merge": {
-        if (!actingThread.mergeBaseBranch) {
-          throw new ApiError(409, "invalid_request", "Environment has no merge base branch");
-        }
         const rawResult = await queueCommandAndWait(deps, {
           hostId: environment.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
@@ -141,11 +138,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             environmentId: environment.id,
             environmentStatus: environment.status,
             workspacePath: environment.path,
-            targetBranch: payload.options?.mergeBaseBranch ?? actingThread.mergeBaseBranch,
+            targetBranch: payload.options.mergeBaseBranch,
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);
-        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess);
+        const autoArchiveRequested = payload.options.autoArchiveOnSuccess;
         const archivedThread = autoArchiveRequested
           ? archiveThread(deps.db, deps.hub, actingThread.id)
           : null;

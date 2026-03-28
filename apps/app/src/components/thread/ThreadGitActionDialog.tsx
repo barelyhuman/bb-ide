@@ -52,7 +52,7 @@ interface ThreadGitActionDialogProps {
   onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onCommit: () => Promise<void>;
-  onSquashMerge: (args: { mergeBaseBranch?: string }) => Promise<void>;
+  onSquashMerge: (args: { mergeBaseBranch: string }) => Promise<void>;
   onAskAgentToFix?: (input: PromptInput[]) => Promise<void>;
 }
 
@@ -206,11 +206,19 @@ function ThreadGitActionDialogContent({
           await onCommit();
           break;
         case "commit_and_squash_merge":
+          if (!selectedMergeBaseBranch) {
+            setErrorMessage("A merge base branch is required");
+            return;
+          }
           await onSquashMerge({
             mergeBaseBranch: selectedMergeBaseBranch,
           });
           break;
         case "squash_merge":
+          if (!selectedMergeBaseBranch) {
+            setErrorMessage("A merge base branch is required");
+            return;
+          }
           await onSquashMerge({
             mergeBaseBranch: selectedMergeBaseBranch,
           });
@@ -325,7 +333,10 @@ function ThreadGitActionDialogContent({
           ) : (
             <span />
           )}
-          <Button type="submit" disabled={pending}>
+          <Button
+            type="submit"
+            disabled={pending || (dialogCopy.showMergeBase && !selectedMergeBaseBranch)}
+          >
             {pending ? "Starting..." : dialogCopy.submitLabel}
           </Button>
         </DialogFooter>

@@ -299,13 +299,13 @@ export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const commitOptionsSchema = z.object({
   message: z.string().min(1).optional(),
-  autoArchiveOnSuccess: z.boolean().optional(),
+  autoArchiveOnSuccess: z.boolean(),
 });
 export type CommitOptions = z.infer<typeof commitOptionsSchema>;
 
 export const squashMergeOptionsSchema = z.object({
-  mergeBaseBranch: z.string().min(1).optional(),
-  autoArchiveOnSuccess: z.boolean().optional(),
+  mergeBaseBranch: z.string().min(1),
+  autoArchiveOnSuccess: z.boolean(),
 });
 export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;
 
@@ -322,11 +322,11 @@ export const environmentActionRequestSchema = z.discriminatedUnion("action", [
   }),
   environmentActionTargetSchema.extend({
     action: z.literal("commit"),
-    options: commitOptionsSchema.optional(),
+    options: commitOptionsSchema,
   }),
   environmentActionTargetSchema.extend({
     action: z.literal("squash_merge"),
-    options: squashMergeOptionsSchema.optional(),
+    options: squashMergeOptionsSchema,
   }),
 ]);
 export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSchema>;

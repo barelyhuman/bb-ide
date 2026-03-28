@@ -216,6 +216,7 @@ describe("public environment and system routes", () => {
             threadId: thread.id,
             options: {
               message: "Checkpoint changes",
+              autoArchiveOnSuccess: false,
             },
           }),
         },
@@ -373,7 +374,10 @@ describe("public environment and system routes", () => {
           body: JSON.stringify({
             action: "squash_merge",
             threadId: thread.id,
-            options: {},
+            options: {
+              mergeBaseBranch: "main",
+              autoArchiveOnSuccess: false,
+            },
           }),
         },
       );

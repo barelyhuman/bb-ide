@@ -18,6 +18,48 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 describe("public environment action regressions", () => {
+  it("rejects malformed commit and squash-merge payloads with a 400", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const commitResponse = await harness.app.request(
+        "/api/v1/environments/env_missing/actions",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "commit",
+            threadId: "thread_missing",
+          }),
+        },
+      );
+      expect(commitResponse.status).toBe(400);
+      await expect(readJson(commitResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+
+      const squashMergeResponse = await harness.app.request(
+        "/api/v1/environments/env_missing/actions",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "squash_merge",
+            threadId: "thread_missing",
+            options: {
+              autoArchiveOnSuccess: false,
+            },
+          }),
+        },
+      );
+      expect(squashMergeResponse.status).toBe(400);
+      await expect(readJson(squashMergeResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("archives the primary thread before cleanup on commit auto-archive", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -116,6 +158,7 @@ describe("public environment action regressions", () => {
             action: "squash_merge",
             threadId: thread.id,
             options: {
+              mergeBaseBranch: "main",
               autoArchiveOnSuccess: true,
             },
           }),
@@ -231,6 +274,9 @@ describe("public environment action regressions", () => {
           body: JSON.stringify({
             action: "commit",
             threadId: mismatchedThread.id,
+            options: {
+              autoArchiveOnSuccess: false,
+            },
           }),
         },
       );

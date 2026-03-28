@@ -18,7 +18,7 @@ interface EnvironmentCommitCommandOptions {
 }
 
 interface EnvironmentSquashMergeCommandOptions {
-  mergeBaseBranch?: string;
+  mergeBaseBranch: string;
   json?: boolean;
   thread: string;
 }
@@ -58,6 +58,7 @@ export function registerEnvironmentCommands(
               action: "commit",
               threadId: opts.thread,
               options: {
+                autoArchiveOnSuccess: false,
                 ...(opts.message ? { message: opts.message } : {}),
               },
             },
@@ -74,7 +75,7 @@ export function registerEnvironmentCommands(
     .command("squash-merge <id>")
     .description("Squash-merge changes in an environment")
     .requiredOption("--thread <threadId>", "Thread to act on")
-    .option("--merge-base-branch <branch>", "Merge-base branch hint")
+    .requiredOption("--merge-base-branch <branch>", "Merge-base branch")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
       id: string,
@@ -88,7 +89,8 @@ export function registerEnvironmentCommands(
             action: "squash_merge",
             threadId: opts.thread,
             options: {
-              ...(opts.mergeBaseBranch ? { mergeBaseBranch: opts.mergeBaseBranch } : {}),
+              mergeBaseBranch: opts.mergeBaseBranch,
+              autoArchiveOnSuccess: false,
             },
           },
         }),

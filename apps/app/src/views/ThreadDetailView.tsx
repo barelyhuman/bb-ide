@@ -119,7 +119,9 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "commit",
               threadId: "thread",
-              options: {},
+              options: {
+                autoArchiveOnSuccess: false,
+              },
             },
             { errorMessage: details.errorMessage },
           ),
@@ -133,7 +135,10 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "squash_merge",
               threadId: "thread",
-              options: {},
+              options: {
+                mergeBaseBranch: "main",
+                autoArchiveOnSuccess: false,
+              },
             },
             { conflictFiles: details.conflictFiles },
           ),
@@ -147,7 +152,10 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
             {
               action: "squash_merge",
               threadId: "thread",
-              options: {},
+              options: {
+                mergeBaseBranch: "main",
+                autoArchiveOnSuccess: false,
+              },
             },
             {
               stage: details.stage,
@@ -828,7 +836,7 @@ export function ThreadDetailView() {
   const handleSquashMergeThread = async ({
     mergeBaseBranch,
   }: {
-    mergeBaseBranch?: string;
+    mergeBaseBranch: string;
   }) => {
     const attachedEnvironmentId = thread.environmentId;
     if (!threadId || !attachedEnvironmentId) {
@@ -841,7 +849,7 @@ export function ThreadDetailView() {
         threadId,
         action: "squash_merge",
         options: {
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          mergeBaseBranch,
           autoArchiveOnSuccess,
         },
       });
