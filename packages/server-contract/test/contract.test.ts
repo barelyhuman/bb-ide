@@ -184,4 +184,77 @@ describe("server-contract clients", () => {
     expect(contractSource).not.toMatch(/query:\s*\{/);
     expect(contractSource).not.toMatch(/form:\s*Record</);
   });
+
+  it("keeps contract optional fields on an explicit allowlist", () => {
+    const contractDir = path.dirname(fileURLToPath(import.meta.url));
+    const files = [
+      "../src/api-types.ts",
+      "../src/errors.ts",
+    ];
+
+    const optionalLines = files.flatMap((relativePath) => {
+      const absolutePath = path.resolve(contractDir, relativePath);
+      return readFileSync(absolutePath, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.includes(".optional()"));
+    });
+
+    expect(optionalLines).toEqual([
+      "type: threadTypeSchema.optional(),",
+      "title: z.string().min(1).optional(),",
+      "serviceTier: serviceTierSchema.optional(),",
+      "reasoningLevel: reasoningLevelSchema.optional(),",
+      "sandboxMode: sandboxModeSchema.optional(),",
+      "parentThreadId: z.string().min(1).optional(),",
+      "model: z.string().optional(),",
+      "serviceTier: serviceTierSchema.optional(),",
+      "reasoningLevel: reasoningLevelSchema.optional(),",
+      "sandboxMode: sandboxModeSchema.optional(),",
+      "model: z.string().optional(),",
+      "serviceTier: serviceTierSchema.optional(),",
+      "reasoningLevel: reasoningLevelSchema.optional(),",
+      "sandboxMode: sandboxModeSchema.optional(),",
+      "title: z.string().min(1).nullable().optional(),",
+      "mergeBaseBranch: z.string().min(1).nullable().optional(),",
+      "parentThreadId: z.string().min(1).nullable().optional(),",
+      "title: z.string().min(1).optional(),",
+      "query: z.string().min(1).optional(),",
+      "limit: z.string().regex(/^\\d+$/).optional(),",
+      "projectId: z.string().min(1).optional(),",
+      "type: threadTypeSchema.optional(),",
+      "parentThreadId: z.string().min(1).optional(),",
+      "archived: z.enum([\"true\", \"false\"]).optional(),",
+      "limit: z.string().regex(/^\\d+$/).optional(),",
+      "includeManagerDebugView: z.enum([\"true\", \"false\"]).optional(),",
+      "includeManagerDebugView: z.enum([\"true\", \"false\"]).optional(),",
+      "afterSeq: z.string().regex(/^\\d+$/).optional(),",
+      "limit: z.string().regex(/^\\d+$/).optional(),",
+      "query: z.string().min(1).optional(),",
+      "limit: z.string().regex(/^\\d+$/).optional(),",
+      "providerId: z.string().min(1).optional(),",
+      "hostId: z.string().min(1).optional(),",
+      "environmentId: z.string().min(1).optional(),",
+      "hostId: z.string().min(1).optional(),",
+      "environmentId: z.string().min(1).optional(),",
+      "name: z.string().min(1).optional(),",
+      "path: z.string().min(1).optional(),",
+      "repoUrl: z.string().url().optional(),",
+      "message: z.string().min(1).optional(),",
+      "autoArchiveOnSuccess: z.boolean().optional(),",
+      "mergeBaseBranch: z.string().min(1).optional(),",
+      "autoArchiveOnSuccess: z.boolean().optional(),",
+      "options: commitOptionsSchema.optional(),",
+      "options: squashMergeOptionsSchema.optional(),",
+      "commitSha: z.string().optional(),",
+      "commitSubject: z.string().optional(),",
+      "commitSha: z.string().optional(),",
+      "commitSubject: z.string().optional(),",
+      "details: environmentActionFailureDetailsSchema.optional(),",
+      "includeManagerDebugView: z.boolean().optional(),",
+      "contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),",
+      "mimeType: z.string().optional(),",
+      "retryable: z.boolean().optional(),",
+    ]);
+  });
 });

@@ -55,6 +55,8 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Replace inline route input objects in `packages/server-contract/src/public-api.ts` with shared exported request/query/form types.
   Purpose: keep route client typing tied to named contract types instead of letting handwritten inline shapes drift away from the real request schemas.
   Current: the repo had a mixed pattern where many body routes already reused shared types but `public-api.ts` still had inline `query` and some inline `form` shapes. That let the client type for `/threads/:id/archive` drift away from the real request schema, and `/environments/:id/diff` also failed to model the `commitSha` branch explicitly.
+- [x] Put the remaining contract `.optional()` fields behind explicit allowlist tests.
+  Purpose: make the optional-field inventory mechanical so new optionals in the contract packages fail tests unless they are intentionally reviewed and added to the list.
 - [x] Add or update tests for every intentional remaining optional field so the meaning of leaving it out is explicit.
 
 ### 2. Delete Dead Or Ignored Boundary Fields

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createHostDaemonClient,
@@ -127,6 +130,32 @@ describe("host-daemon command schemas", () => {
       type: "thread.start",
       workspacePath: "/tmp/workspace",
     });
+  });
+
+  it("keeps contract optional fields on an explicit allowlist", () => {
+    const contractDir = path.dirname(fileURLToPath(import.meta.url));
+    const files = [
+      "../src/commands.ts",
+      "../src/session.ts",
+    ];
+
+    const optionalLines = files.flatMap((relativePath) => {
+      const absolutePath = path.resolve(contractDir, relativePath);
+      return readFileSync(absolutePath, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.includes(".optional()"));
+    });
+
+    expect(optionalLines).toEqual([
+      "query: z.string().optional(),",
+      "providerThreadId: z.string().min(1).optional(),",
+      "commitSubject: z.string().min(1).optional(),",
+      "commitSha: z.string().min(1).optional(),",
+      "message: z.string().optional(),",
+      "branchName: z.string().min(1).optional(),",
+      "providerThreadId: z.string().min(1).optional(),",
+    ]);
   });
 
   it("parses thread.resume with workspacePath", () => {
