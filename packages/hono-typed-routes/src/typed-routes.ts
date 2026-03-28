@@ -53,7 +53,9 @@ type QueryInput<I> = "query" extends keyof I
   ? I extends { query?: infer Q } ? Q : never
   : never;
 
-type RouteInput<I> = [JsonBody<I>] extends [never] ? QueryInput<I> : JsonBody<I>;
+type RouteInputForMethod<MKey extends MethodKey, I> = MKey extends "$get"
+  ? QueryInput<I>
+  : JsonBody<I>;
 
 // ---------------------------------------------------------------------------
 // Constrained context & handler types
@@ -115,7 +117,7 @@ type InputSource = "json" | "query";
 type TypedRegister<Schema, MKey extends MethodKey> = <
   Path extends string & keyof Schema,
   E extends MKey extends keyof Schema[Path] ? Schema[Path][MKey] : never,
-  Input extends RouteInput<EndpointInput<E>>,
+  Input extends RouteInputForMethod<MKey, EndpointInput<E>>,
 >(
   ...args: [Input] extends [never]
     ? [path: Path, handler: NoBodyHandler<E, Path>]
