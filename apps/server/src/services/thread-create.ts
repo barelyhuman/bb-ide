@@ -157,13 +157,14 @@ async function startQueuedThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: Environment;
-    eventSequence?: number;
+    eventSequence: number;
     request: ThreadCreateServiceRequest;
     thread: ReturnType<typeof createThread>;
   },
 ): Promise<void> {
-  if (!args.request.input || args.request.input.length === 0) {
-    return;
+  const input = args.request.input;
+  if (!input || input.length === 0) {
+    throw new ApiError(500, "invalid_request", "Thread start requires input");
   }
 
   await queueThreadStartCommand(deps, {
@@ -173,7 +174,7 @@ async function startQueuedThreadIfNeeded(
       hostId: args.environment.hostId,
       path: args.environment.path,
     },
-    input: args.request.input,
+    input,
     eventSequence: args.eventSequence,
     execution: buildExecutionOptions(args.request, "client/thread/start"),
     projectId: args.thread.projectId,

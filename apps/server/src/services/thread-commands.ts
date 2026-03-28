@@ -38,7 +38,7 @@ export function buildExecutionOptions(
 export async function queueThreadStartCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    eventSequence?: number;
+    eventSequence: number;
     environment: {
       hostId: string;
       id: string;
@@ -71,9 +71,7 @@ export async function queueThreadStartCommand(
       projectRootPath: runtimeContext.projectRootPath,
       providerId: args.providerId,
       threadType: runtimeContext.threadType,
-      ...(args.eventSequence !== undefined
-        ? { eventSequence: args.eventSequence }
-        : {}),
+      eventSequence: args.eventSequence,
       input: args.input,
       ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
     }),

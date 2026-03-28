@@ -76,7 +76,7 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
   hostDaemonThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("thread.start"),
-  eventSequence: z.number().int().nonnegative().optional(),
+  eventSequence: z.number().int().nonnegative(),
   input: z.array(promptInputSchema).min(1),
 });
 

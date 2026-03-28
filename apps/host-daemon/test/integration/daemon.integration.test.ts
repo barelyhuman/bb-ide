@@ -46,6 +46,7 @@ async function waitForCursor(
 
 function createStandardThreadStartCommand(args: {
   environmentId: string;
+  eventSequence: number;
   input: Array<{ text: string; type: "text" }>;
   projectId: string;
   providerId: string;
@@ -62,6 +63,7 @@ function createStandardThreadStartCommand(args: {
     projectRootPath: args.workspacePath,
     providerId: args.providerId,
     threadType: "standard" as const,
+    eventSequence: args.eventSequence,
     input: args.input,
   };
 }
@@ -142,6 +144,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -174,6 +177,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -230,6 +234,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -274,6 +279,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -284,6 +290,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envBPath,
           projectId: "project-1",
           providerId: "fake",
+          eventSequence: 1,
           input: [{ type: "text", text: "start" }],
         }),
       });
