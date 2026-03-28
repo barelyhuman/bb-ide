@@ -57,6 +57,13 @@
       "when": 1775077200000,
       "tag": "0007_honest_warstar",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1779699600000,
+      "tag": "0008_nice_chimera",
+      "breakpoints": true
     }
   ]
 }

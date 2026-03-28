@@ -130,8 +130,10 @@ describe("db rebuild schema", () => {
       id: createDraftId(),
       threadId,
       content: "[]",
+      model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -479,8 +481,10 @@ describe("db rebuild schema", () => {
       id: createDraftId(),
       threadId,
       content: "[]",
+      model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
       createdAt: now,
       updatedAt: now,
     }).run();

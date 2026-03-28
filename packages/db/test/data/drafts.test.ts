@@ -46,8 +46,10 @@ describe("drafts", () => {
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
+      model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
     });
 
     const fetched = getDraft(db, draft.id);
@@ -60,14 +62,18 @@ describe("drafts", () => {
     createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
+      model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
     });
     createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[{}]",
+      model: "gpt-5",
       reasoningLevel: "high",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
     });
 
     expect(listDrafts(db, thread.id)).toHaveLength(2);
@@ -78,8 +84,10 @@ describe("drafts", () => {
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
+      model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
+      serviceTier: "flex",
     });
 
     expect(deleteDraft(db, noopNotifier, draft.id)).toBe(true);
