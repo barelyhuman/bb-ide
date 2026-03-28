@@ -318,7 +318,7 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.commit": z.object({
     commitSha: z.string().min(1),
-    commitSubject: z.string().min(1).optional(),
+    commitSubject: z.string().min(1),
   }),
   "workspace.squash_merge": z.object({
     merged: z.boolean(),
