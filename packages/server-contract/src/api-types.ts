@@ -118,10 +118,11 @@ export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
 
 export const updateThreadRequestSchema = z
   .object({
-    title: z.string().min(1).nullable().optional(),
-    mergeBaseBranch: z.string().min(1).nullable().optional(),
-    parentThreadId: z.string().min(1).nullable().optional(),
+    title: z.string().min(1).nullable(),
+    mergeBaseBranch: z.string().min(1).nullable(),
+    parentThreadId: z.string().min(1).nullable(),
   })
+  .partial()
   .refine(
     (value) =>
       value.title !== undefined ||
@@ -149,9 +150,9 @@ export type CreateManagerThreadRequest = z.infer<
 >;
 
 export const projectFilesQuerySchema = z.object({
-  query: z.string().min(1).optional(),
-  limit: z.string().regex(/^\d+$/).optional(),
-});
+  query: z.string().min(1),
+  limit: z.string().regex(/^\d+$/),
+}).partial();
 export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
 
 export const projectAttachmentContentQuerySchema = z.object({
@@ -184,18 +185,18 @@ export const environmentDiffQuerySchema = z.discriminatedUnion("selection", [
 export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
 
 export const threadListQuerySchema = z.object({
-  projectId: z.string().min(1).optional(),
-  type: threadTypeSchema.optional(),
-  parentThreadId: z.string().min(1).optional(),
-  archived: z.enum(["true", "false"]).optional(),
-});
+  projectId: z.string().min(1),
+  type: threadTypeSchema,
+  parentThreadId: z.string().min(1),
+  archived: z.enum(["true", "false"]),
+}).partial();
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 
 export const threadTimelineQuerySchema = z.object({
-  limit: z.string().regex(/^\d+$/).optional(),
-  includeManagerDebugView: z.enum(["true", "false"]).optional(),
-  includeToolGroupMessages: z.enum(["true", "false"]).optional(),
-});
+  limit: z.string().regex(/^\d+$/),
+  includeManagerDebugView: z.enum(["true", "false"]),
+  includeToolGroupMessages: z.enum(["true", "false"]),
+}).partial();
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
 export const timelineToolDetailsQuerySchema = z.object({
@@ -209,15 +210,15 @@ export type TimelineToolDetailsQuery = z.infer<
 >;
 
 export const threadEventsQuerySchema = z.object({
-  afterSeq: z.string().regex(/^\d+$/).optional(),
-  limit: z.string().regex(/^\d+$/).optional(),
-});
+  afterSeq: z.string().regex(/^\d+$/),
+  limit: z.string().regex(/^\d+$/),
+}).partial();
 export type ThreadEventsQuery = z.infer<typeof threadEventsQuerySchema>;
 
 export const threadWorkspaceFilesQuerySchema = z.object({
-  query: z.string().min(1).optional(),
-  limit: z.string().regex(/^\d+$/).optional(),
-});
+  query: z.string().min(1),
+  limit: z.string().regex(/^\d+$/),
+}).partial();
 export type ThreadWorkspaceFilesQuery = z.infer<
   typeof threadWorkspaceFilesQuerySchema
 >;
@@ -230,16 +231,16 @@ export type ThreadWorkspaceFileQuery = z.infer<
 >;
 
 export const systemModelsQuerySchema = z.object({
-  providerId: z.string().min(1).optional(),
-  hostId: z.string().min(1).optional(),
-  environmentId: z.string().min(1).optional(),
-});
+  providerId: z.string().min(1),
+  hostId: z.string().min(1),
+  environmentId: z.string().min(1),
+}).partial();
 export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
 
 export const systemProvidersQuerySchema = z.object({
-  hostId: z.string().min(1).optional(),
-  environmentId: z.string().min(1).optional(),
-});
+  hostId: z.string().min(1),
+  environmentId: z.string().min(1),
+}).partial();
 export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
 
 export interface ProjectAttachmentUploadForm {
@@ -252,8 +253,9 @@ export interface SystemVoiceTranscriptionForm {
 
 export const updateProjectRequestSchema = z
   .object({
-    name: z.string().min(1).optional(),
+    name: z.string().min(1),
   })
+  .partial()
   .refine(
     (value) => value.name !== undefined,
     "At least one field must be provided",
@@ -280,9 +282,10 @@ export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceReque
 
 export const updateProjectSourceRequestSchema = z
   .object({
-    path: z.string().min(1).optional(),
-    repoUrl: z.string().url().optional(),
+    path: z.string().min(1),
+    repoUrl: z.string().url(),
   })
+  .partial()
   .refine(
     (value) => value.path !== undefined || value.repoUrl !== undefined,
     "At least one field must be provided",
