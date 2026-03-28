@@ -11,6 +11,7 @@ import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
 
 export const TEST_AUTH_TOKEN = "test-secret-token";
+const TEST_SERVER_HOST = "127.0.0.1";
 
 export interface TestAppHarness {
   app: ReturnType<typeof createApp>["app"];
@@ -74,6 +75,11 @@ export async function startTestServer(
   const { app, injectWebSocket } = createApp(harness.deps);
   const server = serve(
     {
+      // The client always connects to 127.0.0.1, so bind the test server to
+      // 127.0.0.1 too. If we leave the host unspecified, this server can end
+      // up on ::1 while another local process owns 127.0.0.1 on the same
+      // port, and the client will hit that other process instead.
+      hostname: TEST_SERVER_HOST,
       port: 0,
       fetch: app.fetch,
     },
@@ -90,7 +96,7 @@ export async function startTestServer(
   return {
     ...harness,
     app,
-    baseUrl: `http://127.0.0.1:${addressInfo.port}`,
+    baseUrl: `http://${TEST_SERVER_HOST}:${addressInfo.port}`,
     async close(): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
