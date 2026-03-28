@@ -90,7 +90,7 @@ export const sendMessageRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
-  mode: sendMessageModeSchema.optional(),
+  mode: sendMessageModeSchema,
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 

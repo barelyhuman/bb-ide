@@ -490,7 +490,7 @@ export function ThreadDetailView() {
   const sendFollowUpInput = useCallback(
     async ({
       input,
-      mode,
+      mode = "auto",
       model,
       serviceTier: executionServiceTier,
       reasoningLevel: executionReasoningLevel,
@@ -508,7 +508,7 @@ export function ThreadDetailView() {
       await sendMessage.mutateAsync({
         id: threadId,
         input,
-        ...(mode ? { mode } : {}),
+        mode,
         ...(mode === "steer"
           ? {}
           : {
@@ -861,6 +861,7 @@ export function ThreadDetailView() {
     await sendMessage.mutateAsync({
       id: threadId,
       input,
+      mode: "auto",
     });
   };
   const threadActionsMenu = (

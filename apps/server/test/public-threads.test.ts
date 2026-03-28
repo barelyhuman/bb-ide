@@ -438,6 +438,7 @@ describe("public thread routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            mode: "auto",
             input: [{ type: "text", text: "Run this task" }],
           }),
         },
@@ -879,6 +880,7 @@ describe("public thread routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            mode: "auto",
             input: [{ type: "text", text: "Start coordinating work" }],
           }),
         },

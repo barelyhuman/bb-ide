@@ -49,7 +49,7 @@ interface ThreadStopCommandOptions {
 }
 
 interface ThreadSendOptions {
-  mode?: "steer";
+  mode?: "auto" | "steer";
   model?: string;
   reasoningLevel?: ReasoningLevel;
 }
@@ -267,12 +267,13 @@ async function postThreadMessage(
   options?: ThreadSendOptions,
 ): Promise<{ ok: boolean; mode?: "steer" }> {
   const client = createClient(getUrl());
+  const requestedMode = options?.mode ?? "auto";
   const response = await unwrap<{ ok: boolean }>(
     client.api.v1.threads[":id"].send.$post({
       param: { id: threadId },
       json: {
         input: [{ type: "text", text: message }],
-        ...(options?.mode ? { mode: options.mode } : {}),
+        mode: requestedMode,
         ...(options?.model ? { model: options.model } : {}),
         ...(options?.reasoningLevel
           ? { reasoningLevel: options.reasoningLevel }
@@ -282,7 +283,7 @@ async function postThreadMessage(
   );
   return {
     ...response,
-    ...(options?.mode ? { mode: options.mode } : {}),
+    ...(requestedMode === "steer" ? { mode: "steer" as const } : {}),
   };
 }
 

@@ -50,7 +50,7 @@ function ensureThreadIsWritable(thread: Thread): void {
 
 function resolveSendMode(
   threadStatus: string,
-  requestedMode: "auto" | "start" | "steer" | undefined,
+  requestedMode: "auto" | "start" | "steer",
 ): "start" | "steer" {
   if (requestedMode === "start") {
     if (threadStatus === "active") {
