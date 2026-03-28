@@ -75,10 +75,10 @@ export async function startTestServer(
   const { app, injectWebSocket } = createApp(harness.deps);
   const server = serve(
     {
-      // The client connects to 127.0.0.1 (IPv4), so bind the test server to
-      // 127.0.0.1 too. Otherwise the server can listen on a different loopback
-      // address family, and another local IPv4 process on the same port can
-      // receive the request instead.
+      // The client always connects to 127.0.0.1, so bind the test server to
+      // 127.0.0.1 too. If we leave the host unspecified, this server can end
+      // up on ::1 while another local process owns 127.0.0.1 on the same
+      // port, and the client will hit that other process instead.
       hostname: TEST_SERVER_HOST,
       port: 0,
       fetch: app.fetch,
