@@ -106,6 +106,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          input: [{ type: "text", text: "Inspect the default source workspace" }],
           environment: {
             type: "host",
             hostId: host.id,
@@ -337,6 +338,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          input: [{ type: "text", text: "Use the sandbox host" }],
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
@@ -372,6 +374,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          input: [{ type: "text", text: "Reuse the environment" }],
           environment: {
             type: "reuse",
             environmentId: environment.id,
@@ -382,7 +385,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       await expect(readJson(response)).resolves.toMatchObject({
         environmentId: environment.id,
-        status: "idle",
+        status: "active",
       });
     } finally {
       await harness.cleanup();

@@ -8,7 +8,6 @@ import {
   updateEnvironment,
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
-import type { CreateThreadRequest } from "@bb/server-contract";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
@@ -27,11 +26,12 @@ import {
   requireDefaultSource,
   requireProjectExists,
 } from "./thread-create-helpers.js";
+import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
 
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
   mergeBaseBranch: string | null;
-  request: CreateThreadRequest;
+  request: ThreadCreateServiceRequest;
   threadStatus: "idle" | "provisioning";
 }
 
@@ -39,7 +39,7 @@ interface ReuseUnmanagedEnvironmentArgs {
   hostId: string;
   mergeBaseBranch: string | null;
   path: string;
-  request: CreateThreadRequest;
+  request: ThreadCreateServiceRequest;
 }
 
 async function createThreadInEnvironment(
@@ -158,7 +158,7 @@ async function startQueuedThreadIfNeeded(
   args: {
     environment: Environment;
     eventSequence?: number;
-    request: CreateThreadRequest;
+    request: ThreadCreateServiceRequest;
     thread: ReturnType<typeof createThread>;
   },
 ): Promise<void> {
@@ -184,7 +184,7 @@ async function startQueuedThreadIfNeeded(
 
 export async function createThreadFromRequest(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
-  request: CreateThreadRequest,
+  request: ThreadCreateServiceRequest,
 ) {
   requireProjectExists(deps, request.projectId);
 

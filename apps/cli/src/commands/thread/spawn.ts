@@ -21,7 +21,7 @@ import {
 } from "./helpers.js";
 
 interface ThreadSpawnCommandOptions {
-  prompt?: string;
+  prompt: string;
   json?: boolean;
   project?: string;
   environment?: string;
@@ -100,7 +100,7 @@ export function registerSpawnCommand(
   parent
     .command("spawn")
     .description("Spawn a new thread for a project")
-    .option("--prompt <prompt>", "Initial prompt for the thread")
+    .requiredOption("--prompt <prompt>", "Initial prompt for the thread")
     .option("--json", "Print machine-readable JSON output")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option(
@@ -164,9 +164,7 @@ export function registerSpawnCommand(
             json: {
               projectId,
               providerId: opts.provider,
-              input: opts.prompt
-                ? [{ type: "text", text: opts.prompt }]
-                : undefined,
+              input: [{ type: "text", text: opts.prompt }],
               ...(opts.model ? { model: opts.model } : {}),
               ...(reasoningLevel ? { reasoningLevel } : {}),
               ...(opts.title ? { title: opts.title } : {}),

@@ -7,10 +7,10 @@ import {
   queueCommand,
 } from "@bb/db";
 import type { ProjectSource } from "@bb/domain";
-import type { CreateThreadRequest } from "@bb/server-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
 import { deriveTitleFallback } from "./title-generation.js";
 
 export interface ResolvedProjectSource extends ProjectSource {
@@ -33,7 +33,7 @@ export function buildManagedBranchNameFromSeed(
 }
 
 export function buildManagedBranchName(
-  request: CreateThreadRequest,
+  request: ThreadCreateServiceRequest,
   threadId: string,
 ): string {
   const seed = request.title ?? deriveTitleFallback(request.input) ?? threadId;
@@ -114,7 +114,7 @@ export function queueEnvironmentProvision(
 
 export function createThreadRecord(
   deps: Pick<AppDeps, "db" | "hub">,
-  request: CreateThreadRequest,
+  request: ThreadCreateServiceRequest,
   environmentId: string | null,
   mergeBaseBranch: string | null,
 ) {

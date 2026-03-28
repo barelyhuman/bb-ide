@@ -230,6 +230,7 @@ describe("server integration", () => {
           json: {
             projectId: project.id,
             providerId: "codex",
+            input: [{ type: "text", text: "Start the event thread" }],
             environment: {
               type: "host",
               hostId: "host-1",
@@ -258,6 +259,25 @@ describe("server integration", () => {
             isGitRepo: true,
             isWorktree: false,
             ranSetup: false,
+          },
+        },
+      });
+      const threadStartCommand = await fetchSingleCommand(
+        daemonClient,
+        session.sessionId,
+        provisionCommand.cursor,
+      );
+      expect(threadStartCommand.command.type).toBe("thread.start");
+      await daemonClient.session["command-result"].$post({
+        json: {
+          sessionId: session.sessionId,
+          commandId: threadStartCommand.id,
+          cursor: threadStartCommand.cursor,
+          completedAt: Date.now(),
+          type: "thread.start",
+          ok: true,
+          result: {
+            providerThreadId: "provider-thread",
           },
         },
       });
@@ -346,6 +366,7 @@ describe("server integration", () => {
           json: {
             projectId: project.id,
             providerId: "codex",
+            input: [{ type: "text", text: "Start the lifecycle thread" }],
             environment: {
               type: "host",
               hostId: "host-1",
@@ -379,10 +400,68 @@ describe("server integration", () => {
         },
       });
 
-      const afterProvisionThread = await (
+      const initialThreadStartCommand = await fetchSingleCommand(
+        daemonClient,
+        session.sessionId,
+        provisionCommand.cursor,
+      );
+      expect(initialThreadStartCommand.command.type).toBe("thread.start");
+
+      await daemonClient.session["command-result"].$post({
+        json: {
+          sessionId: session.sessionId,
+          commandId: initialThreadStartCommand.id,
+          cursor: initialThreadStartCommand.cursor,
+          completedAt: Date.now(),
+          type: "thread.start",
+          ok: true,
+          result: {
+            providerThreadId: "provider-thread",
+          },
+        },
+      });
+
+      const initialNextSequence = await getNextEventSequence(publicClient, thread.id);
+      const initialEventsResponse = await daemonClient.session.events.$post({
+        json: {
+          sessionId: session.sessionId,
+          events: [
+            {
+              id: "evt-initial-started",
+              environmentId: thread.environmentId,
+              threadId: thread.id,
+              sequence: initialNextSequence,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/started",
+                threadId: thread.id,
+                providerThreadId: "provider-thread",
+                turnId: "turn-initial",
+              },
+            },
+            {
+              id: "evt-initial-completed",
+              environmentId: thread.environmentId,
+              threadId: thread.id,
+              sequence: initialNextSequence + 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-thread",
+                turnId: "turn-initial",
+                status: "completed",
+              },
+            },
+          ],
+        },
+      });
+      expect(initialEventsResponse.status).toBe(200);
+
+      const afterInitialTurnThread = await (
         await publicClient.threads[":id"].$get({ param: { id: thread.id } })
       ).json();
-      expect(afterProvisionThread.status).toBe("idle");
+      expect(afterInitialTurnThread.status).toBe("idle");
 
       const sendResponse = await publicClient.threads[":id"].send.$post({
         param: { id: thread.id },
@@ -393,24 +472,22 @@ describe("server integration", () => {
       });
       expect(sendResponse.status).toBe(200);
 
-      const threadStartCommand = await fetchSingleCommand(
+      const turnRunCommand = await fetchSingleCommand(
         daemonClient,
         session.sessionId,
-        provisionCommand.cursor,
+        initialThreadStartCommand.cursor,
       );
-      expect(threadStartCommand.command.type).toBe("thread.start");
+      expect(turnRunCommand.command.type).toBe("turn.run");
 
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
-          commandId: threadStartCommand.id,
-          cursor: threadStartCommand.cursor,
+          commandId: turnRunCommand.id,
+          cursor: turnRunCommand.cursor,
           completedAt: Date.now(),
-          type: "thread.start",
+          type: "turn.run",
           ok: true,
-          result: {
-            providerThreadId: "provider-thread",
-          },
+          result: {},
         },
       });
 

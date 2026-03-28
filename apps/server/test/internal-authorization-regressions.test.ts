@@ -191,6 +191,7 @@ describe("internal authorization regressions", () => {
         body: JSON.stringify({
           projectId: projectA.id,
           providerId: "codex",
+          input: [{ type: "text", text: "Reuse the other project environment" }],
           environment: {
             type: "reuse",
             environmentId: environment.id,
