@@ -14,6 +14,8 @@ import {
   hostDaemonCommandResultReportSchema,
 } from "./commands.js";
 
+const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
+
 export const hostDaemonActiveThreadSchema = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
@@ -45,9 +47,9 @@ export type HostDaemonSessionOpenResponse = z.infer<
 
 export const hostDaemonCommandsQuerySchema = z.object({
   sessionId: z.string().min(1),
-  afterCursor: z.string().optional(),
-  limit: z.string().optional(),
-  waitMs: z.string().optional(),
+  afterCursor: nonNegativeIntegerStringSchema,
+  limit: nonNegativeIntegerStringSchema,
+  waitMs: nonNegativeIntegerStringSchema,
 });
 export type HostDaemonCommandsQuery = z.infer<
   typeof hostDaemonCommandsQuerySchema

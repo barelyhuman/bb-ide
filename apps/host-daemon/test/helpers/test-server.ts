@@ -129,7 +129,7 @@ export async function createTestServer(
   });
   app.get("/internal/session/commands", (context) => {
     const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
-    const afterCursor = Number.parseInt(query.afterCursor ?? "0", 10);
+    const afterCursor = Number.parseInt(query.afterCursor, 10);
     commandFetches.push({
       sessionId: query.sessionId,
       afterCursor,

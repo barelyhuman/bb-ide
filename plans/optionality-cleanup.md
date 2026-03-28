@@ -194,7 +194,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Make `hostDaemonHeartbeat.lastCommandCursor` required and nullable.
   Purpose: make heartbeat state explicit without using an optional field. Use a number when known and `null` when unknown.
   Current: the contract makes it optional in [packages/host-daemon-contract/src/session.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/session.ts#L88), the daemon sends `cursorState.value || undefined` in [apps/host-daemon/src/app.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/app.ts#L188), and I found no current server-side consumer of the field.
-- [ ] Fill in defaults for `commandsQuery.afterCursor`, `limit`, and `waitMs` at the boundary so downstream code does not invent defaults ad hoc.
+- [x] Fill in defaults for `commandsQuery.afterCursor`, `limit`, and `waitMs` at the boundary so downstream code does not invent defaults ad hoc.
   Purpose: make polling semantics explicit and predictable.
   Current: the command query schema leaves all three optional in [packages/host-daemon-contract/src/session.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/session.ts#L46), the daemon client always sends `afterCursor` but only sometimes sends `limit` / `waitMs` in [apps/host-daemon/src/server-client.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/server-client.ts#L200), and the server defaults them to `0`, `100`, and `0` in [apps/server/src/internal/commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/commands.ts#L23).
 

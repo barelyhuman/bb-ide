@@ -92,7 +92,12 @@ async function fetchSingleCommand(
   afterCursor: number,
 ): Promise<HostDaemonCommandEnvelope> {
   const response = await daemonClient.session.commands.$get({
-    query: { sessionId, afterCursor: String(afterCursor) },
+    query: {
+      sessionId,
+      afterCursor: String(afterCursor),
+      limit: "100",
+      waitMs: "0",
+    },
   });
   expect(response.status).toBe(200);
   const body = await response.json();

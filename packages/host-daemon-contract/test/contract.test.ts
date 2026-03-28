@@ -293,6 +293,8 @@ describe("host-daemon session schemas", () => {
       hostDaemonCommandsQuerySchema.parse({
         sessionId: "session_123",
         afterCursor: "12",
+        limit: "100",
+        waitMs: "0",
       }),
     ).toMatchObject({
       sessionId: "session_123",

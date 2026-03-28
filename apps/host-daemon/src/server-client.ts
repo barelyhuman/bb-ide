@@ -23,6 +23,8 @@ import type { ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 
 const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
+const DEFAULT_COMMAND_FETCH_LIMIT = 100;
+const DEFAULT_COMMAND_FETCH_WAIT_MS = 0;
 
 function parseRawCommandBatch(json: unknown): unknown[] {
   if (
@@ -201,10 +203,8 @@ export function createServerClient(
       const query = hostDaemonCommandsQuerySchema.parse({
         sessionId: requireSessionId(),
         afterCursor: String(optionsArg.afterCursor),
-        limit:
-          optionsArg.limit === undefined ? undefined : String(optionsArg.limit),
-        waitMs:
-          optionsArg.waitMs === undefined ? undefined : String(optionsArg.waitMs),
+        limit: String(optionsArg.limit ?? DEFAULT_COMMAND_FETCH_LIMIT),
+        waitMs: String(optionsArg.waitMs ?? DEFAULT_COMMAND_FETCH_WAIT_MS),
       });
       const response = await fetchFn(
         buildInternalUrl("/session/commands", query),

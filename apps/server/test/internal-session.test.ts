@@ -120,7 +120,7 @@ describe("internal session routes", () => {
       });
 
       const fetchResponse = await harness.app.request(
-        `/internal/session/commands?sessionId=${session.id}&afterCursor=0&limit=10`,
+        `/internal/session/commands?sessionId=${session.id}&afterCursor=0&limit=10&waitMs=0`,
         {
           headers: {
             authorization: `Bearer ${harness.config.authToken}`,
@@ -149,7 +149,7 @@ describe("internal session routes", () => {
       expect(fetched?.state).toBe("fetched");
 
       const timeoutResponse = await harness.app.request(
-        `/internal/session/commands?sessionId=${session.id}&afterCursor=${command.cursor}&waitMs=1`,
+        `/internal/session/commands?sessionId=${session.id}&afterCursor=${command.cursor}&limit=100&waitMs=1`,
         {
           headers: {
             authorization: `Bearer ${harness.config.authToken}`,
