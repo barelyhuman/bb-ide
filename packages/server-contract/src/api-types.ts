@@ -115,7 +115,7 @@ export const sendDraftResponseSchema = z.object({
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
 
 export const archiveThreadRequestSchema = z.object({
-  force: z.boolean().optional(),
+  force: z.boolean(),
 });
 export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
 

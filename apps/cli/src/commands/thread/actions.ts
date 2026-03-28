@@ -146,7 +146,7 @@ export function registerActionsCommands(
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].archive.$post({
             param: { id: threadId },
-            json: opts.force ? { force: true } : {},
+            json: { force: opts.force === true },
           }),
         );
       } catch (err: unknown) {

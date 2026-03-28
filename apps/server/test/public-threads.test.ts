@@ -590,7 +590,7 @@ describe("public thread routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ force: false }),
         },
       );
       const dirtyStatusCommand = await waitForQueuedCommand(
@@ -620,7 +620,7 @@ describe("public thread routes", () => {
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ force: false }),
       });
       const cleanStatusCommand = await waitForQueuedCommandAfter(
         harness,

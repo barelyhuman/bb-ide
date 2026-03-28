@@ -456,7 +456,7 @@ export function ThreadDetailView() {
     }
 
     archiveThread.mutate(
-      { id: thread.id },
+      { id: thread.id, force: false },
       {
         onSuccess: () => {
           navigate(`/projects/${thread.projectId}`);

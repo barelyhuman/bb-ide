@@ -744,7 +744,7 @@ describe("CLI command output contracts", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
-      json: {},
+      json: { force: false },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived",
@@ -805,6 +805,10 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.error))).toContain(
       "Error: Failed to archive thread thread-archive-1: HTTP 404: missing",
     );
+    expect(archivePost).toHaveBeenCalledWith({
+      param: { id: "thread-archive-1" },
+      json: { force: false },
+    });
   });
 
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {

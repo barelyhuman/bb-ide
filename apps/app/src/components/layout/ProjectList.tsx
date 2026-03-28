@@ -272,7 +272,7 @@ export function ProjectList({
 
     // Client-side confirmation is deferred to the server — if the environment
     // has uncommitted changes, the server returns 409 and we show the dialog.
-    archiveThread.mutate({ id: thread.id }, {
+    archiveThread.mutate({ id: thread.id, force: false }, {
       onError: (error) => {
         if (isArchiveForceRequiredError(error)) {
           archiveConfirmationDialog.onOpen(thread)

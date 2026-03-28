@@ -419,12 +419,12 @@ export async function stopThread(id: string): Promise<void> {
 
 export async function archiveThread(
   id: string,
-  opts?: { force?: boolean },
+  opts: { force: boolean },
 ): Promise<void> {
   await request<unknown>(
     apiClient.threads[":id"].archive.$post({
       param: { id },
-      json: { force: opts?.force === true },
+      json: { force: opts.force },
     }),
   );
 }

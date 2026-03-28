@@ -905,7 +905,7 @@ export function useUpdateThread() {
 export function useArchiveThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: { id: string; force?: boolean }) =>
+    mutationFn: (args: { id: string; force: boolean }) =>
       api.archiveThread(args.id, { force: args.force }),
     onMutate: async (args) => {
       await queryClient.cancelQueries({ queryKey: ["thread", args.id] });
