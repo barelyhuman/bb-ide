@@ -667,7 +667,7 @@ export function useThreadTimelineToolDetails() {
 
 export function useEnvironmentGitDiff(
   id: string,
-  options?: {
+  options: {
     enabled?: boolean;
     selection: ThreadGitDiffSelection;
     mergeBaseBranch?: string;
@@ -683,9 +683,9 @@ export function useEnvironmentGitDiff(
       id,
       options.selection.type,
       selectionKey,
-      options?.mergeBaseBranch ?? null,
+      options.mergeBaseBranch ?? null,
     ],
-    queryFn: () => api.getEnvironmentDiff(id, options.selection, options?.mergeBaseBranch),
+    queryFn: () => api.getEnvironmentDiff(id, options.selection, options.mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
     placeholderData: (previousData, previousQuery) =>
       resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),

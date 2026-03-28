@@ -522,17 +522,22 @@ export async function getEnvironmentDiff(
   selection: ThreadGitDiffSelection,
   mergeBaseBranch?: string,
 ): Promise<ThreadGitDiffResponse> {
+  const query =
+    selection.type === "commit"
+      ? {
+          selection: "commit",
+          commitSha: selection.sha,
+          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        }
+      : {
+          selection: "combined",
+          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        };
+
   return request<ThreadGitDiffResponse>(
     apiClient.environments[":id"].diff.$get({
       param: { id },
-      query: {
-        ...(selection.type === "commit"
-          ? { selection: "commit", commitSha: selection.sha }
-          : selection.type === "combined"
-            ? { selection: "combined" }
-            : {}),
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      },
+      query,
     }),
   );
 }
