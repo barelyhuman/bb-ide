@@ -80,7 +80,6 @@ export const createThreadRequestSchema = z.object({
   sandboxMode: sandboxModeSchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
-  spawnInitiator: z.enum(["user", "agent", "system"]).optional(),
 });
 export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
 

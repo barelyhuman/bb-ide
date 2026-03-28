@@ -74,7 +74,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [ ] Redesign `CreateProjectSourceRequest` as a discriminated union so invalid partial shapes are no longer representable.
   Purpose: describe valid source creation shapes instead of accepting a loose bag of `type` / `path` / `repoUrl`.
   Current: the schema is loose in [packages/server-contract/src/api-types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/server-contract/src/api-types.ts#L164), the server defaults missing `type` to `"local_path"` in [apps/server/src/routes/projects.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/projects.ts#L112), and the only in-tree app caller sends just `{ hostId, path }` in [apps/app/src/components/layout/ProjectList.tsx](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/components/layout/ProjectList.tsx#L230). I found no production caller that creates a `github_repo` source through this route.
-- [ ] Delete `CreateThreadRequest.spawnInitiator` from the public contract.
+- [x] Delete `CreateThreadRequest.spawnInitiator` from the public contract.
   Purpose: label the initiator recorded on `client/thread/start` events.
   Current: the public contract exposes it in [packages/server-contract/src/api-types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/server-contract/src/api-types.ts#L71), but the only in-tree caller that sets it is the internal tool-call path in [apps/server/src/internal/tool-calls.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/tool-calls.ts#L80). App and CLI thread creation do not send it.
 - [ ] Delete all user-configurable squash-merge message fields and flags.
