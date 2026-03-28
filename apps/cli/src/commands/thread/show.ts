@@ -87,7 +87,7 @@ export function registerShowCommand(
     .option("--git-diff", "Include git diff in output")
     .option(
       "--diff-selection <type>",
-      "Diff selection type: combined or commit (used with --git-diff)",
+      "Diff selection type: combined (used with --git-diff)",
     )
     .option(
       "--diff-merge-base <branch>",
@@ -164,11 +164,16 @@ export function registerShowCommand(
       let gitDiff: ThreadGitDiffResponse | undefined;
       if (opts.gitDiff && thread.environmentId) {
         const mergeBaseBranch = await requireMergeBaseBranch(opts.diffMergeBase);
+        if (opts.diffSelection !== undefined && opts.diffSelection !== "combined") {
+          throw new Error(
+            "Only --diff-selection combined is currently supported by bb thread show.",
+          );
+        }
         gitDiff = await unwrap<ThreadGitDiffResponse>(
           client.api.v1.environments[":id"].diff.$get({
             param: { id: thread.environmentId },
             query: {
-              selection: opts.diffSelection ?? "combined",
+              selection: "combined",
               mergeBaseBranch,
             },
           }),

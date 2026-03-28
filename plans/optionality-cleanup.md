@@ -52,6 +52,9 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 - [x] Re-audit every `.optional()` field in `packages/server-contract` and `packages/host-daemon-contract`.
 - [x] For each field, classify it as `keep optional`, `delete`, `fill in the default at the server boundary, then make required`, or `make required`.
+- [x] Replace inline route input objects in `packages/server-contract/src/public-api.ts` with shared exported request/query/form types.
+  Purpose: keep route client typing tied to named contract types instead of letting handwritten inline shapes drift away from the real request schemas.
+  Current: the repo had a mixed pattern where many body routes already reused shared types but `public-api.ts` still had inline `query` and some inline `form` shapes. That let the client type for `/threads/:id/archive` drift away from the real request schema, and `/environments/:id/diff` also failed to model the `commitSha` branch explicitly.
 - [x] Add or update tests for every intentional remaining optional field so the meaning of leaving it out is explicit.
 
 ### 2. Delete Dead Or Ignored Boundary Fields
@@ -89,6 +92,9 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Make `model` required in the public create-thread API. Keep `serviceTier`, `reasoningLevel`, and `sandboxMode` optional on create-thread, with server-owned defaults.
   Purpose: starting a new thread should always choose a model explicitly, while still allowing the API to omit the common defaults for service tier, reasoning level, and sandbox mode.
   Current: `CreateThreadRequest` leaves `model`, `serviceTier`, `reasoningLevel`, and `sandboxMode` optional in [packages/server-contract/src/api-types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/server-contract/src/api-types.ts#L71), and server helpers currently accept missing values in [apps/server/src/services/thread-commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-commands.ts#L23).
+- [x] Make `CreateManagerThreadRequest.providerId`, `CreateManagerThreadRequest.model`, and `CreateManagerThreadRequest.reasoningLevel` required.
+  Purpose: manager creation should not hide provider/model/reasoning defaults behind omission. The caller should choose them explicitly.
+  Current: the manager create request previously allowed all three to be omitted in [packages/server-contract/src/api-types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/server-contract/src/api-types.ts#L141), the server silently defaulted `providerId` in [apps/server/src/routes/projects.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/projects.ts#L221), the app could omit them from the hire flow in [apps/app/src/components/HireManagerModal.tsx](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/components/HireManagerModal.tsx#L148), and the CLI could omit them in [apps/cli/src/commands/manager.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/cli/src/commands/manager.ts#L46).
 - [x] Make CLI `thread spawn --prompt` required so it cannot create an idle thread shell.
   Purpose: align CLI behavior with the intended product model that thread creation starts work immediately.
   Current: `--prompt` is optional in [apps/cli/src/commands/thread/spawn.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/cli/src/commands/thread/spawn.ts#L101) and is the only in-tree production caller that creates threads without input.

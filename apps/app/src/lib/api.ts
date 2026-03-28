@@ -15,9 +15,9 @@ import type {
   ThreadQueuedMessage,
   WorkspaceStatus,
   AvailableModel,
-  ReasoningLevel,
 } from "@bb/domain";
 import type {
+  CreateManagerThreadRequest,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateDraftRequest,
@@ -206,12 +206,12 @@ export async function createProject(req: CreateProjectRequest): Promise<Project>
 
 export async function hireProjectManager(
   projectId: string,
-  options?: { title?: string; providerId?: string; model?: string; reasoningLevel?: ReasoningLevel },
+  options: CreateManagerThreadRequest,
 ): Promise<Thread> {
   return request<Thread>(
     apiClient.projects[":id"].managers.$post({
       param: { id: projectId },
-      json: options ?? {},
+      json: options,
     }),
   );
 }
@@ -521,12 +521,12 @@ export async function getEnvironmentDiff(
   const query =
     selection.type === "commit"
       ? {
-          selection: "commit",
+          selection: "commit" as const,
           commitSha: selection.sha,
           mergeBaseBranch,
         }
       : {
-          selection: "combined",
+          selection: "combined" as const,
           mergeBaseBranch,
         };
 

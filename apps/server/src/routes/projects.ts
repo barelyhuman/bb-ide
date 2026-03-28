@@ -218,11 +218,11 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     }
     const thread = await createThreadFromRequest(deps, {
       projectId: context.req.param("id"),
-      providerId: payload.providerId ?? "claude-code",
+      providerId: payload.providerId,
       type: "manager",
       ...(payload.title ? { title: payload.title } : {}),
-      ...(payload.model ? { model: payload.model } : {}),
-      ...(payload.reasoningLevel ? { reasoningLevel: payload.reasoningLevel } : {}),
+      model: payload.model,
+      reasoningLevel: payload.reasoningLevel,
       environment: {
         type: "host",
         hostId: source.hostId,

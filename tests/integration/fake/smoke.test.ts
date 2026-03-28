@@ -196,7 +196,9 @@ describe.sequential("fake provider smoke integration", () => {
       async (harness) => {
         const project = await createProjectFixture(harness, "Manager Smoke");
         const managerThread = await createManagerThread(harness.api, project.id, {
+          model: "fake-model",
           providerId: "fake",
+          reasoningLevel: "high",
           title: "Project manager",
         });
         expect(managerThread.type).toBe("manager");

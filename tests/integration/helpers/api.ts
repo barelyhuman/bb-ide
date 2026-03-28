@@ -137,14 +137,9 @@ export async function createManagerThread(
   projectId: string,
   request: CreateManagerThreadRequest,
 ): Promise<Thread> {
-  const providerId = request.providerId ?? "fake";
   const response = await api.projects[":id"].managers.$post({
     param: { id: projectId },
-    json: {
-      ...request,
-      model: request.model ?? defaultModelForProvider(providerId),
-      providerId,
-    },
+    json: request,
   });
   await expectStatus(response, 201, `create manager thread for project ${projectId}`);
   return threadSchema.parse(await response.json());

@@ -137,6 +137,10 @@ export function HireManagerModal({
   const handleHire = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!projectId || isPending) return;
+    if (!effectiveProviderId || !selectedModel || !effectiveReasoningLevel) {
+      setError("Manager provider, model, and reasoning level are required");
+      return;
+    }
     setIsPending(true);
     setError(null);
     try {
@@ -144,11 +148,9 @@ export function HireManagerModal({
       const thread = await hireManager.mutateAsync({
         projectId,
         ...(trimmedManagerName ? { title: trimmedManagerName } : {}),
-        ...(hasMultipleProviders && effectiveProviderId
-          ? { providerId: effectiveProviderId }
-          : {}),
-        ...(selectedModel ? { model: selectedModel } : {}),
-        ...(effectiveReasoningLevel ? { reasoningLevel: effectiveReasoningLevel } : {}),
+        providerId: effectiveProviderId,
+        model: selectedModel,
+        reasoningLevel: effectiveReasoningLevel,
       });
       onHired(thread);
       onClose();

@@ -415,9 +415,9 @@ export function useHireProjectManager() {
     }: {
       projectId: string;
       title?: string;
-      providerId?: string;
-      model?: string;
-      reasoningLevel?: ReasoningLevel;
+      providerId: string;
+      model: string;
+      reasoningLevel: ReasoningLevel;
     }) => api.hireProjectManager(projectId, { title, providerId, model, reasoningLevel }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);

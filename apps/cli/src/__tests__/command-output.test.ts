@@ -230,13 +230,29 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["manager", "hire", "project-123"], (program) =>
+    await runCommand(
+      [
+        "manager",
+        "hire",
+        "project-123",
+        "--provider",
+        "claude-code",
+        "--model",
+        "claude-opus-4-6",
+        "--reasoning-level",
+        "high",
+      ],
+      (program) =>
       registerManagerCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       param: { id: "project-123" },
-      json: {},
+      json: {
+        model: "claude-opus-4-6",
+        providerId: "claude-code",
+        reasoningLevel: "high",
+      },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-1");
   });

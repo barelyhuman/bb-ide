@@ -140,13 +140,110 @@ export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
 export const createManagerThreadRequestSchema = z.object({
   title: z.string().min(1).optional(),
-  providerId: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  reasoningLevel: reasoningLevelSchema.optional(),
+  providerId: z.string().min(1),
+  model: z.string().min(1),
+  reasoningLevel: reasoningLevelSchema,
 });
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
 >;
+
+export const projectFilesQuerySchema = z.object({
+  query: z.string().min(1).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+});
+export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
+
+export const projectAttachmentContentQuerySchema = z.object({
+  path: z.string().min(1),
+});
+export type ProjectAttachmentContentQuery = z.infer<
+  typeof projectAttachmentContentQuerySchema
+>;
+
+export const environmentStatusQuerySchema = z.object({
+  mergeBaseBranch: z.string().min(1),
+});
+export type EnvironmentStatusQuery = z.infer<typeof environmentStatusQuerySchema>;
+
+export const environmentDiffQuerySchema = z.discriminatedUnion("selection", [
+  z.object({
+    selection: z.literal("combined"),
+    mergeBaseBranch: z.string().min(1),
+  }),
+  z.object({
+    selection: z.literal("commit"),
+    commitSha: z.string().min(1),
+    mergeBaseBranch: z.string().min(1),
+  }),
+]);
+export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
+
+export const threadListQuerySchema = z.object({
+  projectId: z.string().min(1).optional(),
+  type: threadTypeSchema.optional(),
+  parentThreadId: z.string().min(1).optional(),
+  archived: z.enum(["true", "false"]).optional(),
+});
+export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
+
+export const threadTimelineQuerySchema = z.object({
+  limit: z.string().regex(/^\d+$/).optional(),
+  includeManagerDebugView: z.enum(["true", "false"]).optional(),
+});
+export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
+
+export const timelineToolDetailsQuerySchema = z.object({
+  turnId: z.string().min(1),
+  sourceSeqStart: z.string().regex(/^\d+$/),
+  sourceSeqEnd: z.string().regex(/^\d+$/),
+  includeManagerDebugView: z.enum(["true", "false"]).optional(),
+});
+export type TimelineToolDetailsQuery = z.infer<
+  typeof timelineToolDetailsQuerySchema
+>;
+
+export const threadEventsQuerySchema = z.object({
+  afterSeq: z.string().regex(/^\d+$/).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+});
+export type ThreadEventsQuery = z.infer<typeof threadEventsQuerySchema>;
+
+export const threadWorkspaceFilesQuerySchema = z.object({
+  query: z.string().min(1).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+});
+export type ThreadWorkspaceFilesQuery = z.infer<
+  typeof threadWorkspaceFilesQuerySchema
+>;
+
+export const threadWorkspaceFileQuerySchema = z.object({
+  path: z.string().min(1),
+});
+export type ThreadWorkspaceFileQuery = z.infer<
+  typeof threadWorkspaceFileQuerySchema
+>;
+
+export const systemModelsQuerySchema = z.object({
+  providerId: z.string().min(1).optional(),
+  hostId: z.string().min(1).optional(),
+  environmentId: z.string().min(1).optional(),
+});
+export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
+
+export const systemProvidersQuerySchema = z.object({
+  hostId: z.string().min(1).optional(),
+  environmentId: z.string().min(1).optional(),
+});
+export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
+
+export interface ProjectAttachmentUploadForm {
+  [key: string]: string | Blob;
+}
+
+export interface SystemVoiceTranscriptionForm {
+  [key: string]: string | Blob;
+}
 
 export const updateProjectRequestSchema = z
   .object({

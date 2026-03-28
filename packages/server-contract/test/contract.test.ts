@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   PROJECT_CHANGE_KINDS,
@@ -52,6 +55,7 @@ describe("server-contract canonical schemas", () => {
 
     expect(
       createManagerThreadRequestSchema.parse({
+        model: "claude-opus-4-6",
         providerId: "codex",
         reasoningLevel: "high",
         title: "Manager",
@@ -134,9 +138,13 @@ describe("server-contract canonical schemas", () => {
       input: [{ type: "text", text: "Queue this with inherited defaults" }],
     });
 
-    expect(
-      createManagerThreadRequestSchema.parse({}),
-    ).toEqual({});
+    expect(() =>
+      createManagerThreadRequestSchema.parse({
+        providerId: "claude-code",
+        reasoningLevel: "high",
+        title: "Missing model",
+      }),
+    ).toThrow();
   });
 });
 
@@ -163,5 +171,17 @@ describe("server-contract clients", () => {
         },
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/timeline/tool-details");
+  });
+
+  it("keeps route inputs in shared named types instead of inline objects", () => {
+    const contractPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../src/public-api.ts",
+    );
+    const contractSource = readFileSync(contractPath, "utf8");
+
+    expect(contractSource).not.toMatch(/json:\s*\{/);
+    expect(contractSource).not.toMatch(/query:\s*\{/);
+    expect(contractSource).not.toMatch(/form:\s*Record</);
   });
 });
