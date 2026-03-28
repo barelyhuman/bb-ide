@@ -144,7 +144,7 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
-  it("creates child threads from the spawn_thread tool call", async () => {
+  it("rejects unsupported tool calls", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps);
@@ -169,16 +169,14 @@ describe("internal event and tool-call routes", () => {
           turnId: "turn-1",
           callId: "call-1",
           tool: "spawn_thread",
-          arguments: {
-            title: "Worker thread",
-            prompt: "Implement the endpoint",
-          },
+          arguments: {},
         }),
       });
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
-        success: true,
+        success: false,
+        contentItems: [{ type: "inputText", text: "Unsupported tool: spawn_thread" }],
       });
 
       const childThreads = harness.db
@@ -186,8 +184,7 @@ describe("internal event and tool-call routes", () => {
         .from(threads)
         .where(eq(threads.parentThreadId, managerThread.id))
         .all();
-      expect(childThreads).toHaveLength(1);
-      expect(childThreads[0]?.title).toBe("Worker thread");
+      expect(childThreads).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

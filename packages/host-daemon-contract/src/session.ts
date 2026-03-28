@@ -161,7 +161,7 @@ export type HostDaemonInternalSchema = {
     >;
   };
   "/session/tool-call": {
-    /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. spawn_thread). */
+    /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. message_user). */
     $post: Endpoint<
       { json: HostDaemonToolCallRequest },
       HostDaemonToolCallResponse

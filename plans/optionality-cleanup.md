@@ -155,7 +155,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [ ] Keep `message_user` as an implementation-owned manager tool that is always included for manager threads.
   Purpose: preserve the real manager communication path as a server-owned manager tool.
   Current: `message_user` is implemented server-side in [apps/server/src/internal/tool-calls.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/tool-calls.ts#L23), but is still injected daemon-side in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L65).
-- [ ] Delete the manager `spawn_thread` dynamic tool and its server-side tool-call implementation.
+- [x] Delete the manager `spawn_thread` dynamic tool and its server-side tool-call implementation.
   Purpose: remove the hallucinated manager capability instead of preserving it as a built-in tool.
   Current: `spawn_thread` is injected alongside `message_user` in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L65), implemented in [apps/server/src/internal/tool-calls.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/tool-calls.ts#L59), mentioned in manager templates, and covered by tests.
 - [x] Always send `session.open.activeThreads`, and make the field required.

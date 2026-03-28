@@ -319,10 +319,7 @@ describe("thread command dispatch", () => {
     );
 
     expect(harness.runtimeState.startedDynamicTools).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "message_user" }),
-        expect.objectContaining({ name: "spawn_thread" }),
-      ]),
+      [expect.objectContaining({ name: "message_user" })],
     );
     expect(harness.runtimeState.startedInstructions).toContain(
       "You are a manager for this project.",

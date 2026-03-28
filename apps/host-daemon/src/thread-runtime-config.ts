@@ -27,63 +27,11 @@ const MESSAGE_USER_TOOL_SCHEMA = {
   required: ["text"],
 };
 
-const SPAWN_THREAD_TOOL_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    prompt: {
-      type: "string",
-      description: "Primary task prompt for the child thread.",
-    },
-    environmentId: {
-      type: "string",
-      description: "Existing environment to reuse for the child thread.",
-    },
-    hostId: {
-      type: "string",
-      description: "Host to run the child thread on when creating a new environment.",
-    },
-    providerId: {
-      type: "string",
-      description: "Provider for the child thread.",
-    },
-    type: {
-      type: "string",
-      enum: ["standard", "manager"],
-      description: "Thread type for the child thread.",
-    },
-    title: {
-      type: "string",
-      description: "Human-readable child thread title.",
-    },
-    model: {
-      type: "string",
-      description: "Model override for the child thread.",
-    },
-    reasoningLevel: {
-      type: "string",
-      enum: ["low", "medium", "high", "xhigh"],
-      description: "Reasoning effort for the child thread.",
-    },
-    sandboxMode: {
-      type: "string",
-      enum: ["read-only", "workspace-write", "danger-full-access"],
-      description: "Sandbox mode for the child thread.",
-    },
-  },
-  required: ["prompt"],
-};
-
 const MANAGER_DYNAMIC_TOOLS: DynamicTool[] = [
   {
     name: "message_user",
     description: "Send a user-visible update from the manager thread.",
     inputSchema: MESSAGE_USER_TOOL_SCHEMA,
-  },
-  {
-    name: "spawn_thread",
-    description: "Create a BB child thread to own substantive work.",
-    inputSchema: SPAWN_THREAD_TOOL_SCHEMA,
   },
 ];
 
