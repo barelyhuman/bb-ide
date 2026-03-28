@@ -669,23 +669,23 @@ export function useEnvironmentGitDiff(
   id: string,
   options?: {
     enabled?: boolean;
-    selection?: ThreadGitDiffSelection;
+    selection: ThreadGitDiffSelection;
     mergeBaseBranch?: string;
   },
 ) {
   const selectionKey =
-    options?.selection?.type === "commit"
+    options.selection.type === "commit"
       ? options.selection.sha
       : "combined";
   return useQuery<ThreadGitDiffResponse>({
     queryKey: [
       ENVIRONMENT_GIT_DIFF_QUERY_KEY,
       id,
-      options?.selection?.type ?? "combined",
+      options.selection.type,
       selectionKey,
       options?.mergeBaseBranch ?? null,
     ],
-    queryFn: () => api.getEnvironmentDiff(id, options?.selection, options?.mergeBaseBranch),
+    queryFn: () => api.getEnvironmentDiff(id, options.selection, options?.mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
     placeholderData: (previousData, previousQuery) =>
       resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),

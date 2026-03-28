@@ -197,7 +197,7 @@ export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.exte
 
 export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diff"),
-  selection: threadGitDiffSelectionSchema.optional(),
+  selection: threadGitDiffSelectionSchema,
   mergeBaseBranch: z.string().min(1).optional(),
 });
 

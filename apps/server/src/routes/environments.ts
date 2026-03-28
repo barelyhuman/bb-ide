@@ -26,6 +26,14 @@ function resolveDiffSelection(query: Record<string, string | undefined>) {
   return undefined;
 }
 
+function requireDiffSelection(query: Record<string, string | undefined>) {
+  const selection = resolveDiffSelection(query);
+  if (!selection) {
+    throw new ApiError(400, "invalid_request", "A valid diff selection is required");
+  }
+  return selection;
+}
+
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
   const { get, post } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
 
@@ -54,6 +62,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   get("/environments/:id/diff", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
+    const selection = requireDiffSelection(context.req.query());
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -62,7 +71,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: environment.status,
         workspacePath: environment.path,
-        ...(resolveDiffSelection(context.req.query()) ? { selection: resolveDiffSelection(context.req.query()) } : {}),
+        selection,
         ...(context.req.query("mergeBaseBranch")
           ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
           : {}),

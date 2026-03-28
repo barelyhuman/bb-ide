@@ -519,16 +519,16 @@ export async function getThreadTimelineToolDetails(
 
 export async function getEnvironmentDiff(
   id: string,
-  selection?: ThreadGitDiffSelection,
+  selection: ThreadGitDiffSelection,
   mergeBaseBranch?: string,
 ): Promise<ThreadGitDiffResponse> {
   return request<ThreadGitDiffResponse>(
     apiClient.environments[":id"].diff.$get({
       param: { id },
       query: {
-        ...(selection?.type === "commit"
+        ...(selection.type === "commit"
           ? { selection: "commit", commitSha: selection.sha }
-          : selection?.type === "combined"
+          : selection.type === "combined"
             ? { selection: "combined" }
             : {}),
         ...(mergeBaseBranch ? { mergeBaseBranch } : {}),

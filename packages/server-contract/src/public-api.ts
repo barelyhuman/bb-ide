@@ -133,8 +133,8 @@ export type PublicApiSchema = {
     /** Get git diff for an environment's workspace. Proxies to `workspace.diff`. */
     $get: Endpoint<
       PathId & {
-        query?: {
-          selection?: string;
+        query: {
+          selection: string;
           mergeBaseBranch?: string;
         };
       },

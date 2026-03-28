@@ -139,7 +139,7 @@ export function registerShowCommand(
           client.api.v1.environments[":id"].diff.$get({
             param: { id: thread.environmentId },
             query: {
-              ...(opts.diffSelection ? { selection: opts.diffSelection } : {}),
+              selection: opts.diffSelection ?? "combined",
               ...(opts.diffMergeBase
                 ? { mergeBaseBranch: opts.diffMergeBase }
                 : {}),
