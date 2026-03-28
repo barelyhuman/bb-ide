@@ -192,12 +192,24 @@ export function createCodexProviderAdapter(
               threadId: command.providerThreadId ?? command.threadId,
               approvalPolicy: "never",
               sandbox: command.options?.sandboxMode ?? "danger-full-access",
+              baseInstructions: command.options?.instructions ?? "",
               model: command.options?.model ?? undefined,
               serviceTier: command.options?.serviceTier ?? undefined,
               config: buildCodexConfig(command.threadId, command.options) ?? undefined,
               persistExtendedHistory: false,
+              // dynamicTools is accepted by the codex wire protocol but not yet
+              // declared in the generated ThreadResumeParams schema.
+              ...(command.dynamicTools && command.dynamicTools.length > 0
+                ? {
+                    dynamicTools: command.dynamicTools.map((tool) => ({
+                      name: tool.name,
+                      description: tool.description,
+                      inputSchema: JSON.parse(JSON.stringify(tool.inputSchema)),
+                    })),
+                  }
+                : {}),
             },
-          };
+          } as JsonRpcMessage;
         case "turn/start":
           return {
             jsonrpc: "2.0",

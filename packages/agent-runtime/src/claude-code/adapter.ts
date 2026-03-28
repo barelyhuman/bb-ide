@@ -256,19 +256,27 @@ export function createClaudeCodeProviderAdapter(
           };
         }
         case "thread/resume": {
+          const baseInstructions = command.options?.instructions ?? "";
           const resumeConfig = buildClaudeCodeConfig(command.options?.envVars);
           const finalResumeConfig: Record<string, unknown> = resumeConfig ? { ...resumeConfig } : {};
           if (command.options?.reasoningLevel) {
             finalResumeConfig.model_reasoning_effort = command.options.reasoningLevel;
           }
+          const dynamicTools = command.dynamicTools?.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
+          }));
           return {
             jsonrpc: "2.0",
             method: "thread/resume",
             params: {
+              baseInstructions,
               threadId: command.threadId,
               providerThreadId: command.providerThreadId ?? null,
               ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
             },
           };
         }

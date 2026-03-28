@@ -8,7 +8,10 @@ import {
   fakeProviderScriptPath,
 } from "./test/index.js";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type { ProviderAdapter } from "./provider-adapter.js";
+import type {
+  AdapterCommand,
+  ProviderAdapter,
+} from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
 
 // ---------------------------------------------------------------------------
@@ -403,6 +406,114 @@ describe("createAgentRuntime", () => {
       threadId: "t1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer input" }],
+    });
+    await runtime.shutdown();
+  });
+
+  it("reconfigures the thread before later run turns when settings change", async () => {
+    const builtCommands: AdapterCommand[] = [];
+    const baseAdapter = createFakeAdapter(scriptPath);
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => {},
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => ({
+        ...baseAdapter,
+        buildCommand(command) {
+          builtCommands.push(command);
+          return baseAdapter.buildCommand(command);
+        },
+      }),
+    });
+
+    await runtime.startThread({
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: { model: "fake-model" },
+      instructions: "Initial instructions",
+    });
+    builtCommands.length = 0;
+
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "use a different setup" }],
+      options: { model: "fake-model-2" },
+      instructions: "Updated instructions",
+    });
+
+    expect(builtCommands).toHaveLength(2);
+    expect(builtCommands[0]).toMatchObject({
+      type: "thread/resume",
+      options: {
+        instructions: "Updated instructions",
+        model: "fake-model-2",
+      },
+    });
+    expect(builtCommands[1]).toMatchObject({
+      type: "turn/start",
+      options: {
+        instructions: "Updated instructions",
+        model: "fake-model-2",
+      },
+    });
+    await runtime.shutdown();
+  });
+
+  it("reconfigures the thread before steer turns when settings change", async () => {
+    const builtCommands: AdapterCommand[] = [];
+    const baseAdapter = createFakeAdapter(scriptPath);
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => {},
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => ({
+        ...baseAdapter,
+        buildCommand(command) {
+          builtCommands.push(command);
+          return baseAdapter.buildCommand(command);
+        },
+      }),
+    });
+
+    await runtime.startThread({
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: { model: "fake-model" },
+      instructions: "Initial instructions",
+    });
+    builtCommands.length = 0;
+
+    await runtime.steerTurn({
+      threadId: "t1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "apply a new setup now" }],
+      options: { model: "fake-model-2" },
+      instructions: "Updated instructions",
+    });
+
+    expect(builtCommands).toHaveLength(2);
+    expect(builtCommands[0]).toMatchObject({
+      type: "thread/resume",
+      options: {
+        instructions: "Updated instructions",
+        model: "fake-model-2",
+      },
+    });
+    expect(builtCommands[1]).toMatchObject({
+      expectedTurnId: "turn-1",
+      type: "turn/steer",
+      options: {
+        instructions: "Updated instructions",
+        model: "fake-model-2",
+      },
     });
     await runtime.shutdown();
   });

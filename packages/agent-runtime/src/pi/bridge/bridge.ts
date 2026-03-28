@@ -52,8 +52,14 @@ const piCommandSchema = z.discriminatedUnion("method", [
     params: z.object({
       threadId: z.string(),
       sessionPath: z.string().optional(),
+      baseInstructions: z.string().optional(),
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
+      dynamicTools: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        inputSchema: z.unknown(),
+      })).optional(),
     }),
   }),
   z.object({
@@ -352,6 +358,7 @@ async function handleThreadResume(
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv, threadId);
+  applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
   const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
 
