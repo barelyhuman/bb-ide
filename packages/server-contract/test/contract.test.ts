@@ -80,7 +80,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "createDraftRequestSchema.reasoningLevel": "Queued drafts may inherit the thread's default reasoning level.",
   "createDraftRequestSchema.sandboxMode": "Queued drafts may inherit the thread's default sandbox mode.",
   "createDraftRequestSchema.serviceTier": "Queued drafts may inherit the thread's default service tier.",
-  "createManagerThreadRequestSchema.title": "Manager creation may omit a custom title and use the server-generated default.",
+  "createManagerThreadRequestSchema.name": "Manager creation may omit a custom name and use the server-generated default.",
   "createThreadRequestSchema.parentThreadId": "Root thread creation omits a parent thread id.",
   "createThreadRequestSchema.reasoningLevel": "Thread creation may omit reasoning level and use the server default.",
   "createThreadRequestSchema.sandboxMode": "Thread creation may omit sandbox mode and use the server default.",
@@ -172,7 +172,7 @@ describe("server-contract canonical schemas", () => {
         model: "claude-opus-4-6",
         providerId: "codex",
         reasoningLevel: "high",
-        title: "Manager",
+        name: "Manager",
       }),
     ).toMatchObject({
       providerId: "codex",
@@ -257,7 +257,7 @@ describe("server-contract canonical schemas", () => {
       createManagerThreadRequestSchema.parse({
         providerId: "claude-code",
         reasoningLevel: "high",
-        title: "Missing model",
+        name: "Missing model",
       }),
     ).toThrow();
   });

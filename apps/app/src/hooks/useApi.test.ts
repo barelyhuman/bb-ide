@@ -165,7 +165,6 @@ describe("resolveThreadTimelinePlaceholder", () => {
           },
         },
       ],
-      contextWindowUsage: null,
     };
 
     expect(
@@ -180,7 +179,6 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("drops previous timeline rows when switching to a different thread", () => {
     const previousTimeline: ThreadTimelineResponse = {
       rows: [],
-      contextWindowUsage: null,
     };
 
     expect(

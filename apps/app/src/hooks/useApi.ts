@@ -408,17 +408,17 @@ export function useHireProjectManager() {
   return useMutation({
     mutationFn: ({
       projectId,
-      title,
+      name,
       providerId,
       model,
       reasoningLevel,
     }: {
       projectId: string;
-      title?: string;
+      name?: string;
       providerId: string;
       model: string;
       reasoningLevel: ReasoningLevel;
-    }) => api.hireProjectManager(projectId, { title, providerId, model, reasoningLevel }),
+    }) => api.hireProjectManager(projectId, { name, providerId, model, reasoningLevel }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
 

@@ -221,7 +221,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       projectId: context.req.param("id"),
       providerId: payload.providerId,
       type: "manager",
-      ...(payload.title ? { title: payload.title } : {}),
+      ...(payload.name ? { title: payload.name } : {}),
       model: payload.model,
       reasoningLevel: payload.reasoningLevel,
       environment: {

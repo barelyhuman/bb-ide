@@ -147,7 +147,7 @@ export function HireManagerModal({
       const trimmedManagerName = managerName.trim();
       const thread = await hireManager.mutateAsync({
         projectId,
-        ...(trimmedManagerName ? { title: trimmedManagerName } : {}),
+        ...(trimmedManagerName ? { name: trimmedManagerName } : {}),
         providerId: effectiveProviderId,
         model: selectedModel,
         reasoningLevel: effectiveReasoningLevel,

@@ -140,7 +140,7 @@ export const createProjectRequestSchema = z.object({
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
 export const createManagerThreadRequestSchema = z.object({
-  title: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
   providerId: z.string().min(1),
   model: z.string().min(1),
   reasoningLevel: reasoningLevelSchema,
@@ -411,7 +411,7 @@ export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResp
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
-  contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
+  contextWindowUsage: threadContextWindowUsageSchema.optional(),
 });
 export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
 
