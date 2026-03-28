@@ -37,7 +37,34 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
 };
 
 // ---------------------------------------------------------------------------
-// Tool category sets
+// Diff helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a minimal unified-diff string from old/new text pairs.
+ * Exported so each adapter can call it with its own arg names.
+ */
+export function buildEditDiff(
+  filePath: string,
+  oldString: string | undefined,
+  newString: string | undefined,
+): string | undefined {
+  const normalizedPath = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (oldString !== undefined && newString !== undefined) {
+    const oldLines = oldString.split("\n").map((line) => `-${line}`);
+    const newLines = newString.split("\n").map((line) => `+${line}`);
+    return [
+      `--- a/${normalizedPath}`,
+      `+++ b/${normalizedPath}`,
+      ...oldLines,
+      ...newLines,
+    ].join("\n") + "\n";
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Shared item helpers
 // ---------------------------------------------------------------------------
 
 export function toOptionalString(value: unknown): string | undefined {

@@ -29,6 +29,7 @@ import {
 } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
+  extractResultText,
   HIGH_REASONING_EFFORT,
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,

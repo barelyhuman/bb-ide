@@ -1,32 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { renderTemplate } from "@bb/templates";
 import {
   buildEditDiff,
   extractResultText,
-  resolveBaseInstructions,
 } from "./adapter-utils.js";
 
 describe("adapter-utils", () => {
-  const defaultBaseInstructions = renderTemplate(
-    "standardAgentInstructions",
-    {},
-  );
-
-  it("resolveBaseInstructions returns the default instructions when none are provided", () => {
-    expect(resolveBaseInstructions()).toBe(defaultBaseInstructions);
-  });
-
-  it("resolveBaseInstructions avoids duplicating the default instructions", () => {
-    const instructions = `${defaultBaseInstructions}\n\nFocus on the failing tests first.`;
-    expect(resolveBaseInstructions(instructions)).toBe(instructions);
-  });
-
-  it("resolveBaseInstructions appends custom instructions after the default block", () => {
-    expect(resolveBaseInstructions("Focus on the failing tests first.")).toBe(
-      `${defaultBaseInstructions}\n\nFocus on the failing tests first.`,
-    );
-  });
-
   it("extractResultText returns an empty string for nullish content", () => {
     expect(extractResultText(null)).toBe("");
     expect(extractResultText(undefined)).toBe("");

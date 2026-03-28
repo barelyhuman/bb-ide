@@ -33,6 +33,8 @@ import { listCodexModels } from "./models.js";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
+import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
+import { jsonRpcEnvelopeSchema } from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
   AdapterOptions,
@@ -523,6 +525,195 @@ function toCodexDynamicTools(
     description: tool.description,
     inputSchema: JSON.parse(JSON.stringify(tool.inputSchema)),
   }));
+}
+
+function toTurnStatus(status: CodexTurnStatus): ThreadEventTurnStatus {
+  switch (status) {
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "interrupted":
+      return "interrupted";
+    case "inProgress":
+      return "completed";
+    default:
+      return assertNever(status);
+  }
+}
+
+function toItemStatus(status: CodexItemStatus): ThreadEventItemStatus {
+  switch (status) {
+    case "inProgress":
+      return "pending";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "failed";
+    case "declined":
+      return "interrupted";
+    default:
+      return assertNever(status);
+  }
+}
+
+function translateCodexUserContent(
+  content: CodexParsedUserInput,
+): ThreadEventUserContent {
+  switch (content.type) {
+    case "text":
+      return { type: "text", text: content.text };
+    case "image":
+      return { type: "image", url: content.url };
+    case "localImage":
+      return { type: "localImage", path: content.path };
+    case "skill":
+    case "mention":
+      return { type: "text", text: `[${content.type}: ${content.name}]` };
+    default:
+      return assertNever(content);
+  }
+}
+
+function extractDynamicToolCallResult(
+  contentItems: CodexDynamicToolCallContentItem[] | null,
+): unknown {
+  if (!contentItems || contentItems.length === 0) {
+    return undefined;
+  }
+
+  const textParts = contentItems
+    .filter((contentItem) => contentItem.type === "inputText")
+    .map((contentItem) => contentItem.text);
+
+  if (textParts.length > 0) {
+    return textParts.join("\n");
+  }
+
+  return contentItems;
+}
+
+function buildDynamicToolCallError(
+  success: boolean | null,
+  result: unknown,
+): string | undefined {
+  if (success !== false) {
+    return undefined;
+  }
+  if (typeof result === "string" && result.trim().length > 0) {
+    return result;
+  }
+  return "Dynamic tool call failed";
+}
+
+function translateCodexItem(item: unknown): ThreadEventItem | null {
+  const parsed = codexHandledThreadItemSchema.safeParse(item);
+  if (!parsed.success) {
+    return null;
+  }
+
+  const parsedItem: CodexHandledThreadItem = parsed.data;
+  switch (parsedItem.type) {
+    case "agentMessage":
+      return { type: "agentMessage", id: parsedItem.id, text: parsedItem.text };
+    case "userMessage": {
+      const content = parsedItem.content
+        .map((entry) => translateCodexUserContent(entry))
+        .filter((entry) => entry.type !== "text" || entry.text.length > 0);
+      return { type: "userMessage", id: parsedItem.id, content };
+    }
+    case "commandExecution":
+      return {
+        type: "commandExecution",
+        id: parsedItem.id,
+        command: parsedItem.command,
+        cwd: parsedItem.cwd,
+        status: toItemStatus(parsedItem.status),
+        aggregatedOutput: parsedItem.aggregatedOutput ?? undefined,
+        exitCode: parsedItem.exitCode ?? undefined,
+        durationMs: parsedItem.durationMs ?? undefined,
+      };
+    case "fileChange":
+      return {
+        type: "fileChange",
+        id: parsedItem.id,
+        changes: parsedItem.changes.map((change) => ({
+          path: change.path,
+          kind: change.kind.type,
+          ...(change.kind.type === "update" && change.kind.move_path
+            ? { movePath: change.kind.move_path }
+            : {}),
+          ...(change.diff ? { diff: change.diff } : {}),
+        })),
+        status: toItemStatus(parsedItem.status),
+      };
+    case "mcpToolCall":
+      return {
+        type: "toolCall",
+        id: parsedItem.id,
+        server: parsedItem.server,
+        tool: parsedItem.tool,
+        arguments: parsedItem.arguments,
+        status: toItemStatus(parsedItem.status),
+        error: parsedItem.error?.message,
+        durationMs: parsedItem.durationMs ?? undefined,
+      };
+    case "dynamicToolCall": {
+      const result = extractDynamicToolCallResult(parsedItem.contentItems);
+      return {
+        type: "toolCall",
+        id: parsedItem.id,
+        tool: parsedItem.tool,
+        arguments: parsedItem.arguments,
+        status: toItemStatus(parsedItem.status),
+        result,
+        error: buildDynamicToolCallError(parsedItem.success, result),
+        durationMs: parsedItem.durationMs ?? undefined,
+      };
+    }
+    case "collabAgentToolCall":
+      return {
+        type: "toolCall",
+        id: parsedItem.id,
+        tool: parsedItem.tool,
+        arguments: {
+          senderThreadId: parsedItem.senderThreadId,
+          receiverThreadIds: parsedItem.receiverThreadIds,
+          ...(parsedItem.prompt ? { prompt: parsedItem.prompt } : {}),
+          ...(parsedItem.model ? { model: parsedItem.model } : {}),
+          ...(parsedItem.reasoningEffort ? { reasoningEffort: parsedItem.reasoningEffort } : {}),
+        },
+        status: toItemStatus(parsedItem.status),
+        result: parsedItem.agentsStates,
+      };
+    case "webSearch":
+      return {
+        type: "webSearch",
+        id: parsedItem.id,
+        query: parsedItem.query,
+        ...(parsedItem.action ? { action: parsedItem.action.type } : {}),
+      };
+    case "reasoning":
+      return {
+        type: "reasoning",
+        id: parsedItem.id,
+        summary: parsedItem.summary,
+        content: parsedItem.content,
+      };
+    case "plan":
+      return {
+        type: "plan",
+        id: parsedItem.id,
+        text: parsedItem.text,
+      };
+    case "contextCompaction":
+      return {
+        type: "contextCompaction",
+        id: parsedItem.id,
+      };
+    default:
+      return assertNever(parsedItem);
+  }
 }
 
 // ---------------------------------------------------------------------------
