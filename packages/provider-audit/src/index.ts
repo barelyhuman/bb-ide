@@ -3,9 +3,11 @@ export {
   parseImportFixturesArgs,
 } from "./fixtures.js";
 export {
+  collectCoverageIssues,
   listFixtureBundles,
   parseReplayFixturesArgs,
   replayFixtures,
+  summarizeFixtureCoverage,
   summarizeReplayResults,
 } from "./replay.js";
 export {
@@ -21,8 +23,10 @@ export type {
   ProviderAuditBundle,
   ProviderAuditClientRequest,
   ProviderAuditCliArgs,
+  ProviderAuditCoverageIssues,
   ProviderAuditExportLadleDataArgs,
   ProviderAuditExportLadleDataResult,
+  ProviderAuditFixtureCoverageSummary,
   ProviderAuditFixtureBundle,
   ProviderAuditGitSnapshot,
   ProviderAuditImportFixtureResult,

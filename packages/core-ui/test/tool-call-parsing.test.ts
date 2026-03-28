@@ -6,7 +6,6 @@ import {
   isExploringCall,
   isExploringIntent,
   parseShellCommandIntents,
-  toolNameToParsedIntents,
 } from "../src/tool-call-parsing.js";
 
 describe("extractShellCommandFromString", () => {
@@ -71,80 +70,93 @@ describe("isExploringIntent / isExploringCall", () => {
   });
 });
 
-describe("toolNameToParsedIntents", () => {
-  it("maps Read to a read intent", () => {
-    const intents = toolNameToParsedIntents("Read", { file_path: "/src/index.ts" });
-    expect(intents).toHaveLength(1);
-    expect(intents[0]?.type).toBe("read");
-    expect(intents[0]?.path).toBe("/src/index.ts");
+describe("parseShellCommandIntents", () => {
+  it("returns empty array for commands without exploring intent", () => {
+    expect(parseShellCommandIntents("corepack yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false")).toEqual([]);
   });
 
-  it("maps Glob to a list_files intent", () => {
-    const intents = toolNameToParsedIntents("Glob", { pattern: "**/*.ts" });
-    expect(intents).toHaveLength(1);
-    expect(intents[0]?.type).toBe("list_files");
-  });
-
-  it("maps Grep to a search intent", () => {
-    const intents = toolNameToParsedIntents("Grep", { pattern: "TODO", path: "src" });
-    expect(intents).toHaveLength(1);
-    expect(intents[0]?.type).toBe("search");
-    expect(intents[0]?.query).toBe("TODO");
-    expect(intents[0]?.path).toBe("src");
-  });
-
-  it("returns empty array for unknown tools", () => {
-    expect(toolNameToParsedIntents("CustomTool", {})).toEqual([]);
-  });
-
-  it("maps exec_command search invocations to search intents", () => {
+  it("classifies sed reads with the concrete shell tool name", () => {
     expect(
-      toolNameToParsedIntents("exec_command", {
-        command: "pwd && rg -n \"search sidebar|canvas search|search\" packages/excalidraw",
-      }),
-    ).toEqual([
-      {
-        type: "search",
-        cmd: "pwd && rg -n \"search sidebar|canvas search|search\" packages/excalidraw",
-        query: "search sidebar|canvas search|search",
-        path: null,
-      },
-    ]);
-  });
-
-  it("maps exec_command file reads to read intents", () => {
-    expect(
-      toolNameToParsedIntents("exec_command", {
-        command: "sed -n '1,260p' packages/excalidraw/components/SearchMenu.tsx",
-      }),
+      parseShellCommandIntents(
+        "sed -n '1,260p' packages/excalidraw/components/SearchMenu.tsx",
+      ),
     ).toEqual([
       {
         type: "read",
         cmd: "sed -n '1,260p' packages/excalidraw/components/SearchMenu.tsx",
-        name: "exec_command",
+        name: "sed",
         path: "packages/excalidraw/components/SearchMenu.tsx",
       },
     ]);
   });
 
-  it("maps exec_command file discovery to list_files intents", () => {
+  it("classifies grep searches with query and file path", () => {
     expect(
-      toolNameToParsedIntents("exec_command", {
-        command: "ls -la && find . -maxdepth 3 -type f | sed -n '1,200p'",
-      }),
+      parseShellCommandIntents(
+        'grep -n "searchMatches" $EXCALIDRAW_REPO/packages/excalidraw/types.ts | head -20',
+      ),
+    ).toEqual([
+      {
+        type: "search",
+        cmd: 'grep -n "searchMatches" $EXCALIDRAW_REPO/packages/excalidraw/types.ts | head -20',
+        query: "searchMatches",
+        path: "$EXCALIDRAW_REPO/packages/excalidraw/types.ts",
+      },
+    ]);
+  });
+
+  it("classifies rg searches across chained commands", () => {
+    expect(
+      parseShellCommandIntents(
+        'pwd && rg -n "search sidebar|canvas search|search" packages/excalidraw',
+      ),
+    ).toEqual([
+      {
+        type: "search",
+        cmd: 'pwd && rg -n "search sidebar|canvas search|search" packages/excalidraw',
+        query: "search sidebar|canvas search|search",
+        path: "packages/excalidraw",
+      },
+    ]);
+  });
+
+  it("keeps rg path extraction stable when glob filters are present", () => {
+    expect(
+      parseShellCommandIntents(
+        `rg -n "searchQueryAtom|searchItemInFocusAtom" -g '*.ts' -g '*.tsx' packages/excalidraw`,
+      ),
+    ).toEqual([
+      {
+        type: "search",
+        cmd: `rg -n "searchQueryAtom|searchItemInFocusAtom" -g '*.ts' -g '*.tsx' packages/excalidraw`,
+        query: "searchQueryAtom|searchItemInFocusAtom",
+        path: "packages/excalidraw",
+      },
+    ]);
+  });
+
+  it("classifies find pipelines as list_files instead of reads", () => {
+    expect(
+      parseShellCommandIntents(
+        'find . -maxdepth 3 -type f | head -20',
+      ),
     ).toEqual([
       {
         type: "list_files",
-        cmd: "ls -la && find . -maxdepth 3 -type f | sed -n '1,200p'",
+        cmd: 'find . -maxdepth 3 -type f | head -20',
         path: ".",
       },
     ]);
   });
-});
 
-describe("parseShellCommandIntents", () => {
-  it("returns empty array for commands without exploring intent", () => {
-    expect(parseShellCommandIntents("corepack yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false")).toEqual([]);
+  it("classifies ls invocations with an explicit path", () => {
+    expect(parseShellCommandIntents("ls -la /tmp/workspace")).toEqual([
+      {
+        type: "list_files",
+        cmd: "ls -la /tmp/workspace",
+        path: "/tmp/workspace",
+      },
+    ]);
   });
 });
 
@@ -234,7 +246,7 @@ describe("formatToolCallOutput", () => {
     expect(formatToolCallOutput("ToolSearch", "alpha.md\nbeta.md")).toBe("alpha.md\nbeta.md");
   });
 
-  it("summarizes Agent report outputs", () => {
+  it("preserves Agent report outputs after stripping metadata", () => {
     expect(
       formatToolCallOutput(
         "Agent",
@@ -248,6 +260,14 @@ describe("formatToolCallOutput", () => {
           "<usage>total_tokens: 123",
         ].join("\n"),
       ),
-    ).toBe("Subagent report: Summary of Canvas Search Sidebar Implementation");
+    ).toBe(
+      [
+        "Perfect! Now let me create a summary of all findings:",
+        "",
+        "## Summary of Canvas Search Sidebar Implementation",
+        "",
+        "- item 1",
+      ].join("\n"),
+    );
   });
 });

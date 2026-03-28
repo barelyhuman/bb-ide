@@ -7,7 +7,11 @@ import type {
   ViewMessage,
   ToolCallResponse,
 } from "@bb/domain";
-import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime";
+import type {
+  AgentRuntimeCaptureEntry,
+  ProviderObservedToolCallCoverage,
+  ProviderRawEventCoverage,
+} from "@bb/agent-runtime";
 
 export interface ProviderAuditScenarioExecutionOptions {
   reasoningLevel?: ThreadExecutionOptions["reasoningLevel"];
@@ -51,6 +55,8 @@ export interface ProviderAuditCliArgs {
   workspacePath: string;
   model?: string;
   prompt?: string;
+  threadId?: string;
+  projectId?: string;
   gitResetRef?: string;
   timeoutMs: number;
 }
@@ -105,17 +111,12 @@ export interface ProviderAuditClientRequest {
   createdAt: number;
 }
 
-export type ProviderAuditRawEventTranslationExpectation =
-  | "expected-none"
-  | "expected-some"
-  | "unknown";
-
 export interface ProviderAuditUntranslatedRawEvent {
   captureId: string;
   method: string;
   kind: string;
   capturedAt: number;
-  expectation: ProviderAuditRawEventTranslationExpectation;
+  classification: ProviderRawEventCoverage;
 }
 
 export interface ProviderAuditDebugRawEvent {
@@ -130,6 +131,19 @@ export interface ProviderAuditToolCallSummary {
   requestCount: number;
   resultCount: number;
   failedCount: number;
+}
+
+export interface ProviderAuditRawEventKindSummary {
+  kind: string;
+  classification: ProviderRawEventCoverage;
+  count: number;
+}
+
+export interface ProviderAuditObservedToolCallSummary {
+  key: string;
+  displayName: string;
+  coverage: ProviderObservedToolCallCoverage;
+  count: number;
 }
 
 export interface ProviderAuditStderrSummary {
@@ -149,14 +163,23 @@ export interface ProviderAuditReport {
     toolCallResultCount: number;
     providerStderrCount: number;
     processLifecycleCount: number;
+    normalizedRawEventCount: number;
+    noiseRawEventCount: number;
+    unknownRawEventCount: number;
+    wellKnownObservedToolCallCount: number;
+    acceptedFallbackObservedToolCallCount: number;
+    unknownObservedToolCallCount: number;
   };
   rawProviderMethods: string[];
   rawProviderEventKinds: string[];
+  rawEventKinds: ProviderAuditRawEventKindSummary[];
   translatedEventTypes: ThreadEvent["type"][];
   untranslatedRawProviderEvents: ProviderAuditUntranslatedRawEvent[];
   unexpectedUntranslatedRawProviderEvents: ProviderAuditUntranslatedRawEvent[];
   debugRawEvents: ProviderAuditDebugRawEvent[];
   toolCalls: ProviderAuditToolCallSummary;
+  wellKnownToolNames: string[];
+  observedToolCalls: ProviderAuditObservedToolCallSummary[];
   providerStderr: ProviderAuditStderrSummary;
   processLifecycle: Array<
     Extract<
@@ -247,6 +270,75 @@ export interface ProviderAuditReplayFixtureResult {
 
 export interface ProviderAuditReplayFixturesResult {
   fixtures: ProviderAuditReplayFixtureResult[];
+}
+
+export interface ProviderAuditCoverageFixtureIds {
+  fixtureIds: string[];
+}
+
+export interface ProviderAuditCoverageRawEventSummary
+  extends ProviderAuditCoverageFixtureIds {
+  kind: string;
+  classification: ProviderRawEventCoverage;
+  totalCount: number;
+}
+
+export interface ProviderAuditCoverageTranslatedEventTypeSummary
+  extends ProviderAuditCoverageFixtureIds {
+  type: ThreadEvent["type"];
+}
+
+export interface ProviderAuditCoverageToolCallSummary
+  extends ProviderAuditCoverageFixtureIds {
+  key: string;
+  displayName: string;
+  coverage: ProviderObservedToolCallCoverage;
+  totalCount: number;
+}
+
+export interface ProviderAuditProviderCoverageSummary {
+  providerId: string;
+  fixtureIds: string[];
+  wellKnownToolNames: string[];
+  rawEventKinds: ProviderAuditCoverageRawEventSummary[];
+  translatedEventTypes: ProviderAuditCoverageTranslatedEventTypeSummary[];
+  observedToolCalls: ProviderAuditCoverageToolCallSummary[];
+}
+
+export interface ProviderAuditFixtureCoverageSummary {
+  providers: ProviderAuditProviderCoverageSummary[];
+}
+
+export interface ProviderAuditUnexpectedUntranslatedFixtureIssue {
+  fixtureId: string;
+  unexpectedUntranslatedRawEventCount: number;
+}
+
+export interface ProviderAuditUnknownRawEventKindIssue {
+  providerId: string;
+  kind: string;
+  totalCount: number;
+  fixtureIds: string[];
+}
+
+export interface ProviderAuditProviderUnhandledEventIssue {
+  providerId: string;
+  fixtureIds: string[];
+}
+
+export interface ProviderAuditUnknownObservedToolCallIssue {
+  providerId: string;
+  key: string;
+  displayName: string;
+  totalCount: number;
+  fixtureIds: string[];
+}
+
+export interface ProviderAuditCoverageIssues {
+  unexpectedUntranslatedFixtures: ProviderAuditUnexpectedUntranslatedFixtureIssue[];
+  providersWithUnhandledEvents: ProviderAuditProviderUnhandledEventIssue[];
+  unknownRawEventKinds: ProviderAuditUnknownRawEventKindIssue[];
+  unknownObservedToolCalls: ProviderAuditUnknownObservedToolCallIssue[];
 }
 
 export interface ProviderAuditLadleFixture {

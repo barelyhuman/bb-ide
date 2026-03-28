@@ -9,6 +9,19 @@ export type {
   TimelineFormat,
 } from "./format-timeline-text.js";
 export { durationToCompactString } from "./format-helpers.js";
+export {
+  buildToolGroupSummaryParts,
+  formatToolGroupCountLabel,
+} from "./timeline-summary.js";
+export type { ToolGroupSummaryParts } from "./timeline-summary.js";
+export {
+  buildExploringDetailLines,
+  formatDelegationSummary,
+  formatExploringCountsLabel,
+  formatExploringIntentLine,
+  summarizeExploringCounts,
+} from "./timeline-render-helpers.js";
+export type { ExploringCounts } from "./timeline-render-helpers.js";
 
 export {
   deriveThreadTitleFromInput,

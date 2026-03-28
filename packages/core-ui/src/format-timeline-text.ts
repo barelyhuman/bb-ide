@@ -1,19 +1,32 @@
 import type {
-  ViewDelegationMessage,
-  ViewMessage,
-  ViewUserMessage,
-  ViewAssistantTextMessage,
+  TimelineRow,
+  TimelineToolGroupRow,
   ViewAssistantReasoningMessage,
-  ViewToolCallMessage,
-  ViewToolExploringMessage,
+  ViewAssistantTextMessage,
+  ViewDelegationMessage,
+  ViewErrorMessage,
   ViewFileEditMessage,
-  ViewWebSearchMessage,
+  ViewMessage,
   ViewOperationMessage,
   ViewTasksMessage,
-  ViewErrorMessage,
+  ViewToolCallMessage,
+  ViewToolExploringMessage,
+  ViewUserMessage,
+  ViewWebSearchMessage,
 } from "@bb/domain";
+import { durationToCompactString } from "./format-helpers.js";
+import { buildTimelineRows } from "./thread-detail-rows.js";
+import { buildToolGroupSummaryParts } from "./timeline-summary.js";
+import {
+  buildExploringDetailLines,
+  formatDelegationSummary,
+  formatExploringCountsLabel,
+  summarizeExploringCounts,
+} from "./timeline-render-helpers.js";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
+
+type TimelineTextEntry = TimelineRow | ViewMessage;
 
 export interface FormatTimelineOptions {
   format: TimelineFormat;
@@ -71,6 +84,55 @@ function statusBadge(status: string, color: boolean): string {
   }
 }
 
+function formatSummaryDuration(durationMs: number | undefined): string | undefined {
+  if (durationMs === undefined || durationMs < 1_000) {
+    return undefined;
+  }
+  return durationToCompactString(durationMs);
+}
+
+function formatDurationLine(
+  durationMs: number | undefined,
+  duration: string | undefined,
+  color: boolean,
+): string | undefined {
+  if (durationMs === undefined) {
+    return undefined;
+  }
+  return dim(`  ${duration ?? `${durationMs}ms`}`, color);
+}
+
+function isTimelineRow(entry: TimelineTextEntry): entry is TimelineRow {
+  if (entry.kind === "message") {
+    return "message" in entry;
+  }
+  if (entry.kind === "tool-group") {
+    return "messages" in entry && "summaryCount" in entry;
+  }
+  return false;
+}
+
+function toTimelineRows(entries: TimelineTextEntry[]): TimelineRow[] {
+  if (entries.every((entry) => isTimelineRow(entry))) {
+    return entries;
+  }
+
+  const messages: ViewMessage[] = [];
+  for (const entry of entries) {
+    if (isTimelineRow(entry)) {
+      if (entry.kind === "message") {
+        messages.push(entry.message);
+        continue;
+      }
+      messages.push(...entry.messages);
+      continue;
+    }
+    messages.push(entry);
+  }
+
+  return buildTimelineRows(messages);
+}
+
 function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator("User", color));
@@ -84,14 +146,22 @@ function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): st
   return lines.join("\n");
 }
 
-function formatAssistantText(msg: ViewAssistantTextMessage, _verbose: boolean, color: boolean): string {
+function formatAssistantText(
+  msg: ViewAssistantTextMessage,
+  _verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   lines.push(separator("Assistant", color));
   lines.push(msg.text);
   return lines.join("\n");
 }
 
-function formatReasoning(msg: ViewAssistantReasoningMessage, verbose: boolean, color: boolean): string {
+function formatReasoning(
+  msg: ViewAssistantReasoningMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
   if (!verbose) return "";
   const lines: string[] = [];
   lines.push(separator("Reasoning", color));
@@ -99,18 +169,25 @@ function formatReasoning(msg: ViewAssistantReasoningMessage, verbose: boolean, c
   return lines.join("\n");
 }
 
-function formatToolCall(msg: ViewToolCallMessage, verbose: boolean, color: boolean): string {
+function formatToolCall(
+  msg: ViewToolCallMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   const name = msg.toolName ?? "exec_command";
   const cmd = msg.command ?? "";
   lines.push(separator(`Tool Call: ${name}`, color));
   lines.push(`  ${badge} ${cyan(cmd || name, color)}`);
-  if (msg.durationMs !== undefined) {
-    lines.push(dim(`  ${msg.duration ?? `${msg.durationMs}ms`}`, color));
+
+  const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
+  if (durationLine) {
+    lines.push(durationLine);
   }
+
   if (msg.output) {
-    const maxOut = verbose ? 10000 : 200;
+    const maxOut = verbose ? msg.output.length : 200;
     const output = truncate(msg.output.trim(), maxOut);
     if (output) {
       lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
@@ -122,29 +199,37 @@ function formatToolCall(msg: ViewToolCallMessage, verbose: boolean, color: boole
   return lines.join("\n");
 }
 
-function formatExploring(msg: ViewToolExploringMessage, verbose: boolean, color: boolean): string {
+function formatExploring(
+  msg: ViewToolExploringMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
-  const badge = statusBadge(msg.status, color);
-  lines.push(separator(`Exploring (${msg.calls.length} call${msg.calls.length === 1 ? "" : "s"})`, color));
-  const visibleCalls = verbose ? msg.calls : msg.calls.slice(0, 8);
-  for (const call of visibleCalls) {
-    const cmd = call.command ?? call.callId;
-    lines.push(`  ${badge} ${dim(cmd, color)}`);
-    if (verbose && call.output) {
-      const output = truncate(call.output.trim(), 500);
-      if (output) {
-        lines.push(dim(`    ${output.split("\n").join("\n    ")}`, color));
-      }
-    }
+  const countsLabel =
+    formatExploringCountsLabel(summarizeExploringCounts(msg.calls)) || "workspace";
+  lines.push(
+    separator(
+      `${msg.status === "pending" ? "Exploring" : "Explored"} ${countsLabel}`,
+      color,
+    ),
+  );
+
+  if (!verbose) {
+    return lines.join("\n");
   }
-  if (!verbose && msg.calls.length > visibleCalls.length) {
-    const remaining = msg.calls.length - visibleCalls.length;
-    lines.push(dim(`  ... ${remaining} more exploration call${remaining === 1 ? "" : "s"}`, color));
+
+  for (const line of buildExploringDetailLines(msg.calls)) {
+    lines.push(`  ${line}`);
   }
+
   return lines.join("\n");
 }
 
-function formatFileEdit(msg: ViewFileEditMessage, verbose: boolean, color: boolean): string {
+function formatFileEdit(
+  msg: ViewFileEditMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   lines.push(separator("File Edit", color));
@@ -152,7 +237,7 @@ function formatFileEdit(msg: ViewFileEditMessage, verbose: boolean, color: boole
     const kindLabel = change.kind ? ` (${change.kind})` : "";
     lines.push(`  ${badge} ${cyan(change.path, color)}${dim(kindLabel, color)}`);
     if (verbose && change.diff) {
-      const diff = truncate(change.diff.trim(), 2000);
+      const diff = truncate(change.diff.trim(), 2_000);
       lines.push(dim(`  ${diff.split("\n").join("\n  ")}`, color));
     }
   }
@@ -162,7 +247,11 @@ function formatFileEdit(msg: ViewFileEditMessage, verbose: boolean, color: boole
   return lines.join("\n");
 }
 
-function formatWebSearch(msg: ViewWebSearchMessage, _verbose: boolean, color: boolean): string {
+function formatWebSearch(
+  msg: ViewWebSearchMessage,
+  _verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
   lines.push(separator("Web Search", color));
@@ -171,11 +260,21 @@ function formatWebSearch(msg: ViewWebSearchMessage, _verbose: boolean, color: bo
   return lines.join("\n");
 }
 
-function formatOperation(msg: ViewOperationMessage, _verbose: boolean, color: boolean): string {
+function formatOperation(
+  msg: ViewOperationMessage,
+  _verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   lines.push(separator(`Operation: ${msg.title}`, color));
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
-  if (msg.status) lines.push(`  ${statusBadge(msg.status, color)}`);
+  if (
+    msg.status &&
+    msg.opType !== "warning" &&
+    msg.opType !== "deprecation"
+  ) {
+    lines.push(`  ${statusBadge(msg.status, color)}`);
+  }
   return lines.join("\n");
 }
 
@@ -194,35 +293,44 @@ function taskStatusGlyph(status: ViewTasksMessage["tasks"][number]["status"]): s
 
 function formatTasks(msg: ViewTasksMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
-  lines.push(separator(msg.title, color));
+  lines.push(separator("Updated tasks", color));
   for (const task of msg.tasks) {
     lines.push(`  ${taskStatusGlyph(task.status)} ${task.text}`);
   }
   return lines.join("\n");
 }
 
-function formatDelegation(msg: ViewDelegationMessage, verbose: boolean, color: boolean): string {
+function formatDelegation(
+  msg: ViewDelegationMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
-  const badge = statusBadge(msg.status, color);
-  const label = msg.command ?? msg.toolName;
-  lines.push(separator(`Delegation: ${msg.toolName}`, color));
-  lines.push(`  ${badge} ${cyan(label, color)}`);
+  lines.push(separator(`Subagent ${formatDelegationSummary(msg)}`, color));
+
+  const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
+  if (durationLine) {
+    lines.push(durationLine);
+  }
+
   if (msg.output) {
-    lines.push(dim(`  ${truncate(msg.output.trim(), verbose ? 2000 : 160)}`, color));
+    const output = verbose ? msg.output.trim() : truncate(msg.output.trim(), 160);
+    if (output) {
+      lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
+    }
   }
 
-  const childBlocks = msg.children
-    .map((child) => formatMessage(child, verbose, color))
-    .filter((block) => block.length > 0);
-  const visibleChildBlocks = verbose ? childBlocks : childBlocks.slice(0, 6);
+  if (!verbose) {
+    return lines.join("\n");
+  }
 
-  for (const block of visibleChildBlocks) {
-    lines.push(indentBlock(block, "  "));
+  for (const row of buildTimelineRows(msg.children)) {
+    const block = formatTimelineRow(row, true, color);
+    if (block) {
+      lines.push(indentBlock(block, "  "));
+    }
   }
-  if (!verbose && childBlocks.length > visibleChildBlocks.length) {
-    const remaining = childBlocks.length - visibleChildBlocks.length;
-    lines.push(dim(`  ... ${remaining} more nested item${remaining === 1 ? "" : "s"}`, color));
-  }
+
   return lines.join("\n");
 }
 
@@ -258,29 +366,61 @@ function formatMessage(msg: ViewMessage, verbose: boolean, color: boolean): stri
     case "error":
       return formatError(msg, verbose, color);
     case "debug/raw-event":
-      // Skip debug events in timeline view
       return "";
     default:
       return "";
   }
 }
 
+function formatToolGroupSummary(entry: TimelineToolGroupRow): string {
+  const duration = formatSummaryDuration(entry.durationMs);
+  const parts = buildToolGroupSummaryParts({
+    duration,
+    status: entry.status,
+    summaryCount: entry.summaryCount,
+  });
+  return [parts.prefix, parts.emphasis, parts.suffix].filter(Boolean).join(" ");
+}
+
+function formatTimelineRow(row: TimelineRow, verbose: boolean, color: boolean): string {
+  if (row.kind === "message") {
+    return formatMessage(row.message, verbose, color);
+  }
+
+  const lines: string[] = [];
+  lines.push(separator(formatToolGroupSummary(row), color));
+
+  if (!verbose) {
+    return lines.join("\n");
+  }
+
+  for (const message of row.messages) {
+    const block = formatMessage(message, true, color);
+    if (block.length > 0) {
+      lines.push(indentBlock(block, "  "));
+    }
+  }
+
+  return lines.join("\n");
+}
+
 /**
- * Format an array of ViewMessages as human-readable terminal text.
+ * Format timeline rows or messages as human-readable terminal text.
  *
- * - `minimal`: Compact view — exploring collapsed, tool output truncated, reasoning hidden
- * - `verbose`: Full view — all output shown, reasoning included, diffs expanded
+ * - `minimal`: Compact view — grouped tool work stays collapsed, reasoning hidden
+ * - `verbose`: Expanded view — grouped rows are expanded, reasoning included, diffs shown
  */
 export function formatTimelineAsText(
-  messages: ViewMessage[],
+  entries: TimelineTextEntry[],
   options?: { verbose?: boolean; color?: boolean },
 ): string {
   const verbose = options?.verbose ?? false;
   const color = options?.color ?? false;
+  const rows = toTimelineRows(entries);
 
   const blocks: string[] = [];
-  for (const msg of messages) {
-    const formatted = formatMessage(msg, verbose, color);
+  for (const row of rows) {
+    const formatted = formatTimelineRow(row, verbose, color);
     if (formatted) {
       blocks.push(formatted);
     }

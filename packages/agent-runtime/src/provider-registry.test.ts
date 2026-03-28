@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { JsonRpcMessage } from "./provider-adapter.js";
 import {
   createProviderForId,
+  getProviderVisibilityMetadata,
   listAvailableProviderInfos,
 } from "./provider-registry.js";
 
@@ -41,6 +43,107 @@ describe("provider registry", () => {
   it("lists provider catalog", () => {
     const ids = listAvailableProviderInfos().map((provider) => provider.id);
     expect(ids).toEqual(["codex", "claude-code", "pi"]);
+  });
+
+  it("returns provider-owned visibility metadata", () => {
+    const claude = getProviderVisibilityMetadata("claude-code");
+    const pi = getProviderVisibilityMetadata("pi");
+    const codex = getProviderVisibilityMetadata("codex");
+
+    expect([...claude.wellKnownToolNames]).toEqual([
+      "Agent",
+      "Bash",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Read",
+      "TodoWrite",
+      "ToolSearch",
+      "WebFetch",
+      "WebSearch",
+      "Write",
+    ]);
+    expect([...pi.wellKnownToolNames]).toEqual([
+      "bash",
+      "edit",
+      "find",
+      "grep",
+      "read",
+      "write",
+    ]);
+    expect([...codex.wellKnownToolNames]).toEqual([
+      "closeAgent",
+      "resumeAgent",
+      "sendInput",
+      "spawnAgent",
+      "wait",
+    ]);
+  });
+
+  it("keeps declared well-known tool names aligned with observed tool classification", () => {
+    const claude = getProviderVisibilityMetadata("claude-code");
+    for (const toolName of claude.wellKnownToolNames) {
+      const observed = claude.extractObservedToolCalls({
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          message: {
+            type: "assistant",
+            message: {
+              role: "assistant",
+              content: [{ type: "tool_use", id: `tool-${toolName}`, name: toolName, input: {} }],
+            },
+          },
+        },
+      });
+      expect(observed).toContainEqual(
+        expect.objectContaining({ displayName: toolName, coverage: "well-known" }),
+      );
+    }
+
+    const pi = getProviderVisibilityMetadata("pi");
+    for (const toolName of pi.wellKnownToolNames) {
+      const observed = pi.extractObservedToolCalls({
+        jsonrpc: "2.0",
+        method: "sdk/message",
+        params: {
+          message: {
+            type: "tool_execution_start",
+            toolName,
+          },
+        },
+      });
+      expect(observed).toContainEqual(
+        expect.objectContaining({ displayName: toolName, coverage: "well-known" }),
+      );
+    }
+
+    const codex = getProviderVisibilityMetadata("codex");
+    for (const toolName of codex.wellKnownToolNames) {
+      const observed = codex.extractObservedToolCalls({
+        jsonrpc: "2.0",
+        method: "item/started",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          item: {
+            type: "collabAgentToolCall",
+            id: `collab-${toolName}`,
+            tool: toolName,
+            status: "inProgress",
+            senderThreadId: "t1",
+            receiverThreadIds: [],
+            prompt: null,
+            model: null,
+            reasoningEffort: null,
+            agentsStates: {},
+          },
+        },
+      } satisfies JsonRpcMessage);
+      expect(observed).toContainEqual(
+        expect.objectContaining({ displayName: toolName, coverage: "well-known" }),
+      );
+    }
   });
 
 });

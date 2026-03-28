@@ -280,6 +280,55 @@ describe("toViewMessages replay coverage", () => {
     expect(tool?.status).toBe("completed");
   });
 
+  it("projects synthesized durationMs for command execution lifecycles", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "echo hello",
+            cwd: "/repo",
+            status: "pending",
+          },
+        },
+        createdAt: 100,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "echo hello",
+            cwd: "/repo",
+            exitCode: 0,
+            status: "completed",
+          },
+        },
+        createdAt: 500,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const tool = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+
+    expect(tool?.durationMs).toBe(400);
+    expect(tool?.duration).toBe("400ms");
+  });
+
   it("projects provider plan updates into tasks messages", () => {
     const events: ThreadEventRow[] = [
       {
@@ -452,6 +501,7 @@ describe("toViewMessages replay coverage", () => {
             id: "agent-1",
             tool: "Agent",
             arguments: {
+              subagent_type: "Explore",
               description: "Explore SearchMenu implementation",
             },
             status: "pending",
@@ -532,6 +582,8 @@ describe("toViewMessages replay coverage", () => {
     expect(delegation).toMatchObject({
       toolName: "Agent",
       callId: "agent-1",
+      subagentType: "Explore",
+      description: "Explore SearchMenu implementation",
       status: "completed",
       sourceSeqStart: 1,
       sourceSeqEnd: 4,
@@ -672,7 +724,10 @@ describe("toViewMessages replay coverage", () => {
     );
 
     expect(delegation).toBeDefined();
-    expect(delegation?.callId).toBe("agent-1");
+    expect(delegation).toMatchObject({
+      callId: "agent-1",
+      description: "Explore SearchMenu implementation",
+    });
     expect(delegation?.children).toHaveLength(2);
     expect(delegation?.children[0]?.kind).toBe("tool-exploring");
     expect(delegation?.children[1]?.kind).toBe("tool-call");
@@ -1868,6 +1923,35 @@ describe("toViewMessages replay coverage", () => {
     expect(ops.some((message) => message.opType === "warning")).toBe(true);
   });
 
+  it("uses general warning summaries as operation titles", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "warning",
+        data: {
+          category: "general",
+          summary: "Rate limit status updated",
+          details: "status: allowed • limit: five_hour",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const op = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.title).toBe("Rate limit status updated");
+    expect(op?.detail).toBe("status: allowed • limit: five_hour");
+  });
+
   it("projects system thread title updates as operations", () => {
     const events: ThreadEventRow[] = [
       {
@@ -2105,6 +2189,147 @@ describe("toViewMessages replay coverage", () => {
     expect(op?.opType).toBe("thread-interrupted");
     expect(op?.title).toBe("Stopped by user");
     expect(op?.status).toBe("interrupted");
+  });
+
+  it("projects provider/unhandled events as readable operations", () => {
+    const projected = toViewMessages(fromRows([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "provider/unhandled",
+        data: {
+          providerThreadId: "provider-thread-1",
+          providerId: "codex",
+          rawType: "item/tool/requestUserInput",
+          turnId: "turn-1",
+          summary: "Tool is waiting for input",
+          payloadSummary: "tool: prompt_user",
+        },
+        createdAt: 1,
+      },
+    ]));
+    const op = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("provider-unhandled");
+    expect(op?.title).toBe("Unhandled Codex event");
+    expect(op?.detail).toContain("Tool is waiting for input");
+    expect(op?.detail).toContain("Raw event: item/tool/requestUserInput");
+    expect(op?.detail).toContain("tool: prompt_user");
+  });
+
+  it("projects shared tool progress onto the active tool call", () => {
+    const projected = toViewMessages(fromRows([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "bash",
+            arguments: { command: "npm test" },
+            status: "pending",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/toolCall/progress",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          itemId: "tool-1",
+          message: "partial output",
+        },
+        createdAt: 2,
+      },
+    ]), {
+      threadStatus: "active",
+    });
+    const toolCall = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+
+    expect(toolCall).toBeDefined();
+    expect(toolCall?.status).toBe("pending");
+    expect(toolCall?.output).toContain("partial output");
+  });
+
+  it("keeps tool calls open through progress events until the completion event arrives", () => {
+    const projected = toViewMessages(fromRows([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "bash",
+            arguments: { command: "npm test" },
+            status: "pending",
+          },
+        },
+        createdAt: 1_000,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/toolCall/progress",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          itemId: "tool-1",
+          message: "partial output",
+        },
+        createdAt: 1_500,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "bash",
+            arguments: { command: "npm test" },
+            status: "completed",
+            result: "partial output\nfinal result",
+            durationMs: 2_000,
+          },
+        },
+        createdAt: 3_000,
+      },
+    ]), {
+      threadStatus: "idle",
+    });
+    const toolCall = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+
+    expect(toolCall).toBeDefined();
+    expect(toolCall?.status).toBe("completed");
+    expect(toolCall?.output).toContain("final result");
+    expect(toolCall?.durationMs).toBe(2_000);
   });
 
   it("projects provisioning events as operations", () => {

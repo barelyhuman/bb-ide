@@ -8,16 +8,7 @@ import { fixtureStoryData } from "../.ladle/fixture-story-data";
 const EMPTY_LOADING_IDS = new Set<string>();
 const EMPTY_TOOL_GROUP_MESSAGES: Record<string, never[]> = {};
 
-type FixtureStoryId =
-  | "excalidraw/claude-code/search-bugfix"
-  | "excalidraw/claude-code/search-feature"
-  | "excalidraw/claude-code/ttd-explanation"
-  | "excalidraw/codex/search-bugfix"
-  | "excalidraw/codex/search-feature"
-  | "excalidraw/codex/ttd-explanation"
-  | "excalidraw/pi/search-bugfix"
-  | "excalidraw/pi/search-feature"
-  | "excalidraw/pi/ttd-explanation";
+type FixtureStoryId = string;
 
 function findFixture(fixtureId: FixtureStoryId) {
   const fixture = fixtureStoryData.fixtures.find((candidate) => candidate.id === fixtureId);
@@ -60,38 +51,63 @@ export default {
   title: "Excalidraw Timeline",
 };
 
-export const ClaudeCodeExplanation: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/claude-code/ttd-explanation" />
+function createFixtureStory(fixtureId: FixtureStoryId): Story {
+  return () => <FixtureTimeline fixtureId={fixtureId} />;
+}
+
+export const ClaudeCodeExplanation = createFixtureStory(
+  "excalidraw/claude-code/ttd-explanation",
+);
+export const ClaudeCodeFeature = createFixtureStory(
+  "excalidraw/claude-code/search-feature",
+);
+export const ClaudeCodeBugfix = createFixtureStory(
+  "excalidraw/claude-code/search-bugfix",
+);
+export const ClaudeCodeCollabStartupExplanation = createFixtureStory(
+  "excalidraw/claude-code/collab-startup-explanation",
+);
+export const ClaudeCodeEyedropperPreviewBugfix = createFixtureStory(
+  "excalidraw/claude-code/eyedropper-preview-bugfix",
+);
+export const ClaudeCodeMagicframeFeature = createFixtureStory(
+  "excalidraw/claude-code/magicframe-feature",
 );
 
-export const ClaudeCodeFeature: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/claude-code/search-feature" />
+export const CodexExplanation = createFixtureStory(
+  "excalidraw/codex/ttd-explanation",
+);
+export const CodexFeature = createFixtureStory(
+  "excalidraw/codex/search-feature",
+);
+export const CodexBugfix = createFixtureStory(
+  "excalidraw/codex/search-bugfix",
+);
+export const CodexCollabStartupExplanation = createFixtureStory(
+  "excalidraw/codex/collab-startup-explanation",
+);
+export const CodexEyedropperPreviewBugfix = createFixtureStory(
+  "excalidraw/codex/eyedropper-preview-bugfix",
+);
+export const CodexMagicframeFeature = createFixtureStory(
+  "excalidraw/codex/magicframe-feature",
 );
 
-export const ClaudeCodeBugfix: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/claude-code/search-bugfix" />
+export const PiExplanation = createFixtureStory(
+  "excalidraw/pi/ttd-explanation",
 );
-
-export const CodexExplanation: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/codex/ttd-explanation" />
+export const PiFeature = createFixtureStory(
+  "excalidraw/pi/search-feature",
 );
-
-export const CodexFeature: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/codex/search-feature" />
+export const PiBugfix = createFixtureStory(
+  "excalidraw/pi/search-bugfix",
 );
-
-export const CodexBugfix: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/codex/search-bugfix" />
+export const PiCollabStartupExplanation = createFixtureStory(
+  "excalidraw/pi/collab-startup-explanation",
 );
-
-export const PiExplanation: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/pi/ttd-explanation" />
+export const PiEyedropperPreviewBugfix = createFixtureStory(
+  "excalidraw/pi/eyedropper-preview-bugfix",
 );
-
-export const PiFeature: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/pi/search-feature" />
-);
-
-export const PiBugfix: Story = () => (
-  <FixtureTimeline fixtureId="excalidraw/pi/search-bugfix" />
+export const PiMagicframeFeature = createFixtureStory(
+  "excalidraw/pi/magicframe-feature",
 );

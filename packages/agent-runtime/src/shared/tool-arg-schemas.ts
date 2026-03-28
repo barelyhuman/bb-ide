@@ -13,16 +13,6 @@ export const bashArgsSchema = z.object({
   cwd: z.unknown().optional(),
 }).passthrough();
 
-export const fileEditArgsSchema = z.object({
-  file_path: z.string().optional(),
-  path: z.string().optional(),
-}).passthrough();
-
-export const webSearchArgsSchema = z.object({
-  query: z.unknown().optional(),
-  url: z.unknown().optional(),
-}).passthrough();
-
 export const textBlockSchema = z.object({
   type: z.literal("text"),
   text: z.string(),

@@ -41,12 +41,9 @@ export function TasksRow({
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const activeTask = message.tasks.find((task) => task.status === "active");
   const summaryContent = (
     <EventTitle
-      prefix={statusLabel(message)}
-      emphasis={activeTask?.text ?? `${message.tasks.length} tasks`}
-      suffix={message.source === "todo" ? "todo list" : "plan"}
+      prefix={`${statusLabel(message)} tasks`}
       tone={message.status === "error" ? "destructive" : "default"}
       shimmerPrefix={message.status === "pending"}
     />

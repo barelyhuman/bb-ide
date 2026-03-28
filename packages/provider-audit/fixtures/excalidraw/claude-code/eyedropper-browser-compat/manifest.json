@@ -1,0 +1,37 @@
+{
+  "providerId": "claude-code",
+  "scenarioId": "excalidraw-eyedropper-browser-compat",
+  "scenarioDescription": "Provider-targeted eyedropper browser compatibility task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774668698580,
+  "completedAt": 1774669093908,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/claude-code/eyedropper-browser-compat",
+  "threadId": "provider-audit-claude-eyedropper-browser-compat-20260328T032935Z",
+  "projectId": "provider-audit-phase5-claude-20260328T032935Z",
+  "turns": [
+    "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.",
+    "Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.",
+    "Summarize the external references you relied on and the files you changed."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M packages/excalidraw/components/ColorPicker/ColorInput.tsx",
+      " M packages/excalidraw/components/EyeDropper.tsx",
+      " M packages/excalidraw/global.d.ts",
+      " M packages/excalidraw/locales/en.json"
+    ]
+  }
+}

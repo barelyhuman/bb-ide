@@ -1,0 +1,34 @@
+{
+  "providerId": "pi",
+  "scenarioId": "excalidraw-eyedropper-preview-bugfix",
+  "scenarioDescription": "Provider-neutral eyedropper preview bug-fix task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774599348751,
+  "completedAt": 1774599503236,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/pi/eyedropper-preview-bugfix",
+  "threadId": "provider-audit-pi-eyedropper-preview-bugfix-20260327T081548Z-1549",
+  "projectId": "provider-audit-round2-other-05-1549",
+  "turns": [
+    "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
+    "Explain how the old positioning logic failed and how your regression coverage would have caught it."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M packages/excalidraw/components/EyeDropper.tsx",
+      "?? packages/excalidraw/components/EyeDropper.test.ts"
+    ]
+  }
+}

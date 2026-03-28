@@ -1,0 +1,35 @@
+{
+  "providerId": "codex",
+  "scenarioId": "excalidraw-share-web-compat",
+  "scenarioDescription": "Provider-targeted share dialog web compatibility task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774670353735,
+  "completedAt": 1774670789975,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/codex/share-web-compat",
+  "threadId": "provider-audit-codex-share-web-compat-20260328T035907Z",
+  "projectId": "provider-audit-phase5-codex-20260328T035907Z",
+  "turns": [
+    "Use the available repo_outline helper first for the share and collaboration area. Then inspect the actual code and implement one small discoverability improvement to the share dialog for unsupported browsers with focused validation. Keep the change minimal and move quickly.",
+    "Summarize the helper output you used, the files you changed, and any outside references you consulted."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M excalidraw-app/share/ShareDialog.scss",
+      " M excalidraw-app/share/ShareDialog.tsx",
+      "?? excalidraw-app/tests/ShareDialog.test.tsx"
+    ]
+  }
+}

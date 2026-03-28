@@ -1,0 +1,35 @@
+{
+  "providerId": "pi",
+  "scenarioId": "excalidraw-command-palette-map",
+  "scenarioDescription": "Provider-targeted command palette mapping task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774669737756,
+  "completedAt": 1774670023293,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/pi/command-palette-map",
+  "threadId": "provider-audit-pi-command-palette-map-20260328T041442Z",
+  "projectId": "provider-audit-phase5-pi-20260328T041442Z",
+  "turns": [
+    "Use the available repo_outline helper first for the command and search area. Then use the built-in ls, find, and grep tools instead of bash while you inventory the relevant directories, trace the path from command registration to availability gating and action dispatch, and call out the safest insertion point for another gated action.",
+    "Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.",
+    "Summarize the directories you explored, the behavior change, and the validation you ran."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M packages/excalidraw/actions/actionToggleSearchMenu.ts",
+      "?? packages/excalidraw/actions/actionToggleSearchMenu.test.tsx"
+    ]
+  }
+}

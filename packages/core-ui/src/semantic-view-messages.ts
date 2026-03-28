@@ -82,6 +82,8 @@ function toDelegationMessage(message: ViewToolCallMessage): ViewDelegationMessag
     toolName: message.toolName,
     callId: message.callId,
     command: message.command,
+    subagentType: message.subagentType,
+    description: message.description,
     output: message.output,
     duration: message.duration,
     durationMs: message.durationMs,

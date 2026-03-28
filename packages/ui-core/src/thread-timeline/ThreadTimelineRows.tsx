@@ -1,3 +1,4 @@
+import { buildToolGroupSummaryParts } from "@bb/core-ui";
 import type { TimelineRow, TimelineToolGroupRow, ViewMessage } from "@bb/domain";
 import { ExpandablePanel } from "../disclosure.js";
 import { ConversationEntry } from "./ConversationEntry.js";
@@ -9,6 +10,7 @@ import type {
 } from "./types.js";
 import {
   EventTitle,
+  type EventTitleTone,
   formatSummaryDuration,
   getEventHeaderToneClass,
 } from "./rows/shared.js";
@@ -49,25 +51,25 @@ function ToolGroupEntry({
   themeType,
 }: ToolGroupEntryProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const count = entry.summaryCount;
   const visibleDuration = formatSummaryDuration(entry.durationMs);
   const isWorking = entry.status === "pending";
-  const summaryContent = visibleDuration ? (
+  const tone: EventTitleTone = entry.status === "error" ? "destructive" : "default";
+  const summary = buildToolGroupSummaryParts({
+    duration: visibleDuration,
+    status: entry.status,
+    summaryCount: entry.summaryCount,
+  });
+  const summaryContent = (
     <EventTitle
-      prefix={isWorking ? "Working for" : "Worked for"}
-      emphasis={visibleDuration}
-      suffix={count > 0 ? `${count} item${count === 1 ? "" : "s"}` : undefined}
+      prefix={summary.prefix}
+      emphasis={summary.emphasis}
+      suffix={summary.suffix}
       suffixClassName="truncate"
       shimmerPrefix={isWorking}
-    />
-  ) : (
-    <EventTitle
-      prefix={isWorking ? "Working on" : "Worked on"}
-      emphasis={`${count} item${count === 1 ? "" : "s"}`}
-      shimmerPrefix={isWorking}
+      tone={tone}
     />
   );
-  const headerToneClass = getEventHeaderToneClass(isExpanded);
+  const headerToneClass = getEventHeaderToneClass(isExpanded, tone);
 
   const handleToggle = () => {
     if (!isExpanded && messages.length === 0 && !isLoadingMessages) {
@@ -129,10 +131,12 @@ export function ThreadTimelineRows({
     <>
       {threadDetailRows.map((entry, entryIndex) => {
         const isLastRow = entryIndex === threadDetailRows.length - 1;
+        const isActive = threadStatus === "active";
         const preferOngoingLabels =
-          threadStatus === "active" &&
+          isActive &&
           isLastRow &&
           shouldPreferOngoingLabelsForRow(entry, latestActivityRowId);
+        const shouldAutoExpand = isLastRow && isActive;
 
         return (
           <div key={entry.id} data-thread-row-id={entry.id} className="pt-2">
@@ -142,7 +146,7 @@ export function ThreadTimelineRows({
                 messages={toolGroupMessagesById[entry.id] ?? entry.messages}
                 isLoadingMessages={loadingToolGroupIds.has(entry.id)}
                 onLoadMessages={() => onLoadToolGroupMessages(entry)}
-                initialExpanded={isLastRow}
+                initialExpanded={shouldAutoExpand}
                 preferOngoingLabels={preferOngoingLabels}
                 projectId={projectId}
                 resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
@@ -152,7 +156,7 @@ export function ThreadTimelineRows({
               <ConversationEntry
                 message={entry.message}
                 projectId={projectId}
-                initialExpanded={isLastRow}
+                initialExpanded={shouldAutoExpand}
                 preferOngoingLabels={preferOngoingLabels}
                 resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                 themeType={themeType}

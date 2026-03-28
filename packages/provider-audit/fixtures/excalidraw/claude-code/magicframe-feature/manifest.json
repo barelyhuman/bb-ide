@@ -1,0 +1,34 @@
+{
+  "providerId": "claude-code",
+  "scenarioId": "excalidraw-magicframe-feature",
+  "scenarioDescription": "Provider-neutral Magic Frame feature task against the real Excalidraw repo",
+  "model": null,
+  "source": "live-capture",
+  "capturedAt": 1774598724026,
+  "completedAt": 1774599182958,
+  "gitSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "workspacePath": "$EXCALIDRAW_REPO",
+  "runtimeWorkspacePath": "$EXCALIDRAW_REPO",
+  "envWorkspacePath": "$EXCALIDRAW_REPO",
+  "outputDir": "$FIXTURE_ROOT/excalidraw/claude-code/magicframe-feature",
+  "threadId": "provider-audit-claude-code-magicframe-feature-20260327T080523Z-1549",
+  "projectId": "provider-audit-round2-other-03-1549",
+  "turns": [
+    "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
+    "Summarize the user-visible behavior and the validation you ran."
+  ],
+  "gitResetRef": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+  "runtimeWorkspaceGitStart": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": true,
+    "statusLines": []
+  },
+  "runtimeWorkspaceGitEnd": {
+    "headSha": "4a5c9e990ca2dca3106b7bbe674b21cf58acec7d",
+    "isClean": false,
+    "statusLines": [
+      "M packages/excalidraw/components/CommandPalette/CommandPalette.tsx",
+      "?? packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx"
+    ]
+  }
+}

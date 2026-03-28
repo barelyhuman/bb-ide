@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
   createAgentRuntime,
+  getProviderVisibilityMetadata,
   type AgentRuntimeCaptureEntry,
 } from "@bb/agent-runtime";
 import {
@@ -20,8 +21,9 @@ import type {
   ProviderAuditDebugRawEvent,
   ProviderAuditGitSnapshot,
   ProviderAuditManifest,
-  ProviderAuditRawEventTranslationExpectation,
+  ProviderAuditObservedToolCallSummary,
   ProviderAuditReport,
+  ProviderAuditRawEventKindSummary,
   ProviderAuditRunResult,
   ProviderAuditScenario,
   ProviderAuditScenarioExecutionOptions,
@@ -64,16 +66,133 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
       "Explain why the regression would have failed before your change.",
     ],
   },
+  "excalidraw-collab-startup-explanation": {
+    id: "excalidraw-collab-startup-explanation",
+    description:
+      "Provider-neutral collaboration startup explanation task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references.",
+      "What's the safest extension point if I want to instrument room startup without changing behavior?",
+    ],
+  },
+  "excalidraw-eyedropper-preview-bugfix": {
+    id: "excalidraw-eyedropper-preview-bugfix",
+    description:
+      "Provider-neutral eyedropper preview bug-fix task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
+      "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
+    ],
+  },
+  "excalidraw-magicframe-feature": {
+    id: "excalidraw-magicframe-feature",
+    description:
+      "Provider-neutral Magic Frame feature task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
+      "Summarize the user-visible behavior and the validation you ran.",
+    ],
+  },
+  "excalidraw-eyedropper-browser-compat": {
+    id: "excalidraw-eyedropper-browser-compat",
+    description:
+      "Provider-targeted eyedropper browser compatibility task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.",
+      "Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.",
+      "Summarize the external references you relied on and the files you changed.",
+    ],
+  },
+  "excalidraw-command-palette-map": {
+    id: "excalidraw-command-palette-map",
+    description:
+      "Provider-targeted command palette mapping task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "Use the available repo_outline helper first for the command and search area. Then use the built-in ls, find, and grep tools instead of bash while you inventory the relevant directories, trace the path from command registration to availability gating and action dispatch, and call out the safest insertion point for another gated action.",
+      "Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.",
+      "Summarize the directories you explored, the behavior change, and the validation you ran.",
+    ],
+    toolFixtures: [
+      {
+        tool: {
+          name: "repo_outline",
+          description:
+            "Provide a compact high-level map of the relevant Excalidraw repo area so the agent can choose what to inspect next.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              area: {
+                type: "string",
+                description: "The product area or concern to outline.",
+              },
+            },
+            required: ["area"],
+            additionalProperties: false,
+          },
+        },
+        response: {
+          success: true,
+          contentItems: [
+            {
+              type: "inputText",
+              text:
+                "High-level map for the command and search area:\n- packages/excalidraw/actions/ contains the registered action definitions and action metadata\n- packages/excalidraw/actions/register.ts and manager.tsx hold action registration and dispatch\n- packages/excalidraw/components/CommandPalette/ contains command palette item shaping, gating, and search UI\n- packages/excalidraw/components/App.tsx wires ActionManager and command palette setup\n- tests around actions and command/search behavior live under packages/excalidraw/tests and adjacent action test files",
+            },
+          ],
+        },
+      },
+    ],
+  },
+  "excalidraw-share-web-compat": {
+    id: "excalidraw-share-web-compat",
+    description:
+      "Provider-targeted share dialog web compatibility task against the real Excalidraw repo",
+    workspaceMode: "repo",
+    turns: [
+      "Use the available repo_outline helper first for the share and collaboration area. Then inspect the actual code and implement one small discoverability improvement to the share dialog for unsupported browsers with focused validation. Keep the change minimal and move quickly.",
+      "Summarize the helper output you used, the files you changed, and any outside references you consulted.",
+    ],
+    toolFixtures: [
+      {
+        tool: {
+          name: "repo_outline",
+          description:
+            "Provide a compact high-level map of the relevant Excalidraw repo area so the agent can choose what to inspect next.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              area: {
+                type: "string",
+                description: "The product area or concern to outline.",
+              },
+            },
+            required: ["area"],
+            additionalProperties: false,
+          },
+        },
+        response: {
+          success: true,
+          contentItems: [
+            {
+              type: "inputText",
+              text:
+                "High-level map for the share and collaboration area:\n- excalidraw-app/share/ contains the app-level share dialog and platform-specific share handling\n- excalidraw-app/data/ contains collaboration link helpers and room/share link data helpers\n- excalidraw-app/collab/ contains collaboration startup and room session wiring\n- packages/excalidraw contains shared share triggers, clipboard helpers, and command/search UI pieces\n- app-level and package-level tests cover share, collaboration, and command/search behavior",
+            },
+          ],
+        },
+      },
+    ],
+  },
 };
 
 interface PreparedAuditWorkspace {
   runtimeWorkspacePath: string;
   envWorkspacePath: string;
-}
-
-interface RawEventKindDetails {
-  kind: string;
-  expectation: ProviderAuditRawEventTranslationExpectation;
 }
 
 function printHelp(): void {
@@ -89,6 +208,8 @@ Options:
   --model <id>         Optional model override
   --workspace <path>   Env/source workspace path. Default: current directory
   --output <path>      Output directory. Default: ${join(tmpdir(), "bb-provider-audit")}
+  --thread-id <id>     Override the bb thread id used for the capture
+  --project-id <id>    Override the bb project id used for the capture
   --git-reset-ref <r>  Reset the repo workspace to this git ref before and after capture
   --timeout-ms <ms>    Timeout waiting for turn completion. Default: ${DEFAULT_TIMEOUT_MS}
   --help               Show this message
@@ -139,6 +260,16 @@ export function parseCliArgs(argv: string[]): ProviderAuditCliArgs {
     }
     if (token === "--prompt" && next) {
       args.prompt = next;
+      index += 1;
+      continue;
+    }
+    if (token === "--thread-id" && next) {
+      args.threadId = next;
+      index += 1;
+      continue;
+    }
+    if (token === "--project-id" && next) {
+      args.projectId = next;
       index += 1;
       continue;
     }
@@ -451,12 +582,13 @@ function buildThreadEventRows(args: {
   clientRequests: ProviderAuditClientRequest[];
   execution?: ProviderAuditScenarioExecutionOptions;
   model?: string;
+  threadId: string;
 }): ThreadEventRow[] {
   const clientRows = buildClientRequestRows({
     clientRequests: args.clientRequests,
     execution: args.execution,
     model: args.model,
-    threadId: DEFAULT_THREAD_ID,
+    threadId: args.threadId,
   });
 
   const providerRows = args.translatedCaptures.map((entry, index) => {
@@ -492,259 +624,40 @@ function buildThreadEventRows(args: {
     }));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getRecordProperty(
-  value: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> | null {
-  const next = value[key];
-  return isRecord(next) ? next : null;
-}
-
-function getStringProperty(
-  value: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const next = value[key];
-  return typeof next === "string" ? next : undefined;
-}
-
-function getRawSdkMessage(
-  entry: Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>,
-): Record<string, unknown> | null {
-  if (entry.rawEvent.method !== "sdk/message") {
-    return null;
-  }
-  if (!isRecord(entry.rawEvent.params)) {
-    return null;
-  }
-  const message = entry.rawEvent.params["message"];
-  return isRecord(message) ? message : null;
-}
-
-function getMessageContentTypes(message: Record<string, unknown>): string[] {
-  const messagePayload = getRecordProperty(message, "message");
-  const content = messagePayload?.["content"];
-  if (!Array.isArray(content)) {
+function buildRawEventKindSummaries(
+  rawProviderEvents: Extract<
+    AgentRuntimeCaptureEntry,
+    { kind: "raw-provider-event" }
+  >[],
+): ProviderAuditRawEventKindSummary[] {
+  if (rawProviderEvents.length === 0) {
     return [];
   }
 
-  const types = new Set<string>();
-  for (const block of content) {
-    if (!isRecord(block)) continue;
-    const type = getStringProperty(block, "type");
-    if (!type) continue;
-    types.add(type);
-  }
-  return [...types];
-}
+  const visibility = getProviderVisibilityMetadata(rawProviderEvents[0].providerId);
+  const countsByKindAndClassification = new Map<string, ProviderAuditRawEventKindSummary>();
 
-function hasClaudeParentToolUseId(message: Record<string, unknown>): boolean {
-  return typeof message["parent_tool_use_id"] === "string";
-}
-
-function describeClaudeRawEventKind(
-  entry: Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>,
-): string {
-  if (entry.rawEvent.method !== "sdk/message") {
-    return entry.rawEvent.method;
-  }
-  const message = getRawSdkMessage(entry);
-  if (!message) {
-    return "sdk/unknown";
+  for (const entry of rawProviderEvents) {
+    const description = visibility.describeRawEvent(entry.rawEvent);
+    const mapKey = `${description.coverage}:${description.kind}`;
+    const existing = countsByKindAndClassification.get(mapKey);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    countsByKindAndClassification.set(mapKey, {
+      kind: description.kind,
+      classification: description.coverage,
+      count: 1,
+    });
   }
 
-  const type = getStringProperty(message, "type");
-  if (type === "assistant" || type === "user") {
-    const contentTypes = getMessageContentTypes(message);
-    if (contentTypes.length === 0) {
-      return `sdk/${type}`;
+  return [...countsByKindAndClassification.values()].sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind.localeCompare(right.kind);
     }
-    return `sdk/${type}:${contentTypes.sort().join("+")}`;
-  }
-  if (type === "system") {
-    const subtype = getStringProperty(message, "subtype");
-    return subtype ? `sdk/system:${subtype}` : "sdk/system";
-  }
-  if (type === "stream_event") {
-    const event = getRecordProperty(message, "event");
-    const eventType = event ? getStringProperty(event, "type") : undefined;
-    if (!eventType) {
-      return "sdk/stream_event";
-    }
-    if (eventType === "content_block_start") {
-      const contentBlock = event ? getRecordProperty(event, "content_block") : null;
-      const contentType = contentBlock
-        ? getStringProperty(contentBlock, "type")
-        : undefined;
-      return contentType
-        ? `sdk/stream_event:${eventType}:${contentType}`
-        : `sdk/stream_event:${eventType}`;
-    }
-    if (eventType === "content_block_delta") {
-      const delta = event ? getRecordProperty(event, "delta") : null;
-      const deltaType = delta ? getStringProperty(delta, "type") : undefined;
-      return deltaType
-        ? `sdk/stream_event:${eventType}:${deltaType}`
-        : `sdk/stream_event:${eventType}`;
-    }
-    return `sdk/stream_event:${eventType}`;
-  }
-  return type ? `sdk/${type}` : "sdk/unknown";
-}
-
-function describePiRawEventKind(
-  entry: Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>,
-): string {
-  if (entry.rawEvent.method !== "sdk/message") {
-    return entry.rawEvent.method;
-  }
-  const message = getRawSdkMessage(entry);
-  if (!message) {
-    return "sdk/unknown";
-  }
-
-  const type = getStringProperty(message, "type");
-  if (type === "message_start" || type === "message_end") {
-    const payload = getRecordProperty(message, "message");
-    const role = payload ? getStringProperty(payload, "role") : undefined;
-    return role ? `sdk/${type}:${role}` : `sdk/${type}`;
-  }
-  if (type === "message_update") {
-    const assistantMessageEvent = getRecordProperty(message, "assistantMessageEvent");
-    const assistantEventType = assistantMessageEvent
-      ? getStringProperty(assistantMessageEvent, "type")
-      : undefined;
-    return assistantEventType
-      ? `sdk/message_update:${assistantEventType}`
-      : "sdk/message_update";
-  }
-  return type ? `sdk/${type}` : "sdk/unknown";
-}
-
-function getRawEventKindDetails(
-  entry: Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>,
-): RawEventKindDetails {
-  if (entry.providerId === "claude-code") {
-    const kind = describeClaudeRawEventKind(entry);
-    const message = getRawSdkMessage(entry);
-    if (
-      kind === "thread/identity" ||
-      kind === "sdk/assistant:text" ||
-      kind === "sdk/assistant:tool_use" ||
-      kind === "sdk/assistant:text+tool_use" ||
-      kind === "sdk/user:tool_result" ||
-      kind === "sdk/result" ||
-      kind === "sdk/stream_event:content_block_delta:text_delta"
-    ) {
-      return { kind, expectation: "expected-some" };
-    }
-    if (kind === "sdk/user:text" && message && hasClaudeParentToolUseId(message)) {
-      return { kind, expectation: "expected-none" };
-    }
-    if (
-      kind === "sdk/system:init" ||
-      kind === "sdk/system:task_started" ||
-      kind === "sdk/system:task_progress" ||
-      kind === "sdk/system:task_notification" ||
-      kind === "sdk/rate_limit_event" ||
-      kind === "sdk/assistant:thinking" ||
-      kind === "sdk/stream_event:message_start" ||
-      kind === "sdk/stream_event:content_block_start:text" ||
-      kind === "sdk/stream_event:content_block_start:thinking" ||
-      kind === "sdk/stream_event:content_block_start:tool_use" ||
-      kind === "sdk/stream_event:content_block_stop" ||
-      kind === "sdk/stream_event:message_delta" ||
-      kind === "sdk/stream_event:message_stop" ||
-      kind === "sdk/stream_event:content_block_delta:thinking_delta" ||
-      kind === "sdk/stream_event:content_block_delta:signature_delta" ||
-      kind === "sdk/stream_event:content_block_delta:input_json_delta"
-    ) {
-      return { kind, expectation: "expected-none" };
-    }
-    return { kind, expectation: "unknown" };
-  }
-
-  if (entry.providerId === "pi") {
-    const kind = describePiRawEventKind(entry);
-    if (
-      kind === "thread/identity" ||
-      kind === "sdk/agent_start" ||
-      kind === "sdk/agent_end" ||
-      kind === "sdk/message_update:text_delta" ||
-      kind === "sdk/tool_execution_start" ||
-      kind === "sdk/tool_execution_end"
-    ) {
-      return { kind, expectation: "expected-some" };
-    }
-    if (
-      kind === "sdk/turn_start" ||
-      kind === "sdk/message_start:user" ||
-      kind === "sdk/message_end:user" ||
-      kind === "sdk/message_start:assistant" ||
-      kind === "sdk/message_start:toolResult" ||
-      kind === "sdk/message_end:toolResult" ||
-      kind === "sdk/message_update:text_start" ||
-      kind === "sdk/message_update:text_end" ||
-      kind === "sdk/message_update:thinking_start" ||
-      kind === "sdk/message_update:thinking_delta" ||
-      kind === "sdk/message_update:thinking_end" ||
-      kind === "sdk/message_update:toolcall_start" ||
-      kind === "sdk/message_update:toolcall_delta" ||
-      kind === "sdk/message_update:toolcall_end" ||
-      kind === "sdk/tool_execution_update" ||
-      kind === "sdk/message_end:assistant" ||
-      kind === "sdk/turn_end"
-    ) {
-      return { kind, expectation: "expected-none" };
-    }
-    return { kind, expectation: "unknown" };
-  }
-
-  const kind = entry.rawEvent.method;
-  if (kind === "item/commandExecution/terminalInteraction") {
-    if (isRecord(entry.rawEvent.params)) {
-      const stdin = getStringProperty(entry.rawEvent.params, "stdin");
-      if (stdin !== undefined && stdin.length === 0) {
-        return { kind, expectation: "expected-none" };
-      }
-    }
-    return { kind, expectation: "unknown" };
-  }
-  if (
-    kind === "thread/status/changed" ||
-    kind === "account/rateLimits/updated"
-  ) {
-    return { kind, expectation: "expected-none" };
-  }
-  if (
-    kind === "thread/started" ||
-    kind === "thread/name/updated" ||
-    kind === "thread/compacted" ||
-    kind === "turn/started" ||
-    kind === "turn/completed" ||
-    kind === "item/started" ||
-    kind === "item/completed" ||
-    kind === "item/agentMessage/delta" ||
-    kind === "item/commandExecution/outputDelta" ||
-    kind === "item/fileChange/outputDelta" ||
-    kind === "item/reasoning/summaryTextDelta" ||
-    kind === "item/reasoning/textDelta" ||
-    kind === "item/plan/delta" ||
-    kind === "item/mcpToolCall/progress" ||
-    kind === "thread/tokenUsage/updated" ||
-    kind === "turn/plan/updated" ||
-    kind === "turn/diff/updated" ||
-    kind === "error" ||
-    kind === "deprecationNotice" ||
-    kind === "configWarning"
-  ) {
-    return { kind, expectation: "expected-some" };
-  }
-  return { kind, expectation: "unknown" };
+    return left.classification.localeCompare(right.classification);
+  });
 }
 
 function buildUntranslatedRawProviderEvents(
@@ -757,6 +670,11 @@ function buildUntranslatedRawProviderEvents(
     { kind: "translated-thread-event" }
   >[],
 ): ProviderAuditUntranslatedRawEvent[] {
+  if (rawProviderEvents.length === 0) {
+    return [];
+  }
+
+  const visibility = getProviderVisibilityMetadata(rawProviderEvents[0].providerId);
   const translatedCountByRawCaptureId = new Map<string, number>();
   for (const entry of translatedCaptures) {
     if (!entry.rawCaptureId) continue;
@@ -769,15 +687,53 @@ function buildUntranslatedRawProviderEvents(
   return rawProviderEvents
     .filter((entry) => !translatedCountByRawCaptureId.has(entry.captureId))
     .map((entry) => {
-      const kindDetails = getRawEventKindDetails(entry);
+      const description = visibility.describeRawEvent(entry.rawEvent);
       return {
         captureId: entry.captureId,
         method: entry.rawEvent.method,
-        kind: kindDetails.kind,
+        kind: description.kind,
         capturedAt: entry.capturedAt,
-        expectation: kindDetails.expectation,
+        classification: description.coverage,
       };
     });
+}
+
+function buildObservedToolCalls(
+  rawProviderEvents: Extract<
+    AgentRuntimeCaptureEntry,
+    { kind: "raw-provider-event" }
+  >[],
+): ProviderAuditObservedToolCallSummary[] {
+  if (rawProviderEvents.length === 0) {
+    return [];
+  }
+
+  const visibility = getProviderVisibilityMetadata(rawProviderEvents[0].providerId);
+  const countsByToolKey = new Map<string, ProviderAuditObservedToolCallSummary>();
+
+  for (const entry of rawProviderEvents) {
+    const observedToolCalls = visibility.extractObservedToolCalls(entry.rawEvent);
+    for (const observedToolCall of observedToolCalls) {
+      const existing = countsByToolKey.get(observedToolCall.key);
+      if (existing) {
+        existing.count += 1;
+        continue;
+      }
+      countsByToolKey.set(observedToolCall.key, {
+        key: observedToolCall.key,
+        displayName: observedToolCall.displayName,
+        coverage: observedToolCall.coverage,
+        count: 1,
+      });
+    }
+  }
+
+  return [...countsByToolKey.values()].sort((left, right) => {
+    if (left.key !== right.key) {
+      return left.key.localeCompare(right.key);
+    }
+    return left.coverage.localeCompare(right.coverage);
+  });
 }
 
 function buildDebugRawEvents(
@@ -820,14 +776,38 @@ function buildAuditReport(args: {
   >[];
   processLifecycle: ProviderAuditBundle["processLifecycle"];
 }): ProviderAuditReport {
+  const rawEventKinds = buildRawEventKindSummaries(args.rawProviderEvents);
   const untranslatedRawProviderEvents = buildUntranslatedRawProviderEvents(
     args.rawProviderEvents,
     args.translatedCaptures,
   );
   const unexpectedUntranslatedRawProviderEvents = untranslatedRawProviderEvents.filter(
-    (entry) => entry.expectation !== "expected-none",
+    (entry) => entry.classification !== "noise",
   );
   const debugRawEvents = buildDebugRawEvents(args.auditViewMessages);
+  const observedToolCalls = buildObservedToolCalls(args.rawProviderEvents);
+  const normalizedRawEventCount = rawEventKinds
+    .filter((entry) => entry.classification === "normalized")
+    .reduce((total, entry) => total + entry.count, 0);
+  const noiseRawEventCount = rawEventKinds
+    .filter((entry) => entry.classification === "noise")
+    .reduce((total, entry) => total + entry.count, 0);
+  const unknownRawEventCount = rawEventKinds
+    .filter((entry) => entry.classification === "unknown")
+    .reduce((total, entry) => total + entry.count, 0);
+  const wellKnownObservedToolCallCount = observedToolCalls
+    .filter((entry) => entry.coverage === "well-known")
+    .reduce((total, entry) => total + entry.count, 0);
+  const acceptedFallbackObservedToolCallCount = observedToolCalls
+    .filter((entry) => entry.coverage === "accepted-fallback")
+    .reduce((total, entry) => total + entry.count, 0);
+  const unknownObservedToolCallCount = observedToolCalls
+    .filter((entry) => entry.coverage === "unknown")
+    .reduce((total, entry) => total + entry.count, 0);
+  const wellKnownToolNames =
+    args.rawProviderEvents.length > 0
+      ? [...getProviderVisibilityMetadata(args.rawProviderEvents[0].providerId).wellKnownToolNames]
+      : [];
   const attentionNeeded: string[] = [];
 
   if (unexpectedUntranslatedRawProviderEvents.length > 0) {
@@ -843,6 +823,11 @@ function buildAuditReport(args: {
   if (args.toolCallResults.some((entry) => entry.success === false)) {
     attentionNeeded.push("At least one provider tool call failed in the runtime hook");
   }
+  if (unknownObservedToolCallCount > 0) {
+    attentionNeeded.push(
+      `${unknownObservedToolCallCount} observed tool call(s) are not yet classified as well-known or accepted fallback`,
+    );
+  }
 
   return {
     summary: {
@@ -857,13 +842,18 @@ function buildAuditReport(args: {
       toolCallResultCount: args.toolCallResults.length,
       providerStderrCount: args.providerStderr.length,
       processLifecycleCount: args.processLifecycle.length,
+      normalizedRawEventCount,
+      noiseRawEventCount,
+      unknownRawEventCount,
+      wellKnownObservedToolCallCount,
+      acceptedFallbackObservedToolCallCount,
+      unknownObservedToolCallCount,
     },
     rawProviderMethods: [
       ...new Set(args.rawProviderEvents.map((entry) => entry.rawEvent.method)),
     ],
-    rawProviderEventKinds: [
-      ...new Set(args.rawProviderEvents.map((entry) => getRawEventKindDetails(entry).kind)),
-    ],
+    rawProviderEventKinds: [...new Set(rawEventKinds.map((entry) => entry.kind))],
+    rawEventKinds,
     translatedEventTypes: [
       ...new Set(args.translatedCaptures.map((entry) => entry.event.type)),
     ],
@@ -876,6 +866,8 @@ function buildAuditReport(args: {
       failedCount: args.toolCallResults.filter((entry) => entry.success === false)
         .length,
     },
+    wellKnownToolNames,
+    observedToolCalls,
     providerStderr: {
       lineCount: args.providerStderr.length,
       sample: args.providerStderr.slice(0, 20),
@@ -920,6 +912,8 @@ async function runScenario(args: {
   scenario: ProviderAuditScenario;
   providerId: string;
   model?: string;
+  threadId: string;
+  projectId: string;
   clientRequests: ProviderAuditClientRequest[];
   translatedCaptures: Extract<
     AgentRuntimeCaptureEntry,
@@ -933,8 +927,8 @@ async function runScenario(args: {
   });
 
   await args.runtime.startThread({
-    threadId: DEFAULT_THREAD_ID,
-    projectId: DEFAULT_PROJECT_ID,
+    threadId: args.threadId,
+    projectId: args.projectId,
     providerId: args.providerId,
     options: executionOptions,
     dynamicTools: args.scenario.toolFixtures?.map((fixture) => fixture.tool),
@@ -951,7 +945,7 @@ async function runScenario(args: {
       createdAt: Date.now(),
     });
     await args.runtime.runTurn({
-      threadId: DEFAULT_THREAD_ID,
+      threadId: args.threadId,
       input: [{ type: "text", text: args.scenario.turns[index] }],
       options: buildExecutionOptions({
         model: args.model,
@@ -979,6 +973,8 @@ function buildManifest(args: {
   runtimeWorkspacePath: string;
   envWorkspacePath: string;
   outputDir: string;
+  threadId: string;
+  projectId: string;
   capturedAt: number;
   completedAt: number;
   gitResetRef?: string;
@@ -998,8 +994,8 @@ function buildManifest(args: {
     runtimeWorkspacePath: args.runtimeWorkspacePath,
     envWorkspacePath: args.envWorkspacePath,
     outputDir: args.outputDir,
-    threadId: DEFAULT_THREAD_ID,
-    projectId: DEFAULT_PROJECT_ID,
+    threadId: args.threadId,
+    projectId: args.projectId,
     turns: args.scenario.turns,
     gitResetRef: args.gitResetRef ?? null,
     runtimeWorkspaceGitStart: args.runtimeWorkspaceGitStart,
@@ -1060,6 +1056,7 @@ export function buildBundle(args: {
     clientRequests: args.clientRequests,
     execution: args.execution,
     model: args.model,
+    threadId: args.manifest.threadId,
   });
   const decodedRows = threadEventRows.map((row) => decodeRow(row));
   const viewMessages = toViewMessages(decodedRows, { threadStatus: "idle" });
@@ -1068,11 +1065,11 @@ export function buildBundle(args: {
     includeDebugRawEvents: true,
   });
   const timelineRows = buildTimelineRows(viewMessages);
-  const timelineText = formatTimelineAsText(viewMessages, {
+  const timelineText = formatTimelineAsText(timelineRows, {
     verbose: false,
     color: false,
   });
-  const timelineVerboseText = formatTimelineAsText(viewMessages, {
+  const timelineVerboseText = formatTimelineAsText(timelineRows, {
     verbose: true,
     color: false,
   });
@@ -1147,6 +1144,8 @@ export async function runProviderAuditCapture(
 ): Promise<ProviderAuditRunResult> {
   const scenario = resolveScenario(args);
   const outputDir = args.outputDir ?? defaultOutputDir(args.providerId, args.scenarioId);
+  const threadId = args.threadId ?? DEFAULT_THREAD_ID;
+  const projectId = args.projectId ?? DEFAULT_PROJECT_ID;
   const preparedWorkspace = prepareScenarioWorkspace({
     outputDir,
     scenario,
@@ -1197,6 +1196,8 @@ export async function runProviderAuditCapture(
         scenario,
         providerId: args.providerId,
         model: args.model,
+        threadId,
+        projectId,
         clientRequests,
         translatedCaptures,
         timeoutMs: args.timeoutMs,
@@ -1217,6 +1218,8 @@ export async function runProviderAuditCapture(
       runtimeWorkspacePath: preparedWorkspace.runtimeWorkspacePath,
       envWorkspacePath: preparedWorkspace.envWorkspacePath,
       outputDir,
+      threadId,
+      projectId,
       capturedAt,
       completedAt,
       gitResetRef: args.gitResetRef,

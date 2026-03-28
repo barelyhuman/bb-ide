@@ -1,15 +1,44 @@
 import type { ThreadEvent, ThreadEventItemStatus } from "@bb/domain";
 import { getEventParentToolCallId, type EventMeta } from "./event-decode.js";
 import type { ViewFileEditMessage, ViewToolCallMessage, ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
-import { durationToString } from "./format-helpers.js";
+import { durationToString, getFirstStringField } from "./format-helpers.js";
 import {
   extractShellCommandFromString,
   formatToolCallCommand,
   formatToolCallOutput,
   parseShellCommandIntents,
-  toolNameToParsedIntents,
+  stripAgentOutputMetadata,
 } from "./tool-call-parsing.js";
 import { toRecord } from "./unknown-helpers.js";
+
+const STRUCTURED_READ_TOOL_NAMES = new Set(["Read", "read"]);
+const STRUCTURED_SEARCH_TOOL_NAMES = new Set(["Grep", "grep"]);
+const STRUCTURED_LIST_TOOL_NAMES = new Set(["Glob", "glob", "find"]);
+const DELEGATION_TOOL_NAMES = new Set([
+  "Agent",
+  "Task",
+  "spawnAgent",
+  "resumeAgent",
+]);
+
+interface DelegationMetadata {
+  subagentType?: string;
+  description?: string;
+}
+
+export interface ExecLifecycleContext {
+  /**
+   * Tracks call start timestamps so projection can synthesize durations when a
+   * provider completion event omits `durationMs`.
+   */
+  callStartedAtById: Map<string, number>;
+}
+
+export function createExecLifecycleContext(): ExecLifecycleContext {
+  return {
+    callStartedAtById: new Map(),
+  };
+}
 
 export function itemStatusToToolStatus(status: ThreadEventItemStatus): ViewToolCallMessage["status"] {
   switch (status) {
@@ -47,10 +76,144 @@ function toExecDefaultStatus(kind: "begin" | "end"): ViewToolCallMessage["status
   return "completed";
 }
 
+function baseToolName(toolName: string): string {
+  const segments = toolName.split(":");
+  return segments[segments.length - 1] ?? toolName;
+}
+
+function buildStructuredReadIntents(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): ViewToolParsedIntent[] {
+  const path = getFirstStringField(args, ["file_path", "file", "path"]);
+  if (!path) {
+    return [];
+  }
+
+  return [
+    {
+      type: "read",
+      cmd: formatToolCallCommand(toolName, args),
+      name: baseToolName(toolName),
+      path,
+    },
+  ];
+}
+
+function buildStructuredSearchIntents(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): ViewToolParsedIntent[] {
+  const query = getFirstStringField(args, ["pattern", "query"]);
+  if (!query) {
+    return [];
+  }
+
+  return [
+    {
+      type: "search",
+      cmd: formatToolCallCommand(toolName, args),
+      query,
+      path: getFirstStringField(args, ["path"]) ?? null,
+    },
+  ];
+}
+
+function buildStructuredListIntents(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): ViewToolParsedIntent[] {
+  const path = getFirstStringField(args, ["path", "pattern"]);
+  if (!path) {
+    return [];
+  }
+
+  return [
+    {
+      type: "list_files",
+      cmd: formatToolCallCommand(toolName, args),
+      path,
+    },
+  ];
+}
+
+function getStructuredToolParsedIntents(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): ViewToolParsedIntent[] {
+  const baseName = baseToolName(toolName);
+  if (STRUCTURED_READ_TOOL_NAMES.has(baseName)) {
+    return buildStructuredReadIntents(toolName, args);
+  }
+  if (STRUCTURED_SEARCH_TOOL_NAMES.has(baseName)) {
+    return buildStructuredSearchIntents(toolName, args);
+  }
+  if (STRUCTURED_LIST_TOOL_NAMES.has(baseName)) {
+    return buildStructuredListIntents(toolName, args);
+  }
+  return [];
+}
+
+function getDelegationMetadata(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): DelegationMetadata {
+  if (!DELEGATION_TOOL_NAMES.has(baseToolName(toolName))) {
+    return {};
+  }
+
+  const subagentType = getFirstStringField(args, ["subagent_type", "subagentType"]);
+  const description = getFirstStringField(args, ["description", "prompt"]);
+  return {
+    ...(subagentType ? { subagentType } : {}),
+    ...(description ? { description } : {}),
+  };
+}
+
+function formatToolCallResultOutput(toolName: string, output: string): string {
+  if (baseToolName(toolName) === "Agent") {
+    return stripAgentOutputMetadata(output);
+  }
+  return formatToolCallOutput(toolName, output);
+}
+
+function trackCallStart(
+  context: ExecLifecycleContext | undefined,
+  callId: string,
+  startedAt: number,
+): void {
+  if (!context || context.callStartedAtById.has(callId)) {
+    return;
+  }
+  context.callStartedAtById.set(callId, startedAt);
+}
+
+function resolveCallDurationMs(
+  context: ExecLifecycleContext | undefined,
+  callId: string,
+  completedAt: number,
+  providerDurationMs: number | undefined,
+): number | undefined {
+  if (providerDurationMs !== undefined) {
+    context?.callStartedAtById.delete(callId);
+    return providerDurationMs;
+  }
+
+  const startedAt = context?.callStartedAtById.get(callId);
+  context?.callStartedAtById.delete(callId);
+  if (startedAt === undefined) {
+    return undefined;
+  }
+
+  const durationMs = completedAt - startedAt;
+  return durationMs >= 0 ? durationMs : undefined;
+}
+
 export function parseExecLifecycleEvent(
   decoded: ThreadEvent,
-  _meta: EventMeta,
+  meta: EventMeta,
   parentToolCallIdOverride?: string,
+  context?: ExecLifecycleContext,
 ): ExecLifecycleEvent | null {
   const parentToolCallId =
     parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
@@ -84,6 +247,17 @@ export function parseExecLifecycleEvent(
         ? "error"
         : (itemStatusToToolStatus(decoded.item.status) ??
             toExecDefaultStatus(kind));
+    const durationMs = kind === "end"
+      ? resolveCallDurationMs(
+          context,
+          callId,
+          meta.createdAt,
+          decoded.item.durationMs,
+        )
+      : decoded.item.durationMs;
+    if (kind === "begin") {
+      trackCallStart(context, callId, meta.createdAt);
+    }
 
     const command = extractShellCommandFromString(decoded.item.command);
     return {
@@ -95,8 +269,8 @@ export function parseExecLifecycleEvent(
         parsedCmd: parseShellCommandIntents(command),
         output: decoded.item.aggregatedOutput,
         exitCode,
-        durationMs: decoded.item.durationMs,
-        duration: durationToString(decoded.item.durationMs),
+        durationMs,
+        duration: durationToString(durationMs),
         status,
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },
@@ -108,11 +282,28 @@ export function parseExecLifecycleEvent(
 
 export function parseToolCallLifecycleEvent(
   decoded: ThreadEvent,
-  _meta: EventMeta,
+  meta: EventMeta,
   parentToolCallIdOverride?: string,
+  context?: ExecLifecycleContext,
 ): ExecLifecycleEvent | null {
   const parentToolCallId =
     parentToolCallIdOverride ?? getEventParentToolCallId(decoded);
+  if (
+    decoded.type === "item/toolCall/progress" ||
+    decoded.type === "item/mcpToolCall/progress"
+  ) {
+    return {
+      kind: "output",
+      call: {
+        callId: decoded.itemId,
+        parsedCmd: [],
+        output: decoded.message ?? "Progress update",
+        status: "pending",
+        ...(parentToolCallId ? { parentToolCallId } : {}),
+      },
+    };
+  }
+
   if (decoded.type === "item/started" || decoded.type === "item/completed") {
     if (decoded.item.type !== "toolCall") return null;
 
@@ -127,14 +318,27 @@ export function parseToolCallLifecycleEvent(
     const status = kind === "end"
       ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
       : "pending";
+    const durationMs = kind === "end"
+      ? resolveCallDurationMs(
+          context,
+          callId,
+          meta.createdAt,
+          decoded.item.durationMs,
+        )
+      : decoded.item.durationMs;
+    if (kind === "begin") {
+      trackCallStart(context, callId, meta.createdAt);
+    }
     const result = decoded.item.result;
     const rawOutput = typeof result === "string"
       ? result
       : (result !== undefined ? JSON.stringify(result) : undefined);
     const output = rawOutput !== undefined
-      ? formatToolCallOutput(fullToolName, rawOutput)
+      ? formatToolCallResultOutput(fullToolName, rawOutput)
       : undefined;
     const errorField = decoded.item.error;
+    const parsedCmd = getStructuredToolParsedIntents(fullToolName, parsedArgs);
+    const delegationMetadata = getDelegationMetadata(fullToolName, parsedArgs);
 
     return {
       kind,
@@ -142,11 +346,12 @@ export function parseToolCallLifecycleEvent(
         callId,
         toolName: fullToolName,
         command: formatToolCallCommand(fullToolName, parsedArgs),
-        parsedCmd: toolNameToParsedIntents(fullToolName, parsedArgs),
+        parsedCmd,
         output: kind === "end" ? (output ?? errorField) : undefined,
-        durationMs: decoded.item.durationMs,
-        duration: durationToString(decoded.item.durationMs),
+        durationMs,
+        duration: durationToString(durationMs),
         status,
+        ...delegationMetadata,
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },
     };

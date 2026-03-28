@@ -15,6 +15,7 @@ import type {
   AvailableModel,
   ProviderCapabilities,
   ThreadEvent,
+  ThreadEventItem,
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
   ToolCallRequest,
@@ -23,22 +24,41 @@ import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
 import {
+  bashArgsSchema,
   textBlockSchema,
 } from "../shared/tool-arg-schemas.js";
 import {
+  buildEditDiff,
   HIGH_REASONING_EFFORT,
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
   toNonNegativeNumber,
-  translateToolCallToItem,
-  translateToolResultToItem,
+  toOptionalString,
+  withParentToolCallId,
 } from "../shared/adapter-utils.js";
+import {
+  getRecordProperty,
+  getStringProperty,
+  isRecord,
+  type StringRecord,
+} from "../shared/provider-visibility-helpers.js";
+import {
+  buildUnhandledProviderEvents,
+} from "../shared/provider-unhandled-event.js";
+import {
+  errorEnvelopeSchema,
+  jsonRpcEnvelopeSchema,
+  sdkMessageEnvelopeSchema,
+  threadIdentityEnvelopeSchema,
+} from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
   JsonRpcMessage,
+  ProviderTranslationContext,
   ProviderAdapter,
 } from "../provider-adapter.js";
+import { claudeCodeVisibilityMetadata } from "./visibility.js";
 
 // ---------------------------------------------------------------------------
 // Claude Code event and command types
@@ -53,6 +73,29 @@ export type ClaudeCodeEvent = SDKMessage;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+function buildClaudeRateLimitDetails(
+  message: StringRecord,
+): string | undefined {
+  const rateLimitInfo = getRecordProperty(message, "rate_limit_info");
+  if (!rateLimitInfo) {
+    return undefined;
+  }
+
+  const status = getStringProperty(rateLimitInfo, "status");
+  const rateLimitType = getStringProperty(rateLimitInfo, "rateLimitType");
+  const overageStatus = getStringProperty(rateLimitInfo, "overageStatus");
+  const overageDisabledReason = getStringProperty(rateLimitInfo, "overageDisabledReason");
+
+  const detailParts = [
+    status ? `status: ${status}` : undefined,
+    rateLimitType ? `limit: ${rateLimitType}` : undefined,
+    overageStatus ? `overage: ${overageStatus}` : undefined,
+    overageDisabledReason ? `reason: ${overageDisabledReason}` : undefined,
+  ].filter((detail): detail is string => Boolean(detail));
+
+  return detailParts.length > 0 ? detailParts.join(" • ") : undefined;
+}
 
 
 const STATIC_CLAUDE_CODE_MODELS: AvailableModel[] = [
@@ -106,6 +149,224 @@ function getNestedMessageId(message: unknown): string | undefined {
   return parsed.success ? parsed.data.id : undefined;
 }
 
+const claudeFileEditArgsSchema = z.object({
+  file_path: z.string().optional(),
+  path: z.string().optional(),
+  old_string: z.string().optional(),
+  new_string: z.string().optional(),
+  content: z.string().optional(),
+}).passthrough();
+
+const claudeWebSearchArgsSchema = z.object({
+  query: z.string().optional(),
+  url: z.string().optional(),
+}).passthrough();
+
+type ClaudeFileEditArgs = z.infer<typeof claudeFileEditArgsSchema>;
+type ClaudePendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
+
+interface ClaudeToolUseTranslationInput {
+  callId: string;
+  toolName: string;
+  args: unknown;
+  parentToolCallId?: string;
+}
+
+interface ClaudeToolResultTranslationInput {
+  callId: string;
+  toolName?: string;
+  content: unknown;
+  isError: boolean;
+  parentToolCallId?: string;
+  startedItem?: ThreadEventItem;
+}
+
+function buildClaudeFileChangeItem(
+  args: ClaudeFileEditArgs,
+): ClaudePendingFileChangeItem | null {
+  const filePath = args.file_path ?? args.path;
+  if (!filePath) {
+    return null;
+  }
+
+  const diff = buildEditDiff(
+    filePath,
+    args.old_string,
+    args.new_string,
+  );
+
+  return {
+    type: "fileChange",
+    id: "",
+    changes: [{
+      path: filePath,
+      kind: "update",
+      ...(diff ? { diff } : {}),
+    }],
+    status: "pending",
+  };
+}
+
+function translateClaudeToolUseItem(
+  input: ClaudeToolUseTranslationInput,
+): ThreadEventItem {
+  const baseToolCall = {
+    type: "toolCall" as const,
+    id: input.callId,
+    tool: input.toolName,
+    arguments: input.args,
+    status: "pending" as const,
+  };
+
+  switch (input.toolName) {
+    case "Bash": {
+      const parsed = bashArgsSchema.safeParse(input.args);
+      const command = parsed.success
+        ? toOptionalString(parsed.data.command)
+        : undefined;
+      if (!command) {
+        return withParentToolCallId(baseToolCall, input.parentToolCallId);
+      }
+      return withParentToolCallId({
+        type: "commandExecution",
+        id: input.callId,
+        command,
+        cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? "") : "",
+        status: "pending",
+      }, input.parentToolCallId);
+    }
+    case "Edit":
+    case "Write": {
+      const parsed = claudeFileEditArgsSchema.safeParse(input.args);
+      if (!parsed.success) {
+        return withParentToolCallId(baseToolCall, input.parentToolCallId);
+      }
+      const fileChangeItem = buildClaudeFileChangeItem(parsed.data);
+      if (!fileChangeItem) {
+        return withParentToolCallId({
+          ...baseToolCall,
+          arguments: parsed.data,
+        }, input.parentToolCallId);
+      }
+      return withParentToolCallId({
+        ...fileChangeItem,
+        id: input.callId,
+      }, input.parentToolCallId);
+    }
+    case "WebSearch":
+    case "WebFetch": {
+      const parsed = claudeWebSearchArgsSchema.safeParse(input.args);
+      const query = parsed.success
+        ? (toOptionalString(parsed.data.query) ?? toOptionalString(parsed.data.url))
+        : undefined;
+      if (!query) {
+        return withParentToolCallId(baseToolCall, input.parentToolCallId);
+      }
+      return withParentToolCallId({
+        type: "webSearch",
+        id: input.callId,
+        query,
+        ...(input.toolName === "WebFetch" ? { action: "fetch" } : {}),
+      }, input.parentToolCallId);
+    }
+    default:
+      return withParentToolCallId(baseToolCall, input.parentToolCallId);
+  }
+}
+
+function translateClaudeToolResultItem(
+  input: ClaudeToolResultTranslationInput,
+): ThreadEventItem {
+  const outputText = extractResultText(input.content);
+  const startedItem = input.startedItem;
+  const itemStatus = input.isError ? "failed" : "completed";
+  const bashExitCode = input.isError ? 1 : 0;
+
+  if (startedItem) {
+    switch (startedItem.type) {
+      case "commandExecution":
+        return withParentToolCallId({
+          type: "commandExecution",
+          id: input.callId,
+          command: startedItem.command,
+          cwd: startedItem.cwd,
+          aggregatedOutput: outputText,
+          exitCode: bashExitCode,
+          status: itemStatus,
+        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+      case "fileChange":
+        return withParentToolCallId({
+          type: "fileChange",
+          id: input.callId,
+          changes: startedItem.changes,
+          status: itemStatus,
+        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+      case "webSearch":
+        return withParentToolCallId({
+          type: "webSearch",
+          id: input.callId,
+          query: startedItem.query,
+          ...(startedItem.action ? { action: startedItem.action } : {}),
+        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+      case "toolCall":
+        return withParentToolCallId({
+          type: "toolCall",
+          id: input.callId,
+          tool: startedItem.tool,
+          arguments: startedItem.arguments,
+          status: itemStatus,
+          result: outputText,
+        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+      default:
+        break;
+    }
+  }
+
+  const fallbackToolCall = withParentToolCallId({
+    type: "toolCall",
+    id: input.callId,
+    tool: input.toolName ?? "unknown",
+    status: itemStatus,
+    result: outputText,
+  }, input.parentToolCallId);
+
+  switch (input.toolName) {
+    case "Bash":
+      return withParentToolCallId({
+        type: "commandExecution",
+        id: input.callId,
+        command: "",
+        cwd: "",
+        aggregatedOutput: outputText,
+        exitCode: bashExitCode,
+        status: itemStatus,
+      }, input.parentToolCallId);
+    case "Edit":
+    case "Write":
+      return withParentToolCallId({
+        type: "fileChange",
+        id: input.callId,
+        changes: [],
+        status: itemStatus,
+      }, input.parentToolCallId);
+    case "WebSearch":
+      return withParentToolCallId({
+        type: "webSearch",
+        id: input.callId,
+        query: "",
+      }, input.parentToolCallId);
+    case "WebFetch":
+      return withParentToolCallId({
+        type: "webSearch",
+        id: input.callId,
+        query: "",
+        action: "fetch",
+      }, input.parentToolCallId);
+    default:
+      return fallbackToolCall;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Claude Code–specific helpers
 // ---------------------------------------------------------------------------
@@ -122,14 +383,9 @@ function resolveBridgePath(): string {
 function buildClaudeCodeConfig(envVars?: Record<string, string>): Record<string, unknown> | undefined {
   if (!envVars) return undefined;
   const config: Record<string, unknown> = {};
-  const projectId = envVars["BB_PROJECT_ID"];
-  const threadId = envVars["BB_THREAD_ID"];
-  const serverUrl = envVars["BB_SERVER_URL"];
-  const path = envVars["PATH"];
-  if (projectId) config["shell_environment_policy.set.BB_PROJECT_ID"] = projectId;
-  if (threadId) config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
-  if (serverUrl) config["shell_environment_policy.set.BB_SERVER_URL"] = serverUrl;
-  if (path) config["shell_environment_policy.set.PATH"] = path;
+  for (const [key, value] of Object.entries(envVars)) {
+    config[`shell_environment_policy.set.${key}`] = value;
+  }
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
@@ -161,7 +417,8 @@ interface ClaudeTurnState {
   counter: number;
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
-  toolNamesByCallId: Map<string, string>;
+  currentStructuredErrorKey: string | undefined;
+  toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
 export function createClaudeCodeProviderAdapter(
@@ -186,7 +443,8 @@ export function createClaudeCodeProviderAdapter(
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
-        toolNamesByCallId: new Map(),
+        currentStructuredErrorKey: undefined,
+        toolItemsByCallId: new Map(),
       });
     }
     return turnState.get(threadId)!;
@@ -198,6 +456,8 @@ export function createClaudeCodeProviderAdapter(
     state: ClaudeTurnState,
   ): string {
     if (!state.currentTurnId) {
+      state.toolItemsByCallId.clear();
+      state.currentStructuredErrorKey = undefined;
       state.counter += 1;
       state.currentTurnId = `turn-${state.counter}`;
       events.push({
@@ -208,6 +468,251 @@ export function createClaudeCodeProviderAdapter(
       });
     }
     return state.currentTurnId;
+  }
+
+  function translateClaudeEvent(
+    event: unknown,
+    context?: ProviderTranslationContext,
+  ): ThreadEvent[] {
+    const sdkEnvelope = sdkMessageEnvelopeSchema.safeParse(event);
+    if (sdkEnvelope.success) {
+      const sdkMessage = sdkEnvelope.data.params.message;
+      const nestedParentToolCallId = getNestedParentToolUseId(sdkMessage);
+      const parentToolCallId =
+        nestedParentToolCallId
+          ? nestedParentToolCallId
+          : sdkEnvelope.data.params.parent_tool_use_id ?? context?.parentToolCallId;
+      const translated = translateClaudeEvent(sdkMessage, {
+        ...context,
+        ...(parentToolCallId ? { parentToolCallId } : {}),
+      });
+      return translated.length > 0
+        ? translated
+        : buildUnhandledProviderEvents({
+            providerId: "claude-code",
+            rawEvent: {
+              jsonrpc: "2.0",
+              method: sdkEnvelope.data.method,
+              params: sdkEnvelope.data.params,
+            },
+            visibilityMetadata: claudeCodeVisibilityMetadata,
+            ...(parentToolCallId ? { parentToolCallId } : {}),
+          });
+    }
+
+    const identityEnvelope = threadIdentityEnvelopeSchema.safeParse(event);
+    if (identityEnvelope.success) {
+      const { threadId = "", providerThreadId } = identityEnvelope.data.params;
+      return providerThreadId
+        ? [{ type: "thread/identity", threadId, providerThreadId }]
+        : [];
+    }
+
+    const errorEnvelope = errorEnvelopeSchema.safeParse(event);
+    if (errorEnvelope.success) {
+      return [{
+        type: "error",
+        threadId: "",
+        providerThreadId: "",
+        message: errorEnvelope.data.params?.message ?? "unknown error",
+      }];
+    }
+
+    const envelope = jsonRpcEnvelopeSchema.safeParse(event);
+    if (envelope.success) {
+      return buildUnhandledProviderEvents({
+        providerId: "claude-code",
+        rawEvent: {
+          jsonrpc: "2.0",
+          method: envelope.data.method,
+          ...(envelope.data.params ? { params: envelope.data.params } : {}),
+        },
+        visibilityMetadata: claudeCodeVisibilityMetadata,
+        ...(context?.parentToolCallId
+          ? { parentToolCallId: context.parentToolCallId }
+          : {}),
+      });
+    }
+
+    const messageType = z.object({ type: z.string() }).safeParse(event);
+    if (!messageType.success) {
+      return [];
+    }
+
+    const message = event as ClaudeCodeEvent;
+    // threadId is not available from SDKMessage — the bridge/host-daemon
+    // supplies it from the session context. We use "" here; the caller
+    // overrides it.
+    const threadId = "";
+    const events: ThreadEvent[] = [];
+
+    // Resolve per-thread turn state using the context threadId.
+    const stateKey = context?.threadId ?? "";
+    const state = getTurnState(stateKey);
+    const parentToolCallId = context?.parentToolCallId;
+
+    switch (message.type) {
+      case "system":
+        // System init — no events emitted
+        break;
+
+      case "assistant": {
+        const turnId = ensureTurnStarted(events, threadId, state);
+        const assistantMessageId = getNestedMessageId(message.message);
+
+        const text = extractAssistantText(message);
+        if (text) {
+          const structuredError = parseClaudeApiErrorText(text);
+          if (structuredError) {
+            state.currentStructuredErrorKey = structuredError.key;
+            events.push({
+              type: "error",
+              threadId,
+              providerThreadId: "",
+              turnId,
+              message: structuredError.message,
+              ...(structuredError.detail ? { detail: structuredError.detail } : {}),
+            });
+          } else {
+            events.push({
+              type: "item/completed",
+              threadId,
+              providerThreadId: "",
+              turnId,
+              item: {
+                type: "agentMessage",
+                id: assistantMessageId ?? `msg-${state.counter}`,
+                text,
+                ...(parentToolCallId ? { parentToolCallId } : {}),
+              },
+            });
+          }
+        }
+
+        const toolUses = extractToolUses(message);
+        for (const toolUse of toolUses) {
+          const item = translateClaudeToolUseItem({
+            callId: toolUse.id,
+            toolName: toolUse.name,
+            args: toolUse.input,
+            parentToolCallId,
+          });
+          state.toolItemsByCallId.set(toolUse.id, item);
+          events.push({
+            type: "item/started",
+            threadId,
+            providerThreadId: "",
+            turnId,
+            item,
+          });
+        }
+        break;
+      }
+
+      case "stream_event": {
+        const delta = extractStreamTextDelta(message);
+        if (delta) {
+          const turnId = ensureTurnStarted(events, threadId, state);
+          events.push({
+            type: "item/agentMessage/delta",
+            threadId,
+            providerThreadId: "",
+            turnId,
+            delta,
+            ...(parentToolCallId ? { parentToolCallId } : {}),
+          });
+        }
+        break;
+      }
+
+      case "user": {
+        const toolResults = extractToolResults(message);
+        for (const result of toolResults) {
+          const startedItem = state.toolItemsByCallId.get(result.toolUseId);
+          events.push({
+            type: "item/completed",
+            threadId,
+            providerThreadId: "",
+            turnId: state.currentTurnId ?? "",
+            item: translateClaudeToolResultItem({
+              callId: result.toolUseId,
+              content: result.content,
+              isError: result.isError,
+              toolName: result.toolName,
+              startedItem,
+              parentToolCallId,
+            }),
+          });
+          state.toolItemsByCallId.delete(result.toolUseId);
+        }
+        break;
+      }
+
+      case "result": {
+        if (state.currentTurnId) {
+          const resultError = message.is_error
+            ? parseClaudeApiErrorText("result" in message ? message.result : undefined)
+            : null;
+          const tokenUsage = extractTokenUsage(message, state.cumulativeTokens);
+          if (tokenUsage) {
+            events.push({
+              type: "thread/tokenUsage/updated",
+              threadId,
+              providerThreadId: "",
+              turnId: state.currentTurnId,
+              tokenUsage,
+            });
+          }
+          if (
+            resultError &&
+            resultError.key !== state.currentStructuredErrorKey
+          ) {
+            events.push({
+              type: "error",
+              threadId,
+              providerThreadId: "",
+              turnId: state.currentTurnId,
+              message: resultError.message,
+              ...(resultError.detail ? { detail: resultError.detail } : {}),
+            });
+          }
+          events.push({
+            type: "turn/completed",
+            threadId,
+            providerThreadId: "",
+            turnId: state.currentTurnId,
+            status:
+              message.is_error || message.subtype.startsWith("error")
+                ? "failed"
+                : "completed",
+          });
+          state.toolItemsByCallId.clear();
+          state.currentStructuredErrorKey = undefined;
+          state.currentTurnId = undefined;
+        }
+        break;
+      }
+
+      case "rate_limit_event": {
+        const details = isRecord(message)
+          ? buildClaudeRateLimitDetails(message)
+          : undefined;
+        events.push({
+          type: "warning",
+          threadId,
+          providerThreadId: "",
+          category: "general",
+          summary: "Rate limit status updated",
+          ...(details ? { details } : {}),
+        });
+        break;
+      }
+
+      default:
+        break;
+    }
+
+    return events;
   }
 
   return {
@@ -314,162 +819,9 @@ export function createClaudeCodeProviderAdapter(
 
     translateEvent(
       event: unknown,
-      context?: { threadId?: string; parentToolCallId?: string },
+      context?: ProviderTranslationContext,
     ): ThreadEvent[] {
-      // The runtime passes full JSON-RPC notifications. Unwrap bridge
-      // envelope formats so the translation logic sees raw SDK messages.
-      const envelope = event as { method?: string; params?: Record<string, unknown> };
-      if (envelope.method === "sdk/message") {
-        const sdkMessage = envelope.params?.message;
-        if (!sdkMessage) return [];
-        const nestedParentToolCallId = getNestedParentToolUseId(sdkMessage);
-        const parentToolCallId =
-          nestedParentToolCallId
-            ? nestedParentToolCallId
-            : typeof envelope.params?.parent_tool_use_id === "string"
-              ? envelope.params.parent_tool_use_id
-            : context?.parentToolCallId;
-        return this.translateEvent(sdkMessage, {
-          ...context,
-          ...(parentToolCallId ? { parentToolCallId } : {}),
-        });
-      }
-      if (envelope.method === "thread/identity") {
-        const threadId = (envelope.params?.threadId as string) ?? "";
-        const providerThreadId = envelope.params?.providerThreadId as string | undefined;
-        if (providerThreadId) {
-          return [{ type: "thread/identity", threadId, providerThreadId } as ThreadEvent];
-        }
-        return [];
-      }
-      if (envelope.method === "error") {
-        const params = envelope.params as { message?: string } | undefined;
-        return [{ type: "error", threadId: "", providerThreadId: "", message: params?.message ?? "unknown error" } as ThreadEvent];
-      }
-
-      const message = event as ClaudeCodeEvent;
-      // threadId is not available from SDKMessage — the bridge/host-daemon
-      // supplies it from the session context. We use "" here; the caller
-      // overrides it.
-      const threadId = "";
-      const events: ThreadEvent[] = [];
-
-      // Resolve per-thread turn state using the context threadId.
-      const stateKey = context?.threadId ?? "";
-      const state = getTurnState(stateKey);
-      const parentToolCallId = context?.parentToolCallId;
-
-      switch (message.type) {
-        case "system":
-          // System init — no events emitted
-          break;
-
-        case "assistant": {
-          const turnId = ensureTurnStarted(events, threadId, state);
-          const assistantMessageId = getNestedMessageId(message.message);
-
-          const text = extractAssistantText(message);
-          if (text) {
-            events.push({
-              type: "item/completed",
-              threadId,
-              providerThreadId: "",
-              turnId,
-              item: {
-                type: "agentMessage",
-                id: assistantMessageId ?? `msg-${state.counter}`,
-                text,
-                ...(parentToolCallId ? { parentToolCallId } : {}),
-              },
-            });
-          }
-
-          const toolUses = extractToolUses(message);
-          for (const toolUse of toolUses) {
-            state.toolNamesByCallId.set(toolUse.id, toolUse.name);
-            events.push({
-              type: "item/started",
-              threadId,
-              providerThreadId: "",
-              turnId,
-              item: translateToolCallToItem({
-                callId: toolUse.id,
-                toolName: toolUse.name,
-                args: toolUse.input,
-                parentToolCallId,
-              }),
-            });
-          }
-          break;
-        }
-
-        case "stream_event": {
-          const delta = extractStreamTextDelta(message);
-          if (delta) {
-            const turnId = ensureTurnStarted(events, threadId, state);
-            events.push({
-              type: "item/agentMessage/delta",
-              threadId,
-              providerThreadId: "",
-              turnId,
-              delta,
-              ...(parentToolCallId ? { parentToolCallId } : {}),
-            });
-          }
-          break;
-        }
-
-        case "user": {
-          const toolResults = extractToolResults(message);
-          for (const result of toolResults) {
-            const toolName =
-              result.toolName ?? state.toolNamesByCallId.get(result.toolUseId);
-            events.push({
-              type: "item/completed",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId ?? "",
-              item: translateToolResultToItem({
-                callId: result.toolUseId,
-                toolName,
-                content: result.content,
-                parentToolCallId,
-              }),
-            });
-          }
-          break;
-        }
-
-        case "result": {
-          const resultMessage = message as SDKResultMessage;
-          if (state.currentTurnId) {
-            const tokenUsage = extractTokenUsage(resultMessage, state.cumulativeTokens);
-            if (tokenUsage) {
-              events.push({
-                type: "thread/tokenUsage/updated",
-                threadId,
-                providerThreadId: "",
-                turnId: state.currentTurnId,
-                tokenUsage,
-              });
-            }
-            events.push({
-              type: "turn/completed",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId,
-              status: resultMessage.subtype.startsWith("error") ? "failed" : "completed",
-            });
-            state.currentTurnId = undefined;
-          }
-          break;
-        }
-
-        default:
-          break;
-      }
-
-      return events;
+      return translateClaudeEvent(event, context);
     },
 
     // -- Tool call codec ---------------------------------------------------
@@ -502,6 +854,7 @@ const toolResultBlockSchema = z.object({
   tool_use_id: z.string(),
   tool_name: z.string().optional(),
   content: z.unknown(),
+  is_error: z.boolean().optional(),
 });
 
 const messageContentSchema = z.object({
@@ -526,6 +879,14 @@ const contentBlockStartSchema = z.object({
 }).passthrough();
 
 const streamEventSchema = z.union([contentBlockDeltaSchema, contentBlockStartSchema]);
+const claudeApiErrorPayloadSchema = z.object({
+  type: z.literal("error"),
+  error: z.object({
+    type: z.string().optional(),
+    message: z.string().optional(),
+  }).passthrough(),
+  request_id: z.string().optional(),
+}).passthrough();
 
 // ---------------------------------------------------------------------------
 // SDK message extraction helpers
@@ -548,6 +909,55 @@ function extractAssistantText(
   }
   const joined = chunks.join("\n").trim();
   return joined.length > 0 ? joined : undefined;
+}
+
+function parseClaudeApiErrorText(
+  value: unknown,
+): { key: string; message: string; detail?: string } | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = value.match(/^API Error:\s*(\d+)\s+(\{[\s\S]+\})$/);
+  if (!match) {
+    return null;
+  }
+
+  const statusCode = Number.parseInt(match[1] ?? "", 10);
+  if (!Number.isFinite(statusCode)) {
+    return null;
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(match[2] ?? "");
+  } catch {
+    return null;
+  }
+
+  const parsedPayload = claudeApiErrorPayloadSchema.safeParse(parsedJson);
+  if (!parsedPayload.success) {
+    return null;
+  }
+
+  const errorType = parsedPayload.data.error.type?.trim();
+  const errorMessage = parsedPayload.data.error.message?.trim();
+  const requestId = parsedPayload.data.request_id?.trim();
+  const message =
+    errorMessage && errorMessage.length > 0
+      ? `Claude API error ${statusCode}: ${errorMessage}`
+      : `Claude API error ${statusCode}`;
+  const detail = [
+    errorType ? `type: ${errorType}` : undefined,
+    requestId ? `request id: ${requestId}` : undefined,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(" • ");
+
+  return {
+    key: `${statusCode}:${errorType ?? ""}:${errorMessage ?? ""}:${requestId ?? ""}`,
+    message,
+    ...(detail ? { detail } : {}),
+  };
 }
 
 function extractToolUses(
@@ -575,8 +985,8 @@ function extractStreamTextDelta(
 
 function extractToolResults(
   message: Extract<SDKMessage, { type: "user" }>,
-): Array<{ toolUseId: string; toolName?: string; content: unknown }> {
-  const results: Array<{ toolUseId: string; toolName?: string; content: unknown }> = [];
+): Array<{ toolUseId: string; toolName?: string; content: unknown; isError: boolean }> {
+  const results: Array<{ toolUseId: string; toolName?: string; content: unknown; isError: boolean }> = [];
   for (const block of parseMessageContent(message)) {
     const result = toolResultBlockSchema.safeParse(block);
     if (result.success) {
@@ -584,6 +994,7 @@ function extractToolResults(
         toolUseId: result.data.tool_use_id,
         toolName: result.data.tool_name,
         content: result.data.content,
+        isError: result.data.is_error ?? false,
       });
     }
   }

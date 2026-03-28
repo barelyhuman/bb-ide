@@ -1,0 +1,18 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/thread/start",
+    "requestMethod": "thread/start",
+    "text": "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
+    "createdAt": 1774598724090
+  },
+  {
+    "id": "audit-client-row-2",
+    "turnIndex": 1,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Summarize the user-visible behavior and the validation you ran.",
+    "createdAt": 1774599173675
+  }
+]

@@ -51,8 +51,16 @@ The same replay output now feeds two review loops:
 The current checked-in corpora are:
 
 - `fixtures/excalidraw`
-  - 3 providers x 3 realistic tasks against the Excalidraw repo
-  - explanation, feature work, and bug fix with validation
+  - 21 fixture bundles against the Excalidraw repo
+  - six shared tasks across all three providers:
+    - the original TTD/search trio
+    - collaboration-startup
+    - eyedropper-preview
+    - Magic Frame
+  - three provider-targeted tasks:
+    - Claude Code: eyedropper browser compatibility
+    - Pi: command palette mapping with helper-tool coverage
+    - Codex: share dialog compatibility/discoverability with dynamic helper-tool coverage
 
 The Excalidraw corpus is the north-star baseline and the only checked-in corpus.
 
@@ -63,6 +71,18 @@ The current fixture-backed findings are:
 - obvious shell exploration is common across providers, especially Codex
   - `rg`, `grep`, `find`, `ls`, `sed -n`, `cat`, and similar commands often carry the real exploration story
   - treating those as generic `exec_command` rows makes Codex and Pi feel much noisier than they should
+- Pi has a real built-in-tool split that is easy to misread
+  - Pi CLI and Pi SDK default to the four-tool coding set: `read`, `bash`, `edit`, `write`
+  - `grep`, `find`, and `ls` are real first-class Pi tools, but they are opt-in rather than part of the default coding set
+  - if they are not explicitly enabled, the model will usually treat them as shell commands routed through `bash`
+- targeted provider-shaped fixtures are valuable when breadth matters
+  - Claude's targeted fixture reliably surfaces `TodoWrite`, `ToolSearch`, `WebSearch`, and `WebFetch`
+  - Codex's targeted fixture reliably surfaces a `dynamicToolCall` via the helper-tool path
+  - Pi now covers a custom helper tool, but still strongly prefers `bash` over raw `ls` / `find` / `grep` even when prompted directly
+- Pi bridge parity needs to be watched explicitly
+  - bb currently always starts Pi with base instructions, which means the bridge takes a custom `DefaultResourceLoader` path instead of Pi's plain default-loader path
+  - that path is closer to `pi --system-prompt ... --no-extensions --no-skills --no-prompt-templates --no-themes` than to an untouched interactive Pi session
+  - when Pi behavior looks surprising, compare the bridge behavior against a direct `pi --mode json` run before changing rendering code
 - Claude subagent work benefits from compaction even before we model nesting
   - showing the full `Agent` report inline in the main timeline duplicates later assistant output and overwhelms the useful steps
 - the final rendered timeline matters more than streaming polish
@@ -99,6 +119,46 @@ The reusable React timeline renderer also now lives in `@bb/ui-core` rather
 than `apps/app`, which means `apps/app` and the provider-audit Ladle stories
 render the same timeline components.
 
+## Cross-Package Data Flows
+
+Some user-facing timeline concepts now intentionally span multiple packages:
+
+- task updates
+  - adapters normalize provider-specific plan/todo signals into
+    `turn/plan/updated` or `TodoWrite`-shaped thread events
+  - `@bb/core-ui` projects those into `tasks`
+  - CLI text and React rows both render that same projected message shape
+- delegation
+  - adapters preserve parent tool-call linkage and structured subagent metadata
+  - `to-view-messages()` projects parent rows plus nested child activity
+  - CLI and React both render the same nested delegation tree
+- tool progress
+  - providers emit command output deltas, shared `item/toolCall/progress`, or
+    provider-specific progress signals
+  - `ExecLifecycleContext` in `@bb/core-ui` keeps enough timing state to merge
+    those partial updates into one coherent tool row with synthesized duration
+
+When any of these flows change, validation has to cover all three layers:
+adapter translation, `ViewMessage` projection, and final CLI/React rendering.
+
+## Shell Parsing Rationale
+
+The codebase still parses some shell commands on purpose.
+
+That is not accidental parser creep: the checked-in provider corpus shows that
+Codex and Pi frequently express repo exploration through shell commands even
+when a more semantic tool exists. Without those heuristics, the timeline loses
+most of the real exploration story and collapses back into generic command
+noise.
+
+The current rule is:
+
+- keep only the small shell heuristics that materially improve the user-facing
+  exploration summary
+- prefer structured tool arguments over shell parsing whenever the provider
+  gives them to us
+- use provider-audit fixtures to justify new shell parsing before adding it
+
 ## Reference Research
 
 Two external repos were especially useful in shaping the work:
@@ -115,6 +175,20 @@ Those references reinforce the same direction for `bb`:
 
 - rendering can improve a lot before the domain model expands
 - real subagent boundaries and todo/plan parity probably require first-class concepts, not just better formatting
+
+## Capture Hygiene
+
+When capturing new fixtures:
+
+- use a fresh thread/provider-thread pair for every provider + prompt capture
+- reset the target repo to a known ref before and after each run
+- keep the prompt repo-aware but under-specified enough that the provider still has to explore
+- when provider behavior is surprising, reproduce the task directly in the native provider CLI first
+  - for Pi, `pi --mode json` is especially useful because it shows the exact tool calls the model made
+  - ask the provider what tools it believes it has before assuming a missing tool is a rendering bug
+- treat capture prompts as disposable instrumentation
+  - iterate on them until the target surface actually shows up
+  - then check in only the final successful bundle
 
 ## Generate New Fixtures
 
@@ -140,6 +214,7 @@ node ./packages/provider-audit/dist/cli.js import-fixtures \
 ```
 
 That import sanitizes local paths into placeholders like `$EXCALIDRAW_REPO`, `$CAPTURE_OUTPUT`, and `$HOME`.
+It replaces the target corpus, so when appending new bundles you should stage the existing fixture directories and the new capture directories together under the same `--source-root`.
 
 ## Replay Fixtures
 
@@ -242,6 +317,20 @@ The package test suite does two things:
 - verifies fixture-backed React story data can be exported for Ladle
 
 The snapshot is intentionally compact. We do not commit full generated outputs back into the corpus.
+
+Automated replay is the baseline, not the whole review:
+
+- replay tests should pass
+- coverage issues should be zero for the checked-in corpus
+- CLI verbose timeline snapshots should be spot-checked for new or changed fixtures
+- Ladle story data should regenerate cleanly for the full corpus
+- when a fixture wave changes rendering semantics, do a real browser pass in Ladle rather than relying only on generated story data
+
+The practical split is:
+
+- automated validation catches classification regressions and snapshot drift
+- manual CLI review catches weak wording and noisy rows
+- manual React review catches layout, grouping, and visual hierarchy problems
 
 ## Current Direction
 

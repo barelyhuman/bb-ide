@@ -1,0 +1,18 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/thread/start",
+    "requestMethod": "thread/start",
+    "text": "Use the available repo_outline helper first for the share and collaboration area. Then inspect the actual code and implement one small discoverability improvement to the share dialog for unsupported browsers with focused validation. Keep the change minimal and move quickly.",
+    "createdAt": 1774670353835
+  },
+  {
+    "id": "audit-client-row-2",
+    "turnIndex": 1,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Summarize the helper output you used, the files you changed, and any outside references you consulted.",
+    "createdAt": 1774670776029
+  }
+]

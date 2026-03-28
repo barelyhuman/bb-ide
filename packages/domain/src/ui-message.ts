@@ -71,7 +71,12 @@ export type ViewToolParsedIntent =
       cmd: string;
     };
 
-export interface ViewToolCallSummary {
+export interface ViewDelegationMetadata {
+  subagentType?: string;
+  description?: string;
+}
+
+export interface ViewToolCallSummary extends ViewDelegationMetadata {
   callId: string;
   command?: string;
   cwd?: string;
@@ -93,7 +98,8 @@ export interface ViewToolExploringMessage extends ViewMessageBase {
   calls: ViewToolCallSummary[];
 }
 
-export interface ViewToolCallMessage extends ViewMessageBase {
+export interface ViewToolCallMessage
+  extends ViewMessageBase, ViewDelegationMetadata {
   kind: "tool-call";
   toolName: string;
   callId: string;
@@ -198,7 +204,8 @@ export interface ViewTasksMessage extends ViewMessageBase {
   tasks: ViewTaskEntry[];
 }
 
-export interface ViewDelegationMessage extends ViewMessageBase {
+export interface ViewDelegationMessage
+  extends ViewMessageBase, ViewDelegationMetadata {
   kind: "delegation";
   toolName: string;
   callId: string;

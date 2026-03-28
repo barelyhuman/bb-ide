@@ -94,6 +94,30 @@ export type ThreadEventWarningCategory = z.infer<
   typeof threadEventWarningCategorySchema
 >;
 
+export const providerUnhandledEventSchema = z.object({
+  type: z.literal("provider/unhandled"),
+  threadId: z.string(),
+  providerThreadId: z.string(),
+  providerId: z.string(),
+  rawType: z.string(),
+  turnId: z.string().optional(),
+  parentToolCallId: z.string().optional(),
+  summary: z.string(),
+  payloadSummary: z.string().optional(),
+});
+export type ProviderUnhandledEvent = z.infer<typeof providerUnhandledEventSchema>;
+
+export const toolCallProgressEventSchema = z.object({
+  type: z.literal("item/toolCall/progress"),
+  threadId: z.string(),
+  providerThreadId: z.string(),
+  turnId: z.string(),
+  itemId: z.string(),
+  message: z.string().optional(),
+  parentToolCallId: z.string().optional(),
+});
+export type ToolCallProgressEvent = z.infer<typeof toolCallProgressEventSchema>;
+
 export const threadEventItemSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("userMessage"),
@@ -281,6 +305,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     message: z.string().optional(),
     parentToolCallId: z.string().optional(),
   }),
+  toolCallProgressEventSchema,
   z.object({
     type: z.literal("thread/tokenUsage/updated"),
     threadId: z.string(),
@@ -320,6 +345,7 @@ export const providerEventSchema = z.discriminatedUnion("type", [
     summary: z.string().optional(),
     details: z.string().optional(),
   }),
+  providerUnhandledEventSchema,
 ]);
 export type ProviderEvent = z.infer<typeof providerEventSchema>;
 

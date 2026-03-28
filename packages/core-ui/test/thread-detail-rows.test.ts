@@ -187,7 +187,7 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
   });
 
-  it("keeps delegation and tasks rows as standalone message rows", () => {
+  it("collapses delegation and tasks rows into a tool group before the final assistant text", () => {
     const rows = buildTimelineRows([
       {
         kind: "delegation",
@@ -255,19 +255,437 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
-    expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
-    expect(rows[0]?.kind).toBe("message");
-    if (rows[0]?.kind === "message") {
-      expect(rows[0].message.kind).toBe("delegation");
+    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
+    expect(rows[0]?.kind).toBe("tool-group");
+    if (rows[0]?.kind === "tool-group") {
+      expect(rows[0].summaryCount).toBe(2);
+      expect(rows[0].status).toBe("completed");
+      expect(rows[0].messages).toHaveLength(2);
+      expect(rows[0].messages[0]?.kind).toBe("delegation");
+      expect(rows[0].messages[1]?.kind).toBe("tasks");
     }
     expect(rows[1]?.kind).toBe("message");
     if (rows[1]?.kind === "message") {
-      expect(rows[1].message.kind).toBe("tasks");
+      expect(rows[1].message.kind).toBe("assistant-text");
     }
   });
 
-  it("collapses post-assistant tool activity into an expandable tool group", () => {
+  it("keeps intermediate assistant text inside the tool group and the last assistant text standalone", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Trace the bug",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        text: "I found the likely area.",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 6,
+        createdAt: 6,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "rg -n focusIndex packages/excalidraw/components/SearchMenu.tsx",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 7,
+        sourceSeqEnd: 9,
+        createdAt: 9,
+        turnId: "turn-1",
+        text: "The fix is in SearchMenu.tsx.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
+    expect(rows[1]?.kind).toBe("tool-group");
+    if (rows[1]?.kind !== "tool-group") return;
+    expect(rows[1].messages.map((message) => message.kind)).toEqual([
+      "assistant-text",
+      "tool-call",
+    ]);
+    expect(rows[2]?.kind).toBe("message");
+    if (rows[2]?.kind === "message") {
+      expect(rows[2].message.kind).toBe("assistant-text");
+      if (rows[2].message.kind === "assistant-text") {
+        expect(rows[2].message.text).toBe("The fix is in SearchMenu.tsx.");
+      }
+    }
+  });
+
+  it("marks grouped error rows as failed work and counts non-tool rows", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [{ text: "Run validation", status: "active" }],
+      },
+      {
+        kind: "error",
+        id: "error-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        rawType: "provider/error",
+        message: "Validation failed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        text: "I hit a validation error.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
+    expect(rows[0]?.kind).toBe("tool-group");
+    if (rows[0]?.kind !== "tool-group") return;
+    expect(rows[0].summaryCount).toBe(2);
+    expect(rows[0].status).toBe("error");
+    expect(rows[0].messages.map((message) => message.kind)).toEqual([
+      "tasks",
+      "error",
+    ]);
+  });
+
+  it("keeps a Pi-style final assistant message standalone when its source range finishes after tool activity", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        text: "I’m checking the current tests.",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 8,
+        createdAt: 8,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 9,
+        createdAt: 9,
+        turnId: "turn-1",
+        text: "The tests pass with the fix.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
+    expect(rows[0]?.kind).toBe("tool-group");
+    if (rows[0]?.kind !== "tool-group") return;
+    expect(rows[0].messages).toHaveLength(2);
+    expect(rows[1]?.kind).toBe("message");
+  });
+
+  it("keeps a Pi-style last assistant message inside the group when later tool activity finishes after it", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        text: "I’m validating the fix now.",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 8,
+        createdAt: 8,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 6,
+        createdAt: 6,
+        turnId: "turn-1",
+        text: "The tests pass with the fix.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("tool-group");
+    if (rows[0]?.kind !== "tool-group") return;
+    expect(rows[0].messages.map((message) => message.kind)).toEqual([
+      "assistant-text",
+      "tool-call",
+      "assistant-text",
+    ]);
+  });
+
+  it("groups delegation, tasks, and errors together before the final answer", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "delegation",
+        id: "delegation-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        toolName: "Agent",
+        callId: "agent-1",
+        status: "completed",
+        children: [],
+      },
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [{ text: "Re-run the focused test", status: "active" }],
+      },
+      {
+        kind: "error",
+        id: "error-1",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 2/5",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 5,
+        createdAt: 5,
+        turnId: "turn-1",
+        text: "I retried, verified the fix, and updated the task list.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
+    expect(rows[0]?.kind).toBe("tool-group");
+    if (rows[0]?.kind !== "tool-group") return;
+    expect(rows[0].messages.map((message) => message.kind)).toEqual([
+      "delegation",
+      "tasks",
+      "error",
+    ]);
+  });
+
+  it("groups each turn independently in multi-turn conversations", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Fix the bug",
+      },
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [{ text: "Inspect SearchMenu.tsx", status: "completed" }],
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        text: "Turn one is complete.",
+        status: "completed",
+      },
+      {
+        kind: "user",
+        id: "user-2",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 5,
+        createdAt: 5,
+        turnId: "turn-2",
+        text: "Add the summary UI",
+      },
+      {
+        kind: "tasks",
+        id: "tasks-2",
+        threadId: "thread-1",
+        sourceSeqStart: 6,
+        sourceSeqEnd: 6,
+        createdAt: 6,
+        turnId: "turn-2",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [{ text: "Update search summary copy", status: "completed" }],
+      },
+      {
+        kind: "tool-call",
+        id: "tool-2",
+        threadId: "thread-1",
+        sourceSeqStart: 7,
+        sourceSeqEnd: 7,
+        createdAt: 7,
+        turnId: "turn-2",
+        toolName: "exec_command",
+        callId: "call-2",
+        command: "pnpm exec turbo run test --filter=@bb/ui-core",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-2",
+        threadId: "thread-1",
+        sourceSeqStart: 8,
+        sourceSeqEnd: 8,
+        createdAt: 8,
+        turnId: "turn-2",
+        text: "Turn two is complete.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "tool-group",
+      "message",
+      "message",
+      "tool-group",
+      "message",
+    ]);
+    const toolGroups = rows.filter((row): row is Extract<TimelineRow, { kind: "tool-group" }> =>
+      row.kind === "tool-group");
+    expect(toolGroups).toHaveLength(2);
+    expect(toolGroups[0]?.turnId).toBe("turn-1");
+    expect(toolGroups[1]?.turnId).toBe("turn-2");
+  });
+
+  it("does not collapse a turn that has only one tool message", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Run the test",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message"]);
+  });
+
+  it("collapses all turn activity into a single tool group when no final answer text", () => {
     const rows = buildTimelineRows([
       {
         kind: "user",
@@ -318,14 +736,20 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "tool-group"]);
-    expect(rows[2]?.kind).toBe("tool-group");
-    if (rows[2]?.kind !== "tool-group") return;
-    expect(rows[2].summaryCount).toBe(2);
-    expect(rows[2].messages).toHaveLength(2);
+    // No final assistant-text, so intermediate text + tool calls all group
+    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group"]);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind === "message") {
+      expect(rows[0].message.kind).toBe("user");
+    }
+    expect(rows[1]?.kind).toBe("tool-group");
+    if (rows[1]?.kind !== "tool-group") return;
+    // summaryCount only counts tool items, not intermediate text
+    expect(rows[1].summaryCount).toBe(2);
+    expect(rows[1].messages).toHaveLength(3);
   });
 
-  it("keeps a single post-assistant tool message visible as its own row", () => {
+  it("groups intermediate assistant text with following tool call when no final answer", () => {
     const rows = buildTimelineRows([
       {
         kind: "user",
@@ -363,8 +787,12 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
-    expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
+    // No final assistant-text → intermediate text + tool call grouped together
+    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group"]);
+    expect(rows[1]?.kind).toBe("tool-group");
+    if (rows[1]?.kind === "tool-group") {
+      expect(rows[1].messages).toHaveLength(2);
+    }
   });
 
   it("collapses a promote started/completed pair into a single operation row", () => {
@@ -530,7 +958,7 @@ describe("buildTimelineRows reconnect error collapsing", () => {
     expect(rows[0].message.startedAt).toBe(10);
   });
 
-  it("does not collapse reconnect errors across breaks or retry budgets", () => {
+  it("groups reconnect errors with other turn activity into a single tool group", () => {
     const rows = buildTimelineRows([
       {
         kind: "error",
@@ -579,7 +1007,9 @@ describe("buildTimelineRows reconnect error collapsing", () => {
       },
     ]);
 
-    expect(rows).toHaveLength(4);
+    // All same turn, no final assistant-text → single tool group
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("tool-group");
   });
 });
 

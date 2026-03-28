@@ -16,9 +16,26 @@ interface TodoWriteTodo {
 }
 
 interface ShellReadPattern {
+  name: string;
   pattern: RegExp;
   captureIndex: number;
 }
+
+interface ShellReadMatch {
+  name: string;
+  path: string;
+}
+
+interface ToolDescriptor {
+  argKeys: readonly string[];
+  secondaryArgKeys?: readonly string[];
+  formatCommand?: ToolCommandFormatter;
+  formatOutput?: ToolOutputFormatter;
+}
+
+const SHELL_SEGMENT_BREAK_TOKENS = new Set(["&&", "||", "|", ";"]);
+const SEARCH_TOOL_NAMES = new Set(["rg", "grep"]);
+const SEARCH_OPTIONS_WITH_VALUES = new Set(["-g", "--glob"]);
 
 function unwrapQuotedShellArg(value: string): string {
   if (value.length < 2) return value;
@@ -52,47 +69,44 @@ export function extractShellCommandFromString(value: string): string | undefined
   return unwrapQuotedShellArg(commandArg.trim());
 }
 
-// ── Tool descriptor table ──────────────────────────────────────────────
-// Each entry defines how to parse intent and format display for a known tool.
-// To add a new tool, add one row — both toolNameToParsedIntents and
-// formatToolCallCommand will pick it up automatically.
-
-interface ToolDescriptor {
-  /** The exploring-intent type, or null if this tool is not an exploring action. */
-  intentType: ViewToolParsedIntent["type"] | null;
-  /** Arg keys to extract as the primary value (tried in order). */
-  argKeys: readonly string[];
-  /** Optional secondary arg keys (e.g. path for Grep). */
-  secondaryArgKeys?: readonly string[];
-  /** Optional custom command formatter for non-standard tools. */
-  formatCommand?: ToolCommandFormatter;
-  /** Optional output formatter for non-standard tools. */
-  formatOutput?: ToolOutputFormatter;
-}
-
 const TOOL_TABLE: Record<string, ToolDescriptor> = {
-  Read:  { intentType: "read",       argKeys: ["file_path", "file", "path"] },
-  read:  { intentType: "read",       argKeys: ["file_path", "file", "path"] },
-  Glob:  { intentType: "list_files", argKeys: ["pattern", "path"] },
-  glob:  { intentType: "list_files", argKeys: ["pattern", "path"] },
-  ls:    { intentType: "list_files", argKeys: ["pattern", "path"] },
-  find:  { intentType: "list_files", argKeys: ["pattern", "path"] },
-  Grep:  { intentType: "search",     argKeys: ["pattern", "query"], secondaryArgKeys: ["path"] },
-  grep:  { intentType: "search",     argKeys: ["pattern", "query"], secondaryArgKeys: ["path"] },
-  Bash:  { intentType: null,         argKeys: ["command"] },
-  bash:  { intentType: null,         argKeys: ["command"] },
-  Edit:  { intentType: null,         argKeys: ["file_path", "path"] },
-  edit:  { intentType: null,         argKeys: ["file_path", "path"] },
-  Write: { intentType: null,         argKeys: ["file_path", "path"] },
-  write: { intentType: null,         argKeys: ["file_path", "path"] },
-  ToolSearch: { intentType: null,    argKeys: ["query"], formatCommand: formatToolSearchCommand },
-  TodoWrite: { intentType: null,     argKeys: [], formatCommand: formatTodoWriteCommand, formatOutput: formatTodoWriteOutput },
-  Agent: { intentType: null,         argKeys: ["description", "prompt"], formatCommand: formatAgentCommand, formatOutput: formatAgentOutput },
-  spawnAgent: { intentType: null,    argKeys: ["prompt"], formatCommand: formatCollabAgentCommand },
-  sendInput: { intentType: null,     argKeys: ["prompt"], formatCommand: formatCollabAgentCommand },
-  resumeAgent: { intentType: null,   argKeys: [], formatCommand: formatCollabAgentCommand },
-  wait: { intentType: null,          argKeys: [], formatCommand: formatCollabAgentCommand },
-  closeAgent: { intentType: null,    argKeys: [], formatCommand: formatCollabAgentCommand },
+  Read: { argKeys: ["file_path", "file", "path"] },
+  read: { argKeys: ["file_path", "file", "path"] },
+  Glob: { argKeys: ["pattern", "path"] },
+  glob: { argKeys: ["pattern", "path"] },
+  Grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"] },
+  grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"] },
+  Bash: { argKeys: ["command"] },
+  bash: { argKeys: ["command"] },
+  Edit: { argKeys: ["file_path", "path"] },
+  edit: { argKeys: ["file_path", "path"] },
+  Write: { argKeys: ["file_path", "path"] },
+  write: { argKeys: ["file_path", "path"] },
+  ToolSearch: {
+    argKeys: ["query"],
+    formatCommand: formatToolSearchCommand,
+  },
+  TodoWrite: {
+    argKeys: [],
+    formatCommand: formatTodoWriteCommand,
+    formatOutput: formatTodoWriteOutput,
+  },
+  Agent: {
+    argKeys: ["description", "prompt"],
+    formatCommand: formatAgentCommand,
+    formatOutput: formatAgentOutput,
+  },
+  spawnAgent: {
+    argKeys: ["prompt"],
+    formatCommand: formatCollabAgentCommand,
+  },
+  sendInput: {
+    argKeys: ["prompt"],
+    formatCommand: formatCollabAgentCommand,
+  },
+  resumeAgent: { argKeys: [], formatCommand: formatCollabAgentCommand },
+  wait: { argKeys: [], formatCommand: formatCollabAgentCommand },
+  closeAgent: { argKeys: [], formatCommand: formatCollabAgentCommand },
 };
 
 function truncateForDisplay(value: string, maxLength: number): string {
@@ -191,7 +205,7 @@ function formatAgentCommand(_toolName: string, args: ToolArguments): string {
   return `Agent [${subagentType}] ${truncateForDisplay(label, 90)}`;
 }
 
-function stripAgentOutputMetadata(output: string): string {
+export function stripAgentOutputMetadata(output: string): string {
   const lines = output
     .split("\n")
     .map((line) => line.trimEnd())
@@ -199,38 +213,8 @@ function stripAgentOutputMetadata(output: string): string {
   return lines.join("\n").trim();
 }
 
-function extractMarkdownHeading(output: string): string | undefined {
-  for (const line of output.split("\n")) {
-    const trimmed = line.trim();
-    const match = /^(#{1,6})\s+(.+)$/u.exec(trimmed);
-    if (!match) continue;
-    return match[2]?.trim();
-  }
-  return undefined;
-}
-
-function firstParagraph(output: string): string | undefined {
-  for (const paragraph of output.split(/\n\s*\n/u)) {
-    const trimmed = paragraph.replace(/\s+/gu, " ").trim();
-    if (trimmed.length > 0) {
-      return trimmed;
-    }
-  }
-  return undefined;
-}
-
 function formatAgentOutput(output: string): string {
-  const cleaned = stripAgentOutputMetadata(output);
-  if (cleaned.length === 0) return "Subagent completed";
-
-  const heading = extractMarkdownHeading(cleaned);
-  if (heading) {
-    return `Subagent report: ${truncateForDisplay(heading, 120)}`;
-  }
-
-  const paragraph = firstParagraph(cleaned);
-  if (!paragraph) return "Subagent completed";
-  return `Subagent result: ${truncateForDisplay(paragraph, 120)}`;
+  return stripAgentOutputMetadata(output);
 }
 
 function countReceiverThreadIds(args: ToolArguments): number {
@@ -269,28 +253,36 @@ function formatCollabAgentCommand(toolName: string, args: ToolArguments): string
 
 const SHELL_READ_PATTERNS: readonly ShellReadPattern[] = [
   {
+    name: "sed",
     pattern: /\bsed\s+-n\s+(?:"[^"]*"|'[^']*'|\S+)\s+([^\s|&;]+)/u,
     captureIndex: 1,
   },
   {
+    name: "nl",
     pattern: /\bnl\s+-ba\s+([^\s|&;]+)/u,
     captureIndex: 1,
   },
   {
+    name: "cat",
     pattern: /\bcat\s+([^\s|&;]+)/u,
     captureIndex: 1,
   },
   {
+    name: "head",
     pattern: /\bhead(?:\s+-\d+)?\s+([^\s|&;]+)/u,
     captureIndex: 1,
   },
 ];
 
-function extractShellReadPath(command: string): string | null {
+function extractShellReadMatch(command: string): ShellReadMatch | null {
   for (const entry of SHELL_READ_PATTERNS) {
     const match = entry.pattern.exec(command);
     const path = match?.[entry.captureIndex]?.trim();
-    if (path) return path;
+    if (!path) continue;
+    return {
+      name: entry.name,
+      path,
+    };
   }
   return null;
 }
@@ -314,8 +306,171 @@ function extractSearchQuery(command: string): string | null {
   return unquoted?.[1]?.trim() ?? null;
 }
 
+function tokenizeShellWords(command: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let escaping = false;
+
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+    if (!character) continue;
+
+    if (escaping) {
+      current += character;
+      escaping = false;
+      continue;
+    }
+
+    if (character === "\\") {
+      if (quote === "'") {
+        current += character;
+        continue;
+      }
+      escaping = true;
+      continue;
+    }
+
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+        continue;
+      }
+      current += character;
+      continue;
+    }
+
+    if (character === "'" || character === '"') {
+      quote = character;
+      continue;
+    }
+
+    if (/\s/u.test(character)) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+
+    if (character === "|" || character === "&" || character === ";") {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = "";
+      }
+
+      const nextCharacter = command[index + 1];
+      if (
+        nextCharacter &&
+        ((character === "|" && nextCharacter === "|") ||
+          (character === "&" && nextCharacter === "&"))
+      ) {
+        tokens.push(`${character}${nextCharacter}`);
+        index += 1;
+        continue;
+      }
+
+      tokens.push(character);
+      continue;
+    }
+
+    current += character;
+  }
+
+  if (escaping) {
+    current += "\\";
+  }
+  if (current.length > 0) {
+    tokens.push(current);
+  }
+
+  return tokens;
+}
+
+function findShellSegmentTokens(
+  command: string,
+  matcher: (token: string) => boolean,
+): string[] {
+  const tokens = tokenizeShellWords(command);
+  const segments: string[][] = [];
+  let currentSegment: string[] = [];
+
+  for (const token of tokens) {
+    if (SHELL_SEGMENT_BREAK_TOKENS.has(token)) {
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+        currentSegment = [];
+      }
+      continue;
+    }
+    currentSegment.push(token);
+  }
+
+  if (currentSegment.length > 0) {
+    segments.push(currentSegment);
+  }
+
+  return (
+    segments.find((segment) => segment.some((token) => matcher(token))) ?? []
+  );
+}
+
+function isShellRedirectionToken(token: string): boolean {
+  return /^(?:\d*>|>>|<|>\|?|2>&1)/u.test(token);
+}
+
+function extractSearchPath(command: string): string | null {
+  const segment = findShellSegmentTokens(
+    command,
+    (token) => SEARCH_TOOL_NAMES.has(token),
+  );
+  if (segment.length === 0) {
+    return null;
+  }
+
+  const toolIndex = segment.findIndex((token) => SEARCH_TOOL_NAMES.has(token));
+  if (toolIndex < 0) {
+    return null;
+  }
+
+  let querySeen = false;
+  let lastPathCandidate: string | null = null;
+  for (let index = toolIndex + 1; index < segment.length; index += 1) {
+    const token = segment[index];
+    if (!token) continue;
+
+    if (!querySeen) {
+      if (token.startsWith("-")) {
+        if (SEARCH_OPTIONS_WITH_VALUES.has(token)) {
+          index += 1;
+        }
+        continue;
+      }
+      querySeen = true;
+      continue;
+    }
+
+    if (token.startsWith("-")) {
+      if (SEARCH_OPTIONS_WITH_VALUES.has(token)) {
+        index += 1;
+      }
+      continue;
+    }
+    if (isShellRedirectionToken(token)) {
+      continue;
+    }
+
+    lastPathCandidate = token;
+  }
+
+  return lastPathCandidate;
+}
+
 export function parseShellCommandIntents(command: string | undefined): ViewToolParsedIntent[] {
   if (!command) return [];
+
+  // Check search/list commands first — they may be piped through head/tail
+  // which would otherwise be misclassified as reads.
 
   if (/\brg\b/u.test(command)) {
     return [
@@ -323,19 +478,18 @@ export function parseShellCommandIntents(command: string | undefined): ViewToolP
         type: "search",
         cmd: command,
         query: extractSearchQuery(command),
-        path: null,
+        path: extractSearchPath(command),
       },
     ];
   }
 
-  const readPath = extractShellReadPath(command);
-  if (readPath) {
+  if (/\bgrep\b/u.test(command)) {
     return [
       {
-        type: "read",
+        type: "search",
         cmd: command,
-        name: "exec_command",
-        path: readPath,
+        query: extractSearchQuery(command),
+        path: extractSearchPath(command),
       },
     ];
   }
@@ -362,48 +516,19 @@ export function parseShellCommandIntents(command: string | undefined): ViewToolP
     ];
   }
 
-  if (/\bgrep\b/u.test(command)) {
+  const readMatch = extractShellReadMatch(command);
+  if (readMatch) {
     return [
       {
-        type: "search",
+        type: "read",
         cmd: command,
-        query: extractSearchQuery(command),
-        path: null,
+        name: readMatch.name,
+        path: readMatch.path,
       },
     ];
   }
 
   return [];
-}
-
-// Maps well-known tool names to exploring intents for grouping
-export function toolNameToParsedIntents(
-  toolName: string,
-  args: Record<string, unknown> | null,
-): ViewToolParsedIntent[] {
-  if (toolName === "exec_command" || toolName === "Bash" || toolName === "bash") {
-    const command = getFirstStringField(args, ["command", "cmd"]);
-    return parseShellCommandIntents(command);
-  }
-
-  const desc = TOOL_TABLE[toolName];
-  if (!desc?.intentType) return [];
-
-  const primary = getFirstStringField(args, desc.argKeys) ?? "";
-  const secondary = desc.secondaryArgKeys
-    ? getFirstStringField(args, desc.secondaryArgKeys) ?? ""
-    : "";
-
-  switch (desc.intentType) {
-    case "read":
-      return [{ type: "read", cmd: `${toolName} ${primary}`.trim(), name: toolName, path: primary || null }];
-    case "list_files":
-      return [{ type: "list_files", cmd: `${toolName} ${primary}`.trim(), path: primary || null }];
-    case "search":
-      return [{ type: "search", cmd: `${toolName} '${primary}'${secondary ? ` in ${secondary}` : ""}`.trim(), query: primary || null, path: secondary || null }];
-    default:
-      return [];
-  }
 }
 
 export function formatToolCallCommand(toolName: string, args: Record<string, unknown> | null): string {

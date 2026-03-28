@@ -80,16 +80,16 @@ describe("formatTimelineAsText", () => {
     ];
 
     const minimal = formatTimelineAsText(messages, { color: false });
-    expect(minimal).toContain("Exploring (2 calls)");
-    expect(minimal).toContain("Read /src/main.ts");
-    expect(minimal).toContain("Grep 'bug' in /src");
-    // Minimal mode should NOT include output
-    expect(minimal).not.toContain("file contents here");
+    expect(minimal).toContain("Explored 1 file, 1 search");
+    expect(minimal).not.toContain("Read main.ts");
+    expect(minimal).not.toContain("Search bug in /src");
 
     const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
-    // Verbose mode SHOULD include output
-    expect(verbose).toContain("file contents here");
-    expect(verbose).toContain("found 3 matches");
+    expect(verbose).toContain("Explored 1 file, 1 search");
+    expect(verbose).toContain("Read /src/main.ts");
+    expect(verbose).toContain("Search bug in /src");
+    expect(verbose).not.toContain("Read exec_command");
+    expect(verbose).not.toContain("file contents here");
   });
 
   it("limits large exploring groups in minimal mode", () => {
@@ -123,11 +123,8 @@ describe("formatTimelineAsText", () => {
       { color: false },
     );
 
-    expect(minimal).toContain("Exploring (10 calls)");
-    expect(minimal).toContain("Read /src/file-1.ts");
-    expect(minimal).toContain("Read /src/file-8.ts");
-    expect(minimal).not.toContain("Read /src/file-9.ts");
-    expect(minimal).toContain("... 2 more exploration calls");
+    expect(minimal).toContain("Explored 10 files");
+    expect(minimal).not.toContain("Read /src/file-1.ts");
   });
 
   it("renders file edit with path", () => {
@@ -195,5 +192,201 @@ describe("formatTimelineAsText", () => {
     const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
     expect(verbose).toContain("Reasoning");
     expect(verbose).toContain("Let me think about this");
+  });
+
+  it("collapses grouped tool activity in minimal mode and expands it in verbose mode", () => {
+    const messages: ViewMessage[] = [
+      {
+        kind: "tool-call",
+        id: "tc1",
+        threadId: "t1",
+        turnId: "turn-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        startedAt: 1,
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "npm test",
+        output: "ok",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tc2",
+        threadId: "t1",
+        turnId: "turn-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        startedAt: 2,
+        toolName: "exec_command",
+        callId: "call-2",
+        command: "npm run lint",
+        output: "clean",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "a1",
+        threadId: "t1",
+        turnId: "turn-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        text: "Tests pass.",
+        status: "completed",
+      },
+    ];
+
+    const minimal = formatTimelineAsText(messages, { color: false });
+    expect(minimal).toContain("Worked on 2 items");
+    expect(minimal).toContain("Assistant");
+    expect(minimal).toContain("Tests pass.");
+    expect(minimal).not.toContain("npm test");
+
+    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    expect(verbose).toContain("Worked on 2 items");
+    expect(verbose).toContain("npm test");
+    expect(verbose).toContain("npm run lint");
+    expect(verbose).toContain("ok");
+    expect(verbose).toContain("clean");
+  });
+
+  it("keeps grouped error work summaries neutral in minimal mode", () => {
+    const text = formatTimelineAsText(
+      [
+        {
+          kind: "tasks",
+          id: "tasks-1",
+          threadId: "t1",
+          turnId: "turn-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          title: "Tasks updated",
+          source: "todo",
+          status: "completed",
+          tasks: [{ text: "Run validation", status: "active" }],
+        },
+        {
+          kind: "error",
+          id: "error-1",
+          threadId: "t1",
+          turnId: "turn-1",
+          sourceSeqStart: 2,
+          sourceSeqEnd: 2,
+          createdAt: 2,
+          rawType: "provider/error",
+          message: "Validation failed",
+        },
+      ],
+      { color: false },
+    );
+
+    expect(text).toContain("Worked on 2 items");
+    expect(text).not.toContain("Failed");
+  });
+
+  it("formats grouped duration summaries with parenthesized item counts", () => {
+    const text = formatTimelineAsText(
+      [
+        {
+          kind: "tool-group",
+          id: "group-1",
+          turnId: "turn-1",
+          summaryCount: 22,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 22,
+          startedAt: 1,
+          createdAt: 128_001,
+          durationMs: 128_000,
+          status: "completed",
+          messages: [],
+        },
+      ],
+      { color: false },
+    );
+
+    expect(text).toContain("Worked for 2m 8s (22 items)");
+  });
+
+  it("omits completed badges for warning operations", () => {
+    const text = formatTimelineAsText(
+      [
+        {
+          kind: "operation",
+          id: "op-1",
+          threadId: "t1",
+          turnId: "turn-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          opType: "warning",
+          title: "Warning",
+          detail: "Rate limit status updated",
+          status: "completed",
+        },
+      ],
+      { color: false },
+    );
+
+    expect(text).toContain("Operation: Warning");
+    expect(text).toContain("Rate limit status updated");
+    expect(text).not.toContain("✓");
+  });
+
+  it("renders delegation summaries from structured fields and shows full output in verbose mode", () => {
+    const messages: ViewMessage[] = [
+      {
+        kind: "delegation",
+        id: "d1",
+        threadId: "t1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        toolName: "Agent",
+        callId: "agent-1",
+        status: "completed",
+        subagentType: "Explore",
+        description: "Inspect the docs tree",
+        output: "## Findings\n\n- alpha\n- beta",
+        children: [],
+      },
+    ];
+
+    const minimal = formatTimelineAsText(messages, { color: false });
+    expect(minimal).toContain("Subagent Explore: Inspect the docs tree");
+    expect(minimal).toContain("## Findings");
+
+    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    expect(verbose).toContain("Subagent Explore: Inspect the docs tree");
+    expect(verbose).toContain("## Findings");
+    expect(verbose).toContain("- alpha");
+    expect(verbose).toContain("- beta");
+  });
+
+  it("labels tasks consistently as Updated tasks", () => {
+    const messages: ViewMessage[] = [
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "t1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        title: "Tasks updated",
+        tasks: [
+          { text: "Inspect docs", status: "completed" },
+          { text: "Write summary", status: "active" },
+        ],
+      },
+    ];
+
+    const text = formatTimelineAsText(messages, { color: false });
+    expect(text).toContain("Updated tasks");
+    expect(text).not.toContain("Tasks updated");
+    expect(text).toContain("Inspect docs");
+    expect(text).toContain("Write summary");
   });
 });

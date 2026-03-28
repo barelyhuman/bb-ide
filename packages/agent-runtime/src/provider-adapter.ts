@@ -21,6 +21,11 @@ export interface JsonRpcMessage {
   params?: unknown;
 }
 
+export interface ProviderTranslationContext {
+  threadId?: string;
+  parentToolCallId?: string;
+}
+
 // ---------------------------------------------------------------------------
 // AdapterCommand — what the runtime asks the adapter to build
 // ---------------------------------------------------------------------------
@@ -87,7 +92,7 @@ export interface ProviderAdapter {
   buildCommand(command: AdapterCommand): JsonRpcMessage | null;
   translateEvent(
     event: unknown,
-    context?: { threadId?: string; parentToolCallId?: string },
+    context?: ProviderTranslationContext,
   ): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null;
   listModels(): Promise<AvailableModel[]>;

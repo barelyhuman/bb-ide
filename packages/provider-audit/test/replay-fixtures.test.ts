@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ViewMessage } from "@bb/domain";
 import {
+  collectCoverageIssues,
   listFixtureBundles,
   replayFixtures,
+  summarizeFixtureCoverage,
 } from "../src/replay.js";
 import {
   buildLadleStoryData,
@@ -31,6 +33,13 @@ function buildTimelinePreview(text: string): string[] {
     .split("\n")
     .filter((line) => line.trim().length > 0)
     .slice(0, 8);
+}
+
+function trimTrailingWhitespace(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+$/u, ""))
+    .join("\n");
 }
 
 afterEach(() => {
@@ -68,6 +77,40 @@ describe("@bb/provider-audit fixture replay", () => {
     expect(summary).toMatchSnapshot();
   });
 
+  it("snapshots verbose CLI timeline output for every fixture", () => {
+    const replayed = replayFixtures({
+      fixtureRoot: fixtureRoot(),
+    });
+
+    const verboseTimelines = replayed.fixtures.map(({ fixture, bundle }) => ({
+      fixture: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+      timeline: trimTrailingWhitespace(bundle.timelineVerboseText),
+    }));
+
+    expect(verboseTimelines).toMatchSnapshot();
+  });
+
+  it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {
+    const replayed = replayFixtures({
+      fixtureRoot: fixtureRoot(),
+    });
+
+    expect(summarizeFixtureCoverage(replayed)).toMatchSnapshot();
+  });
+
+  it("has no unresolved coverage issues in the checked-in fixtures", () => {
+    const replayed = replayFixtures({
+      fixtureRoot: fixtureRoot(),
+    });
+
+    expect(collectCoverageIssues(replayed)).toEqual({
+      unexpectedUntranslatedFixtures: [],
+      providersWithUnhandledEvents: [],
+      unknownRawEventKinds: [],
+      unknownObservedToolCalls: [],
+    });
+  });
+
   it("writes replay outputs on demand without mutating the checked-in fixtures", () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "provider-audit-replay-"));
     TEMP_DIRS.push(outputRoot);
@@ -97,7 +140,8 @@ describe("@bb/provider-audit fixture replay", () => {
     expect(existsSync(rawProviderEventsPath)).toBe(true);
 
     const timeline = readFileSync(timelinePath, "utf8");
-    expect(timeline).toContain("Agent");
+    expect(timeline).toContain("User");
+    expect(timeline).toContain("Assistant");
   });
 
   it("replays Claude delegated child activity under the parent delegation", () => {

@@ -175,6 +175,7 @@ export {
   threadEventWarningCategorySchema,
 } from "./provider-event.js";
 export type {
+  ProviderUnhandledEvent,
   ProviderEvent,
   SystemEvent,
   ThreadEvent,
@@ -190,6 +191,7 @@ export type {
   ThreadEventType,
   ThreadEventUserContent,
   ThreadEventWarningCategory,
+  ToolCallProgressEvent,
 } from "./provider-event.js";
 
 export {

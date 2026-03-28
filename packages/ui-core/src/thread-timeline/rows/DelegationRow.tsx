@@ -1,5 +1,9 @@
 import { useMemo, type ReactNode } from "react";
-import { buildTimelineRows } from "@bb/core-ui";
+import {
+  buildTimelineRows,
+  buildToolGroupSummaryParts,
+  formatDelegationSummary,
+} from "@bb/core-ui";
 import type {
   TimelineRow,
   TimelineToolGroupRow,
@@ -7,12 +11,14 @@ import type {
   ViewMessage,
 } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
+import { ConversationMarkdown } from "../ConversationMarkdown.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 import {
   findLatestActivityRowId,
   shouldPreferOngoingLabelsForRow,
 } from "../threadDetailActivity.js";
 import {
+  EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
   EventTitle,
   formatSummaryDuration,
   getEventHeaderToneClass,
@@ -52,21 +58,21 @@ function NestedToolGroup({
   renderMessage,
 }: NestedToolGroupProps) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(false);
-  const count = entry.summaryCount;
   const duration = formatSummaryDuration(entry.durationMs);
-  const isWorking = entry.status === "pending";
-  const summaryContent = duration ? (
+  const isWorking = entry.status === "pending" || preferOngoingLabels;
+  const tone = entry.status === "error" ? "destructive" : "default";
+  const summary = buildToolGroupSummaryParts({
+    duration,
+    status: isWorking ? "pending" : entry.status,
+    summaryCount: entry.summaryCount,
+  });
+  const summaryContent = (
     <EventTitle
-      prefix={isWorking ? "Working for" : "Worked for"}
-      emphasis={duration}
-      suffix={`${count} item${count === 1 ? "" : "s"}`}
+      prefix={summary.prefix}
+      emphasis={summary.emphasis}
+      suffix={summary.suffix}
       shimmerPrefix={isWorking}
-    />
-  ) : (
-    <EventTitle
-      prefix={isWorking ? "Working on" : "Worked on"}
-      emphasis={`${count} item${count === 1 ? "" : "s"}`}
-      shimmerPrefix={isWorking}
+      tone={tone}
     />
   );
 
@@ -74,16 +80,17 @@ function NestedToolGroup({
     <ExpandablePanel
       isExpanded={isExpanded}
       summaryContent={summaryContent}
-      headerToneClass={getEventHeaderToneClass(isExpanded)}
+      headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
       onToggle={onToggle}
     >
       <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
         {entry.messages.map((message, index) => {
           const isLastMessage = index === entry.messages.length - 1;
+          const shouldAutoExpand = isLastMessage && entry.status === "pending";
           return (
             <div key={message.id}>
               {renderMessage(message, {
-                initialExpanded: isLastMessage,
+                initialExpanded: shouldAutoExpand,
                 preferOngoingLabels: preferOngoingLabels && isLastMessage,
               })}
             </div>
@@ -111,15 +118,14 @@ export function DelegationRow({
     () => findLatestActivityRowId(nestedRows),
     [nestedRows],
   );
-  const label =
-    message.status === "pending" || preferOngoingLabels ? "Delegating" : "Delegated";
+  const isWorking = message.status === "pending" || preferOngoingLabels;
   const summaryContent = (
     <EventTitle
-      prefix={label}
-      emphasis={message.command ?? message.toolName}
+      prefix="Subagent"
+      emphasis={formatDelegationSummary(message)}
       suffix={formatSummaryDuration(message.durationMs)}
       tone={message.status === "error" ? "destructive" : "default"}
-      shimmerPrefix={message.status === "pending" || preferOngoingLabels}
+      shimmerPrefix={isWorking}
     />
   );
 
@@ -136,40 +142,39 @@ export function DelegationRow({
           )}
           onToggle={onToggle}
         >
-          <div className="mt-1 border-l border-border/70 pl-3">
+          <div className={`overflow-auto rounded-md border border-border/60 bg-background/40 ${EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS}`}>
+            {nestedRows.map((row, index) => {
+              const isLastRow = index === nestedRows.length - 1 && !message.output;
+              const shouldAutoExpand = isLastRow && isWorking;
+              const rowPreferOngoingLabels = shouldPreferNestedOngoingLabels({
+                latestActivityRowId: nestedLatestActivityRowId,
+                preferOngoingLabels,
+                row,
+              });
+              if (row.kind === "tool-group") {
+                return (
+                  <NestedToolGroup
+                    key={row.id}
+                    entry={row}
+                    preferOngoingLabels={rowPreferOngoingLabels}
+                    renderMessage={renderMessage}
+                  />
+                );
+              }
+              return (
+                <div key={row.id}>
+                  {renderMessage(row.message, {
+                    initialExpanded: shouldAutoExpand,
+                    preferOngoingLabels: rowPreferOngoingLabels,
+                  })}
+                </div>
+              );
+            })}
             {message.output ? (
-              <div className="mb-2 rounded-md border border-border/60 bg-background/40 px-3 py-2 text-sm text-muted-foreground">
-                {message.output}
+              <div className="px-2 py-2 text-sm leading-relaxed">
+                <ConversationMarkdown content={message.output} />
               </div>
             ) : null}
-            <div className="space-y-2">
-              {nestedRows.map((row, index) => {
-                const isLastRow = index === nestedRows.length - 1;
-                const rowPreferOngoingLabels = shouldPreferNestedOngoingLabels({
-                  latestActivityRowId: nestedLatestActivityRowId,
-                  preferOngoingLabels,
-                  row,
-                });
-                if (row.kind === "tool-group") {
-                  return (
-                    <NestedToolGroup
-                      key={row.id}
-                      entry={row}
-                      preferOngoingLabels={rowPreferOngoingLabels}
-                      renderMessage={renderMessage}
-                    />
-                  );
-                }
-                return (
-                  <div key={row.id}>
-                    {renderMessage(row.message, {
-                      initialExpanded: isLastRow,
-                      preferOngoingLabels: rowPreferOngoingLabels,
-                    })}
-                  </div>
-                );
-              })}
-            </div>
           </div>
         </ExpandablePanel>
       </div>

@@ -5,9 +5,13 @@
  */
 
 import { createClaudeCodeProviderAdapter } from "./claude-code/adapter.js";
+import { claudeCodeVisibilityMetadata } from "./claude-code/visibility.js";
 import { createCodexProviderAdapter } from "./codex/adapter.js";
+import { codexVisibilityMetadata } from "./codex/visibility.js";
 import { createPiProviderAdapter } from "./pi/adapter.js";
+import { piVisibilityMetadata } from "./pi/visibility.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
+import type { ProviderVisibilityMetadata } from "./provider-visibility.js";
 import type { ProviderInfo } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -20,6 +24,12 @@ const builtInFactories = new Map<string, ProviderFactory>([
   ["codex", createCodexProviderAdapter],
   ["claude-code", createClaudeCodeProviderAdapter],
   ["pi", createPiProviderAdapter],
+]);
+
+const builtInVisibility = new Map<string, ProviderVisibilityMetadata>([
+  ["codex", codexVisibilityMetadata],
+  ["claude-code", claudeCodeVisibilityMetadata],
+  ["pi", piVisibilityMetadata],
 ]);
 
 // ---------------------------------------------------------------------------
@@ -42,6 +52,21 @@ export function createProviderForId(providerId: string): ProviderAdapter {
   }
 
   return factory();
+}
+
+export function getProviderVisibilityMetadata(
+  providerId: string,
+): ProviderVisibilityMetadata {
+  const metadata = builtInVisibility.get(providerId);
+
+  if (!metadata) {
+    const allIds = [...builtInVisibility.keys()];
+    throw new Error(
+      `Unsupported provider "${providerId}". Available providers: ${allIds.join(", ")}.`,
+    );
+  }
+
+  return metadata;
 }
 
 /**

@@ -151,6 +151,17 @@ function getRenderablePatch(change: ViewFileEditMessage["changes"][number]): str
   return toSyntheticPatch(change, fileChangeAction(change));
 }
 
+function getPlainDiffFallback(
+  change: ViewFileEditMessage["changes"][number],
+  patch: string | undefined,
+): string | undefined {
+  if (patch) {
+    return undefined;
+  }
+  const diff = change.diff?.trimEnd();
+  return diff && diff.length > 0 ? diff : undefined;
+}
+
 const DIFF_VIEW_BASE_OPTIONS = {
   overflow: "scroll",
   diffStyle: "unified",
@@ -223,15 +234,18 @@ export function FileEditRow({
       : isExpanded && uniqueFileCount === 1
         ? collapsedFileLabelBase
         : collapsedFileLabel;
+  const hasDiffs = collapsedStats.added > 0 || collapsedStats.removed > 0;
   const summaryContent = (
     <EventTitle
       prefix={actionLabel}
       emphasis={summaryLabel}
       suffix={
-        <>
-          <span className="text-emerald-600">+{collapsedStats.added}</span>{" "}
-          <span className="text-destructive/80">-{collapsedStats.removed}</span>
-        </>
+        hasDiffs ? (
+          <>
+            <span className="text-emerald-600">+{collapsedStats.added}</span>{" "}
+            <span className="text-destructive/80">-{collapsedStats.removed}</span>
+          </>
+        ) : undefined
       }
       tone={tone}
       shimmerPrefix={isApplying}
@@ -276,6 +290,7 @@ export function FileEditRow({
               const stats = diffStats(change);
               const fileName = fileNameFromPath(change.path);
               const patch = getRenderablePatch(change);
+              const plainDiff = getPlainDiffFallback(change, patch);
               const changeKey = changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
               const isChangeExpanded =
                 !isAggregatedChanges ||
@@ -284,15 +299,18 @@ export function FileEditRow({
                   isExpanded &&
                   changeKey === lastChangeKey);
               const changeHeaderToneClass = getEventHeaderToneClass(isChangeExpanded);
+              const hasChangeStats = stats.added > 0 || stats.removed > 0;
               const changeSummaryContent = (
                 <span className="inline-flex min-w-0 items-center gap-2 font-mono ui-text-sm text-foreground/90">
                   <span className="min-w-0 flex-1 truncate" title={change.path}>
                     {fileName}
                   </span>
-                  <span className="shrink-0">
-                    <span className="text-emerald-600">+{stats.added}</span>{" "}
-                    <span className="text-destructive/80">-{stats.removed}</span>
-                  </span>
+                  {hasChangeStats ? (
+                    <span className="shrink-0">
+                      <span className="text-emerald-600">+{stats.added}</span>{" "}
+                      <span className="text-destructive/80">-{stats.removed}</span>
+                    </span>
+                  ) : null}
                 </span>
               );
               return (
@@ -329,28 +347,31 @@ export function FileEditRow({
                           >
                             {fileName}
                           </span>
-                          <span className="shrink-0 font-mono ui-text-sm">
-                            <span className="text-emerald-600">+{stats.added}</span>{" "}
-                            <span className="text-destructive/80">-{stats.removed}</span>
-                          </span>
+                          {hasChangeStats ? (
+                            <span className="shrink-0 font-mono ui-text-sm">
+                              <span className="text-emerald-600">+{stats.added}</span>{" "}
+                              <span className="text-destructive/80">-{stats.removed}</span>
+                            </span>
+                          ) : null}
                         </div>
                       )}
                     </div>
-                    {isChangeExpanded ? (
+                    {isChangeExpanded && patch ? (
                       <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
                         <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
                           <div className="min-w-fit">
-                            {patch ? (
-                              <div style={DIFF_VIEW_STYLE}>
-                                <PatchDiff patch={patch} options={diffViewOptions} />
-                              </div>
-                            ) : (
-                              <div className="px-3 py-2 font-mono ui-text-xs text-muted-foreground/80">
-                                (No diff provided)
-                              </div>
-                            )}
+                            <div style={DIFF_VIEW_STYLE}>
+                              <PatchDiff patch={patch} options={diffViewOptions} />
+                            </div>
                           </div>
                         </div>
+                      </div>
+                    ) : null}
+                    {isChangeExpanded && plainDiff ? (
+                      <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                        <pre className="max-h-[240px] overflow-auto border-t border-border/60 bg-background/80 px-3 py-2 font-mono ui-text-xs whitespace-pre-wrap text-foreground/90">
+                          {plainDiff}
+                        </pre>
                       </div>
                     ) : null}
                   </div>

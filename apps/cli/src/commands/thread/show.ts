@@ -326,13 +326,10 @@ export function registerShowCommand(
           query: {},
         }),
       );
-      const messages = timeline.rows.flatMap((row) =>
-        row.kind === "message" ? [row.message] : row.messages,
-      );
       const color =
         process.stdout.isTTY === true &&
         !process.env.NO_COLOR;
-      const text = formatTimelineAsText(messages, {
+      const text = formatTimelineAsText(timeline.rows, {
         verbose: format === "verbose",
         color,
       });

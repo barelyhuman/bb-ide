@@ -1,4 +1,8 @@
-import type { ThreadEvent, ThreadEventPlanStepStatus } from "@bb/domain";
+import type {
+  ProviderUnhandledEvent,
+  ThreadEvent,
+  ThreadEventPlanStepStatus,
+} from "@bb/domain";
 import { getCompactionKey } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
@@ -11,6 +15,28 @@ import type {
   ViewOperationMessage,
   ViewThreadOperationMetadata,
 } from "@bb/domain";
+
+function providerDisplayName(providerId: string): string {
+  switch (providerId) {
+    case "claude-code":
+      return "Claude Code";
+    case "codex":
+      return "Codex";
+    case "pi":
+      return "Pi";
+    default:
+      return providerId;
+  }
+}
+
+function buildUnhandledProviderDetail(decoded: ProviderUnhandledEvent): string {
+  const detailLines = [
+    decoded.summary,
+    `Raw event: ${decoded.rawType}`,
+    decoded.payloadSummary,
+  ].filter((line): line is string => Boolean(line));
+  return detailLines.join("\n");
+}
 
 export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): string {
   if (!meta) return "Operation update";
@@ -193,25 +219,37 @@ export function parseOperationMessage(
     });
   }
 
-  if (decoded.type === "item/mcpToolCall/progress") {
-    return op(decoded, meta, "mcp-progress", {
-      turnId: decoded.turnId,
-      opType: "mcp-progress",
-      title: "MCP tool progress",
-      detail: decoded.message || undefined,
-      status: "pending",
+  if (decoded.type === "provider/unhandled") {
+    return op(decoded, meta, "provider-unhandled", {
+      turnId: eventTurnId,
+      opType: "provider-unhandled",
+      title: `Unhandled ${providerDisplayName(decoded.providerId)} event`,
+      detail: buildUnhandledProviderDetail(decoded),
+      status: "completed",
     });
   }
 
   if (decoded.type === "warning") {
     const category = decoded.category ?? "general";
-    const detail = decoded.summary ?? decoded.details;
     const isDeprecation = category === "deprecation";
+    const isConfig = category === "config";
+    const title = isDeprecation
+      ? "Deprecation notice"
+      : isConfig
+        ? "Configuration warning"
+        : decoded.summary?.trim() || "Warning";
+    const detail = (
+      isDeprecation || isConfig
+        ? [decoded.summary, decoded.details]
+        : [decoded.details]
+    )
+      .filter((line): line is string => Boolean(line))
+      .join("\n");
     return op(decoded, meta, isDeprecation ? "deprecation" : "warning", {
       turnId: eventTurnId,
       opType: isDeprecation ? "deprecation" : "warning",
-      title: isDeprecation ? "Deprecation notice" : category === "config" ? "Configuration warning" : "Warning",
-      detail: detail || undefined,
+      title,
+      detail: detail.length > 0 ? detail : undefined,
       status: "completed",
     });
   }
@@ -359,9 +397,6 @@ export function interruptOperationMessage(message: ViewOperationMessage): void {
       }
     case "provisioning":
       message.title = "Provisioning interrupted";
-      return;
-    case "mcp-progress":
-      message.title = "MCP tool progress interrupted";
       return;
     case "compaction":
       message.title = "Context compaction interrupted";

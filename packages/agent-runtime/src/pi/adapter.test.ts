@@ -56,6 +56,59 @@ describe("pi provider adapter", () => {
     expect((cmd as { params: { baseInstructions?: string } }).params.baseInstructions).toBeDefined();
   });
 
+  it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      options: {
+        model: "anthropic/claude-sonnet-4-20250514",
+        instructions: "Focus on the failing tests first.",
+        reasoningLevel: "high",
+        envVars: {
+          TEST_VAR: "123",
+        },
+      },
+      dynamicTools: [{
+        name: "bb_test_ping",
+        description: "Ping the host",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ping: { type: "boolean" },
+          },
+          required: ["ping"],
+        },
+      }],
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        threadId: "bb-thread-1",
+        model: "anthropic/claude-sonnet-4-20250514",
+        baseInstructions: expect.stringContaining("Focus on the failing tests first."),
+        dynamicTools: [{
+          name: "bb_test_ping",
+          description: "Ping the host",
+          inputSchema: {
+            type: "object",
+            properties: {
+              ping: { type: "boolean" },
+            },
+            required: ["ping"],
+          },
+        }],
+      },
+    });
+    expect((cmd as { params: { config?: Record<string, unknown> } }).params.config).toMatchObject({
+      "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
+      "shell_environment_policy.set.TEST_VAR": "123",
+      model_reasoning_effort: "high",
+    });
+  });
+
   it("buildCommand thread/resume routes to provider thread id", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommand({
@@ -83,6 +136,24 @@ describe("pi provider adapter", () => {
     });
   });
 
+  it("buildCommand turn/steer includes expectedTurnId", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "turn/steer",
+      threadId: "t1",
+      providerThreadId: "pi-1",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "steer" }],
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/steer",
+      params: {
+        threadId: "pi-1",
+        expectedTurnId: "turn-1",
+      },
+    });
+  });
+
   it("buildCommand thread/name/set returns null (unsupported)", () => {
     const adapter = createPiProviderAdapter();
     expect(
@@ -93,6 +164,31 @@ describe("pi provider adapter", () => {
         title: "hi",
       }),
     ).toBeNull();
+  });
+
+  it("decodeToolCallRequest preserves string request ids", () => {
+    const adapter = createPiProviderAdapter();
+    expect(
+      adapter.decodeToolCallRequest({
+        jsonrpc: "2.0",
+        id: "req-1",
+        method: "item/tool/call",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "bb_test_ping",
+          arguments: { ping: true },
+        },
+      }),
+    ).toEqual({
+      requestId: "req-1",
+      threadId: "t1",
+      turnId: "turn-1",
+      callId: "call-1",
+      tool: "bb_test_ping",
+      arguments: { ping: true },
+    });
   });
 
   // -- translateEvent: turn lifecycle --------------------------------------
@@ -166,6 +262,138 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent preserves parent_tool_use_id on nested sdk/message events", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        parent_tool_use_id: "agent-parent-1",
+        message: {
+          type: "tool_execution_start",
+          toolCallId: "tool-bash-1",
+          toolName: "bash",
+          args: {
+            command: "ls",
+          },
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-bash-1",
+          parentToolCallId: "agent-parent-1",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent tool_execution_start with edit args emits fileChange with diff", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-edit-1",
+      toolName: "edit",
+      args: {
+        path: "src/app.ts",
+        oldText: "const enabled = false;\n",
+        newText: "const enabled = true;\n",
+      },
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "fileChange",
+          id: "tool-edit-1",
+          status: "pending",
+          changes: [
+            expect.objectContaining({
+              path: "src/app.ts",
+              diff: expect.stringContaining("const enabled = true;"),
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent tool_execution_start with content-only write args avoids synthesizing a create diff", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-write-1",
+      toolName: "write",
+      args: {
+        path: "src/app.ts",
+        content: "console.log('updated');\n",
+      },
+    } as AgentSessionEvent);
+
+    const started = events.find(
+      (event): event is Extract<(typeof events)[number], { type: "item/started" }> =>
+        event.type === "item/started",
+    );
+    expect(started?.item).toMatchObject({
+      type: "fileChange",
+      id: "tool-write-1",
+      status: "pending",
+      changes: [
+        {
+          path: "src/app.ts",
+          kind: "update",
+        },
+      ],
+    });
+    if (!started || started.item.type !== "fileChange") return;
+    expect(started.item.changes[0]).not.toHaveProperty("diff");
+  });
+
+  it("translateEvent tool_execution_start with read args preserves structured tool arguments", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-read-1",
+      toolName: "read",
+      args: {
+        path: "src/app.ts",
+        offset: 1,
+        limit: 20,
+      },
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "tool-read-1",
+          tool: "read",
+          status: "pending",
+          arguments: expect.objectContaining({
+            path: "src/app.ts",
+            offset: 1,
+            limit: 20,
+          }),
+        }),
+      }),
+    );
+  });
+
   it("translateEvent tool_execution_end emits item/completed", () => {
     const adapter = createPiProviderAdapter();
     // Start a turn first
@@ -185,6 +413,163 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent tool_execution_end marks bash failures", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      args: {
+        command: "npm test",
+        cwd: "/repo",
+      },
+    } as AgentSessionEvent);
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_end",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      isError: true,
+      result: "tests failed",
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-bash-1",
+          command: "npm test",
+          cwd: "/repo",
+          aggregatedOutput: "tests failed",
+          exitCode: 1,
+          status: "failed",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent recovers non-bash tool results from the started item", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-read-1",
+      toolName: "read",
+      args: {
+        path: "src/app.ts",
+        offset: 1,
+        limit: 20,
+      },
+    } as AgentSessionEvent);
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_end",
+      toolCallId: "tool-read-1",
+      toolName: "read",
+      isError: false,
+      result: "file contents",
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "tool-read-1",
+          tool: "read",
+          status: "completed",
+          result: "file contents",
+          arguments: expect.objectContaining({
+            path: "src/app.ts",
+            offset: 1,
+            limit: 20,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent maps tool execution updates to shared tool progress", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_update",
+          toolCallId: "tool-bash-1",
+          toolName: "bash",
+          partialResult: {
+            content: [{ type: "text", text: "partial output" }],
+          },
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/toolCall/progress",
+        itemId: "tool-bash-1",
+        message: "partial output",
+      }),
+    );
+  });
+
+  it("translateEvent surfaces tool events without an active turn as provider/unhandled", () => {
+    const adapter = createPiProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "tool_execution_start",
+          toolCallId: "tool-bash-1",
+          toolName: "bash",
+          args: {
+            command: "npm test",
+          },
+        },
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "provider/unhandled",
+        providerId: "pi",
+        rawType: "sdk/tool_execution_start",
+      }),
+    );
+  });
+
+  it("translateEvent ignores auto retry notifications for now", () => {
+    const adapter = createPiProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "auto_retry_start",
+          attempt: 1,
+          maxAttempts: 2,
+          delayMs: 2000,
+        },
+      },
+    });
+
+    expect(events).toEqual([]);
+  });
+
   // -- translateEvent: multiple turns --------------------------------------
 
   it("translateEvent increments turn IDs across turns", () => {
@@ -199,6 +584,77 @@ describe("pi provider adapter", () => {
 
     expect(events).toContainEqual(
       expect.objectContaining({ type: "turn/started", turnId: "turn-2" }),
+    );
+  });
+
+  it("translateEvent accumulates Pi token usage across turns", () => {
+    const adapter = createPiProviderAdapter();
+
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    const firstTurnEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    const secondTurnEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    const firstTokenUsage = firstTurnEvents.find(
+      (event): event is Extract<(typeof firstTurnEvents)[number], { type: "thread/tokenUsage/updated" }> =>
+        event.type === "thread/tokenUsage/updated",
+    );
+    const secondTokenUsage = secondTurnEvents.find(
+      (event): event is Extract<(typeof secondTurnEvents)[number], { type: "thread/tokenUsage/updated" }> =>
+        event.type === "thread/tokenUsage/updated",
+    );
+
+    expect(firstTokenUsage?.tokenUsage.last).toMatchObject({
+      totalTokens: 7736,
+      inputTokens: 4200,
+      cachedInputTokens: 3380,
+      outputTokens: 156,
+    });
+    expect(secondTokenUsage?.tokenUsage.total).toMatchObject({
+      totalTokens: 15472,
+      inputTokens: 8400,
+      cachedInputTokens: 6760,
+      outputTokens: 312,
+    });
+    expect(secondTokenUsage?.tokenUsage.last).toEqual(firstTokenUsage?.tokenUsage.last);
+  });
+
+  it("translateEvent clears stale tool state when a turn ends without tool results", () => {
+    const adapter = createPiProviderAdapter();
+
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      args: {
+        command: "npm test",
+        cwd: "/repo",
+      },
+    } as AgentSessionEvent);
+    adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    const events = adapter.translateEvent({
+      type: "tool_execution_end",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      isError: false,
+      result: "late output",
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "commandExecution",
+          id: "tool-bash-1",
+          command: "",
+          cwd: "",
+          aggregatedOutput: "late output",
+        }),
+      }),
     );
   });
 

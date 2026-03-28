@@ -16,7 +16,7 @@
 - The app and CLI timeline renderers now understand `tasks` and `delegation`, and recursive nested activity rendering is supported when parent-child linkage is present.
 - The shared thread timeline React renderer now lives in `@bb/ui-core`, so `apps/app` and offline audits use the same presentation path.
 - `@bb/provider-audit` now has a fixture-backed Ladle loop that renders the Excalidraw corpus through the shared React timeline components.
-- The shared React timeline has now been audited in a real browser across all 9 checked-in Excalidraw fixtures, so app-side coverage is no longer inferred only from CLI text output.
+- The shared React timeline has now been audited in a real browser across all 18 checked-in Excalidraw fixtures, so app-side coverage is no longer inferred only from CLI text output.
 - Realistic Claude delegated child activity now nests under the parent `Agent` row because the adapter preserves `sdk/message.message.parent_tool_use_id` from the raw fixture corpus.
 - Claude assistant messages now preserve the provider's real message ids instead of reusing one synthetic id per turn, so separate narration steps no longer collapse into corrupted run-on text in the final timeline.
 - Projection can now infer delegated child nesting from provider child thread ids plus collab-tool `receiverThreadIds`, so Codex-style child-thread activity can attach under a parent delegation without widening the stored thread-event model.

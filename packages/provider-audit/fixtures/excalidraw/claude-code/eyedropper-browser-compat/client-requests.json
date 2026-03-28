@@ -1,0 +1,26 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/thread/start",
+    "requestMethod": "thread/start",
+    "text": "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.",
+    "createdAt": 1774668698648
+  },
+  {
+    "id": "audit-client-row-2",
+    "turnIndex": 1,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.",
+    "createdAt": 1774668856782
+  },
+  {
+    "id": "audit-client-row-3",
+    "turnIndex": 2,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Summarize the external references you relied on and the files you changed.",
+    "createdAt": 1774669076776
+  }
+]

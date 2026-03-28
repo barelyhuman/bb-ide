@@ -2,31 +2,33 @@
  * Codex provider adapter.
  *
  * Maps between bb's ProviderAdapter contract and the OpenAI Codex app-server
- * JSON-RPC protocol. Uses Zod schemas to validate codex-specific notification
- * payloads at the boundary.
+ * JSON-RPC protocol. Validates the outer JSON-RPC envelope before translating
+ * the provider-specific payloads.
  *
  * Reference: https://github.com/openai/codex (codex-rs/app-server-protocol/)
  */
 
+import { z } from "zod";
 import type {
   AvailableModel,
+  PromptInput,
   ProviderCapabilities,
   SandboxMode,
   ThreadEvent,
   ThreadEventItem,
   ThreadEventItemStatus,
   ThreadEventTurnStatus,
+  ThreadEventUserContent,
   ToolCallRequest,
-  PromptInput,
 } from "@bb/domain";
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
+import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
 import type { ServerNotification as CodexServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
 import type { SandboxPolicy } from "./generated/codex-app-server/schema/v2/SandboxPolicy.js";
 import type { DynamicToolSpec } from "./generated/codex-app-server/schema/v2/DynamicToolSpec.js";
 import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
-import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
 import { listCodexModels } from "./models.js";
 import {
   decodeProviderToolCallRequest,
@@ -37,38 +39,400 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "../provider-adapter.js";
-
-// ---------------------------------------------------------------------------
-// assertNever (inlined)
-// ---------------------------------------------------------------------------
+import { codexVisibilityMetadata } from "./visibility.js";
 
 function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${String(value)}`);
 }
 
-// ---------------------------------------------------------------------------
-// Codex-specific event and command types
-// ---------------------------------------------------------------------------
-
-/**
- * Codex event — a JSON-RPC notification from the codex app-server.
- * Uses the generated `ServerNotification` type from the codex protocol schema.
- */
 export type CodexEvent = CodexServerNotification;
 
-/**
- * Codex command — a JSON-RPC request sent to the codex app-server.
- * Derived from the generated `ClientRequest` by stripping the `id` field
- * (the host-daemon assigns request IDs when sending).
- */
-export type CodexCommand = DistributiveOmit<CodexClientRequest, "id">;
+interface CodexUnhandledEventArgs {
+  rawEvent: JsonRpcMessage;
+  rawType?: string;
+  threadId?: string;
+  providerThreadId?: string;
+  turnId?: string;
+  parentToolCallId?: string;
+}
 
-/** Omit that distributes over union members. */
+export type CodexCommand = DistributiveOmit<CodexClientRequest, "id">;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
-// ---------------------------------------------------------------------------
-// Codex-specific helpers
-// ---------------------------------------------------------------------------
+const codexTurnStatusSchema = z.enum([
+  "completed",
+  "failed",
+  "interrupted",
+  "inProgress",
+]);
+type CodexTurnStatus = z.infer<typeof codexTurnStatusSchema>;
+
+const codexItemStatusSchema = z.enum([
+  "inProgress",
+  "completed",
+  "failed",
+  "declined",
+]);
+type CodexItemStatus = z.infer<typeof codexItemStatusSchema>;
+
+const codexPlanStepStatusSchema = z.enum([
+  "pending",
+  "inProgress",
+  "completed",
+  "failed",
+]);
+
+type ZodObjectSchema = z.ZodObject<z.ZodRawShape>;
+
+const codexStringArraySchema = z.array(z.string());
+
+const codexUserInputSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("text"),
+    text: z.string(),
+    text_elements: z.array(z.unknown()).optional(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("image"),
+    url: z.string(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("localImage"),
+    path: z.string(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("skill"),
+    name: z.string(),
+    path: z.string(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("mention"),
+    name: z.string(),
+    path: z.string(),
+  }).passthrough(),
+]);
+type CodexParsedUserInput = z.infer<typeof codexUserInputSchema>;
+
+const codexToolReferenceStatusSchema = z.enum([
+  "inProgress",
+  "completed",
+  "failed",
+  "declined",
+]);
+
+const codexFileChangeKindSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("add") }).passthrough(),
+  z.object({ type: z.literal("delete") }).passthrough(),
+  z.object({
+    type: z.literal("update"),
+    move_path: z.string().nullable().optional(),
+  }).passthrough(),
+]);
+
+const codexFileChangeSchema = z.object({
+  path: z.string(),
+  kind: codexFileChangeKindSchema,
+  diff: z.string(),
+}).passthrough();
+
+const codexDynamicToolCallContentItemSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("inputText"),
+    text: z.string(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("inputImage"),
+    imageUrl: z.string(),
+  }).passthrough(),
+]);
+type CodexDynamicToolCallContentItem = z.infer<
+  typeof codexDynamicToolCallContentItemSchema
+>;
+
+const codexWebSearchActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("search"),
+    query: z.string().optional(),
+    queries: z.array(z.string()).nullable().optional(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("open_page"),
+    url: z.string().optional(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("find_in_page"),
+    url: z.string().optional(),
+    pattern: z.string().optional(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("other"),
+  }).passthrough(),
+]);
+
+const codexThreadItemEnvelopeSchema = z.object({
+  type: z.string(),
+  id: z.string(),
+}).passthrough();
+
+const codexHandledThreadItemSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("agentMessage"),
+    id: z.string(),
+    text: z.string(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("userMessage"),
+    id: z.string(),
+    content: z.array(codexUserInputSchema),
+  }).passthrough(),
+  z.object({
+    type: z.literal("commandExecution"),
+    id: z.string(),
+    command: z.string(),
+    cwd: z.string(),
+    status: codexToolReferenceStatusSchema,
+    aggregatedOutput: z.string().nullable(),
+    exitCode: z.number().nullable(),
+    durationMs: z.number().nullable(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("fileChange"),
+    id: z.string(),
+    changes: z.array(codexFileChangeSchema),
+    status: codexToolReferenceStatusSchema,
+  }).passthrough(),
+  z.object({
+    type: z.literal("mcpToolCall"),
+    id: z.string(),
+    server: z.string(),
+    tool: z.string(),
+    status: codexToolReferenceStatusSchema,
+    arguments: z.unknown(),
+    error: z.object({
+      message: z.string().optional(),
+    }).passthrough().nullable().optional(),
+    durationMs: z.number().nullable(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("dynamicToolCall"),
+    id: z.string(),
+    tool: z.string(),
+    arguments: z.unknown(),
+    status: codexToolReferenceStatusSchema,
+    contentItems: z.array(codexDynamicToolCallContentItemSchema).nullable(),
+    success: z.boolean().nullable(),
+    durationMs: z.number().nullable(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("collabAgentToolCall"),
+    id: z.string(),
+    tool: z.string(),
+    status: codexToolReferenceStatusSchema,
+    senderThreadId: z.string(),
+    receiverThreadIds: z.array(z.string()),
+    prompt: z.string().nullable(),
+    model: z.string().nullable(),
+    reasoningEffort: z.string().nullable(),
+    agentsStates: z.record(z.string(), z.unknown()),
+  }).passthrough(),
+  z.object({
+    type: z.literal("webSearch"),
+    id: z.string(),
+    query: z.string(),
+    action: codexWebSearchActionSchema.nullable(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("reasoning"),
+    id: z.string(),
+    summary: codexStringArraySchema,
+    content: codexStringArraySchema,
+  }).passthrough(),
+  z.object({
+    type: z.literal("plan"),
+    id: z.string(),
+    text: z.string(),
+  }).passthrough(),
+  z.object({
+    type: z.literal("contextCompaction"),
+    id: z.string(),
+  }).passthrough(),
+]);
+type CodexHandledThreadItem = z.infer<typeof codexHandledThreadItemSchema>;
+
+const codexThreadTurnParamsSchema = z.object({
+  threadId: z.string(),
+  turnId: z.string(),
+}).passthrough();
+
+const codexTurnSchema = z.object({
+  id: z.string(),
+  status: codexTurnStatusSchema,
+  error: z.object({
+    message: z.string(),
+    additionalDetails: z.string().optional(),
+  }).passthrough().nullable().optional(),
+}).passthrough();
+
+const codexThreadSchema = z.object({
+  id: z.string(),
+  preview: z.string().optional(),
+}).passthrough();
+
+const codexTokenUsageBreakdownSchema = z.object({
+  totalTokens: z.number(),
+  inputTokens: z.number(),
+  cachedInputTokens: z.number(),
+  outputTokens: z.number(),
+  reasoningOutputTokens: z.number(),
+}).passthrough();
+
+const codexTokenUsageSchema = z.object({
+  total: codexTokenUsageBreakdownSchema,
+  last: codexTokenUsageBreakdownSchema,
+  modelContextWindow: z.number().nullable(),
+}).passthrough();
+
+const codexPlanStepSchema = z.object({
+  step: z.string(),
+  status: codexPlanStepStatusSchema,
+}).passthrough();
+
+const codexWarningParamsSchema = z.object({
+  summary: z.string(),
+  details: z.string().nullish(),
+}).passthrough();
+
+const codexBridgeEnvelopeSchema = z.union([
+  jsonRpcEnvelopeSchema,
+  z.object({
+    method: z.string(),
+    params: z.record(z.string(), z.unknown()).optional(),
+  }).passthrough(),
+]);
+
+function createCodexEventSchema<
+  TMethod extends string,
+  TParams extends ZodObjectSchema,
+>(
+  method: TMethod,
+  params: TParams,
+) {
+  return z.object({
+    method: z.literal(method),
+    params,
+  });
+}
+
+const codexHandledEventSchema = z.discriminatedUnion("method", [
+  createCodexEventSchema("turn/started", z.object({
+    threadId: z.string(),
+    turn: codexTurnSchema,
+  }).passthrough()),
+  createCodexEventSchema("turn/completed", z.object({
+    threadId: z.string(),
+    turn: codexTurnSchema,
+  }).passthrough()),
+  createCodexEventSchema("thread/started", z.object({
+    thread: codexThreadSchema,
+  }).passthrough()),
+  createCodexEventSchema("thread/name/updated", z.object({
+    threadId: z.string(),
+    threadName: z.string().optional(),
+  }).passthrough()),
+  createCodexEventSchema("thread/compacted", z.object({
+    threadId: z.string(),
+  }).passthrough()),
+  createCodexEventSchema("item/started", z.object({
+    threadId: z.string(),
+    turnId: z.string(),
+    item: codexThreadItemEnvelopeSchema,
+  }).passthrough()),
+  createCodexEventSchema("item/completed", z.object({
+    threadId: z.string(),
+    turnId: z.string(),
+    item: codexThreadItemEnvelopeSchema,
+  }).passthrough()),
+  createCodexEventSchema("item/agentMessage/delta", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    delta: z.string(),
+  })),
+  createCodexEventSchema("item/commandExecution/outputDelta", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    delta: z.string(),
+  })),
+  createCodexEventSchema("item/fileChange/outputDelta", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    delta: z.string(),
+  })),
+  createCodexEventSchema("item/reasoning/summaryTextDelta", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    delta: z.string(),
+  })),
+  createCodexEventSchema("item/reasoning/textDelta", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    delta: z.string(),
+  })),
+  createCodexEventSchema("item/plan/delta", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    delta: z.string(),
+  })),
+  createCodexEventSchema("item/mcpToolCall/progress", codexThreadTurnParamsSchema.extend({
+    itemId: z.string(),
+    message: z.string().optional(),
+  })),
+  createCodexEventSchema("thread/tokenUsage/updated", codexThreadTurnParamsSchema.extend({
+    tokenUsage: codexTokenUsageSchema,
+  })),
+  createCodexEventSchema("turn/plan/updated", codexThreadTurnParamsSchema.extend({
+    plan: z.array(codexPlanStepSchema),
+    explanation: z.string().nullish(),
+  })),
+  createCodexEventSchema("turn/diff/updated", codexThreadTurnParamsSchema.extend({
+    diff: z.string(),
+  })),
+  createCodexEventSchema("error", z.object({
+    threadId: z.string(),
+    turnId: z.string().optional(),
+    error: z.object({
+      message: z.string(),
+      additionalDetails: z.string().optional(),
+    }).passthrough(),
+    willRetry: z.boolean().optional(),
+  }).passthrough()),
+  createCodexEventSchema("deprecationNotice", codexWarningParamsSchema),
+  createCodexEventSchema("configWarning", codexWarningParamsSchema),
+]);
+type CodexHandledEvent = z.infer<typeof codexHandledEventSchema>;
+
+const HANDLED_CODEX_METHODS = [
+  "turn/started",
+  "turn/completed",
+  "thread/started",
+  "thread/name/updated",
+  "thread/compacted",
+  "item/started",
+  "item/completed",
+  "item/agentMessage/delta",
+  "item/commandExecution/outputDelta",
+  "item/fileChange/outputDelta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/mcpToolCall/progress",
+  "thread/tokenUsage/updated",
+  "turn/plan/updated",
+  "turn/diff/updated",
+  "error",
+  "deprecationNotice",
+  "configWarning",
+] as const;
+type HandledCodexMethod = typeof HANDLED_CODEX_METHODS[number];
+
+const handledCodexMethodSet = new Set<string>(HANDLED_CODEX_METHODS);
+
+function isHandledCodexMethod(method: string): method is HandledCodexMethod {
+  return handledCodexMethodSet.has(method);
+}
 
 function toSandboxPolicy(sandboxMode?: SandboxMode): SandboxPolicy {
   const resolved: SandboxMode = sandboxMode ?? "danger-full-access";
@@ -76,12 +440,40 @@ function toSandboxPolicy(sandboxMode?: SandboxMode): SandboxPolicy {
     case "read-only":
       return { type: "readOnly", access: { type: "fullAccess" }, networkAccess: false };
     case "workspace-write":
-      return { type: "workspaceWrite", writableRoots: [], readOnlyAccess: { type: "fullAccess" }, networkAccess: true, excludeTmpdirEnvVar: false, excludeSlashTmp: false };
+      return {
+        type: "workspaceWrite",
+        writableRoots: [],
+        readOnlyAccess: { type: "fullAccess" },
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      };
     case "danger-full-access":
       return { type: "dangerFullAccess" };
     default:
       return assertNever(resolved);
   }
+}
+
+function buildUnhandledCodexEvent(
+  args: CodexUnhandledEventArgs,
+): ThreadEvent[] {
+  const description = codexVisibilityMetadata.describeRawEvent(args.rawEvent);
+  if (description.coverage !== "unknown" && args.rawType === undefined) {
+    return [];
+  }
+
+  return [
+    createUnhandledProviderEvent({
+      providerId: "codex",
+      rawEvent: args.rawEvent,
+      rawType: args.rawType ?? description.kind,
+      ...(args.threadId ? { threadId: args.threadId } : {}),
+      ...(args.providerThreadId ? { providerThreadId: args.providerThreadId } : {}),
+      ...(args.turnId ? { turnId: args.turnId } : {}),
+      ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
+    }),
+  ];
 }
 
 function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
@@ -104,13 +496,17 @@ function buildCodexConfig(
   options?: AdapterOptions,
 ): { [key in string]?: JsonValue } | undefined {
   const config: { [key in string]?: JsonValue } = {};
-  if (threadId) config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
+  if (threadId) {
+    config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
+  }
   if (options?.envVars) {
     for (const [key, value] of Object.entries(options.envVars)) {
       config[`shell_environment_policy.set.${key}`] = value;
     }
   }
-  if (options?.reasoningLevel) config["model_reasoning_effort"] = options.reasoningLevel;
+  if (options?.reasoningLevel) {
+    config["model_reasoning_effort"] = options.reasoningLevel;
+  }
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
@@ -133,15 +529,10 @@ function toCodexDynamicTools(
 // Adapter factory
 // ---------------------------------------------------------------------------
 
-/** Options for overriding codex adapter defaults. Used by test infrastructure. */
 export interface CreateCodexProviderAdapterOptions {
-  /** Override the provider binary. Used by e2e tests to swap in a fake codex. */
   processCommand?: string;
-  /** Override the provider binary args. */
   processArgs?: string[];
-  /** Extra environment variables for the provider process. */
   launchEnv?: Record<string, string>;
-  /** Override model listing. Used by unit tests to avoid real API calls. */
   listModels?: () => Promise<AvailableModel[]>;
 }
 
@@ -155,8 +546,6 @@ export function createCodexProviderAdapter(
   const models = opts?.listModels ?? listCodexModels;
 
   return {
-    // -- Identity & launch -------------------------------------------------
-
     id: "codex",
     displayName: "Codex",
     capabilities,
@@ -164,8 +553,6 @@ export function createCodexProviderAdapter(
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
     },
-
-    // -- Unified command builder -------------------------------------------
 
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       switch (command.type) {
@@ -240,7 +627,9 @@ export function createCodexProviderAdapter(
             },
           };
         case "thread/name/set":
-          if (!capabilities.supportsRename) return null;
+          if (!capabilities.supportsRename) {
+            return null;
+          }
           return {
             jsonrpc: "2.0",
             method: "thread/name/set",
@@ -250,376 +639,260 @@ export function createCodexProviderAdapter(
             },
           };
         case "thread/stop":
-          // Codex doesn't support graceful stop yet.
           return null;
       }
     },
 
-    // -- Unified event translator ------------------------------------------
-
     translateEvent(
       event: unknown,
-      _context?: { threadId?: string; parentToolCallId?: string },
     ): ThreadEvent[] {
-      const codexEvent = event as CodexEvent;
-      const events: ThreadEvent[] = [];
+      const envelope = codexBridgeEnvelopeSchema.safeParse(event);
+      if (!envelope.success) {
+        return [];
+      }
 
-      switch (codexEvent.method) {
-        // --- Turn lifecycle ---
-        case "turn/started": {
-          const { threadId, turn } = codexEvent.params;
-          events.push({ type: "turn/started", threadId, providerThreadId: threadId, turnId: turn.id });
-          break;
-        }
-        case "turn/completed": {
-          const { threadId, turn } = codexEvent.params;
-          events.push({
+      const rawEvent: JsonRpcMessage = {
+        jsonrpc: "2.0",
+        method: envelope.data.method,
+        ...(envelope.data.params ? { params: envelope.data.params } : {}),
+      };
+
+      const parsed = codexHandledEventSchema.safeParse(rawEvent);
+      if (!parsed.success) {
+        return isHandledCodexMethod(rawEvent.method)
+          ? buildUnhandledCodexEvent({ rawEvent, rawType: rawEvent.method })
+          : buildUnhandledCodexEvent({ rawEvent });
+      }
+
+      const handledEvent: CodexHandledEvent = parsed.data;
+      switch (handledEvent.method) {
+        case "turn/started":
+          return [{
+            type: "turn/started",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turn.id,
+          }];
+        case "turn/completed":
+          return [{
             type: "turn/completed",
-            threadId,
-            providerThreadId: threadId,
-            turnId: turn.id,
-            status: toTurnStatus(turn.status),
-            error: turn.error ? { message: turn.error.message } : undefined,
-          });
-          break;
-        }
-
-        // --- Thread lifecycle ---
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turn.id,
+            status: toTurnStatus(handledEvent.params.turn.status),
+            ...(handledEvent.params.turn.error?.message
+              ? { error: { message: handledEvent.params.turn.error.message } }
+              : {}),
+          }];
         case "thread/started": {
-          const { thread } = codexEvent.params;
-          events.push({ type: "thread/started", threadId: thread.id });
-          events.push({ type: "thread/identity", threadId: thread.id, providerThreadId: thread.id });
-          if (thread.preview) {
-            events.push({ type: "thread/name/updated", threadId: thread.id, providerThreadId: thread.id, threadName: thread.preview });
-          }
-          break;
-        }
-        case "thread/name/updated": {
-          const { threadId, threadName } = codexEvent.params;
-          if (threadName) {
-            events.push({ type: "thread/name/updated", threadId, providerThreadId: threadId, threadName });
-          }
-          break;
-        }
-        case "thread/compacted": {
-          const { threadId } = codexEvent.params;
-          events.push({ type: "thread/compacted", threadId, providerThreadId: threadId });
-          break;
-        }
-
-        // --- Items ---
-        case "item/started": {
-          const { threadId, turnId, item } = codexEvent.params;
-          events.push({ type: "item/started", threadId, providerThreadId: threadId, turnId, item: translateCodexItem(item) });
-          break;
-        }
-        case "item/completed": {
-          const { threadId, turnId, item } = codexEvent.params;
-          events.push({ type: "item/completed", threadId, providerThreadId: threadId, turnId, item: translateCodexItem(item) });
-          break;
-        }
-
-        // --- Streaming deltas ---
-        case "item/agentMessage/delta": {
-          const { threadId, turnId, itemId, delta } = codexEvent.params;
-          events.push({ type: "item/agentMessage/delta", threadId, providerThreadId: threadId, turnId, itemId, delta });
-          break;
-        }
-        case "item/commandExecution/outputDelta": {
-          const { threadId, turnId, itemId, delta } = codexEvent.params;
-          events.push({ type: "item/commandExecution/outputDelta", threadId, providerThreadId: threadId, turnId, itemId, delta });
-          break;
-        }
-        case "item/fileChange/outputDelta": {
-          const { threadId, turnId, itemId, delta } = codexEvent.params;
-          events.push({ type: "item/fileChange/outputDelta", threadId, providerThreadId: threadId, turnId, itemId, delta });
-          break;
-        }
-        case "item/reasoning/summaryTextDelta": {
-          const { threadId, turnId, itemId, delta } = codexEvent.params;
-          events.push({ type: "item/reasoning/summaryTextDelta", threadId, providerThreadId: threadId, turnId, itemId, delta });
-          break;
-        }
-        case "item/reasoning/textDelta": {
-          const { threadId, turnId, itemId, delta } = codexEvent.params;
-          events.push({ type: "item/reasoning/textDelta", threadId, providerThreadId: threadId, turnId, itemId, delta });
-          break;
-        }
-        case "item/plan/delta": {
-          const { threadId, turnId, itemId, delta } = codexEvent.params;
-          events.push({ type: "item/plan/delta", threadId, providerThreadId: threadId, turnId, itemId, delta });
-          break;
-        }
-        case "item/mcpToolCall/progress": {
-          const { threadId, turnId, itemId, message } = codexEvent.params;
-          events.push({ type: "item/mcpToolCall/progress", threadId, providerThreadId: threadId, turnId, itemId, message });
-          break;
-        }
-
-        // --- Token usage ---
-        case "thread/tokenUsage/updated": {
-          const { threadId, turnId, tokenUsage } = codexEvent.params;
-          events.push({
-            type: "thread/tokenUsage/updated",
-            threadId,
-            providerThreadId: threadId,
-            turnId,
-            tokenUsage: {
-              total: tokenUsage.total,
-              last: tokenUsage.last,
-              modelContextWindow: tokenUsage.modelContextWindow,
+          const events: ThreadEvent[] = [
+            {
+              type: "thread/started",
+              threadId: handledEvent.params.thread.id,
             },
-          });
-          break;
+            {
+              type: "thread/identity",
+              threadId: handledEvent.params.thread.id,
+              providerThreadId: handledEvent.params.thread.id,
+            },
+          ];
+          if (handledEvent.params.thread.preview) {
+            events.push({
+              type: "thread/name/updated",
+              threadId: handledEvent.params.thread.id,
+              providerThreadId: handledEvent.params.thread.id,
+              threadName: handledEvent.params.thread.preview,
+            });
+          }
+          return events;
         }
-
-        // --- Plan/diff ---
-        case "turn/plan/updated": {
-          const { threadId, turnId, plan, explanation } = codexEvent.params;
-          events.push({
+        case "thread/name/updated":
+          return handledEvent.params.threadName
+            ? [{
+                type: "thread/name/updated",
+                threadId: handledEvent.params.threadId,
+                providerThreadId: handledEvent.params.threadId,
+                threadName: handledEvent.params.threadName,
+              }]
+            : [];
+        case "thread/compacted":
+          return [{
+            type: "thread/compacted",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+          }];
+        case "item/started":
+        case "item/completed": {
+          const item = translateCodexItem(handledEvent.params.item);
+          if (!item) {
+            return buildUnhandledCodexEvent({
+              rawEvent,
+              rawType: handledEvent.method,
+              threadId: handledEvent.params.threadId,
+              providerThreadId: handledEvent.params.threadId,
+              turnId: handledEvent.params.turnId,
+            });
+          }
+          return [{
+            type: handledEvent.method,
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            item,
+          }];
+        }
+        case "item/agentMessage/delta":
+          return [{
+            type: "item/agentMessage/delta",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            delta: handledEvent.params.delta,
+          }];
+        case "item/commandExecution/outputDelta":
+          return [{
+            type: "item/commandExecution/outputDelta",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            delta: handledEvent.params.delta,
+          }];
+        case "item/fileChange/outputDelta":
+          return [{
+            type: "item/fileChange/outputDelta",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            delta: handledEvent.params.delta,
+          }];
+        case "item/reasoning/summaryTextDelta":
+          return [{
+            type: "item/reasoning/summaryTextDelta",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            delta: handledEvent.params.delta,
+          }];
+        case "item/reasoning/textDelta":
+          return [{
+            type: "item/reasoning/textDelta",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            delta: handledEvent.params.delta,
+          }];
+        case "item/plan/delta":
+          return [{
+            type: "item/plan/delta",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            delta: handledEvent.params.delta,
+          }];
+        case "item/mcpToolCall/progress":
+          return [{
+            type: "item/toolCall/progress",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            itemId: handledEvent.params.itemId,
+            ...(handledEvent.params.message ? { message: handledEvent.params.message } : {}),
+          }];
+        case "thread/tokenUsage/updated":
+          return [{
+            type: "thread/tokenUsage/updated",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            tokenUsage: {
+              total: {
+                totalTokens: handledEvent.params.tokenUsage.total.totalTokens,
+                inputTokens: handledEvent.params.tokenUsage.total.inputTokens,
+                cachedInputTokens: handledEvent.params.tokenUsage.total.cachedInputTokens,
+                outputTokens: handledEvent.params.tokenUsage.total.outputTokens,
+                reasoningOutputTokens: handledEvent.params.tokenUsage.total.reasoningOutputTokens,
+              },
+              last: {
+                totalTokens: handledEvent.params.tokenUsage.last.totalTokens,
+                inputTokens: handledEvent.params.tokenUsage.last.inputTokens,
+                cachedInputTokens: handledEvent.params.tokenUsage.last.cachedInputTokens,
+                outputTokens: handledEvent.params.tokenUsage.last.outputTokens,
+                reasoningOutputTokens: handledEvent.params.tokenUsage.last.reasoningOutputTokens,
+              },
+              modelContextWindow: handledEvent.params.tokenUsage.modelContextWindow,
+            },
+          }];
+        case "turn/plan/updated":
+          return [{
             type: "turn/plan/updated",
-            threadId,
-            providerThreadId: threadId,
-            turnId,
-            plan: plan.map((s) => ({
-              step: s.step,
-              status: s.status === "inProgress" ? "active" as const : s.status,
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            plan: handledEvent.params.plan.map((step) => ({
+              step: step.step,
+              status: step.status === "inProgress" ? "active" : step.status,
             })),
-            explanation: explanation ?? undefined,
-          });
-          break;
-        }
-        case "turn/diff/updated": {
-          const { threadId, turnId, diff } = codexEvent.params;
-          events.push({ type: "turn/diff/updated", threadId, providerThreadId: threadId, turnId, diff });
-          break;
-        }
-
-        // --- Errors ---
-        case "error": {
-          const { threadId, turnId, error, willRetry } = codexEvent.params;
-          events.push({
+            ...(handledEvent.params.explanation
+              ? { explanation: handledEvent.params.explanation }
+              : {}),
+          }];
+        case "turn/diff/updated":
+          return [{
+            type: "turn/diff/updated",
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            turnId: handledEvent.params.turnId,
+            diff: handledEvent.params.diff,
+          }];
+        case "error":
+          return [{
             type: "error",
-            threadId,
-            providerThreadId: threadId,
-            turnId,
-            message: error.message,
-            detail: error.additionalDetails ?? undefined,
-            willRetry,
-          });
-          break;
-        }
-
-        // --- Warnings ---
-        case "deprecationNotice": {
-          const { summary, details } = codexEvent.params;
-          events.push({
+            threadId: handledEvent.params.threadId,
+            providerThreadId: handledEvent.params.threadId,
+            ...(handledEvent.params.turnId ? { turnId: handledEvent.params.turnId } : {}),
+            message: handledEvent.params.error.message,
+            ...(handledEvent.params.error.additionalDetails
+              ? { detail: handledEvent.params.error.additionalDetails }
+              : {}),
+            ...(handledEvent.params.willRetry !== undefined
+              ? { willRetry: handledEvent.params.willRetry }
+              : {}),
+          }];
+        case "deprecationNotice":
+          return [{
             type: "warning",
             threadId: "",
             providerThreadId: "",
             category: "deprecation",
-            summary,
-            details: details ?? undefined,
-          });
-          break;
-        }
-        case "configWarning": {
-          const { summary, details } = codexEvent.params;
-          events.push({
+            summary: handledEvent.params.summary,
+            ...(handledEvent.params.details ? { details: handledEvent.params.details } : {}),
+          }];
+        case "configWarning":
+          return [{
             type: "warning",
             threadId: "",
             providerThreadId: "",
             category: "config",
-            summary,
-            details: details ?? undefined,
-          });
-          break;
-        }
-
+            summary: handledEvent.params.summary,
+            ...(handledEvent.params.details ? { details: handledEvent.params.details } : {}),
+          }];
         default:
-          // Codex notifications we don't translate: account/*, hooks,
-          // realtime audio, fuzzyFileSearch, skills, etc.
-          break;
+          return assertNever(handledEvent);
       }
-
-      return events;
     },
-
-    // -- Tool call codec ---------------------------------------------------
 
     decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
       return decodeProviderToolCallRequest(request.id ?? 0, request.method, request.params);
     },
 
-    // -- Provider capabilities ---------------------------------------------
-
     listModels() {
       return models();
     },
   };
-}
-
-// ---------------------------------------------------------------------------
-// Codex → ThreadEvent helpers
-// ---------------------------------------------------------------------------
-
-type CodexThreadItem = Extract<CodexServerNotification, { method: "item/started" }>["params"]["item"];
-type CodexTurnStatus = Extract<CodexServerNotification, { method: "turn/completed" }>["params"]["turn"]["status"];
-
-function toTurnStatus(status: CodexTurnStatus): ThreadEventTurnStatus {
-  switch (status) {
-    case "completed": return "completed";
-    case "failed": return "failed";
-    case "interrupted": return "interrupted";
-    case "inProgress": return "completed"; // shouldn't appear on turn/completed, but handle gracefully
-  }
-}
-
-function toItemStatus(status: "inProgress" | "completed" | "failed" | "declined"): ThreadEventItemStatus {
-  switch (status) {
-    case "inProgress": return "pending";
-    case "completed": return "completed";
-    case "failed": return "failed";
-    case "declined": return "interrupted";
-  }
-}
-
-function translateCodexItem(item: CodexThreadItem): ThreadEventItem {
-  switch (item.type) {
-    case "agentMessage":
-      return { type: "agentMessage", id: item.id, text: item.text };
-    case "userMessage":
-      return {
-        type: "userMessage",
-        id: item.id,
-        content: item.content.map((c) => {
-          switch (c.type) {
-            case "text": return { type: "text" as const, text: c.text };
-            case "image": return { type: "image" as const, url: c.url };
-            case "localImage": return { type: "localImage" as const, path: c.path };
-            case "skill":
-            case "mention":
-              return { type: "text" as const, text: `[${c.type}: ${c.name}]` };
-            default: return { type: "text" as const, text: "" };
-          }
-        }).filter((c) => c.type !== "text" || c.text.length > 0),
-      };
-    case "commandExecution":
-      return {
-        type: "commandExecution",
-        id: item.id,
-        command: item.command,
-        cwd: item.cwd,
-        status: toItemStatus(item.status),
-        aggregatedOutput: item.aggregatedOutput ?? undefined,
-        exitCode: item.exitCode ?? undefined,
-        durationMs: item.durationMs ?? undefined,
-      };
-    case "fileChange":
-      return {
-        type: "fileChange",
-        id: item.id,
-        changes: item.changes.map((c) => ({
-          path: c.path,
-          kind: c.kind.type,
-          movePath: c.kind.type === "update" ? (c.kind.move_path ?? undefined) : undefined,
-          diff: c.diff || undefined,
-        })),
-        status: toItemStatus(item.status),
-      };
-    case "webSearch":
-      return {
-        type: "webSearch",
-        id: item.id,
-        query: item.query,
-        action: item.action?.type,
-      };
-    case "mcpToolCall":
-      return {
-        type: "toolCall",
-        id: item.id,
-        server: item.server,
-        tool: item.tool,
-        arguments: item.arguments,
-        status: toItemStatus(item.status),
-        error: item.error?.message,
-        durationMs: item.durationMs ?? undefined,
-      };
-    case "dynamicToolCall": {
-      const result = extractDynamicToolCallResult(item.contentItems);
-      const status = toItemStatus(item.status);
-      return {
-        type: "toolCall",
-        id: item.id,
-        tool: item.tool,
-        arguments: item.arguments,
-        status,
-        result,
-        error: item.success === false && typeof result !== "string"
-          ? "Dynamic tool call failed"
-          : undefined,
-        durationMs: item.durationMs ?? undefined,
-      };
-    }
-    case "collabAgentToolCall":
-      return {
-        type: "toolCall",
-        id: item.id,
-        tool: item.tool,
-        arguments: {
-          senderThreadId: item.senderThreadId,
-          receiverThreadIds: item.receiverThreadIds,
-          prompt: item.prompt ?? undefined,
-          model: item.model ?? undefined,
-          reasoningEffort: item.reasoningEffort ?? undefined,
-        },
-        status:
-          item.status === "inProgress"
-            ? "pending"
-            : item.status === "completed"
-              ? "completed"
-              : "failed",
-        result: item.agentsStates,
-      };
-    case "reasoning":
-      return {
-        type: "reasoning",
-        id: item.id,
-        summary: item.summary,
-        content: item.content,
-      };
-    case "plan":
-      return { type: "plan", id: item.id, text: item.text };
-    case "contextCompaction":
-      return { type: "contextCompaction", id: item.id };
-    default:
-      // imageView, enteredReviewMode, exitedReviewMode — not mapped yet.
-      return { type: "agentMessage", id: (item as { id: string }).id, text: "" };
-  }
-}
-
-type CodexDynamicToolCallContentItems = Extract<
-  CodexThreadItem,
-  { type: "dynamicToolCall" }
->["contentItems"];
-
-function extractDynamicToolCallResult(
-  contentItems: CodexDynamicToolCallContentItems,
-): unknown {
-  if (!contentItems || contentItems.length === 0) {
-    return undefined;
-  }
-
-  const textParts: string[] = [];
-  for (const contentItem of contentItems) {
-    if (contentItem.type === "inputText") {
-      textParts.push(contentItem.text);
-    }
-  }
-
-  if (textParts.length > 0) {
-    return textParts.join("\n");
-  }
-
-  return contentItems;
 }

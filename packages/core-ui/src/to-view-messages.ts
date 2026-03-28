@@ -9,7 +9,11 @@ import {
 import type { EventMeta } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type { ExecCallPartial } from "./exec-lifecycle.js";
-import { parseExecLifecycleEvent, parseToolCallLifecycleEvent } from "./exec-lifecycle.js";
+import {
+  createExecLifecycleContext,
+  parseExecLifecycleEvent,
+  parseToolCallLifecycleEvent,
+} from "./exec-lifecycle.js";
 import type { FileEditPartial } from "./file-edit-parsing.js";
 import { parseFileEditFromItemEvent } from "./file-edit-parsing.js";
 import type { WebSearchLifecycleEvent } from "./web-search-lifecycle.js";
@@ -237,6 +241,8 @@ function upsertRunningExecCall(
       cwd: incoming.cwd,
       parsedCmd: incoming.parsedCmd,
       source: incoming.source,
+      subagentType: incoming.subagentType,
+      description: incoming.description,
       output: incoming.output,
       exitCode: incoming.exitCode,
       duration: incoming.duration,
@@ -263,6 +269,12 @@ function upsertRunningExecCall(
   if (incoming.duration && !existing.duration) existing.duration = incoming.duration;
   if (incoming.durationMs !== undefined && existing.durationMs === undefined) {
     existing.durationMs = incoming.durationMs;
+  }
+  if (incoming.subagentType && !existing.subagentType) {
+    existing.subagentType = incoming.subagentType;
+  }
+  if (incoming.description && !existing.description) {
+    existing.description = incoming.description;
   }
   if (!existing.turnId && turnId) existing.turnId = turnId;
   if (!existing.parentToolCallId && incoming.parentToolCallId) {
@@ -378,6 +390,12 @@ function mergeCallSummary(
   if (incoming.durationMs !== undefined && target.durationMs === undefined) {
     target.durationMs = incoming.durationMs;
   }
+  if (incoming.subagentType && !target.subagentType) {
+    target.subagentType = incoming.subagentType;
+  }
+  if (incoming.description && !target.description) {
+    target.description = incoming.description;
+  }
   target.status = mergeCallStatus(target.status, incoming.status) ?? target.status;
 }
 
@@ -424,6 +442,8 @@ function createToolCallMessage(
     cwd: call.cwd,
     parsedCmd: call.parsedCmd,
     source: call.source,
+    subagentType: call.subagentType,
+    description: call.description,
     output: call.output,
     exitCode: call.exitCode,
     duration: call.duration,
@@ -1047,6 +1067,7 @@ export function toViewMessages(
   const pendingClientThreadStartUserSignatureCounts = new Map<string, number>();
   const pendingClientRequestedUserSignatureCounts = new Map<string, number>();
   const pendingProviderUserSignatureCounts = new Map<string, number>();
+  const execLifecycleContext = createExecLifecycleContext();
 
   for (const { event: decoded, meta } of orderedEvents) {
     const eventType = decoded.type;
@@ -1499,6 +1520,7 @@ export function toViewMessages(
       decoded,
       meta,
       eventParentToolCallId,
+      execLifecycleContext,
     );
     if (execEvent) {
       if (execEvent.kind === "begin") {
@@ -1526,6 +1548,7 @@ export function toViewMessages(
       decoded,
       meta,
       eventParentToolCallId,
+      execLifecycleContext,
     );
     if (toolCallEvent) {
       const toolCallName = getToolCallName(decoded);
@@ -1559,6 +1582,8 @@ export function toViewMessages(
       }
       if (toolCallEvent.kind === "begin") {
         onExecBegin(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
+      } else if (toolCallEvent.kind === "output") {
+        onExecOutput(state, meta, toolCallEvent.call, toolCallEvent.appendOutput);
       } else {
         onExecEnd(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
       }

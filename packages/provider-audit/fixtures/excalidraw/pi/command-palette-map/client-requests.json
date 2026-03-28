@@ -1,0 +1,26 @@
+[
+  {
+    "id": "audit-client-row-1",
+    "turnIndex": 0,
+    "type": "client/thread/start",
+    "requestMethod": "thread/start",
+    "text": "Use the available repo_outline helper first for the command and search area. Then use the built-in ls, find, and grep tools instead of bash while you inventory the relevant directories, trace the path from command registration to availability gating and action dispatch, and call out the safest insertion point for another gated action.",
+    "createdAt": 1774669738158
+  },
+  {
+    "id": "audit-client-row-2",
+    "turnIndex": 1,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.",
+    "createdAt": 1774669803317
+  },
+  {
+    "id": "audit-client-row-3",
+    "turnIndex": 2,
+    "type": "client/turn/requested",
+    "requestMethod": "turn/start",
+    "text": "Summarize the directories you explored, the behavior change, and the validation you ran.",
+    "createdAt": 1774669998913
+  }
+]

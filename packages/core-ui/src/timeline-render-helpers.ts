@@ -1,0 +1,168 @@
+import type {
+  ViewToolExploringMessage,
+  ViewToolParsedIntent,
+} from "@bb/domain";
+import { assertNever } from "./assert-never.js";
+
+interface DelegationSummaryInput {
+  subagentType?: string;
+  description?: string;
+  command?: string;
+  toolName: string;
+}
+
+type ExploringCall = ViewToolExploringMessage["calls"][number];
+
+export interface ExploringCounts {
+  filesRead: number;
+  searches: number;
+  lists: number;
+}
+
+function isReadIntent(
+  intent: ViewToolParsedIntent,
+): intent is Extract<ViewToolParsedIntent, { type: "read" }> {
+  return intent.type === "read";
+}
+
+function isReadOnlyCall(call: ExploringCall): boolean {
+  return call.parsedCmd.length > 0 && call.parsedCmd.every((intent) => isReadIntent(intent));
+}
+
+function formatSearchDetail(
+  intent: Extract<ViewToolParsedIntent, { type: "search" }>,
+): string {
+  const query = intent.query;
+  if (query && intent.path) return `${query} in ${intent.path}`;
+  if (query) return query;
+  return intent.cmd;
+}
+
+function getReadDisplayName(
+  intent: Extract<ViewToolParsedIntent, { type: "read" }>,
+): string {
+  return intent.path ?? intent.name ?? intent.cmd;
+}
+
+export function formatDelegationSummary(message: DelegationSummaryInput): string {
+  if (message.subagentType && message.description) {
+    return `${message.subagentType}: ${message.description}`;
+  }
+  if (message.subagentType) {
+    return message.subagentType;
+  }
+  if (message.description) {
+    return message.description;
+  }
+  return message.command ?? message.toolName;
+}
+
+export function formatExploringIntentLine(intent: ViewToolParsedIntent): string {
+  switch (intent.type) {
+    case "read":
+      return `Read ${getReadDisplayName(intent)}`;
+    case "list_files":
+      return `List ${intent.path ?? intent.cmd}`;
+    case "search":
+      return `Search ${formatSearchDetail(intent)}`;
+    case "unknown":
+      return `Run ${intent.cmd}`;
+    default:
+      return assertNever(intent);
+  }
+}
+
+export function buildExploringDetailLines(
+  calls: ViewToolExploringMessage["calls"],
+): string[] {
+  const detailLines: string[] = [];
+  let index = 0;
+
+  while (index < calls.length) {
+    const call = calls[index];
+    if (!call) break;
+
+    if (isReadOnlyCall(call)) {
+      const readLabels: string[] = [];
+      const seen = new Set<string>();
+      while (index < calls.length && calls[index] && isReadOnlyCall(calls[index])) {
+        const current = calls[index];
+        if (!current) break;
+        for (const intent of current.parsedCmd) {
+          if (intent.type !== "read") continue;
+          const label = getReadDisplayName(intent);
+          if (seen.has(label)) continue;
+          seen.add(label);
+          readLabels.push(label);
+        }
+        index += 1;
+      }
+
+      if (readLabels.length > 0) {
+        detailLines.push(`Read ${readLabels.join(", ")}`);
+      }
+      continue;
+    }
+
+    if (call.parsedCmd.length === 0) {
+      if (call.command) detailLines.push(call.command);
+      index += 1;
+      continue;
+    }
+
+    for (const intent of call.parsedCmd) {
+      detailLines.push(formatExploringIntentLine(intent));
+    }
+    index += 1;
+  }
+
+  return detailLines;
+}
+
+export function summarizeExploringCounts(
+  calls: ViewToolExploringMessage["calls"],
+): ExploringCounts {
+  const readNames = new Set<string>();
+  let searches = 0;
+  let lists = 0;
+
+  for (const call of calls) {
+    for (const intent of call.parsedCmd) {
+      switch (intent.type) {
+        case "read":
+          readNames.add(getReadDisplayName(intent));
+          break;
+        case "search":
+          searches += 1;
+          break;
+        case "list_files":
+          lists += 1;
+          break;
+        case "unknown":
+          break;
+        default:
+          assertNever(intent);
+      }
+    }
+  }
+
+  return {
+    filesRead: readNames.size,
+    searches,
+    lists,
+  };
+}
+
+export function formatExploringCountsLabel(counts: ExploringCounts): string {
+  const parts: string[] = [];
+  if (counts.filesRead > 0) {
+    parts.push(`${counts.filesRead} file${counts.filesRead === 1 ? "" : "s"}`);
+  }
+  if (counts.searches > 0) {
+    parts.push(`${counts.searches} search${counts.searches === 1 ? "" : "es"}`);
+  }
+  if (counts.lists > 0) {
+    parts.push(`${counts.lists} list${counts.lists === 1 ? "" : "s"}`);
+  }
+  return parts.join(", ");
+}

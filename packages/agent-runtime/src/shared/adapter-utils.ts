@@ -7,12 +7,13 @@
 
 import type { ModelReasoningEffort, ThreadEventItem } from "@bb/domain";
 import {
-  bashArgsSchema,
   contentWrapperSchema,
-  fileEditArgsSchema,
   textBlockSchema,
-  webSearchArgsSchema,
 } from "./tool-arg-schemas.js";
+import {
+  getStringProperty,
+  isRecord,
+} from "./provider-visibility-helpers.js";
 
 // ---------------------------------------------------------------------------
 // Reasoning effort constants
@@ -39,9 +40,22 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
 // Tool category sets
 // ---------------------------------------------------------------------------
 
-export const BASH_TOOLS = new Set(["Bash", "bash"]);
-export const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "edit", "write"]);
-export const WEB_SEARCH_TOOLS = new Set(["WebSearch", "WebFetch"]);
+export function toOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+export function withParentToolCallId<TItem extends ThreadEventItem>(
+  item: TItem,
+  parentToolCallId?: string,
+): TItem {
+  if (!parentToolCallId) {
+    return item;
+  }
+  return {
+    ...item,
+    parentToolCallId,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Numeric helpers
@@ -53,144 +67,16 @@ export function toNonNegativeNumber(value: unknown): number {
     : 0;
 }
 
-// ---------------------------------------------------------------------------
-// Tool call / result → ThreadEventItem translation
-// ---------------------------------------------------------------------------
-
-export interface TranslateToolCallToItemInput {
-  callId: string;
-  toolName: string;
-  args: unknown;
-  parentToolCallId?: string;
-}
-
-export interface TranslateToolResultToItemInput {
-  callId: string;
-  toolName?: string;
-  content: unknown;
-  isError?: boolean;
-  parentToolCallId?: string;
-}
-
-/**
- * Translates a tool call (name + args) into a `ThreadEventItem`.
- * Recognises bash, file-edit, and web-search tools and produces the
- * corresponding specialised item types.
- */
-export function translateToolCallToItem(
-  input: TranslateToolCallToItemInput,
-): ThreadEventItem {
-  const { callId, toolName, args, parentToolCallId } = input;
-  if (BASH_TOOLS.has(toolName)) {
-    const parsed = bashArgsSchema.safeParse(args);
-    return {
-      type: "commandExecution",
-      id: callId,
-      command: parsed.success ? String(parsed.data.command ?? "") : "",
-      cwd:
-        parsed.success && typeof parsed.data.cwd === "string"
-          ? parsed.data.cwd
-          : "",
-      status: "pending",
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-    };
-  }
-
-  if (FILE_EDIT_TOOLS.has(toolName)) {
-    const parsed = fileEditArgsSchema.safeParse(args);
-    const filePath = parsed.success
-      ? (parsed.data.file_path ?? parsed.data.path ?? "")
-      : "";
-    return {
-      type: "fileChange",
-      id: callId,
-      changes: [{ path: filePath, kind: "update" as const }],
-      status: "pending",
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-    };
-  }
-
-  if (WEB_SEARCH_TOOLS.has(toolName)) {
-    const parsed = webSearchArgsSchema.safeParse(args);
-    return {
-      type: "webSearch",
-      id: callId,
-      query: parsed.success ? String(parsed.data.query ?? parsed.data.url ?? "") : "",
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-    };
-  }
-
-  return {
-    type: "toolCall",
-    id: callId,
-    tool: toolName,
-    arguments: args,
-    status: "pending",
-    ...(parentToolCallId ? { parentToolCallId } : {}),
-  };
-}
-
-/**
- * Translates a tool result into a `ThreadEventItem`.
- *
- * When `isError` is true the returned item uses `"failed"` status and (for
- * bash tools) exit code 1.  When omitted or false the item uses `"completed"`.
- */
-export function translateToolResultToItem(
-  input: TranslateToolResultToItemInput,
-): ThreadEventItem {
-  const { callId, toolName, content, isError, parentToolCallId } = input;
-  const outputText = extractResultText(content);
-  const status = isError ? ("failed" as const) : ("completed" as const);
-
-  if (toolName && BASH_TOOLS.has(toolName)) {
-    return {
-      type: "commandExecution",
-      id: callId,
-      command: "",
-      cwd: "",
-      aggregatedOutput: outputText,
-      exitCode: isError ? 1 : 0,
-      status,
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-    };
-  }
-
-  if (toolName && FILE_EDIT_TOOLS.has(toolName)) {
-    return {
-      type: "fileChange",
-      id: callId,
-      changes: [],
-      status,
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-    };
-  }
-
-  if (toolName && WEB_SEARCH_TOOLS.has(toolName)) {
-    return {
-      type: "webSearch",
-      id: callId,
-      query: "",
-      ...(parentToolCallId ? { parentToolCallId } : {}),
-    };
-  }
-
-  return {
-    type: "toolCall",
-    id: callId,
-    tool: toolName ?? "unknown",
-    status,
-    result: outputText,
-    ...(parentToolCallId ? { parentToolCallId } : {}),
-  };
-}
-
 /**
  * Extracts text from tool result content.
  * Handles strings, arrays of text blocks, and `{ content: [...] }` wrappers.
  */
 export function extractResultText(content: unknown): string {
+  if (content === null || content === undefined) return "";
   if (typeof content === "string") return content;
+  if (typeof content === "number" || typeof content === "boolean") {
+    return JSON.stringify(content);
+  }
 
   if (content && typeof content === "object" && !Array.isArray(content)) {
     const wrapper = contentWrapperSchema.safeParse(content);
@@ -200,14 +86,69 @@ export function extractResultText(content: unknown): string {
     return JSON.stringify(content);
   }
 
-  if (!Array.isArray(content)) return JSON.stringify(content ?? "");
+  if (!Array.isArray(content)) return "";
+
+  const toolReferenceSummary = describeToolReferenceBlocks(content);
+  if (toolReferenceSummary) {
+    return toolReferenceSummary;
+  }
 
   const chunks: string[] = [];
   for (const block of content) {
     const parsed = textBlockSchema.safeParse(block);
     if (parsed.success) {
       chunks.push(parsed.data.text);
+      continue;
+    }
+    const fallback = describeResultContentBlock(block);
+    if (fallback) {
+      chunks.push(fallback);
     }
   }
   return chunks.join("\n");
+}
+
+function describeToolReferenceBlocks(blocks: unknown[]): string | null {
+  const toolNames: string[] = [];
+  for (const block of blocks) {
+    if (!isRecord(block) || getStringProperty(block, "type") !== "tool_reference") {
+      return null;
+    }
+
+    const toolName = getStringProperty(block, "tool_name");
+    if (!toolName) {
+      return null;
+    }
+    toolNames.push(toolName);
+  }
+
+  return toolNames.length > 0
+    ? `Matched tools: ${toolNames.join(", ")}`
+    : null;
+}
+
+function describeResultContentBlock(block: unknown): string | null {
+  if (!isRecord(block)) {
+    return null;
+  }
+
+  const type = getStringProperty(block, "type");
+  if (!type) {
+    return null;
+  }
+
+  const path = getStringProperty(block, "path");
+  const toolName = getStringProperty(block, "tool_name");
+  const url =
+    getStringProperty(block, "url") ?? getStringProperty(block, "imageUrl");
+  if (path) {
+    return `[${type}: ${path}]`;
+  }
+  if (toolName) {
+    return `[${type}: ${toolName}]`;
+  }
+  if (url) {
+    return `[${type}: ${url}]`;
+  }
+  return `[${type}]`;
 }
