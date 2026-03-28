@@ -46,6 +46,7 @@ Users create automations directly in the app, independent of any manager.
 - Stored directly in the DB (no file involved).
 - When due, the server creates a new thread and queues a `turn.run` to kick it off.
 - Thread runs, produces output, goes idle. Each run is its own thread.
+- By default, automation threads are auto-archived when they complete (go idle). The `autoArchive` flag on the automation config controls this. When `true` (default), completed threads are immediately archived and only visible through the run history panel. When `false`, threads remain in the normal thread list after completion — useful when the output needs manual review or follow-up.
 - Use case: "every morning, comb through my outstanding PRs and give me a summary."
 
 ---
@@ -79,7 +80,7 @@ Note: `kind` lives only on the top-level column, not duplicated inside `config`.
 
 ```typescript
 type ManagerNudgeConfig = { threadId: string };
-type AutomationConfig = { prompt: string; hostId: string };
+type AutomationConfig = { prompt: string; hostId: string; autoArchive: boolean };
 
 // Parsed together with the row's `kind` field
 type ScheduledTaskRow = {
@@ -177,9 +178,9 @@ sweepDueSchedules(db, notifier, now):
           // This mirrors normal thread creation flow, not a single atomic step
           startAutomationRun(db, notifier, task)
       if task.oneShot:
-        delete task
+        delete task WHERE nextFireAt = task.nextFireAt (optimistic lock)
       else:
-        advance nextFireAt using cron-parser (in transaction with lastFiredAt update)
+        advance nextFireAt using cron-parser WHERE nextFireAt = task.nextFireAt (optimistic lock)
         update lastFiredAt
     catch error:
       log error, continue to next task
@@ -188,6 +189,22 @@ sweepDueSchedules(db, notifier, now):
 ### Transactional guarantees
 
 The `nextFireAt` advancement and `lastFiredAt` update must happen in the same transaction as the command queue insertion. If the sweep crashes after queuing a command but before advancing `nextFireAt`, the next sweep would fire the same schedule again. Wrapping both in a transaction prevents this — either both happen or neither does.
+
+### Optimistic locking on `nextFireAt`
+
+The `advanceScheduledTaskAfterFire` UPDATE must include a WHERE clause on the expected `nextFireAt` value:
+
+```sql
+UPDATE scheduled_tasks
+SET nextFireAt = :newFireAt, lastFiredAt = :now, updatedAt = :now
+WHERE id = :id AND nextFireAt = :expectedFireAt
+```
+
+If another server (or a concurrent sweep) already advanced `nextFireAt`, this updates 0 rows and the fire is skipped. This is a compare-and-swap on a monotonically advancing value — cheap, no new tables, and makes the sweep safe regardless of how many servers run it.
+
+The existing re-check guards (`hasOpenScheduledTaskThread`, `hasPendingThreadTurnCommand`) already prevent duplicate side effects, but optimistic locking prevents even the *attempt* to fire. Both layers are needed: the optimistic lock is the primary gate; the re-checks are defense-in-depth for edge cases where `nextFireAt` hasn't advanced yet within the same transaction.
+
+This pattern works with SQLite today (where it's technically redundant because transactions serialize) and with a shared Postgres in the future (where it's essential).
 
 ### Disconnected host handling
 
@@ -221,6 +238,15 @@ Add a nullable `scheduledTaskId` column to the `threads` table (FK → `schedule
 - **Run count:** `SELECT COUNT(*) FROM threads WHERE scheduledTaskId = ?` (or maintain a counter on the scheduled_tasks row).
 
 `ON DELETE SET NULL` means deleting a schedule doesn't cascade-delete all the threads it created — those threads have their own lifecycle and may contain valuable output.
+
+### Auto-archive behavior
+
+When a turn completes on an automation-created thread (identified by `scheduledTaskId`) and the thread transitions to idle, the server checks the automation's `config.autoArchive` flag:
+
+- **`autoArchive: true` (default):** Thread is immediately archived. It disappears from the normal thread list and is only visible through the automation's run history panel. This is the right default for fire-and-forget automations like daily summaries.
+- **`autoArchive: false`:** Thread remains in the normal thread list after completion. Useful when automation output needs manual review, follow-up conversation, or when the user wants to interact with the results.
+
+The check lives in `applyTurnCompletedEvent`. It must look up the scheduled task to read the config — the thread alone doesn't carry the `autoArchive` flag. If the scheduled task has been deleted (`scheduledTaskId` is set to NULL by the FK cascade), default to archiving (there's no config to consult, and orphaned automation threads shouldn't linger).
 
 ---
 
@@ -292,7 +318,7 @@ Both used by Middleman and Terragon. Battle-tested, well-maintained.
 - `ScheduledTask` entity type (the DB row shape)
 - `ScheduledTaskKind` union (`"manager-nudge" | "automation"`)
 - `ManagerNudgeConfig` and `AutomationConfig` Zod schemas
-- `CreateAutomationInput` for the user-facing API
+- `CreateAutomationInput` for the user-facing API (includes `autoArchive: boolean`, default `true`)
 - New `ProjectChangeKind`: `"schedules-changed"` (project-scoped, not system-scoped, since schedules belong to projects)
 
 ### `@bb/db`
@@ -368,6 +394,28 @@ Middleman's approach maps to our use case 1 (manager nudges into long-running th
 
 ---
 
+## Implementation Notes (from code review)
+
+Issues found during review of the first implementation pass. Address in the next pass.
+
+### Code-level fixes
+
+1. **Cron/timezone validation at API boundary.** `computeNextFireAt` can throw on invalid cron or timezone, producing a 500 instead of 400. Either validate in Zod schemas with `.superRefine()` or wrap route handlers to catch `invalidScheduleError` and return 400.
+2. **Logging in `fireManagerNudge` guard clauses.** Five conditions silently return `false` (thread not idle, environment not ready, pending command, etc.). Add `debug`-level logging to each for observability.
+3. **`JSON.parse(row.config)` in `parseScheduledTask`.** Wrap with try/catch that includes the task ID for debuggability on DB corruption.
+4. **Comment the unique index NULL semantics.** The sync key index uses `json_extract(config, '$.threadId')` which is NULL for automations. SQLite allows multiple NULLs in unique indexes. This is correct but implicit — add a schema comment.
+5. **Split `scheduled-tasks.ts`** (~700 lines) into focused modules: `schedule-sweep.ts`, `manager-schedule-sync.ts`, `schedule-helpers.ts`.
+
+### Missing test coverage
+
+1. `oneShot` schedule self-deletion after firing
+2. Archived manager thread → schedule cleanup on next sweep
+3. `hasPendingThreadTurnCommand` guard skips nudge (dedup for offline hosts)
+4. `updateAutomation` / `deleteScheduledTask` with nonexistent ID
+5. Empty manager schedules upsert deletes all schedules for that thread
+
+---
+
 ## Exit Criteria
 
 - [ ] Protocol hardening: daemon gracefully rejects unknown command types at the raw JSON level with well-defined error code
@@ -379,9 +427,10 @@ Middleman's approach maps to our use case 1 (manager nudges into long-running th
 - [ ] Sweep fires manager nudges as `turn.run` on idle manager threads (no backlog accumulation, orphan cleanup)
 - [ ] Sweep fires automations by creating new threads with the stored prompt (full lifecycle: create → provision → run)
 - [ ] Transactional guarantee: command queue insertion and `nextFireAt` advancement are atomic
+- [ ] Optimistic lock: `advanceScheduledTaskAfterFire` uses `WHERE nextFireAt = :expected` to prevent double-fire across concurrent sweeps
 - [ ] `cron-parser` computes next fire times correctly across timezones, including DST transitions
 - [ ] Manager instructions template covers `ASYNC.md` authoring and nudge handling
 - [ ] Automation CRUD API routes work end-to-end
-- [ ] App UI: create, list, enable/disable, delete automations; view run history via `scheduledTaskId` join
+- [ ] App UI: create, list, enable/disable, delete automations; view run history via `scheduledTaskId` join; `autoArchive` toggle
 - [ ] Tests: in-memory SQLite, real sweep logic, no mocks except timers; DST edge cases covered
 - [ ] `ProjectChangeKind: "schedules-changed"` notifies UI of schedule mutations
