@@ -3,6 +3,7 @@ import {
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
   createManagerThreadRequestSchema,
+  createProjectSourceRequestSchema,
   createPublicApiClient,
   createThreadRequestSchema,
   environmentActionRequestSchema,
@@ -56,6 +57,28 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toMatchObject({
       providerId: "codex",
+    });
+
+    expect(
+      createProjectSourceRequestSchema.parse({
+        hostId: "host_123",
+        type: "local_path",
+        path: "/tmp/project",
+      }),
+    ).toMatchObject({
+      type: "local_path",
+      path: "/tmp/project",
+    });
+
+    expect(
+      createProjectSourceRequestSchema.parse({
+        hostId: "host_123",
+        type: "github_repo",
+        repoUrl: "https://github.com/example/repo",
+      }),
+    ).toMatchObject({
+      type: "github_repo",
+      repoUrl: "https://github.com/example/repo",
     });
 
     expect(

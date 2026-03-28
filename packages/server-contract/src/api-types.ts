@@ -160,12 +160,22 @@ export const updateProjectRequestSchema = z
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
-export const createProjectSourceRequestSchema = z.object({
+const createLocalPathProjectSourceRequestSchema = z.object({
   hostId: z.string().min(1),
-  type: z.enum(["local_path", "github_repo"]).optional(),
-  path: z.string().min(1).optional(),
-  repoUrl: z.string().url().optional(),
+  type: z.literal("local_path"),
+  path: z.string().min(1),
 });
+
+const createGitHubRepoProjectSourceRequestSchema = z.object({
+  hostId: z.string().min(1),
+  type: z.literal("github_repo"),
+  repoUrl: z.string().url(),
+});
+
+export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
+  createLocalPathProjectSourceRequestSchema,
+  createGitHubRepoProjectSourceRequestSchema,
+]);
 export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceRequestSchema>;
 
 export const updateProjectSourceRequestSchema = z

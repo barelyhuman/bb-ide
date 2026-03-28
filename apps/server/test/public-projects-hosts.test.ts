@@ -128,6 +128,37 @@ describe("public project and host routes", () => {
       expect(createSourceResponse.status).toBe(201);
       const secondSource = await readJson(createSourceResponse) as { id: string };
 
+      const missingTypeResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/sources`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: secondaryHost.id,
+            path: "/tmp/project-sources-missing-type",
+          }),
+        },
+      );
+      expect(missingTypeResponse.status).toBe(400);
+
+      const invalidGitHubSourceResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/sources`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: secondaryHost.id,
+            type: "github_repo",
+            path: "/tmp/project-sources-github",
+          }),
+        },
+      );
+      expect(invalidGitHubSourceResponse.status).toBe(400);
+
       const updateSourceResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/sources/${secondSource.id}`,
         {

@@ -230,7 +230,11 @@ export function ProjectList({
       if (existingSource) {
         await api.updateProjectSource(projectId, existingSource.id, { path: selectedPath })
       } else {
-        await api.addProjectSource(projectId, { hostId: localHostId, path: selectedPath })
+        await api.addProjectSource(projectId, {
+          hostId: localHostId,
+          type: "local_path",
+          path: selectedPath,
+        })
       }
       queryClient.invalidateQueries({ queryKey: ["projects"] })
     } catch (err) {

@@ -115,9 +115,9 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     const source = createProjectSource(deps.db, deps.hub, {
       projectId: context.req.param("id"),
       hostId: payload.hostId,
-      type: payload.type ?? "local_path",
-      path: payload.path ?? null,
-      repoUrl: payload.repoUrl ?? null,
+      type: payload.type,
+      path: payload.type === "local_path" ? payload.path : null,
+      repoUrl: payload.type === "github_repo" ? payload.repoUrl : null,
     });
     return context.json(source, 201);
   });
