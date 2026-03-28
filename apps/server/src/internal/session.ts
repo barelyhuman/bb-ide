@@ -41,7 +41,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
     reconcileSessionThreads(
       deps,
       payload.hostId,
-      payload.activeThreads ?? [],
+      payload.activeThreads,
     );
 
     return context.json(

@@ -243,6 +243,7 @@ describe("internal session correctness", () => {
           hostName: "Heartbeat Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);
@@ -293,6 +294,7 @@ describe("internal session correctness", () => {
           hostName: "Disconnect Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);
@@ -329,6 +331,7 @@ describe("internal session correctness", () => {
           hostName: "Disconnect Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);

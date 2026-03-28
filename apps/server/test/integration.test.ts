@@ -127,6 +127,7 @@ describe("server integration", () => {
           hostName: "Test Host",
           hostType: "persistent",
           protocolVersion: 2,
+          activeThreads: [],
         },
       });
       expect(sessionResponse.status).toBe(201);
@@ -214,6 +215,7 @@ describe("server integration", () => {
             hostName: "Test Host",
             hostType: "persistent",
             protocolVersion: 2,
+            activeThreads: [],
           },
         })
       ).json();
@@ -351,6 +353,7 @@ describe("server integration", () => {
             hostName: "Lifecycle Host",
             hostType: "persistent",
             protocolVersion: 2,
+            activeThreads: [],
           },
         })
       ).json();
@@ -553,6 +556,7 @@ describe("server integration", () => {
             hostName: "Test Host",
             hostType: "persistent",
             protocolVersion: 2,
+            activeThreads: [],
           },
         })
       ).json();
@@ -582,6 +586,7 @@ describe("server integration", () => {
           hostName: "Test Host",
           hostType: "persistent",
           protocolVersion: 2,
+          activeThreads: [],
         },
       });
       expect(secondSessionResponse.status).toBe(201);

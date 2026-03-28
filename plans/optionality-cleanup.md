@@ -158,7 +158,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [ ] Delete the manager `spawn_thread` dynamic tool and its server-side tool-call implementation.
   Purpose: remove the hallucinated manager capability instead of preserving it as a built-in tool.
   Current: `spawn_thread` is injected alongside `message_user` in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L65), implemented in [apps/server/src/internal/tool-calls.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/tool-calls.ts#L59), mentioned in manager templates, and covered by tests.
-- [ ] Always send `session.open.activeThreads`, and make the field required.
+- [x] Always send `session.open.activeThreads`, and make the field required.
   Purpose: make daemon reconnect state explicit at session-open time.
   Current: the daemon always provides `runtimeManager.listActiveThreads()` when opening a session in [apps/host-daemon/src/server-client.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/server-client.ts#L175), but the contract still makes it optional in [packages/host-daemon-contract/src/session.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/session.ts#L24) and the server already fills in `[]` with `payload.activeThreads ?? []` in [apps/server/src/internal/session.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/session.ts#L19).
 

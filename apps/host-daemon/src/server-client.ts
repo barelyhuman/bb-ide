@@ -63,7 +63,7 @@ export interface OpenSessionArgs {
   hostName: string;
   hostType: HostDaemonSessionOpenRequest["hostType"];
   instanceId: string;
-  activeThreads?: HostDaemonActiveThread[] | Promise<HostDaemonActiveThread[]>;
+  activeThreads: HostDaemonActiveThread[] | Promise<HostDaemonActiveThread[]>;
   protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
 }
 

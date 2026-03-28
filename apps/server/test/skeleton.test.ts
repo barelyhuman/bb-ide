@@ -33,6 +33,7 @@ describe("server skeleton", () => {
           hostName: "Host",
           hostType: "persistent",
           protocolVersion: 2,
+          activeThreads: [],
         }),
       });
 

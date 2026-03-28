@@ -110,7 +110,7 @@ export class ServerConnection {
       hostType: this.options.hostType,
       protocolVersion:
         this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
-      activeThreads: this.options.getActiveThreads?.(),
+      activeThreads: this.options.getActiveThreads?.() ?? [],
     });
     this.session = session;
     this.options.setSession?.(session);

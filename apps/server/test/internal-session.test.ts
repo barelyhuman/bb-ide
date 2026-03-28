@@ -69,6 +69,7 @@ describe("internal session routes", () => {
           hostName: "Reconnected Host",
           hostType: "persistent",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
         }),
       });
 

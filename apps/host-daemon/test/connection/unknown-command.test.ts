@@ -39,6 +39,7 @@ describe("fetchCommands with unknown command types", () => {
       hostName: "Host One",
       hostType: "persistent",
       instanceId: "instance-1",
+      activeThreads: [],
     });
     sessionState.value = session.sessionId;
 
@@ -101,6 +102,7 @@ describe("fetchCommands with unknown command types", () => {
       hostName: "Host One",
       hostType: "persistent",
       instanceId: "instance-1",
+      activeThreads: [],
     });
     sessionState.value = session.sessionId;
 
@@ -140,6 +142,7 @@ describe("fetchCommands with unknown command types", () => {
       hostName: "Host One",
       hostType: "persistent",
       instanceId: "instance-1",
+      activeThreads: [],
     });
     sessionState.value = session.sessionId;
 

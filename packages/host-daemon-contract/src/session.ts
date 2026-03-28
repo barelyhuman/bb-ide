@@ -27,7 +27,7 @@ export const hostDaemonSessionOpenRequestSchema = z.object({
   hostName: z.string().min(1),
   hostType: hostTypeSchema,
   protocolVersion: z.literal(HOST_DAEMON_PROTOCOL_VERSION),
-  activeThreads: z.array(hostDaemonActiveThreadSchema).optional(),
+  activeThreads: z.array(hostDaemonActiveThreadSchema),
 });
 export type HostDaemonSessionOpenRequest = z.infer<
   typeof hostDaemonSessionOpenRequestSchema
