@@ -121,7 +121,6 @@ export const providerListCommandSchema = z.object({
 export const providerListModelsCommandSchema = z.object({
   type: z.literal("provider.list_models"),
   providerId: z.string().min(1),
-  environmentId: z.string().min(1).optional(),
 });
 
 const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({

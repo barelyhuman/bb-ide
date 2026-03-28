@@ -52,9 +52,6 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
         command: {
           type: "provider.list_models",
           providerId,
-          ...(context.req.query("environmentId")
-            ? { environmentId: context.req.query("environmentId") }
-            : {}),
         },
       });
       return context.json(
@@ -78,9 +75,6 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
             command: {
               type: "provider.list_models",
               providerId: provider.id,
-              ...(context.req.query("environmentId")
-                ? { environmentId: context.req.query("environmentId") }
-                : {}),
             },
           }),
         ).models,

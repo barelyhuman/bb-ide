@@ -56,7 +56,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 2. Delete Dead Or Ignored Boundary Fields
 
-- [ ] Delete `provider.list_models.environmentId` from the host-daemon command and command payload.
+- [x] Delete `provider.list_models.environmentId` from the host-daemon command and command payload.
   Purpose: presumably meant to let model availability vary by environment.
   Current: `/system/models` accepts `environmentId` in [apps/server/src/routes/system.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/system.ts#L45) and that query is still useful for picking the correct `hostId` via `resolveHostId()`, but the forwarded command field is ignored by daemon dispatch in [apps/host-daemon/src/command-dispatch.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/command-dispatch.ts#L99). The in-tree app caller in [apps/app/src/lib/api.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/lib/api.ts#L540) never sends `environmentId`.
 - [ ] Implement `workspace.status.mergeBaseBranch` end-to-end and make it required for status requests.
