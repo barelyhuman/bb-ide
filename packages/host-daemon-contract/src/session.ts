@@ -19,7 +19,7 @@ const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
 export const hostDaemonActiveThreadSchema = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
-  providerThreadId: z.string().min(1).optional(),
+  providerThreadId: z.string().min(1),
 });
 export type HostDaemonActiveThread = z.infer<typeof hostDaemonActiveThreadSchema>;
 

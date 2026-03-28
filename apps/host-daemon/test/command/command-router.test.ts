@@ -186,8 +186,8 @@ describe("CommandRouter", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    manager.markThreadActive("env-1", "thread-a");
-    manager.markThreadActive("env-1", "thread-b");
+    manager.markThreadActive("env-1", "thread-a", "provider-a");
+    manager.markThreadActive("env-1", "thread-b", "provider-b");
 
     const router = new CommandRouter({
       runtimeManager: manager,

@@ -19,7 +19,7 @@ export interface RuntimeEntry {
   threads: Map<
     string,
     {
-      providerThreadId?: string;
+      providerThreadId: string;
       status: "active" | "idle";
     }
   >;
@@ -77,16 +77,15 @@ export class RuntimeManager {
   markThreadActive(
     environmentId: string,
     threadId: string,
-    providerThreadId?: string,
+    providerThreadId: string,
   ): void {
     const entry = this.entries.get(environmentId);
     if (!entry) {
       return;
     }
 
-    const current = entry.threads.get(threadId);
     entry.threads.set(threadId, {
-      providerThreadId: providerThreadId ?? current?.providerThreadId,
+      providerThreadId,
       status: "active",
     });
   }
@@ -191,7 +190,7 @@ export class RuntimeManager {
     const threads = new Map<
       string,
       {
-        providerThreadId?: string;
+        providerThreadId: string;
         status: "active" | "idle";
       }
     >();

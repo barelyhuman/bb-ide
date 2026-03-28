@@ -203,7 +203,6 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(optionalFieldPaths).toEqual([
-      "hostDaemonActiveThreadSchema.providerThreadId",
       "hostDaemonCommandSchema.options.approvalPolicy",
       "hostDaemonCommandSchema.options.seq",
       "hostDaemonCommandSchema.options.source",
@@ -413,7 +412,7 @@ describe("host-daemon session schemas", () => {
       hostType: "persistent",
     });
 
-    expect(
+    expect(() =>
       hostDaemonSessionOpenRequestSchema.parse({
         hostId: "host_123",
         instanceId: "instance_1",
@@ -427,14 +426,7 @@ describe("host-daemon session schemas", () => {
           },
         ],
       }),
-    ).toMatchObject({
-      activeThreads: [
-        {
-          environmentId: "env_124",
-          threadId: "thr_124",
-        },
-      ],
-    });
+    ).toThrow();
 
     expect(
       hostDaemonCommandsQuerySchema.parse({
