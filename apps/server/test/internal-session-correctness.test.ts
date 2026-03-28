@@ -264,6 +264,7 @@ describe("internal session correctness", () => {
         JSON.stringify({
           type: "heartbeat",
           bufferDepth: 0,
+          lastCommandCursor: 0,
         }),
       );
       await sleep(25);
