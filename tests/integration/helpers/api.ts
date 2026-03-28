@@ -81,6 +81,34 @@ async function expectStatus(
   throw new Error(`${label} failed with ${response.status}: ${body}`);
 }
 
+function defaultThreadInput(text: string): CreateThreadRequest["input"] {
+  return [{ type: "text", text }];
+}
+
+function defaultModelForProvider(providerId: string): string {
+  switch (providerId) {
+    case "codex":
+      return "gpt-5";
+    case "claude-code":
+      return "claude-haiku-4-5";
+    case "pi":
+      return "openai/codex-mini";
+    default:
+      return `${providerId}-model`;
+  }
+}
+
+async function requireMergeBaseBranch(
+  api: PublicApiClient,
+  environmentId: string,
+): Promise<string> {
+  const environment = await getEnvironment(api, environmentId);
+  if (!environment.defaultBranch) {
+    throw new Error(`Environment ${environmentId} has no default branch`);
+  }
+  return environment.defaultBranch;
+}
+
 export async function archiveThread(
   api: PublicApiClient,
   threadId: string,
@@ -88,7 +116,7 @@ export async function archiveThread(
 ): Promise<void> {
   const response = await api.threads[":id"].archive.$post({
     param: { id: threadId },
-    json: force ? { force: true } : {},
+    json: { force },
   });
   await expectStatus(response, 200, `archive thread ${threadId}`);
 }
@@ -109,9 +137,14 @@ export async function createManagerThread(
   projectId: string,
   request: CreateManagerThreadRequest,
 ): Promise<Thread> {
+  const providerId = request.providerId ?? "fake";
   const response = await api.projects[":id"].managers.$post({
     param: { id: projectId },
-    json: request,
+    json: {
+      ...request,
+      model: request.model ?? defaultModelForProvider(providerId),
+      providerId,
+    },
   });
   await expectStatus(response, 201, `create manager thread for project ${projectId}`);
   return threadSchema.parse(await response.json());
@@ -121,6 +154,8 @@ export async function createHostThread(
   api: PublicApiClient,
   options: CreateHostThreadOptions,
 ): Promise<Thread> {
+  const providerId = options.providerId ?? "fake";
+  const { model, ...execution } = options.execution ?? {};
   const response = await api.threads.$post({
     json: {
       environment: {
@@ -128,10 +163,11 @@ export async function createHostThread(
         hostId: options.hostId,
         workspace: options.workspace,
       },
-      input: options.input,
-      ...(options.execution ?? {}),
+      input: options.input ?? defaultThreadInput("Start integration thread"),
+      ...execution,
+      model: model ?? defaultModelForProvider(providerId),
       projectId: options.projectId,
-      providerId: options.providerId ?? "fake",
+      providerId,
       title: options.title,
     },
   });
@@ -143,16 +179,19 @@ export async function createReuseThread(
   api: PublicApiClient,
   options: CreateReuseThreadOptions,
 ): Promise<Thread> {
+  const providerId = options.providerId ?? "fake";
+  const { model, ...execution } = options.execution ?? {};
   const response = await api.threads.$post({
     json: {
       environment: {
         type: "reuse",
         environmentId: options.environmentId,
       },
-      input: options.input,
-      ...(options.execution ?? {}),
+      input: options.input ?? defaultThreadInput("Start integration thread"),
+      ...execution,
+      model: model ?? defaultModelForProvider(providerId),
       projectId: options.projectId,
-      providerId: options.providerId ?? "fake",
+      providerId,
       title: options.title,
     },
   });
@@ -196,8 +235,13 @@ export async function getEnvironmentDiff(
   api: PublicApiClient,
   environmentId: string,
 ): Promise<ThreadGitDiffResponse> {
+  const mergeBaseBranch = await requireMergeBaseBranch(api, environmentId);
   const response = await api.environments[":id"].diff.$get({
     param: { id: environmentId },
+    query: {
+      mergeBaseBranch,
+      selection: "combined",
+    },
   });
   await expectStatus(response, 200, `get environment diff ${environmentId}`);
   return threadGitDiffResponseSchema.parse(await response.json());
@@ -207,8 +251,10 @@ export async function getEnvironmentStatus(
   api: PublicApiClient,
   environmentId: string,
 ): Promise<EnvironmentStatusResponse> {
+  const mergeBaseBranch = await requireMergeBaseBranch(api, environmentId);
   const response = await api.environments[":id"].status.$get({
     param: { id: environmentId },
+    query: { mergeBaseBranch },
   });
   await expectStatus(response, 200, `get environment status ${environmentId}`);
   return environmentStatusResponseSchema.parse(await response.json());
@@ -287,7 +333,7 @@ export async function sendTextMessage(
 ): Promise<void> {
   const request: SendMessageRequest = {
     input: [{ type: "text", text: options.text }],
-    mode: options.mode,
+    mode: options.mode ?? "auto",
     ...(options.execution ?? {}),
   };
   const response = await api.threads[":id"].send.$post({

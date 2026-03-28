@@ -33,6 +33,13 @@ async function waitForOpen(socket: WebSocket): Promise<void> {
   });
 }
 
+async function waitForClose(socket: WebSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    socket.once("close", () => resolve());
+    socket.once("error", reject);
+  });
+}
+
 async function waitForSessionStatus(
   args: {
     server: Awaited<ReturnType<typeof startTestServer>>;
@@ -275,7 +282,9 @@ describe("internal session correctness", () => {
         .where(eq(hostDaemonSessions.id, session.sessionId))
         .get()?.leaseExpiresAt;
       expect(updatedLease).toBeGreaterThan(initialLease ?? 0);
+      const closed = waitForClose(socket);
       socket.close();
+      await closed;
     } finally {
       await server.close();
     }

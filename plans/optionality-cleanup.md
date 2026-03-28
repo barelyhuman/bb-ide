@@ -50,9 +50,9 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 1. Freeze The Inventory
 
-- [ ] Re-audit every `.optional()` field in `packages/server-contract` and `packages/host-daemon-contract`.
-- [ ] For each field, classify it as `keep optional`, `delete`, `fill in the default at the server boundary, then make required`, or `make required`.
-- [ ] Add or update tests for every intentional remaining optional field so the meaning of leaving it out is explicit.
+- [x] Re-audit every `.optional()` field in `packages/server-contract` and `packages/host-daemon-contract`.
+- [x] For each field, classify it as `keep optional`, `delete`, `fill in the default at the server boundary, then make required`, or `make required`.
+- [x] Add or update tests for every intentional remaining optional field so the meaning of leaving it out is explicit.
 
 ### 2. Delete Dead Or Ignored Boundary Fields
 
@@ -212,10 +212,10 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 9. Validation
 
-- [ ] `pnpm exec turbo run typecheck --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/app --filter=@bb/cli --filter=@bb/workspace --filter=@bb/agent-runtime --filter=@bb/db --filter=@bb/domain`
-- [ ] `pnpm exec turbo run test --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/workspace --filter=@bb/db`
-- [ ] Add or update behavior tests for every field that changes from optional to required or from “accepted” to deleted.
-- [ ] Verify that tests assert real behavior and outcomes, not just queued payload shapes.
+- [x] `pnpm exec turbo run typecheck --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/app --filter=@bb/cli --filter=@bb/workspace --filter=@bb/agent-runtime --filter=@bb/db --filter=@bb/domain`
+- [x] `pnpm exec turbo run test --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/workspace --filter=@bb/db`
+- [x] Add or update behavior tests for every field that changes from optional to required or from “accepted” to deleted.
+- [x] Verify that tests assert real behavior and outcomes, not just queued payload shapes.
 - [ ] Audit the daemon for server-owned product policy that still lives there. Focus on defaults, instruction assembly, tool selection, and other non-host-local branching.
 
 ## Out Of Scope Follow-Up

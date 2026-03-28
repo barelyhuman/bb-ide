@@ -281,6 +281,69 @@ describe("public thread data routes", () => {
     }
   });
 
+  it("inherits thread default execution options when draft overrides are omitted", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Earlier work" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+
+      const createResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Draft from test" }],
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(201);
+      const draft = await readJson(createResponse) as { id: string };
+      expect(getDraft(harness.db, draft.id)).toMatchObject({
+        id: draft.id,
+        model: "gpt-5",
+        serviceTier: "flex",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("persists draft model and service tier and clears the draft after reprovision send", async () => {
     const harness = await createTestAppHarness();
     try {

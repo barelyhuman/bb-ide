@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
+  createDraftRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
   createPublicApiClient,
@@ -95,6 +96,47 @@ describe("server-contract canonical schemas", () => {
       "environment-created",
       "environment-deleted",
     ]);
+  });
+
+  it("keeps only intentional optional request fields", () => {
+    expect(
+      createThreadRequestSchema.parse({
+        projectId: "proj_123",
+        providerId: "codex",
+        model: "gpt-5",
+        input: [{ type: "text", text: "Ship it" }],
+        environment: {
+          type: "host",
+          hostId: "host_abc",
+          workspace: { type: "unmanaged", path: null },
+        },
+      }),
+    ).toMatchObject({
+      environment: {
+        type: "host",
+      },
+    });
+
+    expect(
+      sendMessageRequestSchema.parse({
+        input: [{ type: "text", text: "Use the thread defaults" }],
+        mode: "auto",
+      }),
+    ).toMatchObject({
+      mode: "auto",
+    });
+
+    expect(
+      createDraftRequestSchema.parse({
+        input: [{ type: "text", text: "Queue this with inherited defaults" }],
+      }),
+    ).toMatchObject({
+      input: [{ type: "text", text: "Queue this with inherited defaults" }],
+    });
+
+    expect(
+      createManagerThreadRequestSchema.parse({}),
+    ).toEqual({});
   });
 });
 

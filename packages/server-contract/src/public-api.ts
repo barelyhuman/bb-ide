@@ -20,6 +20,7 @@ import type {
   PathThreadAndDraft,
 } from "./common.js";
 import type {
+  ArchiveThreadRequest,
   CreateDraftRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,
@@ -229,7 +230,7 @@ export type PublicApiSchema = {
      * Stops the thread if active. If its managed environment now has zero
      * non-archived threads, destroys the environment.
      */
-    $post: Endpoint<PathId & { json: { force?: boolean } }, { ok: true }>;
+    $post: Endpoint<PathId & { json: ArchiveThreadRequest }, { ok: true }>;
   };
   "/threads/:id/unarchive": {
     $post: Endpoint<PathId, { ok: true }>;

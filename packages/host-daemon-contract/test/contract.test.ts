@@ -61,6 +61,18 @@ describe("host-daemon command schemas", () => {
       id: "hcmd_123",
       cursor: 7,
     });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "workspace.list_files",
+        environmentId: "env_123",
+        environmentStatus: "ready",
+        workspacePath: "/tmp/workspace",
+      }),
+    ).toMatchObject({
+      type: "workspace.list_files",
+      workspacePath: "/tmp/workspace",
+    });
   });
 
   it("rejects malformed environment.provision commands at parse time", () => {
@@ -312,6 +324,29 @@ describe("host-daemon session schemas", () => {
     ).toMatchObject({
       hostId: "host_123",
       hostType: "persistent",
+    });
+
+    expect(
+      hostDaemonSessionOpenRequestSchema.parse({
+        hostId: "host_123",
+        instanceId: "instance_1",
+        hostName: "Michael's MacBook",
+        hostType: "persistent",
+        protocolVersion: 2,
+        activeThreads: [
+          {
+            environmentId: "env_124",
+            threadId: "thr_124",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      activeThreads: [
+        {
+          environmentId: "env_124",
+          threadId: "thr_124",
+        },
+      ],
     });
 
     expect(

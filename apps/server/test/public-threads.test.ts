@@ -264,6 +264,17 @@ describe("public thread routes", () => {
       );
       expect(queuedStart.command).toMatchObject({
         workspacePath: source.path,
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/thread/start",
+        },
+      });
+      expect(getThread(harness.db, createdThread.id)).toMatchObject({
+        type: "standard",
+        parentThreadId: null,
       });
 
       const provisionCommands = harness.db
@@ -509,6 +520,13 @@ describe("public thread routes", () => {
         projectId: project.id,
         providerId: idleThread.providerId,
         providerThreadId: "provider-idle",
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
       });
       expect(getThread(harness.db, idleThread.id)?.status).toBe("active");
 
@@ -538,6 +556,13 @@ describe("public thread routes", () => {
         projectId: project.id,
         providerId: activeThread.providerId,
         providerThreadId: "provider-turn",
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
       });
     } finally {
       await harness.cleanup();

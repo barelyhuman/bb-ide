@@ -159,7 +159,8 @@ describe.sequential("fake provider smoke integration", () => {
     }));
 
   it("creates a manager thread and starts it with manager tools and instructions", async () => {
-    const threadStartCommands: Array<{
+    const runtimeConfigCommands: Array<{
+      commandType: string;
       dynamicToolNames: string[];
       instructions: string | undefined;
       threadId: string;
@@ -174,8 +175,9 @@ describe.sequential("fake provider smoke integration", () => {
             modelName: `${providerId} model`,
           });
           const buildCommand: typeof baseAdapter.buildCommand = (command) => {
-            if (command.type === "thread/start") {
-              threadStartCommands.push({
+            if (command.type === "thread/start" || command.type === "thread/resume") {
+              runtimeConfigCommands.push({
+                commandType: command.type,
                 dynamicToolNames: (command.dynamicTools ?? [])
                   .map((tool) => tool.name)
                   .sort(),
@@ -220,6 +222,9 @@ describe.sequential("fake provider smoke integration", () => {
         );
 
         await sendTextMessage(harness.api, managerThread.id, {
+          execution: {
+            model: "fake-model",
+          },
           text: "Coordinate the next step",
         });
         await waitForThreadStatus(
@@ -229,24 +234,25 @@ describe.sequential("fake provider smoke integration", () => {
           TURN_TIMEOUT_MS,
         );
 
-        const managerStartCommand = threadStartCommands.find(
-          (command) => command.threadId === managerThread.id,
+        const managerRuntimeCommand = [...runtimeConfigCommands]
+          .reverse()
+          .find((command) => command.threadId === managerThread.id);
+        expect(managerRuntimeCommand).toBeDefined();
+        expect(managerRuntimeCommand?.commandType).toBe("thread/start");
+        expect(managerRuntimeCommand?.dynamicToolNames).toEqual(
+          expect.arrayContaining(["message_user"]),
         );
-        expect(managerStartCommand).toBeDefined();
-        expect(managerStartCommand?.dynamicToolNames).toEqual(
-          expect.arrayContaining(["message_user", "spawn_thread"]),
-        );
-        expect(managerStartCommand?.instructions).toContain(
+        expect(managerRuntimeCommand?.instructions).toContain(
           "You are a manager for this project.",
         );
-        expect(managerStartCommand?.instructions).toContain(
+        expect(managerRuntimeCommand?.instructions).toContain(
           "Prefer concise user updates.",
         );
-        expect(managerStartCommand?.instructions).toContain(
+        expect(managerRuntimeCommand?.instructions).toContain(
           "Delegate implementation quickly.",
         );
-        expect(managerStartCommand?.instructions).toContain(managerThread.id);
-        expect(managerStartCommand?.instructions).toContain(managerEnvironment.path);
+        expect(managerRuntimeCommand?.instructions).toContain(managerThread.id);
+        expect(managerRuntimeCommand?.instructions).toContain(managerEnvironment.path);
       },
     );
   });
@@ -315,6 +321,14 @@ describe.sequential("fake provider smoke integration", () => {
           path: harness.repoDir,
         },
       });
+      const baselineEvents = await getThreadEvents(harness.api, thread.id);
+      const baselineStartedCount = baselineEvents.filter((event) => event.type === "turn/started").length;
+      const baselineCompletedCount = baselineEvents.filter((event) => event.type === "turn/completed").length;
+      const baselineTurnIds = new Set(
+        readStoredTurnEvents(harness.db, thread.id)
+          .map((event) => event.turnId)
+          .filter((turnId): turnId is string => Boolean(turnId)),
+      );
 
       await sendTextMessage(harness.api, thread.id, {
         text: "first turn",
@@ -328,18 +342,22 @@ describe.sequential("fake provider smoke integration", () => {
       await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
 
       const events = await getThreadEvents(harness.api, thread.id);
-      expect(events.filter((event) => event.type === "turn/started")).toHaveLength(2);
-      expect(events.filter((event) => event.type === "turn/completed")).toHaveLength(2);
+      expect(events.filter((event) => event.type === "turn/started")).toHaveLength(
+        baselineStartedCount + 2,
+      );
+      expect(events.filter((event) => event.type === "turn/completed")).toHaveLength(
+        baselineCompletedCount + 2,
+      );
 
       const turnIds = new Set(
         readStoredTurnEvents(harness.db, thread.id)
           .map((event) => event.turnId)
           .filter((turnId): turnId is string => Boolean(turnId)),
       );
-      expect(turnIds.size).toBe(2);
+      expect(turnIds.size).toBe(baselineTurnIds.size + 2);
     }));
 
-  it("stops an active thread and records an interrupted completion", () =>
+  it("stops an active thread and records a thread interruption event", () =>
     withHarness(async (harness) => {
       const project = await createProjectFixture(harness, "Stop Smoke");
       const { thread } = await createReadyThread(harness, {
@@ -361,14 +379,10 @@ describe.sequential("fake provider smoke integration", () => {
       );
       await stopThread(harness.api, thread.id);
       await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
-
-      const completedEvent = await waitForEventType(
-        harness.api,
-        thread.id,
-        "turn/completed",
-        TURN_TIMEOUT_MS,
-      );
-      expect(completedEvent.data.status).toBe("interrupted");
+      const interruptedEvents = (await getThreadEvents(harness.api, thread.id))
+        .filter((event) => event.type === "system/thread/interrupted");
+      const latestInterruptedEvent = interruptedEvents.at(-1);
+      expect(latestInterruptedEvent?.data.reason).toBe("user");
     }));
 
   it("reports workspace status, diff, and branches for a ready environment", () =>
@@ -416,7 +430,6 @@ describe.sequential("fake provider smoke integration", () => {
         action: "commit",
         threadId: thread.id,
         options: {
-          includeUnstaged: true,
           message: "smoke commit",
         },
       });
@@ -458,7 +471,6 @@ describe.sequential("fake provider smoke integration", () => {
         action: "commit",
         threadId: thread.id,
         options: {
-          includeUnstaged: true,
           message: "feature work",
         },
       });
@@ -484,7 +496,7 @@ describe.sequential("fake provider smoke integration", () => {
       });
       const environmentStatus = await getEnvironmentStatus(harness.api, environment.id);
       expect(sourceBranch.trim()).toBe("main");
-      expect(environmentStatus.workspace?.state).toBe("clean");
+      expect(environmentStatus.workspace?.state).toBe("committed_unmerged");
     }));
 
   it("archives and unarchives a thread, blocking work while archived", () =>
@@ -506,6 +518,7 @@ describe.sequential("fake provider smoke integration", () => {
         param: { id: thread.id },
         json: {
           input: [{ type: "text", text: "should fail" }],
+          mode: "auto",
         },
       });
       expect(archivedSendResponse.status).toBe(409);
@@ -710,6 +723,7 @@ describe.sequential("fake provider smoke integration", () => {
         param: { id: thread.id },
         json: {
           input: [{ type: "text", text: "start reprovision" }],
+          mode: "auto",
         },
       });
       expect(firstSendResponse.status).toBe(200);
@@ -719,6 +733,7 @@ describe.sequential("fake provider smoke integration", () => {
         param: { id: thread.id },
         json: {
           input: [{ type: "text", text: "duplicate reprovision" }],
+          mode: "auto",
         },
       });
       expect(secondSendResponse.status).toBe(409);
@@ -757,6 +772,7 @@ describe.sequential("fake provider smoke integration", () => {
         param: { id: thread.id },
         json: {
           input: [{ type: "text", text: "try unmanaged reprovision" }],
+          mode: "auto",
         },
       });
       expect(response.status).toBe(409);
