@@ -118,9 +118,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             environmentStatus: environment.status,
             workspacePath: environment.path,
             message: payload.options?.message ?? "Checkpoint changes",
-            ...(payload.options?.includeUnstaged !== undefined
-              ? { includeUnstaged: payload.options.includeUnstaged }
-              : {}),
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);

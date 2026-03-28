@@ -34,7 +34,6 @@ export type DiffResult = ThreadGitDiffResponse;
 
 export interface CommitOptions {
   message: string;
-  includeUnstaged?: boolean;
 }
 
 export interface CommitResult {
@@ -206,10 +205,7 @@ export class Workspace {
   async commit(options: CommitOptions): Promise<CommitResult> {
     await ensureGitRepo(this.path);
 
-    if (options.includeUnstaged !== false) {
-      await runGit(["add", "-A"], { cwd: this.path });
-    }
-
+    await runGit(["add", "-A"], { cwd: this.path });
     await runGit(["commit", "-m", options.message], { cwd: this.path });
     const commitSha = await revParse(this.path, "HEAD");
     const commitSubject = (
@@ -250,7 +246,6 @@ export class Workspace {
       commitSha = (
         await this.commit({
           message: options.commitMessage,
-          includeUnstaged: true,
         })
       ).commitSha;
     } else {

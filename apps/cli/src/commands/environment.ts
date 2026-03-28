@@ -13,7 +13,6 @@ import {
 
 interface EnvironmentCommitCommandOptions {
   message?: string;
-  stagedOnly?: boolean;
   json?: boolean;
   thread: string;
 }
@@ -51,7 +50,6 @@ export function registerEnvironmentCommands(
     .description("Commit changes in an environment")
     .requiredOption("--thread <threadId>", "Thread to act on")
     .option("--message <message>", "Commit message hint")
-    .option("--staged-only", "Commit only currently staged changes")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: EnvironmentCommitCommandOptions) => {
       const client = createClient(getUrl());
@@ -64,7 +62,6 @@ export function registerEnvironmentCommands(
               action: "commit",
               threadId: opts.thread,
               options: {
-                includeUnstaged: opts.stagedOnly ? false : true,
                 ...(opts.message ? { message: opts.message } : {}),
               },
             },

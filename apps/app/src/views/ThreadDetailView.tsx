@@ -800,11 +800,7 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
-  const handleCommitThread = async ({
-    includeUnstaged,
-  }: {
-    includeUnstaged: boolean;
-  }) => {
+  const handleCommitThread = async () => {
     const attachedEnvironmentId = thread.environmentId;
     if (!threadId || !attachedEnvironmentId) {
       return;
@@ -816,7 +812,6 @@ export function ThreadDetailView() {
         threadId,
         action: "commit",
         options: {
-          includeUnstaged,
           autoArchiveOnSuccess,
         },
       });

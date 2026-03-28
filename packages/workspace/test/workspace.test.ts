@@ -87,7 +87,6 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "commit me\n", "utf8");
     const commit = await workspace.commit({
       message: "Commit from workspace",
-      includeUnstaged: true,
     });
     const head = (
       await runGit(["rev-parse", "HEAD"], { cwd: repoPath })
@@ -171,7 +170,7 @@ describe("Workspace", () => {
     expect(await workspace.isGitRepo).toBe(false);
     expect(await workspace.currentBranch).toBeUndefined();
     await expect(
-      workspace.commit({ message: "nope", includeUnstaged: true }),
+      workspace.commit({ message: "nope" }),
     ).rejects.toThrow(/not a git repository/u);
     await expect(workspace.getStatus()).rejects.toThrow(WorkspaceError);
   });

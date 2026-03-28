@@ -41,7 +41,7 @@ const THREAD_COMMAND_OPTION_SPECS: Record<
   commit: {
     positionalCount: 1,
     optionsWithValues: new Set(["--message"]),
-    flagOptions: new Set(["--staged-only"]),
+    flagOptions: new Set(),
   },
   "squash-merge": {
     positionalCount: 1,

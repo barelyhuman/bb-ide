@@ -189,7 +189,6 @@ export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const commitOptionsSchema = z.object({
   message: z.string().min(1).optional(),
-  includeUnstaged: z.boolean().optional(),
   autoArchiveOnSuccess: z.boolean().optional(),
 });
 export type CommitOptions = z.infer<typeof commitOptionsSchema>;

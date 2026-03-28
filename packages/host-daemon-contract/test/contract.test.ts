@@ -23,7 +23,6 @@ describe("host-daemon command schemas", () => {
         workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         message: "Checkpoint work",
-        includeUnstaged: true,
       }),
     ).toMatchObject({
       type: "workspace.commit",

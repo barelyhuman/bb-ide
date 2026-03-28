@@ -130,7 +130,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.commit({
         message: command.message,
-        includeUnstaged: command.includeUnstaged,
       }) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     }
     case "workspace.squash_merge":

@@ -204,7 +204,6 @@ export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend
 export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.commit"),
   message: z.string().min(1),
-  includeUnstaged: z.boolean().optional(),
 });
 
 export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend({

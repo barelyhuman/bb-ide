@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,
@@ -52,7 +51,7 @@ interface ThreadGitActionDialogProps {
   onMergeBaseBranchChange?: (branch: string) => void;
   onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   onOpenChange: (open: boolean) => void;
-  onCommit: (args: { includeUnstaged: boolean }) => Promise<void>;
+  onCommit: () => Promise<void>;
   onSquashMerge: (args: {
     commitIfNeeded: boolean;
     includeUnstaged: boolean;
@@ -171,7 +170,6 @@ function ThreadGitActionDialogContent({
 }: Omit<ThreadGitActionDialogProps, "target"> & {
   target: ThreadGitActionDialogTarget;
 }) {
-  const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [askAgentInput, setAskAgentInput] = useState<PromptInput[] | null>(null);
   const label = threadTypeLabel(threadType ?? "standard");
@@ -190,7 +188,7 @@ function ThreadGitActionDialogContent({
     dialogCopy.showMergeBase &&
     showMergeBaseDetails === true &&
     (canSelectMergeBase || Boolean(selectedMergeBaseBranch));
-  const isStagedOnlyCommitScope = dialogCopy.showCommitControls && !includeUnstaged;
+  const isStagedOnlyCommitScope = false;
   const displayedGitStatusLabel = isStagedOnlyCommitScope ? "Staged only" : gitStatusLabel;
   const displayedGitStatusSummary = isStagedOnlyCommitScope
     ? "Only staged changes will be included. Unstaged edits stay in the workspace."
@@ -209,14 +207,12 @@ function ThreadGitActionDialogContent({
     try {
       switch (target.kind) {
         case "commit":
-          await onCommit({
-            includeUnstaged,
-          });
+          await onCommit();
           break;
         case "commit_and_squash_merge":
           await onSquashMerge({
             commitIfNeeded: true,
-            includeUnstaged,
+            includeUnstaged: true,
             mergeBaseBranch: selectedMergeBaseBranch,
           });
           break;
@@ -301,22 +297,6 @@ function ThreadGitActionDialogContent({
                     {selectedMergeBaseBranch}
                   </span>
                 )}
-              </DetailRow>
-            ) : null}
-            {dialogCopy.showCommitControls ? (
-              <DetailRow label="Include unstaged" valueClassName="min-w-0">
-                <div className="flex min-w-0 items-center gap-3">
-                  <Switch
-                    checked={includeUnstaged}
-                    disabled={pending}
-                    aria-label="Include unstaged changes"
-                    onCheckedChange={setIncludeUnstaged}
-                    className="h-4 w-7 [&>span]:size-3 [&>span[data-state=checked]]:translate-x-3"
-                  />
-                  <span className="min-w-0 truncate text-muted-foreground">
-                    {includeUnstaged ? "All workspace changes" : "Only staged changes"}
-                  </span>
-                </div>
               </DetailRow>
             ) : null}
             {shouldShowChangedFilesRow ? (
