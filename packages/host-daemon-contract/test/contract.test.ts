@@ -1,5 +1,5 @@
+import { collectOptionalFieldPaths } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
-import { collectOptionalFieldPaths } from "../../../tests/helpers/collect-optional-field-paths.js";
 import * as contract from "../src/index.js";
 import {
   createHostDaemonClient,

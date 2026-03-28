@@ -1,5 +1,5 @@
 {
-  "name": "@bb/server-contract",
+  "name": "@bb/test-helpers",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -15,17 +15,12 @@
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "dev": "tsc --watch --preserveWatchOutput",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --config vitest.config.ts"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bb/domain": "workspace:*",
-    "@bb/hono-typed-routes": "workspace:*",
-    "hono": "^4.7.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "typescript": "^5.7.0"
   }
