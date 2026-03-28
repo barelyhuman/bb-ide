@@ -257,6 +257,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
       {
@@ -272,6 +273,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 2" }],
         },
       },
       {
@@ -287,6 +289,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 3" }],
         },
       },
     ]);
@@ -348,6 +351,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
       {
@@ -363,6 +367,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 2" }],
         },
       },
     ]);
@@ -448,6 +453,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
       {
@@ -463,6 +469,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 3" }],
         },
       },
     ]);
@@ -516,6 +523,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 1" }],
         },
       },
     ]);
@@ -536,6 +544,7 @@ describe("CommandRouter", () => {
           projectRootPath: "/tmp/project-1",
           providerId: "fake",
           threadType: "standard",
+          input: [{ type: "text", text: "start thread 2" }],
         },
       },
     ]);

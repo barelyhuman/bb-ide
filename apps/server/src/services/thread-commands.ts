@@ -45,7 +45,7 @@ export async function queueThreadStartCommand(
       path: string | null;
     };
     execution: HostDaemonExecutionOptions;
-    input?: PromptInput[];
+    input: PromptInput[];
     projectId: string;
     providerId: string;
     thread: Thread;
@@ -74,7 +74,7 @@ export async function queueThreadStartCommand(
       ...(args.eventSequence !== undefined
         ? { eventSequence: args.eventSequence }
         : {}),
-      ...(args.input ? { input: args.input } : {}),
+      input: args.input,
       ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
     }),
   });

@@ -46,6 +46,7 @@ async function waitForCursor(
 
 function createStandardThreadStartCommand(args: {
   environmentId: string;
+  input: Array<{ text: string; type: "text" }>;
   projectId: string;
   providerId: string;
   threadId: string;
@@ -61,6 +62,7 @@ function createStandardThreadStartCommand(args: {
     projectRootPath: args.workspacePath,
     providerId: args.providerId,
     threadType: "standard" as const,
+    input: args.input,
   };
 }
 
@@ -140,6 +142,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -171,6 +174,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -226,6 +230,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
@@ -269,6 +274,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.queueCommand({
@@ -278,6 +284,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envBPath,
           projectId: "project-1",
           providerId: "fake",
+          input: [{ type: "text", text: "start" }],
         }),
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });

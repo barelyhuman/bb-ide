@@ -92,7 +92,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Make CLI `thread spawn --prompt` required so it cannot create an idle thread shell.
   Purpose: align CLI behavior with the intended product model that thread creation starts work immediately.
   Current: `--prompt` is optional in [apps/cli/src/commands/thread/spawn.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/cli/src/commands/thread/spawn.ts#L101) and is the only in-tree production caller that creates threads without input.
-- [ ] Make `thread.start.input` required in `@bb/host-daemon-contract`.
+- [x] Make `thread.start.input` required in `@bb/host-daemon-contract`.
   Purpose: ensure daemon `thread.start` always represents “start this thread with this initial turn input”.
   Current: the runtime API supports omitted input in [packages/agent-runtime/src/types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/agent-runtime/src/types.ts#L74), but current server call sites only queue `thread.start` when input exists in [apps/server/src/services/thread-create.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-create.ts#L169) and [apps/server/src/internal/command-result-handlers.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/command-result-handlers.ts#L191).
 - [ ] Make `thread.start.eventSequence` required in `@bb/host-daemon-contract`.

@@ -77,7 +77,7 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
 ).extend({
   type: z.literal("thread.start"),
   eventSequence: z.number().int().nonnegative().optional(),
-  input: z.array(promptInputSchema).min(1).optional(),
+  input: z.array(promptInputSchema).min(1),
 });
 
 /** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */

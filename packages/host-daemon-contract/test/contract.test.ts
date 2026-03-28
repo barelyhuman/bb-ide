@@ -98,6 +98,7 @@ describe("host-daemon command schemas", () => {
         projectRootPath: "/tmp/project",
         providerId: "codex",
         threadType: "manager",
+        input: [{ type: "text", text: "hello" }],
         dynamicTools: [
           {
             name: "message_user",

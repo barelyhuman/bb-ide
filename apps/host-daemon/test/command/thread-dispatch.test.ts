@@ -28,6 +28,7 @@ describe("thread command dispatch", () => {
         projectRootPath: "/tmp/project-1",
         providerId: "fake",
         threadType: "standard",
+        input: [{ type: "text", text: "hello" }],
       },
       { runtimeManager: harness.manager },
     );
@@ -310,6 +311,7 @@ describe("thread command dispatch", () => {
         projectRootPath: "/tmp/manager-project",
         providerId: "fake",
         threadType: "manager",
+        input: [{ type: "text", text: "hello" }],
       },
       { runtimeManager: harness.manager },
     );
