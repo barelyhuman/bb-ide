@@ -60,6 +60,17 @@ describe("@bb/provider-audit fixture replay", () => {
       fixtureRoot: fixtureRoot(),
     });
 
+    for (const { fixture, bundle } of replayed.fixtures) {
+      expect(
+        bundle.auditReport.summary.translatedThreadEventCount,
+        `Expected translated events for ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+      ).toBeGreaterThan(0);
+      expect(
+        bundle.auditReport.summary.unexpectedUntranslatedRawEventCount,
+        `Expected zero unexpected untranslated raw events for ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+      ).toBe(0);
+    }
+
     const summary = replayed.fixtures.map(({ fixture, bundle }) => ({
       fixture: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
       rawProviderEventCount: bundle.auditReport.summary.rawProviderEventCount,

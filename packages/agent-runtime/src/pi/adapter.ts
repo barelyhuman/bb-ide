@@ -30,10 +30,12 @@ import {
 } from "../shared/provider-tool-call-contract.js";
 import {
   bashArgsSchema,
+  textBlockSchema,
 } from "../shared/tool-arg-schemas.js";
 import {
   HIGH_REASONING_EFFORT,
   buildEditDiff,
+  buildShellEnvironmentPolicyConfig,
   extractResultText,
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
@@ -92,7 +94,7 @@ function buildUnhandledPiEvent(
 }
 
 function buildUnexpectedPiSdkEvent(
-  rawMessage: PiEvent,
+  rawMessage: unknown,
   context?: ProviderTranslationContext,
 ): ThreadEvent[] {
   const rawEvent: JsonRpcMessage = {
@@ -132,6 +134,80 @@ type PiCatalogModel = Pick<
   "id" | "name" | "provider" | "reasoning" | "input"
 >;
 
+const piEventTypeSchema = z.object({
+  type: z.enum([
+    "agent_end",
+    "agent_start",
+    "message_update",
+    "tool_execution_end",
+    "tool_execution_start",
+    "tool_execution_update",
+  ]),
+}).passthrough();
+
+const piMessageContentBlockSchema = z.object({
+  type: z.string(),
+}).passthrough();
+
+const piAssistantUsageSchema = z.object({
+  input: z.number().optional(),
+  output: z.number().optional(),
+  cacheRead: z.number().optional(),
+  cacheWrite: z.number().optional(),
+  totalTokens: z.number().optional(),
+}).passthrough();
+
+const piAssistantMessageSchema = z.object({
+  role: z.literal("assistant"),
+  content: z.array(piMessageContentBlockSchema),
+  usage: piAssistantUsageSchema.optional(),
+}).passthrough();
+
+const piConversationMessageSchema = z.object({
+  role: z.string(),
+  content: z.array(piMessageContentBlockSchema).optional(),
+  usage: piAssistantUsageSchema.optional(),
+}).passthrough();
+
+const piAgentStartEventSchema = z.object({
+  type: z.literal("agent_start"),
+}).passthrough();
+
+const piAgentEndEventSchema = z.object({
+  type: z.literal("agent_end"),
+  messages: z.array(piConversationMessageSchema),
+}).passthrough();
+
+const piMessageUpdateEventSchema = z.object({
+  type: z.literal("message_update"),
+  assistantMessageEvent: z.object({
+    type: z.string(),
+    delta: z.string().optional(),
+  }).passthrough(),
+}).passthrough();
+
+const piToolExecutionStartEventSchema = z.object({
+  type: z.literal("tool_execution_start"),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  args: z.unknown(),
+}).passthrough();
+
+const piToolExecutionEndEventSchema = z.object({
+  type: z.literal("tool_execution_end"),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  result: z.unknown(),
+  isError: z.boolean(),
+}).passthrough();
+
+const piToolExecutionUpdateEventSchema = z.object({
+  type: z.literal("tool_execution_update"),
+  toolCallId: z.string(),
+  toolName: z.string(),
+  partialResult: z.unknown(),
+}).passthrough();
+
 const piFileEditArgsSchema = z.object({
   path: z.string().optional(),
   oldText: z.string().optional(),
@@ -141,6 +217,9 @@ const piFileEditArgsSchema = z.object({
 
 type PiFileEditArgs = z.infer<typeof piFileEditArgsSchema>;
 type PiPendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
+type PiAssistantMessage = z.infer<typeof piAssistantMessageSchema>;
+type PiConversationMessage = z.infer<typeof piConversationMessageSchema>;
+type PiToolExecutionUpdateEvent = z.infer<typeof piToolExecutionUpdateEventSchema>;
 
 interface PiToolUseTranslationInput {
   callId: string;
@@ -316,11 +395,9 @@ function resolveBridgePath(): string {
 function buildPiConfig(threadId: string, options?: AdapterOptions): Record<string, unknown> | undefined {
   const config: Record<string, unknown> = {};
   if (threadId) config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
-  const envVars = options?.envVars;
-  if (envVars) {
-    for (const [key, value] of Object.entries(envVars)) {
-      config[`shell_environment_policy.set.${key}`] = value;
-    }
+  const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(options?.envVars);
+  if (shellEnvironmentConfig) {
+    Object.assign(config, shellEnvironmentConfig);
   }
   return Object.keys(config).length > 0 ? config : undefined;
 }
@@ -504,12 +581,10 @@ export function createPiProviderAdapter(
       });
     }
 
-    const eventType = z.object({ type: z.string() }).safeParse(event);
+    const eventType = piEventTypeSchema.safeParse(event);
     if (!eventType.success) {
       return [];
     }
-
-    const piEvent = event as PiEvent;
     const threadId = "";
     const events: ThreadEvent[] = [];
 
@@ -517,8 +592,12 @@ export function createPiProviderAdapter(
     const stateKey = context?.threadId ?? "";
     const state = getTurnState(stateKey);
 
-    switch (piEvent.type) {
+    switch (eventType.data.type) {
       case "agent_start": {
+        const piEvent = piAgentStartEventSchema.safeParse(event);
+        if (!piEvent.success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
         if (!state.currentTurnId) {
           state.toolItemsByCallId.clear();
           state.counter += 1;
@@ -529,7 +608,11 @@ export function createPiProviderAdapter(
       }
 
       case "agent_end": {
-        const lastAssistant = findLastAssistantMessage(piEvent.messages);
+        const piEvent = piAgentEndEventSchema.safeParse(event);
+        if (!piEvent.success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
+        const lastAssistant = findLastAssistantMessage(piEvent.data.messages);
         if (lastAssistant) {
           const text = extractAssistantText(lastAssistant);
           if (text) {
@@ -567,7 +650,11 @@ export function createPiProviderAdapter(
       }
 
       case "message_update": {
-        const assistantEvent = piEvent.assistantMessageEvent;
+        const piEvent = piMessageUpdateEventSchema.safeParse(event);
+        if (!piEvent.success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
+        const assistantEvent = piEvent.data.assistantMessageEvent;
         if (assistantEvent.type === "text_delta" && state.currentTurnId) {
           const delta = assistantEvent.delta;
           if (delta) {
@@ -584,16 +671,20 @@ export function createPiProviderAdapter(
       }
 
       case "tool_execution_start": {
+        const piEvent = piToolExecutionStartEventSchema.safeParse(event);
+        if (!piEvent.success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
         if (!state.currentTurnId) {
-          return buildUnexpectedPiSdkEvent(piEvent, context);
+          return buildUnexpectedPiSdkEvent(piEvent.data, context);
         }
         const item = translatePiToolUseItem({
-          callId: piEvent.toolCallId,
-          toolName: piEvent.toolName,
-          args: piEvent.args,
+          callId: piEvent.data.toolCallId,
+          toolName: piEvent.data.toolName,
+          args: piEvent.data.args,
           parentToolCallId: context?.parentToolCallId,
         });
-        state.toolItemsByCallId.set(piEvent.toolCallId, item);
+        state.toolItemsByCallId.set(piEvent.data.toolCallId, item);
         events.push({
           type: "item/started",
           threadId,
@@ -605,39 +696,47 @@ export function createPiProviderAdapter(
       }
 
       case "tool_execution_end": {
-        if (!state.currentTurnId) {
-          return buildUnexpectedPiSdkEvent(piEvent, context);
+        const piEvent = piToolExecutionEndEventSchema.safeParse(event);
+        if (!piEvent.success) {
+          return buildUnexpectedPiSdkEvent(event, context);
         }
-        const startedItem = state.toolItemsByCallId.get(piEvent.toolCallId);
+        if (!state.currentTurnId) {
+          return buildUnexpectedPiSdkEvent(piEvent.data, context);
+        }
+        const startedItem = state.toolItemsByCallId.get(piEvent.data.toolCallId);
         events.push({
           type: "item/completed",
           threadId,
           providerThreadId: "",
           turnId: state.currentTurnId,
           item: translatePiToolResultItem({
-            callId: piEvent.toolCallId,
-            toolName: piEvent.toolName,
-            content: piEvent.result,
-            isError: piEvent.isError,
+            callId: piEvent.data.toolCallId,
+            toolName: piEvent.data.toolName,
+            content: piEvent.data.result,
+            isError: piEvent.data.isError,
             startedItem,
             parentToolCallId: context?.parentToolCallId,
           }),
         });
-        state.toolItemsByCallId.delete(piEvent.toolCallId);
+        state.toolItemsByCallId.delete(piEvent.data.toolCallId);
         break;
       }
 
       case "tool_execution_update": {
+        const piEvent = piToolExecutionUpdateEventSchema.safeParse(event);
+        if (!piEvent.success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
         if (!state.currentTurnId) {
-          return buildUnexpectedPiSdkEvent(piEvent, context);
+          return buildUnexpectedPiSdkEvent(piEvent.data, context);
         }
         events.push({
           type: "item/toolCall/progress",
           threadId,
           providerThreadId: "",
           turnId: state.currentTurnId,
-          itemId: piEvent.toolCallId,
-          message: extractPiToolProgressText(piEvent),
+          itemId: piEvent.data.toolCallId,
+          message: extractPiToolProgressText(piEvent.data),
           ...(context?.parentToolCallId
             ? { parentToolCallId: context.parentToolCallId }
             : {}),
@@ -778,17 +877,14 @@ export function createPiProviderAdapter(
 // Pi SDK event extraction helpers
 // ---------------------------------------------------------------------------
 
-type PiAgentEndEvent = Extract<AgentSessionEvent, { type: "agent_end" }>;
-type PiAssistantMessage = Extract<PiAgentEndEvent["messages"][number], { role: "assistant" }>;
-type PiToolExecutionUpdateEvent = Extract<AgentSessionEvent, { type: "tool_execution_update" }>;
-
 function findLastAssistantMessage(
-  messages: PiAgentEndEvent["messages"],
+  messages: PiConversationMessage[],
 ): PiAssistantMessage | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    if (message.role === "assistant") {
-      return message as PiAssistantMessage;
+    const parsedMessage = piAssistantMessageSchema.safeParse(message);
+    if (parsedMessage.success) {
+      return parsedMessage.data;
     }
   }
   return undefined;
@@ -800,8 +896,9 @@ function extractAssistantText(
   const content = message.content;
   const chunks: string[] = [];
   for (const block of content) {
-    if (block.type === "text") {
-      chunks.push(block.text);
+    const parsedBlock = textBlockSchema.safeParse(block);
+    if (parsedBlock.success) {
+      chunks.push(parsedBlock.data.text);
     }
   }
   const text = chunks.join("\n").trim();

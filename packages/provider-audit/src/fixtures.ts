@@ -1,6 +1,5 @@
 import {
   mkdirSync,
-  readFileSync,
   readdirSync,
   rmSync,
   statSync,
@@ -9,6 +8,13 @@ import {
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime";
+import { z } from "zod";
+import {
+  providerAuditClientRequestSchema,
+  providerAuditManifestSchema,
+  providerAuditRawProviderEventCaptureEntrySchema,
+  readJsonFile,
+} from "./json-file.js";
 import type {
   ProviderAuditClientRequest,
   ProviderAuditImportFixtureResult,
@@ -54,10 +60,6 @@ interface ProviderAuditFixtureImportBundleArgs {
 function getHomeDir(): string | null {
   const homeDir = process.env.HOME;
   return homeDir && homeDir.length > 0 ? homeDir : null;
-}
-
-function readJsonFile<TValue>(filePath: string): TValue {
-  return JSON.parse(readFileSync(filePath, "utf8")) as TValue;
 }
 
 function writeJsonFile(filePath: string, value: object): void {
@@ -224,14 +226,21 @@ function writeFixtureBundle(args: {
 function importFixtureBundle(
   args: ProviderAuditFixtureImportBundleArgs,
 ): ProviderAuditImportFixtureResult {
-  const manifest = readJsonFile<ProviderAuditManifest>(args.bundlePaths.manifestPath);
+  const manifest = readJsonFile({
+    filePath: args.bundlePaths.manifestPath,
+    schema: providerAuditManifestSchema,
+  });
   const clientRequests = normalizeClientRequests(
-    readJsonFile<ProviderAuditClientRequest[]>(args.bundlePaths.clientRequestsPath),
+    readJsonFile({
+      filePath: args.bundlePaths.clientRequestsPath,
+      schema: z.array(providerAuditClientRequestSchema),
+    }),
   );
   const rawProviderEvents = normalizeRawProviderEvents(
-    readJsonFile<
-      Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }>[]
-    >(args.bundlePaths.rawProviderEventsPath),
+    readJsonFile({
+      filePath: args.bundlePaths.rawProviderEventsPath,
+      schema: z.array(providerAuditRawProviderEventCaptureEntrySchema),
+    }),
   );
   const taskId = normalizeTaskId({
     corpusId: args.corpusId,

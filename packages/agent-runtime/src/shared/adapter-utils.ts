@@ -5,6 +5,7 @@
  * adapters are extracted here so each adapter imports from one place.
  */
 
+import { z } from "zod";
 import type { ModelReasoningEffort, ThreadEventItem } from "@bb/domain";
 import {
   contentWrapperSchema,
@@ -35,6 +36,10 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   reasoningEffort: "xhigh",
   description: "Extra high reasoning effort",
 };
+
+const shellEnvironmentVariableKeySchema = z.string().regex(
+  /^[A-Z_][A-Z0-9_]*$/i,
+);
 
 // ---------------------------------------------------------------------------
 // Diff helpers
@@ -82,6 +87,24 @@ export function withParentToolCallId<TItem extends ThreadEventItem>(
     ...item,
     parentToolCallId,
   };
+}
+
+export function buildShellEnvironmentPolicyConfig(
+  envVars?: Record<string, string>,
+): Record<string, string> | undefined {
+  if (!envVars) {
+    return undefined;
+  }
+
+  const config: Record<string, string> = {};
+  for (const [key, value] of Object.entries(envVars)) {
+    if (!shellEnvironmentVariableKeySchema.safeParse(key).success) {
+      continue;
+    }
+    config[`shell_environment_policy.set.${key}`] = value;
+  }
+
+  return Object.keys(config).length > 0 ? config : undefined;
 }
 
 // ---------------------------------------------------------------------------

@@ -10,39 +10,39 @@ exports[`@bb/provider-audit fixture replay > exports shared React story data for
   },
   {
     "id": "excalidraw/claude-code/eyedropper-browser-compat",
-    "latestActivityRowId": "turn-2:tool-group:36",
-    "timelineRowCount": 9,
-    "viewMessageCount": 81,
+    "latestActivityRowId": "turn-2:tool-group:35",
+    "timelineRowCount": 8,
+    "viewMessageCount": 80,
   },
   {
     "id": "excalidraw/claude-code/eyedropper-preview-bugfix",
-    "latestActivityRowId": "turn-2:tool-group:5",
-    "timelineRowCount": 6,
-    "viewMessageCount": 26,
+    "latestActivityRowId": "turn-2:tool-group:4",
+    "timelineRowCount": 5,
+    "viewMessageCount": 25,
   },
   {
     "id": "excalidraw/claude-code/magicframe-feature",
     "latestActivityRowId": "turn-1:tool-group:1",
-    "timelineRowCount": 6,
-    "viewMessageCount": 63,
+    "timelineRowCount": 5,
+    "viewMessageCount": 62,
   },
   {
     "id": "excalidraw/claude-code/search-bugfix",
     "latestActivityRowId": "turn-1:tool-group:1",
-    "timelineRowCount": 6,
-    "viewMessageCount": 22,
+    "timelineRowCount": 5,
+    "viewMessageCount": 21,
   },
   {
     "id": "excalidraw/claude-code/search-feature",
     "latestActivityRowId": "turn-1:tool-group:1",
-    "timelineRowCount": 6,
-    "viewMessageCount": 21,
+    "timelineRowCount": 5,
+    "viewMessageCount": 20,
   },
   {
     "id": "excalidraw/claude-code/ttd-explanation",
-    "latestActivityRowId": "turn-2:tool-group:7",
-    "timelineRowCount": 7,
-    "viewMessageCount": 10,
+    "latestActivityRowId": "turn-2:tool-group:6",
+    "timelineRowCount": 6,
+    "viewMessageCount": 9,
   },
   {
     "id": "excalidraw/codex/collab-startup-explanation",
@@ -164,20 +164,19 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── User ────────────────────────────────────────────────────",
       "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.",
       "── Working for 1m 57s (36 items) ───────────────────────────",
-      "── Operation: Rate limit status updated ────────────────────",
-      "  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits",
       "── Assistant ───────────────────────────────────────────────",
       "---",
       "## Analysis & Recommendation",
+      "### Current state of the repo",
+      "Excalidraw implements a **fully custom, canvas-based eyedropper** in \`EyeDropper.tsx\`. It does **not** use the browser-native \`window.EyeDropper\` API at all. Instead it:",
     ],
-    "timelineRowCount": 9,
-    "translatedThreadEventCount": 375,
+    "timelineRowCount": 8,
+    "translatedThreadEventCount": 374,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 81,
+    "viewMessageCount": 80,
     "viewMessageKinds": {
       "assistant-text": 27,
       "file-edit": 6,
-      "operation": 1,
       "tasks": 9,
       "tool-call": 4,
       "tool-exploring": 18,
@@ -193,22 +192,21 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── User ────────────────────────────────────────────────────",
       "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
       "── Worked for 1m 22s (2 items) ─────────────────────────────",
-      "── Operation: Rate limit status updated ────────────────────",
-      "  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits",
       "── User ────────────────────────────────────────────────────",
       "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
       "── Worked for 2m 8s (22 items) ─────────────────────────────",
+      "── Assistant ───────────────────────────────────────────────",
+      "Everything looks good. Here's a summary of the changes:",
     ],
-    "timelineRowCount": 6,
-    "translatedThreadEventCount": 215,
+    "timelineRowCount": 5,
+    "translatedThreadEventCount": 214,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 26,
+    "viewMessageCount": 25,
     "viewMessageKinds": {
       "assistant-text": 10,
       "delegation": 1,
       "error": 1,
       "file-edit": 3,
-      "operation": 1,
       "tool-call": 2,
       "tool-exploring": 6,
       "user": 2,
@@ -222,21 +220,20 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── User ────────────────────────────────────────────────────",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
       "── Worked for 7m 2s (48 items) ─────────────────────────────",
-      "── Operation: Rate limit status updated ────────────────────",
-      "  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits",
       "── Assistant ───────────────────────────────────────────────",
       "Everything looks good. Here's a summary of the changes:",
       "---",
+      "## Summary",
+      "### Problem",
     ],
-    "timelineRowCount": 6,
-    "translatedThreadEventCount": 391,
+    "timelineRowCount": 5,
+    "translatedThreadEventCount": 390,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 63,
+    "viewMessageCount": 62,
     "viewMessageKinds": {
       "assistant-text": 29,
       "delegation": 1,
       "file-edit": 6,
-      "operation": 1,
       "tool-call": 3,
       "tool-exploring": 21,
       "user": 2,
@@ -250,21 +247,20 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── User ────────────────────────────────────────────────────",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
       "── Worked for 3m 25s (13 items) ────────────────────────────",
-      "── Operation: Rate limit status updated ────────────────────",
-      "  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits",
       "── Assistant ───────────────────────────────────────────────",
       "All 6 tests pass, including the new regression test. Let me summarize the fix:",
       "## Bug & Fix",
+      "**Root cause:** In \`handleSearch()\` (SearchMenu.tsx, line 868), the focus index was computed as:",
+      "\`\`\`js",
     ],
-    "timelineRowCount": 6,
-    "translatedThreadEventCount": 183,
+    "timelineRowCount": 5,
+    "translatedThreadEventCount": 182,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 22,
+    "viewMessageCount": 21,
     "viewMessageKinds": {
       "assistant-text": 8,
       "delegation": 1,
       "file-edit": 2,
-      "operation": 1,
       "tool-call": 4,
       "tool-exploring": 4,
       "user": 2,
@@ -278,21 +274,20 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── User ────────────────────────────────────────────────────",
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
       "── Worked for 2m 33s (13 items) ────────────────────────────",
-      "── Operation: Rate limit status updated ────────────────────",
-      "  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits",
       "── Assistant ───────────────────────────────────────────────",
       "All 8 tests pass. Here's a summary of what was done:",
       "### Changes Made",
+      "**\`packages/excalidraw/components/SearchMenu.tsx\`**",
+      "- Added \`data-testid="search-result-summary"\` to the match count display (\`N results\` or \`X / N results\` when navigating)",
     ],
-    "timelineRowCount": 6,
-    "translatedThreadEventCount": 172,
+    "timelineRowCount": 5,
+    "translatedThreadEventCount": 171,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 21,
+    "viewMessageCount": 20,
     "viewMessageKinds": {
       "assistant-text": 9,
       "delegation": 1,
       "file-edit": 3,
-      "operation": 1,
       "tool-call": 2,
       "tool-exploring": 3,
       "user": 2,
@@ -306,20 +301,19 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── User ────────────────────────────────────────────────────",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.",
       "── Worked for 1m 12s (3 items) ─────────────────────────────",
-      "── Operation: Rate limit status updated ────────────────────",
-      "  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits",
       "── Assistant ───────────────────────────────────────────────",
       "Here's the full trace of Excalidraw's text-to-diagram (TTD) flow, grounded in the current codebase:",
       "---",
+      "## 1. Dialog Entry Point",
+      "**Trigger:** \`TTDDialogTrigger.tsx\` calls \`setAppState({ openDialog: { name: "ttd", tab: "text-to-diagram" } })\`. In \`LayerUI.tsx\`, when \`appState.openDialog?.name === "ttd"\`, \`<TTDDialog>\` renders.",
     ],
-    "timelineRowCount": 7,
-    "translatedThreadEventCount": 458,
+    "timelineRowCount": 6,
+    "translatedThreadEventCount": 457,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 10,
+    "viewMessageCount": 9,
     "viewMessageKinds": {
       "assistant-text": 3,
       "delegation": 3,
-      "operation": 1,
       "tool-exploring": 1,
       "user": 2,
     },
@@ -796,9 +790,6 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
     ☒ Read MDN and other docs on EyeDropper API compatibility
     ☒ Analyze current repo handling of missing EyeDropper support
     ☒ Recommend changes to improve cross-browser experience
-
-── Operation: Rate limit status updated ────────────────────
-  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits
 
 ── Assistant ───────────────────────────────────────────────
 ---
@@ -1382,9 +1373,6 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
       Search eyeDropperIcon\\|eyeDropper in $EXCALIDRAW_REPO/packages/excalidraw/components/icons.tsx
   ── Error ───────────────────────────────────────────────────
     Claude API error 500: Internal server error - type: api_error • request id: req_011CZTEbvYVvxTSx1wnhXfkG
-
-── Operation: Rate limit status updated ────────────────────
-  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits
 
 ── User ────────────────────────────────────────────────────
 Explain how the old positioning logic failed and how your regression coverage would have caught it.
@@ -2261,9 +2249,6 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   ── Explored 1 file ─────────────────────────────────────────
     Read $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
 
-── Operation: Rate limit status updated ────────────────────
-  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits
-
 ── Assistant ───────────────────────────────────────────────
 Everything looks good. Here's a summary of the changes:
 
@@ -2620,9 +2605,6 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
           Tests  6 passed (6)
        Start at  21:01:35
        Duration  4.45s (transform 1.12s, setup 161ms, collect 1.58s, tests 2.42s, environment 127ms, prepare 30ms)
-
-── Operation: Rate limit status updated ────────────────────
-  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits
 
 ── Assistant ───────────────────────────────────────────────
 All 6 tests pass, including the new regression test. Let me summarize the fix:
@@ -3040,9 +3022,6 @@ Add a small result summary to the canvas search sidebar: show \`N results\` when
           Tests  8 passed (8)
        Start at  20:51:43
        Duration  4.41s (transform 1.05s, setup 156ms, collect 1.49s, tests 2.48s, environment 123ms, prepare 29ms)
-
-── Operation: Rate limit status updated ────────────────────
-  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits
 
 ── Assistant ───────────────────────────────────────────────
 All 8 tests pass. Here's a summary of what was done:
@@ -3755,9 +3734,6 @@ I'm trying to understand Excalidraw's text-to-diagram flow before changing it. P
         Search parseMermaidToExcalidraw\\|convertToExcalidrawElements\\|insertToEditor\\|addElementsFromPasteOrLibrary in $EXCALIDRAW_REPO/packages/excalidraw/components/TTDDialog/common.ts
         Search class Scene in $EXCALIDRAW_REPO/packages/element/src/Scene.ts
         Read $EXCALIDRAW_REPO/packages/element/src/Scene.ts
-
-── Operation: Rate limit status updated ────────────────────
-  status: allowed • limit: five_hour • overage: rejected • reason: out_of_credits
 
 ── Assistant ───────────────────────────────────────────────
 Here's the full trace of Excalidraw's text-to-diagram (TTD) flow, grounded in the current codebase:
@@ -10449,7 +10425,7 @@ exports[`@bb/provider-audit fixture replay > summarizes raw-event and tool-call 
           "totalCount": 468,
         },
         {
-          "classification": "normalized",
+          "classification": "noise",
           "fixtureIds": [
             "excalidraw/claude-code/eyedropper-browser-compat",
             "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -10796,17 +10772,6 @@ exports[`@bb/provider-audit fixture replay > summarizes raw-event and tool-call 
             "excalidraw/claude-code/ttd-explanation",
           ],
           "type": "turn/started",
-        },
-        {
-          "fixtureIds": [
-            "excalidraw/claude-code/eyedropper-browser-compat",
-            "excalidraw/claude-code/eyedropper-preview-bugfix",
-            "excalidraw/claude-code/magicframe-feature",
-            "excalidraw/claude-code/search-bugfix",
-            "excalidraw/claude-code/search-feature",
-            "excalidraw/claude-code/ttd-explanation",
-          ],
-          "type": "warning",
         },
       ],
       "wellKnownToolNames": [

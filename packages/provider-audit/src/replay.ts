@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -7,15 +7,21 @@ import {
   type AgentRuntimeRawProviderEventCaptureEntry,
   type AgentRuntimeTranslatedThreadEventCaptureEntry,
 } from "@bb/agent-runtime";
-import type { ThreadEvent } from "@bb/domain";
+import { threadEventSchema, type ThreadEvent } from "@bb/domain";
+import { z } from "zod";
 import { buildBundle, writeBundle } from "./capture.js";
+import {
+  providerAuditClientRequestSchema,
+  providerAuditManifestSchema,
+  providerAuditRawProviderEventCaptureEntrySchema,
+  readJsonFile,
+} from "./json-file.js";
 import type {
   ProviderAuditCoverageIssues,
   ProviderAuditBundle,
   ProviderAuditCoverageRawEventSummary,
   ProviderAuditCoverageToolCallSummary,
   ProviderAuditCoverageTranslatedEventTypeSummary,
-  ProviderAuditClientRequest,
   ProviderAuditFixtureCoverageSummary,
   ProviderAuditFixtureBundle,
   ProviderAuditManifest,
@@ -62,9 +68,9 @@ interface CoverageProviderAccumulator {
   wellKnownToolNames: Set<string>;
 }
 
-function readJsonFile<TValue>(filePath: string): TValue {
-  return JSON.parse(readFileSync(filePath, "utf8")) as TValue;
-}
+const providerAuditThreadIdParamsSchema = z.object({
+  threadId: z.string().optional(),
+}).passthrough();
 
 function isDirectory(path: string): boolean {
   try {
@@ -93,52 +99,72 @@ function loadFixtureBundle(args: {
     taskId: args.taskId,
     fixturePath,
     manifestPath: join(fixturePath, "manifest.json"),
-    manifest: readJsonFile<ProviderAuditManifest>(join(fixturePath, "manifest.json")),
-    clientRequests: readJsonFile<ProviderAuditClientRequest[]>(
-      join(fixturePath, "client-requests.json"),
-    ),
-    rawProviderEvents: readJsonFile<AgentRuntimeRawProviderEventCaptureEntry[]>(
-      join(fixturePath, "raw-provider-events.json"),
-    ),
+    manifest: readJsonFile({
+      filePath: join(fixturePath, "manifest.json"),
+      schema: providerAuditManifestSchema,
+    }),
+    clientRequests: readJsonFile({
+      filePath: join(fixturePath, "client-requests.json"),
+      schema: z.array(providerAuditClientRequestSchema),
+    }),
+    rawProviderEvents: readJsonFile({
+      filePath: join(fixturePath, "raw-provider-events.json"),
+      schema: z.array(providerAuditRawProviderEventCaptureEntrySchema),
+    }),
   };
 }
 
 function getThreadIdFromParams(
-  rawEvent: { params?: unknown },
+  rawEvent: AgentRuntimeRawProviderEventCaptureEntry["rawEvent"],
 ): string | undefined {
-  if (!isRecord(rawEvent.params)) {
-    return undefined;
-  }
-  const threadId = rawEvent.params.threadId;
-  return typeof threadId === "string" ? threadId : undefined;
+  const parsedParams = providerAuditThreadIdParamsSchema.safeParse(rawEvent.params);
+  return parsedParams.success ? parsedParams.data.threadId : undefined;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function stampTranslatedEvent(args: {
+interface StampTranslatedEventArgs {
   event: ThreadEvent;
   bbThreadId: string;
   providerThreadId: string | undefined;
   sourceThreadId: string | undefined;
-}): ThreadEvent {
-  const stamped = structuredClone(args.event);
-  const eventRecord = stamped as Record<string, unknown>;
+}
 
-  eventRecord.threadId = args.bbThreadId;
-
+function resolveStampedProviderThreadId(
+  args: StampTranslatedEventArgs,
+): string | undefined {
   if (args.providerThreadId) {
-    eventRecord.providerThreadId = args.providerThreadId;
-  } else if (
-    args.sourceThreadId &&
-    args.sourceThreadId !== args.bbThreadId &&
-    stamped.type !== "thread/identity"
-  ) {
-    eventRecord.providerThreadId = args.sourceThreadId;
+    return args.providerThreadId;
   }
 
-  return stamped;
+  if (
+    args.sourceThreadId &&
+    args.sourceThreadId !== args.bbThreadId &&
+    args.event.type !== "thread/identity"
+  ) {
+    return args.sourceThreadId;
+  }
+
+  return "providerThreadId" in args.event
+    ? args.event.providerThreadId
+    : undefined;
+}
+
+function stampTranslatedEvent(args: StampTranslatedEventArgs): ThreadEvent {
+  const providerThreadId = resolveStampedProviderThreadId(args);
+  return threadEventSchema.parse({
+    ...args.event,
+    threadId: args.bbThreadId,
+    ...(
+      providerThreadId !== undefined || "providerThreadId" in args.event
+        ? {
+            providerThreadId:
+              providerThreadId ??
+              ("providerThreadId" in args.event
+                ? args.event.providerThreadId
+                : undefined),
+          }
+        : {}
+    ),
+  });
 }
 
 function translateRawProviderEvents(args: {

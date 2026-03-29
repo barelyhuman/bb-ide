@@ -28,7 +28,8 @@
     "@bb/agent-runtime": "workspace:*",
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
-    "@bb/ui-core": "workspace:*"
+    "@bb/ui-core": "workspace:*",
+    "zod": "^4.1.11"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

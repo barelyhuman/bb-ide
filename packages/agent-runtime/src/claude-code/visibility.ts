@@ -92,7 +92,6 @@ function toClaudeRawEventDescription(event: JsonRpcMessage): ProviderRawEventDes
     kind === "sdk/assistant:text" ||
     kind === "sdk/assistant:tool_use" ||
     kind === "sdk/assistant:text+tool_use" ||
-    kind === "sdk/rate_limit_event" ||
     kind === "sdk/user:tool_result" ||
     kind === "sdk/result" ||
     kind === "sdk/stream_event:content_block_delta:text_delta"
@@ -109,6 +108,7 @@ function toClaudeRawEventDescription(event: JsonRpcMessage): ProviderRawEventDes
     kind === "sdk/system:task_started" ||
     kind === "sdk/system:task_progress" ||
     kind === "sdk/system:task_notification" ||
+    kind === "sdk/rate_limit_event" ||
     kind === "sdk/assistant:thinking" ||
     kind === "sdk/stream_event:message_start" ||
     kind === "sdk/stream_event:content_block_start:text" ||

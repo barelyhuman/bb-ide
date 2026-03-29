@@ -9,7 +9,7 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { SDKMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type {
   AvailableModel,
@@ -29,6 +29,7 @@ import {
 } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
+  buildShellEnvironmentPolicyConfig,
   extractResultText,
   HIGH_REASONING_EFFORT,
   LOW_REASONING_EFFORT,
@@ -39,13 +40,8 @@ import {
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
 import {
-  getRecordProperty,
-  getStringProperty,
-  isRecord,
-  type StringRecord,
-} from "../shared/provider-visibility-helpers.js";
-import {
   buildUnhandledProviderEvents,
+  createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
 import {
   errorEnvelopeSchema,
@@ -62,42 +58,11 @@ import type {
 import { claudeCodeVisibilityMetadata } from "./visibility.js";
 
 // ---------------------------------------------------------------------------
-// Claude Code event and command types
-// ---------------------------------------------------------------------------
-
-/** The raw SDK message type from the Claude Agent SDK. */
-export type ClaudeCodeEvent = SDKMessage;
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-function buildClaudeRateLimitDetails(
-  message: StringRecord,
-): string | undefined {
-  const rateLimitInfo = getRecordProperty(message, "rate_limit_info");
-  if (!rateLimitInfo) {
-    return undefined;
-  }
-
-  const status = getStringProperty(rateLimitInfo, "status");
-  const rateLimitType = getStringProperty(rateLimitInfo, "rateLimitType");
-  const overageStatus = getStringProperty(rateLimitInfo, "overageStatus");
-  const overageDisabledReason = getStringProperty(rateLimitInfo, "overageDisabledReason");
-
-  const detailParts = [
-    status ? `status: ${status}` : undefined,
-    rateLimitType ? `limit: ${rateLimitType}` : undefined,
-    overageStatus ? `overage: ${overageStatus}` : undefined,
-    overageDisabledReason ? `reason: ${overageDisabledReason}` : undefined,
-  ].filter((detail): detail is string => Boolean(detail));
-
-  return detailParts.length > 0 ? detailParts.join(" • ") : undefined;
-}
-
 
 const STATIC_CLAUDE_CODE_MODELS: AvailableModel[] = [
   {
@@ -382,12 +347,8 @@ function resolveBridgePath(): string {
 }
 
 function buildClaudeCodeConfig(envVars?: Record<string, string>): Record<string, unknown> | undefined {
-  if (!envVars) return undefined;
-  const config: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(envVars)) {
-    config[`shell_environment_policy.set.${key}`] = value;
-  }
-  return Object.keys(config).length > 0 ? config : undefined;
+  const config = buildShellEnvironmentPolicyConfig(envVars);
+  return config ? { ...config } : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -535,12 +496,10 @@ export function createClaudeCodeProviderAdapter(
       });
     }
 
-    const messageType = z.object({ type: z.string() }).safeParse(event);
+    const messageType = claudeSdkMessageTypeSchema.safeParse(event);
     if (!messageType.success) {
       return [];
     }
-
-    const message = event as ClaudeCodeEvent;
     // threadId is not available from SDKMessage — the bridge/host-daemon
     // supplies it from the session context. We use "" here; the caller
     // overrides it.
@@ -552,12 +511,22 @@ export function createClaudeCodeProviderAdapter(
     const state = getTurnState(stateKey);
     const parentToolCallId = context?.parentToolCallId;
 
-    switch (message.type) {
-      case "system":
+    switch (messageType.data.type) {
+      case "system": {
+        const parsedMessage = claudeSystemMessageSchema.safeParse(event);
+        if (!parsedMessage.success) {
+          return buildUnexpectedClaudeSdkEvent({ event, context });
+        }
         // System init — no events emitted
-        break;
+        return [];
+      }
 
       case "assistant": {
+        const parsedMessage = claudeAssistantMessageSchema.safeParse(event);
+        if (!parsedMessage.success) {
+          return buildUnexpectedClaudeSdkEvent({ event, context });
+        }
+        const message = parsedMessage.data;
         const turnId = ensureTurnStarted(events, threadId, state);
         const assistantMessageId = getNestedMessageId(message.message);
 
@@ -611,6 +580,11 @@ export function createClaudeCodeProviderAdapter(
       }
 
       case "stream_event": {
+        const parsedMessage = claudeStreamEventMessageSchema.safeParse(event);
+        if (!parsedMessage.success) {
+          return buildUnexpectedClaudeSdkEvent({ event, context });
+        }
+        const message = parsedMessage.data;
         const delta = extractStreamTextDelta(message);
         if (delta) {
           const turnId = ensureTurnStarted(events, threadId, state);
@@ -627,6 +601,11 @@ export function createClaudeCodeProviderAdapter(
       }
 
       case "user": {
+        const parsedMessage = claudeUserMessageSchema.safeParse(event);
+        if (!parsedMessage.success) {
+          return buildUnexpectedClaudeSdkEvent({ event, context });
+        }
+        const message = parsedMessage.data;
         const toolResults = extractToolResults(message);
         for (const result of toolResults) {
           const startedItem = state.toolItemsByCallId.get(result.toolUseId);
@@ -650,6 +629,11 @@ export function createClaudeCodeProviderAdapter(
       }
 
       case "result": {
+        const parsedMessage = claudeResultMessageSchema.safeParse(event);
+        if (!parsedMessage.success) {
+          return buildUnexpectedClaudeSdkEvent({ event, context });
+        }
+        const message = parsedMessage.data;
         if (state.currentTurnId) {
           const resultError = message.is_error
             ? parseClaudeApiErrorText("result" in message ? message.result : undefined)
@@ -694,23 +678,11 @@ export function createClaudeCodeProviderAdapter(
         break;
       }
 
-      case "rate_limit_event": {
-        const details = isRecord(message)
-          ? buildClaudeRateLimitDetails(message)
-          : undefined;
-        events.push({
-          type: "warning",
-          threadId,
-          providerThreadId: "",
-          category: "general",
-          summary: "Rate limit status updated",
-          ...(details ? { details } : {}),
-        });
-        break;
-      }
+      case "rate_limit_event":
+        return [];
 
       default:
-        break;
+        return buildUnexpectedClaudeSdkEvent({ event, context });
     }
 
     return events;
@@ -869,6 +841,10 @@ const sdkUsageSchema = z.object({
   cache_creation_input_tokens: z.number().optional(),
 }).passthrough();
 
+const claudeModelUsageSchema = z.record(z.string(), z.object({
+  contextWindow: z.number(),
+}).passthrough());
+
 const contentBlockDeltaSchema = z.object({
   type: z.literal("content_block_delta"),
   delta: z.object({ type: z.literal("text_delta"), text: z.string() }).passthrough(),
@@ -889,19 +865,107 @@ const claudeApiErrorPayloadSchema = z.object({
   request_id: z.string().optional(),
 }).passthrough();
 
+const claudeSdkMessageTypeSchema = z.object({
+  type: z.enum([
+    "assistant",
+    "rate_limit_event",
+    "result",
+    "stream_event",
+    "system",
+    "user",
+  ]),
+}).passthrough();
+
+const claudeSystemMessageSchema = z.object({
+  type: z.literal("system"),
+}).passthrough();
+
+const claudeAssistantMessageSchema = z.object({
+  type: z.literal("assistant"),
+  message: z.unknown(),
+}).passthrough();
+
+const claudeStreamEventMessageSchema = z.object({
+  type: z.literal("stream_event"),
+  event: z.unknown(),
+}).passthrough();
+
+const claudeUserMessageSchema = z.object({
+  type: z.literal("user"),
+  message: z.unknown(),
+}).passthrough();
+
+const claudeResultMessageSchema = z.object({
+  type: z.literal("result"),
+  subtype: z.string(),
+  is_error: z.boolean().optional(),
+  result: z.unknown().optional(),
+  usage: z.unknown().optional(),
+  modelUsage: z.unknown().optional(),
+}).passthrough();
+
+type ClaudeAssistantMessage = z.infer<typeof claudeAssistantMessageSchema>;
+type ClaudeResultMessage = z.infer<typeof claudeResultMessageSchema>;
+type ClaudeStreamEventMessage = z.infer<typeof claudeStreamEventMessageSchema>;
+type ClaudeUserMessage = z.infer<typeof claudeUserMessageSchema>;
+type ClaudeMessageContentBlock = NonNullable<z.infer<
+  typeof messageContentSchema
+>["content"]>[number];
+
+interface ClaudeToolUseBlockData {
+  id: string;
+  input: unknown;
+  name: string;
+}
+
+interface ClaudeToolResultBlockData {
+  content: unknown;
+  isError: boolean;
+  toolName?: string;
+  toolUseId: string;
+}
+
 // ---------------------------------------------------------------------------
 // SDK message extraction helpers
 // ---------------------------------------------------------------------------
 
 function parseMessageContent(
   message: { message: unknown },
-): Array<{ type: string } & Record<string, unknown>> {
+): ClaudeMessageContentBlock[] {
   const parsed = messageContentSchema.safeParse(message.message);
   return parsed.success ? (parsed.data.content ?? []) : [];
 }
 
+interface ClaudeUnexpectedSdkEventArgs {
+  event: unknown;
+  context?: ProviderTranslationContext;
+}
+
+function buildUnexpectedClaudeSdkEvent(
+  args: ClaudeUnexpectedSdkEventArgs,
+): ThreadEvent[] {
+  const rawEvent: JsonRpcMessage = {
+    jsonrpc: "2.0",
+    method: "sdk/message",
+    params: {
+      ...(args.context?.threadId ? { threadId: args.context.threadId } : {}),
+      message: args.event,
+    },
+  };
+  return [
+    createUnhandledProviderEvent({
+      providerId: "claude-code",
+      rawEvent,
+      rawType: claudeCodeVisibilityMetadata.describeRawEvent(rawEvent).kind,
+      ...(args.context?.parentToolCallId
+        ? { parentToolCallId: args.context.parentToolCallId }
+        : {}),
+    }),
+  ];
+}
+
 function extractAssistantText(
-  message: Extract<SDKMessage, { type: "assistant" }>,
+  message: ClaudeAssistantMessage,
 ): string | undefined {
   const chunks: string[] = [];
   for (const block of parseMessageContent(message)) {
@@ -962,9 +1026,9 @@ function parseClaudeApiErrorText(
 }
 
 function extractToolUses(
-  message: Extract<SDKMessage, { type: "assistant" }>,
-): Array<{ id: string; name: string; input: unknown }> {
-  const uses: Array<{ id: string; name: string; input: unknown }> = [];
+  message: ClaudeAssistantMessage,
+): ClaudeToolUseBlockData[] {
+  const uses: ClaudeToolUseBlockData[] = [];
   for (const block of parseMessageContent(message)) {
     const tool = toolUseBlockSchema.safeParse(block);
     if (tool.success) uses.push({ id: tool.data.id, name: tool.data.name, input: tool.data.input });
@@ -973,7 +1037,7 @@ function extractToolUses(
 }
 
 function extractStreamTextDelta(
-  message: Extract<SDKMessage, { type: "stream_event" }>,
+  message: ClaudeStreamEventMessage,
 ): string | undefined {
   const parsed = streamEventSchema.safeParse(message.event);
   if (!parsed.success) return undefined;
@@ -985,9 +1049,9 @@ function extractStreamTextDelta(
 }
 
 function extractToolResults(
-  message: Extract<SDKMessage, { type: "user" }>,
-): Array<{ toolUseId: string; toolName?: string; content: unknown; isError: boolean }> {
-  const results: Array<{ toolUseId: string; toolName?: string; content: unknown; isError: boolean }> = [];
+  message: ClaudeUserMessage,
+): ClaudeToolResultBlockData[] {
+  const results: ClaudeToolResultBlockData[] = [];
   for (const block of parseMessageContent(message)) {
     const result = toolResultBlockSchema.safeParse(block);
     if (result.success) {
@@ -1003,12 +1067,15 @@ function extractToolResults(
 }
 
 function extractTokenUsage(
-  message: SDKResultMessage,
+  message: ClaudeResultMessage | SDKResultMessage,
   cumulativeTokens: ThreadEventTokenUsageBreakdown,
 ): ThreadEventTokenUsage | undefined {
   const parsed = sdkUsageSchema.safeParse(message.usage);
   const last = parsed.success ? toTokenUsageBreakdown(parsed.data) : undefined;
-  const modelContextWindow = extractModelContextWindow(message.modelUsage);
+  const parsedModelUsage = claudeModelUsageSchema.safeParse(message.modelUsage);
+  const modelContextWindow = parsedModelUsage.success
+    ? extractModelContextWindow(parsedModelUsage.data)
+    : null;
 
   if (!last && modelContextWindow === null) {
     return undefined;

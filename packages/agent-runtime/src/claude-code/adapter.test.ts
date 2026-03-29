@@ -73,6 +73,7 @@ describe("claude-code provider adapter", () => {
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
+          "BAD.KEY": "ignored",
           TEST_VAR: "123",
         },
       },
@@ -112,6 +113,13 @@ describe("claude-code provider adapter", () => {
       config: {
         "shell_environment_policy.set.TEST_VAR": "123",
         model_reasoning_effort: "high",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        config: {
+          "shell_environment_policy.set.BAD.KEY": "ignored",
+        },
       },
     });
   });
@@ -351,7 +359,7 @@ describe("claude-code provider adapter", () => {
     );
   });
 
-  it("translateEvent maps rate limit events to warnings", () => {
+  it("translateEvent ignores rate limit events", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     const events = adapter.translateEvent({
@@ -371,14 +379,7 @@ describe("claude-code provider adapter", () => {
       },
     });
 
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "warning",
-        category: "general",
-        summary: "Rate limit status updated",
-        details: expect.stringContaining("reason: out_of_credits"),
-      }),
-    );
+    expect(events).toEqual([]);
   });
 
   it("translateEvent maps synthetic Claude API error assistant text to error events", () => {
@@ -526,6 +527,29 @@ describe("claude-code provider adapter", () => {
         providerId: "claude-code",
         rawType: "sdk/custom_event",
         summary: "SDK Custom Event",
+      }),
+    ]);
+  });
+
+  it("translateEvent surfaces malformed handled sdk envelopes as provider/unhandled", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "claude-thread-1",
+        message: {
+          type: "result",
+        },
+      },
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "provider/unhandled",
+        providerId: "claude-code",
+        rawType: "sdk/result",
       }),
     ]);
   });

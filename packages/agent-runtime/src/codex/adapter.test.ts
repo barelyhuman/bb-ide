@@ -88,6 +88,7 @@ describe("codex provider adapter", () => {
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
+          "BAD.KEY": "ignored",
           TEST_VAR: "123",
         },
       },
@@ -128,6 +129,13 @@ describe("codex provider adapter", () => {
         "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
         "shell_environment_policy.set.TEST_VAR": "123",
         model_reasoning_effort: "high",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        config: {
+          "shell_environment_policy.set.BAD.KEY": "ignored",
+        },
       },
     });
   });

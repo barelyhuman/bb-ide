@@ -30,6 +30,7 @@ import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
 import { listCodexModels } from "./models.js";
+import { buildShellEnvironmentPolicyConfig } from "../shared/adapter-utils.js";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -501,10 +502,9 @@ function buildCodexConfig(
   if (threadId) {
     config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
   }
-  if (options?.envVars) {
-    for (const [key, value] of Object.entries(options.envVars)) {
-      config[`shell_environment_policy.set.${key}`] = value;
-    }
+  const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(options?.envVars);
+  if (shellEnvironmentConfig) {
+    Object.assign(config, shellEnvironmentConfig);
   }
   if (options?.reasoningLevel) {
     config["model_reasoning_effort"] = options.reasoningLevel;

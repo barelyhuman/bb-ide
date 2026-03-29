@@ -67,6 +67,7 @@ describe("pi provider adapter", () => {
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
+          "BAD.KEY": "ignored",
           TEST_VAR: "123",
         },
       },
@@ -106,6 +107,13 @@ describe("pi provider adapter", () => {
       "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
       "shell_environment_policy.set.TEST_VAR": "123",
       model_reasoning_effort: "high",
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        config: {
+          "shell_environment_policy.set.BAD.KEY": "ignored",
+        },
+      },
     });
   });
 
@@ -293,6 +301,29 @@ describe("pi provider adapter", () => {
         }),
       }),
     );
+  });
+
+  it("translateEvent surfaces malformed handled sdk envelopes as provider/unhandled", () => {
+    const adapter = createPiProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "sdk/message",
+      params: {
+        threadId: "pi-thread-1",
+        message: {
+          type: "agent_end",
+        },
+      },
+    });
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "provider/unhandled",
+        providerId: "pi",
+        rawType: "sdk/agent_end",
+      }),
+    ]);
   });
 
   it("translateEvent tool_execution_start with edit args emits fileChange with diff", () => {
