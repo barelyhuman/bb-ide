@@ -15,6 +15,7 @@ import type {
   ViewWebSearchMessage,
 } from "@bb/domain";
 import { durationToCompactString } from "./format-helpers.js";
+import { taskStatusGlyph } from "./task-status.js";
 import { buildTimelineRows } from "./thread-detail-rows.js";
 import { buildToolGroupSummaryParts } from "./timeline-summary.js";
 import {
@@ -276,19 +277,6 @@ function formatOperation(
     lines.push(`  ${statusBadge(msg.status, color)}`);
   }
   return lines.join("\n");
-}
-
-function taskStatusGlyph(status: ViewTasksMessage["tasks"][number]["status"]): string {
-  switch (status) {
-    case "completed":
-      return "☒";
-    case "active":
-      return "◼";
-    case "failed":
-      return "⚠";
-    case "pending":
-      return "□";
-  }
 }
 
 function formatTasks(msg: ViewTasksMessage, _verbose: boolean, color: boolean): string {

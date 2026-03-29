@@ -2203,8 +2203,10 @@ describe("toViewMessages replay coverage", () => {
           providerId: "codex",
           rawType: "item/tool/requestUserInput",
           turnId: "turn-1",
-          summary: "Tool is waiting for input",
-          payloadSummary: "tool: prompt_user",
+          detailEntries: [
+            { label: "message", value: "Tool is waiting for input" },
+            { label: "tool", value: "prompt_user" },
+          ],
         },
         createdAt: 1,
       },
@@ -2462,7 +2464,9 @@ describe("toViewMessages replay coverage", () => {
     expect(ops[0]?.title).toBe("Promoting to primary checkout");
     expect(ops[0]?.threadOperation).toEqual({
       operation: "primary_checkout",
+      rawOperation: "primary_checkout",
       status: "started",
+      rawStatus: "started",
       metadata: { action: "promote" },
     });
 
@@ -2470,7 +2474,9 @@ describe("toViewMessages replay coverage", () => {
     expect(ops[1]?.title).toBe("Promoted to primary checkout");
     expect(ops[1]?.threadOperation).toEqual({
       operation: "primary_checkout",
+      rawOperation: "primary_checkout",
       status: "completed",
+      rawStatus: "completed",
       metadata: { action: "promote", branch: "feat/example" },
     });
     expect(ops[1]?.detail).toContain("Branch: feat/example");
@@ -2552,13 +2558,17 @@ describe("toViewMessages replay coverage", () => {
     expect(ops[0]?.title).toBe("Commit requested");
     expect(ops[0]?.threadOperation).toEqual({
       operation: "commit",
+      rawOperation: "commit",
       status: "requested",
+      rawStatus: "requested",
     });
     expect(ops[1]?.opType).toBe("operation");
     expect(ops[1]?.title).toBe("Commit queued");
     expect(ops[1]?.threadOperation).toEqual({
       operation: "commit",
+      rawOperation: "commit",
       status: "queued",
+      rawStatus: "queued",
       operationId: "op-1",
     });
     expect(ops[1]?.detail).toContain("deterministic execution");

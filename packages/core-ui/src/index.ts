@@ -23,6 +23,8 @@ export {
 } from "./timeline-render-helpers.js";
 export type { ExploringCounts } from "./timeline-render-helpers.js";
 
+export { taskStatusGlyph } from "./task-status.js";
+
 export {
   deriveThreadTitleFromInput,
   outputFromThreadEvent,

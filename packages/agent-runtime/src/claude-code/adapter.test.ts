@@ -526,7 +526,6 @@ describe("claude-code provider adapter", () => {
         providerThreadId: "bb-thread-1",
         providerId: "claude-code",
         rawType: "sdk/custom_event",
-        summary: "SDK Custom Event",
       }),
     ]);
   });

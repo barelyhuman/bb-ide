@@ -1,12 +1,14 @@
 import type {
-  ProviderUnhandledEvent,
   ThreadEvent,
   ThreadEventPlanStepStatus,
+  ViewThreadOperationKind,
+  ViewThreadOperationStatus,
 } from "@bb/domain";
 import { getCompactionKey } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { capitalize, messageId } from "./format-helpers.js";
+import { buildProviderUnhandledDetail } from "./provider-unhandled-detail.js";
 import {
   readProvisioningTranscript,
 } from "./provisioning-helpers.js";
@@ -29,19 +31,50 @@ function providerDisplayName(providerId: string): string {
   }
 }
 
-function buildUnhandledProviderDetail(decoded: ProviderUnhandledEvent): string {
-  const detailLines = [
-    decoded.summary,
-    `Raw event: ${decoded.rawType}`,
-    decoded.payloadSummary,
-  ].filter((line): line is string => Boolean(line));
-  return detailLines.join("\n");
+function normalizeThreadOperationKind(rawOperation: string): ViewThreadOperationKind {
+  switch (rawOperation) {
+    case "commit":
+    case "squash_merge":
+    case "primary_checkout":
+    case "ownership_change":
+      return rawOperation;
+    default:
+      return "other";
+  }
+}
+
+function normalizeThreadOperationStatus(rawStatus: string): ViewThreadOperationStatus {
+  switch (rawStatus) {
+    case "requested":
+    case "queued":
+    case "running":
+    case "started":
+    case "completed":
+    case "failed":
+    case "noop":
+      return rawStatus;
+    default:
+      return "other";
+  }
+}
+
+function createThreadOperationMetadata(
+  decoded: Extract<ThreadEvent, { type: "system/operation" }>,
+): ViewThreadOperationMetadata {
+  return {
+    operation: normalizeThreadOperationKind(decoded.operation),
+    rawOperation: decoded.operation,
+    status: normalizeThreadOperationStatus(decoded.status),
+    rawStatus: decoded.status,
+    ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
+    ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
+  };
 }
 
 export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): string {
   if (!meta) return "Operation update";
 
-  const { operation, status, metadata } = meta;
+  const { operation, rawOperation, status, rawStatus, metadata } = meta;
 
   switch (operation) {
     case "commit":
@@ -59,7 +92,7 @@ export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): 
         case "noop":
           return "No commit needed";
         default:
-          return `Commit ${status}`;
+          return `Commit ${rawStatus}`;
       }
     case "squash_merge":
       switch (status) {
@@ -76,7 +109,7 @@ export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): 
         case "noop":
           return "No squash merge needed";
         default:
-          return `Squash merge ${status}`;
+          return `Squash merge ${rawStatus}`;
       }
     case "primary_checkout": {
       const action = typeof metadata?.action === "string" ? metadata.action : undefined;
@@ -93,7 +126,7 @@ export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): 
         case "noop":
           return `Primary checkout already ${action === "demote" ? "demoted" : "promoted"}`;
         default:
-          return `Primary checkout ${status}`;
+          return `Primary checkout ${rawStatus}`;
       }
     }
     case "ownership_change": {
@@ -106,12 +139,11 @@ export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): 
         case "failed":
           return "Ownership change failed";
         default:
-          return `Ownership change ${status}`;
+          return `Ownership change ${rawStatus}`;
       }
     }
-    default:
-      // open_external: unknown operations get a generic label.
-      return `${capitalize(operation.replace(/_/g, " "))} ${status}`;
+    case "other":
+      return `${capitalize(rawOperation.replace(/_/g, " "))} ${rawStatus}`;
   }
 }
 
@@ -130,8 +162,7 @@ export function threadOperationStatus(
       return "completed";
     case "failed":
       return "error";
-    default:
-      // open_external: unknown statuses treated as pending.
+    case "other":
       return "pending";
   }
 }
@@ -157,7 +188,7 @@ function op(
   decoded: ThreadEvent,
   meta: EventMeta,
   idKey: string,
-  fields: Omit<ViewOperationMessage, "kind" | "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt" | "startedAt">,
+  fields: ViewOperationFields,
 ): ViewOperationMessage {
   return {
     kind: "operation",
@@ -170,6 +201,11 @@ function op(
     ...fields,
   };
 }
+
+type ViewOperationFields = Omit<
+  ViewOperationMessage,
+  "kind" | "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt" | "startedAt"
+>;
 
 function formatPlanStepStatus(status: ThreadEventPlanStepStatus | undefined): string {
   switch (status) {
@@ -224,7 +260,7 @@ export function parseOperationMessage(
       turnId: eventTurnId,
       opType: "provider-unhandled",
       title: `Unhandled ${providerDisplayName(decoded.providerId)} event`,
-      detail: buildUnhandledProviderDetail(decoded),
+      detail: buildProviderUnhandledDetail(decoded),
       status: "completed",
     });
   }
@@ -324,12 +360,7 @@ export function parseOperationMessage(
   }
 
   if (decoded.type === "system/operation") {
-    const threadOperation: ViewThreadOperationMetadata = {
-      operation: decoded.operation,
-      status: decoded.status,
-      ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
-      ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
-    };
+    const threadOperation = createThreadOperationMetadata(decoded);
     const title = threadOperationTitle(threadOperation);
 
     const branch = typeof decoded.metadata?.branch === "string" ? decoded.metadata.branch : undefined;
@@ -344,7 +375,7 @@ export function parseOperationMessage(
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       status: threadOperationStatus(threadOperation),
-      ...(threadOperation ? { threadOperation } : {}),
+      threadOperation,
     });
   }
 

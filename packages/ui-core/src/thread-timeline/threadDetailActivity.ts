@@ -8,7 +8,6 @@ function isProvisioningActivityOperation(
     case "provisioning":
       return true;
     default:
-      // opType is stringly/open_external at the UI boundary; unknown values are intentionally not highlighted.
       return false;
   }
 }

@@ -505,7 +505,7 @@ describe("codex provider adapter", () => {
         rawType: "item/started",
         threadId: "t1",
         turnId: "turn-1",
-        summary: "item: imageView",
+        detailEntries: [{ label: "item", value: "imageView" }],
       }),
     );
   });

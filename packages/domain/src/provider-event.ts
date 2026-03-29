@@ -94,6 +94,14 @@ export type ThreadEventWarningCategory = z.infer<
   typeof threadEventWarningCategorySchema
 >;
 
+export const providerUnhandledDetailEntrySchema = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+export type ProviderUnhandledDetailEntry = z.infer<
+  typeof providerUnhandledDetailEntrySchema
+>;
+
 export const providerUnhandledEventSchema = z.object({
   type: z.literal("provider/unhandled"),
   threadId: z.string(),
@@ -102,8 +110,7 @@ export const providerUnhandledEventSchema = z.object({
   rawType: z.string(),
   turnId: z.string().optional(),
   parentToolCallId: z.string().optional(),
-  summary: z.string(),
-  payloadSummary: z.string().optional(),
+  detailEntries: z.array(providerUnhandledDetailEntrySchema).optional(),
 });
 export type ProviderUnhandledEvent = z.infer<typeof providerUnhandledEventSchema>;
 

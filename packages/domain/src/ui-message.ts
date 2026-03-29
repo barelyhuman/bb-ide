@@ -144,9 +144,57 @@ export interface ViewFileEditMessage extends ViewMessageBase {
   >;
 }
 
+export const viewOperationTypeValues = [
+  "plan-updated",
+  "provider-unhandled",
+  "warning",
+  "deprecation",
+  "thread-interrupted",
+  "provisioning",
+  "thread-title-updated",
+  "operation",
+  "compaction",
+  "turn-diff",
+] as const;
+export const viewOperationTypeSchema = z.enum(viewOperationTypeValues);
+export type ViewOperationType = z.infer<typeof viewOperationTypeSchema>;
+
+export const viewThreadOperationKindValues = [
+  "commit",
+  "squash_merge",
+  "primary_checkout",
+  "ownership_change",
+  "other",
+] as const;
+export const viewThreadOperationKindSchema = z.enum(
+  viewThreadOperationKindValues,
+);
+export type ViewThreadOperationKind = z.infer<
+  typeof viewThreadOperationKindSchema
+>;
+
+export const viewThreadOperationStatusValues = [
+  "requested",
+  "queued",
+  "running",
+  "started",
+  "completed",
+  "failed",
+  "noop",
+  "other",
+] as const;
+export const viewThreadOperationStatusSchema = z.enum(
+  viewThreadOperationStatusValues,
+);
+export type ViewThreadOperationStatus = z.infer<
+  typeof viewThreadOperationStatusSchema
+>;
+
 export interface ViewThreadOperationMetadata {
-  operation: string;
-  status: string;
+  operation: ViewThreadOperationKind;
+  rawOperation: string;
+  status: ViewThreadOperationStatus;
+  rawStatus: string;
   operationId?: string;
   metadata?: Record<string, unknown>;
 }
@@ -167,7 +215,7 @@ export interface ViewProvisioningMetadata {
 
 export interface ViewOperationMessage extends ViewMessageBase {
   kind: "operation";
-  opType: string;
+  opType: ViewOperationType;
   title: string;
   detail?: string;
   status?: Extract<

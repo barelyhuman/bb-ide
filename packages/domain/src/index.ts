@@ -160,6 +160,7 @@ export type {
 
 export {
   providerEventSchema,
+  providerUnhandledDetailEntrySchema,
   systemEventSchema,
   threadEventFileChangeKindSchema,
   threadEventFileChangeSchema,
@@ -175,6 +176,7 @@ export {
   threadEventWarningCategorySchema,
 } from "./provider-event.js";
 export type {
+  ProviderUnhandledDetailEntry,
   ProviderUnhandledEvent,
   ProviderEvent,
   SystemEvent,
@@ -210,6 +212,12 @@ export type {
 
 export {
   viewMessageSchema,
+  viewOperationTypeSchema,
+  viewOperationTypeValues,
+  viewThreadOperationKindSchema,
+  viewThreadOperationKindValues,
+  viewThreadOperationStatusSchema,
+  viewThreadOperationStatusValues,
   viewMessageStatusSchema,
   viewMessageStatusValues,
 } from "./ui-message.js";
@@ -226,12 +234,15 @@ export type {
   ViewMessageBase,
   ViewMessageStatus,
   ViewOperationMessage,
+  ViewOperationType,
   ViewProvisioningMetadata,
   ViewProvisioningTranscriptEntry,
   ViewTaskEntry,
   ViewTasksMessage,
   ViewTaskStatus,
+  ViewThreadOperationKind,
   ViewThreadOperationMetadata,
+  ViewThreadOperationStatus,
   ViewToolCallMessage,
   ViewToolCallSummary,
   ViewToolExploringMessage,

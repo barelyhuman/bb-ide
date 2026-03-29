@@ -1,3 +1,4 @@
+import { taskStatusGlyph } from "@bb/core-ui";
 import type { ViewTasksMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
@@ -6,19 +7,6 @@ import {
   ExpandableDetailScrollArea,
   getEventHeaderToneClass,
 } from "./shared.js";
-
-function taskStatusGlyph(status: ViewTasksMessage["tasks"][number]["status"]): string {
-  switch (status) {
-    case "completed":
-      return "☒";
-    case "active":
-      return "◼";
-    case "failed":
-      return "⚠";
-    case "pending":
-      return "□";
-  }
-}
 
 function statusLabel(message: ViewTasksMessage): string {
   switch (message.status) {

@@ -221,6 +221,10 @@ function buildOperationSummary(
 ): ReactNode {
   const metadata = message.threadOperation;
   if (!metadata) return <span>{message.title}</span>;
+  const metadataAction =
+    typeof metadata.metadata?.action === "string"
+      ? metadata.metadata.action
+      : undefined;
 
   switch (metadata.operation) {
     case "commit":
@@ -244,14 +248,12 @@ function buildOperationSummary(
           return <EventTitle prefix={baseLabel} detail="completed" tone={tone} />;
         case "failed":
           return <EventTitle prefix={baseLabel} emphasis="failed" tone={tone} />;
-        case "update":
-          return <EventTitle prefix={baseLabel} detail="update" tone={tone} />;
         default:
-          return <EventTitle prefix={baseLabel} detail={metadata.status} tone={tone} />;
+          return <EventTitle prefix={baseLabel} detail={metadata.rawStatus} tone={tone} />;
       }
     }
     case "primary_checkout": {
-      const action = (metadata.metadata?.action as string) ?? "promote";
+      const action = metadataAction ?? "promote";
       switch (action) {
         case "promote":
           switch (metadata.status) {
@@ -270,7 +272,7 @@ function buildOperationSummary(
             case "failed":
               return <EventTitle prefix="Primary checkout promotion" emphasis="failed" tone={tone} />;
             default:
-              return <EventTitle prefix="Primary checkout promotion" detail={metadata.status} tone={tone} />;
+              return <EventTitle prefix="Primary checkout promotion" detail={metadata.rawStatus} tone={tone} />;
           }
         case "demote":
           switch (metadata.status) {
@@ -289,14 +291,14 @@ function buildOperationSummary(
             case "failed":
               return <EventTitle prefix="Primary checkout demotion" emphasis="failed" tone={tone} />;
             default:
-              return <EventTitle prefix="Primary checkout demotion" detail={metadata.status} tone={tone} />;
+              return <EventTitle prefix="Primary checkout demotion" detail={metadata.rawStatus} tone={tone} />;
           }
         default:
-          return <EventTitle prefix="Primary checkout" detail={metadata.status} tone={tone} />;
+          return <EventTitle prefix="Primary checkout" detail={metadata.rawStatus} tone={tone} />;
       }
     }
     case "ownership_change": {
-      const action = (metadata.metadata?.action as string) ?? "transfer";
+      const action = metadataAction ?? "transfer";
       switch (metadata.status) {
         case "completed":
           return <EventTitle prefix={`Ownership ${action}`} detail="completed" tone={tone} />;
@@ -306,12 +308,12 @@ function buildOperationSummary(
         case "running":
           return <EventTitle prefix={`Ownership ${action}`} detail="in progress" tone={tone} shimmerPrefix />;
         default:
-          return <EventTitle prefix={`Ownership ${action}`} detail={metadata.status} tone={tone} />;
+          return <EventTitle prefix={`Ownership ${action}`} detail={metadata.rawStatus} tone={tone} />;
       }
     }
-    default: {
-      const label = capitalizeFirst(metadata.operation.replace(/_/g, " "));
-      return <EventTitle prefix={label} detail={metadata.status} tone={tone} />;
+    case "other": {
+      const label = capitalizeFirst(metadata.rawOperation.replace(/_/g, " "));
+      return <EventTitle prefix={label} detail={metadata.rawStatus} tone={tone} />;
     }
   }
 }

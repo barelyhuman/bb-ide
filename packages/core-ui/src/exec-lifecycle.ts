@@ -40,22 +40,27 @@ export function createExecLifecycleContext(): ExecLifecycleContext {
   };
 }
 
-export function itemStatusToToolStatus(status: ThreadEventItemStatus): ViewToolCallMessage["status"] {
+type ExecItemViewStatus = ViewToolCallMessage["status"];
+
+function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStatus {
   switch (status) {
-    case "pending": return "pending";
-    case "completed": return "completed";
-    case "failed": return "error";
-    case "interrupted": return "interrupted";
+    case "pending":
+      return "pending";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "error";
+    case "interrupted":
+      return "interrupted";
   }
 }
 
+export function itemStatusToToolStatus(status: ThreadEventItemStatus): ViewToolCallMessage["status"] {
+  return itemStatusToExecStatus(status);
+}
+
 export function itemStatusToFileEditStatus(status: ThreadEventItemStatus): ViewFileEditMessage["status"] {
-  switch (status) {
-    case "pending": return "pending";
-    case "completed": return "completed";
-    case "failed": return "error";
-    case "interrupted": return "interrupted";
-  }
+  return itemStatusToExecStatus(status);
 }
 
 export interface ExecCallPartial extends Partial<ViewToolCallSummary> {
