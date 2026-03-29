@@ -8,6 +8,7 @@ import { pathExists, runGit, WorkspaceError, type GitCommandResult } from "./git
 type ProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
 
 export interface CreateWorkspaceArgs {
+  /** Local repo path for worktrees, or a clone URL for managed clones */
   sourcePath: string;
   targetPath: string;
   branchName: string;

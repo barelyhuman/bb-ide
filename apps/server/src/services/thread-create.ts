@@ -1,7 +1,9 @@
 import {
   applyProvisionedEnvironment,
   createEnvironment,
+  createHostId,
   createThread,
+  deleteHost,
   deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
@@ -9,6 +11,8 @@ import {
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import { provisionHost } from "@bb/sandbox-host";
+import type { SandboxHost } from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "./command-wait.js";
@@ -20,6 +24,7 @@ import { generateThreadTitle } from "./title-generation.js";
 import {
   buildManagedBranchName,
   buildManagedTargetPath,
+  buildSandboxTargetPath,
   createThreadRecord,
   getThreadSafe,
   queueEnvironmentProvision,
@@ -42,6 +47,11 @@ interface ReuseEnvironmentByHostPathArgs {
   hostId: string;
   path: string;
   request: ThreadCreateServiceRequest;
+}
+
+interface CreateSandboxHostThreadArgs {
+  request: CreateThreadRequest;
+  sandboxType: string;
 }
 
 async function createThreadInEnvironment(
@@ -206,12 +216,10 @@ export async function createThreadFromRequest(
   requireProjectExists(deps, request.projectId);
 
   if (request.environment.type === "sandbox-host") {
-    // 501: sandbox-host is intentionally deferred until Phase 8.
-    throw new ApiError(
-      501,
-      "unsupported_operation",
-      "Sandbox host provisioning is not implemented yet",
-    );
+    return createSandboxHostThread(deps, {
+      request,
+      sandboxType: request.environment.sandboxType,
+    });
   }
 
   if (request.environment.type === "reuse") {

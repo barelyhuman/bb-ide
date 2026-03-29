@@ -13,6 +13,7 @@ import { NotificationHub } from "./ws/hub.js";
 const logger = createLogger({ component: "server" });
 const db = initDb(serverConfig.BB_DATABASE_URL);
 const hub = new NotificationHub();
+const sandboxRegistry = createSandboxHostRegistry();
 
 const selfDir = dirname(fileURLToPath(import.meta.url));
 const appDistDir = resolve(selfDir, "../../app/dist");
@@ -24,13 +25,17 @@ const { app, injectWebSocket } = createApp(
     config: {
       authToken: commonConfig.BB_SECRET_TOKEN,
       dataDir: commonConfig.BB_DATA_DIR,
+      e2bApiKey: serverConfig.E2B_API_KEY,
+      e2bTemplate: serverConfig.E2B_TEMPLATE,
       hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
       inferenceModel: serverConfig.BB_INFERENCE_MODEL,
       openAiApiKey: serverConfig.OPENAI_API_KEY,
+      publicUrl: serverConfig.BB_PUBLIC_URL,
     },
     db,
     hub,
     logger,
+    sandboxRegistry,
   },
   { staticDir },
 );

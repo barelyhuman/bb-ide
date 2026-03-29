@@ -87,11 +87,14 @@ export async function loadHostIdentity(options: {
   fallbackHostName?: () => string;
   platform?: NodeJS.Platform;
 }): Promise<HostIdentity> {
+  const providedHostId = process.env.BB_HOST_ID?.trim();
   const [hostId, hostName] = await Promise.all([
-    readOrCreateHostId({
-      dataDir: options.dataDir,
-      createId: options.createId,
-    }),
+    providedHostId
+      ? Promise.resolve(providedHostId)
+      : readOrCreateHostId({
+        dataDir: options.dataDir,
+        createId: options.createId,
+      }),
     detectHostName({
       platform: options.platform,
       execFile: options.execFile,

@@ -27,6 +27,7 @@ export const hosts = sqliteTable(
     type: text("type").$type<HostType>().notNull(),
     provider: text("provider"),
     externalId: text("external_id"),
+    destroyedAt: integer("destroyed_at"),
     lastSeenAt: integer("last_seen_at").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

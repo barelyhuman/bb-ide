@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { detectHostName, readOrCreateHostId } from "./identity.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { detectHostName, loadHostIdentity, readOrCreateHostId } from "./identity.js";
 
 const tempDirs: string[] = [];
 
@@ -13,6 +13,7 @@ async function makeTempDir(prefix: string): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
@@ -42,5 +43,21 @@ describe("identity", () => {
     await expect(detectHostName()).resolves.toSatisfy(
       (value) => typeof value === "string" && value.trim().length > 0,
     );
+  });
+
+  it("uses BB_HOST_ID when provided instead of creating a file-backed ID", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-identity-env-");
+    vi.stubEnv("BB_HOST_ID", "host-provided");
+
+    const identity = await loadHostIdentity({
+      dataDir,
+      fallbackHostName: () => "sandbox-host",
+    });
+
+    expect(identity.hostId).toBe("host-provided");
+    expect(identity.hostName.trim().length).toBeGreaterThan(0);
+    await expect(fs.access(path.join(dataDir, "host-id"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

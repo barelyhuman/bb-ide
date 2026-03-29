@@ -1,0 +1,9 @@
+export const DEFAULT_SANDBOX_CREATE_RETRIES = 2;
+export const DEFAULT_SANDBOX_TEMPLATE = "base";
+export const DEFAULT_SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
+export const SANDBOX_DATA_DIR = "/tmp/bb-data";
+export const SANDBOX_DAEMON_HEALTH_PATH = "/health";
+export const SANDBOX_DAEMON_HEALTH_PORT = 9111;
+export const SANDBOX_DAEMON_PATH = "/tmp/bb-daemon.mjs";
+export const SANDBOX_DAEMON_HEALTH_RETRIES = 29;
+export const SANDBOX_DAEMON_HEALTH_RETRY_MS = 2_000;

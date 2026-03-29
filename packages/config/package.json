@@ -11,6 +11,10 @@
       "import": "./dist/server.js",
       "types": "./dist/server.d.ts"
     },
+    "./dev-env": {
+      "import": "./dist/dev-env.js",
+      "types": "./dist/dev-env.d.ts"
+    },
     "./host-daemon": {
       "import": "./dist/host-daemon.js",
       "types": "./dist/host-daemon.d.ts"

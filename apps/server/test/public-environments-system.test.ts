@@ -838,6 +838,17 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("returns ok from GET /health", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request("/health");
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({ ok: true });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("queues provider list and provider list_models commands for system routes", async () => {
     const harness = await createTestAppHarness();
     try {

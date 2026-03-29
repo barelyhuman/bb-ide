@@ -2,6 +2,7 @@ import { envsafe, port, str } from "envsafe";
 import { join } from "node:path";
 import { commonConfig } from "./common.js";
 import { DEFAULTS } from "./defaults.js";
+import { resolveDevPublicUrl, validateRequiredUrl } from "./public-url.js";
 
 export { commonConfig };
 
@@ -29,12 +30,16 @@ const rawServerConfig = envsafe({
     desc: "SQLite database path. Defaults to $BB_DATA_DIR/bb.db",
     default: join(commonConfig.BB_DATA_DIR, "bb.db"),
   }),
-  BB_E2B_API_KEY: str({
+  BB_PUBLIC_URL: str({
+    desc: "Public URL sandboxes can use to reach the server",
+    devDefault: resolveDevPublicUrl(),
+  }),
+  E2B_API_KEY: str({
     desc: "E2B API key for ephemeral sandbox provisioning (optional)",
     default: "",
     allowEmpty: true,
   }),
-  BB_E2B_TEMPLATE: str({
+  E2B_TEMPLATE: str({
     desc: "E2B sandbox template ID (optional)",
     default: "",
     allowEmpty: true,
@@ -54,5 +59,6 @@ const rawServerConfig = envsafe({
 
 export const serverConfig = {
   ...rawServerConfig,
+  BB_PUBLIC_URL: validateRequiredUrl("BB_PUBLIC_URL", rawServerConfig.BB_PUBLIC_URL),
   BB_INFERENCE_MODEL: validateInferenceModel(rawServerConfig.BB_INFERENCE_MODEL),
 };

@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
-import { upsertHost, getHost, listHosts } from "../../src/data/hosts.js";
+import {
+  deleteHost,
+  getHost,
+  listHosts,
+  updateHost,
+  upsertHost,
+} from "../../src/data/hosts.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -45,6 +51,32 @@ describe("hosts", () => {
     expect(host2.lastSeenAt).toBeGreaterThanOrEqual(firstSeen);
   });
 
+  it("preserves provider, externalId, and destroyedAt when omitted on update", () => {
+    const { db } = setup();
+    const host = upsertHost(db, noopNotifier, {
+      destroyedAt: 123,
+      externalId: "sandbox-existing",
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+
+    const updated = upsertHost(db, noopNotifier, {
+      id: host.id,
+      name: "Sandbox Host Reconnected",
+      type: "ephemeral",
+    });
+
+    expect(updated).toMatchObject({
+      destroyedAt: 123,
+      id: host.id,
+      name: "Sandbox Host Reconnected",
+      provider: "e2b",
+      externalId: "sandbox-existing",
+      type: "ephemeral",
+    });
+  });
+
   it("retrieves a host by ID", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
@@ -64,5 +96,77 @@ describe("hosts", () => {
 
     const all = listHosts(db);
     expect(all).toHaveLength(2);
+  });
+
+  it("updates only the provided host fields", () => {
+    const { db } = setup();
+    const host = upsertHost(db, noopNotifier, {
+      externalId: "sandbox-old",
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+
+    const updated = updateHost(db, noopNotifier, host.id, {
+      externalId: "sandbox-new",
+    });
+
+    expect(updated).toMatchObject({
+      id: host.id,
+      name: "Sandbox Host",
+      provider: "e2b",
+      externalId: "sandbox-new",
+    });
+    expect(updated?.updatedAt).toBeGreaterThanOrEqual(host.updatedAt);
+  });
+
+  it("notifies when updateHost mutates host metadata", () => {
+    const { db } = setup();
+    const notifySystem = vi.fn();
+    const notifier = {
+      notifyCommand() {},
+      notifyEnvironment() {},
+      notifyProject() {},
+      notifySystem,
+      notifyThread() {},
+    };
+    const host = upsertHost(db, notifier, {
+      externalId: "sandbox-old",
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+    notifySystem.mockClear();
+
+    updateHost(db, notifier, host.id, {
+      destroyedAt: 456,
+    });
+
+    expect(notifySystem).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(getHost(db, host.id)).toMatchObject({
+      destroyedAt: 456,
+      externalId: "sandbox-old",
+    });
+  });
+
+  it("deletes an existing host row", () => {
+    const { db } = setup();
+    const notifySystem = vi.fn();
+    const notifier = {
+      notifyCommand() {},
+      notifyEnvironment() {},
+      notifyProject() {},
+      notifySystem,
+      notifyThread() {},
+    };
+    const host = upsertHost(db, notifier, {
+      name: "Transient Host",
+      type: "ephemeral",
+    });
+    notifySystem.mockClear();
+
+    expect(deleteHost(db, notifier, host.id)).toBe(true);
+    expect(getHost(db, host.id)).toBeNull();
+    expect(notifySystem).toHaveBeenCalledWith(["host-disconnected"]);
   });
 });

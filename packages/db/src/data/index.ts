@@ -62,8 +62,14 @@ export type {
   UpdateEnvironmentStatusInput,
 } from "./environments.js";
 
-export { upsertHost, getHost, listHosts } from "./hosts.js";
-export type { UpsertHostInput } from "./hosts.js";
+export {
+  upsertHost,
+  getHost,
+  listHosts,
+  updateHost,
+  deleteHost,
+} from "./hosts.js";
+export type { UpsertHostInput, UpdateHostInput } from "./hosts.js";
 
 export {
   getHighWaterMarks,

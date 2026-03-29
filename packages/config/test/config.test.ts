@@ -44,8 +44,9 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
     vi.stubEnv("BB_SERVER_PORT", undefined);
     vi.stubEnv("BB_DATABASE_URL", undefined);
-    vi.stubEnv("BB_E2B_API_KEY", undefined);
-    vi.stubEnv("BB_E2B_TEMPLATE", undefined);
+    vi.stubEnv("BB_PUBLIC_URL", undefined);
+    vi.stubEnv("E2B_API_KEY", undefined);
+    vi.stubEnv("E2B_TEMPLATE", undefined);
     vi.stubEnv("BB_INFERENCE_MODEL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
@@ -55,8 +56,9 @@ describe("consumer-specific config", () => {
 
     expect(serverConfig.BB_SERVER_PORT).toBe(3334);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
-    expect(serverConfig.BB_E2B_API_KEY).toBe("");
-    expect(serverConfig.BB_E2B_TEMPLATE).toBe("");
+    expect(serverConfig.BB_PUBLIC_URL).toBe("http://localhost:3334");
+    expect(serverConfig.E2B_API_KEY).toBe("");
+    expect(serverConfig.E2B_TEMPLATE).toBe("");
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
   });
@@ -74,6 +76,7 @@ describe("consumer-specific config", () => {
   it("requires a valid server URL for the daemon and CLI", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
+    vi.stubEnv("BB_PUBLIC_URL", "https://public.example.test");
 
     const { hostDaemonConfig } = await importFresh<typeof import("../src/host-daemon.js")>(
       "../src/host-daemon.js",
@@ -83,11 +86,34 @@ describe("consumer-specific config", () => {
     );
 
     expect(hostDaemonConfig.BB_SERVER_URL).toBe("http://localhost:9999");
+    expect(hostDaemonConfig.BB_PUBLIC_URL).toBe("https://public.example.test");
     expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:9999");
 
     vi.stubEnv("BB_SERVER_URL", "not-a-url");
     await expect(
       importFresh<typeof import("../src/cli.js")>("../src/cli.js"),
     ).rejects.toThrow(/BB_SERVER_URL/u);
+  });
+
+  it("requires BB_PUBLIC_URL in production server config", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_PUBLIC_URL", undefined);
+    vi.stubEnv("BB_SECRET_TOKEN", "test-secret-token");
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+
+    await expect(
+      importFresh<typeof import("../src/server.js")>("../src/server.js"),
+    ).rejects.toThrow(/BB_PUBLIC_URL/u);
+  });
+
+  it("reads the dev-env tunnel token from its dedicated config scope", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEV_CLOUDFLARED_TUNNEL_TOKEN", "test-tunnel-token");
+
+    const { devEnvConfig } = await importFresh<typeof import("../src/dev-env.js")>(
+      "../src/dev-env.js",
+    );
+
+    expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
   });
 });

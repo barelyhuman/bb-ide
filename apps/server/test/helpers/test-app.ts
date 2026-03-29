@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
+import { createSandboxHostRegistry } from "../../src/services/sandbox-registry.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
@@ -39,12 +40,16 @@ export async function createTestAppHarness(
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
+  const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
     authToken: TEST_AUTH_TOKEN,
     dataDir,
+    e2bApiKey: "test-e2b-api-key",
+    e2bTemplate: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: "test-openai-key",
+    publicUrl: "https://bb.example.test",
     ...overrides,
   };
   const deps: AppDeps = {
@@ -52,6 +57,7 @@ export async function createTestAppHarness(
     db,
     hub,
     logger: testLogger,
+    sandboxRegistry,
   };
   const { app } = createApp(deps);
 

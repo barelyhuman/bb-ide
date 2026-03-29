@@ -11,6 +11,8 @@ import {
   events,
   getDraft,
   getEnvironment,
+  getHost,
+  listHosts,
   getThread,
   hostDaemonCommands,
   listThreads,
@@ -35,6 +37,19 @@ import {
 import { createTestAppHarness } from "./helpers/test-app.js";
 
 const execFileAsync = promisify(execFile);
+const provisionHostMock = vi.fn();
+const resumeHostMock = vi.fn();
+type SandboxHostMockArgs = Array<object | string | undefined>;
+
+interface SandboxProvisionCall {
+  hostId: string;
+  hostName: string;
+}
+
+vi.mock("@bb/sandbox-host", () => ({
+  provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
+  resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
+}));
 
 async function readJson(response: Response): Promise<unknown> {
   return response.json();
@@ -104,6 +119,11 @@ function cleanWorkspaceStatus() {
 }
 
 describe("public thread routes", () => {
+  beforeEach(() => {
+    provisionHostMock.mockReset();
+    resumeHostMock.mockReset();
+  });
+
   it("creates unmanaged host threads and queues environment provisioning", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -516,12 +536,13 @@ describe("public thread routes", () => {
     }
   });
 
-  it("returns 501 with unsupported_operation for sandbox-host thread creation", async () => {
+  it("rejects sandbox-host threads for local-path project sources", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
+        path: "/tmp/cloud-source",
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -541,10 +562,216 @@ describe("public thread routes", () => {
         }),
       });
 
-      expect(response.status).toBe(501);
+      expect(response.status).toBe(409);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "unsupported_operation",
+        message:
+          "Sandbox threads require a cloneable project source; local path sources are not supported yet",
       });
+      expect(provisionHostMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("creates sandbox-host threads for cloneable project sources", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const sandboxLifecycle = {
+        destroy: vi.fn().mockResolvedValue(undefined),
+        extendTimeout: vi.fn().mockResolvedValue(undefined),
+        externalId: "sandbox-external-123",
+        hostId: "host_sandbox_new",
+        resume: vi.fn().mockResolvedValue(undefined),
+        suspend: vi.fn().mockResolvedValue(undefined),
+      };
+      provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 10_000,
+          hostId: options.hostId,
+          hostName: options.hostName,
+          hostType: "ephemeral",
+          instanceId: "instance-sandbox-test",
+          leaseTimeoutMs: 60_000,
+          protocolVersion: 2,
+        });
+        return {
+          ...sandboxLifecycle,
+          hostId: options.hostId,
+        };
+      });
+
+      const { host } = seedHostSession(harness.deps);
+      const project = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+      });
+      createProjectSource(harness.db, harness.hub, {
+        hostId: host.id,
+        isDefault: true,
+        projectId: project.id,
+        repoUrl: "https://github.com/example/repo.git",
+        type: "github_repo",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response) as {
+        environmentId: string;
+        id: string;
+        status: string;
+      };
+      expect(createdThread.status).toBe("provisioning");
+      expect(provisionHostMock).toHaveBeenCalledWith({
+        apiKey: "test-e2b-api-key",
+        authToken: harness.config.authToken,
+        hostId: expect.stringMatching(/^host_/u),
+        hostName: expect.stringMatching(/^sandbox-/u),
+        sandboxType: "e2b",
+        serverUrl: "https://bb.example.test",
+        template: undefined,
+      });
+
+      const environment = getEnvironment(harness.db, createdThread.environmentId);
+      if (!environment) {
+        throw new Error("Expected environment to exist");
+      }
+      expect(environment).toMatchObject({
+        hostId: expect.stringMatching(/^host_/u),
+        managed: true,
+        projectId: project.id,
+        status: "provisioning",
+        workspaceProvisionType: "managed-clone",
+      });
+
+      const sandboxHost = getHost(harness.db, environment.hostId);
+      if (!sandboxHost) {
+        throw new Error("Expected sandbox host to exist");
+      }
+      expect(sandboxHost).toMatchObject({
+        externalId: "sandbox-external-123",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      expect(harness.deps.sandboxRegistry.get(environment.hostId)).toMatchObject({
+        externalId: "sandbox-external-123",
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        projectId: project.id,
+        sourcePath: "https://github.com/example/repo.git",
+        targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,
+        workspaceProvisionType: "managed-clone",
+      });
+      expect(queued.row.hostId).toBe(environment.hostId);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("cleans up the sandbox host row when provisioning fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      let sandboxHostId = "";
+      provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        sandboxHostId = options.hostId;
+        throw new Error("sandbox bootstrap failed");
+      });
+
+      const { host } = seedHostSession(harness.deps);
+      const project = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+      });
+      createProjectSource(harness.db, harness.hub, {
+        hostId: host.id,
+        isDefault: true,
+        projectId: project.id,
+        repoUrl: "https://github.com/example/repo.git",
+        type: "github_repo",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(500);
+      expect(sandboxHostId).toMatch(/^host_/u);
+      expect(getHost(harness.db, sandboxHostId)).toBeNull();
+      expect(listHosts(harness.db)).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it.each([
+    "https://0.0.0.0:3000",
+    "https://[::1]:3000",
+  ])("rejects unreachable sandbox public URLs: %s", async (publicUrl) => {
+    const harness = await createTestAppHarness({ publicUrl });
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const project = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+      });
+      createProjectSource(harness.db, harness.hub, {
+        hostId: host.id,
+        isDefault: true,
+        projectId: project.id,
+        repoUrl: "https://github.com/example/repo.git",
+        type: "github_repo",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message:
+          "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+      });
+      expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();
     }

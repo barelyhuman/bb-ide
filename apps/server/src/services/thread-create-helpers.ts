@@ -46,6 +46,13 @@ export function buildManagedTargetPath(
   return path.join(path.dirname(sourcePath), ".bb-worktrees", projectId, threadId);
 }
 
+export function buildSandboxTargetPath(
+  projectId: string,
+  threadId: string,
+): string {
+  return path.posix.join("/tmp", ".bb-worktrees", projectId, threadId);
+}
+
 export function requireProjectExists(
   deps: Pick<AppDeps, "db">,
   projectId: string,

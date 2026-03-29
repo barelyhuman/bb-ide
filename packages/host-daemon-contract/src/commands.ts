@@ -201,8 +201,9 @@ const managedCloneEnvironmentProvisionCommandSchema =
  *   isWorktree, branchName). Does NOT create anything.
  * - `managed-worktree`: creates a git worktree at `targetPath` from
  *   `sourcePath`, runs setup script if present.
- * - `managed-clone`: clones repo from `sourcePath` to `targetPath`, runs setup
- *   script if present.
+ * - `managed-clone`: clones repo from `sourcePath` to `targetPath`, where
+ *   `sourcePath` may be a local repo path or a remote clone URL, then runs
+ *   setup script if present.
  *
  * Idempotent — if path already exists and is valid, reports success.
  * Rolls back partial state on failure.

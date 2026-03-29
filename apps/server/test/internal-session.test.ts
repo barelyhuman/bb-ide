@@ -2,12 +2,14 @@ import { and, eq } from "drizzle-orm";
 import {
   events,
   getEnvironment,
+  getHost,
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
   markThreadDeleted,
   markThreadStopRequested,
   queueCommand,
+  upsertHost,
 } from "@bb/db";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
@@ -174,6 +176,41 @@ describe("internal session routes", () => {
         },
       );
       expect(timeoutResponse.status).toBe(204);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves sandbox host provider metadata when a session reconnects", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-existing",
+        id: "host-sandbox-reconnect",
+        name: "Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-reconnected",
+          hostName: "Sandbox Host",
+          hostType: "ephemeral",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+
+      const updatedHost = getHost(harness.db, host.id);
+      expect(updatedHost).toMatchObject({
+        externalId: "sandbox-existing",
+        provider: "e2b",
+      });
     } finally {
       await harness.cleanup();
     }

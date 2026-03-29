@@ -49,6 +49,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
 
   app.use("*", cors());
   app.onError((error) => errorToResponse(error));
+  app.get("/health", (context) => context.json({ ok: true }));
   app.use("/internal/*", async (context, next) => {
     const isWebSocketPath = context.req.path === "/internal/ws";
     const authorized = isWebSocketPath
