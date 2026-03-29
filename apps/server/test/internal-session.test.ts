@@ -196,6 +196,7 @@ describe("internal session routes", () => {
         method: "POST",
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
+          activeThreads: [],
           hostId: host.id,
           instanceId: "instance-reconnected",
           hostName: "Sandbox Host",

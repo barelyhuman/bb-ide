@@ -50,7 +50,7 @@ interface ReuseEnvironmentByHostPathArgs {
 }
 
 interface CreateSandboxHostThreadArgs {
-  request: CreateThreadRequest;
+  request: ThreadCreateServiceRequest;
   sandboxType: string;
 }
 
@@ -210,7 +210,7 @@ async function startQueuedThreadIfNeeded(
 }
 
 export async function createThreadFromRequest(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   request: ThreadCreateServiceRequest,
 ) {
   requireProjectExists(deps, request.projectId);

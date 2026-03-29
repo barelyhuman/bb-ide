@@ -621,6 +621,9 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
@@ -716,6 +719,9 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
@@ -758,6 +764,9 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
           environment: {
             type: "sandbox-host",
             sandboxType: "e2b",
