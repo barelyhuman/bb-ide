@@ -857,6 +857,7 @@ function onWebSearchBegin(
     active.createdAt = Math.max(active.createdAt, meta.createdAt);
     if (payload.query) active.query = payload.query;
     if (payload.action) active.action = payload.action;
+    if (payload.output) active.output = payload.output;
     return;
   }
 
@@ -874,6 +875,7 @@ function onWebSearchBegin(
     callId: payload.callId,
     query: payload.query,
     action: payload.action,
+    output: payload.output,
     status: "pending",
   };
 }
@@ -895,6 +897,7 @@ function onWebSearchEnd(
     active.createdAt = Math.max(active.createdAt, meta.createdAt);
     if (payload.query) active.query = payload.query;
     if (payload.action) active.action = payload.action;
+    if (payload.output) active.output = payload.output;
     active.status = "completed";
     flushActiveToolCell(state);
     state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
@@ -916,6 +919,7 @@ function onWebSearchEnd(
     callId: payload.callId,
     query: payload.query,
     action: payload.action,
+    output: payload.output,
     status: "completed",
   });
   state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
@@ -1493,6 +1497,7 @@ export function toViewMessages(
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
+          startedAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
@@ -1563,6 +1568,7 @@ export function toViewMessages(
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
+          startedAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
@@ -1613,6 +1619,7 @@ export function toViewMessages(
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
+          startedAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
@@ -1674,6 +1681,7 @@ export function toViewMessages(
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
           createdAt: meta.createdAt,
+          startedAt: meta.createdAt,
           ...(eventTurnId ? { turnId: eventTurnId } : {}),
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }

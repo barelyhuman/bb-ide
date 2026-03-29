@@ -163,7 +163,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.",
-      "── Working for 1m 57s ──────────────────────────────────────",
+      "── Working for 1m 58s ──────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "---",
       "## Analysis & Recommendation",
@@ -194,7 +194,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "── Worked for 1m 22s ───────────────────────────────────────",
       "── User ────────────────────────────────────────────────────",
       "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
-      "── Worked for 2m 8s ────────────────────────────────────────",
+      "── Worked for 2m 9s ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Everything looks good. Here's a summary of the changes:",
     ],
@@ -246,7 +246,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
-      "── Worked for 3m 25s ───────────────────────────────────────",
+      "── Worked for 3m 26s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "All 6 tests pass, including the new regression test. Let me summarize the fix:",
       "## Bug & Fix",
@@ -273,7 +273,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
-      "── Worked for 2m 33s ───────────────────────────────────────",
+      "── Worked for 2m 34s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "All 8 tests pass. Here's a summary of what was done:",
       "### Changes Made",
@@ -351,7 +351,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
-      "── Worked for 4m 31s ───────────────────────────────────────",
+      "── Worked for 4m 34s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Fixed.",
       "What changed:",
@@ -432,7 +432,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
-      "── Worked for 4m 7s ────────────────────────────────────────",
+      "── Worked for 4m 11s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Done.",
       "Changed:",
@@ -703,7 +703,7 @@ What's the safest extension point if I want to instrument room startup without c
     "timeline": "── User ────────────────────────────────────────────────────
 I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.
 
-── Working for 1m 57s ──────────────────────────────────────
+── Working for 1m 58s ──────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me start by setting up a todo list and exploring the codebase for eyedropper-related code, while also searching the web for current EyeDropper API support.
   ── Tool Call: ToolSearch ───────────────────────────────────
@@ -720,6 +720,9 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
     Search eyeDropper|EyeDropper|eyedropper|EYEDROPPER
   ── Web Search ──────────────────────────────────────────────
     ✓ EyeDropper API browser compatibility support 2026
+    Web search results for query: "EyeDropper API browser compatibility support 2026"
+
+  Links: [{"title":"EyeDropper API - Web APIs | MDN","url":"https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API"},{"title":"EyeDropper - Web APIs | MDN","url":"https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper"},{"title":"EyeDropper API | Can I use... Support tables for HTML5, CSS3, etc","url":"https://caniuse.com/mdn-api_eyedropper"},{"title":"EyeDropper API","url":"https://wicg.github.io/e...
   ── Assistant ───────────────────────────────────────────────
   Good, I've found 69 files and the web search confirms limited browser support. Let me now read the core eyedropper files and fetch the detailed compatibility tables.
   ── Explored 3 files ────────────────────────────────────────
@@ -728,8 +731,39 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
     ⋯ https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
   ── Web Search ──────────────────────────────────────────────
     ✓ https://caniuse.com/mdn-api_eyedropper
+    # EyeDropper API Browser Compatibility
+
+  ## Supported Browsers
+  - **Chrome**: Version 95 and later (✅)
+  - **Edge**: Version 95 and later (✅)
+  - **Opera**: Version 81 and later (✅)
+
+  ## Not Supported
+  - Firefox (all versions)
+  - Safari (all versions, including iOS)
+  - Internet Explorer
+  - Chrome for Android
+  - Firefox for Android
+  - Opera Mobile
+  - Samsung Internet
+  - UC Browser for Android
+  - QQ Browser
+  - KaiOS Browser
+
+  ## Key Findings
+
+  The EyeDropper API has "Global usage" of approximately 32.83%, but sup...
   ── Web Search ──────────────────────────────────────────────
     ✓ https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
+    # EyeDropper API Browser Compatibility
+
+  Unfortunately, the web page content provided does not include the actual browser compatibility table. The page shows a section header for "[Browser compatibility](#browser_compatibility)" but the table itself is not included in the extracted content.
+
+  ## What We Know from the Page
+
+  The page does provide these important context clues:
+
+  1. **Limited Availability Status**: The feature is marked as "**Limited availability**" and states: *"This feature is no...
   ── Explored 3 files, 1 list ────────────────────────────────
     List $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper*
     Read $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx, $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/Picker.tsx, $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/ColorPicker.tsx
@@ -764,18 +798,51 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
     ⋯ Firefox EyeDropper API support intent implement 2025 2026
   ── Web Search ──────────────────────────────────────────────
     ✓ https://github.com/nicolo-ribaudo/tc39-proposal-eyedropper-api
+    Request failed with status code 404
   ── Web Search ──────────────────────────────────────────────
     ✓ Firefox EyeDropper API support intent implement 2025 2026
+    Web search results for query: "Firefox EyeDropper API support intent implement 2025 2026"
+
+  Links: [{"title":"EyeDropper API - Web APIs | MDN","url":"https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API"},{"title":"EyeDropper API | Can I use... Support tables for HTML5, CSS3, etc","url":"https://caniuse.com/mdn-api_eyedropper"},{"title":"1728527 - Implement JavaScript EyeDropper API","url":"https://bugzilla.mozilla.org/show_bug.cgi?id=1728527"},{"title":"EyeDropper - Web APIs | MDN"...
   ── Web Search ──────────────────────────────────────────────
     ⋯ https://bugzilla.mozilla.org/show_bug.cgi?id=1728527
   ── Web Search ──────────────────────────────────────────────
     ⋯ Safari WebKit EyeDropper API support status intent 2025 2026
   ── Web Search ──────────────────────────────────────────────
     ✓ https://bugzilla.mozilla.org/show_bug.cgi?id=1728527
+    # Firefox EyeDropper API Bug Status
+
+  **Current Status:** UNCONFIRMED and unassigned
+
+  **Priority:** P3 (medium priority)
+
+  **Assignment:** The bug remains "Unassigned" with no active developer working on it.
+
+  **Recent Activity:**
+  The most recent update was 6 months ago when the whiteboard was updated to include tags: "[platform-feature][webcompat:risk-moderate]". The bug has been open for approximately 4 years with minimal progress.
+
+  **Key Blockers:**
+  - A standards-position decision from Mozill...
   ── Web Search ──────────────────────────────────────────────
     ✓ Safari WebKit EyeDropper API support status intent 2025 2026
+    Web search results for query: "Safari WebKit EyeDropper API support status intent 2025 2026"
+
+  Links: [{"title":"Eyedropper API · Issue #29 · WebKit/standards-positions","url":"https://github.com/WebKit/standards-positions/issues/29"},{"title":"EyeDropper API | Can I use... Support tables for HTML5, CSS3, etc","url":"https://caniuse.com/mdn-api_eyedropper"},{"title":"Add Eyedropper API to caniuse · Issue #6049 · Fyrd/caniuse","url":"https://github.com/Fyrd/caniuse/issues/6049"},{"title":"22975...
   ── Web Search ──────────────────────────────────────────────
     ✓ https://github.com/WebKit/standards-positions/issues/29
+    # WebKit/Apple's Position on EyeDropper API
+
+  Based on the GitHub issue, **WebKit's official position remains unclear** — the issue is still marked as "Needs position" in their standards review backlog.
+
+  ## Current Status
+
+  The issue has been open since July 2022 and is assigned to three reviewers (Theresa O'Connor, Anne van Kesteren, and Aditya Keerthi), but no formal position statement has been published.
+
+  ## Identified Concerns
+
+  WebKit has flagged two significant issues:
+
+  1. **API Design Pro...
   ── Updated tasks ───────────────────────────────────────────
     ☒ Find all eyedropper-related code in the repo
     ☒ Web-search for EyeDropper API browser/platform support status
@@ -912,7 +979,7 @@ Shall I go ahead and implement this progressive-enhancement change?
 ── User ────────────────────────────────────────────────────
 Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.
 
-── Worked for 3m 20s ───────────────────────────────────────
+── Worked for 3m 21s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me start by planning the implementation carefully, then build it out.
   ── Updated tasks ───────────────────────────────────────────
@@ -997,7 +1064,58 @@ Implement that improvement with focused validation and keep the existing behavio
   ── Assistant ───────────────────────────────────────────────
   **Step 2: Rewrite \`EyeDropper.tsx\` with native API path + canvas fallback**
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx
+    +import { useEffect, useRef } from "react";
+    +import { createPortal } from "react-dom";
+    +
+    +import { EVENT, KEYS, rgbToHex } from "@excalidraw/common";
+    +
+    +import type { ExcalidrawElement } from "@excalidraw/element/types";
+    +
+    +import { useUIAppState } from "../context/ui-appState";
+    +import { atom } from "../editor-jotai";
+    +import { useCreatePortalContainer } from "../hooks/useCreatePortalContainer";
+    +import { useOutsideClick } from "../hooks/useOutsideClick";
+    +import { useStable } from "../hooks/useStable";
+    +import { getSelectedElements } from "../scene";
+    +
+    +import { useApp, useExcalidrawContainer, useExcalidrawElements } from "./App";
+    +
+    +import "./EyeDropper.scss";
+    +
+    +import type { ColorPickerType } from "./ColorPicker/colorPickerUtils";
+    +
+    +/**
+    + * Returns true when the browser exposes the native EyeDropper API
+    + * (Chromium 95+ on desktop). The native API lets users pick colors from
+    + * anywhere on screen — not just the Excalidraw canvas.
+    + */
+    +export const supportsNativeEyeDropper = (): boolean =>
+    +  typeof window !== "undefined" && "EyeDropper" in window;
+    +
+    +export type EyeDropperProperties = {
+    +  keepOpenOnAlt: boolean;
+    +  swapPreviewOnAlt?: boolean;
+    +  /** called when user picks color (on pointerup) */
+    +  onSelect: (color: string, event: PointerEvent) => void;
+    +  /**
+    +   * property of selected elements to update live when alt-dragging.
+    +   * Supply \`null\` if not applicable (e.g. updating the canvas bg instead of
+    +   * elements)
+    +   **/
+    +  colorPickerType: ColorPickerType;
+    +};
+    +
+    +export const activeEyeDropperAtom = atom<null | EyeDropperProperties>(null);
+    +
+    +// ---------------------------------------------------------------------------
+    +// Native EyeDropper sub-component (Chromium 95+ desktop only)
+    +//
+    +// Uses the browser-native EyeDropper API which can sample any pixel on the
+    +// user's screen, not just the Excalidraw canvas. Falls back transparently
+    +// to the canvas-based pic...
   ── Updated tasks ───────────────────────────────────────────
     ☒ Add supportsNativeEyeDropper() helper utility
     ☒ Add TypeScript type declarations for the native EyeDropper API
@@ -1377,7 +1495,7 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
 ── User ────────────────────────────────────────────────────
 Explain how the old positioning logic failed and how your regression coverage would have caught it.
 
-── Worked for 2m 8s ────────────────────────────────────────
+── Worked for 2m 9s ────────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me read the relevant source files to understand the current code and existing tests.
   ── Explored 2 files, 3 lists ───────────────────────────────
@@ -1470,7 +1588,56 @@ Explain how the old positioning logic failed and how your regression coverage wo
   ── Assistant ───────────────────────────────────────────────
   Now create the test file:
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts
+    +import {
+    +  getPreviewPosition,
+    +  PREVIEW_OFFSET,
+    +  PREVIEW_SIZE,
+    +  PREVIEW_MARGIN,
+    +} from "./EyeDropper";
+    +
+    +// Viewport used for most tests: 1920 × 1080
+    +const W = 1920;
+    +const H = 1080;
+    +
+    +describe("getPreviewPosition", () => {
+    +  // ------------------------------------------------------------------
+    +  // Default placement (bottom-right of pointer)
+    +  // ------------------------------------------------------------------
+    +  it("places the preview to the bottom-right of the pointer by default", () => {
+    +    const { left, top } = getPreviewPosition(400, 300, W, H);
+    +    expect(left).toBe(400 + PREVIEW_OFFSET);
+    +    expect(top).toBe(300 + PREVIEW_OFFSET);
+    +  });
+    +
+    +  // ------------------------------------------------------------------
+    +  // Right edge  → flip horizontally
+    +  // ------------------------------------------------------------------
+    +  it("flips to the left of the pointer near the right viewport edge", () => {
+    +    const clientX = W - 30; // 30 px from right edge — not enough room
+    +    const { left } = getPreviewPosition(clientX, 300, W, H);
+    +
+    +    expect(left).toBe(clientX - PREVIEW_OFFSET - PREVIEW_SIZE);
+    +    // Must stay inside the viewport
+    +    expect(left).toBeGreaterThanOrEqual(PREVIEW_MARGIN);
+    +    expect(left + PREVIEW_SIZE).toBeLessThanOrEqual(W - PREVIEW_MARGIN);
+    +  });
+    +
+    +  // ------------------------------------------------------------------
+    +  // Bottom edge → flip vertically
+    +  // ------------------------------------------------------------------
+    +  it("flips above the pointer near the bottom viewport edge", () => {
+    +    const clientY = H - 30;
+    +    const { top } = getPreviewPosition(400, clientY, W, H);
+    +
+    +    expect(top).toBe(clientY - PREVIEW_OFFSET - PREVIEW_SIZE);
+    +    expect(top).toBeGreaterThanOrEqual(PREVIEW_MARGIN);
+    +    expect(top + PREVIEW_SIZE).toBeLessThanOrEqual(H - PREVIEW_MARGIN);
+    +  });
+    +
+    +  // ------------------------------------...
   ── Assistant ───────────────────────────────────────────────
   Let me verify the final state of the changed file and run the tests:
   ── Explored 1 file ─────────────────────────────────────────
@@ -1986,7 +2153,72 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   ── Assistant ───────────────────────────────────────────────
   Now I have all the information I need. Let me write the test file:
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { fireEvent, act, render, waitFor } from "../../tests/test-utils";
+    +import { Excalidraw } from "../../index";
+    +import { KEYS } from "@excalidraw/common";
+    +
+    +const { h } = window;
+    +
+    +/**
+    + * Opens the command palette by dispatching the Ctrl/Meta+Shift+P shortcut.
+    + */
+    +const openCommandPalette = async () => {
+    +  fireEvent.keyDown(document, {
+    +    key: KEYS.P,
+    +    ctrlKey: true,
+    +    shiftKey: true,
+    +  });
+    +  await waitFor(() => {
+    +    const dialog = document.querySelector(".command-palette");
+    +    if (!dialog) {
+    +      throw new Error("Command palette not open");
+    +    }
+    +  });
+    +};
+    +
+    +/**
+    + * Returns the visible labels shown in the command palette.
+    + */
+    +const getVisibleCommandLabels = (): string[] => {
+    +  const items = document.querySelectorAll(
+    +    ".command-palette .command-palette__item-label",
+    +  );
+    +  return Array.from(items).map((el) => el.textContent ?? "");
+    +};
+    +
+    +/**
+    + * Types a search query into the command palette input.
+    + */
+    +const searchFor = (query: string) => {
+    +  const input = document.querySelector<HTMLInputElement>(
+    +    ".command-palette input",
+    +  );
+    +  if (!input) {
+    +    throw new Error("Command palette input not found");
+    +  }
+    +  fireEvent.change(input, { target: { value: query } });
+    +};
+    +
+    +// ---------------------------------------------------------------------------
+    +// Tests
+    +// ---------------------------------------------------------------------------
+    +
+    +describe("CommandPalette – Magic Frame AI entry", () => {
+    +  describe("availability gating", () => {
+    +    it("should NOT show Magic Frame when aiEnabled is false", async () => {
+    +      await render(<Excalidraw aiEnabled={false} />);
+    +
+    +      await openCommandPalette();
+    +      searchFor("wireframe");
+    +
+    +      const labels = getVisibleCommandLabels();
+    +      expect(labels.every((l) => !l.toLowerCase().includes("wireframe"))).toBe(
+    +        true,
+    + ...
   ── Assistant ───────────────────────────────────────────────
   Now let me check the CSS class names used in the command palette to make sure my selectors are correct:
   ── Explored 1 file, 2 searches ─────────────────────────────
@@ -2010,7 +2242,77 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
 
   Now let me update the test with the correct CSS selectors:
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { fireEvent, act, render, waitFor } from "../../tests/test-utils";
+    +import { Excalidraw } from "../../index";
+    +import { KEYS } from "@excalidraw/common";
+    +
+    +const { h } = window;
+    +
+    +/**
+    + * Opens the command palette by dispatching the Ctrl+Shift+P shortcut.
+    + */
+    +const openCommandPalette = async () => {
+    +  fireEvent.keyDown(document, {
+    +    key: KEYS.P,
+    +    ctrlKey: true,
+    +    shiftKey: true,
+    +  });
+    +  await waitFor(() => {
+    +    const dialog = document.querySelector(".command-palette-dialog");
+    +    if (!dialog) {
+    +      throw new Error("Command palette not open");
+    +    }
+    +  });
+    +};
+    +
+    +/**
+    + * Returns text content of all visible command items in the palette.
+    + */
+    +const getVisibleCommandTexts = (): string[] => {
+    +  const items = document.querySelectorAll(
+    +    ".command-palette-dialog .command-item .name",
+    +  );
+    +  return Array.from(items).map((el) => el.textContent ?? "");
+    +};
+    +
+    +/**
+    + * Types a search query into the command palette input.
+    + */
+    +const searchFor = async (query: string) => {
+    +  const input = document.querySelector<HTMLInputElement>(
+    +    ".command-palette-dialog input",
+    +  );
+    +  if (!input) {
+    +    throw new Error("Command palette input not found");
+    +  }
+    +  fireEvent.change(input, { target: { value: query } });
+    +  // Allow the filtering effect to run
+    +  await waitFor(() => {});
+    +};
+    +
+    +/**
+    + * Helper: returns true if any command label contains the given substring.
+    + */
+    +const hasCommandMatching = (substring: string): boolean => {
+    +  return getVisibleCommandTexts().some((t) =>
+    +    t.toLowerCase().includes(substring.toLowerCase()),
+    +  );
+    +};
+    +
+    +/**
+    + * Register the diagramToCode plugin on the app so Magic Frame is gated in.
+    + */
+    +const registerDiagramToCodePlugin = () => {
+    +  act(() => {
+    +    h.app.setPlugins({
+    +      diagramToCode: {
+    +        generate: async () => ({ html: "<div>test</div>" }),
+    +      },
+    +   ...
   ── Assistant ───────────────────────────────────────────────
   Now let's try running the tests:
   ── Tool Call: exec_command ─────────────────────────────────
@@ -2109,7 +2411,78 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
 
   Let me try a different approach - use \`window\` directly or dispatch the event properly:
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { fireEvent, act, render, waitFor } from "../../tests/test-utils";
+    +import { Excalidraw } from "../../index";
+    +
+    +const { h } = window;
+    +
+    +/**
+    + * Opens the command palette by setting the app state directly.
+    + */
+    +const openCommandPalette = async () => {
+    +  act(() => {
+    +    h.setState({ openDialog: { name: "commandPalette" } });
+    +  });
+    +  await waitFor(() => {
+    +    const dialog = document.querySelector(".command-palette-dialog");
+    +    if (!dialog) {
+    +      throw new Error("Command palette not open");
+    +    }
+    +  });
+    +};
+    +
+    +/**
+    + * Returns text content of all visible command items in the palette.
+    + */
+    +const getVisibleCommandTexts = (): string[] => {
+    +  const items = document.querySelectorAll(
+    +    ".command-palette-dialog .command-item .name",
+    +  );
+    +  return Array.from(items).map((el) => el.textContent ?? "");
+    +};
+    +
+    +/**
+    + * Types a search query into the command palette input.
+    + */
+    +const searchFor = async (query: string) => {
+    +  const input = document.querySelector<HTMLInputElement>(
+    +    ".command-palette-dialog input",
+    +  );
+    +  if (!input) {
+    +    throw new Error("Command palette input not found");
+    +  }
+    +  fireEvent.change(input, { target: { value: query } });
+    +  // Allow the filtering useEffect to run
+    +  await waitFor(() => {});
+    +};
+    +
+    +/**
+    + * Helper: returns true if any command label contains the given substring.
+    + */
+    +const hasCommandMatching = (substring: string): boolean => {
+    +  return getVisibleCommandTexts().some((t) =>
+    +    t.toLowerCase().includes(substring.toLowerCase()),
+    +  );
+    +};
+    +
+    +/**
+    + * Register the diagramToCode plugin on the app so Magic Frame is gated in.
+    + */
+    +const registerDiagramToCodePlugin = () => {
+    +  act(() => {
+    +    h.app.setPlugins({
+    +      diagramToCode: {
+    +        generate: async () => ({ html: "<div>test</div>" }),
+    +      },
+    +    });
+    +  });
+    +};
+    +
+    +// ------------------------------------------...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx --reporter=verbose 2>&1 | tail -60
     8.6s
@@ -2201,7 +2574,77 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   ── Assistant ───────────────────────────────────────────────
   So \`CommandPalette\` is passed as children to \`Excalidraw\`. I need to render it in my test. Let me update the test:
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { fireEvent, act, render, waitFor } from "../../tests/test-utils";
+    +import { Excalidraw } from "../../index";
+    +import { CommandPalette } from "./CommandPalette";
+    +
+    +const { h } = window;
+    +
+    +/**
+    + * Opens the command palette by setting the app state directly.
+    + */
+    +const openCommandPalette = async () => {
+    +  act(() => {
+    +    h.setState({ openDialog: { name: "commandPalette" } });
+    +  });
+    +  await waitFor(() => {
+    +    const dialog = document.querySelector(".command-palette-dialog");
+    +    if (!dialog) {
+    +      throw new Error("Command palette not open");
+    +    }
+    +  });
+    +};
+    +
+    +/**
+    + * Returns text content of all visible command items in the palette.
+    + */
+    +const getVisibleCommandTexts = (): string[] => {
+    +  const items = document.querySelectorAll(
+    +    ".command-palette-dialog .command-item .name",
+    +  );
+    +  return Array.from(items).map((el) => el.textContent ?? "");
+    +};
+    +
+    +/**
+    + * Types a search query into the command palette input.
+    + */
+    +const searchFor = async (query: string) => {
+    +  const input = document.querySelector<HTMLInputElement>(
+    +    ".command-palette-dialog input",
+    +  );
+    +  if (!input) {
+    +    throw new Error("Command palette input not found");
+    +  }
+    +  fireEvent.change(input, { target: { value: query } });
+    +  // Allow the filtering useEffect to run
+    +  await waitFor(() => {});
+    +};
+    +
+    +/**
+    + * Helper: returns true if any command label contains the given substring.
+    + */
+    +const hasCommandMatching = (substring: string): boolean => {
+    +  return getVisibleCommandTexts().some((t) =>
+    +    t.toLowerCase().includes(substring.toLowerCase()),
+    +  );
+    +};
+    +
+    +/**
+    + * Register the diagramToCode plugin on the app so Magic Frame is gated in.
+    + */
+    +const registerDiagramToCodePlugin = () => {
+    +  act(() => {
+    +    h.app.setPlugins({
+    +      diagramToCode: {
+    +        generate: async () => ({ html: "<div>test</div>" }),
+    +      },
+    +    });
+    +  });
+    ...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx --reporter=verbose 2>&1 | tail -40
     2.6s
@@ -2310,7 +2753,7 @@ Ran the new test suite (\`vitest run\`) — all 6 tests pass:
     "timeline": "── User ────────────────────────────────────────────────────
 There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.
 
-── Worked for 3m 25s ───────────────────────────────────────
+── Worked for 3m 26s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me start by exploring the codebase to understand the canvas search sidebar implementation.
   ── Subagent Explore: Find canvas search sidebar code ───────
@@ -2689,7 +3132,7 @@ When \`findIndex\` returns \`-1\`, the expression \`visibleIndex >= 0\` is \`fal
     "timeline": "── User ────────────────────────────────────────────────────
 Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.
 
-── Worked for 2m 33s ───────────────────────────────────────
+── Worked for 2m 34s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   I'll start by exploring the codebase to understand the canvas search sidebar implementation.
   ── Subagent Explore: Find canvas search sidebar code ───────
@@ -3925,7 +4368,7 @@ TTDDialogTrigger → setAppState({ openDialog: "ttd" })
 ── User ────────────────────────────────────────────────────
 What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?
 
-── Worked for 7s ───────────────────────────────────────────
+── Worked for 8s ───────────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Based on the flow we already traced, there are several clean extension points where UI changes stay completely decoupled from the conversion/scene pipeline. Let me verify the exact prop boundaries to give you precise guidance.
   ── Explored 6 files ────────────────────────────────────────
@@ -4381,7 +4824,7 @@ So: **best completion hook = \`initializeRoom()\`; best outer lifecycle hook = \
     "timeline": "── User ────────────────────────────────────────────────────
 There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.
 
-── Worked for 4m 31s ───────────────────────────────────────
+── Worked for 4m 34s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Using \`vercel-react-best-practices\` because this is a React UI bugfix with tests.
   ── Tool Call: exec_command ─────────────────────────────────
@@ -7528,7 +7971,7 @@ That’s exactly what the regression test sets up:
     "timeline": "── User ────────────────────────────────────────────────────
 Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.
 
-── Worked for 4m 7s ────────────────────────────────────────
+── Worked for 4m 11s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Using the \`vercel-react-best-practices\` skill because this is a React UI change with tests.
   ── Tool Call: exec_command ─────────────────────────────────
@@ -9385,7 +9828,70 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
     Search commandPalette\\|openDialog.*command in packages/excalidraw/tests/
     Read packages/excalidraw/vitest.config.mts
   ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/actions/actionToggleSearchMenu.test.tsx (update)
+    ✓ packages/excalidraw/actions/actionToggleSearchMenu.test.tsx (add)
+    --- /dev/null
+    +++ b/packages/excalidraw/actions/actionToggleSearchMenu.test.tsx
+    +import React from "react";
+    +import fuzzy from "fuzzy";
+    +
+    +import { CANVAS_SEARCH_TAB, DEFAULT_SIDEBAR, KEYS } from "@excalidraw/common";
+    +
+    +import { Excalidraw } from "../index";
+    +import { API } from "../tests/helpers/api";
+    +import { Keyboard } from "../tests/helpers/ui";
+    +import { act, render } from "../tests/test-utils";
+    +import { deburr } from "../deburr";
+    +
+    +import { actionToggleSearchMenu } from "./actionToggleSearchMenu";
+    +
+    +const { h } = window;
+    +
+    +/**
+    + * Build the same haystack the CommandPalette builds for a command, so we can
+    + * assert that fuzzy search surfaces the search action for a given query.
+    + */
+    +const buildHaystack = (label: string, keywords: string[]) =>
+    +  \`\${deburr(label.toLocaleLowerCase())} \${keywords.join(" ")}\`;
+    +
+    +const matches = (query: string, haystack: string) => {
+    +  const normalised = deburr(query.toLocaleLowerCase().replace(/[<>_| -]/g, ""));
+    +  return fuzzy.filter(normalised, [haystack]).length > 0;
+    +};
+    +
+    +describe("actionToggleSearchMenu", () => {
+    +  // ── keyword discoverability ────────────────────────────────────────
+    +
+    +  describe("keyword discoverability", () => {
+    +    const haystack = buildHaystack(
+    +      // The english label resolved from "search.title"
+    +      "Find on canvas",
+    +      actionToggleSearchMenu.keywords!,
+    +    );
+    +
+    +    it.each([
+    +      "search",
+    +      "find",
+    +      "replace",
+    +      "locate",
+    +      "lookup",
+    +      "filter",
+    +      "text",
+    +      "query",
+    +    ])("should surface the search action for query '%s'", (query) => {
+    +      expect(matches(query, haystack)).toBe(true);
+    +    });
+    +
+    +    it("should NOT match an unrelated term", () => {
+    +      expect(matches("eraser", haystack)).toBe(false);
+    +    });
+    +  });
+    +
+    +  // ── action integration ─────────────────────────────────────────────
+    +
+    +  describe("action behaviour", () => {
+    +    beforeEach(async () => {
+    +      await render(<Excalidraw handleKeyboardGlobally />);
+    +    });...
   ── Tool Call: exec_command ─────────────────────────────────
     ✗ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/actions/actionToggleSearchMenu.test.tsx 2>&1
     2.6s
@@ -9443,7 +9949,71 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
     Search Keyboard\\. in packages/excalidraw/tests/helpers/ui.ts
     Read packages/excalidraw/tests/helpers/ui.ts
   ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/actions/actionToggleSearchMenu.test.tsx (update)
+    ✓ packages/excalidraw/actions/actionToggleSearchMenu.test.tsx (add)
+    --- /dev/null
+    +++ b/packages/excalidraw/actions/actionToggleSearchMenu.test.tsx
+    +import React from "react";
+    +import fuzzy from "fuzzy";
+    +
+    +import { CANVAS_SEARCH_TAB, DEFAULT_SIDEBAR } from "@excalidraw/common";
+    +
+    +import { Excalidraw } from "../index";
+    +import { API } from "../tests/helpers/api";
+    +import { render } from "../tests/test-utils";
+    +import { deburr } from "../deburr";
+    +
+    +import { actionToggleSearchMenu } from "./actionToggleSearchMenu";
+    +
+    +const { h } = window;
+    +
+    +/**
+    + * Build the same haystack the CommandPalette builds for a command, so we can
+    + * assert that fuzzy search surfaces the search action for a given query.
+    + */
+    +const buildHaystack = (label: string, keywords: string[]) =>
+    +  \`\${deburr(label.toLocaleLowerCase())} \${keywords.join(" ")}\`;
+    +
+    +const matches = (query: string, haystack: string) => {
+    +  const normalised = deburr(query.toLocaleLowerCase().replace(/[<>_| -]/g, ""));
+    +  return fuzzy.filter(normalised, [haystack]).length > 0;
+    +};
+    +
+    +describe("actionToggleSearchMenu", () => {
+    +  // ── keyword discoverability ────────────────────────────────────────
+    +
+    +  describe("keyword discoverability", () => {
+    +    const haystack = buildHaystack(
+    +      // The english label resolved from "search.title"
+    +      "Find on canvas",
+    +      actionToggleSearchMenu.keywords!,
+    +    );
+    +
+    +    it.each([
+    +      "search",
+    +      "find",
+    +      "replace",
+    +      "locate",
+    +      "lookup",
+    +      "filter",
+    +      "text",
+    +      "query",
+    +    ])("should surface the search action for query '%s'", (query) => {
+    +      expect(matches(query, haystack)).toBe(true);
+    +    });
+    +
+    +    it("should NOT match an unrelated term", () => {
+    +      expect(matches("eraser", haystack)).toBe(false);
+    +    });
+    +  });
+    +
+    +  // ── action integration ─────────────────────────────────────────────
+    +
+    +  describe("action behaviour", () => {
+    +    beforeEach(async () => {
+    +      await render(<Excalidraw handleKeyboardGlobally />);
+    +    });
+    +
+    +    it("should open the search sidebar via executeAction...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/actions/actionToggleSearchMenu.test.tsx 2>&1
     2.6s
@@ -9585,7 +10155,61 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
   ── Explored 1 search ───────────────────────────────────────
     Search eye
   ── File Edit ───────────────────────────────────────────────
-    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts (update)
+    ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts (add)
+    --- /dev/null
+    +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts
+    +import { describe, expect, it } from "vitest";
+    +
+    +import { getPreviewPosition } from "./EyeDropper";
+    +
+    +const PREVIEW_SIZE = 48; // 3rem at 16px base
+    +const VIEWPORT_W = 1024;
+    +const VIEWPORT_H = 768;
+    +
+    +const pos = (cx: number, cy: number) =>
+    +  getPreviewPosition(cx, cy, PREVIEW_SIZE, PREVIEW_SIZE, VIEWPORT_W, VIEWPORT_H);
+    +
+    +describe("getPreviewPosition", () => {
+    +  it("places the preview below-right of the pointer by default", () => {
+    +    const { top, left } = pos(100, 100);
+    +    expect(left).toBe(120); // 100 + 20
+    +    expect(top).toBe(120);  // 100 + 20
+    +  });
+    +
+    +  it("flips left when the preview would overflow the right edge", () => {
+    +    const { left } = pos(VIEWPORT_W - 10, 100);
+    +    // should flip: clientX - 20 - previewWidth
+    +    expect(left).toBe(VIEWPORT_W - 10 - 20 - PREVIEW_SIZE);
+    +  });
+    +
+    +  it("flips up when the preview would overflow the bottom edge", () => {
+    +    const { top } = pos(100, VIEWPORT_H - 10);
+    +    expect(top).toBe(VIEWPORT_H - 10 - 20 - PREVIEW_SIZE);
+    +  });
+    +
+    +  it("flips both axes in the bottom-right corner", () => {
+    +    const { top, left } = pos(VIEWPORT_W - 5, VIEWPORT_H - 5);
+    +    expect(left).toBe(VIEWPORT_W - 5 - 20 - PREVIEW_SIZE);
+    +    expect(top).toBe(VIEWPORT_H - 5 - 20 - PREVIEW_SIZE);
+    +  });
+    +
+    +  it("does not flip when the preview just fits on the right", () => {
+    +    // clientX + 20 + PREVIEW_SIZE === VIEWPORT_W  →  exactly fits
+    +    const cx = VIEWPORT_W - 20 - PREVIEW_SIZE;
+    +    const { left } = pos(cx, 100);
+    +    expect(left).toBe(cx + 20);
+    +  });
+    +
+    +  it("does not flip when the preview just fits on the bottom", () => {
+    +    const cy = VIEWPORT_H - 20 - PREVIEW_SIZE;
+    +    const { top } = pos(100, cy);
+    +    expect(top).toBe(cy + 20);
+    +  });
+    +
+    +  it("flips when off by one pixel on the right", () => {
+    +    const cx = VIEWPORT_W - 20 - PREVIEW_SIZE + 1;
+    +    const { left } = pos(cx, 100);
+    +    expect(left).toBe(cx - 20 - PREVIEW...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/EyeDropper.test.ts 2>&1 | tail -30
     2.2s
@@ -9826,7 +10450,79 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     Search createTestHook\\|window\\.h\\. in packages/excalidraw/components/App.tsx
     Read packages/excalidraw/components/App.tsx
   ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { vi } from "vitest";
+    +
+    +import { Excalidraw } from "../../index";
+    +import {
+    +  act,
+    +  fireEvent,
+    +  render,
+    +  waitFor,
+    +  queryByText,
+    +  withExcalidrawDimensions,
+    +} from "../../tests/test-utils";
+    +
+    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
+    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
+    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
+    +
+    +const openCommandPalette = async () => {
+    +  await act(async () => {
+    +    fireEvent.keyDown(document, {
+    +      key: "/",
+    +      ctrlKey: true,
+    +    });
+    +  });
+    +};
+    +
+    +const queryCommandItem = (
+    +  container: HTMLElement,
+    +  label: string,
+    +): HTMLElement | null => {
+    +  // Command items are rendered inside .command-item > .name
+    +  return queryByText(container, label);
+    +};
+    +
+    +describe("CommandPalette — AI / Magic Frame", () => {
+    +  describe("availability gating", () => {
+    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
+    +      const { container } = await render(
+    +        <Excalidraw aiEnabled={true} />,
+    +      );
+    +
+    +      await withExcalidrawDimensions(
+    +        { width: 1920, height: 1080 },
+    +        async () => {
+    +          await openCommandPalette();
+    +
+    +          await waitFor(() => {
+    +            expect(
+    +              container.querySelector(".command-palette-dialog"),
+    +            ).not.toBeNull();
+    +          });
+    +
+    +          expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).not.toBeNull();
+    +        },
+    +      );
+    +    });
+    +
+    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
+    +      const { container } = await render(
+    +        <Excalidraw aiEnabled={false} />,
+    +      );
+    +
+    +      await withExcalidrawDimensions(
+    +        { width: 1920, height: 1080 },
+    +        async () => {
+    +          await openCommandPalette();
+    +
+    +          await waitFor(() => {
+    +            expect(
+    +              container.querySelector(".command-palette-d...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && yarn test:typecheck 2>&1 | tail -20
     8ms
@@ -9902,7 +10598,75 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   ── Explored 1 search ───────────────────────────────────────
     Search commandPaletteShortcut in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
   ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { vi } from "vitest";
+    +
+    +import { Excalidraw } from "../../index";
+    +import {
+    +  act,
+    +  fireEvent,
+    +  render,
+    +  waitFor,
+    +  queryByText,
+    +  withExcalidrawDimensions,
+    +} from "../../tests/test-utils";
+    +
+    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
+    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
+    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
+    +
+    +const openCommandPalette = async () => {
+    +  await act(async () => {
+    +    window.h.setState({ openDialog: { name: "commandPalette" } });
+    +  });
+    +};
+    +
+    +const queryCommandItem = (
+    +  container: HTMLElement,
+    +  label: string,
+    +): HTMLElement | null => {
+    +  return queryByText(container, label);
+    +};
+    +
+    +describe("CommandPalette — AI / Magic Frame", () => {
+    +  describe("availability gating", () => {
+    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
+    +      const { container } = await render(<Excalidraw aiEnabled={true} />);
+    +
+    +      await withExcalidrawDimensions(
+    +        { width: 1920, height: 1080 },
+    +        async () => {
+    +          await openCommandPalette();
+    +
+    +          await waitFor(() => {
+    +            expect(
+    +              container.querySelector(".command-palette-dialog"),
+    +            ).not.toBeNull();
+    +          });
+    +
+    +          expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).not.toBeNull();
+    +        },
+    +      );
+    +    });
+    +
+    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
+    +      const { container } = await render(<Excalidraw aiEnabled={false} />);
+    +
+    +      await withExcalidrawDimensions(
+    +        { width: 1920, height: 1080 },
+    +        async () => {
+    +          await openCommandPalette();
+    +
+    +          await waitFor(() => {
+    +            expect(
+    +              container.querySelector(".command-palette-dialog"),
+    +            ).not.toBeNull();
+    +          });
+    +
+    +          expect(queryCommandItem(container, MAGIC_FRAME_...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -40
     11.7s
@@ -9957,7 +10721,69 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     Search class.*command-palette-dialog\\|className.*command-palette-dialog in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
     Search formFactor\\|phone\\|desktop in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
   ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { vi } from "vitest";
+    +
+    +import { Excalidraw } from "../../index";
+    +import {
+    +  act,
+    +  fireEvent,
+    +  render,
+    +  waitFor,
+    +  queryByText,
+    +} from "../../tests/test-utils";
+    +
+    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
+    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
+    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
+    +
+    +const openCommandPalette = async (container: HTMLElement) => {
+    +  await act(async () => {
+    +    window.h.app.setState({ openDialog: { name: "commandPalette" } });
+    +  });
+    +  await waitFor(() => {
+    +    expect(
+    +      container.querySelector(".command-palette-dialog"),
+    +    ).not.toBeNull();
+    +  });
+    +};
+    +
+    +const queryCommandItem = (
+    +  container: HTMLElement,
+    +  label: string,
+    +): HTMLElement | null => {
+    +  return queryByText(container, label);
+    +};
+    +
+    +describe("CommandPalette — AI / Magic Frame", () => {
+    +  describe("availability gating", () => {
+    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
+    +      const { container } = await render(<Excalidraw aiEnabled={true} />);
+    +
+    +      await openCommandPalette(container);
+    +
+    +      expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).not.toBeNull();
+    +    });
+    +
+    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
+    +      const { container } = await render(<Excalidraw aiEnabled={false} />);
+    +
+    +      await openCommandPalette(container);
+    +
+    +      expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).toBeNull();
+    +    });
+    +
+    +    it("should gate all AI commands consistently (text-to-diagram, mermaid, magic frame)", async () => {
+    +      const { container } = await render(<Excalidraw aiEnabled={false} />);
+    +
+    +      await openCommandPalette(container);
+    +
+    +      expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).toBeNull();
+    +      expect(queryCommandItem(container, TEXT_TO_DIAGRAM_LABEL)).toBeNull();
+    +      expect(queryComma...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -40
     11.7s
@@ -10007,7 +10833,72 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     Read packages/excalidraw/components/Dialog.tsx
     Search Modal\\|portal\\|Portal in packages/excalidraw/components/Modal.tsx
   ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (update)
+    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
+    --- /dev/null
+    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
+    +import React from "react";
+    +import { vi } from "vitest";
+    +
+    +import { Excalidraw } from "../../index";
+    +import {
+    +  act,
+    +  fireEvent,
+    +  render,
+    +  waitFor,
+    +  queryByText,
+    +} from "../../tests/test-utils";
+    +
+    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
+    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
+    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
+    +
+    +const openCommandPalette = async () => {
+    +  await act(async () => {
+    +    window.h.app.setState({ openDialog: { name: "commandPalette" } });
+    +  });
+    +  await waitFor(() => {
+    +    expect(
+    +      document.querySelector(".command-palette-dialog"),
+    +    ).not.toBeNull();
+    +  });
+    +};
+    +
+    +const queryCommandItem = (label: string): HTMLElement | null => {
+    +  return queryByText(document.body, label);
+    +};
+    +
+    +describe("CommandPalette — AI / Magic Frame", () => {
+    +  describe("availability gating", () => {
+    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
+    +      await render(<Excalidraw aiEnabled={true} />);
+    +
+    +      await openCommandPalette();
+    +
+    +      expect(queryCommandItem(MAGIC_FRAME_LABEL)).not.toBeNull();
+    +    });
+    +
+    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
+    +      await render(<Excalidraw aiEnabled={false} />);
+    +
+    +      await openCommandPalette();
+    +
+    +      expect(queryCommandItem(MAGIC_FRAME_LABEL)).toBeNull();
+    +    });
+    +
+    +    it("should gate all AI commands consistently (text-to-diagram, mermaid, magic frame)", async () => {
+    +      await render(<Excalidraw aiEnabled={false} />);
+    +
+    +      await openCommandPalette();
+    +
+    +      expect(queryCommandItem(MAGIC_FRAME_LABEL)).toBeNull();
+    +      expect(queryCommandItem(TEXT_TO_DIAGRAM_LABEL)).toBeNull();
+    +      expect(queryCommandItem(MERMAID_LABEL)).toBeNull();
+    +    });
+    +
+    +    it("should show all AI commands when aiEnabled is true", async () => {
+    +      await render(<Excalidraw aiEnabled={true} />);
+    +
+    +      await...
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -40
     11.7s
@@ -10060,179 +10951,7 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
 ── User ────────────────────────────────────────────────────
 Summarize the user-visible behavior and the validation you ran.",
   },
-  {
-    "fixture": "excalidraw/pi/search-bugfix",
-    "timeline": "── User ────────────────────────────────────────────────────
-There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.
-
-── Worked for 1m 45s ───────────────────────────────────────
-  ── Explored 1 file ─────────────────────────────────────────
-    Read packages/excalidraw/components/SearchMenu.tsx
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/SearchMenu.tsx (update)
-    --- a/packages/excalidraw/components/SearchMenu.tsx
-    +++ b/packages/excalidraw/components/SearchMenu.tsx
-    -      searchedQueryRef.current = null;
-    -      handleSearch(searchQuery, app, (matchItems, index) => {
-    -        setSearchMatches({
-    -          nonce: randomInteger(),
-    -          items: matchItems,
-    -        });
-    -        searchedQueryRef.current = searchQuery;
-    -        lastSceneNonceRef.current = app.scene.getSceneNonce();
-    -        setAppState({
-    -          searchMatches: matchItems.length
-    -            ? {
-    -                focusedId: null,
-    -                matches: matchItems.map((searchMatch) => ({
-    -                  id: searchMatch.element.id,
-    -                  focus: false,
-    -                  matchedLines: searchMatch.matchedLines,
-    -                })),
-    -              }
-    -            : null,
-    -        });
-    -      });
-    +      searchedQueryRef.current = null;
-    +      handleSearch(searchQuery, app, (matchItems, index) => {
-    +        setSearchMatches({
-    +          nonce: randomInteger(),
-    +          items: matchItems,
-    +        });
-    +        setFocusIndex(index);
-    +        searchedQueryRef.current = searchQuery;
-    +        lastSceneNonceRef.current = app.scene.getSceneNonce();
-    +        setAppState({
-    +          searchMatches: matchItems.length
-    +            ? {
-    +                focusedId: null,
-    +                matches: matchItems.map((searchMatch) => ({
-    +                  id: searchMatch.element.id,
-    +                  focus: false,
-    +                  matchedLines: searchMatch.matchedLines,
-    +                })),
-    +              }
-    +            : null,
-    +        });
-    +      });
-  ── Explored 1 file ─────────────────────────────────────────
-    Read packages/excalidraw/tests/search.test.tsx
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/tests/search.test.tsx (update)
-    --- a/packages/excalidraw/tests/search.test.tsx
-    +++ b/packages/excalidraw/tests/search.test.tsx
-    -    await waitFor(() => {
-    -      expect(h.app.state.searchMatches?.matches.length).toBe(3);
-    -    });
-    -  });
-    -});
-    +    await waitFor(() => {
-    +      expect(h.app.state.searchMatches?.matches.length).toBe(3);
-    +    });
-    +  });
-    +
-    +  it("should reset focus to first match when query changes reduce matches", async () => {
-    +    const scrollIntoViewMock = jest.fn();
-    +    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
-    +
-    +    API.setElements([
-    +      API.createElement({ type: "text", text: "alpha beta" }),
-    +      API.createElement({ type: "text", text: "alpha gamma" }),
-    +      API.createElement({ type: "text", text: "alpha delta" }),
-    +      API.createElement({ type: "text", text: "beta only" }),
-    +    ]);
-    +
-    +    Keyboard.withModifierKeys({ ctrl: true }, () => {
-    +      Keyboard.keyPress(KEYS.F);
-    +    });
-    +
-    +    const searchInput = await querySearchInput();
-    +    updateTextEditor(searchInput, "alpha");
-    +
-    +    await waitFor(() => {
-    +      expect(h.app.state.searchMatches?.matches.length).toBe(3);
-    +      expect(h.app.state.searchMatches?.matches[0].focus).toBe(true);
-    +    });
-    +
-    +    // navigate to the last match (index 2)
-    +    Keyboard.keyPress(KEYS.ENTER, searchInput);
-    +    Keyboard.keyPress(KEYS.ENTER, searchInput);
-    +    expect(h.app.state.searchMatches?.matches[2].focus).toBe(true);
-    +
-    +    // change query so only 1 match remains — old focusIndex (2) would be
-    +    // out of bounds without the fix
-    +    updateTextEditor(searchInput, "beta only");
-    +
-    +    await waitFor(() => {
-    +      expect(h.app.state.searchMatches?.matches.length).toBe(1);
-    +      // focus must land on the first (and only) match, not beyond the array
-    +      expect(h.app.state.searchMatches?.matches[0].focus).toBe(true);
-    +    });
-    +  });
-    +});
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/tests/search.test.tsx 2>&1
-    4.8s
-    RUN  v3.0.6 $EXCALIDRAW_REPO
-
-     ✓ packages/excalidraw/tests/search.test.tsx (6 tests) 2404ms
-       ✓ search > should match text and cycle through matches on Enter 406ms
-       ✓ search > should match text split across multiple lines 750ms
-       ✓ search > should match frame names 392ms
-       ✓ search > should reset focus to first match when query changes reduce matches 761ms
-
-     Test Files  1 passed (1)
-          Tests  6 passed (6)
-       Start at  21:03:59
-       Duration  4.44s (transform 1.12s, setup 162ms, collect 1.59s, tests 2.40s, environment 126ms, prepare 33ms)
-
-── Assistant ───────────────────────────────────────────────
-All 6 tests pass, including the new regression test. Here's what changed:
-
----
-
-### Root cause
-
-There are two code paths that call the debounced \`handleSearch\`:
-
-1. **\`onChange\`** (the text-field handler) — calls \`setFocusIndex(index)\` in its callback ✓
-2. **\`useEffect\`** (reacts to query or scene-nonce changes) — did **not** call \`setFocusIndex\` ✗
-
-When the \`useEffect\` path re-ran the search and got fewer matches, \`focusIndex\` stayed at its old value (e.g. 4) while \`searchMatches.items\` shrank to, say, 1 entry — making \`searchMatches.items[4]\` undefined. Focus pointed at nothing.
-
-### Fix
-
-**\`packages/excalidraw/components/SearchMenu.tsx\`** — Added \`setFocusIndex(index)\` to the \`useEffect\`'s \`handleSearch\` callback, matching what \`onChange\` already does. Now both paths reset focus to the first visible match whenever results are recalculated.
-
-### Regression test
-
-**\`packages/excalidraw/tests/search.test.tsx\`** — Added \`"should reset focus to first match when query changes reduce matches"\`:
-
-1. Creates 4 text elements, 3 containing "alpha"
-2. Searches for "alpha" → 3 matches, navigates to the last one (index 2)
-3. Changes the query to "beta only" → only 1 match remains
-4. Asserts that focus lands on match index 0 (not the stale index 2)
-
-── User ────────────────────────────────────────────────────
-Explain why the regression would have failed before your change.
-
-── Assistant ───────────────────────────────────────────────
-Before the fix, the two \`handleSearch\` callback sites behaved differently:
-
-- **\`onChange\`** called \`setFocusIndex(index)\` — focus reset correctly.
-- **\`useEffect\`** did not call \`setFocusIndex\` at all — focus stayed wherever it was.
-
-The regression test hits the \`useEffect\` path. Here's why:
-
-1. The test types \`"alpha"\`, which goes through \`onChange\`. The debounced \`handleSearch\` fires, finds 3 matches, and \`setFocusIndex\` is called. Focus starts at 0.
-2. Two Enter presses move \`focusIndex\` to 2.
-3. The test types \`"beta only"\`, which again goes through \`onChange\`. But \`handleSearch\` is debounced at 350ms. Before that debounce fires, React re-renders. The \`useEffect\` sees \`isSearching\` is still \`true\` (set synchronously in \`onChange\`), so it skips. The debounce fires, the \`onChange\` callback runs, and \`setIsSearching(false)\` is called.
-4. On the next render, the \`useEffect\` runs again. \`isSearching\` is now \`false\`, and it checks whether the query or scene nonce has drifted from what was last searched. If either has changed (e.g. due to React batching timing or a scene nonce bump), it calls \`handleSearch\` again — but its callback never called \`setFocusIndex\`.
-
-At that point \`searchMatches.items\` has 1 entry, but \`focusIndex\` is still 2. The effect that syncs \`focusIndex\` into \`appState.searchMatches\` tries to access \`matches[2]\`, which is \`undefined\` — so \`focusedId\` becomes \`null\` and no match gets \`focus: true\`. The test's assertion that \`matches[0].focus\` is \`true\` would fail because nothing is focused.
-
-Adding \`setFocusIndex(index)\` to the \`useEffect\` callback ensures that whenever results are recalculated through that path, focus resets to the first visible match instead of staying stale.",
-  },
+  [Object],
   [Object],
   [Object],
 ]

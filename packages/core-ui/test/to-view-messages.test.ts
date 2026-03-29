@@ -1183,6 +1183,97 @@ describe("toViewMessages replay coverage", () => {
     expect(assistant).toBeUndefined();
     expect(reasoning).toBeDefined();
     expect(reasoning?.status).toBe("streaming");
+    expect(reasoning?.startedAt).toBe(2);
+  });
+
+  it("preserves startedAt for assistant and reasoning streams after completion", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: "Partial reply",
+        },
+        createdAt: 10,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/agentMessage/delta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: " finished",
+        },
+        createdAt: 25,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-1",
+          delta: "Reasoning start",
+        },
+        createdAt: 30,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "Partial reply finished",
+          },
+        },
+        createdAt: 40,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "rs-1",
+            summary: ["Reasoning start"],
+            content: [],
+          },
+        },
+        createdAt: 45,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const assistant = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+    const reasoning = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+        message.kind === "assistant-reasoning",
+    );
+
+    expect(assistant?.startedAt).toBe(10);
+    expect(assistant?.createdAt).toBe(40);
+    expect(reasoning?.startedAt).toBe(30);
+    expect(reasoning?.createdAt).toBe(45);
   });
 
   it("renders completed assistant text immediately even while the thread is active", () => {
@@ -1778,6 +1869,7 @@ describe("toViewMessages replay coverage", () => {
             id: "web-1",
             query: "react suspense",
             action: { type: "search", query: "react suspense" },
+            outputText: "Found the React Suspense docs",
           },
         },
         createdAt: 2,
@@ -1793,6 +1885,7 @@ describe("toViewMessages replay coverage", () => {
     expect(search).toBeDefined();
     expect(search?.status).toBe("completed");
     expect(search?.query).toBe("react suspense");
+    expect(search?.output).toBe("Found the React Suspense docs");
   });
 
   it("preserves unknown provider web-search action types", () => {

@@ -122,6 +122,7 @@ export interface ViewWebSearchMessage extends ViewMessageBase {
   callId: string;
   query?: string;
   action?: string;
+  output?: string;
   status: Extract<ViewMessageStatus, "pending" | "completed">;
 }
 

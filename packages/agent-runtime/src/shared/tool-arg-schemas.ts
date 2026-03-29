@@ -9,8 +9,8 @@ import { z } from "zod";
  */
 
 export const bashArgsSchema = z.object({
-  command: z.unknown(),
-  cwd: z.unknown().optional(),
+  command: z.string().optional(),
+  cwd: z.string().optional(),
 }).passthrough();
 
 export const textBlockSchema = z.object({

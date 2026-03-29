@@ -1079,7 +1079,10 @@ export function createCodexProviderAdapter(
     },
 
     decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
-      return decodeProviderToolCallRequest(request.id ?? 0, request.method, request.params);
+      if (typeof request.id !== "string" && typeof request.id !== "number") {
+        return null;
+      }
+      return decodeProviderToolCallRequest(request.id, request.method, request.params);
     },
 
     listModels() {

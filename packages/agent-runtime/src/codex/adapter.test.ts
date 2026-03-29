@@ -166,6 +166,16 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/stop returns null", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.buildCommand({
+        type: "thread/stop",
+        threadId: "bb-t1",
+      }),
+    ).toBeNull();
+  });
+
   it("buildCommand turn/start includes input and sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
@@ -1143,6 +1153,23 @@ describe("codex provider adapter", () => {
       tool: "bb_test_ping",
       arguments: { ping: true },
     });
+  });
+
+  it("decodeToolCallRequest returns null when the request id is missing", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeToolCallRequest({
+        jsonrpc: "2.0",
+        method: "item/tool/call",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "bb_test_ping",
+          arguments: { ping: true },
+        },
+      }),
+    ).toBeNull();
   });
 
   // -- listModels ----------------------------------------------------------

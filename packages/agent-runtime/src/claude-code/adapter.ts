@@ -154,11 +154,12 @@ function buildClaudeFileChangeItem(
   if (!filePath) {
     return null;
   }
+  const newText = args.new_string ?? args.content;
 
   const diff = buildEditDiff(
     filePath,
     args.old_string,
-    args.new_string,
+    newText,
   );
 
   return {
@@ -166,7 +167,7 @@ function buildClaudeFileChangeItem(
     id: "",
     changes: [{
       path: filePath,
-      kind: "update",
+      kind: args.old_string === undefined ? "add" : "update",
       ...(diff ? { diff } : {}),
     }],
     status: "pending",
@@ -273,6 +274,7 @@ function translateClaudeToolResultItem(
           id: input.callId,
           query: startedItem.query,
           ...(startedItem.action ? { action: startedItem.action } : {}),
+          ...(outputText ? { outputText } : {}),
         }, input.parentToolCallId ?? startedItem.parentToolCallId);
       case "toolCall":
         return withParentToolCallId({
@@ -320,6 +322,7 @@ function translateClaudeToolResultItem(
         type: "webSearch",
         id: input.callId,
         query: "",
+        ...(outputText ? { outputText } : {}),
       }, input.parentToolCallId);
     case "WebFetch":
       return withParentToolCallId({
@@ -327,6 +330,7 @@ function translateClaudeToolResultItem(
         id: input.callId,
         query: "",
         action: "fetch",
+        ...(outputText ? { outputText } : {}),
       }, input.parentToolCallId);
     default:
       return fallbackToolCall;
@@ -800,7 +804,10 @@ export function createClaudeCodeProviderAdapter(
     // -- Tool call codec ---------------------------------------------------
 
     decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
-      return decodeProviderToolCallRequest(request.id ?? "", request.method, request.params);
+      if (typeof request.id !== "string" && typeof request.id !== "number") {
+        return null;
+      }
+      return decodeProviderToolCallRequest(request.id, request.method, request.params);
     },
 
     // -- Provider capabilities ---------------------------------------------

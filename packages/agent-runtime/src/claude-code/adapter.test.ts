@@ -150,6 +150,69 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/resume passes through options and dynamic tools", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/resume",
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+      options: {
+        model: "claude-sonnet-4-5",
+        instructions: "Reopen the thread and continue carefully.",
+        reasoningLevel: "high",
+        envVars: {
+          "BAD.KEY": "ignored",
+          TEST_VAR: "123",
+        },
+      },
+      dynamicTools: [{
+        name: "bb_test_ping",
+        description: "Ping the host",
+        inputSchema: {
+          type: "object",
+          properties: {
+            ping: { type: "boolean" },
+          },
+          required: ["ping"],
+        },
+      }],
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/resume",
+      params: {
+        threadId: "bb-thread-1",
+        providerThreadId: "claude-session-1",
+        model: "claude-sonnet-4-5",
+        baseInstructions: "Reopen the thread and continue carefully.",
+        dynamicTools: [{
+          name: "bb_test_ping",
+          description: "Ping the host",
+          inputSchema: {
+            type: "object",
+            properties: {
+              ping: { type: "boolean" },
+            },
+            required: ["ping"],
+          },
+        }],
+      },
+    });
+    expect(cmd?.params).toMatchObject({
+      config: {
+        "shell_environment_policy.set.TEST_VAR": "123",
+        model_reasoning_effort: "high",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        config: {
+          "shell_environment_policy.set.BAD.KEY": "ignored",
+        },
+      },
+    });
+  });
+
   it("buildCommand turn/start includes input and providerThreadId", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommand({
@@ -180,6 +243,16 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/stop returns null", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(
+      adapter.buildCommand({
+        type: "thread/stop",
+        threadId: "bb-thread-1",
+      }),
+    ).toBeNull();
+  });
+
   it("decodeToolCallRequest preserves string request ids", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(
@@ -203,6 +276,23 @@ describe("claude-code provider adapter", () => {
       tool: "bb_test_ping",
       arguments: { ping: true },
     });
+  });
+
+  it("decodeToolCallRequest returns null when the request id is missing", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(
+      adapter.decodeToolCallRequest({
+        jsonrpc: "2.0",
+        method: "item/tool/call",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "bb_test_ping",
+          arguments: { ping: true },
+        },
+      }),
+    ).toBeNull();
   });
 
   // -- translateEvent: assistant messages -----------------------------------
@@ -311,6 +401,38 @@ describe("claude-code provider adapter", () => {
     );
   });
 
+  it("translateEvent falls back to a generic tool call when Bash args are malformed", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    adapter.translateEvent({
+      type: "assistant",
+      message: { role: "assistant", content: [{ type: "text", text: "Let me check" }] },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    const events = adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "tool_use", id: "tool-1", name: "Bash", input: { command: 42 } },
+        ],
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "tool-1",
+          tool: "Bash",
+          status: "pending",
+        }),
+      }),
+    );
+  });
+
   it("translateEvent maps WebSearch and WebFetch tool uses into webSearch items", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -354,6 +476,50 @@ describe("claude-code provider adapter", () => {
           id: "tool-fetch-1",
           query: "https://example.com",
           action: "fetch",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves completed WebSearch output text", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [{
+          type: "tool_use",
+          id: "tool-search-1",
+          name: "WebSearch",
+          input: { query: "react suspense" },
+        }],
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [{
+          type: "tool_result",
+          tool_use_id: "tool-search-1",
+          content: "Found the Suspense docs",
+          is_error: false,
+        }],
+      },
+      session_id: "sess-1",
+    } as SDKMessage);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "webSearch",
+          id: "tool-search-1",
+          query: "react suspense",
+          outputText: "Found the Suspense docs",
         }),
       }),
     );
@@ -600,7 +766,7 @@ describe("claude-code provider adapter", () => {
     );
   });
 
-  it("translateEvent avoids synthesizing create diffs for content-only Write tool uses", () => {
+  it("translateEvent marks content-only Write tool uses as add changes", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     const events = adapter.translateEvent({
@@ -633,12 +799,12 @@ describe("claude-code provider adapter", () => {
       changes: [
         {
           path: "src/app.ts",
-          kind: "update",
+          kind: "add",
         },
       ],
     });
     if (!started || started.item.type !== "fileChange") return;
-    expect(started.item.changes[0]).not.toHaveProperty("diff");
+    expect(started.item.changes[0]?.diff).toContain("+++ b/src/app.ts");
   });
 
   it("translateEvent preserves structured Agent arguments on tool calls", () => {

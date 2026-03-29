@@ -130,6 +130,16 @@ describe("pi provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/stop returns null", () => {
+    const adapter = createPiProviderAdapter();
+    expect(
+      adapter.buildCommand({
+        type: "thread/stop",
+        threadId: "bb-t1",
+      }),
+    ).toBeNull();
+  });
+
   it("buildCommand turn/start includes input", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommand({
@@ -303,6 +313,32 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent falls back to a generic tool call when bash args are malformed", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      args: {
+        command: 42,
+      },
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          type: "toolCall",
+          id: "tool-bash-1",
+          tool: "bash",
+          status: "pending",
+        }),
+      }),
+    );
+  });
+
   it("translateEvent surfaces malformed handled sdk envelopes as provider/unhandled", () => {
     const adapter = createPiProviderAdapter();
 
@@ -359,7 +395,7 @@ describe("pi provider adapter", () => {
     );
   });
 
-  it("translateEvent tool_execution_start with content-only write args avoids synthesizing a create diff", () => {
+  it("translateEvent tool_execution_start with content-only write args marks the change as an add", () => {
     const adapter = createPiProviderAdapter();
     adapter.translateEvent(loadFixture("agent-start.json"));
 
@@ -384,12 +420,12 @@ describe("pi provider adapter", () => {
       changes: [
         {
           path: "src/app.ts",
-          kind: "update",
+          kind: "add",
         },
       ],
     });
     if (!started || started.item.type !== "fileChange") return;
-    expect(started.item.changes[0]).not.toHaveProperty("diff");
+    expect(started.item.changes[0]?.diff).toContain("+++ b/src/app.ts");
   });
 
   it("translateEvent tool_execution_start with read args preserves structured tool arguments", () => {

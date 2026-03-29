@@ -243,11 +243,12 @@ function buildPiFileChangeItem(
   if (!args.path) {
     return null;
   }
+  const newText = args.newText ?? args.content;
 
   const diff = buildEditDiff(
     args.path,
     args.oldText,
-    args.newText,
+    newText,
   );
 
   return {
@@ -255,7 +256,7 @@ function buildPiFileChangeItem(
     id: "",
     changes: [{
       path: args.path,
-      kind: "update",
+      kind: args.oldText === undefined ? "add" : "update",
       ...(diff ? { diff } : {}),
     }],
     status: "pending",

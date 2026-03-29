@@ -250,7 +250,7 @@ function formatFileEdit(
 
 function formatWebSearch(
   msg: ViewWebSearchMessage,
-  _verbose: boolean,
+  verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
@@ -258,6 +258,9 @@ function formatWebSearch(
   lines.push(separator("Web Search", color));
   const query = msg.query ?? msg.action ?? "";
   lines.push(`  ${badge} ${cyan(query, color)}`);
+  if (verbose && msg.output) {
+    lines.push(dim(`  ${truncate(msg.output.trim(), 500)}`, color));
+  }
   return lines.join("\n");
 }
 

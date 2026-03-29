@@ -161,6 +161,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     id: z.string(),
     query: z.string(),
     action: z.string().optional(),
+    outputText: z.string().optional(),
     parentToolCallId: z.string().optional(),
   }),
   z.object({

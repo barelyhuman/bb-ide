@@ -6,6 +6,7 @@ export interface WebSearchLifecycleEvent {
   callId: string;
   query?: string;
   action?: string;
+  output?: string;
   parentToolCallId?: string;
 }
 
@@ -27,6 +28,7 @@ export function parseWebSearchLifecycleEvent(
       callId,
       query: decoded.item.query,
       action: decoded.item.action,
+      output: decoded.item.outputText,
       ...(parentToolCallId ? { parentToolCallId } : {}),
     };
   }
