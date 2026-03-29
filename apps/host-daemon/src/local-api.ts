@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
 import {
+  healthResponseSchema,
   openRequestSchema,
   restartRequestSchema,
   typedRoutes,
@@ -40,8 +41,20 @@ export interface LocalApiServer {
 export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
+  const bindHost = options.bindHost ?? "localhost";
+  const healthPath = options.healthPath ?? "/health";
   const app = new Hono();
   app.use("*", cors());
+
+  app.get(healthPath, (c) =>
+    c.text(healthResponseSchema.parse(options.healthValue ?? "ok")),
+  );
+  app.use("*", async (c, next) => {
+    if (options.mode === "health-only") {
+      return c.notFound();
+    }
+    await next();
+  });
 
   const { get, post } = typedRoutes<HostDaemonLocalSchema>(app);
 
@@ -82,13 +95,14 @@ export async function startLocalApiServer(
     port: number;
   }>((resolve, reject) => {
     const s = serve(
-      { fetch: app.fetch, port: options.port, hostname: "localhost" },
+      { fetch: app.fetch, port: options.port, hostname: bindHost },
       (info) => resolve({ server: s, port: info.port }),
     );
     s.on("error", reject);
   });
 
   return {
+    bindHost,
     port: boundPort,
     async close(): Promise<void> {
       await new Promise<void>((resolve, reject) => {

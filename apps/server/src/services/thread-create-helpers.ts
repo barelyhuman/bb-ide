@@ -38,6 +38,19 @@ export function buildManagedBranchName(
   return buildManagedBranchNameFromSeed(seed, threadId);
 }
 
+function isRemoteSourcePath(sourcePath: string): boolean {
+  if (sourcePath.startsWith("git@")) {
+    return true;
+  }
+
+  try {
+    const protocol = new URL(sourcePath).protocol;
+    return protocol === "http:" || protocol === "https:" || protocol === "ssh:";
+  } catch {
+    return false;
+  }
+}
+
 export function buildManagedTargetPath(
   sourcePath: string,
   projectId: string,

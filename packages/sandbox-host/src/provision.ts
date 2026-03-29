@@ -260,7 +260,7 @@ export async function provisionHost(
   const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
 
   try {
-    await startDaemonProcess(sandbox, daemonPayload, daemonEnv);
+    await startDaemonProcess(sandbox, daemonArtifacts, daemonEnv);
     await waitForDaemonHealth(sandbox);
     return createSandboxHost(sandbox, options.hostId);
   } catch (error) {
@@ -287,13 +287,23 @@ export async function resumeHost(
   const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
 
   try {
-    await writeSandboxFile(sandbox, SANDBOX_DAEMON_PATH, buildFakeDaemonPayload());
+    await Promise.all([
+      writeSandboxFile(sandbox, SANDBOX_DAEMON_PATH, daemonArtifacts.daemon),
+      writeSandboxFile(
+        sandbox,
+        SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
+        daemonArtifacts.claudeCodeBridge,
+      ),
+      writeSandboxFile(
+        sandbox,
+        SANDBOX_PI_BRIDGE_PATH,
+        daemonArtifacts.piBridge,
+      ),
+    ]);
     try {
       await assertDaemonHealth(sandbox);
     } catch {
-      await startBackgroundProcess(sandbox, `node ${SANDBOX_DAEMON_PATH}`, {
-        envs: daemonEnv,
-      });
+      await startDaemonProcess(sandbox, daemonArtifacts, daemonEnv);
       await waitForDaemonHealth(sandbox);
     }
     return createSandboxHost(sandbox, options.hostId);
