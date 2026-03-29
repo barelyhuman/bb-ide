@@ -13,6 +13,7 @@ export type {
   ResumeHostOptions,
   ResumeSandboxOptions,
   RunSandboxCommandOptions,
+  SandboxDaemonArtifacts,
   SandboxBackgroundProcess,
   SandboxCommandResult,
   SandboxFileOptions,

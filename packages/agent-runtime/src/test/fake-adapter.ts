@@ -11,12 +11,11 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "../provider-adapter.js";
+import { parseAvailableModelList } from "../shared/available-models.js";
 
 export interface CreateFakeAdapterOptions {
   displayName?: string;
   id?: string;
-  modelId?: string;
-  modelName?: string;
   scriptPath?: string;
 }
 
@@ -36,8 +35,6 @@ type ToolCallParams = z.infer<typeof toolCallParamsSchema>;
 
 const DEFAULT_ADAPTER_ID = "fake";
 const DEFAULT_DISPLAY_NAME = "Fake Provider";
-const DEFAULT_MODEL_ID = "fake-model";
-const DEFAULT_MODEL_NAME = "Fake Model";
 
 export const fakeProviderScriptPath = fileURLToPath(
   new URL("./fake-provider-script.cjs", import.meta.url),
@@ -47,6 +44,8 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
   switch (command.type) {
     case "initialize":
       return { jsonrpc: "2.0", method: "initialize", params: {} };
+    case "model/list":
+      return { jsonrpc: "2.0", method: "model/list", params: {} };
     case "thread/start":
       return {
         jsonrpc: "2.0",
@@ -213,23 +212,8 @@ function decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null 
   };
 }
 
-function listModels(options: CreateFakeAdapterOptions): Promise<AvailableModel[]> {
-  return Promise.resolve([
-    {
-      defaultReasoningEffort: "medium",
-      description: "Fake model for integration and runtime tests",
-      displayName: options.modelName ?? DEFAULT_MODEL_NAME,
-      id: options.modelId ?? DEFAULT_MODEL_ID,
-      isDefault: true,
-      model: options.modelId ?? DEFAULT_MODEL_ID,
-      supportedReasoningEfforts: [
-        {
-          description: "Medium",
-          reasoningEffort: "medium",
-        },
-      ],
-    },
-  ]);
+function parseModelListResult(result: unknown): AvailableModel[] {
+  return parseAvailableModelList(result);
 }
 
 export function createFakeAdapter(
@@ -247,9 +231,7 @@ export function createFakeAdapter(
     decodeToolCallRequest,
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,
     id: options.id ?? DEFAULT_ADAPTER_ID,
-    async listModels() {
-      return listModels(options);
-    },
+    parseModelListResult,
     process: {
       args: [options.scriptPath ?? fakeProviderScriptPath],
       command: "node",

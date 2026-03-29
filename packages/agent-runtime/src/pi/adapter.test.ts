@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import {
-  buildPiAvailableModels,
   createPiProviderAdapter,
 } from "./adapter.js";
+import { buildPiAvailableModels } from "./model-list.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/pi");
@@ -16,6 +16,9 @@ function loadFixture(name: string): AgentSessionEvent {
 }
 
 describe("pi provider adapter", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   // -- Identity & capabilities ---------------------------------------------
 
@@ -30,6 +33,12 @@ describe("pi provider adapter", () => {
     expect(adapter.process.command).toBe("node");
     expect(adapter.process.args).toHaveLength(1);
     expect(adapter.process.args[0]).toMatch(/bridge\.js$/);
+  });
+
+  it("uses BB_BRIDGE_DIR when present", () => {
+    vi.stubEnv("BB_BRIDGE_DIR", "/tmp");
+    const adapter = createPiProviderAdapter();
+    expect(adapter.process.args[0]).toBe("/tmp/bb-pi-bridge.mjs");
   });
 
   it("advertises trimmed capabilities", () => {
@@ -820,6 +829,7 @@ describe("pi provider adapter", () => {
                 provider: "anthropic",
                 reasoning: true,
                 input: ["text", "image"],
+                supportsXhigh: false,
               },
             ];
           case "openai":
@@ -830,6 +840,7 @@ describe("pi provider adapter", () => {
                 provider: "openai",
                 reasoning: true,
                 input: ["text"],
+                supportsXhigh: false,
               },
             ];
           default:
@@ -840,6 +851,7 @@ describe("pi provider adapter", () => {
                 provider: "google",
                 reasoning: true,
                 input: ["text"],
+                supportsXhigh: false,
               },
             ];
         }

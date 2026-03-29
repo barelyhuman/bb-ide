@@ -20,6 +20,7 @@ import {
   type DynamicToolDefinition,
   type ToolCallForwarder,
 } from "./tool-proxy.js";
+import { listPiBridgeModels } from "./model-list.js";
 
 // ---------------------------------------------------------------------------
 // Command schema — defines what JSON-RPC requests this bridge accepts
@@ -31,6 +32,10 @@ const piCommandSchema = z.discriminatedUnion("method", [
     params: z.object({
       clientInfo: z.object({ name: z.string(), version: z.string() }),
     }),
+  }),
+  z.object({
+    method: z.literal("model/list"),
+    params: z.object({}),
   }),
   z.object({
     method: z.literal("thread/start"),
@@ -282,6 +287,9 @@ function handleRequest(request: PiCommand & { id: string | number }): void {
     case "initialize":
       sendResult(request.id, { ok: true });
       break;
+    case "model/list":
+      void handleModelList(request.id);
+      break;
     case "thread/start":
       void handleThreadStart(request.id, request.params);
       break;
@@ -305,6 +313,15 @@ type ThreadResumeParams = Extract<PiCommand, { method: "thread/resume" }>["param
 type TurnStartParams = Extract<PiCommand, { method: "turn/start" }>["params"];
 type TurnSteerParams = Extract<PiCommand, { method: "turn/steer" }>["params"];
 type ThreadStopParams = Extract<PiCommand, { method: "thread/stop" }>["params"];
+
+async function handleModelList(id: string | number): Promise<void> {
+  try {
+    sendResult(id, await listPiBridgeModels());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendError(id, -32000, message);
+  }
+}
 
 async function handleThreadStart(
   id: string | number,

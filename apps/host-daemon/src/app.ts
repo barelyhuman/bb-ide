@@ -85,6 +85,10 @@ export interface CreateHostDaemonAppOptions {
   releaseLock: () => Promise<void>;
   restart: () => Promise<void>;
   enableLocalApi: boolean;
+  localApiBindHost?: StartLocalApiServerOptions["bindHost"];
+  localApiHealthPath?: StartLocalApiServerOptions["healthPath"];
+  localApiHealthValue?: StartLocalApiServerOptions["healthValue"];
+  localApiMode?: StartLocalApiServerOptions["mode"];
   localApiPort: number;
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
@@ -213,7 +217,11 @@ export async function createHostDaemonApp(
   const localApi =
     options.enableLocalApi
       ? await startLocalApiServer({
+          bindHost: options.localApiBindHost,
+          healthPath: options.localApiHealthPath,
+          healthValue: options.localApiHealthValue,
           hostId: options.hostId,
+          mode: options.localApiMode,
           port: options.localApiPort,
           serverUrl: options.serverUrl,
           getConnected: () => connection.sessionId != null,

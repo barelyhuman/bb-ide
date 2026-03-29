@@ -25,6 +25,7 @@ import {
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
 import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
+import { listClaudeCodeBridgeModels } from "./model-list.js";
 import {
   buildBridgeMcpServer,
   getAllowedToolNames,
@@ -42,6 +43,10 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
     params: z.object({
       clientInfo: z.object({ name: z.string(), version: z.string() }),
     }),
+  }),
+  z.object({
+    method: z.literal("model/list"),
+    params: z.object({}),
   }),
   z.object({
     method: z.literal("thread/start"),
@@ -283,6 +288,9 @@ function handleRequest(request: ClaudeCodeCommand & { id: string | number }): vo
   switch (request.method) {
     case "initialize":
       sendResult(request.id, { ok: true });
+      break;
+    case "model/list":
+      sendResult(request.id, listClaudeCodeBridgeModels());
       break;
     case "thread/start":
       handleThreadStart(request.id, request.params);

@@ -17,9 +17,13 @@ const execFileAsync = promisify(execFile);
 
 export interface StartLocalApiServerOptions {
   hostId: string;
+  bindHost?: string;
+  healthPath?: string;
+  healthValue?: string;
   port: number;
   serverUrl: string;
   getConnected: () => boolean;
+  mode?: "full" | "health-only";
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
   listActiveThreads: () => HostDaemonActiveThread[];
@@ -28,6 +32,7 @@ export interface StartLocalApiServerOptions {
 }
 
 export interface LocalApiServer {
+  bindHost: string;
   port: number;
   close(): Promise<void>;
 }

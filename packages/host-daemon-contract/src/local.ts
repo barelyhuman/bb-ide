@@ -29,6 +29,9 @@ export const statusResponseSchema = z.object({
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;
 
+export const healthResponseSchema = z.string().min(1);
+export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
 // ---------------------------------------------------------------------------
 // Route type definition for Hono typed client
 // ---------------------------------------------------------------------------

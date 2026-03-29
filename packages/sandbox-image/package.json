@@ -1,0 +1,34 @@
+{
+  "name": "@bb/sandbox-image",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist", "templates.json", "Dockerfile"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "template:build": "tsx src/build-template.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "test:image": "SANDBOX_IMAGE_TEST=1 vitest run --config vitest.config.ts test/image.test.ts"
+  },
+  "dependencies": {
+    "e2b": "^2.18.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1"
+  }
+}

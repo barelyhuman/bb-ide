@@ -850,7 +850,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async listModels({ providerId }) {
       await runtime.ensureProvider({ providerId });
       const proc = requireProviderProcess(providerId);
-      return proc.adapter.listModels();
+      const command = proc.adapter.buildCommand({ type: "model/list" });
+      if (!command) {
+        throw new Error(`Provider "${providerId}" does not support model/list`);
+      }
+      const result = await sendRequest(
+        proc.child,
+        command,
+        proc.pending,
+        () => nextRequestId++,
+      );
+      return proc.adapter.parseModelListResult(result);
     },
 
     listRunningProviders() {

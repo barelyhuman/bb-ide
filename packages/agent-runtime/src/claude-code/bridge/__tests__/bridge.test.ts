@@ -7,7 +7,10 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   tool: vi.fn((_name, _desc, _schema, handler) => handler),
 }));
 
-import { buildSessionOptions } from "../bridge.js";
+import {
+  buildSessionOptions,
+} from "../bridge.js";
+import { listClaudeCodeBridgeModels } from "../model-list.js";
 
 describe("bridge", () => {
   it("restricts manager sessions to coordination-safe built-in tools", () => {
@@ -31,5 +34,13 @@ describe("bridge", () => {
     );
 
     expect(options.tools).toBeUndefined();
+  });
+
+  it("returns the bridge-owned Claude model list", () => {
+    expect(listClaudeCodeBridgeModels().map((model) => model.id)).toEqual([
+      "claude-sonnet-4-6",
+      "claude-opus-4-6",
+      "claude-haiku-4-5",
+    ]);
   });
 });

@@ -1,9 +1,14 @@
 export const DEFAULT_SANDBOX_CREATE_RETRIES = 2;
-export const DEFAULT_SANDBOX_TEMPLATE = "base";
 export const DEFAULT_SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
+export const SANDBOX_BRIDGE_DIR = "/tmp";
+export const SANDBOX_CLAUDE_CODE_BRIDGE_PATH = "/tmp/bb-claude-code-bridge.mjs";
 export const SANDBOX_DATA_DIR = "/tmp/bb-data";
 export const SANDBOX_DAEMON_HEALTH_PATH = "/health";
 export const SANDBOX_DAEMON_HEALTH_PORT = 9111;
+export const SANDBOX_DAEMON_HEALTH_RESPONSE = "bb-host-daemon";
 export const SANDBOX_DAEMON_PATH = "/tmp/bb-daemon.mjs";
+export const SANDBOX_DAEMON_STDERR_PATH = "/tmp/bb-daemon.stderr.log";
+export const SANDBOX_DAEMON_STDOUT_PATH = "/tmp/bb-daemon.stdout.log";
 export const SANDBOX_DAEMON_HEALTH_RETRIES = 29;
 export const SANDBOX_DAEMON_HEALTH_RETRY_MS = 2_000;
+export const SANDBOX_PI_BRIDGE_PATH = "/tmp/bb-pi-bridge.mjs";

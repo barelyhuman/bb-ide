@@ -115,6 +115,10 @@ async function ensureExistingWorkspaceMatches(
   return true;
 }
 
+async function ensureWorkspaceParentDirectory(targetPath: string): Promise<void> {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+}
+
 export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path: string }> {
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };

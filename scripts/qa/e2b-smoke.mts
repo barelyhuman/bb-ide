@@ -6,6 +6,7 @@ import {
   startBackgroundProcess,
   writeSandboxFile,
 } from "../../packages/sandbox-host/src/index.ts";
+import { resolveSandboxImageTemplate } from "../../packages/sandbox-image/src/index.ts";
 
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
 const SMOKE_SERVER_PORT = 9999;
@@ -78,6 +79,12 @@ async function main(): Promise<void> {
     if (!nodeResult.stdout.trim().startsWith("v")) {
       throw new Error(`Unexpected node version output: ${nodeResult.stdout}`);
     }
+
+    const templateId = resolveSandboxImageTemplate();
+    console.log(`Checking template tools for ${templateId}`);
+    await runSandboxCommand(sandbox, "codex --version");
+    await runSandboxCommand(sandbox, "git --version");
+    await runSandboxCommand(sandbox, "gh --version");
 
     console.log("Writing fake daemon server");
     await writeSandboxFile(

@@ -346,14 +346,6 @@ function buildClaudeCodeConfig(envVars?: Record<string, string>): Record<string,
 }
 
 // ---------------------------------------------------------------------------
-// Model catalog
-// ---------------------------------------------------------------------------
-
-function listClaudeCodeModels(): Promise<AvailableModel[]> {
-  return Promise.resolve([...STATIC_CLAUDE_CODE_MODELS]);
-}
-
-// ---------------------------------------------------------------------------
 // Adapter factory
 // ---------------------------------------------------------------------------
 
@@ -365,8 +357,6 @@ export interface CreateClaudeCodeProviderAdapterOptions {
   processArgs?: string[];
   /** Extra environment variables for the bridge process. */
   launchEnv?: Record<string, string>;
-  /** Override model listing. Used by unit tests to avoid real API calls. */
-  listModels?: () => Promise<AvailableModel[]>;
 }
 
 interface ClaudeTurnState {
@@ -385,7 +375,6 @@ export function createClaudeCodeProviderAdapter(
     supportsRename: false,
     supportsServiceTier: false,
   };
-  const models = opts?.listModels ?? listClaudeCodeModels;
 
   // Per-thread turn state — the Claude SDK doesn't have turn IDs, so the
   // adapter assigns them. Keyed by threadId so multiple threads sharing
@@ -743,6 +732,12 @@ export function createClaudeCodeProviderAdapter(
             method: "initialize",
             params: { clientInfo: { name: "bb", version: "1.0.0" } },
           };
+        case "model/list":
+          return {
+            jsonrpc: "2.0",
+            method: "model/list",
+            params: {},
+          };
         case "thread/start": {
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildClaudeCodeConfig(command.options?.envVars);
@@ -831,6 +826,10 @@ export function createClaudeCodeProviderAdapter(
       return translateClaudeEvent(event, context);
     },
 
+    parseModelListResult(result: unknown) {
+      return parseAvailableModelList(result);
+    },
+
     // -- Tool call codec ---------------------------------------------------
 
     decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
@@ -840,11 +839,6 @@ export function createClaudeCodeProviderAdapter(
       return decodeProviderToolCallRequest(request.id, request.method, request.params);
     },
 
-    // -- Provider capabilities ---------------------------------------------
-
-    listModels() {
-      return models();
-    },
   };
 }
 

@@ -7,6 +7,22 @@ const pendingToolCalls = new Map();
 
 let nextProviderThreadId = 1;
 let nextToolCallId = 1;
+const defaultModelList = [
+  {
+    id: "fake-model",
+    model: "fake-model",
+    displayName: "Fake Model",
+    description: "Fake model for integration and runtime tests",
+    supportedReasoningEfforts: [
+      {
+        reasoningEffort: "medium",
+        description: "Medium",
+      },
+    ],
+    defaultReasoningEffort: "medium",
+    isDefault: true,
+  },
+];
 
 function send(message) {
   process.stdout.write(JSON.stringify(message) + "\n");
@@ -236,6 +252,15 @@ rl.on("line", (line) => {
       jsonrpc: "2.0",
       id: message.id,
       result: { ok: true },
+    });
+    return;
+  }
+
+  if (message.method === "model/list") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: defaultModelList,
     });
     return;
   }

@@ -11,9 +11,12 @@ mkdirSync(LOG_DIR, { recursive: true });
 
 const LOG_FORMAT = commonConfig.BB_LOG_FORMAT;
 
+export type LoggerTransportMode = "stream" | "worker";
+
 export interface CreateLoggerOptions {
   component: string;
   base?: Record<string, unknown>;
+  transportMode?: LoggerTransportMode;
 }
 
 function sanitizeComponentName(component: string): string {
@@ -27,6 +30,26 @@ function sanitizeComponentName(component: string): string {
 
 export function createLogger(options: CreateLoggerOptions): Logger {
   const component = sanitizeComponentName(options.component);
+  const loggerOptions = {
+    level: commonConfig.BB_LOG_LEVEL,
+    base: {
+      component,
+      ...(options.base ?? {}),
+    },
+    serializers: {
+      err: pino.stdSerializers.errWithCause,
+      error: pino.stdSerializers.errWithCause,
+    },
+  } satisfies pino.LoggerOptions;
+  const transportMode = options.transportMode ?? "worker";
+
+  if (transportMode === "stream") {
+    // Sandboxed single-file bundles cannot resolve pino worker transports
+    // from disk, so use a direct file destination instead.
+    const destination = pino.destination(join(LOG_DIR, `${component}.log`));
+    return pino(loggerOptions, destination);
+  }
+
   const targets: pino.TransportTargetOptions[] = [
     {
       target: "pino-roll",
@@ -54,18 +77,5 @@ export function createLogger(options: CreateLoggerOptions): Logger {
 
   const transport = pino.transport({ targets });
 
-  return pino(
-    {
-      level: commonConfig.BB_LOG_LEVEL,
-      base: {
-        component,
-        ...(options.base ?? {}),
-      },
-      serializers: {
-        err: pino.stdSerializers.errWithCause,
-        error: pino.stdSerializers.errWithCause,
-      },
-    },
-    transport,
-  );
+  return pino(loggerOptions, transport);
 }

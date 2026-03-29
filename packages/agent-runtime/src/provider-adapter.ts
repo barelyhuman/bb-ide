@@ -41,6 +41,7 @@ export interface AdapterOptions {
 
 export type AdapterCommand =
   | { type: "initialize" }
+  | { type: "model/list" }
   | {
       type: "thread/start";
       threadId: string;
@@ -90,10 +91,10 @@ export interface ProviderAdapter {
   process: { command: string; args: string[] };
 
   buildCommand(command: AdapterCommand): JsonRpcMessage | null;
+  parseModelListResult(result: unknown): AvailableModel[];
   translateEvent(
     event: unknown,
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null;
-  listModels(): Promise<AvailableModel[]>;
 }

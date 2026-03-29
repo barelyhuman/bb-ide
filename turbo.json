@@ -5,6 +5,16 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "bundle": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "template:build": {
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "outputs": [],
+      "passThroughEnv": ["E2B_API_KEY"]
+    },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,

@@ -2,7 +2,9 @@ import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ThreadEvent } from "@bb/domain";
+import {
+  type ThreadEvent,
+} from "@bb/domain";
 import {
   createFakeAdapter as createSharedFakeAdapter,
   fakeProviderScriptPath,
@@ -13,6 +15,7 @@ import type {
   ProviderAdapter,
 } from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
+import { parseAvailableModelList } from "./shared/available-models.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,6 +81,12 @@ describe("createAgentRuntime", () => {
             return {
               jsonrpc: "2.0",
               method: "initialize",
+            };
+          case "model/list":
+            return {
+              jsonrpc: "2.0",
+              method: "model/list",
+              params: {},
             };
           case "thread/start":
             return {
@@ -149,23 +158,8 @@ describe("createAgentRuntime", () => {
       decodeToolCallRequest() {
         return null;
       },
-      async listModels() {
-        return [
-          {
-            id: "warning-fake-default",
-            model: "warning-fake-default",
-            displayName: "Warning Fake Default",
-            description: "Test model",
-            supportedReasoningEfforts: [
-              {
-                reasoningEffort: "low",
-                description: "Fastest",
-              },
-            ],
-            defaultReasoningEffort: "low",
-            isDefault: true,
-          },
-        ];
+      parseModelListResult(result) {
+        return parseAvailableModelList(result);
       },
     };
   }
@@ -188,6 +182,12 @@ describe("createAgentRuntime", () => {
             return {
               jsonrpc: "2.0",
               method: "initialize",
+            };
+          case "model/list":
+            return {
+              jsonrpc: "2.0",
+              method: "model/list",
+              params: {},
             };
           case "thread/start":
             return {
@@ -235,8 +235,8 @@ describe("createAgentRuntime", () => {
       decodeToolCallRequest() {
         return null;
       },
-      async listModels() {
-        return [];
+      parseModelListResult(result) {
+        return parseAvailableModelList(result);
       },
     };
   }

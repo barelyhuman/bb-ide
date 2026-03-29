@@ -41,6 +41,8 @@ describe("local API server", () => {
       connected: true,
       serverUrl: "http://server.test",
     });
+    const healthResponse = await client.health.$get();
+    expect(await healthResponse.text()).toBe("ok");
   });
 
   it("delegates open and folder-pick operations to the provided callbacks", async () => {
@@ -126,5 +128,27 @@ describe("local API server", () => {
     expect(response.ok).toBe(true);
     await waitFor(() => restart.mock.calls.length === 1);
     expect(restart).toHaveBeenCalledTimes(1);
+  });
+
+  it("supports health-only mode for sandbox hosts", async () => {
+    server = await startLocalApiServer({
+      bindHost: "127.0.0.1",
+      healthPath: "/ready",
+      healthValue: "bb-host-daemon",
+      hostId: "host-1",
+      mode: "health-only",
+      port: 0,
+      serverUrl: "http://server.test",
+      getConnected: () => true,
+      restart: () => undefined,
+    });
+
+    const healthResponse = await fetch(`http://127.0.0.1:${server.port}/ready`);
+    expect(healthResponse.status).toBe(200);
+    expect(await healthResponse.text()).toBe("bb-host-daemon");
+
+    const client = createHostDaemonLocalClient(`http://127.0.0.1:${server.port}`);
+    const statusResponse = await client.status.$get();
+    expect(statusResponse.status).toBe(404);
   });
 });

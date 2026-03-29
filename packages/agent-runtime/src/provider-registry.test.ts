@@ -44,8 +44,35 @@ describe("provider registry", () => {
   });
 
   it("lists provider catalog", () => {
-    const ids = listAvailableProviderInfos().map((provider) => provider.id);
-    expect(ids).toEqual(["codex", "claude-code", "pi"]);
+    expect(listAvailableProviderInfos()).toEqual([
+      {
+        id: "codex",
+        displayName: "Codex",
+        capabilities: {
+          supportsRename: true,
+          supportsServiceTier: true,
+        },
+        available: true,
+      },
+      {
+        id: "claude-code",
+        displayName: "Claude Code",
+        capabilities: {
+          supportsRename: false,
+          supportsServiceTier: false,
+        },
+        available: true,
+      },
+      {
+        id: "pi",
+        displayName: "Pi",
+        capabilities: {
+          supportsRename: false,
+          supportsServiceTier: false,
+        },
+        available: true,
+      },
+    ]);
   });
 
   it("returns provider-owned visibility metadata", () => {

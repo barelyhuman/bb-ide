@@ -269,6 +269,9 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.10
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       hono:
         specifier: ^4.7.0
         version: 4.11.9
@@ -619,6 +622,9 @@ importers:
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../host-daemon-contract
+      '@bb/sandbox-image':
+        specifier: workspace:*
+        version: link:../sandbox-image
       e2b:
         specifier: ^2.18.0
         version: 2.18.0
@@ -641,6 +647,28 @@ importers:
       vitest:
         specifier: ^4.1.1
         version: 4.1.1(@types/node@22.19.10)(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
+
+  packages/sandbox-image:
+    dependencies:
+      e2b:
+        specifier: ^2.18.0
+        version: 2.18.0
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
 
   packages/server-contract:
     dependencies:

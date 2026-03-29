@@ -43,6 +43,10 @@ export function buildManagedTargetPath(
   projectId: string,
   threadId: string,
 ): string {
+  if (isRemoteSourcePath(sourcePath)) {
+    return path.join(REMOTE_WORKSPACE_ROOT, projectId, threadId);
+  }
+
   return path.join(path.dirname(sourcePath), ".bb-worktrees", projectId, threadId);
 }
 

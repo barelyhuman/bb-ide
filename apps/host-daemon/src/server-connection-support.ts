@@ -1,4 +1,5 @@
 import ReconnectingWebSocket from "partysocket/ws";
+import WS from "ws";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonActiveThread,
@@ -83,7 +84,10 @@ export function createDefaultReconnectingWebSocket(
   urlProvider: () => Promise<string>,
   options: ReconnectingWebSocketOptions,
 ): ReconnectingWebSocketLike {
-  return new ReconnectingWebSocket(urlProvider, [], options);
+  return new ReconnectingWebSocket(urlProvider, [], {
+    ...options,
+    WebSocket: WS,
+  });
 }
 
 export function decodeWebSocketMessageData(data: unknown): string {

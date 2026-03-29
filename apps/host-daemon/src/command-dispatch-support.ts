@@ -1,4 +1,4 @@
-import { createProviderForId, listAvailableProviders } from "@bb/agent-runtime";
+import { createAgentRuntime, listAvailableProviders } from "@bb/agent-runtime";
 import type {
   AvailableModel,
   ProviderInfo,

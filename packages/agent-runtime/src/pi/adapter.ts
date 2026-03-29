@@ -2,9 +2,9 @@
  * Pi provider adapter.
  *
  * Maps between bb's ProviderAdapter contract and the Pi coding agent bridge
- * process. Uses the Pi AI SDK for model catalog and authentication. The adapter
- * owns event translation: it takes raw `AgentSessionEvent` from the Pi SDK
- * and produces `ThreadEvent[]`.
+ * process. The bridge owns provider SDK interactions such as model discovery.
+ * The adapter owns event translation: it takes raw `AgentSessionEvent` from
+ * the Pi SDK and produces `ThreadEvent[]`.
  */
 
 import type { KnownProvider } from "@mariozechner/pi-ai";
@@ -899,6 +899,12 @@ export function createPiProviderAdapter(
             method: "initialize",
             params: { clientInfo: { name: "bb", version: "1.0.0" } },
           };
+        case "model/list":
+          return {
+            jsonrpc: "2.0",
+            method: "model/list",
+            params: {},
+          };
         case "thread/start": {
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
@@ -985,6 +991,10 @@ export function createPiProviderAdapter(
       return translatePiEvent(event, context);
     },
 
+    parseModelListResult(result: unknown) {
+      return parseAvailableModelList(result);
+    },
+
     // -- Tool call codec ---------------------------------------------------
 
     decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
@@ -994,11 +1004,6 @@ export function createPiProviderAdapter(
       return decodeProviderToolCallRequest(request.id, request.method, request.params);
     },
 
-    // -- Provider capabilities ---------------------------------------------
-
-    listModels() {
-      return models();
-    },
   };
 }
 

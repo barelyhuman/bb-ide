@@ -187,6 +187,34 @@ describe("createLogger", () => {
     );
   });
 
+  it("uses a direct file destination when stream mode is requested", async () => {
+    const dataDir = createTempDir();
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_SECRET_TOKEN", "test-token");
+    vi.stubEnv("BB_DATA_DIR", dataDir);
+    vi.stubEnv("BB_LOG_FORMAT", "json");
+
+    const { createLogger, transportSpy } =
+      await importFreshLoggerWithPinoTransportSpy();
+    const logger = createLogger({
+      component: "host-daemon",
+      transportMode: "stream",
+    });
+    const logDir = path.join(dataDir, "logs");
+
+    logger.info({ requestId: "req_2" }, "sandbox booted");
+    await waitFor(() => readComponentLogLines(logDir, "host-daemon").length === 1);
+
+    expect(transportSpy).not.toHaveBeenCalled();
+    const entries = readComponentLogLines(logDir, "host-daemon");
+    expect(entries[0]).toMatchObject({
+      component: "host-daemon",
+      level: 30,
+      msg: "sandbox booted",
+      requestId: "req_2",
+    });
+  });
+
   it("serializes nested error causes", async () => {
     const dataDir = createTempDir();
     vi.stubEnv("NODE_ENV", "production");

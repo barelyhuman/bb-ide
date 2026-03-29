@@ -734,7 +734,6 @@ export function createCodexProviderAdapter(
     supportsRename: true,
     supportsServiceTier: true,
   };
-  const models = opts?.listModels ?? listCodexModels;
 
   return {
     id: "codex",
@@ -755,6 +754,12 @@ export function createCodexProviderAdapter(
               clientInfo: { name: "bb", version: "1.0.0", title: null },
               capabilities: { experimentalApi: true },
             },
+          };
+        case "model/list":
+          return {
+            jsonrpc: "2.0",
+            method: "model/list",
+            params: {},
           };
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);

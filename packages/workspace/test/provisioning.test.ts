@@ -108,6 +108,34 @@ describe("workspace provisioning", () => {
     expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
   });
 
+  it("creates nested clone targets when parent directories do not exist", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+    const parentDir = await makeTempDir("bb-clone-nested-parent-");
+    const targetPath = path.join(parentDir, ".bb-worktrees", "proj_123", "thr_456");
+
+    await createClone({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName: "clone-branch",
+    });
+
+    expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
+  });
+
+  it("creates nested worktree targets when parent directories do not exist", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+    const parentDir = await makeTempDir("bb-worktree-nested-parent-");
+    const targetPath = path.join(parentDir, ".bb-worktrees", "proj_123", "thr_456");
+
+    await createWorktree({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName: "feature",
+    });
+
+    expect(await new Workspace(targetPath).currentBranch).toBe("feature");
+  });
+
   it("streams setup script output and respects timeouts", async () => {
     const workspacePath = await makeTempDir("bb-setup-script-");
     await fs.writeFile(

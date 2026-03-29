@@ -3,7 +3,29 @@ import {
   provisionHost,
   resumeHost,
 } from "../src/index.js";
-import { SANDBOX_DAEMON_PATH } from "../src/constants.js";
+import {
+  SANDBOX_BRIDGE_DIR,
+  SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
+  SANDBOX_DAEMON_HEALTH_RESPONSE,
+  SANDBOX_DAEMON_PATH,
+  SANDBOX_DAEMON_STDERR_PATH,
+  SANDBOX_DAEMON_STDOUT_PATH,
+  SANDBOX_PI_BRIDGE_PATH,
+} from "../src/constants.js";
+
+const testDaemonArtifacts = {
+  claudeCodeBridge: "console.log('claude bridge');",
+  daemon: "console.log('daemon');",
+  piBridge: "console.log('pi bridge');",
+};
+const testSandboxTemplate = "bb-sandbox:test-build";
+
+const daemonStartCommand = [
+  "sh -lc",
+  `'rm -f ${SANDBOX_DAEMON_STDOUT_PATH} ${SANDBOX_DAEMON_STDERR_PATH}`,
+  `&& node ${SANDBOX_DAEMON_PATH}`,
+  `>${SANDBOX_DAEMON_STDOUT_PATH} 2>${SANDBOX_DAEMON_STDERR_PATH}'`,
+].join(" ");
 
 const sandboxCreateMock = vi.fn();
 const sandboxConnectMock = vi.fn();
@@ -48,17 +70,19 @@ describe("sandbox host provisioning", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("creates a sandbox with daemon envs and lifecycle pause", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
       .mockResolvedValueOnce({ pid: 321 })
-      .mockResolvedValueOnce({ stdout: "ok\n" });
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const host = await provisionHost({
       authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
@@ -69,7 +93,11 @@ describe("sandbox host provisioning", () => {
 
     expect(sandboxCreateMock).toHaveBeenCalledWith("custom-template", {
       envs: {
+        BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
         BB_DATA_DIR: "/tmp/bb-data",
+        BB_DAEMON_HEALTH_PATH: "/health",
+        BB_DAEMON_HEALTH_PORT: "9111",
+        BB_DAEMON_HEALTH_VALUE: SANDBOX_DAEMON_HEALTH_RESPONSE,
         BB_HOST_ID: "host-123",
         BB_HOST_NAME: "sandbox-123",
         BB_SECRET_TOKEN: "secret-token",
@@ -78,9 +106,10 @@ describe("sandbox host provisioning", () => {
       lifecycle: { onTimeout: "pause" },
       timeoutMs: 123_000,
     });
-    expect(sandbox.files.write).toHaveBeenCalledWith(
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      1,
       SANDBOX_DAEMON_PATH,
-      expect.stringContaining("session/open"),
+      testDaemonArtifacts.daemon,
       {},
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith(`node ${SANDBOX_DAEMON_PATH}`, {
@@ -101,15 +130,17 @@ describe("sandbox host provisioning", () => {
       .mockResolvedValueOnce({ pid: 321 })
       .mockRejectedValueOnce(new Error("not ready"))
       .mockRejectedValueOnce(new Error("still not ready"))
-      .mockResolvedValueOnce({ stdout: "ok\n" });
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const provisioning = provisionHost({
       authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
     });
 
     await vi.runAllTimersAsync();
@@ -122,7 +153,7 @@ describe("sandbox host provisioning", () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
       .mockResolvedValueOnce({ pid: 321 })
-      .mockResolvedValueOnce({ stdout: "ok\n" });
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock
       .mockRejectedValueOnce(new Error("create failed"))
       .mockRejectedValueOnce(new Error("create failed again"))
@@ -130,10 +161,12 @@ describe("sandbox host provisioning", () => {
 
     const provisioning = provisionHost({
       authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
     });
 
     await vi.runAllTimersAsync();
@@ -185,15 +218,17 @@ describe("sandbox host provisioning", () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
       .mockResolvedValueOnce({ pid: 321 })
-      .mockResolvedValueOnce({ stdout: "ok\n" });
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const host = await provisionHost({
       authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
     });
 
     await host.suspend();
@@ -208,11 +243,12 @@ describe("sandbox host provisioning", () => {
     sandbox.commands.run
       .mockRejectedValueOnce(new Error("daemon not running"))
       .mockResolvedValueOnce({ pid: 654 })
-      .mockResolvedValueOnce({ stdout: "ok\n" });
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxConnectMock.mockResolvedValue(sandbox);
 
     const resuming = resumeHost({
       authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
       externalId: "sandbox-123",
       hostId: "host-123",
       hostName: "sandbox-123",
@@ -226,9 +262,22 @@ describe("sandbox host provisioning", () => {
     expect(sandboxConnectMock).toHaveBeenCalledWith("sandbox-123", {
       timeoutMs: 45_000,
     });
-    expect(sandbox.files.write).toHaveBeenCalledWith(
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      1,
       SANDBOX_DAEMON_PATH,
-      expect.stringContaining("session/open"),
+      testDaemonArtifacts.daemon,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      2,
+      SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
+      testDaemonArtifacts.claudeCodeBridge,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      3,
+      SANDBOX_PI_BRIDGE_PATH,
+      testDaemonArtifacts.piBridge,
       {},
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith("curl -sf http://127.0.0.1:9111/health", {});

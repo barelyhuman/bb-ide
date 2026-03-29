@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./models.js", () => ({
-  listCodexModels: vi.fn(),
-}));
-
-import { listCodexModels } from "./models.js";
+import { parseModelsResponse } from "./models.js";
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
 
@@ -57,6 +53,17 @@ describe("codex provider adapter", () => {
         clientInfo: { name: "bb", version: "1.0.0", title: null },
         capabilities: { experimentalApi: true },
       },
+    });
+  });
+
+  it("buildCommand model/list maps to the codex protocol", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({ type: "model/list" });
+
+    expect(cmd).toEqual({
+      jsonrpc: "2.0",
+      method: "model/list",
+      params: {},
     });
   });
 
@@ -1222,6 +1229,7 @@ describe("codex provider adapter", () => {
     ] satisfies Awaited<ReturnType<typeof listCodexModels>>;
     mockedListCodexModels.mockResolvedValue(models);
 
+  it("parses model/list results from the codex protocol", () => {
     const adapter = createCodexProviderAdapter();
     await expect(adapter.listModels()).resolves.toEqual(models);
   });

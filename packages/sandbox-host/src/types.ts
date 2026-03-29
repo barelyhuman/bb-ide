@@ -40,9 +40,15 @@ export interface SandboxHost {
   extendTimeout(timeoutMs: number): Promise<void>;
 }
 
+export interface SandboxDaemonArtifacts {
+  claudeCodeBridge: string;
+  daemon: string;
+  piBridge: string;
+}
+
 export interface ProvisionHostOptions {
   apiKey?: string;
-  daemonPayload?: string;
+  daemonArtifacts?: SandboxDaemonArtifacts;
   hostId: string;
   hostName: string;
   sandboxType: string;
@@ -54,6 +60,7 @@ export interface ProvisionHostOptions {
 
 export interface ResumeHostOptions {
   apiKey?: string;
+  daemonArtifacts?: SandboxDaemonArtifacts;
   externalId: string;
   hostId: string;
   hostName: string;

@@ -14,6 +14,10 @@ function loadFixture(name: string): unknown {
 }
 
 describe("claude-code provider adapter", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   // -- Identity & capabilities ---------------------------------------------
 
   it("has correct identity", () => {
@@ -27,6 +31,12 @@ describe("claude-code provider adapter", () => {
     expect(adapter.process.command).toBe("node");
     expect(adapter.process.args).toHaveLength(1);
     expect(adapter.process.args[0]).toMatch(/bridge\.js$/);
+  });
+
+  it("uses BB_BRIDGE_DIR when present", () => {
+    vi.stubEnv("BB_BRIDGE_DIR", "/tmp");
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(adapter.process.args[0]).toBe("/tmp/bb-claude-code-bridge.mjs");
   });
 
   it("advertises trimmed capabilities", () => {
@@ -49,6 +59,15 @@ describe("claude-code provider adapter", () => {
         title: "hi",
       }),
     ).toBeNull();
+  });
+
+  it("buildCommand model/list routes through the bridge", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(adapter.buildCommand({ type: "model/list" })).toEqual({
+      jsonrpc: "2.0",
+      method: "model/list",
+      params: {},
+    });
   });
 
   it("buildCommand thread/start routes threadId from command", () => {
@@ -134,6 +153,25 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
     });
+  });
+
+  it("parseModelListResult validates bridge model payloads", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(
+      adapter.parseModelListResult([
+        {
+          id: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-6",
+          displayName: "Claude Sonnet 4.6",
+          description: "Fast, intelligent model for everyday coding tasks",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "Medium reasoning effort" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+      ]),
+    ).toHaveLength(1);
   });
 
   it("buildCommand thread/resume uses null for missing providerThreadId", () => {
