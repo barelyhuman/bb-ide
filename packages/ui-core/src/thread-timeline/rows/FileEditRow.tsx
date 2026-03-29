@@ -19,6 +19,8 @@ interface RenderablePatch {
   patch: string;
 }
 
+type SyntheticFileEditPatchAction = "created" | "deleted";
+
 function fileNameFromPath(path: string): string {
   const normalized = path.replaceAll("\\", "/");
   const segments = normalized.split("/");
@@ -120,42 +122,86 @@ function diffStats(change: ViewFileEditMessage["changes"][number]): { added: num
   return { added, removed };
 }
 
+function splitPatchLines(diff: string): string[] {
+  const normalizedDiff = diff.replaceAll("\r\n", "\n");
+  if (normalizedDiff.length === 0) {
+    return [];
+  }
+  const lines = normalizedDiff.split("\n");
+  const lastLine = lines[lines.length - 1];
+  if (lastLine === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+function isPatchMetadataLine(line: string): boolean {
+  return (
+    line.startsWith("diff --git ") ||
+    line.startsWith("index ") ||
+    line.startsWith("new file mode ") ||
+    line.startsWith("deleted file mode ") ||
+    line.startsWith("similarity index ") ||
+    line.startsWith("rename from ") ||
+    line.startsWith("rename to ") ||
+    line.startsWith("--- ") ||
+    line.startsWith("+++ ") ||
+    line.startsWith("@@") ||
+    line === "\\ No newline at end of file"
+  );
+}
+
+function getPatchBodyLines(diff: string | undefined): string[] {
+  if (!diff) {
+    return [];
+  }
+  return splitPatchLines(diff).filter((line) => !isPatchMetadataLine(line));
+}
+
+function ensurePrefixedBodyLines(
+  lines: string[],
+  prefix: "+" | "-",
+): string[] {
+  return lines.map((line) => (line.startsWith(prefix) ? line : `${prefix}${line}`));
+}
+
 function toSyntheticPatch(
   change: ViewFileEditMessage["changes"][number],
-  action: FileChangeAction,
+  action: SyntheticFileEditPatchAction,
 ): string | undefined {
-  if (action !== "created" && action !== "deleted") return undefined;
-  const diff = change.diff?.replaceAll("\r\n", "\n") ?? "";
-  const lines = diff.endsWith("\n") ? diff.slice(0, -1).split("\n") : diff.split("\n");
-  if (lines.length === 0 || (lines.length === 1 && lines[0] === "")) return undefined;
+  const lines = getPatchBodyLines(change.diff);
+  if (lines.length === 0) return undefined;
   const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
   const fromPath = action === "created" ? "/dev/null" : `a/${normalizedPath}`;
   const toPath = action === "created" ? `b/${normalizedPath}` : "/dev/null";
-  const prefix = action === "created" ? "+" : "-";
-  const oldCount = action === "created" ? 0 : lines.length;
-  const newCount = action === "created" ? lines.length : 0;
-  const body = lines.map((line) => `${prefix}${line}`).join("\n");
+  const bodyLines = ensurePrefixedBodyLines(
+    lines,
+    action === "created" ? "+" : "-",
+  );
+  const oldCount = action === "created" ? 0 : bodyLines.length;
+  const newCount = action === "created" ? bodyLines.length : 0;
+  const body = bodyLines.join("\n");
   return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- ${fromPath}\n+++ ${toPath}\n@@ -1,${oldCount} +1,${newCount} @@\n${body}\n`;
 }
 
 function toSyntheticUpdatePatch(
   change: ViewFileEditMessage["changes"][number],
 ): string | undefined {
-  const diff = change.diff?.replaceAll("\r\n", "\n").trimEnd();
-  if (!diff || diff.length === 0) {
+  const bodyLines = getPatchBodyLines(change.diff);
+  if (bodyLines.length === 0) {
     return undefined;
   }
-
-  const lines = diff.split("\n");
-  const hasUnifiedLines = lines.some((line) => line.startsWith("+") || line.startsWith("-"));
+  const hasUnifiedLines = bodyLines.some(
+    (line) => line.startsWith("+") || line.startsWith("-"),
+  );
   if (!hasUnifiedLines) {
     return undefined;
   }
 
   const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
-  const removedCount = lines.filter((line) => line.startsWith("-") && !line.startsWith("--- ")).length;
-  const addedCount = lines.filter((line) => line.startsWith("+") && !line.startsWith("+++ ")).length;
-  return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n@@ -1,${Math.max(removedCount, 1)} +1,${Math.max(addedCount, 1)} @@\n${diff}\n`;
+  const removedCount = bodyLines.filter((line) => line.startsWith("-")).length;
+  const addedCount = bodyLines.filter((line) => line.startsWith("+")).length;
+  return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n@@ -1,${Math.max(removedCount, 1)} +1,${Math.max(addedCount, 1)} @@\n${bodyLines.join("\n")}\n`;
 }
 
 function getRenderablePatch(
@@ -182,7 +228,11 @@ function getRenderablePatch(
     }
   }
   const syntheticPatch =
-    toSyntheticPatch(change, fileChangeAction(change)) ?? toSyntheticUpdatePatch(change);
+    (fileChangeAction(change) === "created"
+      ? toSyntheticPatch(change, "created")
+      : fileChangeAction(change) === "deleted"
+        ? toSyntheticPatch(change, "deleted")
+        : undefined) ?? toSyntheticUpdatePatch(change);
   if (!syntheticPatch) {
     return undefined;
   }
