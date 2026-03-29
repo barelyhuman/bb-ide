@@ -218,7 +218,7 @@ function formatExploring(
     return lines.join("\n");
   }
 
-  for (const line of buildExploringDetailLines(msg.calls)) {
+  for (const line of buildExploringDetailLines(msg.calls, { readPathStyle: "full" })) {
     lines.push(`  ${line}`);
   }
 

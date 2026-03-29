@@ -60,7 +60,7 @@ function NestedToolGroup({
   const { isExpanded, onToggle } = useLatestInitialExpanded(false);
   const duration = formatSummaryDuration(entry.durationMs);
   const isWorking = entry.status === "pending" || preferOngoingLabels;
-  const tone = entry.status === "error" ? "destructive" : "default";
+  const tone = "default";
   const summary = buildToolGroupSummaryParts({
     duration,
     status: isWorking ? "pending" : entry.status,

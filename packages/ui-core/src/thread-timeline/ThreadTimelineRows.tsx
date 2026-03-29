@@ -53,7 +53,7 @@ function ToolGroupEntry({
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const visibleDuration = formatSummaryDuration(entry.durationMs);
   const isWorking = entry.status === "pending";
-  const tone: EventTitleTone = entry.status === "error" ? "destructive" : "default";
+  const tone: EventTitleTone = "default";
   const summary = buildToolGroupSummaryParts({
     duration: visibleDuration,
     status: entry.status,

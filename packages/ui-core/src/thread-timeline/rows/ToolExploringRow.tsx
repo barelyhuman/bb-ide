@@ -32,7 +32,7 @@ export function ToolExploringRow({
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const detailLines = useMemo(
-    () => buildExploringDetailLines(message.calls),
+    () => buildExploringDetailLines(message.calls, { readPathStyle: "basename" }),
     [message.calls],
   );
   const { elementRef: detailRef, handleScroll: handleDetailScroll } =

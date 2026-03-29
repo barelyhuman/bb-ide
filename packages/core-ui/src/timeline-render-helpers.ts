@@ -19,6 +19,14 @@ export interface ExploringCounts {
   lists: number;
 }
 
+export interface ExploringRenderOptions {
+  readPathStyle?: "basename" | "full";
+}
+
+const DEFAULT_EXPLORING_RENDER_OPTIONS: ExploringRenderOptions = {
+  readPathStyle: "full",
+};
+
 function isReadIntent(
   intent: ViewToolParsedIntent,
 ): intent is Extract<ViewToolParsedIntent, { type: "read" }> {
@@ -38,10 +46,23 @@ function formatSearchDetail(
   return intent.cmd;
 }
 
+function fileNameFromPath(path: string): string {
+  const normalizedPath = path.replaceAll("\\", "/");
+  const segments = normalizedPath.split("/");
+  const candidate = segments[segments.length - 1];
+  return candidate && candidate.length > 0 ? candidate : path;
+}
+
 function getReadDisplayName(
   intent: Extract<ViewToolParsedIntent, { type: "read" }>,
+  options: ExploringRenderOptions,
 ): string {
-  return intent.path ?? intent.name ?? intent.cmd;
+  if (intent.path) {
+    return options.readPathStyle === "basename"
+      ? fileNameFromPath(intent.path)
+      : intent.path;
+  }
+  return intent.name ?? intent.cmd;
 }
 
 export function formatDelegationSummary(message: DelegationSummaryInput): string {
@@ -57,10 +78,13 @@ export function formatDelegationSummary(message: DelegationSummaryInput): string
   return message.command ?? message.toolName;
 }
 
-export function formatExploringIntentLine(intent: ViewToolParsedIntent): string {
+export function formatExploringIntentLine(
+  intent: ViewToolParsedIntent,
+  options: ExploringRenderOptions = DEFAULT_EXPLORING_RENDER_OPTIONS,
+): string {
   switch (intent.type) {
     case "read":
-      return `Read ${getReadDisplayName(intent)}`;
+      return `Read ${getReadDisplayName(intent, options)}`;
     case "list_files":
       return `List ${intent.path ?? intent.cmd}`;
     case "search":
@@ -74,6 +98,7 @@ export function formatExploringIntentLine(intent: ViewToolParsedIntent): string 
 
 export function buildExploringDetailLines(
   calls: ViewToolExploringMessage["calls"],
+  options: ExploringRenderOptions = DEFAULT_EXPLORING_RENDER_OPTIONS,
 ): string[] {
   const detailLines: string[] = [];
   let index = 0;
@@ -90,7 +115,7 @@ export function buildExploringDetailLines(
         if (!current) break;
         for (const intent of current.parsedCmd) {
           if (intent.type !== "read") continue;
-          const label = getReadDisplayName(intent);
+          const label = getReadDisplayName(intent, options);
           if (seen.has(label)) continue;
           seen.add(label);
           readLabels.push(label);
@@ -111,7 +136,7 @@ export function buildExploringDetailLines(
     }
 
     for (const intent of call.parsedCmd) {
-      detailLines.push(formatExploringIntentLine(intent));
+      detailLines.push(formatExploringIntentLine(intent, options));
     }
     index += 1;
   }
@@ -130,7 +155,9 @@ export function summarizeExploringCounts(
     for (const intent of call.parsedCmd) {
       switch (intent.type) {
         case "read":
-          readNames.add(getReadDisplayName(intent));
+          readNames.add(
+            getReadDisplayName(intent, DEFAULT_EXPLORING_RENDER_OPTIONS),
+          );
           break;
         case "search":
           searches += 1;

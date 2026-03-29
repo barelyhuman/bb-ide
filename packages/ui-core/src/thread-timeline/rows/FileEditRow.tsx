@@ -14,6 +14,11 @@ import type { ThreadTimelineTheme } from "../types.js";
 
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
 
+interface RenderablePatch {
+  disableLineNumbers: boolean;
+  patch: string;
+}
+
 function fileNameFromPath(path: string): string {
   const normalized = path.replaceAll("\\", "/");
   const segments = normalized.split("/");
@@ -130,10 +135,32 @@ function toSyntheticPatch(
   const oldCount = action === "created" ? 0 : lines.length;
   const newCount = action === "created" ? lines.length : 0;
   const body = lines.map((line) => `${prefix}${line}`).join("\n");
-  return `--- ${fromPath}\n+++ ${toPath}\n@@ -1,${oldCount} +1,${newCount} @@\n${body}\n`;
+  return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- ${fromPath}\n+++ ${toPath}\n@@ -1,${oldCount} +1,${newCount} @@\n${body}\n`;
 }
 
-function getRenderablePatch(change: ViewFileEditMessage["changes"][number]): string | undefined {
+function toSyntheticUpdatePatch(
+  change: ViewFileEditMessage["changes"][number],
+): string | undefined {
+  const diff = change.diff?.replaceAll("\r\n", "\n").trimEnd();
+  if (!diff || diff.length === 0) {
+    return undefined;
+  }
+
+  const lines = diff.split("\n");
+  const hasUnifiedLines = lines.some((line) => line.startsWith("+") || line.startsWith("-"));
+  if (!hasUnifiedLines) {
+    return undefined;
+  }
+
+  const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
+  const removedCount = lines.filter((line) => line.startsWith("-") && !line.startsWith("--- ")).length;
+  const addedCount = lines.filter((line) => line.startsWith("+") && !line.startsWith("+++ ")).length;
+  return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n@@ -1,${Math.max(removedCount, 1)} +1,${Math.max(addedCount, 1)} @@\n${diff}\n`;
+}
+
+function getRenderablePatch(
+  change: ViewFileEditMessage["changes"][number],
+): RenderablePatch | undefined {
   const patch = change.diff;
   if (patch && patch.trim().length > 0) {
     const trimmedPatch = patch.trimEnd();
@@ -141,21 +168,35 @@ function getRenderablePatch(change: ViewFileEditMessage["changes"][number]): str
       trimmedPatch.startsWith("diff --git") ||
       (trimmedPatch.includes("--- ") && trimmedPatch.includes("+++ ") && trimmedPatch.includes("@@"))
     ) {
-      return patch;
+      return {
+        patch,
+        disableLineNumbers: false,
+      };
     }
     if (patch.includes("@@")) {
       const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
-      return `--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`;
+      return {
+        patch: `--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`,
+        disableLineNumbers: false,
+      };
     }
   }
-  return toSyntheticPatch(change, fileChangeAction(change));
+  const syntheticPatch =
+    toSyntheticPatch(change, fileChangeAction(change)) ?? toSyntheticUpdatePatch(change);
+  if (!syntheticPatch) {
+    return undefined;
+  }
+  return {
+    patch: syntheticPatch,
+    disableLineNumbers: true,
+  };
 }
 
 function getPlainDiffFallback(
   change: ViewFileEditMessage["changes"][number],
-  patch: string | undefined,
+  renderablePatch: RenderablePatch | undefined,
 ): string | undefined {
-  if (patch) {
+  if (renderablePatch) {
     return undefined;
   }
   const diff = change.diff?.trimEnd();
@@ -289,8 +330,8 @@ export function FileEditRow({
             {message.changes.map((change, index) => {
               const stats = diffStats(change);
               const fileName = fileNameFromPath(change.path);
-              const patch = getRenderablePatch(change);
-              const plainDiff = getPlainDiffFallback(change, patch);
+              const renderablePatch = getRenderablePatch(change);
+              const plainDiff = getPlainDiffFallback(change, renderablePatch);
               const changeKey = changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
               const isChangeExpanded =
                 !isAggregatedChanges ||
@@ -356,12 +397,18 @@ export function FileEditRow({
                         </div>
                       )}
                     </div>
-                    {isChangeExpanded && patch ? (
+                    {isChangeExpanded && renderablePatch ? (
                       <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
                         <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
                           <div className="min-w-fit">
                             <div style={DIFF_VIEW_STYLE}>
-                              <PatchDiff patch={patch} options={diffViewOptions} />
+                              <PatchDiff
+                                patch={renderablePatch.patch}
+                                options={{
+                                  ...diffViewOptions,
+                                  disableLineNumbers: renderablePatch.disableLineNumbers,
+                                }}
+                              />
                             </div>
                           </div>
                         </div>

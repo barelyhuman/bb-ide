@@ -26,14 +26,12 @@ function baseMessage(): ViewFileEditMessage {
 }
 
 describe("FileEditRow rendering", () => {
-  it("renders raw diff text when only a headerless synthetic update diff is available", () => {
+  it("renders headerless update diffs through PatchDiff without line numbers", () => {
     const html = renderToStaticMarkup(
       <FileEditRow message={baseMessage()} initialExpanded={true} />,
     );
 
-    expect(html).toContain("--- a/src/app.ts");
-    expect(html).toContain("+++ b/src/app.ts");
-    expect(html).toContain("-const enabled = false;");
-    expect(html).toContain("+const enabled = true;");
+    expect(html).toContain("<diffs-container");
+    expect(html).not.toContain("<pre");
   });
 });

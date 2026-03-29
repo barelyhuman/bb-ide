@@ -288,7 +288,7 @@ describe("formatTimelineAsText", () => {
     expect(text).not.toContain("Failed");
   });
 
-  it("formats grouped duration summaries with parenthesized item counts", () => {
+  it("formats grouped duration summaries without item-count suffixes", () => {
     const text = formatTimelineAsText(
       [
         {
@@ -308,7 +308,8 @@ describe("formatTimelineAsText", () => {
       { color: false },
     );
 
-    expect(text).toContain("Worked for 2m 8s (22 items)");
+    expect(text).toContain("Worked for 2m 8s");
+    expect(text).not.toContain("22 items");
   });
 
   it("omits completed badges for warning operations", () => {

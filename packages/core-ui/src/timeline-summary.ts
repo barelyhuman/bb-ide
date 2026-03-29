@@ -37,7 +37,6 @@ export function buildToolGroupSummaryParts({
     return {
       prefix,
       emphasis: duration,
-      suffix: summaryCount > 0 ? `(${countLabel})` : undefined,
     };
   }
 

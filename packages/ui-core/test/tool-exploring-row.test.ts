@@ -167,4 +167,22 @@ describe("ToolExploringRow helpers", () => {
       lists: 1,
     });
   });
+
+  it("supports basename-only read details for React rows", () => {
+    expect(
+      buildExploringDetailLines(
+        [
+          buildCall("read-1", [
+            {
+              type: "read",
+              cmd: "Read packages/excalidraw/components/SearchMenu.tsx",
+              name: "Read",
+              path: "packages/excalidraw/components/SearchMenu.tsx",
+            },
+          ]),
+        ],
+        { readPathStyle: "basename" },
+      ),
+    ).toEqual(["Read SearchMenu.tsx"]);
+  });
 });
