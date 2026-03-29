@@ -17,6 +17,7 @@ import {
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
 import {
   createApp,
+  createSandboxHostRegistry,
   initDb,
   NotificationHub,
   type ServerRuntimeConfig,
@@ -184,18 +185,23 @@ async function startIntegrationServer(
 
   const db = initDb(":memory:");
   const hub = new NotificationHub();
+  const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
     authToken,
     dataDir: serverDataDir,
+    e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",
+    e2bTemplate: process.env.E2B_TEMPLATE ?? "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
+    publicUrl: "https://bb.example.test",
   };
   const { app, injectWebSocket } = createApp({
     config,
     db,
     hub,
     logger: testLogger,
+    sandboxRegistry,
   });
 
   let addressInfo: ListeningAddress | null = null;
