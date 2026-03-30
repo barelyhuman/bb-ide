@@ -50,7 +50,19 @@ describe("threads", () => {
     createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
     createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
     expect(listThreads(db, { projectId: project.id })).toHaveLength(2);
-    expect(listThreads(db)).toHaveLength(2);
+  });
+
+  it("isolates threads by project", () => {
+    const { db, host, project } = setup();
+    const { project: otherProject } = createProject(db, noopNotifier, {
+      name: "other-project",
+      source: { type: "local_path", hostId: host.id, path: "/tmp/other" },
+    });
+    createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
+    createThread(db, noopNotifier, { projectId: otherProject.id, providerId: "codex" });
+
+    expect(listThreads(db, { projectId: project.id })).toHaveLength(1);
+    expect(listThreads(db, { projectId: otherProject.id })).toHaveLength(1);
   });
 
   it("filters threads by type, parent thread, and archived state", () => {
@@ -72,10 +84,10 @@ describe("threads", () => {
     });
     archiveThread(db, noopNotifier, child.id);
 
-    expect(listThreads(db, { type: "manager" })).toHaveLength(2);
-    expect(listThreads(db, { parentThreadId: parent.id })).toHaveLength(1);
-    expect(listThreads(db, { archived: true })).toHaveLength(1);
-    expect(listThreads(db, { archived: false })).toHaveLength(2);
+    expect(listThreads(db, { projectId: project.id, type: "manager" })).toHaveLength(2);
+    expect(listThreads(db, { projectId: project.id, parentThreadId: parent.id })).toHaveLength(1);
+    expect(listThreads(db, { projectId: project.id, archived: true })).toHaveLength(1);
+    expect(listThreads(db, { projectId: project.id, archived: false })).toHaveLength(2);
   });
 
   it("updates thread title", () => {

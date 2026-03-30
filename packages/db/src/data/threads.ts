@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -63,18 +63,18 @@ export function getThread(db: DbConnection, id: string) {
 }
 
 export interface ListThreadsOptions {
+  projectId: string;
   archived?: boolean;
   parentThreadId?: string;
-  projectId?: string;
   type?: ThreadType;
 }
 
 export function listThreads(
   db: DbConnection,
-  options: ListThreadsOptions = {},
+  options: ListThreadsOptions,
 ) {
   const filters = [
-    options.projectId ? eq(threads.projectId, options.projectId) : undefined,
+    eq(threads.projectId, options.projectId),
     options.type ? eq(threads.type, options.type) : undefined,
     options.parentThreadId
       ? eq(threads.parentThreadId, options.parentThreadId)
@@ -86,14 +86,11 @@ export function listThreads(
         : undefined,
   ].filter((value) => value !== undefined);
 
-  if (filters.length === 0) {
-    return db.select().from(threads).all();
-  }
-
   return db
     .select()
     .from(threads)
     .where(and(...filters))
+    .orderBy(desc(threads.createdAt))
     .all();
 }
 

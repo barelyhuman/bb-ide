@@ -339,7 +339,9 @@ describe("RuntimeManager", () => {
 
     expect(runtimeA.shutdown).toHaveBeenCalledTimes(1);
     expect(runtimeB.shutdown).toHaveBeenCalledTimes(1);
-    expect(workspaceA.destroy).toHaveBeenCalledTimes(1);
-    expect(workspaceB.destroy).toHaveBeenCalledTimes(1);
+    // shutdownAll does NOT destroy workspaces — the server owns managed
+    // workspace lifecycle via explicit environment.destroy commands
+    expect(workspaceA.destroy).not.toHaveBeenCalled();
+    expect(workspaceB.destroy).not.toHaveBeenCalled();
   });
 });

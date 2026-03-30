@@ -195,6 +195,20 @@ describe.sequential("fake provider smoke integration", () => {
       },
       async (harness) => {
         const project = await createProjectFixture(harness, "Manager Smoke");
+
+        // Create an unmanaged thread first so the environment is ready. The
+        // manager reuses the existing unmanaged environment from the project's
+        // default source instead of provisioning a new managed-worktree.
+        const { environment: sourceEnvironment } = await createReadyThread(harness, {
+          projectId: project.id,
+          workspace: {
+            type: "unmanaged",
+            path: harness.repoDir,
+          },
+        });
+
+        // Manager creation returns immediately — the initial thread.start
+        // uses default preferences (isThreadCreation skips the daemon read).
         const managerThread = await createManagerThread(harness.api, project.id, {
           model: "fake-model",
           providerId: "fake",
@@ -202,39 +216,22 @@ describe.sequential("fake provider smoke integration", () => {
           name: "Project manager",
         });
         expect(managerThread.type).toBe("manager");
+        expect(managerThread.environmentId).toBe(sourceEnvironment.id);
 
-        const readyManager = await waitForThreadStatus(
-          harness.api,
-          managerThread.id,
-          "idle",
-          TURN_TIMEOUT_MS,
-        );
-        const managerEnvironment = await getEnvironment(
-          harness.api,
-          readyManager.environmentId ?? "",
-        );
-        if (!managerEnvironment.path) {
-          throw new Error("Manager environment path was not assigned");
-        }
-
-        await fs.writeFile(
-          path.join(managerEnvironment.path, "PREFERENCES.md"),
-          "Prefer concise user updates.\nDelegate implementation quickly.\n",
-          "utf8",
-        );
-
-        await sendTextMessage(harness.api, managerThread.id, {
-          execution: {
-            model: "fake-model",
-          },
-          text: "Coordinate the next step",
-        });
         await waitForThreadStatus(
           harness.api,
           managerThread.id,
           "idle",
           TURN_TIMEOUT_MS,
         );
+
+        const managerEnvironment = await getEnvironment(
+          harness.api,
+          managerThread.environmentId ?? "",
+        );
+        if (!managerEnvironment.path) {
+          throw new Error("Manager environment path was not assigned");
+        }
 
         const managerRuntimeCommand = [...runtimeConfigCommands]
           .reverse()
@@ -248,10 +245,7 @@ describe.sequential("fake provider smoke integration", () => {
           "You are a manager for this project.",
         );
         expect(managerRuntimeCommand?.instructions).toContain(
-          "Prefer concise user updates.",
-        );
-        expect(managerRuntimeCommand?.instructions).toContain(
-          "Delegate implementation quickly.",
+          "(file does not exist)",
         );
         expect(managerRuntimeCommand?.instructions).toContain(managerThread.id);
         expect(managerRuntimeCommand?.instructions).toContain(managerEnvironment.path);

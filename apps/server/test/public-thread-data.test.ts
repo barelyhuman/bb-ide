@@ -703,7 +703,7 @@ describe("public thread data routes", () => {
           command.environmentId === environment.id,
       );
       expect(filesCommand.command).toMatchObject({
-        workspacePath: "/tmp/thread-workspace",
+        workspaceContext: { workspacePath: "/tmp/thread-workspace", workspaceProvisionType: "unmanaged" },
         query: "src",
       });
       await reportQueuedCommandSuccess(harness, filesCommand, {
@@ -730,7 +730,7 @@ describe("public thread data routes", () => {
           command.environmentId === environment.id,
       );
       expect(fileCommand.command).toMatchObject({
-        workspacePath: "/tmp/thread-workspace",
+        workspaceContext: { workspacePath: "/tmp/thread-workspace", workspaceProvisionType: "unmanaged" },
         path: "src/index.ts",
       });
       await reportQueuedCommandSuccess(harness, fileCommand, {

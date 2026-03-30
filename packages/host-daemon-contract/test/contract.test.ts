@@ -29,7 +29,7 @@ describe("host-daemon command schemas", () => {
         type: "workspace.commit",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspacePath: "/tmp/workspace",
+        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
         threadId: "thr_123",
         message: "Checkpoint work",
       }),
@@ -61,7 +61,7 @@ describe("host-daemon command schemas", () => {
           type: "workspace.commit",
           environmentId: "env_123",
           environmentStatus: "ready",
-          workspacePath: "/tmp/workspace",
+          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
           threadId: "thr_123",
           message: "Checkpoint work",
         },
@@ -76,11 +76,11 @@ describe("host-daemon command schemas", () => {
         type: "workspace.list_files",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspacePath: "/tmp/workspace",
+        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
       }),
     ).toMatchObject({
       type: "workspace.list_files",
-      workspacePath: "/tmp/workspace",
+      workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
     });
   });
 
@@ -112,7 +112,7 @@ describe("host-daemon command schemas", () => {
         type: "thread.start",
         environmentId: "env_123",
         threadId: "thr_123",
-        workspacePath: "/tmp/workspace",
+        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
         projectId: "proj_123",
         providerId: "codex",
         eventSequence: 1,
@@ -134,7 +134,7 @@ describe("host-daemon command schemas", () => {
       }),
     ).toMatchObject({
       type: "thread.start",
-      workspacePath: "/tmp/workspace",
+      workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
     });
   });
 
@@ -142,8 +142,6 @@ describe("host-daemon command schemas", () => {
     const optionalFieldPaths = collectOptionalFieldPaths({
       hostDaemonActiveThreadSchema: contract.hostDaemonActiveThreadSchema,
       hostDaemonCommandSchema: contract.hostDaemonCommandSchema,
-      threadResumeResultSchema:
-        contract.hostDaemonCommandResultSchemaByType["thread.resume"],
       workspaceCommitResultSchema:
         contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
       workspaceCheckpointResultSchema:
@@ -162,31 +160,6 @@ describe("host-daemon command schemas", () => {
     ).toBe(true);
   });
 
-  it("parses thread.resume with workspacePath", () => {
-    expect(
-      hostDaemonCommandSchema.parse({
-        type: "thread.resume",
-        environmentId: "env_123",
-        threadId: "thr_123",
-        workspacePath: "/tmp/workspace",
-        projectId: "proj_123",
-        providerId: "codex",
-        providerThreadId: "provider_123",
-        options: {
-          model: "gpt-5",
-          serviceTier: "flex",
-          reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
-        },
-        instructions: "Be a helpful coding agent.",
-        dynamicTools: [],
-      }),
-    ).toMatchObject({
-      type: "thread.resume",
-      workspacePath: "/tmp/workspace",
-    });
-  });
-
   it("requires eventSequence and resumeContext for turn.run and turn.steer", () => {
     expect(
       hostDaemonCommandSchema.parse({
@@ -202,7 +175,7 @@ describe("host-daemon command schemas", () => {
           sandboxMode: "danger-full-access",
         },
         resumeContext: {
-          workspacePath: "/tmp/workspace",
+          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
           projectId: "proj_123",
           providerId: "codex",
           providerThreadId: "provider_123",
@@ -214,7 +187,7 @@ describe("host-daemon command schemas", () => {
       type: "turn.run",
       eventSequence: 12,
       resumeContext: {
-        workspacePath: "/tmp/workspace",
+        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
       },
     });
 
@@ -233,7 +206,7 @@ describe("host-daemon command schemas", () => {
           sandboxMode: "danger-full-access",
         },
         resumeContext: {
-          workspacePath: "/tmp/workspace",
+          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
           projectId: "proj_123",
           providerId: "codex",
           providerThreadId: "provider_123",
@@ -260,7 +233,7 @@ describe("host-daemon command schemas", () => {
           sandboxMode: "danger-full-access",
         },
         resumeContext: {
-          workspacePath: "/tmp/workspace",
+          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
           projectId: "proj_123",
           providerId: "codex",
           instructions: "Be a helpful coding agent.",
@@ -276,7 +249,7 @@ describe("host-daemon command schemas", () => {
         type: "workspace.promote",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspacePath: "/tmp/workspace",
+        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
       }),
@@ -290,7 +263,7 @@ describe("host-daemon command schemas", () => {
         type: "workspace.demote",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspacePath: "/tmp/workspace",
+        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
         defaultBranch: "main",

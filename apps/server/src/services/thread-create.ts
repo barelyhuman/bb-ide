@@ -180,6 +180,7 @@ async function startQueuedThreadIfNeeded(
       id: args.environment.id,
       hostId: args.environment.hostId,
       path: args.environment.path,
+      workspaceProvisionType: args.environment.workspaceProvisionType,
     },
     input: args.request.input,
     eventSequence: args.eventSequence,

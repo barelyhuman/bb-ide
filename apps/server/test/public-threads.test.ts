@@ -267,7 +267,7 @@ describe("public thread routes", () => {
           command.threadId === createdThread.id,
       );
       expect(queuedStart.command).toMatchObject({
-        workspacePath: source.path,
+        workspaceContext: { workspacePath: source.path, workspaceProvisionType: "unmanaged" },
         options: {
           model: "gpt-5",
           serviceTier: "flex",
@@ -531,7 +531,7 @@ describe("public thread routes", () => {
           source: "client/turn/requested",
         },
         resumeContext: {
-          workspacePath: environment.path,
+          workspaceContext: { workspacePath: environment.path, workspaceProvisionType: "unmanaged" },
           projectId: project.id,
           providerId: idleThread.providerId,
           providerThreadId: "provider-idle",
@@ -569,7 +569,7 @@ describe("public thread routes", () => {
           source: "client/turn/requested",
         },
         resumeContext: {
-          workspacePath: environment.path,
+          workspaceContext: { workspacePath: environment.path, workspaceProvisionType: "unmanaged" },
           projectId: project.id,
           providerId: activeThread.providerId,
           providerThreadId: "provider-turn",
@@ -908,6 +908,8 @@ describe("public thread routes", () => {
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();
 
+      // Manager creation returns immediately — thread.start is queued with
+      // default preferences (skipPreferences: true on initial start).
       const managerResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/managers`,
         {
@@ -933,71 +935,9 @@ describe("public thread routes", () => {
       if (!managerThread.environmentId) {
         throw new Error("Expected manager thread environment");
       }
-      expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.parentThreadId, thread.id))
-          .all(),
-      ).toEqual([]);
-      const managerProvisionCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "environment.provision" &&
-          command.projectId === project.id,
-      );
-      expect(managerProvisionCommand.command.type).toBe("environment.provision");
-      if (managerProvisionCommand.command.type !== "environment.provision") {
-        throw new Error("Expected manager provisioning command");
-      }
-      const managerProvisionPath = managerProvisionCommand.command.targetPath;
-      if (!managerProvisionPath) {
-        throw new Error("Expected manager provisioning target path");
-      }
-      const provisionResponse = await reportQueuedCommandSuccess(
-        harness,
-        managerProvisionCommand,
-        {
-          path: managerProvisionPath,
-          branchName: managerProvisionCommand.command.branchName ?? "bb/project-manager",
-          defaultBranch: "main",
-          isGitRepo: true,
-          isWorktree: true,
-          ranSetup: false,
-        },
-      );
-      expect(provisionResponse.status).toBe(200);
 
-      const managerSendPromise = harness.app.request(
-        `/api/v1/threads/${managerThread.id}/send`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            mode: "auto",
-            input: [{ type: "text", text: "Start coordinating work" }],
-          }),
-        },
-      );
-      const managerPreferencesCommand = await waitForQueuedCommandAfter(
+      const managerStartCommand = await waitForQueuedCommand(
         harness,
-        managerProvisionCommand.row.cursor,
-        ({ command }) =>
-          command.type === "workspace.read_file" &&
-          command.environmentId === managerThread.environmentId,
-      );
-      await reportQueuedCommandSuccess(harness, managerPreferencesCommand, {
-        path: "PREFERENCES.md",
-        content: "Prefer concise user updates.",
-      });
-      const managerSendResponse = await managerSendPromise;
-      expect(managerSendResponse.status).toBe(200);
-
-      const managerStartCommand = await waitForQueuedCommandAfter(
-        harness,
-        managerPreferencesCommand.row.cursor,
         ({ command }) =>
           command.type === "thread.start" &&
           command.threadId === managerThread.id,
@@ -1007,7 +947,7 @@ describe("public thread routes", () => {
         serviceTier: "flex",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
-        source: "client/turn/requested",
+        source: "client/thread/start",
       });
       expect(managerStartCommand.command.dynamicTools).toEqual(
         [expect.objectContaining({ name: "message_user" })],
@@ -1016,7 +956,7 @@ describe("public thread routes", () => {
         "You are a manager for this project.",
       );
       expect(managerStartCommand.command.instructions).toContain(
-        "Prefer concise user updates.",
+        "(file does not exist)",
       );
       expect(managerStartCommand.command.instructions).toContain(project.name);
       expect(managerStartCommand.command.instructions).toContain("/tmp/thread-data-project");

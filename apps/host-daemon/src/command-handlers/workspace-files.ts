@@ -109,7 +109,9 @@ export async function listBranches(
   runtimeManager: RuntimeManager,
 ): Promise<HostDaemonCommandResult<"workspace.list_branches">> {
   const entry = await requireWorkspaceEnvironment(command, runtimeManager);
-  const branches = await entry.workspace.getBranches();
-  const current = await entry.workspace.currentBranch();
+  const [branches, current] = await Promise.all([
+    entry.workspace.getBranches(),
+    entry.workspace.currentBranch(),
+  ]);
   return { branches, current };
 }

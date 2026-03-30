@@ -253,7 +253,7 @@ export class Workspace {
 
     const branchName = await this.currentBranch;
     if (!branchName) {
-      throw new WorkspaceError("Cannot checkpoint a detached workspace");
+      throw new WorkspaceError("detached_head", "Cannot checkpoint a detached workspace");
     }
 
     let commitSha: string;
@@ -344,7 +344,7 @@ export class Workspace {
 
     const sourceBranch = await this.currentBranch;
     if (!sourceBranch) {
-      throw new WorkspaceError("Cannot squash merge from a detached workspace");
+      throw new WorkspaceError("detached_head", "Cannot squash merge from a detached workspace");
     }
 
     if (await hasUncommittedChanges(this.path)) {
@@ -379,6 +379,7 @@ export class Workspace {
         );
       } else {
         throw new WorkspaceError(
+          "branch_not_found",
           `Target branch does not exist: ${options.targetBranch}`,
         );
       }
@@ -407,7 +408,7 @@ export class Workspace {
         countWorktrees(worktreeCountBefore.stdout) !==
         countWorktrees(worktreeCountAfter.stdout)
       ) {
-        throw new WorkspaceError("Temporary worktree cleanup failed");
+        throw new WorkspaceError("worktree_cleanup_failed", "Temporary worktree cleanup failed");
       }
     }
   }

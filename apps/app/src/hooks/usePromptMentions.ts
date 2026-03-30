@@ -65,9 +65,7 @@ export function usePromptMentions(
   const threadSuggestionMode = options?.threadSuggestionMode ?? "none";
   const threadsQuery = useThreads(
     { projectId },
-    {
-      enabled: Boolean(projectId) && threadSuggestionMode !== "none",
-    },
+    { enabled: threadSuggestionMode !== "none" },
   );
 
   const hasQuery = (query?.trim().length ?? 0) > 0;

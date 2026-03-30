@@ -18,8 +18,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.status",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
-        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         mergeBaseBranch: "main",
       },
       { runtimeManager: harness.manager },
@@ -28,8 +27,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.diff",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
-        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         mergeBaseBranch: "main",
         selection: { type: "combined" },
       },
@@ -39,8 +37,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.commit",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
-        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         message: "Commit message",
       },
       { runtimeManager: harness.manager },
@@ -49,8 +46,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.squash_merge",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
-        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         targetBranch: "main",
       },
       { runtimeManager: harness.manager },
@@ -59,8 +55,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.checkpoint",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
-        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         commitMessage: "Checkpoint",
       },
       { runtimeManager: harness.manager },
@@ -69,7 +64,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.promote",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         threadId: "thread-1",
         primaryPath: "/tmp/primary",
       },
@@ -79,7 +74,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.demote",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
         threadId: "thread-1",
         primaryPath: "/tmp/primary",
         defaultBranch: "main",
@@ -101,15 +96,14 @@ describe("workspace command dispatch", () => {
     expect(harness.workspaceState.demotedPrimaryPath).toBe("/tmp/primary");
   });
 
-  it("rehydrates a missing workspace runtime from workspacePath", async () => {
+  it("rehydrates a missing workspace runtime from workspaceContext", async () => {
     const harness = createHarness({ workspacePath: "/tmp/env-rehydrate" });
 
     const result = await dispatchCommand(
       {
         type: "workspace.status",
         environmentId: "env-rehydrate",
-        workspacePath: "/tmp/env-rehydrate",
-        threadId: "thread-1",
+        workspaceContext: { workspacePath: "/tmp/env-rehydrate", workspaceProvisionType: "unmanaged" },
         mergeBaseBranch: "main",
       },
       { runtimeManager: harness.manager },
@@ -140,7 +134,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_files",
         environmentId: "env-1",
-        workspacePath: tempDir,
+        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
       },
       { runtimeManager: harness.manager },
     );
@@ -153,7 +147,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_files",
         environmentId: "env-1",
-        workspacePath: tempDir,
+        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
         query: "file-b",
       },
       { runtimeManager: harness.manager },
@@ -176,7 +170,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.read_file",
         environmentId: "env-1",
-        workspacePath: tempDir,
+        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
         path: "readme.txt",
       },
       { runtimeManager: harness.manager },
@@ -199,7 +193,7 @@ describe("workspace command dispatch", () => {
         {
           type: "workspace.read_file",
           environmentId: "env-1",
-          workspacePath: tempDir,
+          workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
           path: "../../../etc/passwd",
         },
         { runtimeManager: harness.manager },
@@ -218,7 +212,7 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_branches",
         environmentId: "env-1",
-        workspacePath: "/tmp/env-1",
+        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
       },
       { runtimeManager: harness.manager },
     );

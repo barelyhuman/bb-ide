@@ -6,7 +6,6 @@ import type {
   ClientMessage,
   ChangedMessage,
   RealtimeEntity,
-  ServerMessage,
 } from "@bb/server-contract";
 
 type ChangeCallback = (message: ChangedMessage) => void;
@@ -56,9 +55,10 @@ export class WebSocketManager {
     };
 
     this.socket.onmessage = (event: MessageEvent) => {
+      if (typeof event.data !== "string") return;
       try {
-        const msg = JSON.parse(event.data as string) as ServerMessage;
-        if (msg.type === "changed") {
+        const msg: unknown = JSON.parse(event.data);
+        if (isChangedMessage(msg)) {
           for (const cb of this.callbacks) {
             cb(msg);
           }
@@ -137,6 +137,13 @@ export class WebSocketManager {
       callback();
     }
   }
+}
+
+function isChangedMessage(value: unknown): value is ChangedMessage {
+  if (typeof value !== "object" || value === null) return false;
+  if (!("type" in value) || !("entity" in value) || !("changes" in value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.type === "changed";
 }
 
 function subKey(entity: RealtimeEntity, id?: string): string {

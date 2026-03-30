@@ -73,8 +73,8 @@
 
 7. **Conditionally queue `thread.start` command** (only on Path A/B when env is `"ready"`)
    - `startQueuedThreadIfNeeded()`:
-     - Only fires if `hasThreadStartInput(request)` (always true for standard threads, always false for manager threads) AND `threadStatus === "idle"` (env already ready)
-     - `resolveThreadRuntimeCommandConfig()` — resolves workspace path, instructions, dynamic tools (see Code Reuse below)
+     - Only fires if `hasThreadStartInput(request)` (always true for standard threads, always true for manager threads since they now include welcome message input) AND `threadStatus === "idle"` (env already ready)
+     - `resolveThreadRuntimeCommandConfig()` — resolves workspace path, instructions, dynamic tools (see Code Reuse below). Called via `queueThreadStartCommand` with `isThreadCreation: true`, which skips the daemon round-trip to read PREFERENCES.md — preferences are read on subsequent turns only.
      - `queueCommand(db, hub, { type: "thread.start", ... })` — same async queue mechanism as step 6
      - `transitionThreadStatus(db, hub, threadId, "active")`
      - **On failure: `deleteThread(db, hub, threadId)`** — cleans up, no orphans
@@ -123,7 +123,7 @@
 
 | Function | Also used by |
 |---|---|
-| `createThreadFromRequest()` | `POST /projects/:id/managers` — identical code path, hard-codes `type: "manager"`, `workspace: "managed-worktree"`, omits `input` |
+| `createThreadFromRequest()` | `POST /projects/:id/managers` — identical code path, hard-codes `type: "manager"`, `workspace: { type: "unmanaged", path: source.path }`, includes `systemMessageManagerWelcome` as input |
 | `createThreadInEnvironment()` | Internal helper shared between reuse path (A/B) within this same route |
 | `buildExecutionOptions()` | `POST /threads/:id/send`, `POST /threads/:id/drafts`, `POST /threads/:id/drafts/:draftId/send` |
 | `resolveThreadRuntimeCommandConfig()` | `queueThreadStartCommand()` (used here) + `queueTurnRunCommand()` (used by send/draft-send) |
@@ -134,7 +134,7 @@
 
 1. **`type` field accepted from client but the only consumer-facing route that should create managers is `POST /projects/:id/managers`.**
    - The manager route hard-codes `type: "manager"` and calls `createThreadFromRequest()` internally.
-   - Accepting `type` on `POST /threads` means a client could create a `"manager"` thread directly, bypassing the manager route's guardrails (which hard-codes `workspace: "managed-worktree"` and omits `input`).
+   - Accepting `type` on `POST /threads` means a client could create a `"manager"` thread directly, bypassing the manager route's guardrails (which hard-codes `workspace: { type: "unmanaged" }` and includes the `systemMessageManagerWelcome` template as input).
    - Is there a reason the public thread creation route allows `type: "manager"`? If not, this should be restricted to `"standard"` only.
 
 2. **`sandboxMode` defaults to `"danger-full-access"`** — least restrictive possible. This is filled in server-side by `resolveExecutionOptions()` when the client doesn't send it.

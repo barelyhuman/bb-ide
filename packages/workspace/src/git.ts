@@ -8,8 +8,10 @@ const execFileAsync = promisify(execFile);
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
 
 export class WorkspaceError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  readonly code: string;
+  constructor(code: string, message: string, options?: { cause?: unknown }) {
     super(message, options);
+    this.code = code;
     this.name = "WorkspaceError";
   }
 }
@@ -78,7 +80,7 @@ export async function runGit(
 
     const stderr = trimOutput(execError?.stderr ?? "");
     const detail = stderr ? `: ${stderr}` : "";
-    throw new WorkspaceError(`git ${args.join(" ")} failed${detail}`, {
+    throw new WorkspaceError("git_command_failed", `git ${args.join(" ")} failed${detail}`, {
       cause: error,
     });
   }
@@ -106,7 +108,7 @@ export async function ensureGitRepo(cwd: string): Promise<void> {
     return;
   }
 
-  throw new WorkspaceError(`Path is not a git repository: ${cwd}`);
+  throw new WorkspaceError("not_git_repo", `Path is not a git repository: ${cwd}`);
 }
 
 export async function getCurrentBranch(cwd: string): Promise<string | undefined> {

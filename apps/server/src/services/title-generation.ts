@@ -3,12 +3,11 @@ import { renderTemplate } from "@bb/templates";
 import {
   getEnvironment,
   getThread,
-  queueCommand,
   updateThread,
-  getActiveSession,
 } from "@bb/db";
 import type { PromptInput } from "@bb/domain";
 import type { AppDeps } from "../types.js";
+import { queueThreadRenameCommand } from "./thread-commands.js";
 import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
 
 export function deriveTitleFallback(input: PromptInput[] | undefined): string | null {
@@ -120,17 +119,13 @@ export async function generateThreadTitle(
       return;
     }
 
-    const session = getActiveSession(deps.db, environment.hostId);
-    queueCommand(deps.db, deps.hub, {
-      hostId: environment.hostId,
-      sessionId: session?.id ?? null,
-      type: "thread.rename",
-      payload: JSON.stringify({
-        type: "thread.rename",
-        environmentId: environment.id,
-        threadId: titledThread.id,
-        title: parsed.title,
-      }),
+    queueThreadRenameCommand(deps, {
+      environment: {
+        id: environment.id,
+        hostId: environment.hostId,
+      },
+      threadId: titledThread.id,
+      title: parsed.title,
     });
   } catch (error) {
     deps.logger.warn({ err: error, threadId: args.threadId }, "Failed to generate thread title");

@@ -6,13 +6,10 @@ import { getThreadDisplayTitle } from "@/lib/thread-title";
 
 export function ProjectArchivedThreadsView() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { data: threads, isLoading } = useThreads(
-    {
-      projectId,
-      archived: true,
-    },
-    { enabled: Boolean(projectId) },
-  );
+  const { data: threads, isLoading } = useThreads({
+    projectId,
+    archived: true,
+  });
   const unarchiveThread = useUnarchiveThread();
 
   if (!projectId) {

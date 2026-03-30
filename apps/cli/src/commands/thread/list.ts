@@ -2,12 +2,11 @@ import { Command } from "commander";
 import type { Thread } from "@bb/domain";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
-import { resolveThreadId } from "../../context-env.js";
+import { requireProjectIdWithLabel, resolveThreadId } from "../../context-env.js";
 import { renderBorderlessTable } from "../../table.js";
 import {
   outputJson,
   printContextLabel,
-  type ResolvedId,
 } from "../helpers.js";
 import { statusText } from "./helpers.js";
 
@@ -31,20 +30,17 @@ export function registerListCommand(
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (opts: ThreadListCommandOptions) => {
       const client = createClient(getUrl());
-      const resolvedProject = resolveProjectContext(opts.project);
-      const projectId = resolvedProject?.id;
-      if (resolvedProject) {
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-      }
+      const resolvedProject = requireProjectIdWithLabel(opts.project);
+      printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+      const projectId = resolvedProject.id;
       const parentThreadId = resolveThreadId(opts.parentThread);
+      const query = {
+        projectId,
+        ...(parentThreadId ? { parentThreadId } : {}),
+        ...(opts.archived ? { archived: "true" as const } : {}),
+      };
       const threads = await unwrap<Thread[]>(
-        client.api.v1.threads.$get({
-          query: {
-            ...(projectId ? { projectId } : {}),
-            ...(parentThreadId ? { parentThreadId } : {}),
-            ...(opts.archived ? { archived: "true" } : {}),
-          },
-        }),
+        client.api.v1.threads.$get({ query }),
       );
       if (outputJson(opts, threads)) return;
       if (threads.length === 0) {
@@ -53,19 +49,6 @@ export function registerListCommand(
       }
       printThreadTable(threads);
     }));
-}
-
-function resolveProjectContext(
-  projectId: string | undefined,
-): ResolvedId | undefined {
-  if (projectId) {
-    return { id: projectId, source: "arg" };
-  }
-  const envProjectId = process.env.BB_PROJECT_ID?.trim();
-  if (envProjectId) {
-    return { id: envProjectId, source: "env" };
-  }
-  return undefined;
 }
 
 function printThreadTable(threads: Thread[]): void {

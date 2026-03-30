@@ -29,7 +29,6 @@ export {
   providerListCommandSchema,
   providerListModelsCommandSchema,
   threadRenameCommandSchema,
-  threadResumeCommandSchema,
   threadStartCommandSchema,
   threadStopCommandSchema,
   turnRunCommandSchema,
@@ -43,6 +42,7 @@ export {
   workspaceListFilesCommandSchema,
   workspaceReadFileCommandSchema,
   workspaceSquashMergeCommandSchema,
+  workspaceContextSchema,
   workspaceStatusCommandSchema,
 } from "./commands.js";
 export type {
@@ -53,6 +53,7 @@ export type {
   HostDaemonCommandResultReport,
   HostDaemonCommandType,
   HostDaemonExecutionOptions,
+  WorkspaceContext,
 } from "./commands.js";
 
 export {

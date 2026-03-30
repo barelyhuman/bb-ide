@@ -9,7 +9,7 @@ export type Endpoint<
   Input,
   Output = Untyped,
   Status extends number = 200,
-  Format extends "json" | "text" = "json",
+  Format extends "json" | "text" | "binary" = "json",
 > = {
   input: Input;
   output: Output;

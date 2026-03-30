@@ -5,8 +5,7 @@ export interface PublicThreadCreateServiceRequest extends CreateThreadRequest {
   spawnInitiator?: ThreadTurnInitiator;
 }
 
-export interface ManagerThreadCreateServiceRequest
-  extends Omit<CreateThreadRequest, "input"> {
+export interface ManagerThreadCreateServiceRequest extends CreateThreadRequest {
   type: "manager";
   spawnInitiator?: ThreadTurnInitiator;
 }

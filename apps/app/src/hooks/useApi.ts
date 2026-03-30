@@ -19,7 +19,6 @@ import type {
   ThreadGitDiffSelection,
   WorkspaceStatus,
   ThreadQueuedMessage,
-  ThreadType,
 } from "@bb/domain";
 import type {
   CreateProjectRequest,
@@ -158,23 +157,11 @@ function getCachedThreadListPlaceholder(
   const threadLists = queryClient.getQueriesData<Thread[]>({
     queryKey: ["threads"],
   });
-  let fallbackMatch: Thread | undefined;
-  for (const [queryKey, threads] of threadLists) {
-    const filters = Array.isArray(queryKey)
-      ? readThreadListFiltersFromQueryKey(queryKey)
-      : null;
-    if (filters === null) {
-      continue;
-    }
+  for (const [, threads] of threadLists) {
     const match = threads?.find((thread) => thread.id === id);
-    if (match) {
-      if (filters?.includeWorkStatus) {
-        return match;
-      }
-      fallbackMatch ??= match;
-    }
+    if (match) return match;
   }
-  return fallbackMatch;
+  return undefined;
 }
 
 function updateCachedThread(
@@ -196,46 +183,7 @@ function buildOptimisticUserMessageText(input: PromptInput[]): string {
     .join("\n\n");
 }
 
-function buildOptimisticUserAttachments(input: PromptInput[]) {
-  let webImages = 0;
-  let localImages = 0;
-  let localFiles = 0;
-  const imageUrls: string[] = [];
-  const localImagePaths: string[] = [];
-  const localFilePaths: string[] = [];
-
-  for (const entry of input) {
-    switch (entry.type) {
-      case "text":
-        break;
-      case "image":
-        webImages += 1;
-        imageUrls.push(entry.url);
-        break;
-      case "localImage":
-        localImages += 1;
-        localImagePaths.push(entry.path);
-        break;
-      case "localFile":
-        localFiles += 1;
-        localFilePaths.push(entry.path);
-        break;
-    }
-  }
-
-  if (webImages === 0 && localImages === 0 && localFiles === 0) {
-    return undefined;
-  }
-
-  return {
-    webImages,
-    localImages,
-    localFiles,
-    ...(imageUrls.length > 0 ? { imageUrls } : {}),
-    ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
-    ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
-  };
-}
+import { collectPromptAttachments } from "../lib/prompt-attachments";
 
 export function buildOptimisticUserThreadRow(
   threadId: string,
@@ -251,7 +199,7 @@ export function buildOptimisticUserThreadRow(
       kind: "user",
       threadId,
       text: buildOptimisticUserMessageText(input),
-      attachments: buildOptimisticUserAttachments(input),
+      attachments: collectPromptAttachments(input),
       sourceSeqStart: Number.MAX_SAFE_INTEGER,
       sourceSeqEnd: Number.MAX_SAFE_INTEGER,
       createdAt,
@@ -275,72 +223,22 @@ export function appendOptimisticUserRowToTimeline(
   };
 }
 
-interface ThreadListFilters {
+interface ThreadListQueryFilters {
   projectId?: string;
-  type?: ThreadType;
+  type?: api.ThreadListFilters["type"];
   parentThreadId?: string;
   archived?: boolean;
-  includeWorkStatus?: boolean;
 }
 
-function isThreadListFilters(value: unknown): value is ThreadListFilters {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const maybeFilters = value as Record<string, unknown>;
-  if (
-    maybeFilters.projectId !== undefined &&
-    typeof maybeFilters.projectId !== "string"
-  ) {
-    return false;
-  }
-  if (
-    maybeFilters.type !== undefined &&
-    maybeFilters.type !== "standard" &&
-    maybeFilters.type !== "manager"
-  ) {
-    return false;
-  }
-  if (
-    maybeFilters.parentThreadId !== undefined &&
-    typeof maybeFilters.parentThreadId !== "string"
-  ) {
-    return false;
-  }
-  if (
-    maybeFilters.archived !== undefined &&
-    typeof maybeFilters.archived !== "boolean"
-  ) {
-    return false;
-  }
-  if (
-    maybeFilters.includeWorkStatus !== undefined &&
-    typeof maybeFilters.includeWorkStatus !== "boolean"
-  ) {
-    return false;
-  }
-  return true;
-}
+type ThreadListQueryKey = readonly ["threads", ThreadListQueryFilters?];
 
-function readThreadListFiltersFromQueryKey(
-  queryKey: readonly unknown[],
-): ThreadListFilters | undefined | null {
-  if (queryKey.length < 2) {
-    return undefined;
-  }
-  const rawFilters = queryKey[1];
-  if (rawFilters === undefined) {
-    return undefined;
-  }
-  if (!isThreadListFilters(rawFilters)) {
-    return null;
-  }
-  return rawFilters;
+export function threadListQueryKey(filters?: ThreadListQueryFilters): ThreadListQueryKey {
+  return filters ? ["threads", filters] : ["threads"];
 }
 
 function threadMatchesListFilters(
   thread: Thread,
-  filters: ThreadListFilters | undefined,
+  filters: ThreadListQueryFilters | undefined,
 ): boolean {
   if (filters?.archived === true && thread.archivedAt == null) {
     return false;
@@ -363,14 +261,20 @@ function threadMatchesListFilters(
   return true;
 }
 
-function appendThreadIfMissing(
-  list: Thread[],
+function optimisticallyInsertThread(
+  queryClient: QueryClient,
   thread: Thread,
-): Thread[] {
-  if (list.some((candidate) => candidate.id === thread.id)) {
-    return list;
+): void {
+  const threadLists = queryClient.getQueriesData<Thread[]>({
+    queryKey: ["threads"],
+  });
+  for (const [queryKey, list] of threadLists) {
+    if (!list) continue;
+    const filters = (queryKey as ThreadListQueryKey)[1];
+    if (!threadMatchesListFilters(thread, filters)) continue;
+    if (list.some((t) => t.id === thread.id)) continue;
+    queryClient.setQueryData<Thread[]>(queryKey, [thread, ...list]);
   }
-  return [...list, thread];
 }
 
 // --- Hosts ---
@@ -421,26 +325,7 @@ export function useHireProjectManager() {
     }) => api.hireProjectManager(projectId, { name, providerId, model, reasoningLevel }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
-
-      const existingThreadLists = queryClient.getQueriesData<Thread[]>({
-        queryKey: ["threads"],
-      });
-      for (const [queryKey, list] of existingThreadLists) {
-        if (!list) {
-          continue;
-        }
-        const filters = readThreadListFiltersFromQueryKey(queryKey);
-        if (filters === null) {
-          continue;
-        }
-        if (!threadMatchesListFilters(thread, filters)) {
-          continue;
-        }
-        const nextList = appendThreadIfMissing(list, thread);
-        if (nextList !== list) {
-          queryClient.setQueryData<Thread[]>(queryKey, nextList);
-        }
-      }
+      optimisticallyInsertThread(queryClient, thread);
 
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
@@ -507,13 +392,17 @@ export function useUploadPromptAttachment() {
 // --- Query Hooks ---
 
 export function useThreads(
-  filters?: ThreadListFilters,
+  filters: Omit<api.ThreadListFilters, "projectId"> & { projectId?: string },
   options?: { enabled?: boolean },
 ) {
+  const { projectId, ...rest } = filters;
   return useQuery<Thread[]>({
-    queryKey: ["threads", filters],
-    queryFn: ({ signal }) => api.listThreads(filters, signal),
-    enabled: options?.enabled ?? true,
+    queryKey: threadListQueryKey(projectId ? { ...rest, projectId } : rest),
+    queryFn: ({ signal }) => {
+      if (!projectId) throw new Error("useThreads: projectId is required when query is enabled");
+      return api.listThreads({ ...rest, projectId }, signal);
+    },
+    enabled: (options?.enabled ?? true) && Boolean(projectId),
     staleTime: 10_000,
   });
 }
@@ -720,26 +609,7 @@ export function useCreateThread() {
     },
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
-
-      const existingThreadLists = queryClient.getQueriesData<Thread[]>({
-        queryKey: ["threads"],
-      });
-      for (const [queryKey, list] of existingThreadLists) {
-        if (!list) {
-          continue;
-        }
-        const filters = readThreadListFiltersFromQueryKey(queryKey);
-        if (filters === null) {
-          continue;
-        }
-        if (!threadMatchesListFilters(thread, filters)) {
-          continue;
-        }
-        const nextList = appendThreadIfMissing(list, thread);
-        if (nextList !== list) {
-          queryClient.setQueryData<Thread[]>(queryKey, nextList);
-        }
-      }
+      optimisticallyInsertThread(queryClient, thread);
 
       void queryClient.refetchQueries({
         queryKey: ["threads"],

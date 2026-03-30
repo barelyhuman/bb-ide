@@ -2,7 +2,6 @@ import { Command } from "commander";
 import { type Thread } from "@bb/domain";
 import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
-import { requireThreadId } from "../context-env.js";
 import { renderBorderlessTable } from "../table.js";
 import {
   confirmDestructiveAction,
@@ -98,7 +97,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         console.log("No managers hired");
         return;
       }
-      printManagerTable(managers);
+      printThreadsTable(managers);
     }));
 
   manager
@@ -107,9 +106,9 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: ManagerStatusCommandOptions) => {
       const client = createClient(getUrl());
-      const managerThreadId = requireThreadId(id);
+      const managerThreadId = id;
       const managerThread = await getManagerThreadById(client, managerThreadId);
-      const managedThreads = await listManagedThreads(client, managerThreadId);
+      const managedThreads = await listManagedThreads(client, managerThread.projectId, managerThreadId);
       if (outputJson(opts, { manager: managerThread, managedThreads })) return;
       printManagerThread(managerThread);
       printManagedThreadTable(managedThreads);
@@ -122,7 +121,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: ManagerDeleteCommandOptions) => {
       const client = createClient(getUrl());
-      const managerThreadId = requireThreadId(id);
+      const managerThreadId = id;
       const managerThread = await getManagerThreadById(client, managerThreadId);
       if (!opts.yes) {
         const confirmed = await confirmDestructiveAction(
@@ -167,11 +166,12 @@ async function getManagerThreadById(
 
 async function listManagedThreads(
   client: ReturnType<typeof createClient>,
+  projectId: string,
   managerThreadId: string,
 ): Promise<Thread[]> {
   return unwrap<Thread[]>(
     client.api.v1.threads.$get({
-      query: { parentThreadId: managerThreadId },
+      query: { projectId, parentThreadId: managerThreadId },
     }),
   );
 }
@@ -188,35 +188,7 @@ function printManagerThread(thread: Thread): void {
   console.log("");
 }
 
-function printManagerTable(managers: Thread[]): void {
-  const rows = managers.map((manager) => [
-    manager.id,
-    manager.status,
-    manager.title ?? "<untitled>",
-  ]);
-  const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
-  const statusWidth = Math.max(6, ...rows.map((row) => row[1].length));
-  const titleWidth = Math.max(5, ...rows.map((row) => row[2].length));
-  const table = renderBorderlessTable(
-    {
-      head: ["ID", "Status", "Title"],
-      colWidths: [idWidth, statusWidth, titleWidth],
-    },
-    rows,
-  );
-
-  console.log("");
-  console.log(table);
-  console.log("");
-}
-
-function printManagedThreadTable(threads: Thread[]): void {
-  console.log("Managed threads:");
-  if (threads.length === 0) {
-    console.log("  None");
-    return;
-  }
-  console.log("");
+function printThreadsTable(threads: Thread[]): void {
   const rows = threads.map((thread) => [
     thread.id,
     thread.status,
@@ -232,6 +204,16 @@ function printManagedThreadTable(threads: Thread[]): void {
     },
     rows,
   );
+  console.log("");
   console.log(table);
   console.log("");
+}
+
+function printManagedThreadTable(threads: Thread[]): void {
+  console.log("Managed threads:");
+  if (threads.length === 0) {
+    console.log("  None");
+    return;
+  }
+  printThreadsTable(threads);
 }

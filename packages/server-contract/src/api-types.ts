@@ -160,7 +160,7 @@ export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
   providerId: z.string().min(1),
   model: z.string().min(1),
-  reasoningLevel: reasoningLevelSchema,
+  reasoningLevel: reasoningLevelSchema.optional(),
 });
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
@@ -203,10 +203,10 @@ export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
 
 export const threadListQuerySchema = z.object({
   projectId: z.string().min(1),
-  type: threadTypeSchema,
-  parentThreadId: z.string().min(1),
-  archived: z.enum(["true", "false"]),
-}).partial();
+  type: threadTypeSchema.optional(),
+  parentThreadId: z.string().min(1).optional(),
+  archived: z.enum(["true", "false"]).optional(),
+});
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 
 export const threadTimelineQuerySchema = z.object({

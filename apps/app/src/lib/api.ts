@@ -169,8 +169,14 @@ async function request<T>(responsePromise: Promise<Response>): Promise<T> {
     await throwHttpError(res);
   }
   const text = await res.text();
-  if (!text) return undefined as T;
   return JSON.parse(text) as T;
+}
+
+async function requestVoid(responsePromise: Promise<Response>): Promise<void> {
+  const res = await responsePromise;
+  if (!res.ok) {
+    await throwHttpError(res);
+  }
 }
 
 async function postMultipart<T>(
@@ -196,7 +202,6 @@ async function postMultipart<T>(
     await throwHttpError(res);
   }
   const text = await res.text();
-  if (!text) return undefined as T;
   return JSON.parse(text) as T;
 }
 
@@ -228,7 +233,7 @@ export async function listProjects(): Promise<ProjectResponse[]> {
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await request<unknown>(apiClient.projects[":id"].$delete({ param: { id } }));
+  await requestVoid(apiClient.projects[":id"].$delete({ param: { id } }));
 }
 
 export async function addProjectSource(
@@ -257,7 +262,7 @@ export async function removeProjectSource(
   projectId: string,
   sourceId: string,
 ): Promise<void> {
-  await request<unknown>(
+  await requestVoid(
     apiClient.projects[":id"].sources[":sourceId"].$delete({
       param: { id: projectId, sourceId },
     }),
@@ -308,22 +313,24 @@ export async function createThread(req: CreateThreadRequest): Promise<Thread> {
   return request<Thread>(apiClient.threads.$post({ json: req }));
 }
 
+export interface ThreadListFilters {
+  projectId: string;
+  type?: ThreadType;
+  parentThreadId?: string;
+  archived?: boolean;
+}
+
 export async function listThreads(
-  filters?: {
-    projectId?: string;
-    type?: ThreadType;
-    parentThreadId?: string;
-    archived?: boolean;
-  },
+  filters: ThreadListFilters,
   signal?: AbortSignal,
 ): Promise<Thread[]> {
   return request<Thread[]>(
     apiClient.threads.$get({
       query: {
-        ...(filters?.projectId ? { projectId: filters.projectId } : {}),
-        ...(filters?.type ? { type: filters.type } : {}),
-        ...(filters?.parentThreadId ? { parentThreadId: filters.parentThreadId } : {}),
-        ...(filters?.archived !== undefined
+        projectId: filters.projectId,
+        ...(filters.type ? { type: filters.type } : {}),
+        ...(filters.parentThreadId ? { parentThreadId: filters.parentThreadId } : {}),
+        ...(filters.archived !== undefined
           ? { archived: String(filters.archived) as "true" | "false" }
           : {}),
       },
@@ -376,7 +383,7 @@ export async function getThreadDefaultExecutionOptions(
 }
 
 export async function sendThreadMessage(id: string, req: SendMessageRequest): Promise<void> {
-  await request<unknown>(apiClient.threads[":id"].send.$post({ param: { id }, json: req }));
+  await requestVoid(apiClient.threads[":id"].send.$post({ param: { id }, json: req }));
 }
 
 export async function createThreadDraft(
@@ -404,7 +411,7 @@ export async function deleteThreadDraft(
   id: string,
   queuedMessageId: string,
 ): Promise<void> {
-  await request<unknown>(
+  await requestVoid(
     apiClient.threads[":id"].drafts[":draftId"].$delete({
       param: { id, draftId: queuedMessageId },
     }),
@@ -412,14 +419,14 @@ export async function deleteThreadDraft(
 }
 
 export async function stopThread(id: string): Promise<void> {
-  await request<unknown>(apiClient.threads[":id"].stop.$post({ param: { id } }));
+  await requestVoid(apiClient.threads[":id"].stop.$post({ param: { id } }));
 }
 
 export async function archiveThread(
   id: string,
   opts: { force: boolean },
 ): Promise<void> {
-  await request<unknown>(
+  await requestVoid(
     apiClient.threads[":id"].archive.$post({
       param: { id },
       json: { force: opts.force },
@@ -428,11 +435,11 @@ export async function archiveThread(
 }
 
 export async function unarchiveThread(id: string): Promise<void> {
-  await request<unknown>(apiClient.threads[":id"].unarchive.$post({ param: { id } }));
+  await requestVoid(apiClient.threads[":id"].unarchive.$post({ param: { id } }));
 }
 
 export async function deleteThread(id: string): Promise<void> {
-  await request<unknown>(apiClient.threads[":id"].$delete({ param: { id } }));
+  await requestVoid(apiClient.threads[":id"].$delete({ param: { id } }));
 }
 
 export async function markThreadRead(id: string): Promise<Thread> {

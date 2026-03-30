@@ -8,7 +8,8 @@ export async function startThread(
 ): Promise<HostDaemonCommandResult<"thread.start">> {
   const entry = await options.runtimeManager.ensureEnvironment({
     environmentId: command.environmentId,
-    workspacePath: command.workspacePath,
+    workspacePath: command.workspaceContext.workspacePath,
+    workspaceProvisionType: command.workspaceContext.workspaceProvisionType,
   });
   const result = await entry.runtime.startThread({
     threadId: command.threadId,
@@ -27,31 +28,7 @@ export async function startThread(
   return result;
 }
 
-export async function resumeThread(
-  command: CommandOf<"thread.resume">,
-  options: CommandDispatchOptions,
-): Promise<HostDaemonCommandResult<"thread.resume">> {
-  const entry = await options.runtimeManager.ensureEnvironment({
-    environmentId: command.environmentId,
-    workspacePath: command.workspacePath,
-  });
-  const result = await entry.runtime.resumeThread({
-    threadId: command.threadId,
-    projectId: command.projectId,
-    providerThreadId: command.providerThreadId,
-    providerId: command.providerId,
-    options: command.options,
-    instructions: command.instructions,
-    resumePath: command.workspacePath,
-    dynamicTools: command.dynamicTools,
-  });
-  options.runtimeManager.markThreadActive(
-    command.environmentId,
-    command.threadId,
-    result.providerThreadId,
-  );
-  return result;
-}
+
 
 export async function ensureThreadRuntime(
   command: CommandOf<"turn.run"> | CommandOf<"turn.steer">,
@@ -62,7 +39,8 @@ export async function ensureThreadRuntime(
   if (!entry) {
     entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
-      workspacePath: resumeContext.workspacePath,
+      workspacePath: resumeContext.workspaceContext.workspacePath,
+      workspaceProvisionType: resumeContext.workspaceContext.workspaceProvisionType,
     });
   }
 
@@ -80,7 +58,7 @@ export async function ensureThreadRuntime(
       providerId: resumeContext.providerId,
       options: command.options,
       instructions: resumeContext.instructions,
-      resumePath: resumeContext.workspacePath,
+      resumePath: resumeContext.workspaceContext.workspacePath,
       dynamicTools: resumeContext.dynamicTools,
     });
     options.runtimeManager.markThreadActive(

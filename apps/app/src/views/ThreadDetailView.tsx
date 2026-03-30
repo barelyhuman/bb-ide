@@ -48,10 +48,8 @@ import {
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
-import type {
-  EnvironmentActionApiError,
-  EnvironmentActionFailureDetails,
-} from "@bb/server-contract";
+import type { EnvironmentActionFailureDetails } from "@bb/server-contract";
+import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
@@ -69,7 +67,7 @@ import { extractThreadQueuedMessages, queuedInputToDraft } from "./threadQueuedM
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
-import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
+import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import { useWorkspaceViewer } from "./useWorkspaceViewer";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
@@ -81,28 +79,9 @@ function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFai
   if (!(error instanceof HttpError) || typeof error.body !== "object" || error.body === null) {
     return undefined;
   }
-  const details = (error.body as Partial<EnvironmentActionApiError>).details;
-  if (typeof details !== "object" || details === null) {
-    return undefined;
-  }
-  const typedDetails = details as Partial<EnvironmentActionFailureDetails>;
-  switch (typedDetails.kind) {
-    case "commit_failed":
-      return typeof typedDetails.errorMessage === "string"
-        ? typedDetails as EnvironmentActionFailureDetails
-        : undefined;
-    case "squash_merge_conflict":
-      return Array.isArray(typedDetails.conflictFiles)
-        ? typedDetails as EnvironmentActionFailureDetails
-        : undefined;
-    case "squash_merge_commit_failed":
-      return typeof typedDetails.errorMessage === "string" &&
-          (typedDetails.stage === "prep_commit" || typedDetails.stage === "squash_commit")
-        ? typedDetails as EnvironmentActionFailureDetails
-        : undefined;
-    default:
-      return undefined;
-  }
+  const body = error.body as Record<string, unknown>;
+  const result = environmentActionFailureDetailsSchema.safeParse(body.details);
+  return result.success ? result.data : undefined;
 }
 
 function buildAskAgentInputForGitOperation(args: {
@@ -219,10 +198,7 @@ export function ThreadDetailView() {
     threadId,
     threadType: thread?.type,
   });
-  const { data: allProjectThreads } = useThreads(
-    projectId ? { projectId } : undefined,
-    { enabled: Boolean(projectId) },
-  );
+  const { data: allProjectThreads } = useThreads({ projectId });
   const managerThreads = useMemo(
     () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
     [allProjectThreads],
@@ -1045,7 +1021,7 @@ export function ThreadDetailView() {
     />
   );
   const composerFooter = (
-    <ThreadDetailPromptArea
+    <ThreadFollowUpComposer
       attachments={{
         attachmentError,
         attachments: promptDraft.attachments,

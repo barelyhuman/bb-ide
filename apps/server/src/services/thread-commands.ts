@@ -7,6 +7,7 @@ import type {
   PromptInput,
   ResolvedThreadExecutionOptions,
   Thread,
+  WorkspaceProvisionType,
 } from "@bb/domain";
 import type {
   CreateThreadRequest,
@@ -56,6 +57,7 @@ export async function queueThreadStartCommand(
       hostId: string;
       id: string;
       path: string | null;
+      workspaceProvisionType: WorkspaceProvisionType;
     };
     execution: ResolvedThreadExecutionOptions;
     input: PromptInput[];
@@ -67,6 +69,7 @@ export async function queueThreadStartCommand(
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
+    isThreadCreation: true,
   });
   const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
@@ -77,7 +80,10 @@ export async function queueThreadStartCommand(
       type: "thread.start",
       environmentId: args.environment.id,
       threadId: args.thread.id,
-      workspacePath: runtimeContext.workspacePath,
+      workspaceContext: {
+        workspacePath: runtimeContext.workspacePath,
+        workspaceProvisionType: runtimeContext.workspaceProvisionType,
+      },
       projectId: args.projectId,
       providerId: args.providerId,
       eventSequence: args.eventSequence,
@@ -106,11 +112,7 @@ export async function queueReadyThreadTurnCommand(
       input: args.input,
       eventSequence: args.eventSequence,
       execution: args.execution,
-      environment: {
-        id: args.environment.id,
-        hostId: args.environment.hostId,
-        path: args.environment.path,
-      },
+      environment: args.environment,
       providerThreadId,
     });
     return;
@@ -118,11 +120,7 @@ export async function queueReadyThreadTurnCommand(
 
   await queueThreadStartCommand(deps, {
     thread: args.thread,
-    environment: {
-      id: args.environment.id,
-      hostId: args.environment.hostId,
-      path: args.environment.path,
-    },
+    environment: args.environment,
     input: args.input,
     eventSequence: args.eventSequence,
     execution: args.execution,
@@ -163,7 +161,10 @@ export async function queueTurnRunCommand(
       input: args.input,
       options: args.execution,
       resumeContext: {
-        workspacePath: runtimeContext.workspacePath,
+        workspaceContext: {
+          workspacePath: runtimeContext.workspacePath,
+          workspaceProvisionType: runtimeContext.workspaceProvisionType,
+        },
         projectId: runtimeContext.projectId,
         providerId: runtimeContext.providerId,
         providerThreadId,
@@ -212,7 +213,10 @@ export async function queueTurnSteerCommand(
       input: args.input,
       options: args.execution,
       resumeContext: {
-        workspacePath: runtimeContext.workspacePath,
+        workspaceContext: {
+          workspacePath: runtimeContext.workspacePath,
+          workspaceProvisionType: runtimeContext.workspaceProvisionType,
+        },
         projectId: runtimeContext.projectId,
         providerId: runtimeContext.providerId,
         providerThreadId,

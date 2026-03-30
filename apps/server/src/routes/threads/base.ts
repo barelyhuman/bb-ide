@@ -31,7 +31,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   get("/threads", threadListQuerySchema, (context, query) => {
     return context.json(
       listThreads(deps.db, {
-        ...(query.projectId ? { projectId: query.projectId } : {}),
+        projectId: query.projectId,
         ...(query.type ? { type: query.type } : {}),
         ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
         archived: query.archived === undefined ? undefined : query.archived === "true",

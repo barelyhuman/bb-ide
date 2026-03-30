@@ -120,6 +120,7 @@ async function sendClaimedDraft(
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,
         path: readyEnvironment.path,
+        workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
     tryTransition(deps.db, deps.hub, thread.id, "active");
@@ -138,6 +139,7 @@ async function sendClaimedDraft(
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,
         path: readyEnvironment.path,
+        workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
   }

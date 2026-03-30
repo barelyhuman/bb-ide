@@ -75,11 +75,12 @@ async function ensureExistingWorkspaceMatches(
 
   const workspace = new Workspace(targetPath);
   if (!(await workspace.isGitRepo)) {
-    throw new WorkspaceError(`Target path exists but is not a git repo: ${targetPath}`);
+    throw new WorkspaceError("path_exists", `Target path exists but is not a git repo: ${targetPath}`);
   }
 
   if ((await workspace.currentBranch) !== branchName) {
     throw new WorkspaceError(
+      "path_exists",
       `Target path exists on the wrong branch: ${targetPath}`,
     );
   }
@@ -190,6 +191,7 @@ export async function runSetupScript(
     if (timedOut) {
       emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} timed out`, status: "failed" });
       throw new WorkspaceError(
+        "setup_script_failed",
         `Setup script timed out after ${timeoutMs}ms: ${scriptPath}`,
       );
     }
@@ -197,6 +199,7 @@ export async function runSetupScript(
     if (result.signal) {
       emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} interrupted`, status: "failed" });
       throw new WorkspaceError(
+        "setup_script_failed",
         `Setup script exited via signal ${result.signal}: ${scriptPath}`,
       );
     }
@@ -204,6 +207,7 @@ export async function runSetupScript(
     if ((result.exitCode ?? 0) !== 0) {
       emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} failed`, status: "failed" });
       throw new WorkspaceError(
+        "setup_script_failed",
         `Setup script failed with exit code ${result.exitCode}: ${scriptPath}`,
       );
     }

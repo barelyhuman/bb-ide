@@ -19,7 +19,6 @@ export const HOST_DAEMON_PROTOCOL_VERSION = 2 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
-  "thread.resume",
   "turn.run",
   "turn.steer",
   "thread.stop",
@@ -52,13 +51,19 @@ export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;
 
+export const workspaceContextSchema = z.object({
+  workspacePath: z.string().min(1),
+  workspaceProvisionType: workspaceProvisionTypeSchema,
+});
+export type WorkspaceContext = z.infer<typeof workspaceContextSchema>;
+
 const hostDaemonThreadTargetSchema = z.object({
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
 });
 
 const hostDaemonThreadRuntimeContextSchema = z.object({
-  workspacePath: z.string().min(1),
+  workspaceContext: workspaceContextSchema,
   projectId: z.string().min(1),
   providerId: z.string().min(1),
   options: hostDaemonExecutionOptionsSchema,
@@ -80,7 +85,7 @@ const hostDaemonEnvironmentTargetSchema = z.object({
 });
 
 const hostDaemonWorkspaceTargetSchema = hostDaemonEnvironmentTargetSchema.extend({
-  workspacePath: z.string().min(1),
+  workspaceContext: workspaceContextSchema,
 });
 
 export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
@@ -89,13 +94,6 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
   type: z.literal("thread.start"),
   eventSequence: z.number().int().nonnegative(),
   input: z.array(promptInputSchema).min(1),
-});
-
-/** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */
-export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonExistingThreadRuntimeContextSchema,
-).extend({
-  type: z.literal("thread.resume"),
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
@@ -260,7 +258,6 @@ export const workspaceListBranchesCommandSchema = hostDaemonWorkspaceTargetSchem
 
 const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStartCommandSchema,
-  threadResumeCommandSchema,
   turnRunCommandSchema,
   turnSteerCommandSchema,
   threadStopCommandSchema,
@@ -287,9 +284,6 @@ export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 
 export const hostDaemonCommandResultSchemaByType = {
   "thread.start": z.object({
-    providerThreadId: z.string().min(1),
-  }),
-  "thread.resume": z.object({
     providerThreadId: z.string().min(1),
   }),
   "turn.run": z.object({}),

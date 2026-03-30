@@ -6,12 +6,12 @@
 
 ## Request Params (Query)
 
-| Field | Required | Notes |
-|---|---|---|
-| `sessionId` | Yes | Validated via `requireActiveSession` — must match an active, non-expired session. Used to resolve `hostId` for the command fetch. |
-| `afterCursor` | Yes | String-encoded non-negative integer. Commands with `cursor > afterCursor` are returned. The daemon tracks its own cursor and sends the last-seen value. |
-| `limit` | Yes | String-encoded non-negative integer. Max number of commands to return. |
-| `waitMs` | Yes | String-encoded non-negative integer. If > 0 and no commands are immediately available, the route long-polls via `hub.waitForCommands` up to this duration. If 0, returns immediately. |
+| Field         | Required | Notes                                                                                                                                                                                 |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessionId`   | Yes      | Validated via `requireActiveSession` — must match an active, non-expired session. Used to resolve `hostId` for the command fetch.                                                     |
+| `afterCursor` | Yes      | String-encoded non-negative integer. Commands with `cursor > afterCursor` are returned. The daemon tracks its own cursor and sends the last-seen value.                               |
+| `limit`       | Yes      | String-encoded non-negative integer. Max number of commands to return.                                                                                                                |
+| `waitMs`      | Yes      | String-encoded non-negative integer. If > 0 and no commands are immediately available, the route long-polls via `hub.waitForCommands` up to this duration. If 0, returns immediately. |
 
 **All 4 fields consumed. No dead params.**
 
@@ -36,11 +36,11 @@
 
 ## DB Query Summary
 
-| # | Query | Table | Index | Notes |
-|---|-------|-------|-------|-------|
-| 1 | SELECT session by PK + status + lease | `host_daemon_sessions` | PK (id), filtered by status/lease | Session validation |
-| 2 | SELECT pending commands for host after cursor | `host_daemon_commands` | `host_daemon_commands_host_state_idx` + `host_daemon_commands_host_cursor_idx` | Main fetch |
-| 3 | N x UPDATE command state to "fetched" (RETURNING) | `host_daemon_commands` | PK | Per-command state update |
+| #   | Query                                             | Table                  | Index                                                                          | Notes                    |
+| --- | ------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------ | ------------------------ |
+| 1   | SELECT session by PK + status + lease             | `host_daemon_sessions` | PK (id), filtered by status/lease                                              | Session validation       |
+| 2   | SELECT pending commands for host after cursor     | `host_daemon_commands` | `host_daemon_commands_host_state_idx` + `host_daemon_commands_host_cursor_idx` | Main fetch               |
+| 3   | N x UPDATE command state to "fetched" (RETURNING) | `host_daemon_commands` | PK                                                                             | Per-command state update |
 
 > **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
 
@@ -62,21 +62,29 @@
 
 ## Usages
 
-| Caller | Location | Purpose |
-|---|---|---|
-| `createServerClient().fetchCommands` | `apps/host-daemon/src/server-client.ts:211` | GETs `/session/commands` with cursor, limit, and waitMs to long-poll for pending commands |
-| `createCommandFetchLoop` | `apps/host-daemon/src/app.ts:173` | Wires `serverClient.fetchCommands` into the daemon's command fetch loop |
-| `createDaemonApp` (fetchCommands arg) | `apps/host-daemon/src/app.ts:29-43` | Consumes fetched commands, re-fetching when cursor advances |
-| `HostDaemonInternalSchema["/session/commands"]` | `packages/host-daemon-contract/src/session.ts:143` | Type-level contract definition for the endpoint |
-| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:174` | Typed Hono RPC client used by integration tests |
-| Test: command fetch | `apps/server/test/internal-session.test.ts:123` | Tests fetching commands after cursor |
-| Test: long-poll 204 | `apps/server/test/internal-session.test.ts:152` | Tests 204 response when no commands available after wait |
-| Test: correctness | `apps/server/test/internal-session-correctness.test.ts:222` | Tests command fetch correctness in end-to-end session flow |
-| Test: fake test-server | `apps/host-daemon/test/helpers/test-server.ts:130` | Fake server stub for host-daemon unit tests |
-| Test: contract URL | `packages/host-daemon-contract/test/contract.test.ts:501` | Verifies typed client produces correct URL path |
+| Caller                                          | Location                                                    | Purpose                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `createServerClient().fetchCommands`            | `apps/host-daemon/src/server-client.ts:211`                 | GETs `/session/commands` with cursor, limit, and waitMs to long-poll for pending commands |
+| `createCommandFetchLoop`                        | `apps/host-daemon/src/app.ts:173`                           | Wires `serverClient.fetchCommands` into the daemon's command fetch loop                   |
+| `createDaemonApp` (fetchCommands arg)           | `apps/host-daemon/src/app.ts:29-43`                         | Consumes fetched commands, re-fetching when cursor advances                               |
+| `HostDaemonInternalSchema["/session/commands"]` | `packages/host-daemon-contract/src/session.ts:143`          | Type-level contract definition for the endpoint                                           |
+| `createHostDaemonClient`                        | `packages/host-daemon-contract/src/session.ts:174`          | Typed Hono RPC client used by integration tests                                           |
+| Test: command fetch                             | `apps/server/test/internal-session.test.ts:123`             | Tests fetching commands after cursor                                                      |
+| Test: long-poll 204                             | `apps/server/test/internal-session.test.ts:152`             | Tests 204 response when no commands available after wait                                  |
+| Test: correctness                               | `apps/server/test/internal-session-correctness.test.ts:222` | Tests command fetch correctness in end-to-end session flow                                |
+| Test: fake test-server                          | `apps/host-daemon/test/helpers/test-server.ts:130`          | Fake server stub for host-daemon unit tests                                               |
+| Test: contract URL                              | `packages/host-daemon-contract/test/contract.test.ts:501`   | Verifies typed client produces correct URL path                                           |
 
 ---
 
 ## Review Comments
 
 <!-- Flag 1 (N+1) is the most actionable performance issue. Flag 2 is a design choice — re-parsing prevents corrupted payloads from reaching the daemon, but costs CPU. -->
+
+> 4. **`parseInteger` is local**: Defined inline in the commands file, not shared with the validation utility in `services/validation.ts` which has `parseOptionalInteger`.
+
+please fix this
+
+> **Total: 2 + N queries per fetch call. Called once or twice (if long-poll triggers). The per-command UPDATE is still N+1 — could be batched into a single UPDATE ... WHERE id IN (...).**
+
+tell me more about this! where does N come from? how does this happen? how do we fix it?

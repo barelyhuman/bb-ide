@@ -11,6 +11,7 @@ import type {
   Thread,
   ThreadExecutionOptions,
   ThreadExecutionSource,
+  WorkspaceProvisionType,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
@@ -24,7 +25,7 @@ const DEFAULT_SERVICE_TIER: ServiceTier = "flex";
 const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 const DEFAULT_SANDBOX_MODE: SandboxMode = "danger-full-access";
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
-const NO_MANAGER_PREFERENCES = "No preferences yet.";
+const NO_MANAGER_PREFERENCES = "(file does not exist)";
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
   "standardAgentInstructions",
   {},
@@ -52,6 +53,7 @@ export interface ThreadRuntimeCommandEnvironment {
   hostId: string;
   id: string;
   path: string | null;
+  workspaceProvisionType: WorkspaceProvisionType;
 }
 
 export interface ResolveExecutionOptionsArgs {
@@ -66,6 +68,12 @@ export interface RequestedExecutionOptions extends ThreadExecutionOptions {
 export interface ResolveThreadRuntimeCommandConfigArgs {
   environment: ThreadRuntimeCommandEnvironment;
   thread: Thread;
+  /**
+   * True during thread creation. Skips the daemon round-trip to read
+   * PREFERENCES.md because the manager has no preferences yet at
+   * creation time. Preferences are read on subsequent turns.
+   */
+  isThreadCreation?: boolean;
 }
 
 export interface ResolvedThreadRuntimeCommandConfig {
@@ -74,6 +82,7 @@ export interface ResolvedThreadRuntimeCommandConfig {
   projectId: string;
   providerId: string;
   workspacePath: string;
+  workspaceProvisionType: WorkspaceProvisionType;
 }
 
 function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): string {
@@ -89,6 +98,7 @@ async function readManagerPreferences(
   args: {
     environment: ThreadRuntimeCommandEnvironment;
     workspacePath: string;
+    workspaceProvisionType: WorkspaceProvisionType;
   },
 ): Promise<string> {
   try {
@@ -98,7 +108,10 @@ async function readManagerPreferences(
       command: {
         type: "workspace.read_file",
         environmentId: args.environment.id,
-        workspacePath: args.workspacePath,
+        workspaceContext: {
+          workspacePath: args.workspacePath,
+          workspaceProvisionType: args.workspaceProvisionType,
+        },
         path: MANAGER_PREFERENCES_FILE_NAME,
       },
     });
@@ -157,6 +170,8 @@ export async function resolveThreadRuntimeCommandConfig(
   const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
   const projectRootPath = defaultSource?.path ?? workspacePath;
 
+  const { workspaceProvisionType } = args.environment;
+
   if (args.thread.type !== "manager") {
     return {
       dynamicTools: [],
@@ -164,13 +179,17 @@ export async function resolveThreadRuntimeCommandConfig(
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
       workspacePath,
+      workspaceProvisionType,
     };
   }
 
-  const managerPreferencesContent = await readManagerPreferences(deps, {
-    environment: args.environment,
-    workspacePath,
-  });
+  const managerPreferencesContent = args.isThreadCreation
+    ? NO_MANAGER_PREFERENCES
+    : await readManagerPreferences(deps, {
+        environment: args.environment,
+        workspacePath,
+        workspaceProvisionType,
+      });
 
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
@@ -185,5 +204,6 @@ export async function resolveThreadRuntimeCommandConfig(
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
     workspacePath,
+    workspaceProvisionType,
   };
 }

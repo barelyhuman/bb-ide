@@ -21,7 +21,7 @@
 
 | Field | Required | Notes |
 |---|---|---|
-| `workspacePath` | Yes | Filesystem path. Used by `ensureEnvironment` if runtime doesn't exist, and as `resumePath` for auto-resume. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `ensureEnvironment` with correct managed type if runtime doesn't exist, and `workspacePath` used as `resumePath` for auto-resume. |
 | `projectId` | Yes | Passed to `runtime.resumeThread` during auto-resume if the thread is not registered. |
 | `providerId` | Yes | Selects which provider adapter. Used during auto-resume. |
 | `providerThreadId` | Yes | Provider's internal thread ID. Required for auto-resume if the daemon lost thread state. |
@@ -53,12 +53,12 @@
 
 - `ensureThreadRuntime` is shared with `turn.steer`.
 - `seedThreadHighWaterMarkIfPresent` is shared with `thread.start` and `turn.steer`.
-- The auto-resume path inside `ensureThreadRuntime` reuses the same `runtime.resumeThread` call as the explicit `thread.resume` command.
+- The auto-resume path inside `ensureThreadRuntime` calls `runtime.resumeThread` internally. The explicit `thread.resume` daemon command has been fully deleted; auto-resume via `ensureThreadRuntime` is the only resume path.
 
 ## Flags
 
 1. **`dynamicTools` not passed to `runTurn`.** The `runtime.runTurn` interface does not accept `dynamicTools`. They are only registered during `startThread` or `resumeThread` (via `resumeContext`). If tools change between turns, the auto-resume path picks them up, but if the thread is already registered and tools changed since the last turn, the new tools are NOT applied. This could be intentional (tools are session-scoped) but worth verifying.
-2. **Auto-resume is implicit.** If the daemon restarts between turns, `turn.run` silently auto-resumes the provider session using `ensureThreadRuntime`. The server relies on this to avoid explicit `thread.resume` before every `turn.run`. This is clean but worth documenting as a design decision.
+2. **Auto-resume is implicit.** If the daemon restarts between turns, `turn.run` silently auto-resumes the provider session using `ensureThreadRuntime`. The explicit `thread.resume` command has been deleted; auto-resume via `ensureThreadRuntime` is now the only resume mechanism.
 
 ## Usages
 

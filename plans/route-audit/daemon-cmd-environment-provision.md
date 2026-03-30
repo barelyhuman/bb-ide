@@ -135,6 +135,12 @@
 
 ---
 
+## Updates
+
+- **Error codes now structured.** `WorkspaceError` carries a `code` field. Provision failures now surface specific codes: `"path_not_found"` (unmanaged path missing), `"path_exists"` (target already exists with wrong state), `"setup_script_failed"` (env setup script non-zero exit), `"git_command_failed"` (worktree/clone git failures).
+- **Managed workspace re-provision fix.** Other workspace commands (commit, diff, etc.) now send `workspaceContext: { workspacePath, workspaceProvisionType }` instead of flat `workspacePath`. The daemon's `requireWorkspaceEnvironment` uses `workspaceProvisionType` when lazily re-provisioning after a daemon restart. Previously, lazy re-provisioning always hardcoded `"unmanaged"`, which meant managed worktree/clone environments would be incorrectly re-provisioned as unmanaged. This bug is now fixed.
+- **`reconnectManaged` helper extracted.** Managed workspace reconnection (after daemon restart) now uses a shared `reconnectManaged(wsPath, destroyFn)` helper in `packages/workspace/src/provision.ts`. The helper validates the workspace still exists on disk, wraps it as a `WorkspaceImpl`, and provides the correct destroy function. `reconnectManagedWorktree` and `reconnectManagedClone` are thin wrappers that pass the appropriate destroy function (`removeWorktree` vs `removeDirectory`). The `RuntimeManager` maps `managed-worktree` to `reconnect-managed-worktree` and `managed-clone` to `reconnect-managed-clone` provision types when re-provisioning.
+
 ## Review Comments
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->

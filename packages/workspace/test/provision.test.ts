@@ -329,4 +329,45 @@ describe("provisionWorkspace", () => {
       await expect(env.demote({ primary, defaultBranch: "main" })).rejects.toThrow(/no branch/u);
     });
   });
+
+  describe("reconnect-managed-worktree", () => {
+    it("reconnects to an existing worktree with managed=true", async () => {
+      const repoPath = await initRepo();
+      const parentDir = await makeTempDir("bb-reconnect-wt-parent-");
+      const wtPath = path.join(parentDir, "wt");
+      await runGit(["worktree", "add", "-B", "feature", wtPath], { cwd: repoPath });
+
+      const ws = await provisionWorkspace({ workspaceProvisionType: "reconnect-managed-worktree", path: wtPath });
+
+      expect(ws.path).toBe(wtPath);
+      expect(ws.managed).toBe(true);
+      expect(ws.isGitRepo).toBe(true);
+      expect(ws.isWorktree).toBe(true);
+    });
+
+    it("throws path_not_found for non-existent path", async () => {
+      await expect(
+        provisionWorkspace({ workspaceProvisionType: "reconnect-managed-worktree", path: "/tmp/does-not-exist-reconnect-wt" }),
+      ).rejects.toThrow("path does not exist");
+    });
+  });
+
+  describe("reconnect-managed-clone", () => {
+    it("reconnects to an existing clone with managed=true", async () => {
+      const repoPath = await initRepo();
+
+      const ws = await provisionWorkspace({ workspaceProvisionType: "reconnect-managed-clone", path: repoPath });
+
+      expect(ws.path).toBe(repoPath);
+      expect(ws.managed).toBe(true);
+      expect(ws.isGitRepo).toBe(true);
+      expect(ws.isWorktree).toBe(false);
+    });
+
+    it("throws path_not_found for non-existent path", async () => {
+      await expect(
+        provisionWorkspace({ workspaceProvisionType: "reconnect-managed-clone", path: "/tmp/does-not-exist-reconnect-clone" }),
+      ).rejects.toThrow("path does not exist");
+    });
+  });
 });

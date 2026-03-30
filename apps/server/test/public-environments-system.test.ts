@@ -96,7 +96,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(statusCommand.command).toMatchObject({
-        workspacePath: "/tmp/environment-details/worktree",
+        workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
         mergeBaseBranch: "main",
       });
       await reportQueuedCommandSuccess(harness, statusCommand, {
@@ -134,7 +134,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(diffCommand.command).toMatchObject({
-        workspacePath: "/tmp/environment-details/worktree",
+        workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
         mergeBaseBranch: "main",
         selection: { type: "combined" },
       });
@@ -173,7 +173,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(branchesCommand.command).toMatchObject({
-        workspacePath: "/tmp/environment-details/worktree",
+        workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
       });
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],
@@ -229,7 +229,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
-        workspacePath: "/tmp/test-environment",
+        workspaceContext: { workspacePath: "/tmp/test-environment", workspaceProvisionType: "unmanaged" },
         message: "Checkpoint changes",
       });
 
@@ -294,7 +294,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(promoteCommand.command).toMatchObject({
-        workspacePath: "/tmp/promote-project/.bb-worktrees/thread",
+        workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
         threadId: primaryThread.id,
         primaryPath: source.path,
       });
@@ -328,7 +328,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(demoteCommand.command).toMatchObject({
-        workspacePath: "/tmp/promote-project/.bb-worktrees/thread",
+        workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
         threadId: primaryThread.id,
         primaryPath: source.path,
         defaultBranch: "main",
@@ -389,7 +389,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
-        workspacePath: "/tmp/test-environment",
+        workspaceContext: { workspacePath: "/tmp/test-environment", workspaceProvisionType: "managed-worktree" },
         targetBranch: "main",
       });
       await reportQueuedCommandSuccess(harness, queued, {

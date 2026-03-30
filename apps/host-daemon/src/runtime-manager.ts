@@ -3,13 +3,27 @@ import {
   type AgentRuntime,
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
-import type { ThreadEvent } from "@bb/domain";
+import type { ThreadEvent, WorkspaceProvisionType } from "@bb/domain";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import {
   provisionWorkspace,
   type IWorkspace,
   type ProvisionWorkspaceOpts,
 } from "@bb/workspace";
+
+function lazyProvisionOpts(
+  workspacePath: string,
+  workspaceProvisionType: WorkspaceProvisionType,
+): ProvisionWorkspaceOpts {
+  switch (workspaceProvisionType) {
+    case "unmanaged":
+      return { workspaceProvisionType: "unmanaged", path: workspacePath };
+    case "managed-worktree":
+      return { workspaceProvisionType: "reconnect-managed-worktree", path: workspacePath };
+    case "managed-clone":
+      return { workspaceProvisionType: "reconnect-managed-clone", path: workspacePath };
+  }
+}
 
 export interface RuntimeEntry {
   environmentId: string;
@@ -28,6 +42,7 @@ export interface RuntimeEntry {
 export interface EnsureEnvironmentArgs {
   environmentId: string;
   workspacePath?: string;
+  workspaceProvisionType?: WorkspaceProvisionType;
   provision?: ProvisionWorkspaceOpts;
 }
 
@@ -162,13 +177,22 @@ export class RuntimeManager {
   }
 
   async shutdownAll(): Promise<void> {
-    const environmentIds = new Set<string>([
-      ...this.entries.keys(),
-      ...this.pendingEntries.keys(),
-    ]);
+    const entries = [...this.entries.values()];
+    for (const pending of this.pendingEntries.values()) {
+      try {
+        entries.push(await pending);
+      } catch {
+        // Ignore failed provisions during shutdown
+      }
+    }
+    this.entries.clear();
+    this.pendingEntries.clear();
 
-    for (const environmentId of environmentIds) {
-      await this.destroyEnvironment(environmentId);
+    for (const entry of entries) {
+      await entry.runtime.shutdown();
+      // Do NOT call workspace.destroy() — the server owns managed workspace
+      // lifecycle via explicit environment.destroy commands. Daemon shutdown
+      // should only release in-memory state and stop provider processes.
     }
   }
 
@@ -176,10 +200,7 @@ export class RuntimeManager {
     const provision =
       args.provision ??
       (args.workspacePath
-        ? {
-            workspaceProvisionType: "unmanaged" as const,
-            path: args.workspacePath,
-          }
+        ? lazyProvisionOpts(args.workspacePath, args.workspaceProvisionType ?? "unmanaged")
         : null);
 
     if (!provision) {

@@ -99,12 +99,18 @@ export type PublicApiSchema = {
     >;
   };
   "/projects/:id/attachments/content": {
-    /** Serve an uploaded attachment's content. Used to render attachment previews. */
+    /**
+     * Serve an uploaded attachment's content. Used to render attachment previews.
+     *
+     * Returns raw binary with the appropriate `Content-Type` header.
+     * The handler constructs a `Response` directly (bypasses `context.json()`),
+     * so the output type here is nominal — the actual body is a `Uint8Array`.
+     */
     $get: Endpoint<
       PathProjectId & { query: ProjectAttachmentContentQuery },
-      string,
+      Uint8Array,
       200,
-      "text"
+      "binary"
     >;
   };
   "/projects/:id/managers": {
@@ -261,7 +267,7 @@ export type PublicApiSchema = {
     /** Read a single file from the thread's workspace. Proxies to `workspace.read_file`. */
     $get: Endpoint<
       PathId & { query: ThreadWorkspaceFileQuery },
-      { path: string; content: string }
+      { path: string; content: string; mimeType?: string }
     >;
   };
 

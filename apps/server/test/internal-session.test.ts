@@ -242,7 +242,7 @@ describe("internal session routes", () => {
       );
       expect(threadStartCommand.command).toMatchObject({
         environmentId: successEnvironment.id,
-        workspacePath: "/tmp/provision-success",
+        workspaceContext: { workspacePath: "/tmp/provision-success", workspaceProvisionType: "unmanaged" },
       });
 
       const failureEnvironment = seedEnvironment(harness.deps, {

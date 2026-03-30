@@ -2,7 +2,7 @@ import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAtom } from "jotai"
 import { atomWithStorage } from "jotai/utils"
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Link, useLocation, useMatch, useNavigate } from "react-router-dom"
 import {
   Archive,
   ChevronRight,
@@ -73,7 +73,6 @@ const routeTitles: Record<string, { title: string; subtitle?: string }> = {
 
 interface AppHeaderProps {
   isProjectMainView: boolean
-  projectMatch: RegExpMatchArray | null
   projectName?: string
   projectId?: string
   isManagerActionPending?: boolean
@@ -87,7 +86,6 @@ interface AppHeaderProps {
 
 function AppHeader({
   isProjectMainView,
-  projectMatch,
   projectName,
   projectId,
   isManagerActionPending = false,
@@ -99,8 +97,8 @@ function AppHeader({
   const showProjectMenuButton = isProjectMainView && isSidebarCollapsed
   const showProjectNameInHeader = !isProjectMainView || isSidebarCollapsed
   const collapsedProjectLabel =
-    isSidebarCollapsed && isProjectMainView && projectMatch
-      ? (projectName ?? projectMatch[1])
+    isSidebarCollapsed && isProjectMainView && projectId
+      ? (projectName ?? projectId)
       : undefined
   const headerBreadcrumbs = collapsedProjectLabel
     ? [{ label: "Projects" }, { label: collapsedProjectLabel }]
@@ -159,7 +157,7 @@ function AppHeader({
             ) : null}
           </div>
         </div>
-        {isProjectMainView && projectMatch ? (
+        {isProjectMainView && projectId ? (
           <div className="mr-2 flex items-center gap-1">
             <button
               type="button"
@@ -172,7 +170,7 @@ function AppHeader({
               <UserRoundPlus className="size-4" />
             </button>
             <Link
-              to={`/projects/${projectMatch[1]}/archived`}
+              to={`/projects/${projectId}/archived`}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label="Archived threads"
               title="Archived threads"
@@ -228,20 +226,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const liveWidthRef = useRef(sidebarWidth)
   const animationFrameRef = useRef<number | null>(null)
 
-  const projectMatch = location.pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
-  const projectThreadMatch = location.pathname.match(
-    /^\/projects\/([^/]+)\/threads\/([^/]+)(?:\/|$)/
-  )
-  const projectArchivedMatch = location.pathname.match(/^\/projects\/([^/]+)\/archived(?:\/|$)/)
+  const projectMatch = useMatch("/projects/:projectId/*")
+  const projectThreadMatch = useMatch("/projects/:projectId/threads/:threadId/*")
+  const projectArchivedMatch = useMatch("/projects/:projectId/archived")
   const threadMatch = projectThreadMatch
   const showHeader = location.pathname !== "/" && !threadMatch
   const showFloatingSidebarTrigger = location.pathname === "/"
   const isProjectMainView = Boolean(
     projectMatch && !threadMatch && !projectArchivedMatch
   )
-  const threadId = projectThreadMatch?.[2] ?? ""
+  const threadId = projectThreadMatch?.params.threadId ?? ""
 
-  const projectId = projectMatch?.[1]
+  const projectId = projectMatch?.params.projectId
   const project = projectId
     ? projects?.find((candidate) => candidate.id === projectId)
     : undefined
@@ -262,22 +258,22 @@ export function AppLayout({ children }: { children: ReactNode }) {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
         subtitle: undefined,
       }
-    : projectArchivedMatch
+    : projectArchivedMatch && projectId
       ? {
           title: "",
           subtitle: undefined,
           breadcrumbs: [
             { label: "Projects" },
             {
-              label: projectLabel ?? projectArchivedMatch[1],
-              to: `/projects/${projectArchivedMatch[1]}`,
+              label: projectLabel ?? projectId,
+              to: `/projects/${projectId}`,
             },
             { label: "Archived" },
           ],
         }
-    : projectMatch
+    : projectMatch && projectId
       ? {
-          title: projectLabel ?? projectMatch[1],
+          title: projectLabel ?? projectId,
           subtitle: undefined,
         }
       : (routeTitles[location.pathname] ?? { title: "" })
@@ -286,11 +282,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
     if (threadMatch) {
       return threadDisplayTitle
     }
-    if (projectArchivedMatch) {
-      return `${projectLabel ?? projectArchivedMatch[1]} · Archived`
+    if (projectArchivedMatch && projectId) {
+      return `${projectLabel ?? projectId} · Archived`
     }
-    if (projectMatch) {
-      return projectLabel ?? projectMatch[1]
+    if (projectMatch && projectId) {
+      return projectLabel ?? projectId
     }
     const routeTitle = routeTitles[location.pathname]?.title
     return routeTitle && routeTitle.length > 0 ? routeTitle : "BB"
@@ -391,7 +387,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           {showHeader ? (
             <AppHeader
               isProjectMainView={isProjectMainView}
-              projectMatch={projectMatch}
               projectName={projectLabel}
               projectId={projectId}
               isManagerActionPending={hireProjectManager.isPending || hireManagerModal.isOpen}

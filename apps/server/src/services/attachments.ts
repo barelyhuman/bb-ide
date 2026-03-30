@@ -4,6 +4,7 @@
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve } from "node:path";
 import type { UploadedPromptAttachment } from "@bb/server-contract";
+import mimeTypes from "mime-types";
 import { ApiError } from "../errors.js";
 
 const IMAGE_LIMIT_BYTES = 10 * 1024 * 1024;
@@ -77,6 +78,7 @@ export async function readAttachment(
 
   return {
     content: await readFile(resolved),
+    mimeType: mimeTypes.lookup(resolved) || undefined,
   };
 }
 

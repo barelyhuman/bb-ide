@@ -11,10 +11,10 @@
 |---|---|---|
 | `environmentId` | Yes | Identifies the runtime entry. |
 | ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
-| `workspacePath` | Yes | Fallback for lazy provisioning. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `requireWorkspaceEnvironment` for lazy re-provisioning with the correct managed/unmanaged type. |
 | `commitMessage` | Yes | Message used for the commit if there are uncommitted changes. Min 1 char. |
 
-**All 4 fields consumed. No dead params.**
+**All fields consumed. No dead params.**
 
 ## Implementation Trace
 
@@ -39,7 +39,7 @@
 ## Flags
 
 1. **Remote name hardcoded to `"origin"`.** Not configurable. Fine for typical setups but worth noting.
-2. **No force-push option.** If the remote branch has diverged, `git push` will fail. This is probably the correct safe default, but the error will be a raw git error rather than a structured code.
+2. ~~**No force-push option.** If the remote branch has diverged, `git push` will fail. This is probably the correct safe default, but the error will be a raw git error rather than a structured code.~~ **Partially resolved** — `WorkspaceError` now carries a `code` field, so push failures surface as `"git_command_failed"` rather than a generic error. Force-push is still not available.
 
 ## Usages
 
@@ -48,6 +48,10 @@
 | _(none)_ | — | No server-side callers. Command is defined and handled but never queued. |
 
 ---
+
+## Updates
+
+- **Error codes now structured.** `WorkspaceError` carries a `code` field. Checkpoint failures now surface specific codes: `"detached_head"` (detached workspace), `"git_command_failed"` (commit or push failures). Partially resolves flag 2.
 
 ## Review Comments
 

@@ -45,8 +45,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.status",
         environmentId: environment.id,
-
-        workspacePath: environment.path,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
         mergeBaseBranch: query.mergeBaseBranch,
       },
     });
@@ -62,8 +64,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.diff",
         environmentId: environment.id,
-
-        workspacePath: environment.path,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
         selection: toWorkspaceDiffSelection(query),
         mergeBaseBranch: query.mergeBaseBranch,
       },
@@ -81,8 +85,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_branches",
         environmentId: environment.id,
-
-        workspacePath: environment.path,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
       },
     });
     return context.json(
@@ -106,8 +112,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.commit",
             environmentId: environment.id,
-    
-            workspacePath: environment.path,
+            workspaceContext: {
+              workspacePath: environment.path,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            },
             message: payload.options.message,
           },
         });
@@ -135,8 +143,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.squash_merge",
             environmentId: environment.id,
-    
-            workspacePath: environment.path,
+            workspaceContext: {
+              workspacePath: environment.path,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            },
             targetBranch: payload.options.mergeBaseBranch,
           },
         });
@@ -168,8 +178,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.promote",
             environmentId: environment.id,
-    
-            workspacePath: environment.path,
+            workspaceContext: {
+              workspacePath: environment.path,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            },
             threadId: actingThread.id,
             primaryPath: source.path,
           },
@@ -196,8 +208,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.demote",
             environmentId: environment.id,
-    
-            workspacePath: environment.path,
+            workspaceContext: {
+              workspacePath: environment.path,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            },
             threadId: actingThread.id,
             primaryPath: source.path,
             defaultBranch: actingThread.mergeBaseBranch,

@@ -10,7 +10,7 @@ import {
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
-import { ensureThreadRuntime, resumeThread, startThread } from "./command-handlers/thread.js";
+import { ensureThreadRuntime, startThread } from "./command-handlers/thread.js";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
 
@@ -44,8 +44,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "thread.start":
       seedThreadHighWaterMarkIfPresent(command, options);
       return startThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
-    case "thread.resume":
-      return resumeThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "turn.run": {
       seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(command, options);

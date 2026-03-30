@@ -12,7 +12,7 @@
 | `type` | Yes | Literal `"thread.start"` |
 | `environmentId` | Yes | Target environment for the thread. Used to look up or create a `RuntimeEntry`. |
 | `threadId` | Yes | BB-side thread identifier. Passed to `runtime.startThread` and used by `markThreadActive`. |
-| `workspacePath` | Yes | Filesystem path for the workspace. Passed to `ensureEnvironment` to provision workspace if needed. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Passed to `ensureEnvironment` to provision workspace with correct managed type if needed after daemon restart. |
 | `projectId` | Yes | Passed through to `runtime.startThread` for provider session context. |
 | `providerId` | Yes | Selects which AI provider adapter to use. |
 | `options` | Yes | `HostDaemonExecutionOptions` — extends `ThreadExecutionOptions` with required `model`, `serviceTier`, `reasoningLevel`, `sandboxMode`. Passed to `runtime.startThread`. |
@@ -42,7 +42,7 @@
 
 ## Code Reuse
 
-- `ensureEnvironment` is shared with `resumeThread`, `ensureThreadRuntime` (turn.run/turn.steer).
+- `ensureEnvironment` is shared with `ensureThreadRuntime` (turn.run/turn.steer). (Previously also shared with the now-deleted `thread.resume` command.)
 - `markThreadActive` is shared across all thread-starting commands and also called internally by the `RuntimeManager.onEvent` callback for `thread/identity` events.
 - `seedThreadHighWaterMarkIfPresent` is shared with `turn.run` and `turn.steer`.
 

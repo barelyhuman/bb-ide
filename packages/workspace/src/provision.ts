@@ -69,10 +69,24 @@ export interface ManagedCloneOpts extends ProvisionBase {
   timeoutMs?: number;
 }
 
+export interface ReconnectManagedWorktreeOpts extends ProvisionBase {
+  workspaceProvisionType: "reconnect-managed-worktree";
+  /** Existing worktree path to reconnect */
+  path: string;
+}
+
+export interface ReconnectManagedCloneOpts extends ProvisionBase {
+  workspaceProvisionType: "reconnect-managed-clone";
+  /** Existing clone path to reconnect */
+  path: string;
+}
+
 export type ProvisionWorkspaceOpts =
   | UnmanagedWorkspaceOpts
   | ManagedWorktreeOpts
-  | ManagedCloneOpts;
+  | ManagedCloneOpts
+  | ReconnectManagedWorktreeOpts
+  | ReconnectManagedCloneOpts;
 
 // ---------------------------------------------------------------------------
 // IWorkspace interface
@@ -211,6 +225,7 @@ class WorkspaceImpl implements IWorkspace {
     const branch = args.envBranch ?? await this.ws.currentBranch;
     if (!branch) {
       throw new WorkspaceError(
+        "detached_head",
         "Cannot demote: workspace has no branch (detached HEAD)",
       );
     }
@@ -236,6 +251,10 @@ export async function provisionWorkspace(
       return provisionWorktree(opts);
     case "managed-clone":
       return provisionClone(opts);
+    case "reconnect-managed-worktree":
+      return reconnectManagedWorktree(opts);
+    case "reconnect-managed-clone":
+      return reconnectManagedClone(opts);
   }
 }
 
@@ -244,6 +263,7 @@ async function provisionUnmanaged(
 ): Promise<IWorkspace> {
   if (!(await pathExists(opts.path))) {
     throw new WorkspaceError(
+      "path_not_found",
       `Unmanaged workspace path does not exist: ${opts.path}`,
     );
   }
@@ -302,4 +322,39 @@ async function provisionClone(
     isWorktree: false,
     destroyFn: () => removeDirectory({ path: wsPath }),
   });
+}
+
+async function reconnectManaged(
+  wsPath: string,
+  destroyFn: () => Promise<void>,
+): Promise<IWorkspace> {
+  if (!(await pathExists(wsPath))) {
+    throw new WorkspaceError(
+      "path_not_found",
+      `Managed workspace path does not exist: ${wsPath}`,
+    );
+  }
+
+  const isGitRepo = await detectGitRepo(wsPath);
+  const isWorktree = isGitRepo ? await detectWorktree(wsPath) : false;
+
+  return new WorkspaceImpl({
+    path: wsPath,
+    managed: true,
+    isGitRepo,
+    isWorktree,
+    destroyFn,
+  });
+}
+
+async function reconnectManagedWorktree(
+  opts: ReconnectManagedWorktreeOpts,
+): Promise<IWorkspace> {
+  return reconnectManaged(opts.path, () => removeWorktree({ path: opts.path, force: true }));
+}
+
+async function reconnectManagedClone(
+  opts: ReconnectManagedCloneOpts,
+): Promise<IWorkspace> {
+  return reconnectManaged(opts.path, () => removeDirectory({ path: opts.path }));
 }

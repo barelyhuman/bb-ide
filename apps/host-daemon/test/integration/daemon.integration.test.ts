@@ -57,7 +57,7 @@ function createStandardThreadStartCommand(args: {
     type: "thread.start" as const,
     environmentId: args.environmentId,
     threadId: args.threadId,
-    workspacePath: args.workspacePath,
+    workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },
     projectId: args.projectId,
     providerId: args.providerId,
     eventSequence: args.eventSequence,
@@ -96,7 +96,7 @@ function createTurnRunCommand(args: {
       sandboxMode: "danger-full-access" as const,
     },
     resumeContext: {
-      workspacePath: args.workspacePath,
+      workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },
       projectId: args.projectId,
       providerId: args.providerId,
       providerThreadId: args.providerThreadId,

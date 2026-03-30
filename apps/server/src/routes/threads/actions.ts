@@ -22,7 +22,7 @@ import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { encodeDraftContent, toQueuedMessage } from "../../services/drafts.js";
 import { maybeCleanupEnvironment } from "../../services/environment-cleanup.js";
-import { requireThreadEnvironment } from "../../services/entity-lookup.js";
+import { requireThread, requireThreadEnvironment } from "../../services/entity-lookup.js";
 import { sendQueuedDraft } from "../../services/queued-drafts.js";
 import {
   queueTurnDuringReprovision,
@@ -118,6 +118,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
           id: readyEnvironment.id,
           hostId: readyEnvironment.hostId,
           path: readyEnvironment.path,
+          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
         },
       });
       tryTransition(deps.db, deps.hub, thread.id, "active");
@@ -136,6 +137,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
           id: readyEnvironment.id,
           hostId: readyEnvironment.hostId,
           path: readyEnvironment.path,
+          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
         },
       });
     }
@@ -223,7 +225,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             command: {
               type: "workspace.status",
               environmentId: environment.id,
-              workspacePath: environment.path,
+              workspaceContext: {
+                workspacePath: environment.path,
+                workspaceProvisionType: environment.workspaceProvisionType,
+              },
               mergeBaseBranch,
             },
           }),
@@ -257,6 +262,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/unarchive", (context) => {
+    requireThread(deps.db, context.req.param("id"));
     unarchiveThread(deps.db, deps.hub, context.req.param("id"));
     return context.json({ ok: true });
   });

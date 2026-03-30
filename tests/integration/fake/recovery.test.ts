@@ -63,15 +63,16 @@ function requireSessionId(harness: IntegrationHarness): string {
 async function createRecoveryThread(
   harness: IntegrationHarness,
   name: string,
+  workspaceType: "unmanaged" | "managed-worktree" = "unmanaged",
 ) {
   const project = await createProjectFixture(harness, { name });
+  const workspace = workspaceType === "unmanaged"
+    ? { type: "unmanaged" as const, path: harness.repoDir }
+    : { type: "managed-worktree" as const };
   const readyThread = await createReadyHostThread(harness, {
     projectId: project.id,
     timeoutMs: DEFAULT_TIMEOUT_MS,
-    workspace: {
-      type: "unmanaged",
-      path: harness.repoDir,
-    },
+    workspace,
   });
   return {
     ...readyThread,
@@ -113,6 +114,72 @@ describe.sequential("fake provider recovery integration", () => {
 
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after graceful restart",
+      );
+    }));
+
+  it("restarts cleanly with a managed-worktree environment and continues the thread", () =>
+    withHarness(async (harness) => {
+      const { thread } = await createRecoveryThread(
+        harness,
+        "Managed Worktree Graceful Restart",
+        "managed-worktree",
+      );
+
+      await sendTextMessage(harness.api, thread.id, {
+        text: "before managed restart",
+      });
+      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+
+      await harness.shutdownDaemon("managed-restart");
+      await waitForHostDisconnected(
+        harness.api,
+        harness.hostId,
+        RECOVERY_TIMEOUT_MS,
+      );
+
+      await harness.startDaemon();
+      await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
+
+      await sendTextMessage(harness.api, thread.id, {
+        text: "after managed restart",
+      });
+      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+
+      expect(await getThreadOutput(harness.api, thread.id)).toContain(
+        "after managed restart",
+      );
+    }));
+
+  it("survives a crash with a managed-worktree environment and resumes after restart", () =>
+    withHarness(async (harness) => {
+      const { thread } = await createRecoveryThread(
+        harness,
+        "Managed Worktree Crash Restart",
+        "managed-worktree",
+      );
+
+      await sendTextMessage(harness.api, thread.id, {
+        text: "before managed crash",
+      });
+      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+
+      await harness.crashDaemon();
+      await waitForHostDisconnected(
+        harness.api,
+        harness.hostId,
+        RECOVERY_TIMEOUT_MS,
+      );
+
+      await harness.startDaemon();
+      await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
+
+      await sendTextMessage(harness.api, thread.id, {
+        text: "after managed crash",
+      });
+      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+
+      expect(await getThreadOutput(harness.api, thread.id)).toContain(
+        "after managed crash",
       );
     }));
 
@@ -345,7 +412,10 @@ describe.sequential("fake provider recovery integration", () => {
         eventSequence: eventsBefore.length + 1,
         input: [{ type: "text", text: "queued while offline" }],
         resumeContext: {
-          workspacePath: environment.path,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
           projectId: thread.projectId,
           providerId: thread.providerId,
           providerThreadId,

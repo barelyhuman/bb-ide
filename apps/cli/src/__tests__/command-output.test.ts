@@ -506,6 +506,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
+    process.env.BB_PROJECT_ID = "proj-1";
     await runCommand(["thread", "list"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );

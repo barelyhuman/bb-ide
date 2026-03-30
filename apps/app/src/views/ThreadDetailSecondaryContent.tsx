@@ -386,7 +386,7 @@ function WorkspaceContent({
               <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
                 {file.path}
               </span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
+              <span className="shrink-0 ui-text-xs text-muted-foreground">
                 {file.size} B
               </span>
             </button>

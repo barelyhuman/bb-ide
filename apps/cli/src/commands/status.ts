@@ -7,7 +7,7 @@ import {
 } from "@bb/core-ui";
 import { action } from "../action.js";
 import { resolveContextSnapshot } from "../context-env.js";
-import { createClient, unwrap } from "../client.js";
+import { type Client, createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
 import { outputJson } from "./helpers.js";
 
@@ -32,6 +32,71 @@ interface StatusCommandOptions {
   json?: boolean;
 }
 
+async function fetchSilent<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null;
+  }
+}
+
+function fetchProject(args: {
+  client: Client;
+  projectId: string;
+}): Promise<ProjectResponse | null> {
+  return fetchSilent(() =>
+    unwrap<ProjectResponse>(
+      args.client.api.v1.projects[":id"].$get({
+        param: { id: args.projectId },
+      }),
+    ),
+  );
+}
+
+function fetchThread(args: {
+  client: Client;
+  threadId: string;
+}): Promise<Thread | null> {
+  return fetchSilent(() =>
+    unwrap<Thread>(
+      args.client.api.v1.threads[":id"].$get({
+        param: { id: args.threadId },
+      }),
+    ),
+  );
+}
+
+async function fetchEnvironmentDisplay(args: {
+  client: Client;
+  environmentId: string;
+}): Promise<EnvironmentDisplayInfo | null> {
+  return fetchSilent(async () => {
+    const [env, localHostId] = await Promise.all([
+      unwrap<Environment>(
+        args.client.api.v1.environments[":id"].$get({
+          param: { id: args.environmentId },
+        }),
+      ),
+      fetchLocalHostId(),
+    ]);
+    return formatEnvironmentDisplay(env, env.hostId === localHostId);
+  });
+}
+
+function fetchManagedThreads(args: {
+  client: Client;
+  projectId: string;
+  parentThreadId: string;
+}): Promise<Thread[] | null> {
+  return fetchSilent(() =>
+    unwrap<Thread[]>(
+      args.client.api.v1.threads.$get({
+        query: { projectId: args.projectId, parentThreadId: args.parentThreadId },
+      }),
+    ),
+  );
+}
+
 export function registerStatusCommand(
   program: Command,
   getUrl: () => string,
@@ -53,82 +118,59 @@ export function registerStatusCommand(
 
       // Try to fetch enriched data from the server
       if (context.projectId || context.threadId) {
-        try {
-          const client = createClient(getUrl());
+        const client = createClient(getUrl());
 
-          if (context.projectId) {
-            try {
-              const project = await unwrap<ProjectResponse>(
-                client.api.v1.projects[":id"].$get({
-                  param: { id: context.projectId },
-                }),
-              );
-              payload.project = {
-                id: project.id,
-                name: project.name,
-              };
-              serverAvailable = true;
-            } catch {
-              // Project fetch failed; will fall back below
-            }
+        const [projectResult, threadResult] = await Promise.all([
+          context.projectId
+            ? fetchProject({ client, projectId: context.projectId })
+            : Promise.resolve(null),
+          context.threadId
+            ? fetchThread({ client, threadId: context.threadId })
+            : Promise.resolve(null),
+        ]);
+
+        if (projectResult) {
+          payload.project = {
+            id: projectResult.id,
+            name: projectResult.name,
+          };
+          serverAvailable = true;
+        }
+
+        if (threadResult) {
+          let environmentDisplay: EnvironmentDisplayInfo | null = null;
+          if (threadResult.environmentId) {
+            environmentDisplay = await fetchEnvironmentDisplay({
+              client,
+              environmentId: threadResult.environmentId,
+            });
           }
 
-          if (context.threadId) {
-            try {
-              const thread = await unwrap<Thread>(
-                client.api.v1.threads[":id"].$get({
-                  param: { id: context.threadId },
-                }),
-              );
+          payload.thread = {
+            id: threadResult.id,
+            type: threadResult.type,
+            status: threadResult.status,
+            title: threadResult.title ?? null,
+            parentThreadId: threadResult.parentThreadId ?? null,
+            environment: environmentDisplay,
+          };
+          serverAvailable = true;
 
-              let environmentDisplay: EnvironmentDisplayInfo | null = null;
-              if (thread.environmentId) {
-                try {
-                  const env = await unwrap<Environment>(
-                    client.api.v1.environments[":id"].$get({
-                      param: { id: thread.environmentId },
-                    }),
-                  );
-                  const localHostId = await fetchLocalHostId();
-                  environmentDisplay = formatEnvironmentDisplay(env, env.hostId === localHostId);
-                } catch {
-                  // Environment fetch failed; leave as null
-                }
-              }
-
-              payload.thread = {
-                id: thread.id,
-                type: thread.type,
-                status: thread.status,
-                title: thread.title ?? null,
-                parentThreadId: thread.parentThreadId ?? null,
-                environment: environmentDisplay,
-              };
-              serverAvailable = true;
-
-              // If the thread is a manager, fetch managed (child) threads
-              if (thread.type === "manager") {
-                try {
-                  const managed = await unwrap<Thread[]>(
-                    client.api.v1.threads.$get({
-                      query: { parentThreadId: thread.id },
-                    }),
-                  );
-                  payload.managedThreads = managed.map((t) => ({
-                    id: t.id,
-                    status: t.status,
-                    title: t.title ?? null,
-                  }));
-                } catch {
-                  // Managed threads fetch failed; leave as null
-                }
-              }
-            } catch {
-              // Thread fetch failed; will fall back below
+          // If the thread is a manager, fetch managed (child) threads
+          if (threadResult.type === "manager") {
+            const managed = await fetchManagedThreads({
+              client,
+              projectId: threadResult.projectId,
+              parentThreadId: threadResult.id,
+            });
+            if (managed) {
+              payload.managedThreads = managed.map((t) => ({
+                id: t.id,
+                status: t.status,
+                title: t.title ?? null,
+              }));
             }
           }
-        } catch {
-          // Server unreachable; fall back to env-var-only output
         }
       }
 

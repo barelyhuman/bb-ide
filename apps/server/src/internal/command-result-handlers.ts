@@ -194,6 +194,7 @@ async function handleProvisionCommandResult(
           id: command.environmentId,
           hostId: commandRow.hostId,
           path: report.result.path,
+          workspaceProvisionType: command.workspaceProvisionType,
         },
         eventSequence: startEvent.sequence,
         input: parsedStartEvent.input,

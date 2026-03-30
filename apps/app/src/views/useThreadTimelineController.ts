@@ -319,7 +319,6 @@ export function useThreadTimelineController({
     observer.observe(container, {
       subtree: true,
       childList: true,
-      characterData: true,
     });
 
     return () => {

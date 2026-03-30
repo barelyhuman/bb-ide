@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAtom } from "jotai"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueries, useQueryClient } from "@tanstack/react-query"
 import type { Thread } from "@bb/domain"
 import {
   AlertTriangle,
@@ -24,10 +24,10 @@ import {
   useMarkThreadRead,
   useMarkThreadUnread,
   useProjects,
-  useThreads,
   useUnarchiveThread,
   useUpdateProject,
   useUpdateThread,
+  threadListQueryKey,
 } from "@/hooks/useApi"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
 import * as api from "@/lib/api"
@@ -114,7 +114,19 @@ export function ProjectList({
   isCreatingProject = false,
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: threads, isLoading: threadsLoading } = useThreads()
+  const projectIds = useMemo(() => (projects ?? []).map((p) => p.id), [projects])
+  const { threads, threadsLoading } = useQueries({
+    queries: projectIds.map((projectId) => ({
+      queryKey: threadListQueryKey({ projectId, archived: false }),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        api.listThreads({ projectId, archived: false }, signal),
+      staleTime: 10_000,
+    })),
+    combine: (results) => ({
+      threads: results.flatMap((r) => r.data ?? []),
+      threadsLoading: results.some((r) => r.isLoading),
+    }),
+  })
   const archiveThread = useArchiveThread()
   const markThreadRead = useMarkThreadRead()
   const markThreadUnread = useMarkThreadUnread()
@@ -149,8 +161,7 @@ export function ProjectList({
   const threadsByProject = useMemo(() => {
     const grouped = new Map<string, Thread[]>()
 
-    for (const thread of threads ?? []) {
-      if (thread.archivedAt != null) continue
+    for (const thread of threads) {
       const existing = grouped.get(thread.projectId)
       if (existing) {
         existing.push(thread)
@@ -159,16 +170,12 @@ export function ProjectList({
       }
     }
 
-    for (const projectThreads of grouped.values()) {
-      projectThreads.sort((a, b) => b.createdAt - a.createdAt)
-    }
-
     return grouped
   }, [threads])
 
   useEffect(() => {
     const archiveConfirmationTarget = archiveConfirmationDialog.target
-    if (!archiveConfirmationTarget || !threads) return
+    if (!archiveConfirmationTarget || threads.length === 0) return
 
     const nextThread = threads.find((thread) => thread.id === archiveConfirmationTarget.id)
     if (!nextThread || nextThread.archivedAt != null) {

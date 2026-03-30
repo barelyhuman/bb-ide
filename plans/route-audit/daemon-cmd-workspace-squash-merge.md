@@ -11,10 +11,10 @@
 |---|---|---|
 | `environmentId` | Yes | Identifies the runtime entry. |
 | ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
-| `workspacePath` | Yes | Fallback for lazy provisioning. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `requireWorkspaceEnvironment` for lazy re-provisioning with the correct managed/unmanaged type. |
 | `targetBranch` | Yes | The branch to squash-merge into (e.g., `main`). |
 
-**All 4 fields consumed. No dead params.**
+**All fields consumed. No dead params.**
 
 ## Implementation Trace
 
@@ -52,7 +52,7 @@
 
 1. **Fetch failure silently swallowed.** The `.catch(() => undefined)` on fetch means if origin is unreachable, the merge proceeds against a potentially stale local target branch. This is intentional (offline-friendly) but worth noting.
 2. **Hardcoded commit messages.** The squash merge commit message is always `"bb squash merge"`. The caller cannot customize it. The server may want to provide a message.
-3. **No conflict handling.** If `git merge --squash` produces conflicts, `runGit` will throw a raw `WorkspaceError`. There is no structured error code for merge conflicts.
+3. ~~**No conflict handling.** If `git merge --squash` produces conflicts, `runGit` will throw a raw `WorkspaceError`. There is no structured error code for merge conflicts.~~ **Fixed** — `WorkspaceError` now carries a `code` field; merge conflicts surface as `"merge_conflict"` or `"git_command_failed"`.
 4. **The result schema requires `commitSha` even when `merged` is false** — but the implementation always returns `merged: true` or throws. The `merged: boolean` field is never `false`.
 
 ## Usages
@@ -62,6 +62,10 @@
 | `POST /environments/:id/actions` (action: `"squash_merge"`) | `apps/server/src/routes/environments.ts:132-143` | Client squash-merges workspace branch via environment action |
 
 ---
+
+## Updates
+
+- **Error codes now structured.** `WorkspaceError` carries a `code` field. Squash merge failures now surface specific codes: `"detached_head"` (detached workspace), `"branch_not_found"` (target branch missing), `"git_command_failed"` (merge conflicts or other git failures), `"worktree_cleanup_failed"` (cleanup assertion). Resolves flag 3.
 
 ## Review Comments
 

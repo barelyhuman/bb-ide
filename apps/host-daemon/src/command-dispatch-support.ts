@@ -5,6 +5,7 @@ import type {
 } from "@bb/domain";
 import type {
   HostDaemonCommand,
+  WorkspaceContext,
 } from "@bb/host-daemon-contract";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
 
@@ -60,7 +61,7 @@ export async function requireExistingEnvironment(
 export async function requireWorkspaceEnvironment(
   args: {
     environmentId: string;
-    workspacePath: string;
+    workspaceContext: WorkspaceContext;
   },
   runtimeManager: RuntimeManager,
 ): Promise<RuntimeEntry> {
@@ -71,7 +72,8 @@ export async function requireWorkspaceEnvironment(
 
   return runtimeManager.ensureEnvironment({
     environmentId: args.environmentId,
-    workspacePath: args.workspacePath,
+    workspacePath: args.workspaceContext.workspacePath,
+    workspaceProvisionType: args.workspaceContext.workspaceProvisionType,
   });
 }
 
@@ -82,5 +84,12 @@ export function defaultListProviders(): ProviderInfo[] {
 export async function defaultListModels(
   providerId: string,
 ): Promise<AvailableModel[]> {
-  return createProviderForId(providerId).listModels();
+  try {
+    return await createProviderForId(providerId).listModels();
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Unsupported provider")) {
+      throw new CommandDispatchError("unknown_provider", error.message);
+    }
+    throw error;
+  }
 }

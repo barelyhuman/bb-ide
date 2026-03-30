@@ -11,7 +11,7 @@
 |---|---|---|
 | `environmentId` | Yes | Identifies the runtime entry (the environment workspace = source). |
 | ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
-| `workspacePath` | Yes | Fallback for lazy provisioning. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `requireWorkspaceEnvironment` for lazy re-provisioning with the correct managed/unmanaged type. |
 | `threadId` | Yes | Included in schema but **not used** by the handler or any downstream code. |
 | `primaryPath` | Yes | Absolute path to the primary (user-facing) checkout. Opened as a separate workspace via `runtimeManager.openWorkspace()`. |
 
@@ -57,6 +57,10 @@
 | `POST /environments/:id/actions` (action: `"promote"`) | `apps/server/src/routes/environments.ts:165-176` | Client promotes environment workspace to primary checkout via environment action |
 
 ---
+
+## Updates
+
+- **Error codes now structured.** `WorkspaceError` carries a `code` field. Promote failures now surface specific codes: `"workspace_dirty"` (uncommitted changes), `"detached_head"` (source has no branch), `"not_git_repo"`, `"git_command_failed"`.
 
 ## Review Comments
 

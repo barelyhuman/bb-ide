@@ -97,7 +97,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_files",
         environmentId: readyEnvironment.id,
-        workspacePath: readyEnvironment.path,
+        workspaceContext: {
+          workspacePath: readyEnvironment.path,
+          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
+        },
         ...(query.query ? { query: query.query } : {}),
       },
     });
@@ -119,7 +122,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.read_file",
         environmentId: readyEnvironment.id,
-        workspacePath: readyEnvironment.path,
+        workspaceContext: {
+          workspacePath: readyEnvironment.path,
+          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
+        },
         path: query.path,
       },
     });

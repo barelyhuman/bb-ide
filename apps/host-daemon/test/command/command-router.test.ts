@@ -88,7 +88,7 @@ function createStandardRuntimeCommandContext(args: {
   workspacePath: string;
 }) {
   return {
-    workspacePath: args.workspacePath,
+    workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },
     projectId: "project-1",
     providerId: "fake",
     ...(args.providerThreadId
@@ -137,8 +137,7 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env-1",
-          workspacePath: "/tmp/env-1",
-          threadId: "thread-1",
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
           message: "Commit",
         },
       },
@@ -148,8 +147,7 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.status",
           environmentId: "env-1",
-          workspacePath: "/tmp/env-1",
-          threadId: "thread-1",
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
           mergeBaseBranch: "main",
         },
       },
@@ -209,7 +207,7 @@ describe("CommandRouter", () => {
             sandboxMode: "danger-full-access" as const,
           },
           resumeContext: {
-            workspacePath: "/tmp/env-1",
+            workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
             projectId: "project-1",
             providerId: "fake",
             providerThreadId: "provider-a",
@@ -234,7 +232,7 @@ describe("CommandRouter", () => {
             sandboxMode: "danger-full-access" as const,
           },
           resumeContext: {
-            workspacePath: "/tmp/env-1",
+            workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
             projectId: "project-1",
             providerId: "fake",
             providerThreadId: "provider-b",

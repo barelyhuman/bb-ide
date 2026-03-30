@@ -11,7 +11,7 @@
 |---|---|---|
 | `environmentId` | Yes | Identifies the environment workspace (source). |
 | ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
-| `workspacePath` | Yes | Fallback for lazy provisioning. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `requireWorkspaceEnvironment` for lazy re-provisioning with the correct managed/unmanaged type. |
 | `threadId` | Yes | Included in schema but **not used** by the handler or any downstream code. |
 | `primaryPath` | Yes | Absolute path to the primary checkout. Opened as a separate workspace. |
 | `defaultBranch` | Yes | Branch to switch the primary checkout back to (e.g., `main`). |
@@ -57,6 +57,10 @@
 | `POST /environments/:id/actions` (action: `"demote"`) | `apps/server/src/routes/environments.ts:193-206` | Client demotes environment workspace back to default branch via environment action |
 
 ---
+
+## Updates
+
+- **Error codes now structured.** `WorkspaceError` carries a `code` field. Demote failures now surface specific codes: `"workspace_dirty"` (primary has uncommitted changes), `"detached_head"` (workspace has no branch), `"not_git_repo"`, `"git_command_failed"`.
 
 ## Review Comments
 

@@ -11,10 +11,10 @@
 |---|---|---|
 | `environmentId` | Yes | Inherited from `hostDaemonWorkspaceTargetSchema`. Used to look up or lazily create the runtime entry. |
 | ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
-| `workspacePath` | Yes | Inherited from workspace target. Used to lazily provision workspace if entry missing. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used to lazily provision workspace with correct managed/unmanaged type if entry missing after daemon restart. |
 | `mergeBaseBranch` | Yes | Branch name passed to `workspace.getStatus()` to compute ahead/behind counts and merge-base ref. |
 
-**All 4 fields consumed. No dead params.**
+**All fields consumed. No dead params.**
 
 ## Implementation Trace
 

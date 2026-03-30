@@ -22,7 +22,7 @@
 
 | Field | Required | Notes |
 |---|---|---|
-| `workspacePath` | Yes | Filesystem path. Used by `ensureEnvironment` if needed, and as `resumePath` for auto-resume. |
+| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `ensureEnvironment` with correct managed type if needed, and `workspacePath` used as `resumePath` for auto-resume. |
 | `projectId` | Yes | Passed to `runtime.resumeThread` during auto-resume. |
 | `providerId` | Yes | Selects which provider adapter. Used during auto-resume. |
 | `providerThreadId` | Yes | Provider's internal thread ID. Required for auto-resume. |
@@ -46,7 +46,7 @@
 
 - `ensureThreadRuntime` is shared with `turn.run`.
 - `seedThreadHighWaterMarkIfPresent` is shared with `thread.start` and `turn.run`.
-- Auto-resume path identical to `turn.run`.
+- Auto-resume path identical to `turn.run`. The explicit `thread.resume` command has been deleted; this is the only resume mechanism.
 
 ## Flags
 

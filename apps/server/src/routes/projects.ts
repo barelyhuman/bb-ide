@@ -6,6 +6,7 @@ import {
   deleteProjectSource,
   getDefaultProjectSource,
   listProjects,
+  listThreads,
   projectSources,
   updateProject,
   updateProjectSource,
@@ -25,6 +26,7 @@ import {
 } from "@bb/server-contract";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
+import { renderTemplate } from "@bb/templates";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
@@ -188,7 +190,10 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_files",
         environmentId: environment.id,
-        workspacePath: source.path,
+        workspaceContext: {
+          workspacePath: source.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
         ...(query.query ? { query: query.query } : {}),
       },
     });
@@ -226,22 +231,38 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/projects/:id/managers", createManagerThreadRequestSchema, async (context, payload) => {
-    requireProject(deps.db, context.req.param("id"));
-    const source = getDefaultProjectSource(deps.db, context.req.param("id"));
+    const projectId = context.req.param("id");
+    requireProject(deps.db, projectId);
+    const source = getDefaultProjectSource(deps.db, projectId);
     if (!source) {
       throw new ApiError(409, "invalid_request", "Project has no default source");
     }
+    if (!source.path) {
+      throw new ApiError(409, "invalid_request", "Default source has no local path");
+    }
+
+    let title: string;
+    if (payload.name) {
+      title = payload.name;
+    } else {
+      const existingManagers = listThreads(deps.db, { projectId, type: "manager" });
+      title = existingManagers.length === 0 ? "Manager" : `Manager ${existingManagers.length + 1}`;
+    }
+
+    const welcomeMessage = renderTemplate("systemMessageManagerWelcome", {});
+
     const thread = await createThreadFromRequest(deps, {
-      projectId: context.req.param("id"),
+      projectId,
       providerId: payload.providerId,
       type: "manager",
-      ...(payload.name ? { title: payload.name } : {}),
+      title,
+      input: [{ type: "text", text: welcomeMessage }],
       model: payload.model,
       reasoningLevel: payload.reasoningLevel,
       environment: {
         type: "host",
         hostId: source.hostId,
-        workspace: { type: "managed-worktree" },
+        workspace: { type: "unmanaged", path: source.path },
       },
     });
     return context.json(thread, 201);
