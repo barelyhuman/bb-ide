@@ -231,6 +231,13 @@ export const threadEventsQuerySchema = z.object({
 }).partial();
 export type ThreadEventsQuery = z.infer<typeof threadEventsQuerySchema>;
 
+export const threadEventWaitQuerySchema = z.object({
+  type: z.string().min(1),
+  afterSeq: z.string().regex(/^\d+$/).optional(),
+  waitMs: z.string().regex(/^\d+$/).optional(),
+});
+export type ThreadEventWaitQuery = z.infer<typeof threadEventWaitQuerySchema>;
+
 export const threadWorkspaceFilesQuerySchema = z.object({
   query: z.string().min(1),
   limit: z.string().regex(/^\d+$/),

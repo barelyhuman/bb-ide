@@ -21,17 +21,9 @@ import {
   printContextLabel,
   requireThreadIdWithLabel,
 } from "../helpers.js";
-import {
-  parseRecentEventsCount,
-  parseThreadStatusEventMode,
-  statusText,
-  type ThreadStatusEventMode,
-} from "./helpers.js";
+import { statusText } from "./helpers.js";
 
 interface ThreadShowCommandOptions {
-  recentEvents?: string;
-  eventMode?: string;
-  includeLowSignal?: boolean;
   workStatus?: boolean;
   gitDiff?: boolean;
   diffSelection?: string;
@@ -43,6 +35,8 @@ interface ThreadShowCommandOptions {
 interface ThreadLogCommandOptions {
   json?: boolean;
   format?: string;
+  limit?: string;
+  afterSeq?: string;
 }
 
 interface ThreadOutputCommandOptions {
@@ -51,12 +45,6 @@ interface ThreadOutputCommandOptions {
 
 interface ThreadStatusPayload {
   thread: Thread;
-  recentEvents?: {
-    requestedCount: number;
-    eventMode: ThreadStatusEventMode;
-    includeLowSignal: boolean;
-    events: ThreadEventRow[];
-  };
 }
 
 interface ThreadShowJsonPayload extends ThreadStatusPayload {
@@ -94,16 +82,6 @@ export function registerShowCommand(
     .command("show [id]")
     .description("Show thread details (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .option("--recent-events <count>", "Include last N thread events")
-    .option(
-      "--event-mode <mode>",
-      "summary|raw event formatting for --recent-events",
-      "summary",
-    )
-    .option(
-      "--include-low-signal",
-      "Include low-signal internal lifecycle events in recent events",
-    )
     .option("--work-status", "Include work status (git state) in output")
     .option("--git-diff", "Include git diff in output")
     .option(
@@ -120,29 +98,11 @@ export function registerShowCommand(
       const resolved = requireThreadIdWithLabel(id);
       const threadId = resolved.id;
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const recentEvents =
-        opts.recentEvents === undefined
-          ? undefined
-          : parseRecentEventsCount(opts.recentEvents);
-      const eventMode = parseThreadStatusEventMode(opts.eventMode);
       const thread = await unwrap<Thread>(
         client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
       );
 
-      const events =
-        recentEvents === undefined
-          ? []
-          : await unwrap<ThreadEventRow[]>(
-              client.api.v1.threads[":id"].events.$get({
-                param: { id: threadId },
-                query: {},
-              }),
-            );
-      const statusPayload = buildThreadStatusPayload(thread, events, {
-        recentEvents,
-        eventMode,
-        includeLowSignal: Boolean(opts.includeLowSignal),
-      });
+      const statusPayload: ThreadStatusPayload = { thread };
       let environment: Environment | null | undefined;
       const getEnvironment = async () => {
         if (!thread.environmentId) {
@@ -301,6 +261,8 @@ export function registerShowCommand(
       "Output format: json (raw events), minimal (compact timeline), verbose (full timeline)",
       "minimal",
     )
+    .option("--limit <count>", "Maximum number of events to return; json format only (default 100)")
+    .option("--after-seq <seq>", "Return events after this sequence number; json format only")
     .action(action(async (id: string | undefined, opts: ThreadLogCommandOptions) => {
       const client = createClient(getUrl());
       const resolved = requireThreadIdWithLabel(id);
@@ -308,10 +270,17 @@ export function registerShowCommand(
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
       const format = resolveTimelineFormat(opts);
 
+      if (format !== "json" && (opts.limit || opts.afterSeq)) {
+        throw new Error("--limit and --after-seq are only supported with --format json");
+      }
+
       const events = await unwrap<ThreadEventRow[]>(
         client.api.v1.threads[":id"].events.$get({
           param: { id: threadId },
-          query: {},
+          query: {
+            limit: String(opts.limit ?? 100),
+            ...(opts.afterSeq ? { afterSeq: opts.afterSeq } : {}),
+          },
         }),
       );
 
@@ -356,52 +325,6 @@ export function registerShowCommand(
     }));
 }
 
-function isLowSignalThreadStatusEventType(type: string): boolean {
-  if (type.startsWith("client/")) return true;
-  if (
-    type === "turn/start" ||
-    type === "turn/started" ||
-    type === "turn/completed"
-  ) {
-    return true;
-  }
-  if (type === "item/started") return true;
-  if (type.endsWith("/delta")) return true;
-  if (type === "thread/tokenUsage/updated") return true;
-  return false;
-}
-
-function buildThreadStatusPayload(
-  thread: Thread,
-  events: ThreadEventRow[],
-  opts?: {
-    recentEvents?: number;
-    eventMode: ThreadStatusEventMode;
-    includeLowSignal: boolean;
-  },
-): ThreadStatusPayload {
-  const recentEventCount = opts?.recentEvents;
-  if (recentEventCount === undefined) {
-    return { thread };
-  }
-
-  const eventMode = opts?.eventMode ?? "summary";
-  const includeLowSignal = opts?.includeLowSignal ?? false;
-  const filteredEvents = includeLowSignal
-    ? events
-    : events.filter((event) => !isLowSignalThreadStatusEventType(event.type));
-
-  return {
-    thread,
-    recentEvents: {
-      requestedCount: recentEventCount,
-      eventMode,
-      includeLowSignal,
-      events: filteredEvents.slice(-recentEventCount),
-    },
-  };
-}
-
 function printThreadStatus(payload: ThreadStatusPayload): void {
   const { thread } = payload;
   console.log(`Thread ${thread.id}`);
@@ -418,40 +341,6 @@ function printThreadStatus(payload: ThreadStatusPayload): void {
   }
   console.log(`Created ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`Updated ${new Date(thread.updatedAt).toLocaleString()}`);
-
-  const recentEvents = payload.recentEvents;
-  if (recentEvents === undefined) return;
-
-  console.log("");
-  console.log("Recent events:");
-  if (recentEvents.events.length === 0) return;
-
-  if (recentEvents.eventMode === "raw") {
-    for (const event of recentEvents.events) {
-      printEvent(event);
-    }
-    return;
-  }
-
-  for (const event of recentEvents.events) {
-    const at = new Date(event.createdAt).toLocaleTimeString();
-    console.log(`- ${at} ${event.type}`);
-  }
-}
-
-function printEvent(event: ThreadEventRow): void {
-  const time = new Date(event.createdAt).toLocaleTimeString();
-  const data =
-    typeof event.data === "string"
-      ? event.data
-      : JSON.stringify(event.data, null, 2);
-
-  if (event.type === "error") {
-    console.log(`time=${time} level=error data=${data}`);
-    return;
-  }
-
-  console.log(`time=${time} type=${event.type} data=${data}`);
 }
 
 function resolveTimelineFormat(opts: ThreadLogCommandOptions): TimelineFormat {

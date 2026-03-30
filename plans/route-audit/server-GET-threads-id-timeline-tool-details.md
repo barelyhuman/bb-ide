@@ -51,6 +51,19 @@
 
 1. **`turnId` is a dead param.** It is required in `timelineToolDetailsQuerySchema` but never used in the route handler or in `buildTimelineToolDetails`. The filtering is done entirely by `sourceSeqStart`/`sourceSeqEnd`. Per AGENTS.md: "Accepted-but-ignored route or command fields are forbidden. Delete them or implement them end to end in the same change." This should be removed from the schema.
 2. **`sourceSeqStart`/`sourceSeqEnd` default to 0 via `?? 0`** -- if `parseOptionalInteger` returns `undefined` (which it cannot since the schema makes them required), the fallback produces a range query `sequence >= 0 AND sequence <= 0` which returns nothing. Harmless but the `?? 0` is misleading since the schema already enforces presence.
+3. **No response caching** -- the pre-rebuild daemon `getToolGroupMessages` method had no cache (unlike the main timeline route), so this is equivalent. However, the pre-rebuild version filtered out noise event types at the DB level, which this version does not.
+4. **Noise events included in range query** -- `listThreadEventRowsInRange` fetches all events in the `[seqStart, seqEnd]` range including noise types like `thread/tokenUsage/updated` and `item/reasoning/summaryPartAdded`. The pre-rebuild `listByThread` accepted an `excludedTypes` parameter. For tool-details the range is typically small (one tool group), so the impact is minor compared to the main timeline route.
+
+## Performance Summary (vs. Pre-rebuild)
+
+| Aspect | Pre-rebuild daemon | Current server | Gap |
+|---|---|---|---|
+| Range query | `listByThread(threadId, seqStart-1, rangeSize)` + JS filter for exact bounds | `WHERE threadId = ? AND sequence >= ? AND sequence <= ?` | Current is slightly better (exact range in SQL) |
+| Noise filtering | DB-level exclusion | None | Missing (minor impact -- range is small) |
+| Processing | `toUIMessages` -> filter by turnId + seq range -> `buildThreadDetailRows` | `decodeRow` -> `toViewMessages` -> return messages | Roughly equivalent |
+| Caching | None | None | Same |
+
+**Net effect:** Performance is roughly equivalent to pre-rebuild for this route. The range is bounded by the caller (one tool group's sequence span), so the unbounded-load issue from the main timeline route does not apply here. The main concern remains flag #1 (dead `turnId` param).
 
 ## Usages
 
@@ -68,4 +81,5 @@
 
 ## Review Comments
 
-<!-- Flag #1 is a policy violation per AGENTS.md. turnId should be deleted from the query schema. -->
+<!-- Flag #1 is a policy violation per AGENTS.md. turnId should be deleted from the query schema.
+  Flag #3-4 are minor perf gaps vs. pre-rebuild but low priority since ranges are small. -->

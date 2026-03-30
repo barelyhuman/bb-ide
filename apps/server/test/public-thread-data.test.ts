@@ -799,4 +799,121 @@ describe("public thread data routes", () => {
       await harness.cleanup();
     }
   });
+
+  it("returns existing matching event immediately from /events/wait", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "system/manager/user_message",
+        data: { text: "A manager note" },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "item/completed",
+        data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/events/wait?type=item/completed&waitMs=1000`,
+      );
+      expect(response.status).toBe(200);
+      const body = (await readJson(response)) as { type: string; seq: number };
+      expect(body.type).toBe("item/completed");
+      expect(body.seq).toBe(2);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 204 on timeout when no matching event exists", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "system/manager/user_message",
+        data: { text: "Unrelated event" },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/events/wait?type=item/completed&waitMs=100`,
+      );
+      expect(response.status).toBe(204);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("respects afterSeq when waiting for events", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 5,
+        type: "item/completed",
+        data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },
+      });
+
+      // afterSeq=5 means "after sequence 5" — the match at seq 5 should NOT be returned
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/events/wait?type=item/completed&afterSeq=5&waitMs=100`,
+      );
+      expect(response.status).toBe(204);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 for nonexistent thread on /events/wait", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request(
+        `/api/v1/threads/nonexistent-thread-id/events/wait?type=item/completed&waitMs=100`,
+      );
+      expect(response.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
 });

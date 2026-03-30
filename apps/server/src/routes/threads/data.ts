@@ -1,6 +1,7 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import {
+  threadEventWaitQuerySchema,
   threadEventsQuerySchema,
   threadTimelineQuerySchema,
   threadWorkspaceFileQuerySchema,
@@ -19,6 +20,7 @@ import {
 import { queueCommandAndWait } from "../../services/command-wait.js";
 import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/timeline.js";
 import {
+  findThreadEvent,
   getLastThreadOutput,
   listThreadEventRows,
 } from "../../services/thread-data.js";
@@ -75,9 +77,41 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       listThreadEventRows(deps.db, {
         threadId: context.req.param("id"),
         afterSeq: parseOptionalInteger(query.afterSeq, "afterSeq"),
-        limit: parseOptionalInteger(query.limit, "limit"),
+        limit: parseOptionalInteger(query.limit, "limit") ?? 100,
       }),
     );
+  });
+
+  get("/threads/:id/events/wait", threadEventWaitQuerySchema, async (context, query) => {
+    const threadId = context.req.param("id");
+    requireThread(deps.db, threadId);
+
+    const afterSeq = parseOptionalInteger(query.afterSeq, "afterSeq");
+    const waitMs = Math.min(parseOptionalInteger(query.waitMs, "waitMs") ?? 30_000, 60_000);
+    const eventType = query.type;
+
+    const findMatch = () => findThreadEvent(deps.db, { threadId, type: eventType, afterSeq });
+
+    const deadline = Date.now() + waitMs;
+    let match = findMatch();
+    while (!match) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      const waiter = deps.hub.registerThreadEventWaiter(threadId, remaining);
+      match = findMatch();
+      if (match) {
+        waiter.cancel();
+        break;
+      }
+      await waiter.promise;
+      match = findMatch();
+    }
+
+    if (!match) {
+      return new Response(null, { status: 204 });
+    }
+
+    return context.json(match);
   });
 
   get("/threads/:id/default-execution-options", (context) => {

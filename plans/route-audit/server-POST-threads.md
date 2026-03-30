@@ -10,7 +10,6 @@
 | ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
 | `projectId`      | yes      | —                                                                                                                 |
 | `providerId`     | yes      | —                                                                                                                 |
-| `type`           | yes      | `"standard" \| "manager"` — see **Flag 1** below                                                                  |
 | `title`          | optional | Used in thread record + `buildManagedBranchName()` for worktree/clone branch naming (e.g. `bb/<slug>/<threadId>`) |
 | `input`          | yes      | Array of prompt messages. Drives: initial event payload, daemon `thread.start` command, title generation          |
 | `model`          | yes      | Forwarded to execution options → daemon command                                                                   |
@@ -20,7 +19,7 @@
 | `environment`    | yes      | Discriminated union (`"reuse"` / `"host"` / `"sandbox-host"`) that determines the entire execution path           |
 | `parentThreadId` | optional | Stored on thread record. Creates parent→child relationship (FK, `ON DELETE SET NULL`)                             |
 
-**All 11 fields consumed. No dead params.**
+**All 10 fields consumed. No dead params.** Route hardcodes `type: "standard"`; manager threads are created only via `POST /projects/:id/managers`.
 
 ## Implementation Trace
 
@@ -113,9 +112,8 @@
 | 10  | INSERT provisioning event | `events`               | —                        | —                                                  |
 | 11  | INSERT command (txn)      | `host_daemon_commands` | `host_cursor_idx`        | Monotonic cursor in transaction                    |
 | 12  | INSERT thread.start cmd   | `host_daemon_commands` | `host_cursor_idx`        | Only if env ready                                  |
-| 13  | Re-fetch thread           | `threads`              | PK                       | Return value                                       |
 
-**Typical path (new managed env): ~11 queries. No N+1. All indexed or PK lookups.**
+**Typical path (new managed env): ~11 queries. No N+1. All indexed or PK lookups. DB functions use RETURNING — no post-write re-reads.**
 
 **Background (title gen, not blocking response): +3-5 queries + 1 AI inference call.**
 
@@ -132,13 +130,9 @@
 
 ## Flags
 
-1. **`type` field accepted from client but the only consumer-facing route that should create managers is `POST /projects/:id/managers`.**
-   - The manager route hard-codes `type: "manager"` and calls `createThreadFromRequest()` internally.
-   - Accepting `type` on `POST /threads` means a client could create a `"manager"` thread directly, bypassing the manager route's guardrails (which hard-codes `workspace: { type: "unmanaged" }` and includes the `systemMessageManagerWelcome` template as input).
-   - Is there a reason the public thread creation route allows `type: "manager"`? If not, this should be restricted to `"standard"` only.
+1. ~~**`type` field accepted from client.**~~ **Resolved.** `type` removed from `createThreadRequestSchema`. Route hardcodes `"standard"`. Managers use `POST /projects/:id/managers`.
 
-2. **`sandboxMode` defaults to `"danger-full-access"`** — least restrictive possible. This is filled in server-side by `resolveExecutionOptions()` when the client doesn't send it.
-   - Intentional product decision? Worth an explicit confirmation.
+2. ~~**`sandboxMode` defaults to `"danger-full-access"`.**~~ **Resolved.** Confirmed intentional product decision.
 
 3. **`"sandbox-host"` environment type accepted by schema but throws 501 at runtime.**
    - Per AGENTS.md: "Accepted-but-ignored route or command fields are forbidden."
@@ -167,22 +161,8 @@
 
 ---
 
-> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+> **Updated 2026-03-29:** All review comments resolved. DB functions use RETURNING. `type` field removed. `hasThreadStartInput` deleted (input always required). `sandboxMode` default confirmed intentional.
 
 ## Review Comments
 
-> 1. **`type` field accepted from client but the only consumer-facing route that should create managers is `POST /projects/:id/managers`.**
-
-- The manager route hard-codes `type: "manager"` and calls `createThreadFromRequest()` internally.
-- Accepting `type` on `POST /threads` means a client could create a `"manager"` thread directly, bypassing the manager route's guardrails (which hard-codes `workspace: { type: "unmanaged" }` and includes the `systemMessageManagerWelcome` template as input).
-- Is there a reason the public thread creation route allows `type: "manager"`? If not, this should be restricted to `"standard"` only.
-
-~~this is a bug. remove type param and restrict to standard only here~~ **Fixed:** `type` removed from `createThreadRequestSchema`. Route hardcodes `type: "standard"`. Manager creation is only possible via `POST /projects/:id/managers`.
-
-> 2. **`sandboxMode` defaults to `"danger-full-access"`**
-
-~~Intentional product decision?~~ Confirmed — this is the expected default.
-
-> 8. **Fire-and-forget: `generateThreadTitle()`** (only if no explicit `title` and has input)
-
-~~why does this say "and has input"~~ Fixed — `hasThreadStartInput` deleted. Input is always required on both standard and manager threads. The guard was dead code.
+_No open comments._

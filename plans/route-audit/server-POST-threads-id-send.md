@@ -6,14 +6,14 @@
 
 ## Request Body (or Params)
 
-| Field | Required | Notes |
-|---|---|---|
-| `input` | Yes | `PromptInput[]` (min 1). Passed through to the appended event and the daemon command payload. |
-| `model` | No | Overrides stored model for this turn. Falls through to `resolveExecutionOptions` which checks last event, then errors if none. |
-| `serviceTier` | No | Overrides stored tier. Defaults to `"flex"` if no prior value. |
-| `reasoningLevel` | No | Overrides stored level. Defaults to `"medium"` if no prior value. |
-| `sandboxMode` | No | Overrides stored mode. Defaults to `"danger-full-access"` if no prior value. |
-| `mode` | Yes | `"auto" | "start" | "steer"`. `resolveSendMode` maps `auto` based on `thread.status`. `start` rejects if already active; `steer` rejects if not active. |
+| Field            | Required | Notes                                                                                                                          |
+| ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `input`          | Yes      | `PromptInput[]` (min 1). Passed through to the appended event and the daemon command payload.                                  |
+| `model`          | No       | Overrides stored model for this turn. Falls through to `resolveExecutionOptions` which checks last event, then errors if none. |
+| `serviceTier`    | No       | Overrides stored tier. Defaults to `"flex"` if no prior value.                                                                 |
+| `reasoningLevel` | No       | Overrides stored level. Defaults to `"medium"` if no prior value.                                                              |
+| `sandboxMode`    | No       | Overrides stored mode. Defaults to `"danger-full-access"` if no prior value.                                                   |
+| `mode`           | Yes      | `"auto"                                                                                                                        | "start" | "steer"`. `resolveSendMode`maps`auto`based on`thread.status`. `start`rejects if already active;`steer` rejects if not active. |
 
 **All 6 fields consumed. No dead params.**
 
@@ -54,35 +54,35 @@
 
 ## DB Query Summary
 
-| # | Query | Table | Index | Notes |
-|---|-------|-------|-------|-------|
-| 1 | SELECT thread by PK | `threads` | PK | `getThread` |
-| 2 | SELECT environment by PK | `environments` | PK | `getEnvironment` |
-| 3 | SELECT latest execution event | `events` | `events_thread_sequence_idx` | `getLastExecutionOptions` -- WHERE threadId + type IN (...) ORDER BY sequence DESC LIMIT 1 |
-| 4 | SELECT MAX(sequence) + INSERT event | `events` | `events_thread_sequence_idx` | `appendThreadEvent` in transaction |
-| 5 | SELECT latest providerThreadId | `events` | `events_thread_sequence_idx` | `getLastProviderThreadId` (start mode only) |
-| 6 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `getActiveSession` / `requireConnectedHostSession` |
-| 7 | SELECT project | `projects` | PK | `resolveThreadRuntimeCommandConfig` |
-| 8 | SELECT default project source | `project_sources` | `project_sources_project_idx` | `getDefaultProjectSource` |
-| 9 | SELECT MAX(cursor) + INSERT command | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | `queueCommand` in transaction |
-| 10 | SELECT + UPDATE thread status | `threads` | PK | `transitionThreadStatus` (start mode) or skipped (steer mode) |
-| 11 | SELECT latest turnId | `events` | `events_thread_sequence_idx` | `getLastTurnId` (steer mode only) |
+| #   | Query                               | Table                  | Index                                  | Notes                                                                                      |
+| --- | ----------------------------------- | ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | SELECT thread by PK                 | `threads`              | PK                                     | `getThread`                                                                                |
+| 2   | SELECT environment by PK            | `environments`         | PK                                     | `getEnvironment`                                                                           |
+| 3   | SELECT latest execution event       | `events`               | `events_thread_sequence_idx`           | `getLastExecutionOptions` -- WHERE threadId + type IN (...) ORDER BY sequence DESC LIMIT 1 |
+| 4   | SELECT MAX(sequence) + INSERT event | `events`               | `events_thread_sequence_idx`           | `appendThreadEvent` in transaction                                                         |
+| 5   | SELECT latest providerThreadId      | `events`               | `events_thread_sequence_idx`           | `getLastProviderThreadId` (start mode only)                                                |
+| 6   | SELECT active session               | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `getActiveSession` / `requireConnectedHostSession`                                         |
+| 7   | SELECT project                      | `projects`             | PK                                     | `resolveThreadRuntimeCommandConfig`                                                        |
+| 8   | SELECT default project source       | `project_sources`      | `project_sources_project_idx`          | `getDefaultProjectSource`                                                                  |
+| 9   | SELECT MAX(cursor) + INSERT command | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | `queueCommand` in transaction                                                              |
+| 10  | SELECT + UPDATE thread status       | `threads`              | PK                                     | `transitionThreadStatus` (start mode) or skipped (steer mode)                              |
+| 11  | SELECT latest turnId                | `events`               | `events_thread_sequence_idx`           | `getLastTurnId` (steer mode only)                                                          |
 
 **Total: 9-11 queries depending on mode. No N+1.**
 
 ## Code Reuse
 
-| Function | Shared with |
-|---|---|
-| `requireThreadEnvironment` | drafts/send, stop, archive |
-| `ensureThreadIsWritable` | drafts, drafts/send |
-| `buildExecutionOptions` | drafts, queued-drafts |
-| `appendClientTurnEvent` | queued-drafts, thread-turn-dispatch |
-| `queueReadyThreadTurnCommand` | queued-drafts |
-| `queueTurnSteerCommand` | queued-drafts |
-| `tryTransition` | queued-drafts |
-| `getLastTurnId` | queued-drafts |
-| `queueTurnDuringReprovision` | queued-drafts |
+| Function                      | Shared with                         |
+| ----------------------------- | ----------------------------------- |
+| `requireThreadEnvironment`    | drafts/send, stop, archive          |
+| `ensureThreadIsWritable`      | drafts, drafts/send                 |
+| `buildExecutionOptions`       | drafts, queued-drafts               |
+| `appendClientTurnEvent`       | queued-drafts, thread-turn-dispatch |
+| `queueReadyThreadTurnCommand` | queued-drafts                       |
+| `queueTurnSteerCommand`       | queued-drafts                       |
+| `tryTransition`               | queued-drafts                       |
+| `getLastTurnId`               | queued-drafts                       |
+| `queueTurnDuringReprovision`  | queued-drafts                       |
 
 ## Flags
 
@@ -92,21 +92,21 @@
 
 ## Usages
 
-| Caller | Location | Purpose |
-|---|---|---|
-| `sendMessageRequestSchema` / `SendMessageRequest` | `packages/server-contract/src/api-types.ts` | Contract definition for the request body |
-| Public API type `"/threads/:id/send"` | `packages/server-contract/src/public-api.ts:192` | Typed route definition consumed by API clients |
-| `api.sendThreadMessage` | `apps/app/src/lib/api.ts:378` | App-level API wrapper calling `threads[":id"].send.$post` |
-| `useSendThreadMessage` | `apps/app/src/hooks/useApi.ts:753` | React mutation hook wrapping `api.sendThreadMessage` |
-| `sendMessage.mutateAsync` | `apps/app/src/views/ThreadDetailView.tsx:241,540,886` | UI: send user message (new turn or steer) from thread detail view |
-| `postThreadMessage` (CLI `tell` command) | `apps/cli/src/commands/thread/actions.ts:263` | CLI: `bb thread tell <id> <message>` sends via `threads[":id"].send.$post` |
-| `sendTextMessage` (integration helper) | `tests/integration/helpers/api.ts:326` | Integration test helper wrapping `threads[":id"].send.$post` |
-| Integration tests (fake) | `tests/integration/fake/smoke.test.ts`, `multi-thread.test.ts`, `recovery.test.ts` | Fake-provider integration tests via `sendTextMessage` |
-| Integration tests (real) | `tests/integration/real/provider-smoke.test.ts` | Real-provider smoke tests via `sendTextMessage` |
-| Integration tests (direct) | `tests/integration/fake/smoke.test.ts:520,725,735,774` | Direct `threads[":id"].send.$post` calls (archive-reject, steer scenarios) |
-| Server unit tests | `apps/server/test/public-threads.test.ts:506,541,600,619,968` | Unit tests for send route (mode resolution, steer, manager sends) |
-| Server integration test | `apps/server/test/integration.test.ts:480` | Integration test via `publicClient.threads[":id"].send.$post` |
-| Contract tests | `packages/server-contract/test/contract.test.ts:94,183,214` | Schema parse tests and URL generation tests |
+| Caller                                            | Location                                                                           | Purpose                                                                    |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `sendMessageRequestSchema` / `SendMessageRequest` | `packages/server-contract/src/api-types.ts`                                        | Contract definition for the request body                                   |
+| Public API type `"/threads/:id/send"`             | `packages/server-contract/src/public-api.ts:192`                                   | Typed route definition consumed by API clients                             |
+| `api.sendThreadMessage`                           | `apps/app/src/lib/api.ts:378`                                                      | App-level API wrapper calling `threads[":id"].send.$post`                  |
+| `useSendThreadMessage`                            | `apps/app/src/hooks/useApi.ts:753`                                                 | React mutation hook wrapping `api.sendThreadMessage`                       |
+| `sendMessage.mutateAsync`                         | `apps/app/src/views/ThreadDetailView.tsx:241,540,886`                              | UI: send user message (new turn or steer) from thread detail view          |
+| `postThreadMessage` (CLI `tell` command)          | `apps/cli/src/commands/thread/actions.ts:263`                                      | CLI: `bb thread tell <id> <message>` sends via `threads[":id"].send.$post` |
+| `sendTextMessage` (integration helper)            | `tests/integration/helpers/api.ts:326`                                             | Integration test helper wrapping `threads[":id"].send.$post`               |
+| Integration tests (fake)                          | `tests/integration/fake/smoke.test.ts`, `multi-thread.test.ts`, `recovery.test.ts` | Fake-provider integration tests via `sendTextMessage`                      |
+| Integration tests (real)                          | `tests/integration/real/provider-smoke.test.ts`                                    | Real-provider smoke tests via `sendTextMessage`                            |
+| Integration tests (direct)                        | `tests/integration/fake/smoke.test.ts:520,725,735,774`                             | Direct `threads[":id"].send.$post` calls (archive-reject, steer scenarios) |
+| Server unit tests                                 | `apps/server/test/public-threads.test.ts:506,541,600,619,968`                      | Unit tests for send route (mode resolution, steer, manager sends)          |
+| Server integration test                           | `apps/server/test/integration.test.ts:480`                                         | Integration test via `publicClient.threads[":id"].send.$post`              |
+| Contract tests                                    | `packages/server-contract/test/contract.test.ts:94,183,214`                        | Schema parse tests and URL generation tests                                |
 
 ---
 
@@ -114,4 +114,14 @@
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+> 2. **`queueReadyThreadTurnCommand` dispatches `thread.start` when no `providerThreadId` exists, even in mode="start".** This means a re-started idle thread that already has a provider session will get `turn.run` not `thread.start`. The `tryTransition` to "active" in the route is redundant with `queueTurnRunCommand`'s internal transition -- but harmless since `tryTransition` swallows errors.
+
+tell me more about this
+
+> `queueReadyThreadTurnCommand` ignores the `mode` parameter. It checks `getLastProviderThreadId()`:
+> - No provider session → `thread.start` (new session)
+> - Has provider session → `turn.run` (reuse session)
+>
+> An idle thread that already ran a turn always has a `providerThreadId` in events, so it always gets `turn.run` regardless of mode. This is correct — `turn.run` on an idle thread works because the daemon's `ensureThreadRuntime` handles reconnection transparently.
+>
+> The `tryTransition` in the route is redundant for the `turn.run` path (which does its own idle→active transition) but needed for `thread.start` (which doesn't). Harmless since `tryTransition` swallows errors.

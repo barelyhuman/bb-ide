@@ -56,6 +56,7 @@ async function readThreadEvents(
 ): Promise<ThreadEventRow[]> {
   const response = await api.threads[":id"].events.$get({
     param: { id: threadId },
+    query: { limit: "10000" },
   });
   if (response.status !== 200) {
     throw new Error(

@@ -111,6 +111,7 @@ async function getNextEventSequence(
 ): Promise<number> {
   const response = await publicClient.threads[":id"].events.$get({
     param: { id: threadId },
+    query: { limit: "10000" },
   });
   expect(response.status).toBe(200);
   const events = await response.json();

@@ -1,11 +1,12 @@
 import { Command } from "commander";
 import {
   type Thread,
-  type ThreadEventRow,
   type ThreadStatus,
+  threadEventRowSchema,
   threadStatusSchema,
   threadStatusValues,
 } from "@bb/domain";
+import type { ThreadEventWaitQuery } from "@bb/server-contract";
 import { action, CliExitError } from "../../action.js";
 import { assertNever } from "../../assert-never.js";
 import { createClient, unwrap } from "../../client.js";
@@ -61,7 +62,6 @@ export function registerWaitCommand(
       const pollIntervalMs = parseThreadWaitPollIntervalMs(opts.pollInterval);
       const deadline = Date.now() + timeoutSeconds * 1000;
 
-      let afterSeq: number | undefined;
       while (true) {
         if (target.kind === "status") {
           const thread = await unwrap<Thread>(
@@ -80,38 +80,53 @@ export function registerWaitCommand(
           if (unreachableReason) {
             throw new CliExitError(unreachableReason, THREAD_WAIT_EXIT_CODE_UNREACHABLE);
           }
-        } else {
-          const events = await unwrap<ThreadEventRow[]>(
-            client.api.v1.threads[":id"].events.$get({
-              param: { id: threadId },
-              query: afterSeq !== undefined ? { afterSeq: String(afterSeq) } : {},
-            }),
-          );
-          if (events.length > 0) {
-            afterSeq = events[events.length - 1].seq;
-          }
-          const matched = events.find(
-            (event) => event.type === target.eventType,
-          );
-          if (matched) {
-            if (outputJson(opts, { threadId, matched: true, target })) return;
-            console.log(
-              `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,
+
+          if (Date.now() >= deadline) {
+            throw new CliExitError(
+              `Timed out waiting for thread ${threadId} to reach status ${target.status}.`,
+              THREAD_WAIT_EXIT_CODE_TIMEOUT,
             );
-            return;
           }
-        }
 
-        if (Date.now() >= deadline) {
-          throw new CliExitError(
-            target.kind === "status"
-              ? `Timed out waiting for thread ${threadId} to reach status ${target.status}.`
-              : `Timed out waiting for thread ${threadId} event ${target.eventType}.`,
-            THREAD_WAIT_EXIT_CODE_TIMEOUT,
+          await sleep(pollIntervalMs);
+        } else {
+          const remainingMs = Math.max(0, deadline - Date.now());
+          const waitMs = Math.floor(Math.min(remainingMs, 30_000));
+
+          const waitQuery: ThreadEventWaitQuery = {
+            type: target.eventType,
+            waitMs: String(waitMs),
+          };
+
+          const response = await client.api.v1.threads[":id"].events.wait.$get({
+            param: { id: threadId },
+            query: waitQuery,
+          });
+
+          // Server returns 204 (no content) on timeout — the typed contract
+          // only declares the 200 shape, so widen the status to number.
+          const statusCode: number = response.status;
+          if (statusCode === 204) {
+            if (Date.now() >= deadline) {
+              throw new CliExitError(
+                `Timed out waiting for thread ${threadId} event ${target.eventType}.`,
+                THREAD_WAIT_EXIT_CODE_TIMEOUT,
+              );
+            }
+            await sleep(pollIntervalMs);
+            continue;
+          } else if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Wait request failed with ${statusCode}: ${body}`);
+          }
+
+          const matched = threadEventRowSchema.parse(await response.json());
+          if (outputJson(opts, { threadId, matched: true, target })) return;
+          console.log(
+            `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,
           );
+          return;
         }
-
-        await sleep(pollIntervalMs);
       }
     }));
 }

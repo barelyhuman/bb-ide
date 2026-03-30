@@ -7,12 +7,12 @@
 
 ## Command Payload
 
-| Field | Required | Notes |
-|---|---|---|
-| `environmentId` | Yes | Identifies the runtime entry. |
-| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
-| `workspaceContext` | Yes | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `requireWorkspaceEnvironment` for lazy re-provisioning with the correct managed/unmanaged type. |
-| `targetBranch` | Yes | The branch to squash-merge into (e.g., `main`). |
+| Field                   | Required | Notes                                                                                                                                                                                            |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `environmentId`         | Yes      | Identifies the runtime entry.                                                                                                                                                                    |
+| ~~`environmentStatus`~~ | ~~Yes~~  | Removed — no longer part of the command payload.                                                                                                                                                 |
+| `workspaceContext`      | Yes      | Object with `workspacePath` and `workspaceProvisionType`. Replaces flat `workspacePath`. Used by `requireWorkspaceEnvironment` for lazy re-provisioning with the correct managed/unmanaged type. |
+| `targetBranch`          | Yes      | The branch to squash-merge into (e.g., `main`).                                                                                                                                                  |
 
 **All fields consumed. No dead params.**
 
@@ -57,8 +57,8 @@
 
 ## Usages
 
-| Caller | Location | Trigger |
-|---|---|---|
+| Caller                                                      | Location                                         | Trigger                                                      |
+| ----------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------ |
 | `POST /environments/:id/actions` (action: `"squash_merge"`) | `apps/server/src/routes/environments.ts:132-143` | Client squash-merges workspace branch via environment action |
 
 ---
@@ -69,4 +69,19 @@
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+> 1. **Fetch failure silently swallowed.** The `.catch(() => undefined)` on fetch means if origin is unreachable, the merge proceeds against a potentially stale local target branch. This is intentional (offline-friendly) but worth noting.
+
+We need to fetch the target branch from origin.
+
+> **Investigated:** The fetch IS attempted (`git fetch origin <targetBranch>`) but `.catch(() => undefined)` silently swallows failures. If the fetch failed and the remote ref is stale, the merge could produce incorrect results. This should be a hard error, not silent.
+
+> - **If uncommitted changes exist:** auto-commits with message `"bb squash merge prep"` via `this.commit(...)`.
+> - `git commit -m "bb squash merge"` — creates the squash commit.
+
+This is very surprising, I thought we had auto commit message generation. please look into this.
+
+> **Investigated:** No auto-generated commit messages. Both are hardcoded constants: `"bb squash merge prep"` and `"bb squash merge"`. No thread title, diff summary, or AI-generated message. The commit message should be caller-provided (the server has the thread context) or auto-generated.
+
+I think the commit operations need no verify too
+
+> **Investigated:** Confirmed — neither the prep commit nor the squash commit passes `--no-verify`. Pre-commit hooks run on both, which could reject the changes and fail the operation. Since these are automated commits by the system (not user-authored), `--no-verify` should be added.

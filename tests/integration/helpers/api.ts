@@ -280,6 +280,7 @@ export async function getThreadEvents(
 ): Promise<ThreadEventRow[]> {
   const response = await api.threads[":id"].events.$get({
     param: { id: threadId },
+    query: { limit: "10000" },
   });
   await expectStatus(response, 200, `get thread events ${threadId}`);
   return threadEventRowSchema.array().parse(await response.json());

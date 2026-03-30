@@ -20,6 +20,12 @@ interface CommandWaiter {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+interface ThreadEventWaiter {
+  reject: (reason?: unknown) => void;
+  resolve: (notified: boolean) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
 interface CommandResultWaiter {
   reject: (reason?: unknown) => void;
   resolve: (result: unknown) => void;
@@ -38,6 +44,7 @@ export class NotificationHub implements DbNotifier {
   private readonly commandWaiters = new Map<string, Set<CommandWaiter>>();
   private readonly daemonSessions = new Map<string, { hostId: string; socket: HubSocket }>();
   private readonly daemonSessionIdsByHost = new Map<string, string>();
+  private readonly threadEventWaiters = new Map<string, Set<ThreadEventWaiter>>();
 
   registerClient(socket: HubSocket): void {
     if (!this.clientKeysBySocket.has(socket)) {
@@ -163,6 +170,35 @@ export class NotificationHub implements DbNotifier {
     });
   }
 
+  async waitForThreadEvent(threadId: string, timeoutMs: number): Promise<boolean> {
+    const { promise } = this.registerThreadEventWaiter(threadId, timeoutMs);
+    return promise;
+  }
+
+  registerThreadEventWaiter(
+    threadId: string,
+    timeoutMs: number,
+  ): { promise: Promise<boolean>; cancel: () => void } {
+    let waiter: ThreadEventWaiter;
+    const promise = new Promise<boolean>((resolve, reject) => {
+      waiter = {
+        reject,
+        resolve: (notified) => resolve(notified),
+        timeout: setTimeout(() => {
+          this.deleteThreadEventWaiter(threadId, waiter);
+          resolve(false);
+        }, timeoutMs),
+      };
+      const waiters = this.threadEventWaiters.get(threadId) ?? new Set<ThreadEventWaiter>();
+      waiters.add(waiter);
+      this.threadEventWaiters.set(threadId, waiters);
+    });
+    const cancel = () => {
+      this.deleteThreadEventWaiter(threadId, waiter!);
+    };
+    return { promise, cancel };
+  }
+
   recordCommandResult(commandId: string, result: unknown): void {
     this.commandResultCache.set(commandId, result);
     setTimeout(() => {
@@ -188,6 +224,15 @@ export class NotificationHub implements DbNotifier {
       id: threadId,
       changes,
     });
+
+    const threadEventWaiters = this.threadEventWaiters.get(threadId);
+    if (threadEventWaiters) {
+      for (const waiter of threadEventWaiters) {
+        clearTimeout(waiter.timeout);
+        waiter.resolve(true);
+      }
+      this.threadEventWaiters.delete(threadId);
+    }
   }
 
   notifyProject(projectId: string, changes: ProjectChangeKind[]): void {
@@ -251,6 +296,18 @@ export class NotificationHub implements DbNotifier {
     waiters.delete(waiter);
     if (waiters.size === 0) {
       this.commandResultWaiters.delete(commandId);
+    }
+  }
+
+  private deleteThreadEventWaiter(threadId: string, waiter: ThreadEventWaiter): void {
+    const waiters = this.threadEventWaiters.get(threadId);
+    if (!waiters) {
+      return;
+    }
+    clearTimeout(waiter.timeout);
+    waiters.delete(waiter);
+    if (waiters.size === 0) {
+      this.threadEventWaiters.delete(threadId);
     }
   }
 

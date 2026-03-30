@@ -8,7 +8,6 @@ import {
 import { assertNever } from "../../assert-never.js";
 import { joinValues } from "../helpers.js";
 
-export type ThreadStatusEventMode = "summary" | "raw";
 export type ThreadWaitTarget =
   | { kind: "status"; status: ThreadStatus }
   | { kind: "event"; eventType: string };
@@ -19,7 +18,6 @@ export const THREAD_WAIT_EXIT_CODE_UNREACHABLE = 4;
 export const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 export const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
-const THREAD_STATUS_EVENT_MODES: ThreadStatusEventMode[] = ["summary", "raw"];
 const SERVICE_TIERS: ServiceTier[] = ["fast", "flex"];
 const SANDBOX_MODES: SandboxMode[] = [
   "read-only",
@@ -42,26 +40,6 @@ export function statusText(status: ThreadStatus): string {
     default:
       return assertNever(status);
   }
-}
-
-export function parseRecentEventsCount(value: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error("Recent events count must be a positive integer.");
-  }
-  return parsed;
-}
-
-export function parseThreadStatusEventMode(
-  value: string | undefined,
-): ThreadStatusEventMode {
-  const normalized = (value ?? "summary").trim().toLowerCase();
-  if (normalized === "summary" || normalized === "raw") {
-    return normalized;
-  }
-  throw new Error(
-    `Invalid event mode '${value}'. Expected ${joinValues(THREAD_STATUS_EVENT_MODES)}.`,
-  );
 }
 
 export function parseThreadWaitTimeoutSeconds(

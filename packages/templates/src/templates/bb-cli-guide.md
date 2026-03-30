@@ -38,8 +38,8 @@ bb thread show <thread-id>                            # Show thread details
 bb thread show <thread-id> --work-status              # Include git working-tree status
 bb thread show <thread-id> --git-diff                 # Include git diff
 bb thread show <thread-id> --merge-base-branches      # Include available merge-base branches
-bb thread show <thread-id> --recent-events 10         # Include last N thread events
 bb thread log <thread-id>                             # Show thread event log
+bb thread log <thread-id> --format json --limit 50    # Raw events as JSON (paginated)
 bb thread output <thread-id>                          # Get the final output of a thread
 ```
 

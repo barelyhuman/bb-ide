@@ -5,7 +5,6 @@ import {
   requireHostId,
 } from "../commands/thread/spawn.js";
 import {
-  parseRecentEventsCount,
   parseThreadWaitTimeoutSeconds,
   parseThreadWaitPollIntervalMs,
   parseServiceTier,
@@ -156,31 +155,6 @@ describe("buildSpawnEnvironment", () => {
       hostId: null,
     });
     expect(result).toEqual({ type: "sandbox-host", sandboxType: "e2b" });
-  });
-});
-
-describe("parseRecentEventsCount", () => {
-  it("returns parsed positive integer", () => {
-    expect(parseRecentEventsCount("10")).toBe(10);
-    expect(parseRecentEventsCount("1")).toBe(1);
-  });
-
-  it("throws for zero", () => {
-    expect(() => parseRecentEventsCount("0")).toThrow(
-      "positive integer",
-    );
-  });
-
-  it("throws for negative numbers", () => {
-    expect(() => parseRecentEventsCount("-5")).toThrow(
-      "positive integer",
-    );
-  });
-
-  it("throws for non-numeric strings", () => {
-    expect(() => parseRecentEventsCount("abc")).toThrow(
-      "positive integer",
-    );
   });
 });
 

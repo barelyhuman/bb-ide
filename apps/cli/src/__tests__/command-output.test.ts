@@ -1297,6 +1297,86 @@ describe("CLI JSON output contracts", () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 
+  it("bb thread wait --event reports server errors instead of schema errors", async () => {
+    const waitGet = vi.fn(async () =>
+      new Response(JSON.stringify({ code: "not_found", message: "Thread not found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              events: {
+                wait: {
+                  $get: waitGet,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(
+        ["thread", "wait", "thread-404", "--event", "turn/completed", "--timeout", "5"],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    const errorLines = collectLogLines(vi.mocked(console.error));
+    const hasServerError = errorLines.some(
+      (line) => line.includes("404") && !line.includes("ZodError"),
+    );
+    expect(hasServerError).toBe(true);
+  });
+
+  it("bb thread wait --event --timeout 0 returns immediately when event exists", async () => {
+    const waitGet = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          id: "evt-1",
+          threadId: "thread-t0",
+          seq: 3,
+          type: "turn/completed",
+          data: { reason: "done" },
+          createdAt: Date.now(),
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              events: {
+                wait: {
+                  $get: waitGet,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "wait", "thread-t0", "--event", "turn/completed", "--timeout", "0"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-t0 observed event turn/completed at seq 3.",
+    );
+  });
+
   it("bb thread stop exits early when the thread is already idle", async () => {
     const get = vi.fn(async () => makeThread({
       id: "thread-stop-idle",
@@ -1405,69 +1485,6 @@ describe("CLI JSON output contracts", () => {
 
     expect(collectLogLines(vi.mocked(console.log))).toContain("Thread thread-stop-active stopped");
     expect(stopPost).toHaveBeenCalledTimes(1);
-  });
-
-  it("bb thread show --json with --recent-events prints thread and filtered recent events", async () => {
-    const thread: Thread = makeThread({
-      id: "thread-json-status",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    });
-    const events = [
-      {
-        id: "evt-1",
-        threadId: "thread-json-status",
-        type: "turn/started",
-        data: { ok: true },
-        createdAt: 10,
-        sequence: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-json-status",
-        type: "system/error",
-        data: { code: "provider_unavailable" },
-        createdAt: 20,
-        sequence: 2,
-      },
-    ];
-    const get = vi.fn(async () => thread);
-    const getEvents = vi.fn(async () => events);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              events: {
-                $get: getEvents,
-              },
-            },
-          },
-        },
-      },
-    }));
-
-    await runCommand(
-      ["thread", "show", "thread-json-status", "--recent-events", "5", "--json"],
-      (program) => registerThreadCommands(program, () => "http://server"),
-    );
-
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      {
-        thread,
-        recentEvents: {
-          requestedCount: 5,
-          eventMode: "summary",
-          includeLowSignal: false,
-          events: [events[1]],
-        },
-      },
-    );
   });
 
   it("bb thread log --json prints raw events", async () => {

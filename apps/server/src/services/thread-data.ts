@@ -4,7 +4,7 @@ import {
   providerEventSchema,
   systemManagerUserMessageEventDataSchema,
 } from "@bb/domain";
-import type { ThreadEventRow } from "@bb/domain";
+import type { ThreadEventRow, ThreadEventType } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
 
@@ -92,6 +92,28 @@ export function listRecentThreadEventRows(
     .reverse();
 
   return rows.map((row) => decodeEventRow(row));
+}
+
+export function findThreadEvent(
+  db: DbConnection,
+  args: { threadId: string; type: string; afterSeq?: number },
+): ThreadEventRow | null {
+  // ThreadEventType is a union of string literals with no runtime values array,
+  // so we cannot validate at compile time. Cast for drizzle's typed column —
+  // a non-matching string simply returns no rows, which is correct behavior.
+  const eventType = args.type as ThreadEventType;
+  const row = db
+    .select()
+    .from(events)
+    .where(
+      args.afterSeq !== undefined
+        ? and(eq(events.threadId, args.threadId), eq(events.type, eventType), gt(events.sequence, args.afterSeq))
+        : and(eq(events.threadId, args.threadId), eq(events.type, eventType)),
+    )
+    .orderBy(events.sequence)
+    .limit(1)
+    .get();
+  return row ? decodeEventRow(row) : null;
 }
 
 export function getLastThreadOutput(

@@ -45,6 +45,7 @@ import type {
   SystemProvidersQuery,
   SystemVoiceTranscriptionForm,
   SystemVoiceTranscriptionResponse,
+  ThreadEventWaitQuery,
   ThreadEventsQuery,
   ThreadListQuery,
   ThreadTimelineQuery,
@@ -250,6 +251,13 @@ export type PublicApiSchema = {
   "/threads/:id/events": {
     /** Get raw thread events. Supports `afterSeq` and `limit` pagination. */
     $get: Endpoint<PathId & { query?: ThreadEventsQuery }, ThreadEventRow[]>;
+  };
+  "/threads/:id/events/wait": {
+    /**
+     * Long-poll for a thread event matching `type`. Returns the first matching
+     * event (200) or 204 if none appears within `waitMs`.
+     */
+    $get: Endpoint<PathId & { query: ThreadEventWaitQuery }, ThreadEventRow | null>;
   };
   "/threads/:id/default-execution-options": {
     /** Returns the last used options for the thread for use as defaults in the UI. */
