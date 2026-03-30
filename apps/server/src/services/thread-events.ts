@@ -41,6 +41,15 @@ export interface StoredTurnRequestEventRow {
   type: string;
 }
 
+export type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
+
+export interface AppendThreadOwnershipChangeEventArgs {
+  environmentId?: string | null;
+  nextParentThreadId: string | null;
+  previousParentThreadId: string | null;
+  threadId: string;
+}
+
 export function appendThreadEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs,
@@ -204,6 +213,64 @@ export function appendThreadTitleUpdatedEvent(
       ...(args.previousTitle ? { previousTitle: args.previousTitle } : {}),
       source: "provider",
       providerMethod: "server/thread-title",
+    },
+  });
+}
+
+function resolveThreadOwnershipChangeAction(
+  args: AppendThreadOwnershipChangeEventArgs,
+): ThreadOwnershipChangeAction | null {
+  const { previousParentThreadId, nextParentThreadId } = args;
+  if (previousParentThreadId === nextParentThreadId) {
+    return null;
+  }
+  if (previousParentThreadId === null && nextParentThreadId !== null) {
+    return "assign";
+  }
+  if (previousParentThreadId !== null && nextParentThreadId === null) {
+    return "release";
+  }
+  if (previousParentThreadId !== null && nextParentThreadId !== null) {
+    return "transfer";
+  }
+  return null;
+}
+
+function threadOwnershipChangeMessage(
+  action: ThreadOwnershipChangeAction,
+): string {
+  switch (action) {
+    case "assign":
+      return "Thread assigned to manager";
+    case "release":
+      return "Thread released from manager";
+    case "transfer":
+      return "Thread transferred to new manager";
+  }
+}
+
+export function appendThreadOwnershipChangeEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: AppendThreadOwnershipChangeEventArgs,
+): number | null {
+  const action = resolveThreadOwnershipChangeAction(args);
+  if (!action) {
+    return null;
+  }
+
+  return appendThreadEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId ?? null,
+    type: "system/operation",
+    data: {
+      operation: "ownership_change",
+      status: "completed",
+      message: threadOwnershipChangeMessage(action),
+      metadata: {
+        action,
+        previousParentThreadId: args.previousParentThreadId,
+        nextParentThreadId: args.nextParentThreadId,
+      },
     },
   });
 }

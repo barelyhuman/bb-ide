@@ -7,12 +7,14 @@ import { eq } from "drizzle-orm";
 import {
   createEnvironment,
   createThread,
+  events,
   getDraft,
   getEnvironment,
   getThread,
   hostDaemonCommands,
   threads,
 } from "@bb/db";
+import { systemOperationEventDataSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -953,6 +955,71 @@ describe("public thread routes", () => {
       );
       expect(managerStartCommand.command.instructions).toContain(project.name);
       expect(managerStartCommand.command.instructions).toContain("/tmp/thread-data-project");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("appends an ownership change event when the parent thread changes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-ownership-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-ownership-project/worktree",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+        title: "Manager thread",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: null,
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          parentThreadId: managerThread.id,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(managerThread.id);
+
+      const storedEvent = harness.db
+        .select({ type: events.type, data: events.data })
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .orderBy(events.sequence)
+        .all()
+        .at(-1);
+
+      expect(storedEvent?.type).toBe("system/operation");
+      const parsedData = systemOperationEventDataSchema.parse(
+        storedEvent ? JSON.parse(storedEvent.data) : null,
+      );
+      expect(parsedData).toMatchObject({
+        operation: "ownership_change",
+        status: "completed",
+        message: "Thread assigned to manager",
+        metadata: {
+          action: "assign",
+          previousParentThreadId: null,
+          nextParentThreadId: managerThread.id,
+        },
+      });
     } finally {
       await harness.cleanup();
     }

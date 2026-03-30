@@ -22,6 +22,7 @@ import {
 } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
 import { queueThreadRenameCommand } from "../../services/thread-commands.js";
+import { appendThreadOwnershipChangeEvent } from "../../services/thread-events.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
@@ -70,6 +71,15 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
           title: payload.title,
         });
       }
+    }
+
+    if ("parentThreadId" in payload && payload.parentThreadId !== thread.parentThreadId) {
+      appendThreadOwnershipChangeEvent(deps, {
+        threadId: updated.id,
+        environmentId: updated.environmentId,
+        previousParentThreadId: thread.parentThreadId,
+        nextParentThreadId: updated.parentThreadId,
+      });
     }
 
     return context.json(updated);

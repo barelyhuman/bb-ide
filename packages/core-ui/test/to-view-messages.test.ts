@@ -2673,6 +2673,50 @@ describe("toViewMessages replay coverage", () => {
     expect(ops[1]?.detail).toContain("deterministic execution");
   });
 
+  it("projects ownership change operations", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/operation",
+        data: {
+          operation: "ownership_change",
+          status: "completed",
+          message: "Thread assigned to manager",
+          metadata: {
+            action: "assign",
+            previousParentThreadId: null,
+            nextParentThreadId: "manager-1",
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const op = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op?.opType).toBe("operation");
+    expect(op?.title).toBe("Thread assigned to manager");
+    expect(op?.threadOperation).toEqual({
+      operation: "ownership_change",
+      rawOperation: "ownership_change",
+      status: "completed",
+      rawStatus: "completed",
+      metadata: {
+        action: "assign",
+        previousParentThreadId: null,
+        nextParentThreadId: "manager-1",
+      },
+    });
+  });
+
   it("wraps unknown events in debug mode and drops them otherwise", () => {
     const events: ThreadEventRow[] = [
       {
