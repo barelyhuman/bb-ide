@@ -41,7 +41,7 @@ function notifyHostMutation(
     return;
   }
 
-  notifier.notifySystem([
+  notifier.notifyHost([
     (previous.destroyedAt === null && next.destroyedAt !== null) ||
     (previous.externalId !== null && next.externalId === null)
       ? "host-disconnected"
@@ -147,6 +147,6 @@ export function deleteHost(
   }
 
   db.delete(hosts).where(eq(hosts.id, hostId)).run();
-  notifier.notifySystem(["host-disconnected"]);
+  notifier.notifyHost(["host-disconnected"]);
   return true;
 }

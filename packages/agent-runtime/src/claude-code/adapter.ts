@@ -10,7 +10,6 @@
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type {
-  AvailableModel,
   ProviderCapabilities,
   ThreadEvent,
   ThreadEventItem,
@@ -31,10 +30,6 @@ import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
   extractResultText,
-  HIGH_REASONING_EFFORT,
-  LOW_REASONING_EFFORT,
-  MEDIUM_REASONING_EFFORT,
-  XHIGH_REASONING_EFFORT,
   toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
@@ -44,6 +39,7 @@ import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
+import { parseAvailableModelList } from "../shared/available-models.js";
 import {
   errorEnvelopeSchema,
   jsonRpcEnvelopeSchema,
@@ -61,36 +57,6 @@ import { claudeCodeVisibilityMetadata } from "./visibility.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const STATIC_CLAUDE_CODE_MODELS: AvailableModel[] = [
-  {
-    id: "claude-sonnet-4-6",
-    model: "claude-sonnet-4-6",
-    displayName: "Claude Sonnet 4.6",
-    description: "Fast, intelligent model for everyday coding tasks",
-    supportedReasoningEfforts: [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT],
-    defaultReasoningEffort: "medium",
-    isDefault: true,
-  },
-  {
-    id: "claude-opus-4-6",
-    model: "claude-opus-4-6",
-    displayName: "Claude Opus 4.6",
-    description: "Most capable model for complex coding tasks",
-    supportedReasoningEfforts: [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT, XHIGH_REASONING_EFFORT],
-    defaultReasoningEffort: "medium",
-    isDefault: false,
-  },
-  {
-    id: "claude-haiku-4-5",
-    model: "claude-haiku-4-5",
-    displayName: "Claude Haiku 4.5",
-    description: "Fast, compact model for simple tasks",
-    supportedReasoningEfforts: [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT],
-    defaultReasoningEffort: "low",
-    isDefault: false,
-  },
-];
 
 function getNestedParentToolUseId(message: unknown): string | undefined {
   if (typeof message !== "object" || message === null) {
@@ -717,6 +683,7 @@ export function createClaudeCodeProviderAdapter(
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
+        bundleFileName: "bb-claude-code-bridge.mjs",
         importMetaUrl: import.meta.url,
         bridgeRelativePath: "bridge/bridge.js",
       })],

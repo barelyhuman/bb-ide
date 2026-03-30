@@ -91,12 +91,23 @@ export function defaultListProviders(): ProviderInfo[] {
 export async function defaultListModels(
   providerId: string,
 ): Promise<AvailableModel[]> {
+  const runtime = createAgentRuntime({
+    workspacePath: process.cwd(),
+    onEvent: () => {},
+    onToolCall: async () => ({
+      contentItems: [],
+      success: true,
+    }),
+  });
+
   try {
-    return await createProviderForId(providerId).listModels();
+    return await runtime.listModels({ providerId });
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("Unsupported provider")) {
       throw new CommandDispatchError("unknown_provider", error.message);
     }
     throw error;
+  } finally {
+    await runtime.shutdown();
   }
 }

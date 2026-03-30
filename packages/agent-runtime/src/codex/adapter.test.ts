@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { parseModelsResponse } from "./models.js";
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
 
@@ -20,8 +19,6 @@ function codexEvent<M extends CodexEvent["method"]>(
 }
 
 describe("codex provider adapter", () => {
-  const mockedListCodexModels = vi.mocked(listCodexModels);
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -1215,22 +1212,22 @@ describe("codex provider adapter", () => {
 
   // -- listModels ----------------------------------------------------------
 
-  it("lists models through the injected implementation", async () => {
-    const models = [
-      {
-        id: "codex-mini",
-        model: "codex-mini",
-        displayName: "Codex Mini",
-        description: "Fast coding model",
-        supportedReasoningEfforts: [],
-        defaultReasoningEffort: "medium",
-        isDefault: true,
-      },
-    ] satisfies Awaited<ReturnType<typeof listCodexModels>>;
-    mockedListCodexModels.mockResolvedValue(models);
-
-  it("parses model/list results from the codex protocol", () => {
+  it("parseModelListResult validates model/list payloads", () => {
     const adapter = createCodexProviderAdapter();
-    await expect(adapter.listModels()).resolves.toEqual(models);
+    expect(
+      adapter.parseModelListResult({
+        data: [
+          {
+            id: "codex-mini",
+            model: "codex-mini",
+            displayName: "Codex Mini",
+            description: "Fast coding model",
+            supportedReasoningEfforts: [],
+            defaultReasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      }),
+    ).toHaveLength(1);
   });
 });

@@ -49,6 +49,7 @@ import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
+import { parseAvailableModelList } from "../shared/available-models.js";
 import {
   errorEnvelopeSchema,
   jsonRpcEnvelopeSchema,
@@ -884,6 +885,7 @@ export function createPiProviderAdapter(
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
+        bundleFileName: "bb-pi-bridge.mjs",
         importMetaUrl: import.meta.url,
         bridgeRelativePath: "bridge/bridge.js",
       })],

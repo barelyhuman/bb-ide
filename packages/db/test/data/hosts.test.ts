@@ -122,12 +122,13 @@ describe("hosts", () => {
 
   it("notifies when updateHost mutates host metadata", () => {
     const { db } = setup();
-    const notifySystem = vi.fn();
+    const notifyHost = vi.fn();
     const notifier = {
       notifyCommand() {},
       notifyEnvironment() {},
+      notifyHost,
       notifyProject() {},
-      notifySystem,
+      notifySystem() {},
       notifyThread() {},
     };
     const host = upsertHost(db, notifier, {
@@ -136,13 +137,13 @@ describe("hosts", () => {
       provider: "e2b",
       type: "ephemeral",
     });
-    notifySystem.mockClear();
+    notifyHost.mockClear();
 
     updateHost(db, notifier, host.id, {
       destroyedAt: 456,
     });
 
-    expect(notifySystem).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
     expect(getHost(db, host.id)).toMatchObject({
       destroyedAt: 456,
       externalId: "sandbox-old",
@@ -151,22 +152,23 @@ describe("hosts", () => {
 
   it("deletes an existing host row", () => {
     const { db } = setup();
-    const notifySystem = vi.fn();
+    const notifyHost = vi.fn();
     const notifier = {
       notifyCommand() {},
       notifyEnvironment() {},
+      notifyHost,
       notifyProject() {},
-      notifySystem,
+      notifySystem() {},
       notifyThread() {},
     };
     const host = upsertHost(db, notifier, {
       name: "Transient Host",
       type: "ephemeral",
     });
-    notifySystem.mockClear();
+    notifyHost.mockClear();
 
     expect(deleteHost(db, notifier, host.id)).toBe(true);
     expect(getHost(db, host.id)).toBeNull();
-    expect(notifySystem).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
   });
 });

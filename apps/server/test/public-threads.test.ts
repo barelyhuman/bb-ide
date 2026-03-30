@@ -19,7 +19,7 @@ import {
   threads,
 } from "@bb/db";
 import { systemOperationEventDataSchema } from "@bb/domain";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -602,15 +602,13 @@ describe("public thread routes", () => {
       });
 
       const { host } = seedHostSession(harness.deps);
-      const project = createProject(harness.db, harness.hub, {
+      const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
-      });
-      createProjectSource(harness.db, harness.hub, {
-        hostId: host.id,
-        isDefault: true,
-        projectId: project.id,
-        repoUrl: "https://github.com/example/repo.git",
-        type: "github_repo",
+        source: {
+          hostId: host.id,
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -700,15 +698,13 @@ describe("public thread routes", () => {
       });
 
       const { host } = seedHostSession(harness.deps);
-      const project = createProject(harness.db, harness.hub, {
+      const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
-      });
-      createProjectSource(harness.db, harness.hub, {
-        hostId: host.id,
-        isDefault: true,
-        projectId: project.id,
-        repoUrl: "https://github.com/example/repo.git",
-        type: "github_repo",
+        source: {
+          hostId: host.id,
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -745,15 +741,13 @@ describe("public thread routes", () => {
     const harness = await createTestAppHarness({ publicUrl });
     try {
       const { host } = seedHostSession(harness.deps);
-      const project = createProject(harness.db, harness.hub, {
+      const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
-      });
-      createProjectSource(harness.db, harness.hub, {
-        hostId: host.id,
-        isDefault: true,
-        projectId: project.id,
-        repoUrl: "https://github.com/example/repo.git",
-        type: "github_repo",
+        source: {
+          hostId: host.id,
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
       });
 
       const response = await harness.app.request("/api/v1/threads", {

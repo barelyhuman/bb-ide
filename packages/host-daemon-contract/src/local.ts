@@ -37,6 +37,9 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 // ---------------------------------------------------------------------------
 
 export type HostDaemonLocalSchema = {
+  "/health": {
+    $get: Endpoint<EmptyInput, HealthResponse>;
+  };
   "/open-path": {
     $post: Endpoint<{ json: OpenRequest }, Record<string, never>>;
   };

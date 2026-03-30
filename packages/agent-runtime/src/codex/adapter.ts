@@ -10,7 +10,6 @@
 
 import { z } from "zod";
 import type {
-  AvailableModel,
   PromptInput,
   ProviderCapabilities,
   SandboxMode,
@@ -30,7 +29,7 @@ import type { DynamicToolSpec } from "./generated/codex-app-server/schema/v2/Dyn
 import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
-import { listCodexModels } from "./models.js";
+import { parseModelsResponse } from "./models.js";
 import {
   buildShellEnvironmentPolicyConfig,
   toOptionalRecord,
@@ -724,7 +723,6 @@ export interface CreateCodexProviderAdapterOptions {
   processCommand?: string;
   processArgs?: string[];
   launchEnv?: Record<string, string>;
-  listModels?: () => Promise<AvailableModel[]>;
 }
 
 export function createCodexProviderAdapter(
@@ -1091,8 +1089,8 @@ export function createCodexProviderAdapter(
       return decodeProviderToolCallRequest(request.id, request.method, request.params);
     },
 
-    listModels() {
-      return models();
+    parseModelListResult(result: unknown) {
+      return parseModelsResponse(result);
     },
   };
 }
