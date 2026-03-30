@@ -6,19 +6,19 @@
 
 ## Request Body
 
-| Field | Required | Notes |
-|---|---|---|
-| `projectId` | yes | — |
-| `providerId` | yes | — |
-| `type` | yes | `"standard" \| "manager"` — see **Flag 1** below |
-| `title` | optional | Used in thread record + `buildManagedBranchName()` for worktree/clone branch naming (e.g. `bb/<slug>/<threadId>`) |
-| `input` | yes | Array of prompt messages. Drives: initial event payload, daemon `thread.start` command, title generation |
-| `model` | yes | Forwarded to execution options → daemon command |
-| `serviceTier` | optional | Defaults to `"flex"` via `resolveExecutionOptions` fallback chain |
-| `reasoningLevel` | optional | Defaults to `"medium"` via same chain |
-| `sandboxMode` | optional | Defaults to `"danger-full-access"` via same chain — see **Flag 2** |
-| `environment` | yes | Discriminated union (`"reuse"` / `"host"` / `"sandbox-host"`) that determines the entire execution path |
-| `parentThreadId` | optional | Stored on thread record. Creates parent→child relationship (FK, `ON DELETE SET NULL`) |
+| Field            | Required | Notes                                                                                                             |
+| ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `projectId`      | yes      | —                                                                                                                 |
+| `providerId`     | yes      | —                                                                                                                 |
+| `type`           | yes      | `"standard" \| "manager"` — see **Flag 1** below                                                                  |
+| `title`          | optional | Used in thread record + `buildManagedBranchName()` for worktree/clone branch naming (e.g. `bb/<slug>/<threadId>`) |
+| `input`          | yes      | Array of prompt messages. Drives: initial event payload, daemon `thread.start` command, title generation          |
+| `model`          | yes      | Forwarded to execution options → daemon command                                                                   |
+| `serviceTier`    | optional | Defaults to `"flex"` via `resolveExecutionOptions` fallback chain                                                 |
+| `reasoningLevel` | optional | Defaults to `"medium"` via same chain                                                                             |
+| `sandboxMode`    | optional | Defaults to `"danger-full-access"` via same chain — see **Flag 2**                                                |
+| `environment`    | yes      | Discriminated union (`"reuse"` / `"host"` / `"sandbox-host"`) that determines the entire execution path           |
+| `parentThreadId` | optional | Stored on thread record. Creates parent→child relationship (FK, `ON DELETE SET NULL`)                             |
 
 **All 11 fields consumed. No dead params.**
 
@@ -73,7 +73,7 @@
 
 7. **Conditionally queue `thread.start` command** (only on Path A/B when env is `"ready"`)
    - `startQueuedThreadIfNeeded()`:
-     - Only fires if `hasThreadStartInput(request)` (always true for standard threads, always true for manager threads since they now include welcome message input) AND `threadStatus === "idle"` (env already ready)
+     - Only fires if `threadStatus === "idle"` (env already ready). Input is always present — `hasThreadStartInput` was deleted.
      - `resolveThreadRuntimeCommandConfig()` — resolves workspace path, instructions, dynamic tools (see Code Reuse below). Called via `queueThreadStartCommand` with `isThreadCreation: true`, which skips the daemon round-trip to read PREFERENCES.md — preferences are read on subsequent turns only.
      - `queueCommand(db, hub, { type: "thread.start", ... })` — same async queue mechanism as step 6
      - `transitionThreadStatus(db, hub, threadId, "active")`
@@ -99,21 +99,21 @@
 
 ## DB Query Summary
 
-| # | Query | Table | Index | Notes |
-|---|-------|-------|-------|-------|
-| 1 | Validate project | `projects` | PK | — |
-| 2 | Look up session | `host_daemon_sessions` | `host_status_idx` | Path B/C only |
-| 3 | Default source | `project_sources` | `project_idx` | Path B/C only, filtered by `isDefault` in app code |
-| 4 | Find reusable env | `environments` | `host_path_idx` (unique) | Path B only |
-| 5 | INSERT environment | `environments` | — | Path C only |
-| 6 | INSERT thread | `threads` | — | — |
-| 7 | UPDATE thread status | `threads` | PK | — |
-| 8 | Last execution options | `events` | `thread_sequence_idx` | `ORDER BY sequence DESC LIMIT 1` |
-| 9 | INSERT client turn event | `events` | — | — |
-| 10 | INSERT provisioning event | `events` | — | — |
-| 11 | INSERT command (txn) | `host_daemon_commands` | `host_cursor_idx` | Monotonic cursor in transaction |
-| 12 | INSERT thread.start cmd | `host_daemon_commands` | `host_cursor_idx` | Only if env ready |
-| 13 | Re-fetch thread | `threads` | PK | Return value |
+| #   | Query                     | Table                  | Index                    | Notes                                              |
+| --- | ------------------------- | ---------------------- | ------------------------ | -------------------------------------------------- |
+| 1   | Validate project          | `projects`             | PK                       | —                                                  |
+| 2   | Look up session           | `host_daemon_sessions` | `host_status_idx`        | Path B/C only                                      |
+| 3   | Default source            | `project_sources`      | `project_idx`            | Path B/C only, filtered by `isDefault` in app code |
+| 4   | Find reusable env         | `environments`         | `host_path_idx` (unique) | Path B only                                        |
+| 5   | INSERT environment        | `environments`         | —                        | Path C only                                        |
+| 6   | INSERT thread             | `threads`              | —                        | —                                                  |
+| 7   | UPDATE thread status      | `threads`              | PK                       | —                                                  |
+| 8   | Last execution options    | `events`               | `thread_sequence_idx`    | `ORDER BY sequence DESC LIMIT 1`                   |
+| 9   | INSERT client turn event  | `events`               | —                        | —                                                  |
+| 10  | INSERT provisioning event | `events`               | —                        | —                                                  |
+| 11  | INSERT command (txn)      | `host_daemon_commands` | `host_cursor_idx`        | Monotonic cursor in transaction                    |
+| 12  | INSERT thread.start cmd   | `host_daemon_commands` | `host_cursor_idx`        | Only if env ready                                  |
+| 13  | Re-fetch thread           | `threads`              | PK                       | Return value                                       |
 
 **Typical path (new managed env): ~11 queries. No N+1. All indexed or PK lookups.**
 
@@ -121,14 +121,14 @@
 
 ## Code Reuse
 
-| Function | Also used by |
-|---|---|
-| `createThreadFromRequest()` | `POST /projects/:id/managers` — identical code path, hard-codes `type: "manager"`, `workspace: { type: "unmanaged", path: source.path }`, includes `systemMessageManagerWelcome` as input |
-| `createThreadInEnvironment()` | Internal helper shared between reuse path (A/B) within this same route |
-| `buildExecutionOptions()` | `POST /threads/:id/send`, `POST /threads/:id/drafts`, `POST /threads/:id/drafts/:draftId/send` |
-| `resolveThreadRuntimeCommandConfig()` | `queueThreadStartCommand()` (used here) + `queueTurnRunCommand()` (used by send/draft-send) |
-| `queueCommand()` | Used across the entire command dispatch system — all daemon interactions |
-| `generateThreadTitle()` | Only called from thread creation (two call sites within this file, both paths) |
+| Function                              | Also used by                                                                                                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createThreadFromRequest()`           | `POST /projects/:id/managers` — identical code path, hard-codes `type: "manager"`, `workspace: { type: "unmanaged", path: source.path }`, includes `systemMessageManagerWelcome` as input |
+| `createThreadInEnvironment()`         | Internal helper shared between reuse path (A/B) within this same route                                                                                                                    |
+| `buildExecutionOptions()`             | `POST /threads/:id/send`, `POST /threads/:id/drafts`, `POST /threads/:id/drafts/:draftId/send`                                                                                            |
+| `resolveThreadRuntimeCommandConfig()` | `queueThreadStartCommand()` (used here) + `queueTurnRunCommand()` (used by send/draft-send)                                                                                               |
+| `queueCommand()`                      | Used across the entire command dispatch system — all daemon interactions                                                                                                                  |
+| `generateThreadTitle()`               | Only called from thread creation (two call sites within this file, both paths)                                                                                                            |
 
 ## Flags
 
@@ -150,20 +150,20 @@
 
 ## Usages
 
-| Caller | Location | Purpose |
-|---|---|---|
-| `api.createThread()` | `apps/app/src/lib/api.ts:307` | Frontend API client — wraps `apiClient.threads.$post()` |
-| `useCreateThread()` hook | `apps/app/src/hooks/useApi.ts:714` | React Query mutation hook wrapping `api.createThread` |
-| `ProjectMainView` | `apps/app/src/views/ProjectMainView.tsx:27,182` | Main thread creation flow — user submits prompt from project view |
-| CLI `thread spawn` | `apps/cli/src/commands/thread/spawn.ts:163` | Creates a new thread from CLI with prompt, model, environment options |
-| `POST /projects/:id/managers` | `apps/server/src/routes/projects.ts:220` | Manager creation route — calls `createThreadFromRequest()` with `type: "manager"` |
-| `createHostThread()` | `tests/integration/helpers/api.ts:148` | Integration test helper — creates a host-environment thread via `api.threads.$post()` |
-| `createReuseThread()` | `tests/integration/helpers/api.ts:174` | Integration test helper — creates a reuse-environment thread via `api.threads.$post()` |
-| Server test | `apps/server/test/public-threads.test.ts:102-391` | Multiple test cases exercising thread creation (various environment types, error cases) |
-| Server test | `apps/server/test/public-thread-lifecycle-regressions.test.ts:30-255` | Lifecycle regression tests covering duplicate creation, concurrent paths |
-| Server test | `apps/server/test/public-authorization-regressions.test.ts:110` | Authorization test — validates thread creation respects auth rules |
-| Server test | `apps/server/test/internal-authorization-regressions.test.ts:194` | Internal auth regression test creating threads |
-| Contract test | `packages/server-contract/test/contract.test.ts:77,164` | Validates `createThreadRequestSchema` parsing of valid/invalid payloads |
+| Caller                        | Location                                                              | Purpose                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `api.createThread()`          | `apps/app/src/lib/api.ts:307`                                         | Frontend API client — wraps `apiClient.threads.$post()`                                 |
+| `useCreateThread()` hook      | `apps/app/src/hooks/useApi.ts:714`                                    | React Query mutation hook wrapping `api.createThread`                                   |
+| `ProjectMainView`             | `apps/app/src/views/ProjectMainView.tsx:27,182`                       | Main thread creation flow — user submits prompt from project view                       |
+| CLI `thread spawn`            | `apps/cli/src/commands/thread/spawn.ts:163`                           | Creates a new thread from CLI with prompt, model, environment options                   |
+| `POST /projects/:id/managers` | `apps/server/src/routes/projects.ts:220`                              | Manager creation route — calls `createThreadFromRequest()` with `type: "manager"`       |
+| `createHostThread()`          | `tests/integration/helpers/api.ts:148`                                | Integration test helper — creates a host-environment thread via `api.threads.$post()`   |
+| `createReuseThread()`         | `tests/integration/helpers/api.ts:174`                                | Integration test helper — creates a reuse-environment thread via `api.threads.$post()`  |
+| Server test                   | `apps/server/test/public-threads.test.ts:102-391`                     | Multiple test cases exercising thread creation (various environment types, error cases) |
+| Server test                   | `apps/server/test/public-thread-lifecycle-regressions.test.ts:30-255` | Lifecycle regression tests covering duplicate creation, concurrent paths                |
+| Server test                   | `apps/server/test/public-authorization-regressions.test.ts:110`       | Authorization test — validates thread creation respects auth rules                      |
+| Server test                   | `apps/server/test/internal-authorization-regressions.test.ts:194`     | Internal auth regression test creating threads                                          |
+| Contract test                 | `packages/server-contract/test/contract.test.ts:77,164`               | Validates `createThreadRequestSchema` parsing of valid/invalid payloads                 |
 
 ---
 
@@ -171,5 +171,18 @@
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+> 1. **`type` field accepted from client but the only consumer-facing route that should create managers is `POST /projects/:id/managers`.**
 
+- The manager route hard-codes `type: "manager"` and calls `createThreadFromRequest()` internally.
+- Accepting `type` on `POST /threads` means a client could create a `"manager"` thread directly, bypassing the manager route's guardrails (which hard-codes `workspace: { type: "unmanaged" }` and includes the `systemMessageManagerWelcome` template as input).
+- Is there a reason the public thread creation route allows `type: "manager"`? If not, this should be restricted to `"standard"` only.
+
+~~this is a bug. remove type param and restrict to standard only here~~ **Fixed:** `type` removed from `createThreadRequestSchema`. Route hardcodes `type: "standard"`. Manager creation is only possible via `POST /projects/:id/managers`.
+
+> 2. **`sandboxMode` defaults to `"danger-full-access"`**
+
+~~Intentional product decision?~~ Confirmed — this is the expected default.
+
+> 8. **Fire-and-forget: `generateThreadTitle()`** (only if no explicit `title` and has input)
+
+~~why does this say "and has input"~~ Fixed — `hasThreadStartInput` deleted. Input is always required on both standard and manager threads. The guard was dead code.

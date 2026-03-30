@@ -11,6 +11,7 @@ import {
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { ensureThreadRuntime, startThread } from "./command-handlers/thread.js";
+import { WorkspaceError } from "@bb/workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
 
@@ -103,9 +104,15 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "environment.destroy": {
-      const existing = options.runtimeManager.get(command.environmentId);
-      if (existing) {
+      try {
+        await requireWorkspaceEnvironment(command, options.runtimeManager);
         await options.runtimeManager.destroyEnvironment(command.environmentId);
+      } catch (error) {
+        // Treat already-missing workspaces as successful destroy (idempotent retry).
+        if (error instanceof WorkspaceError && error.code === "path_not_found") {
+          return {} as HostDaemonCommandResult<TCommand["type"]>;
+        }
+        throw error;
       }
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }

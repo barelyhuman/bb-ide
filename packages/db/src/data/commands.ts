@@ -1,4 +1,4 @@
-import { eq, and, max, gt } from "drizzle-orm";
+import { eq, and, max, gt, inArray } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonCommands } from "../schema.js";
@@ -89,15 +89,13 @@ export function fetchCommands(
 
     if (commands.length === 0) return commands;
 
-    // Mark as fetched and return updated rows
-    return commands.map(
-      (cmd) =>
-        tx.update(hostDaemonCommands)
-          .set({ state: "fetched", fetchedAt: now })
-          .where(eq(hostDaemonCommands.id, cmd.id))
-          .returning()
-          .get()!,
-    );
+    // Batch update: mark all fetched commands in one query
+    tx.update(hostDaemonCommands)
+      .set({ state: "fetched", fetchedAt: now })
+      .where(inArray(hostDaemonCommands.id, commands.map((c) => c.id)))
+      .run();
+
+    return commands.map((cmd) => ({ ...cmd, state: "fetched" as const, fetchedAt: now }));
   });
 }
 

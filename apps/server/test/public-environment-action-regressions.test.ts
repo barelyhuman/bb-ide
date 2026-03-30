@@ -122,7 +122,6 @@ describe("public environment action regressions", () => {
       );
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
-        path: "/tmp/commit-auto-archive",
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
     } finally {
@@ -195,7 +194,6 @@ describe("public environment action regressions", () => {
       );
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
-        path: "/tmp/squash-auto-archive",
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
     } finally {

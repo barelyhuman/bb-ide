@@ -78,7 +78,6 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
-        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
@@ -163,7 +162,6 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
-        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {

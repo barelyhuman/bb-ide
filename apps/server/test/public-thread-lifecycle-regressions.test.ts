@@ -33,7 +33,6 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           title: "Worker Thread",
           input: [{ type: "text", text: "Implement the worker task" }],
@@ -59,7 +58,6 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           title: "Worker Thread",
           input: [{ type: "text", text: "Implement the worker task again" }],
@@ -123,7 +121,6 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Start immediately" }],
           environment: {
@@ -161,7 +158,6 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "First reused thread" }],
           environment: {
@@ -176,7 +172,6 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Second reused thread" }],
           environment: {
@@ -234,7 +229,6 @@ describe("public thread lifecycle regressions", () => {
       );
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
-        path: "/tmp/thread-cleanup",
       });
     } finally {
       await harness.cleanup();
@@ -262,7 +256,6 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Wait for provisioning" }],
           environment: {

@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
 import {
@@ -8,6 +9,7 @@ import {
 } from "@bb/host-daemon-contract";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 
 const execFileAsync = promisify(execFile);
 
@@ -43,7 +45,11 @@ export async function startLocalApiServer(
     }),
   );
 
-  post("/open", openRequestSchema, async (c, payload) => {
+  post("/open-path", openRequestSchema, async (c, payload) => {
+    const stat = await fs.stat(payload.path).catch(() => null);
+    if (!stat) {
+      throw new HTTPException(400, { message: `Path does not exist: ${payload.path}` });
+    }
     await (options.openPath ?? openLocalPath)(payload.path);
     return c.json({});
   });
@@ -108,13 +114,23 @@ async function openLocalPath(path: string): Promise<void> {
 
 async function pickLocalFolder(): Promise<string | null> {
   if (process.platform !== "darwin") {
-    return null;
+    throw new HTTPException(501, {
+      message: "Folder picker is only supported on macOS",
+    });
   }
 
-  const { stdout } = await execFileAsync("osascript", [
-    "-e",
-    'try\nPOSIX path of (choose folder with prompt "Choose a folder for bb")\non error number -128\nreturn ""\nend try',
-  ]);
+  let stdout: string;
+  try {
+    const result = await execFileAsync("osascript", [
+      "-e",
+      'try\nPOSIX path of (choose folder with prompt "Choose a folder for bb")\non error number -128\nreturn ""\nend try',
+    ]);
+    stdout = result.stdout;
+  } catch (error) {
+    throw new HTTPException(500, {
+      message: `Folder picker failed: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
   const selectedPath = stdout.trim();
   if (selectedPath === "") {
     return null;

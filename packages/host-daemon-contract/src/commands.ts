@@ -193,10 +193,8 @@ export const environmentProvisionCommandSchema = z.discriminatedUnion(
   ],
 );
 
-export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+export const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("environment.destroy"),
-  path: z.string().min(1),
-  workspaceProvisionType: workspaceProvisionTypeSchema,
 });
 
 export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
@@ -301,7 +299,7 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "environment.destroy": z.object({}),
   "workspace.status": z.object({
-    workspaceStatus: workspaceStatusSchema.nullable(),
+    workspaceStatus: workspaceStatusSchema,
   }),
   "workspace.diff": z.object({
     diff: threadGitDiffResponseSchema,

@@ -29,7 +29,7 @@ export type StatusResponse = z.infer<typeof statusResponseSchema>;
 // ---------------------------------------------------------------------------
 
 export type HostDaemonLocalSchema = {
-  "/open": {
+  "/open-path": {
     $post: Endpoint<{ json: OpenRequest }, Record<string, never>>;
   };
   "/pick-folder": {

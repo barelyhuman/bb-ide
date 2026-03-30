@@ -180,7 +180,6 @@ export function ProjectMainView() {
 
     try {
       await createThread.mutateAsync({
-        type: "standard",
         input: submittedInput,
         projectId,
         providerId: selectedProviderId,

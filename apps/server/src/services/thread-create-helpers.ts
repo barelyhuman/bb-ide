@@ -10,10 +10,7 @@ import type { ProjectSource } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
-import {
-  hasThreadStartInput,
-  type ThreadCreateServiceRequest,
-} from "./thread-create-request.js";
+import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
 import { deriveTitleFallback } from "./title-generation.js";
 
 export interface ResolvedProjectSource extends ProjectSource {
@@ -40,7 +37,7 @@ export function buildManagedBranchName(
   threadId: string,
 ): string {
   const seed = request.title
-    ?? deriveTitleFallback(hasThreadStartInput(request) ? request.input : undefined)
+    ?? deriveTitleFallback(request.input)
     ?? threadId;
   return buildManagedBranchNameFromSeed(seed, threadId);
 }
@@ -129,9 +126,7 @@ export function createThreadRecord(
     providerId: request.providerId,
     type: request.type,
     title: request.title ?? null,
-    titleFallback: deriveTitleFallback(
-      hasThreadStartInput(request) ? request.input : undefined,
-    ),
+    titleFallback: deriveTitleFallback(request.input),
     parentThreadId: request.parentThreadId ?? null,
     status: "created",
     mergeBaseBranch,

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { WorkspaceError } from "@bb/workspace";
 import { dispatchCommand } from "../../src/command-dispatch.js";
-import { cleanupTempDirs, createHarness, makeTempDir } from "./dispatch-helpers.js";
+import { cleanupTempDirs, createFakeRuntime, createFakeWorkspace, createHarness, makeTempDir } from "./dispatch-helpers.js";
+import { RuntimeManager } from "../../src/runtime-manager.js";
 
 afterEach(cleanupTempDirs);
 
@@ -117,8 +119,10 @@ describe("environment command dispatch", () => {
       {
         type: "environment.destroy",
         environmentId: "env-1",
-        path: "/tmp/env-1",
-        workspaceProvisionType: "managed-worktree",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "managed-worktree",
+        },
       },
       { runtimeManager: harness.manager },
     );
@@ -126,5 +130,78 @@ describe("environment command dispatch", () => {
     expect(result).toEqual({});
     expect(harness.runtimeState.shutdownCount).toBe(1);
     expect(harness.workspaceState.destroyed).toBe(true);
+  });
+
+  it("destroys a managed environment after daemon restart (not in memory)", async () => {
+    const harness = createHarness();
+    // Environment is NOT in memory — simulates daemon restart.
+    // The destroy command must reconnect using workspaceContext before destroying.
+    const result = await dispatchCommand(
+      {
+        type: "environment.destroy",
+        environmentId: "env-restart",
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "managed-worktree",
+        },
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result).toEqual({});
+    // The workspace was reconnected (lazy provision) then destroyed
+    expect(harness.workspaceState.destroyed).toBe(true);
+    expect(harness.provisions).toEqual([
+      {
+        workspaceProvisionType: "reconnect-managed-worktree",
+        path: "/tmp/env-1",
+      },
+    ]);
+  });
+
+  it("treats a retry as success when the workspace was already removed", async () => {
+    // Simulate: first destroy succeeds and removes the workspace,
+    // then daemon crashes before reporting. On retry, the path is gone.
+    let callCount = 0;
+    const { workspace } = createFakeWorkspace("/tmp/env-retry");
+    const { runtime } = createFakeRuntime();
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => {
+        callCount++;
+        if (callCount > 1) {
+          throw new WorkspaceError("path_not_found", "Managed workspace path does not exist: /tmp/env-retry");
+        }
+        return workspace;
+      },
+      createRuntime: () => runtime,
+    });
+
+    // First destroy: succeeds (workspace exists in memory after reconnect)
+    await dispatchCommand(
+      {
+        type: "environment.destroy",
+        environmentId: "env-retry",
+        workspaceContext: {
+          workspacePath: "/tmp/env-retry",
+          workspaceProvisionType: "managed-worktree",
+        },
+      },
+      { runtimeManager: manager },
+    );
+
+    // Second destroy (retry): workspace path is gone, should succeed (idempotent)
+    const retryResult = await dispatchCommand(
+      {
+        type: "environment.destroy",
+        environmentId: "env-retry",
+        workspaceContext: {
+          workspacePath: "/tmp/env-retry",
+          workspaceProvisionType: "managed-worktree",
+        },
+      },
+      { runtimeManager: manager },
+    );
+
+    expect(retryResult).toEqual({});
   });
 });

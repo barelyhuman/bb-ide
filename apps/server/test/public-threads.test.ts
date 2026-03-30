@@ -107,7 +107,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Inspect the default source workspace" }],
           environment: {
@@ -169,7 +168,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           title: "Managed thread",
           input: [{ type: "text", text: "Build it" }],
@@ -234,7 +232,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Reuse the existing direct workspace" }],
           environment: {
@@ -315,7 +312,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Wait for the existing provisioning flow" }],
           environment: {
@@ -358,7 +354,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Use the sandbox host" }],
           environment: {
@@ -396,7 +391,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Reuse the environment" }],
           environment: {
@@ -769,8 +763,7 @@ describe("public thread routes", () => {
           command.environmentId === environment.id,
       );
       expect(destroyCommand.command).toMatchObject({
-        path: "/tmp/delete-managed",
-        workspaceProvisionType: "managed-worktree",
+        environmentId: environment.id,
       });
     } finally {
       await harness.cleanup();
@@ -871,7 +864,7 @@ describe("public thread routes", () => {
 
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
-        content: JSON.stringify([{ type: "text", text: "Draft content" }]),
+        content: [{ type: "text", text: "Draft content" }],
         model: "gpt-5",
         serviceTier: "flex",
       });
@@ -1053,7 +1046,7 @@ describe("public thread routes", () => {
       });
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
-        content: JSON.stringify([{ type: "text", text: "Queue a correction" }]),
+        content: [{ type: "text", text: "Queue a correction" }],
         model: "gpt-5",
       });
 

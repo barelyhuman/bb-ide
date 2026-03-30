@@ -164,7 +164,6 @@ export function registerSpawnCommand(
             json: {
               projectId,
               providerId: opts.provider,
-              type: "standard",
               model: opts.model,
               input: [{ type: "text", text: opts.prompt }],
               ...(reasoningLevel ? { reasoningLevel } : {}),

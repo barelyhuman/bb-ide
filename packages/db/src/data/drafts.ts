@@ -1,4 +1,5 @@
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import type { PromptInput } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { queuedThreadMessages } from "../schema.js";
@@ -6,7 +7,7 @@ import { createDraftId } from "../ids.js";
 
 export interface CreateDraftInput {
   threadId: string;
-  content: string;
+  content: PromptInput[];
   model: string;
   reasoningLevel: string;
   sandboxMode: string;
@@ -26,7 +27,7 @@ export function createDraft(
     .values({
       id,
       threadId: input.threadId,
-      content: input.content,
+      content: JSON.stringify(input.content),
       model: input.model,
       reasoningLevel: input.reasoningLevel,
       sandboxMode: input.sandboxMode,

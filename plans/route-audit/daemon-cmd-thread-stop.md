@@ -7,11 +7,11 @@
 
 ## Command Payload
 
-| Field | Required | Notes |
-|---|---|---|
-| `type` | Yes | Literal `"thread.stop"` |
-| `environmentId` | Yes | Identifies the runtime entry. Passed to `requireExistingEnvironment` and `markThreadInactive`. |
-| `threadId` | Yes | Identifies the thread to stop. Passed to `runtime.stopThread` and `markThreadInactive`. |
+| Field           | Required | Notes                                                                                          |
+| --------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `type`          | Yes      | Literal `"thread.stop"`                                                                        |
+| `environmentId` | Yes      | Identifies the runtime entry. Passed to `requireExistingEnvironment` and `markThreadInactive`. |
+| `threadId`      | Yes      | Identifies the thread to stop. Passed to `runtime.stopThread` and `markThreadInactive`.        |
 
 **All 3 fields consumed. No dead params.**
 
@@ -39,15 +39,19 @@
 
 ## Usages
 
-| Caller | Location | Trigger |
-|---|---|---|
-| `queueThreadStopCommand` | `apps/server/src/services/thread-commands.ts:273` | Wrapper that builds and queues a `"thread.stop"` command. Not called by any other service — currently orphaned (see below). |
-| `POST /threads/:id/stop` | `apps/server/src/routes/threads/actions.ts:192` | Queues `thread.stop` directly via `queueCommandAndWait` (does not use the wrapper) |
-| `POST /threads/:id/archive` | `apps/server/src/routes/threads/actions.ts:239` | Queues `thread.stop` via `queueCommandAndWait` as a pre-step when the thread is active before archiving |
-| `handleThreadStopResult` | `apps/server/src/internal/command-result-handlers.ts:263` | Result handler — transitions thread to `"idle"` and appends an interrupted event on success |
+| Caller                      | Location                                                  | Trigger                                                                                                                     |
+| --------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `queueThreadStopCommand`    | `apps/server/src/services/thread-commands.ts:273`         | Wrapper that builds and queues a `"thread.stop"` command. Not called by any other service — currently orphaned (see below). |
+| `POST /threads/:id/stop`    | `apps/server/src/routes/threads/actions.ts:192`           | Queues `thread.stop` directly via `queueCommandAndWait` (does not use the wrapper)                                          |
+| `POST /threads/:id/archive` | `apps/server/src/routes/threads/actions.ts:239`           | Queues `thread.stop` via `queueCommandAndWait` as a pre-step when the thread is active before archiving                     |
+| `handleThreadStopResult`    | `apps/server/src/internal/command-result-handlers.ts:263` | Result handler — transitions thread to `"idle"` and appends an interrupted event on success                                 |
 
 ---
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+> 1. **Requires existing environment.** Unlike `thread.start`/`turn.run` which call `ensureEnvironment`, this uses `requireExistingEnvironment` which throws if the environment doesn't exist. This is correct — you can't stop a thread that was never started.
+
+What does this mean? how does "requireExistingEnvironment" work?
+
+> It checks `runtimeManager.getOrAwait(environmentId)` — looks up the environment in the daemon's in-memory map. If found, returns the runtime entry. If not found (daemon has no memory of this environment), throws `CommandDispatchError("unknown_environment")`. Unlike `requireWorkspaceEnvironment` (used by workspace commands and turn commands), it does NOT lazy-provision from `workspacePath` — the environment must already be tracked. This is correct for stop: if the daemon doesn't have the environment in memory, there's nothing to stop.

@@ -27,8 +27,6 @@ import {
   requireProjectExists,
 } from "./thread-create-helpers.js";
 import {
-  hasThreadStartInput,
-  type PublicThreadCreateServiceRequest,
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 
@@ -73,7 +71,7 @@ async function createThreadInEnvironment(
       threadId: thread.id,
       environmentId: args.environment.id,
       type: "client/thread/start",
-      ...(hasThreadStartInput(args.request) ? { input: args.request.input } : {}),
+      input: args.request.input,
       execution,
       initiator: args.request.spawnInitiator ?? "user",
       requestMethod: "thread/start",
@@ -97,7 +95,7 @@ async function createThreadInEnvironment(
     });
   }
 
-  if (hasThreadStartInput(args.request) && args.threadStatus === "idle") {
+  if (args.threadStatus === "idle") {
     try {
       await startQueuedThreadIfNeeded(deps, {
         thread,
@@ -112,7 +110,7 @@ async function createThreadInEnvironment(
     }
   }
 
-  if (!args.request.title && hasThreadStartInput(args.request)) {
+  if (!args.request.title) {
     void generateThreadTitle(deps, {
       threadId: thread.id,
       input: args.request.input,
@@ -170,7 +168,7 @@ async function startQueuedThreadIfNeeded(
     environment: Environment;
     execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
     eventSequence: number;
-    request: PublicThreadCreateServiceRequest;
+    request: ThreadCreateServiceRequest;
     thread: ReturnType<typeof createThread>;
   },
 ): Promise<void> {
@@ -302,7 +300,7 @@ export async function createThreadFromRequest(
     threadId: thread.id,
     environmentId: environment.id,
     type: "client/thread/start",
-    ...(hasThreadStartInput(request) ? { input: request.input } : {}),
+    input: request.input,
     execution,
     initiator: request.spawnInitiator ?? "user",
     requestMethod: "thread/start",
@@ -358,7 +356,7 @@ export async function createThreadFromRequest(
     }
   }
 
-  if (!request.title && hasThreadStartInput(request)) {
+  if (!request.title) {
     void generateThreadTitle(deps, {
       threadId: thread.id,
       input: request.input,

@@ -20,7 +20,7 @@ import type { Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
-import { encodeDraftContent, toQueuedMessage } from "../../services/drafts.js";
+import { toQueuedMessage } from "../../services/drafts.js";
 import { maybeCleanupEnvironment } from "../../services/environment-cleanup.js";
 import { requireThread, requireThreadEnvironment } from "../../services/entity-lookup.js";
 import { sendQueuedDraft } from "../../services/queued-drafts.js";
@@ -158,7 +158,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     );
     const draft = createDraft(deps.db, deps.hub, {
       threadId: context.req.param("id"),
-      content: encodeDraftContent(payload.input),
+      content: payload.input,
       model: execution.model,
       reasoningLevel: execution.reasoningLevel,
       sandboxMode: execution.sandboxMode,

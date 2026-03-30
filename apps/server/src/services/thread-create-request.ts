@@ -2,6 +2,7 @@ import type { ThreadTurnInitiator } from "@bb/domain";
 import type { CreateThreadRequest } from "@bb/server-contract";
 
 export interface PublicThreadCreateServiceRequest extends CreateThreadRequest {
+  type: "standard";
   spawnInitiator?: ThreadTurnInitiator;
 }
 
@@ -13,9 +14,3 @@ export interface ManagerThreadCreateServiceRequest extends CreateThreadRequest {
 export type ThreadCreateServiceRequest =
   | PublicThreadCreateServiceRequest
   | ManagerThreadCreateServiceRequest;
-
-export function hasThreadStartInput(
-  request: ThreadCreateServiceRequest,
-): request is PublicThreadCreateServiceRequest {
-  return "input" in request;
-}

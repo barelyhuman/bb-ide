@@ -450,7 +450,6 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
@@ -662,7 +661,6 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         parentThreadId: "thread-parent",
@@ -702,7 +700,6 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "reuse", environmentId: "env-worktree-001" },
@@ -742,7 +739,6 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
-        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "managed-worktree" } },

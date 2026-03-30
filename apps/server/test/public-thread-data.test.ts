@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { createDraft, events, getDraft, getThread } from "@bb/db";
+import { createDraftId, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -761,14 +761,23 @@ describe("public thread data routes", () => {
         projectId: project.id,
         environmentId: environment.id,
       });
-      const draft = createDraft(harness.db, harness.hub, {
-        threadId: thread.id,
-        content: "not-json",
-        model: "gpt-5",
-        serviceTier: "flex",
-        reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
-      });
+      const now = Date.now();
+      const draftId = createDraftId();
+      const draft = harness.db.insert(queuedThreadMessages)
+        .values({
+          id: draftId,
+          threadId: thread.id,
+          content: "not-json",
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          claimedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
 
       const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,

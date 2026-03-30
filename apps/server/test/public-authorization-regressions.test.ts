@@ -118,7 +118,6 @@ describe("public authorization regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
-          type: "standard",
           model: "gpt-5",
           input: [{ type: "text", text: "Create the managed thread" }],
           environment: {
@@ -173,11 +172,11 @@ describe("public authorization regressions", () => {
       });
       seedDraft(harness.deps, {
         threadId: threadA.id,
-        content: "Draft A",
+        content: [{ type: "text", text: "Draft A" }],
       });
       const draftB = seedDraft(harness.deps, {
         threadId: threadB.id,
-        content: "Draft B",
+        content: [{ type: "text", text: "Draft B" }],
       });
 
       const response = await harness.app.request(

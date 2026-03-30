@@ -7,7 +7,7 @@ import {
   openSession,
   upsertHost,
 } from "@bb/db";
-import type { ThreadEventType } from "@bb/domain";
+import type { PromptInput, ThreadEventType } from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
 
 export function seedHost(
@@ -117,7 +117,7 @@ export function seedThread(
 export function seedDraft(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    content: string;
+    content: PromptInput[];
     threadId: string;
     model?: string;
     reasoningLevel?: string;

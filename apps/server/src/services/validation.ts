@@ -43,6 +43,17 @@ export function parseOptionalBoolean(value: string | undefined): boolean | undef
   throw new ApiError(400, "invalid_request", `Invalid boolean value: ${value}`);
 }
 
+export function parseInteger(
+  value: string,
+  name: string,
+): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    throw new ApiError(400, "invalid_request", `Invalid integer for ${name}`);
+  }
+  return parsed;
+}
+
 export function parseOptionalInteger(
   value: string | undefined,
   name: string,

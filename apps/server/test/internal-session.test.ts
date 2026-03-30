@@ -713,8 +713,10 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.destroy",
           environmentId: environment.id,
-          path: environment.path,
-          workspaceProvisionType: "managed-worktree",
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: "managed-worktree",
+          },
         }),
       });
 
@@ -762,8 +764,10 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.destroy",
           environmentId: environment.id,
-          path: environment.path,
-          workspaceProvisionType: "managed-worktree",
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: "managed-worktree",
+          },
         }),
       });
 

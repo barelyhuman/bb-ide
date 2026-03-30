@@ -133,7 +133,7 @@ describe("internal event side effects", () => {
       });
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
-        content: JSON.stringify([{ type: "text", text: "Queued follow-up" }]),
+        content: [{ type: "text", text: "Queued follow-up" }],
         model: "gpt-5",
         serviceTier: "flex",
       });

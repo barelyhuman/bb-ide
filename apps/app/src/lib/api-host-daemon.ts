@@ -36,7 +36,7 @@ export async function fetchHostId(port: number): Promise<string | null> {
  */
 export async function openPath(port: number, path: string): Promise<void> {
   const daemon = getHostDaemonClient(port);
-  await daemon.open.$post({ json: { path } });
+  await daemon["open-path"].$post({ json: { path } });
 }
 
 /**

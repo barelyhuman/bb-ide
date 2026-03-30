@@ -15,10 +15,6 @@ interface StoredDraftRow {
   updatedAt: number;
 }
 
-export function encodeDraftContent(input: PromptInput[]): string {
-  return JSON.stringify(input);
-}
-
 function parseStoredDraftContent(
   row: Pick<StoredDraftRow, "content" | "id" | "threadId">,
 ): PromptInput[] {

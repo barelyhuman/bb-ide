@@ -1,4 +1,5 @@
 import { and, count, eq, isNull } from "drizzle-orm";
+import type { WorkspaceProvisionType } from "@bb/domain";
 import {
   getEnvironment,
   getActiveSession,
@@ -6,7 +7,6 @@ import {
   updateEnvironment,
 } from "@bb/db";
 import { threads } from "@bb/db";
-import type { WorkspaceProvisionType } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 
 export function queueEnvironmentDestroyCommand(
@@ -26,8 +26,10 @@ export function queueEnvironmentDestroyCommand(
     payload: JSON.stringify({
       type: "environment.destroy",
       environmentId: environment.id,
-      path: environment.path,
-      workspaceProvisionType: environment.workspaceProvisionType,
+      workspaceContext: {
+        workspacePath: environment.path,
+        workspaceProvisionType: environment.workspaceProvisionType,
+      },
     }),
   });
 }

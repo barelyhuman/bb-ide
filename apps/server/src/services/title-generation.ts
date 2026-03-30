@@ -10,10 +10,7 @@ import type { AppDeps } from "../types.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
 
-export function deriveTitleFallback(input: PromptInput[] | undefined): string | null {
-  if (!input) {
-    return null;
-  }
+export function deriveTitleFallback(input: PromptInput[]): string | null {
   const text = input
     .filter((part) => part.type === "text")
     .map((part) => part.text.trim())

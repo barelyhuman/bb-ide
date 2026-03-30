@@ -42,7 +42,7 @@
 
 ## Code Reuse
 
-- `ensureEnvironment` is shared with `ensureThreadRuntime` (turn.run/turn.steer). (Previously also shared with the now-deleted `thread.resume` command.)
+- `ensureEnvironment` is shared with `ensureThreadRuntime` (turn.run/turn.steer).
 - `markThreadActive` is shared across all thread-starting commands and also called internally by the `RuntimeManager.onEvent` callback for `thread/identity` events.
 - `seedThreadHighWaterMarkIfPresent` is shared with `turn.run` and `turn.steer`.
 

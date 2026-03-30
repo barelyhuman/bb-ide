@@ -56,10 +56,10 @@ describe("local API server", () => {
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
-    await client.open.$post({ json: { path: "/tmp/file.ts" } });
+    await client["open-path"].$post({ json: { path: "/tmp" } });
     const pickFolderResponse = await client["pick-folder"].$post({});
 
-    expect(openPath).toHaveBeenCalledWith("/tmp/file.ts");
+    expect(openPath).toHaveBeenCalledWith("/tmp");
     expect(pickFolder).toHaveBeenCalledTimes(1);
     expect(await pickFolderResponse.json()).toEqual({ path: "/tmp/project" });
   });

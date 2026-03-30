@@ -15,6 +15,9 @@ import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
 
+const defaultInput = [{ type: "text" as const, text: "hello" }];
+const altInput = [{ type: "text" as const, text: "world" }];
+
 function setup() {
   const db = createConnection(":memory:");
   migrate(db);
@@ -32,7 +35,7 @@ describe("drafts", () => {
     const { db, thread } = setup();
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
-      content: "[]",
+      content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -41,7 +44,7 @@ describe("drafts", () => {
 
     expect(draft.id).toMatch(/^draft_/);
     expect(draft.threadId).toBe(thread.id);
-    expect(draft.content).toBe("[]");
+    expect(draft.content).toBe(JSON.stringify(defaultInput));
     expect(draft.model).toBe("gpt-5");
     expect(draft.serviceTier).toBe("flex");
   });
@@ -50,7 +53,7 @@ describe("drafts", () => {
     const { db, thread } = setup();
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
-      content: "[]",
+      content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -66,7 +69,7 @@ describe("drafts", () => {
     const { db, thread } = setup();
     createDraft(db, noopNotifier, {
       threadId: thread.id,
-      content: "[]",
+      content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -74,7 +77,7 @@ describe("drafts", () => {
     });
     createDraft(db, noopNotifier, {
       threadId: thread.id,
-      content: "[{}]",
+      content: altInput,
       model: "gpt-5",
       reasoningLevel: "high",
       sandboxMode: "danger-full-access",
@@ -88,7 +91,7 @@ describe("drafts", () => {
     const { db, thread } = setup();
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
-      content: "[]",
+      content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -104,7 +107,7 @@ describe("drafts", () => {
     const { db, thread } = setup();
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
-      content: "[]",
+      content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -126,7 +129,7 @@ describe("drafts", () => {
       nowSpy.mockReturnValueOnce(1_000);
       const firstDraft = createDraft(db, noopNotifier, {
         threadId: thread.id,
-        content: "[]",
+        content: defaultInput,
         model: "gpt-5",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
@@ -135,7 +138,7 @@ describe("drafts", () => {
       nowSpy.mockReturnValueOnce(2_000);
       const secondDraft = createDraft(db, noopNotifier, {
         threadId: thread.id,
-        content: "[{}]",
+        content: altInput,
         model: "gpt-5",
         reasoningLevel: "high",
         sandboxMode: "danger-full-access",
