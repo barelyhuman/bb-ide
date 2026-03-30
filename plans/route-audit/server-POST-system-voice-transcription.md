@@ -46,7 +46,7 @@ No queries.
 
 1. **No Zod validation on the form body.** The `prompt` field is checked manually with `typeof formData.get("prompt") === "string"`. The `file` field is checked with `instanceof File`. This is reasonable for multipart forms (Zod doesn't handle `FormData` natively), but it means the error for a missing file is a generic `Error` (500) rather than a typed `ApiError` (400). The `"Audio file is required"` error will be caught by the global error handler and returned as `{ code: "internal_error" }` with status 500.
 
-2. **Missing file returns 500 instead of 400.** The `throw new Error("Audio file is required")` on line 100 should probably be `throw new ApiError(400, "invalid_request", "Audio file is required")` for a proper client error response.
+2. ~~**Missing file returns 500 instead of 400.** The `throw new Error("Audio file is required")` on line 100 should probably be `throw new ApiError(400, "invalid_request", "Audio file is required")` for a proper client error response.~~ **Fixed** — now throws `ApiError(400)` instead of plain `Error`.
 
 3. **OpenAI model is hardcoded** to `"gpt-4o-transcribe"`. Not configurable. This is fine for now but worth noting if model selection becomes a concern.
 
@@ -64,4 +64,4 @@ No queries.
 
 ## Review Comments
 
-<!-- Flag 2 is a real bug — the missing-file error returns 500 instead of 400. Consider fixing. -->
+Flag 2 fixed (2026-03-28): changed `throw new Error(...)` to `throw new ApiError(400, "invalid_request", "Audio file is required")` so missing file now returns 400 instead of 500.

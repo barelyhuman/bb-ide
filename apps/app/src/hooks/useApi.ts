@@ -550,26 +550,26 @@ export function useThreadDefaultExecutionOptions(
   });
 }
 
-export function useThreadManagerWorkspaceFiles(
+export function useThreadWorkspaceFiles(
   id: string,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<{ files: api.ManagerWorkspaceFileEntry[] }>({
-    queryKey: ["threadManagerWorkspaceFiles", id],
-    queryFn: () => api.listThreadManagerWorkspaceFiles(id),
+  return useQuery<{ files: api.WorkspaceFileEntry[] }>({
+    queryKey: ["threadWorkspaceFiles", id],
+    queryFn: () => api.listThreadWorkspaceFiles(id),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useThreadManagerWorkspaceFile(
+export function useThreadWorkspaceFile(
   id: string,
   path: string | null,
   options?: { enabled?: boolean },
 ) {
   return useQuery<{ path: string; content: string }>({
-    queryKey: ["threadManagerWorkspaceFile", id, path],
-    queryFn: () => api.getThreadManagerWorkspaceFile(id, path ?? ""),
+    queryKey: ["threadWorkspaceFile", id, path],
+    queryFn: () => api.getThreadWorkspaceFile(id, path ?? ""),
     enabled: (options?.enabled ?? true) && !!id && !!path,
     refetchOnWindowFocus: false,
   });
@@ -615,7 +615,7 @@ export function useThreadTimeline(
     enabled?: boolean;
     limit?: number;
     refetchOnMount?: boolean | "always";
-    includeManagerWorkspaceViewer?: boolean;
+    includeWorkspaceViewer?: boolean;
   },
 ) {
   return useQuery<ThreadTimelineResponse>({
@@ -623,14 +623,14 @@ export function useThreadTimeline(
       "threadTimeline",
       id,
       options?.limit ?? null,
-      options?.includeManagerWorkspaceViewer ?? false,
+      options?.includeWorkspaceViewer ?? false,
     ],
     queryFn: () =>
       api.getThreadTimeline(
         id,
         options?.limit,
         false,
-        options?.includeManagerWorkspaceViewer ?? false,
+        options?.includeWorkspaceViewer ?? false,
       ),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
@@ -646,20 +646,20 @@ export function useThreadTimelineToolDetails() {
       turnId,
       sourceSeqStart,
       sourceSeqEnd,
-      includeManagerWorkspaceViewer,
+      includeWorkspaceViewer,
     }: {
       id: string;
       turnId: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
-      includeManagerWorkspaceViewer?: boolean;
+      includeWorkspaceViewer?: boolean;
     }): Promise<TimelineToolDetailsResponse> =>
       api.getThreadTimelineToolDetails(
         id,
         turnId,
         sourceSeqStart,
         sourceSeqEnd,
-        includeManagerWorkspaceViewer ?? false,
+        includeWorkspaceViewer ?? false,
       ),
   });
 }

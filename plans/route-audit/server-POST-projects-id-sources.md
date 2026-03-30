@@ -23,9 +23,8 @@
 3. `createProjectSource(db, hub, { projectId, hostId, type, path, repoUrl })` -- sync.
    - SELECT existing sources for `projectId` (count check for default logic).
    - If this is the first source or `isDefault` was set, UPDATE all existing sources to `isDefault = false`.
-   - INSERT new source row. Note: `isDefault` is not passed from the route, so it defaults to `undefined`. The DB function sets `isDefault = true` only if there are zero existing sources.
+   - INSERT new source row (RETURNING). Note: `isDefault` is not passed from the route, so it defaults to `undefined`. The DB function sets `isDefault = true` only if there are zero existing sources.
    - Notifies project `["project-sources-changed"]`.
-   - SELECT back the inserted row.
 
 > **-> HTTP 201 returns here.** Fully synchronous.
 
@@ -37,10 +36,11 @@
 | 2   | SELECT host by PK               | `hosts`                | PK                                     | requireHostWithStatus                 |
 | 3   | SELECT session by hostId+status | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | active session check                  |
 | 4   | SELECT sources for project      | `project_sources`      | `project_sources_project_idx`          | default-source logic                  |
-| 5   | INSERT project_source           | `project_sources`      | --                                     | may fail on unique(projectId, hostId) |
-| 6   | SELECT project_source by PK     | `project_sources`      | PK                                     | re-read after insert                  |
+| 5   | INSERT project_source (RETURNING) | `project_sources`    | --                                     | may fail on unique(projectId, hostId) |
 
-**Total: 6 queries. No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 5 queries. No N+1.**
 
 ## Code Reuse
 

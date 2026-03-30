@@ -66,4 +66,4 @@ No CLI caller.
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+Reviewed 2026-03-28: This route already uses `ApiError(400, "invalid_request", "Attachment file is required")` for missing file. No fix needed.

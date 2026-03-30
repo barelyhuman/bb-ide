@@ -57,16 +57,17 @@ export async function ensureThreadRuntime(
   command: CommandOf<"turn.run"> | CommandOf<"turn.steer">,
   options: CommandDispatchOptions,
 ): Promise<RuntimeEntry> {
+  const { resumeContext } = command;
   let entry = options.runtimeManager.get(command.environmentId);
   if (!entry) {
     entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
-      workspacePath: command.workspacePath,
+      workspacePath: resumeContext.workspacePath,
     });
   }
 
   if (!options.runtimeManager.hasThread(command.environmentId, command.threadId)) {
-    if (!command.providerThreadId) {
+    if (!resumeContext.providerThreadId) {
       throw new CommandDispatchError(
         "unknown_thread_runtime",
         `No provider thread id available for thread ${command.threadId}`,
@@ -74,13 +75,13 @@ export async function ensureThreadRuntime(
     }
     const result = await entry.runtime.resumeThread({
       threadId: command.threadId,
-      projectId: command.projectId,
-      providerThreadId: command.providerThreadId,
-      providerId: command.providerId,
+      projectId: resumeContext.projectId,
+      providerThreadId: resumeContext.providerThreadId,
+      providerId: resumeContext.providerId,
       options: command.options,
-      instructions: command.instructions,
-      resumePath: command.workspacePath,
-      dynamicTools: command.dynamicTools,
+      instructions: resumeContext.instructions,
+      resumePath: resumeContext.workspacePath,
+      dynamicTools: resumeContext.dynamicTools,
     });
     options.runtimeManager.markThreadActive(
       command.environmentId,

@@ -8,13 +8,13 @@
 
 > **Updated 2026-03-29:** Schema changed from `{ name, hostId, sourcePath }` to `{ name, source: { type, hostId, path|repoUrl } }` — discriminated union matching `createProjectSourceRequestSchema`.
 
-| Field                | Required                    | Notes                                                                                                  |
-| -------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `name`               | Yes                         | Passed to `createProject` as the project name.                                                         |
-| `source.type`        | Yes                         | Discriminated union: `"local_path"` or `"github_repo"`.                                                |
-| `source.hostId`      | Yes                         | Validated via `requireHostWithStatus`. Used as the host for the initial source.                         |
-| `source.path`        | Yes (when type=local_path)  | Stored as `path` on the auto-created project source.                                                   |
-| `source.repoUrl`     | Yes (when type=github_repo) | Stored as `repoUrl` on the auto-created project source.                                                |
+| Field            | Required                    | Notes                                                                           |
+| ---------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `name`           | Yes                         | Passed to `createProject` as the project name.                                  |
+| `source.type`    | Yes                         | Discriminated union: `"local_path"` or `"github_repo"`.                         |
+| `source.hostId`  | Yes                         | Validated via `requireHostWithStatus`. Used as the host for the initial source. |
+| `source.path`    | Yes (when type=local_path)  | Stored as `path` on the auto-created project source.                            |
+| `source.repoUrl` | Yes (when type=github_repo) | Stored as `repoUrl` on the auto-created project source.                         |
 
 **All fields consumed. No dead params.**
 
@@ -23,15 +23,13 @@
 1. `requireHostWithStatus(db, payload.hostId)` -- sync. Looks up host row + checks for an active daemon session. Throws 404 if host missing.
 2. `createProject(db, hub, { name })` -- sync.
    - Generates ID via `createProjectId()`.
-   - INSERT into `projects`.
+   - INSERT into `projects` (RETURNING).
    - Notifies project `["project-created"]`.
-   - SELECT back the inserted row.
 3. `createProjectSource(db, hub, { projectId, hostId, type: "local_path", path, isDefault: true })` -- sync.
    - SELECT existing sources for the project (always 0 here).
    - Since `isDefault: true` and first source, sets `isDefault = true`.
-   - INSERT into `project_sources`.
+   - INSERT into `project_sources` (RETURNING).
    - Notifies project `["project-sources-changed"]`.
-   - SELECT back the inserted row.
 4. `buildProjectResponses(deps, project.id)` -- sync.
    - `requireProject(db, project.id)` -- SELECT from `projects` by PK.
    - SELECT from `project_sources` WHERE `projectId IN (...)`.
@@ -45,15 +43,15 @@
 | --- | -------------------------------------- | ---------------------- | -------------------------------------- | --------------------------------------- |
 | 1   | SELECT host by PK                      | `hosts`                | PK                                     | requireHostWithStatus                   |
 | 2   | SELECT session by hostId+status        | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | active session check                    |
-| 3   | INSERT project                         | `projects`             | --                                     |                                         |
-| 4   | SELECT project by PK                   | `projects`             | PK                                     | re-read after insert                    |
-| 5   | SELECT sources for project             | `project_sources`      | `project_sources_project_idx`          | check existing sources count            |
-| 6   | INSERT project_source                  | `project_sources`      | --                                     |                                         |
-| 7   | SELECT project_source by PK            | `project_sources`      | PK                                     | re-read after insert                    |
-| 8   | SELECT project by PK                   | `projects`             | PK                                     | buildProjectResponses -> requireProject |
-| 9   | SELECT sources WHERE projectId IN(...) | `project_sources`      | `project_sources_project_idx`          | buildProjectResponses                   |
+| 3   | INSERT project (RETURNING)             | `projects`             | --                                     |                                         |
+| 4   | SELECT sources for project             | `project_sources`      | `project_sources_project_idx`          | check existing sources count            |
+| 5   | INSERT project_source (RETURNING)      | `project_sources`      | --                                     |                                         |
+| 6   | SELECT project by PK                   | `projects`             | PK                                     | buildProjectResponses -> requireProject |
+| 7   | SELECT sources WHERE projectId IN(...) | `project_sources`      | `project_sources_project_idx`          | buildProjectResponses                   |
 
-**Total: 9 queries. No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 7 queries. No N+1.**
 
 ## Code Reuse
 
@@ -69,8 +67,8 @@
 > **Updated 2026-03-29:** Schema changed to discriminated union. Notification fixed — `createProject` now notifies `"project-created"` instead of `["environment-created"]`. `createProjectSource` notifies `"project-sources-changed"`.
 
 1. ~~`createProject` notifies `["environment-created"]` which is misleading -- no environment is created here.~~ **Fixed** — now notifies `"project-created"`.
-2. The route creates the project and source in two separate statements without an explicit transaction. If the source INSERT fails (e.g., unique constraint on `projectId+hostId`), the project row persists orphaned. Low risk in practice (first source) but worth noting.
-3. 9 queries for a single create is somewhat high for simple CRUD. Multiple re-reads after insert could be consolidated.
+2. ~~The route creates the project and source in two separate statements without an explicit transaction. If the source INSERT fails (e.g., unique constraint on `projectId+hostId`), the project row persists orphaned. Low risk in practice (first source) but worth noting.~~ **Fixed** — source INSERT is wrapped in try/catch; on failure, `deleteProject` cleans up the project row before re-throwing.
+3. ~~9 queries for a single create is somewhat high for simple CRUD. Multiple re-reads after insert could be consolidated.~~ **Fixed** — DB functions now use RETURNING; down to 7 queries.
 
 ## Usages
 
@@ -92,14 +90,4 @@
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
 
-1. Can we make this route match the schema for the discriminated union for project sources (re: repo_url vs local_path)
-
-> Done — schema changed from `{ name, hostId, sourcePath }` to `{ name, source: { type, hostId, path|repoUrl } }`, using the same discriminated union as `createProjectSourceRequestSchema`.
-
-2. Can you investigate the notification mismatch? that seems wrong!
-
-> Done — `createProject` now notifies `"project-created"` (new project change kind). The old `["environment-created"]` was a leftover from before the notification system was restructured.
-
-3. agreed. what can we cut?
-
-> Not yet addressed — the redundant re-reads remain. This is a minor optimization opportunity for a future pass.
+Can we address flag 2 and 3 too?

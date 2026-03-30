@@ -110,6 +110,8 @@
 
 ---
 
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
 ## Review Comments
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->

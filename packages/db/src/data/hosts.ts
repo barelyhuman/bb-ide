@@ -23,7 +23,7 @@ export function upsertHost(
   const existing = db.select().from(hosts).where(eq(hosts.id, id)).get();
 
   if (existing) {
-    db.update(hosts)
+    return db.update(hosts)
       .set({
         name: input.name,
         type: input.type,
@@ -33,9 +33,10 @@ export function upsertHost(
         updatedAt: now,
       })
       .where(eq(hosts.id, id))
-      .run();
+      .returning()
+      .get()!;
   } else {
-    db.insert(hosts)
+    const row = db.insert(hosts)
       .values({
         id,
         name: input.name,
@@ -46,11 +47,11 @@ export function upsertHost(
         createdAt: now,
         updatedAt: now,
       })
-      .run();
+      .returning()
+      .get();
     notifier.notifyHost(["host-connected"]);
+    return row;
   }
-
-  return db.select().from(hosts).where(eq(hosts.id, id)).get()!;
 }
 
 export function getHost(db: DbConnection, id: string) {

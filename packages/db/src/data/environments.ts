@@ -28,7 +28,7 @@ export function createEnvironment(
 ) {
   const now = Date.now();
   const id = createEnvironmentId();
-  db.insert(environments)
+  const row = db.insert(environments)
     .values({
       id,
       projectId: input.projectId,
@@ -44,13 +44,10 @@ export function createEnvironment(
       createdAt: now,
       updatedAt: now,
     })
-    .run();
+    .returning()
+    .get();
   notifier.notifyEnvironment(id, ["environment-created"]);
-  return db
-    .select()
-    .from(environments)
-    .where(eq(environments.id, id))
-    .get()!;
+  return row;
 }
 
 export function getEnvironment(db: DbConnection, id: string) {
@@ -107,14 +104,10 @@ export function updateEnvironment(
   if (!existing) return null;
 
   const now = Date.now();
-  db.update(environments)
+  const updated = db.update(environments)
     .set({ ...input, updatedAt: now })
     .where(eq(environments.id, id))
-    .run();
-  const updated = db
-    .select()
-    .from(environments)
-    .where(eq(environments.id, id))
+    .returning()
     .get();
 
   if (updated && input.status && input.status !== existing.status) {

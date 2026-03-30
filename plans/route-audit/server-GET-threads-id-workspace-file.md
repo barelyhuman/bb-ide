@@ -42,10 +42,11 @@
 | 2   | `SELECT * FROM environments WHERE id = ?`                                                          | environments         | PK                                     | `requireEnvironment`          |
 | 3   | `SELECT * FROM host_daemon_sessions WHERE hostId = ? AND status = 'active' AND leaseExpiresAt > ?` | host_daemon_sessions | No dedicated index                     | `requireConnectedHostSession` |
 | 4   | `SELECT MAX(cursor) FROM host_daemon_commands WHERE hostId = ?`                                    | host_daemon_commands | `host_daemon_commands_host_cursor_idx` | Inside transaction            |
-| 5   | `INSERT INTO host_daemon_commands ...`                                                             | host_daemon_commands | --                                     | Insert                        |
-| 6   | `SELECT * FROM host_daemon_commands WHERE id = ?`                                                  | host_daemon_commands | PK                                     | Re-read after insert          |
+| 5   | `INSERT INTO host_daemon_commands ...` (RETURNING)                                                 | host_daemon_commands | --                                     | Insert                        |
 
-**Total: 6 queries (3 reads + 1 aggregate + 1 insert + 1 re-read). No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 5 queries (3 reads + 1 aggregate + 1 insert). No N+1.**
 
 ## Code Reuse
 
@@ -66,10 +67,10 @@
 
 | Caller                                             | Location                                               | Purpose                                                                                                                 |
 | -------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `getThreadManagerWorkspaceFile` (API client)       | `apps/app/src/lib/api.ts:351`                          | Fetches a single workspace file's content from the server                                                               |
-| `useThreadManagerWorkspaceFile` (React query hook) | `apps/app/src/hooks/useApi.ts:565`                     | Wraps the API call in a `useQuery` hook                                                                                 |
-| `useManagerWorkspaceViewer`                        | `apps/app/src/views/useManagerWorkspaceViewer.ts:47`   | Calls `useThreadManagerWorkspaceFile` to load the selected file content                                                 |
-| `ThreadDetailView`                                 | `apps/app/src/views/ThreadDetailView.tsx:218`          | Calls `useManagerWorkspaceViewer` which fetches selected workspace file for manager threads                             |
+| `getThreadWorkspaceFile` (API client)       | `apps/app/src/lib/api.ts:351`                          | Fetches a single workspace file's content from the server                                                               |
+| `useThreadWorkspaceFile` (React query hook) | `apps/app/src/hooks/useApi.ts:565`                     | Wraps the API call in a `useQuery` hook                                                                                 |
+| `useWorkspaceViewer`                              | `apps/app/src/views/useWorkspaceViewer.ts:47`          | Calls `useThreadWorkspaceFile` to load the selected file content                                                        |
+| `ThreadDetailView`                                 | `apps/app/src/views/ThreadDetailView.tsx:218`          | Calls `useWorkspaceViewer` which fetches selected workspace file for manager threads                                    |
 | Server route test                                  | `apps/server/test/public-thread-data.test.ts:723`      | Direct HTTP request to `/api/v1/threads/:id/workspace/file?path=...`                                                    |
 | Contract route definition                          | `packages/server-contract/src/public-api.ts:260`       | Typed route definition for `/threads/:id/workspace/file`                                                                |
 | `thread-runtime-config` (server-side internal)     | `apps/server/src/services/thread-runtime-config.ts:99` | Uses the same `workspace.read_file` daemon command to read config files (not via this HTTP route, but same daemon path) |
@@ -78,12 +79,4 @@
 
 ## Review Comments
 
-<!-- Flag #2 is security-relevant -- verify the daemon validates that the resolved path stays within the workspace root. -->
-
-1. please use the shared version
-
-> Done — switched to the shared `requireReadyEnvironment` from `entity-lookup.ts`.
-
-2. we should do a path traversal guard regardless (in both places)
-
-> Done — path traversal guard added at the server route level. The daemon already had its own guard; now both layers validate.
+<!-- Rename complete: hooks and query keys updated to remove "Manager" prefix. -->

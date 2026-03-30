@@ -14,14 +14,15 @@
 
 ## Implementation Trace
 
-1. (sync) `requireThread(deps.db, id)` -- fetches thread. 404 if missing.
-2. (sync) `deleteThread(deps.db, deps.hub, thread.id)` from `@bb/db`:
+1. (sync) `requireThreadEnvironment(deps.db, id)` -- fetches thread and environment. 404 if missing.
+2. If `thread.status === "active"`, queues `thread.stop` via `queueCommandAndWait` to auto-stop the thread before deletion.
+3. (sync) `deleteThread(deps.db, deps.hub, thread.id)` from `@bb/db`:
    - Re-selects the thread to confirm it exists (defensive; could race with concurrent delete).
    - If not found, returns `false` (but route doesn't check this -- the prior `requireThread` already confirmed existence).
    - `DELETE FROM threads WHERE id = ?`.
    - Cascading FK deletes: `events` rows for this thread are cascade-deleted by the DB.
    - Fires `notifyThread(id, ["thread-deleted"])` and `notifyProject(projectId, ["threads-changed"])`.
-3. (async) `await maybeCleanupEnvironment(deps, thread.environmentId)`:
+4. (async) `await maybeCleanupEnvironment(deps, thread.environmentId)`:
    - If `environmentId` is null/undefined, returns immediately.
    - Fetches environment via `getEnvironment`.
    - Skips if environment is not `managed`, or already `destroying`/`destroyed`.
@@ -34,7 +35,7 @@
      - If environment has a `path`, queues `environment.destroy` command to daemon:
        - `getActiveSession` for host (nullable, fire-and-forget).
        - Inserts into `host_daemon_commands`.
-4. (sync) Returns `{ ok: true }` as JSON 200.
+5. (sync) Returns `{ ok: true }` as JSON 200.
 
 > **-> HTTP 200 returns here.** Environment destroy command (if queued) executes asynchronously on the daemon.
 
@@ -68,7 +69,7 @@
 1. **`deleteThread` return value is ignored.** The route calls `requireThread` first, then `deleteThread`. If a concurrent request deletes the thread between the two calls, `deleteThread` returns `false` but the route still proceeds to `maybeCleanupEnvironment` and returns `{ ok: true }`. This is benign (idempotent-ish) but technically the response claims success for a no-op delete.
 2. **Redundant SELECT in `deleteThread`.** `deleteThread` re-reads the thread (to get `projectId` for the notification), but the route already has the full thread object from `requireThread`. The `projectId` could be passed in to avoid the extra read. Minor inefficiency.
 3. **Cascade deletes are DB-level.** The `events` table has `onDelete: "cascade"` on `threadId`, so event rows are deleted by SQLite automatically. The `queuedThreadMessages` table also cascades. No explicit cleanup needed, but worth noting these are invisible side-effects of the DELETE.
-4. **No thread-status guard.** An `active` thread (agent currently running) can be deleted. The running agent session on the daemon will encounter a missing thread on its next event write. Consider requiring the thread be stopped first, or queuing a `thread.stop` before delete.
+4. ~~**No thread-status guard.**~~ **Fixed.** The delete route now checks `thread.status === "active"` and queues a `thread.stop` command via `queueCommandAndWait` before proceeding with deletion (same pattern as archive).
 
 ## Usages
 
@@ -87,6 +88,8 @@
 | DB unit test | `packages/db/test/data/threads.test.ts:99,101` | Tests `deleteThread` DB function (success + idempotent re-delete) |
 
 ---
+
+> **Updated 2026-03-29:** Route now uses `requireThreadEnvironment` and auto-stops active threads before deletion. DB functions now use RETURNING.
 
 ## Review Comments
 

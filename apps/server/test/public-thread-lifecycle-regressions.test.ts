@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { hostDaemonCommands, listThreads } from "@bb/db";
+import { hostDaemonCommands, listThreads, transitionThreadStatus } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   waitForQueuedCommand,
@@ -202,6 +202,10 @@ describe("public thread lifecycle regressions", () => {
       ) {
         throw new Error("Thread creation response shape was invalid");
       }
+
+      // Transition threads to idle so DELETE doesn't try to auto-stop (no daemon in unit tests)
+      transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id as string, "idle");
+      transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id as string, "idle");
 
       const firstDelete = await harness.app.request(
         `/api/v1/threads/${firstThreadBody.id}`,

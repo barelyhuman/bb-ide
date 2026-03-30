@@ -71,6 +71,10 @@ const hostDaemonExistingThreadRuntimeContextSchema =
     providerThreadId: z.string().min(1),
   });
 
+const turnResumeContextSchema = hostDaemonExistingThreadRuntimeContextSchema.omit({
+  options: true,
+});
+
 const hostDaemonEnvironmentTargetSchema = z.object({
   environmentId: z.string().min(1),
 });
@@ -95,21 +99,21 @@ export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.merge(
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
-export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonExistingThreadRuntimeContextSchema,
-).extend({
+export const turnRunCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("turn.run"),
   eventSequence: z.number().int().nonnegative(),
   input: z.array(promptInputSchema).min(1),
+  options: hostDaemonExecutionOptionsSchema,
+  resumeContext: turnResumeContextSchema,
 });
 
-export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonExistingThreadRuntimeContextSchema,
-).extend({
+export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("turn.steer"),
   eventSequence: z.number().int().nonnegative(),
   expectedTurnId: z.string().min(1),
   input: z.array(promptInputSchema).min(1),
+  options: hostDaemonExecutionOptionsSchema,
+  resumeContext: turnResumeContextSchema,
 });
 
 export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({

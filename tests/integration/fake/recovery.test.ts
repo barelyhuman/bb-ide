@@ -336,20 +336,22 @@ describe.sequential("fake provider recovery integration", () => {
         type: "turn.run",
         environmentId: environment.id,
         threadId: thread.id,
-        workspacePath: environment.path,
-        projectId: thread.projectId,
-        providerId: thread.providerId,
         options: {
           model: `${thread.providerId}-model`,
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           serviceTier: "flex",
         },
-        instructions: `Recovered queued work for ${projectName} in ${projectRootPath}`,
-        dynamicTools: [],
-        providerThreadId,
         eventSequence: eventsBefore.length + 1,
         input: [{ type: "text", text: "queued while offline" }],
+        resumeContext: {
+          workspacePath: environment.path,
+          projectId: thread.projectId,
+          providerId: thread.providerId,
+          providerThreadId,
+          instructions: `Recovered queued work for ${projectName} in ${projectRootPath}`,
+          dynamicTools: [],
+        },
       });
       queueCommand(harness.db, harness.hub, {
         hostId: harness.hostId,

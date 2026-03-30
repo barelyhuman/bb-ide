@@ -189,6 +189,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
 
   post("/threads/:id/stop", async (context) => {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    if (thread.status !== "active") {
+      throw new ApiError(409, "invalid_request", "Thread is not active");
+    }
     await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -204,6 +207,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   post("/threads/:id/archive", archiveThreadRequestSchema, async (context, payload) => {
     const force = payload.force === true;
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    if (thread.archivedAt !== null) {
+      throw new ApiError(409, "invalid_request", "Thread is already archived");
+    }
     if (!force && environment.status === "ready" && environment.path) {
       const mergeBaseBranch = thread.mergeBaseBranch ?? environment.defaultBranch;
       if (!mergeBaseBranch && environment.isGitRepo) {

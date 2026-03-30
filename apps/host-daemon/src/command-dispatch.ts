@@ -53,7 +53,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         threadId: command.threadId,
         input: command.input,
         options: command.options,
-        instructions: command.instructions,
+        instructions: command.resumeContext.instructions,
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
@@ -65,7 +65,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         expectedTurnId: command.expectedTurnId,
         input: command.input,
         options: command.options,
-        instructions: command.instructions,
+        instructions: command.resumeContext.instructions,
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }

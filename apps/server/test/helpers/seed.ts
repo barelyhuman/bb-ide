@@ -3,7 +3,6 @@ import {
   createDraft,
   insertEvents,
   createProject,
-  createProjectSource,
   createThread,
   openSession,
   upsertHost,
@@ -50,15 +49,13 @@ export function seedProjectWithSource(
   deps: Pick<AppDeps, "db" | "hub">,
   args: { hostId: string; name?: string; path?: string },
 ) {
-  const project = createProject(deps.db, deps.hub, {
+  const { project, source } = createProject(deps.db, deps.hub, {
     name: args.name ?? "Test Project",
-  });
-  const source = createProjectSource(deps.db, deps.hub, {
-    projectId: project.id,
-    hostId: args.hostId,
-    type: "local_path",
-    path: args.path ?? "/tmp/test-project",
-    isDefault: true,
+    source: {
+      type: "local_path",
+      hostId: args.hostId,
+      path: args.path ?? "/tmp/test-project",
+    },
   });
   return { project, source };
 }

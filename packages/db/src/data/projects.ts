@@ -1,11 +1,18 @@
 import { eq } from "drizzle-orm";
+import type { ProjectSourceType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { projects } from "../schema.js";
-import { createProjectId } from "../ids.js";
+import { projects, projectSources } from "../schema.js";
+import { createProjectId, createProjectSourceId } from "../ids.js";
 
 export interface CreateProjectInput {
   name: string;
+  source: {
+    type: ProjectSourceType;
+    hostId: string;
+    path?: string | null;
+    repoUrl?: string | null;
+  };
 }
 
 export function createProject(
@@ -14,17 +21,41 @@ export function createProject(
   input: CreateProjectInput,
 ) {
   const now = Date.now();
-  const id = createProjectId();
-  db.insert(projects)
-    .values({
-      id,
-      name: input.name,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
-  notifier.notifyProject(id, ["project-created"]);
-  return db.select().from(projects).where(eq(projects.id, id)).get()!;
+  const projectId = createProjectId();
+  const sourceId = createProjectSourceId();
+
+  const { project, source } = db.transaction((tx) => {
+    const p = tx
+      .insert(projects)
+      .values({
+        id: projectId,
+        name: input.name,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    const s = tx
+      .insert(projectSources)
+      .values({
+        id: sourceId,
+        projectId,
+        type: input.source.type,
+        hostId: input.source.hostId,
+        path: input.source.path ?? null,
+        repoUrl: input.source.repoUrl ?? null,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+    return { project: p, source: s };
+  });
+
+  notifier.notifyProject(projectId, ["project-created"]);
+  notifier.notifyProject(projectId, ["project-sources-changed"]);
+  return { project, source };
 }
 
 export function getProject(db: DbConnection, id: string) {
@@ -46,11 +77,11 @@ export function updateProject(
   input: UpdateProjectInput,
 ) {
   const now = Date.now();
-  db.update(projects)
+  const updated = db.update(projects)
     .set({ ...input, updatedAt: now })
     .where(eq(projects.id, id))
-    .run();
-  const updated = db.select().from(projects).where(eq(projects.id, id)).get();
+    .returning()
+    .get();
   if (updated) {
     notifier.notifyProject(id, ["project-updated"]);
   }

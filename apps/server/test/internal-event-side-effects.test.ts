@@ -169,11 +169,13 @@ describe("internal event side effects", () => {
           command.type === "turn.run" && command.threadId === thread.id,
       );
       expect(queuedCommand.command).toMatchObject({
-        providerThreadId: "provider-auto-send",
         input: [{ type: "text", text: "Queued follow-up" }],
         options: {
           model: "gpt-5",
           serviceTier: "flex",
+        },
+        resumeContext: {
+          providerThreadId: "provider-auto-send",
         },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();

@@ -103,8 +103,13 @@ describe("public authorization regressions", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-managed-check" });
-      const project = createProject(harness.db, harness.hub, {
-        name: "Project Without Source",
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Project Without Local Source",
+        source: {
+          type: "github_repo",
+          hostId: host.id,
+          repoUrl: "https://github.com/test/repo",
+        },
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -128,7 +133,7 @@ describe("public authorization regressions", () => {
 
       expect(response.status).toBe(409);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
+        code: "unsupported_operation",
       });
       expect(
         harness.db

@@ -200,12 +200,22 @@ describe("CommandRouter", () => {
           type: "turn.run",
           environmentId: "env-1",
           threadId: "thread-a",
-          ...createStandardRuntimeCommandContext({
-            workspacePath: "/tmp/env-1",
-            providerThreadId: "provider-a",
-          }),
           eventSequence: 1,
           input: [{ type: "text", text: "A" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "flex" as const,
+            reasoningLevel: "medium" as const,
+            sandboxMode: "danger-full-access" as const,
+          },
+          resumeContext: {
+            workspacePath: "/tmp/env-1",
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "provider-a",
+            instructions: "Be a helpful coding agent.",
+            dynamicTools: [],
+          },
         },
       },
       {
@@ -215,12 +225,22 @@ describe("CommandRouter", () => {
           type: "turn.run",
           environmentId: "env-1",
           threadId: "thread-b",
-          ...createStandardRuntimeCommandContext({
-            workspacePath: "/tmp/env-1",
-            providerThreadId: "provider-b",
-          }),
           eventSequence: 2,
           input: [{ type: "text", text: "B" }],
+          options: {
+            model: "gpt-5",
+            serviceTier: "flex" as const,
+            reasoningLevel: "medium" as const,
+            sandboxMode: "danger-full-access" as const,
+          },
+          resumeContext: {
+            workspacePath: "/tmp/env-1",
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "provider-b",
+            instructions: "Be a helpful coding agent.",
+            dynamicTools: [],
+          },
         },
       },
     ]);

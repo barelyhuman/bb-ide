@@ -7,12 +7,12 @@
 
 ## Command Payload
 
-| Field               | Required | Notes                                                                                                  |
-| ------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
-| `environmentId`     | Yes      | Identifies the runtime entry.                                                                          |
-| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload.                                                       |
-| `workspacePath`     | Yes      | Fallback for lazy provisioning.                                                                        |
-| `path`              | Yes      | Relative file path within the workspace. Resolved against workspace root. Path traversal is validated. |
+| Field                   | Required | Notes                                                                                                  |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `environmentId`         | Yes      | Identifies the runtime entry.                                                                          |
+| ~~`environmentStatus`~~ | ~~Yes~~  | Removed — no longer part of the command payload.                                                       |
+| `workspacePath`         | Yes      | Fallback for lazy provisioning.                                                                        |
+| `path`                  | Yes      | Relative file path within the workspace. Resolved against workspace root. Path traversal is validated. |
 
 **All 4 fields consumed. No dead params.**
 
@@ -53,18 +53,6 @@
 
 ## Review Comments
 
-1. lets handle the "attempting to read a directory case" and return a helpful error
+| `workspacePath` | Yes | Fallback for lazy provisioning. |
 
-> Done — directory guard added. Attempting to read a directory now returns a `CommandDispatchError` with a helpful message.
-
-2. lets add a reasonable hardcoded max file size limit for now. 10MB seems reasonable?
-
-> Done — 10MB hardcoded limit added. Files exceeding the limit return an error.
-
-3. how would we fix 3? would we also send back a content type?
-
-> Done — `mimeType` field added to the result schema, allowing callers to detect binary content and handle it appropriately.
-
-4. what's the point of the environmentStatus payload attribute?
-
-> Removed — `environmentStatus` has been stripped from all workspace command payloads.
+what does lazy provisioning mean?

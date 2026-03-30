@@ -523,16 +523,18 @@ describe("public thread routes", () => {
       );
       expect(runCommand.command).toMatchObject({
         environmentId: environment.id,
-        workspacePath: environment.path,
-        projectId: project.id,
-        providerId: idleThread.providerId,
-        providerThreadId: "provider-idle",
         options: {
           model: "gpt-5",
           serviceTier: "flex",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",
+        },
+        resumeContext: {
+          workspacePath: environment.path,
+          projectId: project.id,
+          providerId: idleThread.providerId,
+          providerThreadId: "provider-idle",
         },
       });
       expect(getThread(harness.db, idleThread.id)?.status).toBe("active");
@@ -559,16 +561,18 @@ describe("public thread routes", () => {
       expect(steerCommand.command).toMatchObject({
         expectedTurnId: "turn-1",
         environmentId: environment.id,
-        workspacePath: environment.path,
-        projectId: project.id,
-        providerId: activeThread.providerId,
-        providerThreadId: "provider-turn",
         options: {
           model: "gpt-5",
           serviceTier: "flex",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",
+        },
+        resumeContext: {
+          workspacePath: environment.path,
+          projectId: project.id,
+          providerId: activeThread.providerId,
+          providerThreadId: "provider-turn",
         },
       });
     } finally {
@@ -1132,10 +1136,12 @@ describe("public thread routes", () => {
       );
       expect(steerCommand.command).toMatchObject({
         expectedTurnId: "turn-draft-steer",
-        providerThreadId: "provider-draft-steer",
         input: [{ type: "text", text: "Queue a correction" }],
         options: {
           model: "gpt-5",
+        },
+        resumeContext: {
+          providerThreadId: "provider-draft-steer",
         },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();

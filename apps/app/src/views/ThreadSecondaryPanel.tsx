@@ -306,8 +306,8 @@ function GitDiffFileCard({
 export function ThreadSecondaryPanel({
   activePanel,
   metadataContent,
-  managerWorkspaceContent,
-  showManagerWorkspaceTab = false,
+  workspaceContent,
+  showWorkspaceTab = false,
   showGitDiffTab = true,
   onPanelChange,
   threadId,
@@ -345,8 +345,8 @@ export function ThreadSecondaryPanel({
 }: {
   activePanel: ThreadSecondaryPanelTab | null;
   metadataContent: ReactNode;
-  managerWorkspaceContent?: ReactNode;
-  showManagerWorkspaceTab?: boolean;
+  workspaceContent?: ReactNode;
+  showWorkspaceTab?: boolean;
   showGitDiffTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   threadId: string;
@@ -383,7 +383,7 @@ export function ThreadSecondaryPanel({
   onOpenFile?: (path: string) => void;
 }) {
   const isDiffPanelActive = activePanel === "git-diff";
-  const isManagerWorkspacePanelActive = activePanel === "manager-workspace";
+  const isWorkspacePanelActive = activePanel === "manager-workspace";
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
 
   return (
@@ -486,20 +486,20 @@ export function ThreadSecondaryPanel({
                     <FileDiffIcon className="size-3.5" />
                   </Button>
                 ) : null}
-                {showManagerWorkspaceTab ? (
+                {showWorkspaceTab ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className={cn(
                       "h-7 w-7 rounded-md p-0",
-                      isManagerWorkspacePanelActive
+                      isWorkspacePanelActive
                         ? "bg-accent/35 text-foreground hover:bg-accent/45"
                         : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
                     )}
                     onClick={() => onPanelChange("manager-workspace")}
                     aria-label="Show manager workspace panel"
-                    aria-pressed={isManagerWorkspacePanelActive}
+                    aria-pressed={isWorkspacePanelActive}
                     title="Workspace"
                   >
                     <FolderOpen className="size-3.5" />
@@ -672,8 +672,8 @@ export function ThreadSecondaryPanel({
                   No diff to display.
                 </p>
               )
-            ) : isManagerWorkspacePanelActive ? (
-              managerWorkspaceContent ?? (
+            ) : isWorkspacePanelActive ? (
+              workspaceContent ?? (
                 <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
                   No manager workspace available.
                 </p>

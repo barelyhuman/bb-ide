@@ -22,7 +22,7 @@ export function createDraft(
 ) {
   const now = Date.now();
   const id = createDraftId();
-  db.insert(queuedThreadMessages)
+  const row = db.insert(queuedThreadMessages)
     .values({
       id,
       threadId: input.threadId,
@@ -35,13 +35,10 @@ export function createDraft(
       createdAt: now,
       updatedAt: now,
     })
-    .run();
+    .returning()
+    .get();
   notifier.notifyThread(input.threadId, ["queue-changed"]);
-  return db
-    .select()
-    .from(queuedThreadMessages)
-    .where(eq(queuedThreadMessages.id, id))
-    .get()!;
+  return row;
 }
 
 export function getDraft(db: DbConnection, id: string) {
@@ -87,7 +84,7 @@ export function claimDraft(
     }
 
     const now = Date.now();
-    const result = tx
+    const updated = tx
       .update(queuedThreadMessages)
       .set({ claimedAt: now, updatedAt: now })
       .where(
@@ -96,16 +93,10 @@ export function claimDraft(
           isNull(queuedThreadMessages.claimedAt),
         ),
       )
-      .run();
-    if (result.changes === 0) {
-      return null;
-    }
+      .returning()
+      .get();
 
-    return tx
-      .select()
-      .from(queuedThreadMessages)
-      .where(eq(queuedThreadMessages.id, id))
-      .get() ?? null;
+    return updated ?? null;
   }, { behavior: "immediate" });
 
   if (claimedDraft) {
@@ -140,7 +131,7 @@ export function claimNextDraft(
     }
 
     const now = Date.now();
-    const result = tx
+    const updated = tx
       .update(queuedThreadMessages)
       .set({ claimedAt: now, updatedAt: now })
       .where(
@@ -149,16 +140,10 @@ export function claimNextDraft(
           isNull(queuedThreadMessages.claimedAt),
         ),
       )
-      .run();
-    if (result.changes === 0) {
-      return null;
-    }
+      .returning()
+      .get();
 
-    return tx
-      .select()
-      .from(queuedThreadMessages)
-      .where(eq(queuedThreadMessages.id, nextDraft.id))
-      .get() ?? null;
+    return updated ?? null;
   }, { behavior: "immediate" });
 
   if (claimedDraft) {

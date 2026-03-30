@@ -64,19 +64,21 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
-  get("/threads/:id/output", (context) =>
-    context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) }),
-  );
+  get("/threads/:id/output", (context) => {
+    requireThread(deps.db, context.req.param("id"));
+    return context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) });
+  });
 
-  get("/threads/:id/events", threadEventsQuerySchema, (context, query) =>
-    context.json(
+  get("/threads/:id/events", threadEventsQuerySchema, (context, query) => {
+    requireThread(deps.db, context.req.param("id"));
+    return context.json(
       listThreadEventRows(deps.db, {
         threadId: context.req.param("id"),
         afterSeq: parseOptionalInteger(query.afterSeq, "afterSeq"),
         limit: parseOptionalInteger(query.limit, "limit"),
       }),
-    ),
-  );
+    );
+  });
 
   get("/threads/:id/default-execution-options", (context) => {
     requireThread(deps.db, context.req.param("id"));

@@ -79,16 +79,14 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   post("/projects", createProjectRequestSchema, async (context, payload) => {
     const { source } = payload;
     requireHostWithStatus(deps.db, source.hostId);
-    const project = createProject(deps.db, deps.hub, {
+    const { project } = createProject(deps.db, deps.hub, {
       name: payload.name,
-    });
-    createProjectSource(deps.db, deps.hub, {
-      projectId: project.id,
-      hostId: source.hostId,
-      type: source.type,
-      path: source.type === "local_path" ? source.path : null,
-      repoUrl: source.type === "github_repo" ? source.repoUrl : null,
-      isDefault: true,
+      source: {
+        type: source.type,
+        hostId: source.hostId,
+        path: source.type === "local_path" ? source.path : null,
+        repoUrl: source.type === "github_repo" ? source.repoUrl : null,
+      },
     });
     return context.json(buildProjectResponses(deps, project.id)[0], 201);
   });

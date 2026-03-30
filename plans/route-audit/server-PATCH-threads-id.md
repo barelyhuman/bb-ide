@@ -23,8 +23,7 @@ Schema has a `.refine()`: at least one field must be provided. All three fields 
 3. (sync) `updateThread(deps.db, deps.hub, thread.id, payload)` from `@bb/db`:
    - Builds a `set` object from present `"in"` checks on input keys.
    - Always sets `updatedAt = Date.now()`.
-   - Runs `UPDATE threads SET ... WHERE id = ?`.
-   - Re-selects the row to return updated state.
+   - Runs `UPDATE threads SET ... WHERE id = ?` (RETURNING).
    - Fires `notifyThread` with change kinds: `"title-changed"` if title present, `"read-state-changed"` if lastReadAt present.
    - Returns updated thread or `null`.
 4. (sync) If `updateThread` returns `null`, throws 404 (race condition: deleted between steps 2-3).
@@ -44,13 +43,14 @@ Schema has a `.refine()`: at least one field must be provided. All three fields 
 | # | Query | Table | Index | Notes |
 |---|-------|-------|-------|-------|
 | 1 | `SELECT * FROM threads WHERE id = ?` | `threads` | PK | `requireThread` |
-| 2 | `UPDATE threads SET ... WHERE id = ?` | `threads` | PK | `updateThread` |
-| 3 | `SELECT * FROM threads WHERE id = ?` | `threads` | PK | Re-read after update (inside `updateThread`) |
-| 4 | `SELECT * FROM environments WHERE id = ?` | `environments` | PK | Only if title changed + environmentId present |
-| 5 | `SELECT * FROM host_daemon_sessions WHERE ...` | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | Only if rename needed; `getActiveSession` |
-| 6 | `INSERT INTO host_daemon_commands ...` | `host_daemon_commands` | -- | Only if rename needed |
+| 2 | `UPDATE threads SET ... WHERE id = ?` (RETURNING) | `threads` | PK | `updateThread` |
+| 3 | `SELECT * FROM environments WHERE id = ?` | `environments` | PK | Only if title changed + environmentId present |
+| 4 | `SELECT * FROM host_daemon_sessions WHERE ...` | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | Only if rename needed; `getActiveSession` |
+| 5 | `INSERT INTO host_daemon_commands ...` | `host_daemon_commands` | -- | Only if rename needed |
 
-**Total: 3 queries (base case), up to 6 queries (with rename). No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 2 queries (base case), up to 5 queries (with rename). No N+1.**
 
 ## Code Reuse
 
@@ -67,7 +67,7 @@ Schema has a `.refine()`: at least one field must be provided. All three fields 
 1. **`updateThread` accepts fields not exposed by the route contract.** The DB-level `UpdateThreadInput` includes `environmentId`, `lastReadAt`, and `titleFallback`, but the route contract only exposes `title`, `mergeBaseBranch`, and `parentThreadId`. This is fine -- the route acts as a filter -- but the mismatch means internal callers using `updateThread` directly can set fields that the public API cannot.
 2. **Rename fires even when setting title to a new non-null value on a ready environment, regardless of thread status.** If the thread is `active` (agent running), the rename command will still be queued. This is probably fine but worth noting.
 3. **`queueThreadRenameCommand` uses `getActiveSession` (nullable) not `requireConnectedHostSession`.** If no active session, `sessionId` is `null` in the command row. The command will sit in the queue until a session picks it up. This is intentional fire-and-forget behavior, unlike `thread.start` which requires a connected host.
-4. **Double-read pattern.** `requireThread` reads the thread, then `updateThread` does UPDATE + SELECT. The initial read is needed to compare the old title, so the double-read is justified.
+4. ~~**Double-read pattern.** `requireThread` reads the thread, then `updateThread` does UPDATE + SELECT. The initial read is needed to compare the old title, so the double-read is justified.~~ **Fixed** — `updateThread` now uses RETURNING, eliminating the post-update re-read. The initial `requireThread` read is still needed to compare the old title.
 
 ## Usages
 

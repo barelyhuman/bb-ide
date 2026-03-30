@@ -33,7 +33,7 @@ export function queueCommand(
 
     const cursor = (maxRow?.maxCursor ?? 0) + 1;
 
-    tx.insert(hostDaemonCommands)
+    const command = tx.insert(hostDaemonCommands)
       .values({
         id,
         hostId: input.hostId,
@@ -45,13 +45,8 @@ export function queueCommand(
         retryCount: 0,
         createdAt: now,
       })
-      .run();
-
-    const command = tx
-      .select()
-      .from(hostDaemonCommands)
-      .where(eq(hostDaemonCommands.id, id))
-      .get()!;
+      .returning()
+      .get();
 
     notifier.notifyCommand(input.hostId);
 
@@ -94,22 +89,13 @@ export function fetchCommands(
 
     if (commands.length === 0) return commands;
 
-    // Mark as fetched
-    const ids = commands.map((cmd) => cmd.id);
-    for (const id of ids) {
-      tx.update(hostDaemonCommands)
-        .set({ state: "fetched", fetchedAt: now })
-        .where(eq(hostDaemonCommands.id, id))
-        .run();
-    }
-
-    // Re-select to return up-to-date objects
-    return ids.map(
-      (id) =>
-        tx
-          .select()
-          .from(hostDaemonCommands)
-          .where(eq(hostDaemonCommands.id, id))
+    // Mark as fetched and return updated rows
+    return commands.map(
+      (cmd) =>
+        tx.update(hostDaemonCommands)
+          .set({ state: "fetched", fetchedAt: now })
+          .where(eq(hostDaemonCommands.id, cmd.id))
+          .returning()
           .get()!,
     );
   });
@@ -130,20 +116,13 @@ export function reportCommandResult(
   input: ReportCommandResultInput,
 ) {
   const now = Date.now();
-  db.update(hostDaemonCommands)
+  return db.update(hostDaemonCommands)
     .set({
       state: input.state,
       resultPayload: input.resultPayload ?? null,
       completedAt: now,
     })
     .where(eq(hostDaemonCommands.id, input.commandId))
-    .run();
-
-  return (
-    db
-      .select()
-      .from(hostDaemonCommands)
-      .where(eq(hostDaemonCommands.id, input.commandId))
-      .get() ?? null
-  );
+    .returning()
+    .get() ?? null;
 }

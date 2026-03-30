@@ -28,8 +28,8 @@
    - **`queueCommandAndWait(..., "thread.stop")`** (async, blocks up to 30s)
      - Same pattern as the stop route.
 4. **`archiveThread(db, hub, thread.id)`** (sync)
-   - UPDATE `threads` SET `archivedAt = now, updatedAt = now`.
-   - Re-selects. Notifies `["archived-changed"]`.
+   - UPDATE `threads` SET `archivedAt = now, updatedAt = now` (RETURNING).
+   - Notifies `["archived-changed"]`.
 5. **`maybeCleanupEnvironment(deps, thread.environmentId)`** (async)
    - `getEnvironment(db, environmentId)` -- re-reads environment.
    - Bails if not managed, or already destroying/destroyed.
@@ -53,15 +53,16 @@
 | 6 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `requireConnectedHostSession` (thread.stop cmd) |
 | 7 | INSERT command (txn) | `host_daemon_commands` | -- | `queueCommand` for thread.stop |
 | 8 | (wait for result) | -- | -- | hub.waitForCommandResult |
-| 9 | UPDATE thread (archive) | `threads` | PK | `archiveThread` |
-| 10 | SELECT thread by PK | `threads` | PK | Re-read after archive |
-| 11 | SELECT environment by PK | `environments` | PK | `maybeCleanupEnvironment` |
-| 12 | SELECT COUNT threads | `threads` | `threads_environment_idx` | Count live threads for env |
-| 13 | UPDATE environment | `environments` | PK | Set status "destroying" |
-| 14 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | For environment.destroy |
-| 15 | INSERT command (txn) | `host_daemon_commands` | -- | `queueCommand` for environment.destroy |
+| 9 | UPDATE thread (archive, RETURNING) | `threads` | PK | `archiveThread` |
+| 10 | SELECT environment by PK | `environments` | PK | `maybeCleanupEnvironment` |
+| 11 | SELECT COUNT threads | `threads` | `threads_environment_idx` | Count live threads for env |
+| 12 | UPDATE environment | `environments` | PK | Set status "destroying" |
+| 13 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | For environment.destroy |
+| 14 | INSERT command (txn) | `host_daemon_commands` | -- | `queueCommand` for environment.destroy |
 
-**Total: 5-15 queries depending on path (force=true + idle skips most). No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 4-14 queries depending on path (force=true + idle skips most). No N+1.**
 
 ## Code Reuse
 
@@ -75,7 +76,7 @@
 ## Flags
 
 1. **Two sequential blocking waits.** If `!force` and thread is active, this route blocks for `workspace.status` (up to 30s) then `thread.stop` (up to 30s) -- potentially 60s total. This is correct behavior but worth noting for timeout configuration.
-2. **No idempotency guard.** If the thread is already archived, the route still runs `archiveThread` (setting `archivedAt` again) and `maybeCleanupEnvironment`. Harmless but wasteful.
+2. ~~**No idempotency guard.**~~ **Fixed.** The route now checks `thread.archivedAt !== null` and returns 409 if the thread is already archived.
 3. **`maybeCleanupEnvironment` uses `threads_environment_idx` for the count query** -- `WHERE environmentId = ? AND archivedAt IS NULL`. The index is on `environmentId` only, so the `archivedAt IS NULL` filter is applied in-row. This is fine for a COUNT but not optimal if a single environment has many archived threads.
 4. **Race condition with concurrent archive.** If two archive requests arrive simultaneously for different threads on the same environment, both could see count > 0 (before the other's archive commits) and neither would trigger cleanup. This is a low-risk edge case; the environment would be orphaned until the next cleanup cycle (if one exists).
 

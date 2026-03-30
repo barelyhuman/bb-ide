@@ -36,7 +36,7 @@ export function createThread(
 ) {
   const now = Date.now();
   const id = createThreadId();
-  db.insert(threads)
+  const thread = db.insert(threads)
     .values({
       id,
       projectId: input.projectId,
@@ -51,8 +51,8 @@ export function createThread(
       createdAt: now,
       updatedAt: now,
     })
-    .run();
-  const thread = db.select().from(threads).where(eq(threads.id, id)).get()!;
+    .returning()
+    .get();
   notifier.notifyThread(id, ["thread-created"]);
   notifier.notifyProject(input.projectId, ["threads-changed"]);
   return thread;
@@ -125,11 +125,11 @@ export function updateThread(
   if ("mergeBaseBranch" in input) set.mergeBaseBranch = input.mergeBaseBranch;
   if ("parentThreadId" in input) set.parentThreadId = input.parentThreadId;
 
-  db.update(threads)
+  const updated = db.update(threads)
     .set(set)
     .where(eq(threads.id, id))
-    .run();
-  const updated = db.select().from(threads).where(eq(threads.id, id)).get();
+    .returning()
+    .get();
   if (updated && changes.length > 0) {
     notifier.notifyThread(id, changes);
   }
@@ -155,11 +155,11 @@ export function archiveThread(
   id: string,
 ) {
   const now = Date.now();
-  db.update(threads)
+  const updated = db.update(threads)
     .set({ archivedAt: now, updatedAt: now })
     .where(eq(threads.id, id))
-    .run();
-  const updated = db.select().from(threads).where(eq(threads.id, id)).get();
+    .returning()
+    .get();
   if (updated) {
     notifier.notifyThread(id, ["archived-changed"]);
   }
@@ -172,11 +172,11 @@ export function unarchiveThread(
   id: string,
 ) {
   const now = Date.now();
-  db.update(threads)
+  const updated = db.update(threads)
     .set({ archivedAt: null, updatedAt: now })
     .where(eq(threads.id, id))
-    .run();
-  const updated = db.select().from(threads).where(eq(threads.id, id)).get();
+    .returning()
+    .get();
   if (updated) {
     notifier.notifyThread(id, ["archived-changed"]);
   }
@@ -203,11 +203,12 @@ export function transitionThreadStatus(
   }
 
   const now = Date.now();
-  db.update(threads)
+  const updated = db.update(threads)
     .set({ status: newStatus, updatedAt: now })
     .where(eq(threads.id, id))
-    .run();
+    .returning()
+    .get();
 
   notifier.notifyThread(id, ["status-changed"]);
-  return db.select().from(threads).where(eq(threads.id, id)).get()!;
+  return updated!;
 }

@@ -42,7 +42,7 @@
 
 ## Flags
 
-1. **No `requireThread` guard.** Same as the `/output` route -- a request for a nonexistent thread returns `[]` instead of 404. Inconsistent with `/timeline` which calls `requireThread`.
+1. ~~**No `requireThread` guard.**~~ Fixed: added `requireThread(deps.db, context.req.param("id"))` at the start of the handler. Nonexistent threads now return 404 consistent with `/timeline` and other routes.
 2. **`limit` defaults to `Number.MAX_SAFE_INTEGER`.** Without a limit, all events for a thread are loaded into memory. Should have a sane server-side default cap.
 
 ## Usages

@@ -101,7 +101,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     const formData = await context.req.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      throw new Error("Audio file is required");
+      throw new ApiError(400, "invalid_request", "Audio file is required");
     }
     return context.json({
       text: await transcribeVoiceInput({

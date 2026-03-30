@@ -12,12 +12,15 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
+import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { maybeCleanupEnvironment } from "../../services/environment-cleanup.js";
 import {
   requireEnvironment,
   requireThread,
+  requireThreadEnvironment,
 } from "../../services/entity-lookup.js";
+import { queueCommandAndWait } from "../../services/command-wait.js";
 import { queueThreadRenameCommand } from "../../services/thread-commands.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
@@ -73,7 +76,18 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   del("/threads/:id", async (context) => {
-    const thread = requireThread(deps.db, context.req.param("id"));
+    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    if (thread.status === "active") {
+      await queueCommandAndWait(deps, {
+        hostId: environment.hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: {
+          type: "thread.stop",
+          environmentId: environment.id,
+          threadId: thread.id,
+        },
+      });
+    }
     deleteThread(deps.db, deps.hub, thread.id);
     await maybeCleanupEnvironment(deps, thread.environmentId);
     return context.json({ ok: true });

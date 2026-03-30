@@ -28,7 +28,7 @@
 4. **Handle result** (async) — `handleCommandResult(deps, payload)`:
    - a. **SELECT command again** (sync) — redundant SELECT by PK (same as step 3).
    - b. **Idempotency guard** — if command is already `success` or `error`, returns the existing row without changes.
-   - c. **Persist result** (sync) — `reportCommandResult(db, hub, { commandId, state, resultPayload })`: UPDATE command with `state`, `resultPayload`, `completedAt=Date.now()`. Re-SELECT by PK.
+   - c. **Persist result** (sync) — `reportCommandResult(db, hub, { commandId, state, resultPayload })`: UPDATE command with `state`, `resultPayload`, `completedAt=Date.now()` (RETURNING).
    - d. **Side effects** (async) — `handleCommandResultSideEffects(deps, report, updatedCommand)`:
      - **`environment.provision`** (async):
        - On success: `updateEnvironment` -> status="ready", set path/git props. For each bound thread: update `mergeBaseBranch` if needed, append provisioning event, transition to idle, look up the stored start event, queue `thread.start` command, transition to active.
@@ -49,12 +49,13 @@
 | 1 | SELECT session | `host_daemon_sessions` | PK | requireActiveSession |
 | 2 | SELECT command by PK | `host_daemon_commands` | PK | Ownership check (route) |
 | 3 | SELECT command by PK | `host_daemon_commands` | PK | Redundant re-select in handleCommandResult |
-| 4 | UPDATE command result | `host_daemon_commands` | PK | reportCommandResult |
-| 5 | SELECT command by PK | `host_daemon_commands` | PK | Re-select after update |
+| 4 | UPDATE command result (RETURNING) | `host_daemon_commands` | PK | reportCommandResult |
 | 6+ | Side-effect queries | varies | varies | See provision flow: getEnvironment, select bound threads, updateEnvironment, per-thread updates, event inserts, queueCommand |
 | N | advanceHostCursor transaction | `host_daemon_commands`, `host_daemon_cursors` | `host_daemon_commands_host_cursor_idx` | Cursor advancement |
 
-**Total: 5 base + variable side-effect queries. The command is selected 3 times (steps 2, 3, 5). Provision success path is the heaviest — per bound thread: ~5-8 queries.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 4 base + variable side-effect queries. The command is selected 2 times (steps 2, 3). Provision success path is the heaviest — per bound thread: ~5-8 queries.**
 
 ## Code Reuse
 
@@ -68,7 +69,7 @@
 ## Flags
 
 1. **`cursor` and `completedAt` are dead params**: The schema requires them, the daemon sends them, but neither is used. The server computes its own `completedAt` via `Date.now()` and uses `commandId` for lookup rather than cursor. These should either be consumed or removed from the contract.
-2. **Triple command SELECT**: The command is fetched by PK three times (route ownership check, handleCommandResult entry, reportCommandResult return). The first two could share the same row.
+2. ~~**Triple command SELECT**: The command is fetched by PK three times (route ownership check, handleCommandResult entry, reportCommandResult return). The first two could share the same row.~~ **Partially fixed** — `reportCommandResult` now uses RETURNING, eliminating one SELECT. The command is still fetched twice (route ownership check + handleCommandResult entry).
 3. **Provision side effects are synchronous w.r.t. HTTP response**: The entire provision flow (environment update, per-thread events, queueing thread.start) runs before returning 200. For environments with many threads, this could be slow.
 4. **`advanceHostCursor` scans all commands for the host**: The cursor advancement reads all commands for the host (`WHERE hostId = ?`) ordered by cursor. For long-lived hosts with many historical commands, this grows unbounded. Should filter to `cursor > currentCursor` or add a lower bound.
 5. **Error path in provision result**: When provision fails and thread is in `created` status, it first tries `created -> provisioning`, then immediately tries `provisioning -> error`. The intermediate transition to "provisioning" on failure seems semantically odd — the thread was never actually provisioning at that point.

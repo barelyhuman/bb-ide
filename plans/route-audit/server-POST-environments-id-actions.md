@@ -77,10 +77,10 @@
 
 | # | Query | Table | Index | Notes |
 |---|-------|-------|-------|-------|
-| 6 | `UPDATE threads SET archivedAt = ?, updatedAt = ?` + re-SELECT | `threads` | PK | `archiveThread` |
+| 6 | `UPDATE threads SET archivedAt = ?, updatedAt = ?` | `threads` | PK | `archiveThread` |
 | 7 | `SELECT * FROM environments WHERE id = ?` | `environments` | PK | `maybeCleanupEnvironment` re-fetches |
 | 8 | `SELECT count(*) FROM threads WHERE environmentId = ? AND archivedAt IS NULL` | `threads` | `threads_environment_idx` | Live thread count |
-| 9 | `UPDATE environments SET status = 'destroying'` + re-SELECT | `environments` | PK | Only if count = 0 |
+| 9 | `UPDATE environments SET status = 'destroying'` | `environments` | PK | Only if count = 0 |
 | 10 | `SELECT * FROM host_daemon_sessions ...` | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | For destroy command |
 | 11-12 | cursor max + INSERT `environment.destroy` | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | Fire-and-forget |
 
@@ -130,6 +130,8 @@
 | `public-environment-action-regressions.test.ts` | `apps/server/test/public-environment-action-regressions.test.ts:25` | Regression tests for edge cases (missing env, auto-archive, cleanup) |
 
 ---
+
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
 
 ## Review Comments
 

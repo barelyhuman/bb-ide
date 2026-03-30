@@ -87,10 +87,6 @@ function createTurnRunCommand(args: {
     type: "turn.run" as const,
     environmentId: args.environmentId,
     threadId: args.threadId,
-    workspacePath: args.workspacePath,
-    projectId: args.projectId,
-    providerId: args.providerId,
-    providerThreadId: args.providerThreadId,
     eventSequence: args.eventSequence,
     input: args.input,
     options: {
@@ -99,8 +95,14 @@ function createTurnRunCommand(args: {
       reasoningLevel: "medium" as const,
       sandboxMode: "danger-full-access" as const,
     },
-    instructions: "Be a helpful coding agent.",
-    dynamicTools: [],
+    resumeContext: {
+      workspacePath: args.workspacePath,
+      projectId: args.projectId,
+      providerId: args.providerId,
+      providerThreadId: args.providerThreadId,
+      instructions: "Be a helpful coding agent.",
+      dynamicTools: [],
+    },
   };
 }
 

@@ -335,20 +335,20 @@ export async function getThread(id: string): Promise<Thread> {
   return request<Thread>(apiClient.threads[":id"].$get({ param: { id } }));
 }
 
-export interface ManagerWorkspaceFileEntry {
+export interface WorkspaceFileEntry {
   path: string;
   size: number;
 }
 
-export async function listThreadManagerWorkspaceFiles(
+export async function listThreadWorkspaceFiles(
   id: string,
-): Promise<{ files: ManagerWorkspaceFileEntry[] }> {
-  return request<{ files: ManagerWorkspaceFileEntry[] }>(
+): Promise<{ files: WorkspaceFileEntry[] }> {
+  return request<{ files: WorkspaceFileEntry[] }>(
     apiClient.threads[":id"].workspace.files.$get({ param: { id } }),
   );
 }
 
-export async function getThreadManagerWorkspaceFile(
+export async function getThreadWorkspaceFile(
   id: string,
   path: string,
 ): Promise<{ path: string; content: string }> {
@@ -479,7 +479,7 @@ export async function getThreadTimeline(
   id: string,
   limit?: number,
   includeToolGroupMessages: boolean = false,
-  includeManagerWorkspaceViewer: boolean = false,
+  includeWorkspaceViewer: boolean = false,
 ): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
@@ -487,7 +487,7 @@ export async function getThreadTimeline(
       query: {
         ...(limit !== undefined ? { limit: String(limit) } : {}),
         ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" } : {}),
-        ...(includeManagerWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
+        ...(includeWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
       },
     }),
   );
@@ -498,7 +498,7 @@ export async function getThreadTimelineToolDetails(
   turnId: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
-  includeManagerWorkspaceViewer: boolean = false,
+  includeWorkspaceViewer: boolean = false,
 ): Promise<TimelineToolDetailsResponse> {
   return request<TimelineToolDetailsResponse>(
     apiClient.threads[":id"].timeline["tool-details"].$get({
@@ -507,7 +507,7 @@ export async function getThreadTimelineToolDetails(
         turnId,
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
-        ...(includeManagerWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
+        ...(includeWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
       },
     }),
   );

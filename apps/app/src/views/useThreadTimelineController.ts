@@ -24,7 +24,7 @@ interface LoadToolGroupMessagesArgs {
   turnId: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
-  includeManagerWorkspaceViewer?: boolean;
+  includeWorkspaceViewer?: boolean;
 }
 
 interface UseThreadTimelineControllerParams {

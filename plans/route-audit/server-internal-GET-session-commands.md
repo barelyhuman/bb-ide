@@ -22,8 +22,7 @@
 3. **Parse integer params** (sync) — `waitMs`, `afterCursor`, `limit` parsed via `parseInteger`.
 4. **Fetch pending commands** (sync) — `fetchCommands(db, hub, { hostId, afterCursor, limit })`:
    - In a transaction: SELECT from `host_daemon_commands` WHERE `hostId`, `state="pending"`, `cursor > afterCursor`, ORDER BY cursor, LIMIT.
-   - Marks returned commands as `state="fetched"`, sets `fetchedAt`.
-   - Re-selects each command by PK to return updated rows.
+   - Marks returned commands as `state="fetched"`, sets `fetchedAt`. Uses RETURNING to get updated rows.
 5. **Long-poll if empty** (async) — If `commands.length === 0 && waitMs > 0`:
    - `hub.waitForCommands(hostId, waitMs)` creates a `CommandWaiter` promise with a timeout.
    - Resolves when either: (a) `hub.notifyCommand(hostId)` is called (new command queued), or (b) timeout expires.
@@ -41,10 +40,11 @@
 |---|-------|-------|-------|-------|
 | 1 | SELECT session by PK + status + lease | `host_daemon_sessions` | PK (id), filtered by status/lease | Session validation |
 | 2 | SELECT pending commands for host after cursor | `host_daemon_commands` | `host_daemon_commands_host_state_idx` + `host_daemon_commands_host_cursor_idx` | Main fetch |
-| 3 | N x UPDATE command state to "fetched" | `host_daemon_commands` | PK | Per-command state update |
-| 4 | N x SELECT command by PK | `host_daemon_commands` | PK | Re-select after update |
+| 3 | N x UPDATE command state to "fetched" (RETURNING) | `host_daemon_commands` | PK | Per-command state update |
 
-**Total: 2 + 2N queries per fetch call. Called once or twice (if long-poll triggers). The per-command UPDATE + re-SELECT is N+1 — could be batched into a single UPDATE ... WHERE id IN (...) + single re-SELECT.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 2 + N queries per fetch call. Called once or twice (if long-poll triggers). The per-command UPDATE is still N+1 — could be batched into a single UPDATE ... WHERE id IN (...).**
 
 ## Code Reuse
 
@@ -55,7 +55,7 @@
 
 ## Flags
 
-1. **N+1 in `fetchCommands`**: The DB function updates and re-selects each command individually in a loop (lines 99-114 in commands.ts). For large batches this is suboptimal. Could batch the UPDATE and use a single `WHERE id IN (...)` SELECT.
+1. **N+1 in `fetchCommands`**: The DB function updates each command individually in a loop. ~~The per-command UPDATE + re-SELECT could be batched.~~ Post-write re-SELECTs are now eliminated via RETURNING, but the per-command UPDATE loop remains — could still be batched into a single `UPDATE ... WHERE id IN (...)`.
 2. **Re-parsing stored payloads**: `hostDaemonCommandSchema.parse(JSON.parse(command.payload))` re-validates the command on every fetch. This is defensive but adds CPU cost. If the server wrote the payload, it was already valid.
 3. **204 bypasses Hono serialization**: `return new Response(null, { status: 204 })` is a raw Response, not `context.json(...)`. This is intentional (no body on 204) but worth noting as the only route that returns a raw Response.
 4. **`parseInteger` is local**: Defined inline in the commands file, not shared with the validation utility in `services/validation.ts` which has `parseOptionalInteger`.

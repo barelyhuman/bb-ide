@@ -6,13 +6,13 @@
 
 ## Request Params / Body
 
-| Field | Required | Notes |
-|---|---|---|
-| `:id` | Yes | Project ID from URL path. Used as `projectId` for the thread. |
-| `name` | No | If provided, passed as `title` to `createThreadFromRequest`. If absent, title is omitted (may be auto-generated). |
-| `providerId` | Yes | Provider identifier for the thread. Passed through to thread creation. |
-| `model` | Yes | Model identifier for the thread. Passed through to thread creation. |
-| `reasoningLevel` | Yes | Reasoning level enum. Passed through to thread creation. |
+| Field            | Required | Notes                                                                                                             |
+| ---------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `:id`            | Yes      | Project ID from URL path. Used as `projectId` for the thread.                                                     |
+| `name`           | No       | If provided, passed as `title` to `createThreadFromRequest`. If absent, title is omitted (may be auto-generated). |
+| `providerId`     | Yes      | Provider identifier for the thread. Passed through to thread creation.                                            |
+| `model`          | Yes      | Model identifier for the thread. Passed through to thread creation.                                               |
+| `reasoningLevel` | Yes      | Reasoning level enum. Passed through to thread creation.                                                          |
 
 **All 5 fields consumed. No dead params.**
 
@@ -42,34 +42,34 @@
 
 ## DB Query Summary
 
-| # | Query | Table | Index | Notes |
-|---|-------|-------|-------|-------|
-| 1 | SELECT project by PK | `projects` | PK | requireProject (route) |
-| 2 | SELECT source by projectId+isDefault | `project_sources` | `project_sources_project_idx` | getDefaultProjectSource (route) |
-| 3 | SELECT project by PK | `projects` | PK | requireProjectExists (redundant) |
-| 4 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | requireConnectedHostSession |
-| 5 | SELECT source by projectId+isDefault | `project_sources` | `project_sources_project_idx` | requireDefaultSource (redundant) |
-| 6 | INSERT environment | `environments` | -- | |
-| 7 | INSERT thread | `threads` | -- | |
-| 8 | UPDATE thread status | `threads` | PK | transition to provisioning |
-| 9 | INSERT event (client/thread/start) | `events` | -- | |
-| 10 | INSERT event (provisioning) | `events` | -- | |
-| 11 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | requireConnectedHostSession (provision cmd) |
-| 12 | INSERT command | `host_daemon_commands` | -- | environment.provision |
-| 13 | SELECT thread by PK | `threads` | PK | getThreadSafe |
+| #   | Query                                | Table                  | Index                                  | Notes                                       |
+| --- | ------------------------------------ | ---------------------- | -------------------------------------- | ------------------------------------------- |
+| 1   | SELECT project by PK                 | `projects`             | PK                                     | requireProject (route)                      |
+| 2   | SELECT source by projectId+isDefault | `project_sources`      | `project_sources_project_idx`          | getDefaultProjectSource (route)             |
+| 3   | SELECT project by PK                 | `projects`             | PK                                     | requireProjectExists (redundant)            |
+| 4   | SELECT active session                | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | requireConnectedHostSession                 |
+| 5   | SELECT source by projectId+isDefault | `project_sources`      | `project_sources_project_idx`          | requireDefaultSource (redundant)            |
+| 6   | INSERT environment                   | `environments`         | --                                     |                                             |
+| 7   | INSERT thread                        | `threads`              | --                                     |                                             |
+| 8   | UPDATE thread status                 | `threads`              | PK                                     | transition to provisioning                  |
+| 9   | INSERT event (client/thread/start)   | `events`               | --                                     |                                             |
+| 10  | INSERT event (provisioning)          | `events`               | --                                     |                                             |
+| 11  | SELECT active session                | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | requireConnectedHostSession (provision cmd) |
+| 12  | INSERT command                       | `host_daemon_commands` | --                                     | environment.provision                       |
+| 13  | SELECT thread by PK                  | `threads`              | PK                                     | getThreadSafe                               |
 
 **Total: 13 queries. No N+1. Some redundant reads (project x2, default source x2, session x2).**
 
 ## Code Reuse
 
-| Function | Shared With |
-|---|---|
-| `requireProject` | Most project routes |
-| `getDefaultProjectSource` | GET /files, thread-create-helpers |
-| `createThreadFromRequest` | POST /threads (the main thread creation route) |
-| `createThreadRecord` | Internal to thread-create |
-| `queueEnvironmentProvision` | Internal to thread-create |
-| `buildExecutionOptions` | Thread send/start flows |
+| Function                    | Shared With                                    |
+| --------------------------- | ---------------------------------------------- |
+| `requireProject`            | Most project routes                            |
+| `getDefaultProjectSource`   | GET /files, thread-create-helpers              |
+| `createThreadFromRequest`   | POST /threads (the main thread creation route) |
+| `createThreadRecord`        | Internal to thread-create                      |
+| `queueEnvironmentProvision` | Internal to thread-create                      |
+| `buildExecutionOptions`     | Thread send/start flows                        |
 
 ## Flags
 
@@ -81,18 +81,34 @@
 
 ## Usages
 
-| Caller | Location | Purpose |
-|---|---|---|
-| `hireProjectManager` API fn | `apps/app/src/lib/api.ts:207` | Typed wrapper around `apiClient.projects[":id"].managers.$post()` |
-| `useHireProjectManager` hook | `apps/app/src/hooks/useApi.ts:406` | React Query mutation; calls `api.hireProjectManager()` |
-| `HireManagerModal` | `apps/app/src/components/HireManagerModal.tsx:135` | Modal form to hire a manager thread |
-| `AppLayout` | `apps/app/src/components/layout/AppLayout.tsx:220` | Triggers manager hiring from layout-level actions |
-| `manager hire` CLI | `apps/cli/src/commands/manager.ts:63` | `bb manager hire` command |
-| manager thread test | `apps/server/test/public-threads.test.ts:908` | Tests manager creation returns provisioning thread |
-| contract test | `packages/server-contract/test/contract.test.ts:218` | Verifies URL generation for the route |
+| Caller                       | Location                                             | Purpose                                                           |
+| ---------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `hireProjectManager` API fn  | `apps/app/src/lib/api.ts:207`                        | Typed wrapper around `apiClient.projects[":id"].managers.$post()` |
+| `useHireProjectManager` hook | `apps/app/src/hooks/useApi.ts:406`                   | React Query mutation; calls `api.hireProjectManager()`            |
+| `HireManagerModal`           | `apps/app/src/components/HireManagerModal.tsx:135`   | Modal form to hire a manager thread                               |
+| `AppLayout`                  | `apps/app/src/components/layout/AppLayout.tsx:220`   | Triggers manager hiring from layout-level actions                 |
+| `manager hire` CLI           | `apps/cli/src/commands/manager.ts:63`                | `bb manager hire` command                                         |
+| manager thread test          | `apps/server/test/public-threads.test.ts:908`        | Tests manager creation returns provisioning thread                |
+| contract test                | `packages/server-contract/test/contract.test.ts:218` | Verifies URL generation for the route                             |
 
 ---
 
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+> **`reasoningLevel` is required** in `createManagerThreadRequestSchema` but optional in `createThreadRequestSchema`. This means manager threads always specify reasoning level while standard threads can omit it. This is an intentional design choice but creates an asymmetry worth noting.
+
+we should fix this to make reasoningLevel optional here too for consistency
+
+> 3. The `name` field is mapped to `title` in the request: `...(payload.name ? { title: payload.name } : {})`. When `name` is absent, `title` is `undefined` (omitted). Since `hasThreadStartInput` returns false for manager threads (no `input`), auto-title generation is never triggered. Manager threads without a `name` will have `title: null` permanently.
+
+the manager name should default to "Manager" or "Manager <numManagers>" if the project has any existing managers
+
+> 4. The route hardcodes `workspace: { type: "managed-worktree" }`. Manager threads always get worktree environments. This policy lives in the route, not in a central config.
+
+This is wrong. the manager should work directly in the primary checkout of the project
+
+> 5. The manager thread is created without `input`, so it starts in `provisioning` status and never transitions to `active` during this request. The actual work begins when the environment provision completes and the daemon sends back a result. The thread's first turn must be triggered separately.
+
+Can you check this? all managers should be started with the following system message (sent as the first user message) /Users/michael/Projects/bb/packages/templates/src/templates/system-message-manager-welcome.md

@@ -45,7 +45,7 @@
 
 ## Flags
 
-1. **No status check.** The route does not verify `thread.status === "active"` before sending `thread.stop`. If the thread is idle or in error state, the daemon still receives the stop command. The daemon presumably handles this gracefully, but the server does not guard against it.
+1. ~~**No status check.**~~ **Fixed.** The route now checks `thread.status !== "active"` and returns 409 if the thread is not active.
 2. **No `ensureThreadIsWritable` guard.** You can stop an archived thread. This may be intentional (stopping a daemon process regardless of archive state) but differs from send/draft routes.
 3. **Synchronous wait pattern.** Unlike send routes which are fire-and-forget, stop blocks for up to 30s. This is correct -- the caller needs confirmation the turn actually stopped.
 

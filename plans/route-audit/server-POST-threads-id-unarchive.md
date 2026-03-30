@@ -15,8 +15,7 @@
 ## Implementation Trace
 
 1. **`unarchiveThread(db, hub, id)`** (sync)
-   - UPDATE `threads` SET `archivedAt = null, updatedAt = now` WHERE `id = ?`.
-   - Re-selects the row.
+   - UPDATE `threads` SET `archivedAt = null, updatedAt = now` WHERE `id = ?` (RETURNING).
    - If found, notifies hub: `notifyThread(id, ["archived-changed"])`.
    - Return value is not checked by the route.
 
@@ -26,10 +25,11 @@
 
 | # | Query | Table | Index | Notes |
 |---|-------|-------|-------|-------|
-| 1 | UPDATE thread | `threads` | PK | Set archivedAt = null |
-| 2 | SELECT thread by PK | `threads` | PK | Re-read after update |
+| 1 | UPDATE thread (RETURNING) | `threads` | PK | Set archivedAt = null |
 
-**Total: 2 queries. No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 1 query. No N+1.**
 
 ## Code Reuse
 
@@ -37,7 +37,7 @@
 
 ## Flags
 
-1. **No 404 check.** If the thread ID does not exist, `unarchiveThread` updates zero rows and the re-select returns null, but the route still returns `{ ok: true }`. The caller gets a false positive.
+1. **No 404 check.** If the thread ID does not exist, `unarchiveThread` updates zero rows and RETURNING yields null, but the route still returns `{ ok: true }`. The caller gets a false positive.
 2. **No idempotency guard.** Unarchiving an already-unarchived thread succeeds silently (sets `archivedAt` to null again, which is already null). Harmless.
 3. **No environment re-provisioning.** If the environment was destroyed during archive (via `maybeCleanupEnvironment`), unarchiving does not re-provision it. The thread would be in a broken state with a destroyed or null environment. The client would need to handle this.
 

@@ -41,7 +41,7 @@
 
 ## Flags
 
-1. **No `requireThread` guard.** Unlike every other thread data route, this one does not call `requireThread` first. A request for a nonexistent thread silently returns `{ output: null }` instead of 404. This is inconsistent with the other routes.
+1. ~~**No `requireThread` guard.**~~ Fixed: added `requireThread(deps.db, context.req.param("id"))` at the start of the handler. Nonexistent threads now return 404 consistent with the other routes.
 2. **Throws 500 on malformed stored events.** If a stored event has invalid JSON or fails schema validation, the route throws `ApiError(500, ...)`. This is arguably correct (data corruption), but it means a single bad event poisons the endpoint for that thread.
 3. **`LIMIT 20` is hardcoded.** The function scans up to 20 recent events looking for output text. If the last 20 qualifying events are all empty-text or non-agentMessage items, it returns null even if older events have output. This is a reasonable heuristic but could miss output in edge cases with many tool-only completions.
 

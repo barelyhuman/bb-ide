@@ -13,11 +13,13 @@ import {
 } from "../../src/data/drafts.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
+import { upsertHost } from "../../src/data/hosts.js";
 
 function setup() {
   const db = createConnection(":memory:");
   migrate(db);
-  const project = createProject(db, noopNotifier, { name: "test-project" });
+  const host = upsertHost(db, noopNotifier, { name: "test-host", type: "persistent" });
+  const { project } = createProject(db, noopNotifier, { name: "test-project", source: { type: "local_path", hostId: host.id, path: "/tmp/test" } });
   const thread = createThread(db, noopNotifier, {
     projectId: project.id,
     providerId: "codex",

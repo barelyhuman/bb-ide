@@ -12,18 +12,24 @@
 | `type` | Yes | Literal `"turn.steer"` |
 | `environmentId` | Yes | Target environment. Used to look up or create runtime, and to check thread registration. |
 | `threadId` | Yes | BB-side thread identifier. Passed to `runtime.steerTurn`. |
+| `eventSequence` | Yes | Non-negative int. Seeded into the high-water mark before dispatch. |
+| `expectedTurnId` | Yes | Non-empty string. Identifies the specific in-progress turn to steer. Passed to `runtime.steerTurn` as a guard to ensure the steer targets the correct turn. |
+| `input` | Yes | Non-empty array of `PromptInput`. The steering input injected into the current turn. |
+| `options` | Yes | `HostDaemonExecutionOptions` — required `model`, `serviceTier`, `reasoningLevel`, `sandboxMode`. Passed to `runtime.steerTurn` and auto-resume. |
+| `resumeContext` | Yes | Object containing session resume fields (see below). |
+
+### `resumeContext`
+
+| Field | Required | Notes |
+|---|---|---|
 | `workspacePath` | Yes | Filesystem path. Used by `ensureEnvironment` if needed, and as `resumePath` for auto-resume. |
 | `projectId` | Yes | Passed to `runtime.resumeThread` during auto-resume. |
 | `providerId` | Yes | Selects which provider adapter. Used during auto-resume. |
 | `providerThreadId` | Yes | Provider's internal thread ID. Required for auto-resume. |
-| `options` | Yes | `HostDaemonExecutionOptions` — required `model`, `serviceTier`, `reasoningLevel`, `sandboxMode`. Passed to `runtime.steerTurn` and auto-resume. |
 | `instructions` | Yes | System instructions. Passed to `runtime.steerTurn` and auto-resume. |
 | `dynamicTools` | Yes | Array of `DynamicTool`. Used during auto-resume. |
-| `eventSequence` | Yes | Non-negative int. Seeded into the high-water mark before dispatch. |
-| `expectedTurnId` | Yes | Non-empty string. Identifies the specific in-progress turn to steer. Passed to `runtime.steerTurn` as a guard to ensure the steer targets the correct turn. |
-| `input` | Yes | Non-empty array of `PromptInput`. The steering input injected into the current turn. |
 
-**All 13 fields consumed. No dead params.**
+**All fields consumed. No dead params.**
 
 ## Implementation Trace
 
@@ -44,7 +50,7 @@
 
 ## Flags
 
-1. **Same `dynamicTools` caveat as `turn.run`.** `steerTurn` on the runtime interface does not accept `dynamicTools`. They are only applied during auto-resume, not if the thread is already registered. Same concern as flag #1 on `turn.run`.
+1. **Same `dynamicTools` caveat as `turn.run`.** `steerTurn` on the runtime interface does not accept `dynamicTools`. They are only applied during auto-resume (via `resumeContext`), not if the thread is already registered. Same concern as flag #1 on `turn.run`.
 2. **`expectedTurnId` validation is provider-side.** The daemon does not validate whether `expectedTurnId` matches a currently running turn — it passes it through to the runtime. If the runtime/provider rejects, it surfaces as an error. This is clean separation of concerns but means steer errors are only caught at the provider level.
 
 ## Usages

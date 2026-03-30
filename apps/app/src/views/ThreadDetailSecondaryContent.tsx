@@ -26,7 +26,7 @@ type ThreadTimelinePaneProps = Omit<
 >;
 type ThreadSecondaryPanelProps = Omit<
   ComponentProps<typeof ThreadSecondaryPanel>,
-  "managerWorkspaceContent" | "metadataContent"
+  "workspaceContent" | "metadataContent"
 >;
 
 interface ManagerSelectorOption {
@@ -71,15 +71,15 @@ interface ThreadDetailMetadataProps {
   workspaceStatusFiles?: ComponentProps<typeof WorkspaceChangesList>["files"];
 }
 
-interface ManagerWorkspaceFileEntry {
+interface WorkspaceFileEntry {
   path: string;
   size: number;
 }
 
-interface ThreadDetailManagerWorkspaceProps {
+interface ThreadDetailWorkspaceProps {
   fileContent?: string;
   fileError?: Error | null;
-  files?: readonly ManagerWorkspaceFileEntry[];
+  files?: readonly WorkspaceFileEntry[];
   isFileLoading: boolean;
   onTogglePath: (path: string) => void;
   selectedPath: string | null;
@@ -89,7 +89,7 @@ interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
   header: ReactNode;
   isSecondaryPanelOpen: boolean;
-  managerWorkspace?: ThreadDetailManagerWorkspaceProps;
+  workspace?: ThreadDetailWorkspaceProps;
   metadata: ThreadDetailMetadataProps;
   secondaryPanel: ThreadSecondaryPanelProps;
   showThreadMetadata: boolean;
@@ -344,14 +344,14 @@ function ThreadMetadataContent({
   );
 }
 
-function ManagerWorkspaceContent({
+function WorkspaceContent({
   fileContent,
   fileError,
   files,
   isFileLoading,
   onTogglePath,
   selectedPath,
-}: ThreadDetailManagerWorkspaceProps) {
+}: ThreadDetailWorkspaceProps) {
   if ((files?.length ?? 0) === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
@@ -420,7 +420,7 @@ export function ThreadDetailSecondaryContent({
   footer,
   header,
   isSecondaryPanelOpen,
-  managerWorkspace,
+  workspace,
   metadata,
   secondaryPanel,
   showThreadMetadata,
@@ -461,9 +461,9 @@ export function ThreadDetailSecondaryContent({
               </div>
             )
           }
-          managerWorkspaceContent={
-            managerWorkspace ? (
-              <ManagerWorkspaceContent {...managerWorkspace} />
+          workspaceContent={
+            workspace ? (
+              <WorkspaceContent {...workspace} />
             ) : undefined
           }
         />

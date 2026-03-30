@@ -187,16 +187,12 @@ describe("host-daemon command schemas", () => {
     });
   });
 
-  it("requires eventSequence and runtime context for turn.run and turn.steer", () => {
+  it("requires eventSequence and resumeContext for turn.run and turn.steer", () => {
     expect(
       hostDaemonCommandSchema.parse({
         type: "turn.run",
         environmentId: "env_123",
         threadId: "thr_123",
-        workspacePath: "/tmp/workspace",
-        projectId: "proj_123",
-        providerId: "codex",
-        providerThreadId: "provider_123",
         eventSequence: 12,
         input: [{ type: "text", text: "hello" }],
         options: {
@@ -205,13 +201,21 @@ describe("host-daemon command schemas", () => {
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
-        instructions: "Be a helpful coding agent.",
-        dynamicTools: [],
+        resumeContext: {
+          workspacePath: "/tmp/workspace",
+          projectId: "proj_123",
+          providerId: "codex",
+          providerThreadId: "provider_123",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+        },
       }),
     ).toMatchObject({
       type: "turn.run",
       eventSequence: 12,
-      workspacePath: "/tmp/workspace",
+      resumeContext: {
+        workspacePath: "/tmp/workspace",
+      },
     });
 
     expect(
@@ -219,10 +223,6 @@ describe("host-daemon command schemas", () => {
         type: "turn.steer",
         environmentId: "env_123",
         threadId: "thr_123",
-        workspacePath: "/tmp/workspace",
-        projectId: "proj_123",
-        providerId: "codex",
-        providerThreadId: "provider_123",
         eventSequence: 13,
         expectedTurnId: "turn_123",
         input: [{ type: "text", text: "adjust" }],
@@ -232,8 +232,14 @@ describe("host-daemon command schemas", () => {
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
-        instructions: "Be a helpful coding agent.",
-        dynamicTools: [],
+        resumeContext: {
+          workspacePath: "/tmp/workspace",
+          projectId: "proj_123",
+          providerId: "codex",
+          providerThreadId: "provider_123",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+        },
       }),
     ).toMatchObject({
       type: "turn.steer",
@@ -246,9 +252,6 @@ describe("host-daemon command schemas", () => {
         type: "turn.run",
         environmentId: "env_123",
         threadId: "thr_123",
-        workspacePath: "/tmp/workspace",
-        projectId: "proj_123",
-        providerId: "codex",
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -256,8 +259,13 @@ describe("host-daemon command schemas", () => {
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
-        instructions: "Be a helpful coding agent.",
-        dynamicTools: [],
+        resumeContext: {
+          workspacePath: "/tmp/workspace",
+          projectId: "proj_123",
+          providerId: "codex",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+        },
       }),
     ).toThrow();
   });

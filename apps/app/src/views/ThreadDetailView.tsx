@@ -71,7 +71,7 @@ import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
-import { useManagerWorkspaceViewer } from "./useManagerWorkspaceViewer";
+import { useWorkspaceViewer } from "./useWorkspaceViewer";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
 import { useThreadMergeBase } from "./useThreadMergeBase";
 import { useThreadReadTracking } from "./useThreadReadTracking";
@@ -207,15 +207,15 @@ export function ThreadDetailView() {
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const {
-    handleManagerWorkspaceViewerChange,
-    isManagerWorkspaceFileLoading,
-    managerWorkspaceFile,
-    managerWorkspaceFileError,
-    managerWorkspaceFiles,
-    selectedManagerWorkspacePath,
-    setSelectedManagerWorkspacePath,
-    showManagerWorkspaceViewer,
-  } = useManagerWorkspaceViewer({
+    handleWorkspaceViewerChange,
+    isWorkspaceFileLoading,
+    workspaceFile,
+    workspaceFileError,
+    workspaceFiles,
+    selectedWorkspacePath,
+    setSelectedWorkspacePath,
+    showWorkspaceViewer,
+  } = useWorkspaceViewer({
     threadId,
     threadType: thread?.type,
   });
@@ -231,7 +231,7 @@ export function ThreadDetailView() {
     threadId ?? "",
     {
       refetchOnMount: "always",
-      includeManagerWorkspaceViewer: showManagerWorkspaceViewer,
+      includeWorkspaceViewer: showWorkspaceViewer,
     },
   );
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -394,7 +394,7 @@ export function ThreadDetailView() {
     loadToolGroupMessages: (args) =>
       timelineToolDetails.mutateAsync({
         ...args,
-        includeManagerWorkspaceViewer: showManagerWorkspaceViewer,
+        includeWorkspaceViewer: showWorkspaceViewer,
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
@@ -605,11 +605,11 @@ export function ThreadDetailView() {
       parentThreadId: nextParentThreadId,
     });
   }, [thread, updateThread]);
-  const handleManagerWorkspacePathToggle = useCallback((path: string) => {
-    setSelectedManagerWorkspacePath((currentPath) =>
+  const handleWorkspacePathToggle = useCallback((path: string) => {
+    setSelectedWorkspacePath((currentPath) =>
       currentPath === path ? null : path,
     );
-  }, [setSelectedManagerWorkspacePath]);
+  }, [setSelectedWorkspacePath]);
   const handleAttachFiles = useCallback(async (files: File[]) => {
     if (!projectId || files.length === 0) return;
 
@@ -910,9 +910,9 @@ export function ThreadDetailView() {
         threadDeleteDialog.onOpen(thread);
       }}
       viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
-      viewerToggleChecked={isManagerThread ? showManagerWorkspaceViewer : undefined}
+      viewerToggleChecked={isManagerThread ? showWorkspaceViewer : undefined}
       onViewerToggleCheckedChange={
-        isManagerThread ? handleManagerWorkspaceViewerChange : undefined
+        isManagerThread ? handleWorkspaceViewerChange : undefined
       }
       isArchived={thread.archivedAt != null}
       threadType={thread.type}
@@ -1138,19 +1138,19 @@ export function ThreadDetailView() {
       }}
     />
   );
-  const managerWorkspace = thread.type === "manager"
+  const workspace = thread.type === "manager"
     ? {
-        fileContent: managerWorkspaceFile?.content,
+        fileContent: workspaceFile?.content,
         fileError:
-          managerWorkspaceFileError instanceof Error
-            ? managerWorkspaceFileError
-            : managerWorkspaceFileError
+          workspaceFileError instanceof Error
+            ? workspaceFileError
+            : workspaceFileError
               ? new Error("Failed to load workspace file")
               : null,
-        files: managerWorkspaceFiles?.files,
-        isFileLoading: isManagerWorkspaceFileLoading,
-        onTogglePath: handleManagerWorkspacePathToggle,
-        selectedPath: selectedManagerWorkspacePath,
+        files: workspaceFiles?.files,
+        isFileLoading: isWorkspaceFileLoading,
+        onTogglePath: handleWorkspacePathToggle,
+        selectedPath: selectedWorkspacePath,
       }
     : undefined;
 
@@ -1160,7 +1160,7 @@ export function ThreadDetailView() {
         footer={composerFooter}
         header={timelineHeader}
         isSecondaryPanelOpen={isSecondaryPanelOpen}
-        managerWorkspace={managerWorkspace}
+        workspace={workspace}
         metadata={{
           canAssignToManager,
           canSelectThreadMergeBase,
@@ -1238,7 +1238,7 @@ export function ThreadDetailView() {
           resizablePanelRef: secondaryResizablePanelRef,
           setGitDiffFileRef,
           showGitDiffTab: canUseGitUi,
-          showManagerWorkspaceTab: thread.type === "manager",
+          showWorkspaceTab: thread.type === "manager",
           threadGitDiff: canUseGitUi ? threadGitDiff : undefined,
           threadId: thread.id,
         }}

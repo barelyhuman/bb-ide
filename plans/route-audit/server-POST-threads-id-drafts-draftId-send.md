@@ -51,21 +51,22 @@
 | 1 | SELECT thread by PK | `threads` | PK | First `requireThreadEnvironment` (route level) |
 | 2 | SELECT environment by PK | `environments` | PK | First `requireThreadEnvironment` |
 | 3 | SELECT draft by PK | `queued_thread_messages` | PK | `getDraft` in `claimDraftForSend` |
-| 4 | SELECT + UPDATE draft (txn) | `queued_thread_messages` | PK | `claimDraft` |
-| 5 | SELECT claimed draft | `queued_thread_messages` | PK | Re-read after claim |
-| 6 | SELECT thread by PK | `threads` | PK | Second `requireThreadEnvironment` (inside `sendClaimedDraft`) |
-| 7 | SELECT environment by PK | `environments` | PK | Second `requireThreadEnvironment` |
-| 8 | SELECT latest execution event | `events` | `events_thread_sequence_idx` | `getLastExecutionOptions` |
-| 9 | SELECT MAX(seq) + INSERT event (txn) | `events` | `events_thread_sequence_idx` | `appendClientTurnEvent` |
-| 10 | SELECT latest providerThreadId | `events` | `events_thread_sequence_idx` | start mode |
-| 11 | SELECT project | `projects` | PK | `resolveThreadRuntimeCommandConfig` |
-| 12 | SELECT default source | `project_sources` | `project_sources_project_idx` | `getDefaultProjectSource` |
-| 13 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `requireConnectedHostSession` |
-| 14 | SELECT MAX(cursor) + INSERT command (txn) | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | `queueCommand` |
-| 15 | SELECT + UPDATE thread status | `threads` | PK | `transitionThreadStatus` (start mode) |
-| 16 | SELECT + DELETE draft | `queued_thread_messages` | PK | `deleteDraft` |
+| 4 | SELECT + UPDATE draft (txn, RETURNING) | `queued_thread_messages` | PK | `claimDraft` |
+| 5 | SELECT thread by PK | `threads` | PK | Second `requireThreadEnvironment` (inside `sendClaimedDraft`) |
+| 6 | SELECT environment by PK | `environments` | PK | Second `requireThreadEnvironment` |
+| 7 | SELECT latest execution event | `events` | `events_thread_sequence_idx` | `getLastExecutionOptions` |
+| 8 | SELECT MAX(seq) + INSERT event (txn) | `events` | `events_thread_sequence_idx` | `appendClientTurnEvent` |
+| 9 | SELECT latest providerThreadId | `events` | `events_thread_sequence_idx` | start mode |
+| 10 | SELECT project | `projects` | PK | `resolveThreadRuntimeCommandConfig` |
+| 11 | SELECT default source | `project_sources` | `project_sources_project_idx` | `getDefaultProjectSource` |
+| 12 | SELECT active session | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `requireConnectedHostSession` |
+| 13 | SELECT MAX(cursor) + INSERT command (txn) | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | `queueCommand` |
+| 14 | SELECT + UPDATE thread status | `threads` | PK | `transitionThreadStatus` (start mode) |
+| 15 | SELECT + DELETE draft | `queued_thread_messages` | PK | `deleteDraft` |
 
-**Total: 14-16 queries depending on mode. No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 13-15 queries depending on mode. No N+1.**
 
 ## Code Reuse
 

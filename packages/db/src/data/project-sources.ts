@@ -36,7 +36,7 @@ export function createProjectSource(
       .run();
   }
 
-  db.insert(projectSources)
+  const row = db.insert(projectSources)
     .values({
       id,
       projectId: input.projectId,
@@ -48,13 +48,10 @@ export function createProjectSource(
       createdAt: now,
       updatedAt: now,
     })
-    .run();
+    .returning()
+    .get();
   notifier.notifyProject(input.projectId, ["project-sources-changed"]);
-  return db
-    .select()
-    .from(projectSources)
-    .where(eq(projectSources.id, id))
-    .get()!;
+  return row;
 }
 
 export function listProjectSources(db: DbConnection, projectId: string) {
@@ -92,23 +89,18 @@ export function updateProjectSource(
       .run();
   }
   const { isDefault: _isDefault, ...rest } = input;
-  db.update(projectSources)
+  const updated = db.update(projectSources)
     .set({
       ...rest,
       ...(input.isDefault ? { isDefault: true } : {}),
       updatedAt: now,
     })
     .where(eq(projectSources.id, id))
-    .run();
+    .returning()
+    .get();
 
   notifier.notifyProject(existing.projectId, ["project-sources-changed"]);
-  return (
-    db
-      .select()
-      .from(projectSources)
-      .where(eq(projectSources.id, id))
-      .get() ?? null
-  );
+  return updated ?? null;
 }
 
 export function getDefaultProjectSource(db: DbConnection, projectId: string) {

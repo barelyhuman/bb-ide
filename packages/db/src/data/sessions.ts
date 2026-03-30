@@ -53,7 +53,7 @@ export function openSession(
 
   const leaseExpiresAt = now + input.leaseTimeoutMs;
 
-  db.insert(hostDaemonSessions)
+  const row = db.insert(hostDaemonSessions)
     .values({
       id,
       hostId: input.hostId,
@@ -68,15 +68,12 @@ export function openSession(
       createdAt: now,
       updatedAt: now,
     })
-    .run();
+    .returning()
+    .get();
 
   notifier.notifyHost(["host-connected"]);
 
-  return db
-    .select()
-    .from(hostDaemonSessions)
-    .where(eq(hostDaemonSessions.id, id))
-    .get()!;
+  return row;
 }
 
 export function closeSession(
@@ -98,7 +95,7 @@ export function closeSession(
   }
 
   const now = Date.now();
-  db.update(hostDaemonSessions)
+  const updated = db.update(hostDaemonSessions)
     .set({
       status: "closed",
       closedAt: now,
@@ -106,17 +103,12 @@ export function closeSession(
       updatedAt: now,
     })
     .where(eq(hostDaemonSessions.id, sessionId))
-    .run();
+    .returning()
+    .get();
 
   notifier.notifyHost(["host-disconnected"]);
 
-  return (
-    db
-      .select()
-      .from(hostDaemonSessions)
-      .where(eq(hostDaemonSessions.id, sessionId))
-      .get() ?? null
-  );
+  return updated ?? null;
 }
 
 export function getActiveSession(db: DbConnection, hostId: string) {
@@ -141,20 +133,13 @@ export function heartbeatSession(
   leaseExpiresAt: number,
 ) {
   const now = Date.now();
-  db.update(hostDaemonSessions)
+  return db.update(hostDaemonSessions)
     .set({
       lastHeartbeatAt: now,
       leaseExpiresAt,
       updatedAt: now,
     })
     .where(eq(hostDaemonSessions.id, sessionId))
-    .run();
-
-  return (
-    db
-      .select()
-      .from(hostDaemonSessions)
-      .where(eq(hostDaemonSessions.id, sessionId))
-      .get() ?? null
-  );
+    .returning()
+    .get() ?? null;
 }

@@ -24,8 +24,7 @@
 3. **`buildExecutionOptions(deps, payload, { threadId }, "client/turn/requested")`** (async)
    - Resolves model/tier/reasoning/sandbox against last stored execution options.
 4. **`createDraft(db, hub, {...})`** (sync)
-   - Inserts into `queued_thread_messages` with `claimedAt: null`.
-   - Re-selects the inserted row.
+   - Inserts into `queued_thread_messages` with `claimedAt: null` (RETURNING).
    - Notifies hub: `notifyThread(threadId, ["queue-changed"])`.
 5. **`toQueuedMessage(draft)`** (sync)
    - Parses the stored `content` JSON back into `PromptInput[]` and validates via `threadQueuedMessageSchema.parse`.
@@ -40,10 +39,11 @@
 | 1 | SELECT thread by PK | `threads` | PK | `getThread` |
 | 2 | SELECT environment by PK | `environments` | PK | `getEnvironment` |
 | 3 | SELECT latest execution event | `events` | `events_thread_sequence_idx` | `getLastExecutionOptions` |
-| 4 | INSERT draft | `queued_thread_messages` | -- | `createDraft` |
-| 5 | SELECT draft by PK | `queued_thread_messages` | PK | re-read after insert |
+| 4 | INSERT draft (RETURNING) | `queued_thread_messages` | -- | `createDraft` |
 
-**Total: 5 queries. No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 4 queries. No N+1.**
 
 ## Code Reuse
 

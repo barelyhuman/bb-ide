@@ -6,11 +6,11 @@
 
 ## Request Params
 
-| Field | Required | Notes |
-|---|---|---|
-| `:id` | Yes | Thread ID. Resolved to thread -> environmentId -> environment -> hostId for daemon dispatch. |
-| `query` | No | Search query string. Passed through to the `workspace.list_files` daemon command. Only included in the command payload if present. |
-| `limit` | No | String integer. **Accepted but never used.** Present in `threadWorkspaceFilesQuerySchema` but never read by the route handler. |
+| Field   | Required | Notes                                                                                                                              |
+| ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `:id`   | Yes      | Thread ID. Resolved to thread -> environmentId -> environment -> hostId for daemon dispatch.                                       |
+| `query` | No       | Search query string. Passed through to the `workspace.list_files` daemon command. Only included in the command payload if present. |
+| `limit` | No       | String integer. **Accepted but never used.** Present in `threadWorkspaceFilesQuerySchema` but never read by the route handler.     |
 
 **DEAD PARAM: `limit` is accepted by the schema but never consumed.**
 
@@ -43,25 +43,26 @@
 
 ## DB Query Summary
 
-| # | Query | Table | Index | Notes |
-|---|-------|-------|-------|-------|
-| 1 | `SELECT * FROM threads WHERE id = ?` | threads | PK | `requireThread` |
-| 2 | `SELECT * FROM environments WHERE id = ?` | environments | PK | `requireEnvironment` |
-| 3 | `SELECT * FROM host_daemon_sessions WHERE hostId = ? AND status = 'active' AND leaseExpiresAt > ?` | host_daemon_sessions | No dedicated index for this query pattern | `requireConnectedHostSession` |
-| 4 | `SELECT MAX(cursor) FROM host_daemon_commands WHERE hostId = ?` | host_daemon_commands | `host_daemon_commands_host_cursor_idx` | Inside transaction |
-| 5 | `INSERT INTO host_daemon_commands ...` | host_daemon_commands | -- | Insert |
-| 6 | `SELECT * FROM host_daemon_commands WHERE id = ?` | host_daemon_commands | PK | Re-read after insert |
+| #   | Query                                                                                              | Table                | Index                                     | Notes                         |
+| --- | -------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------- | ----------------------------- |
+| 1   | `SELECT * FROM threads WHERE id = ?`                                                               | threads              | PK                                        | `requireThread`               |
+| 2   | `SELECT * FROM environments WHERE id = ?`                                                          | environments         | PK                                        | `requireEnvironment`          |
+| 3   | `SELECT * FROM host_daemon_sessions WHERE hostId = ? AND status = 'active' AND leaseExpiresAt > ?` | host_daemon_sessions | No dedicated index for this query pattern | `requireConnectedHostSession` |
+| 4   | `SELECT MAX(cursor) FROM host_daemon_commands WHERE hostId = ?`                                    | host_daemon_commands | `host_daemon_commands_host_cursor_idx`    | Inside transaction            |
+| 5   | `INSERT INTO host_daemon_commands ...` (RETURNING)                                                 | host_daemon_commands | --                                        | Insert                        |
 
-**Total: 6 queries (3 reads + 1 aggregate + 1 insert + 1 re-read). No N+1.**
+> **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+
+**Total: 5 queries (3 reads + 1 aggregate + 1 insert). No N+1.**
 
 ## Code Reuse
 
-| Function | Shared with |
-|---|---|
-| `requireThreadEnvironment` | Shared with workspace/file route |
-| `requireReadyWorkspaceEnvironment` | Local to this file; shared with workspace/file route |
-| `queueCommandAndWait` | Shared with workspace/file, environment status/diff/actions, project files, system models/providers |
-| `requireConnectedHostSession` | Used by `queueCommandAndWait` and daemon session management |
+| Function                           | Shared with                                                                                         |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `requireThreadEnvironment`         | Shared with workspace/file route                                                                    |
+| `requireReadyWorkspaceEnvironment` | Local to this file; shared with workspace/file route                                                |
+| `queueCommandAndWait`              | Shared with workspace/file, environment status/diff/actions, project files, system models/providers |
+| `requireConnectedHostSession`      | Used by `queueCommandAndWait` and daemon session management                                         |
 
 ## Flags
 
@@ -70,17 +71,17 @@
 
 ## Usages
 
-| Caller | Location | Purpose |
-|---|---|---|
-| `listThreadManagerWorkspaceFiles` (API client) | `apps/app/src/lib/api.ts:343` | Fetches workspace file list from the server |
-| `useThreadManagerWorkspaceFiles` (React query hook) | `apps/app/src/hooks/useApi.ts:553` | Wraps the API call in a `useQuery` hook |
-| `useManagerWorkspaceViewer` | `apps/app/src/views/useManagerWorkspaceViewer.ts:34` | Calls `useThreadManagerWorkspaceFiles` to list files for the manager workspace panel |
-| `ThreadDetailView` | `apps/app/src/views/ThreadDetailView.tsx:218` | Calls `useManagerWorkspaceViewer` which fetches workspace files for manager threads |
-| Server route test | `apps/server/test/public-thread-data.test.ts:697` | Direct HTTP request to `/api/v1/threads/:id/workspace/files?query=src` |
-| Contract route definition | `packages/server-contract/src/public-api.ts:252` | Typed route definition for `/threads/:id/workspace/files` |
+| Caller                                              | Location                                             | Purpose                                                                              |
+| --------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `listThreadWorkspaceFiles` (API client)      | `apps/app/src/lib/api.ts:343`                        | Fetches workspace file list from the server                                          |
+| `useThreadWorkspaceFiles` (React query hook) | `apps/app/src/hooks/useApi.ts:553`                   | Wraps the API call in a `useQuery` hook                                              |
+| `useWorkspaceViewer`                                | `apps/app/src/views/useWorkspaceViewer.ts:34`        | Calls `useThreadWorkspaceFiles` to list files for the workspace panel                |
+| `ThreadDetailView`                                  | `apps/app/src/views/ThreadDetailView.tsx:218`        | Calls `useWorkspaceViewer` which fetches workspace files for manager threads         |
+| Server route test                                   | `apps/server/test/public-thread-data.test.ts:697`    | Direct HTTP request to `/api/v1/threads/:id/workspace/files?query=src`               |
+| Contract route definition                           | `packages/server-contract/src/public-api.ts:252`     | Typed route definition for `/threads/:id/workspace/files`                            |
 
 ---
 
 ## Review Comments
 
-<!-- Flag #1 is a policy violation. Flag #2 is a code reuse issue. -->
+<!-- Flag #1 is a policy violation. Flag #2 is a code reuse issue. Rename complete: hooks, types, and query keys updated to remove "Manager" prefix. -->
