@@ -1,24 +1,15 @@
 import type { PromptInput, TimelineRow, ViewUserMessage } from "@bb/domain"
+import { collectPromptAttachments } from "./prompt-attachments"
 
-interface FollowUpAttachmentsSignature {
-  webImages: number
-  localImages: number
-  localFiles: number
-  imageUrls?: string[]
-  localImagePaths?: string[]
-  localFilePaths?: string[]
-}
+type AttachmentsSignature = NonNullable<ViewUserMessage["attachments"]>
 
-function normalizeFollowUpAttachmentsSignature(
-  attachments: FollowUpAttachmentsSignature | null | undefined,
-): FollowUpAttachmentsSignature | null {
+function normalizeAttachmentsSignature(
+  attachments: AttachmentsSignature | null | undefined,
+): AttachmentsSignature | null {
   if (!attachments) {
     return null
   }
 
-  const webImages = attachments.webImages ?? 0
-  const localImages = attachments.localImages ?? 0
-  const localFiles = attachments.localFiles ?? 0
   const imageUrls = attachments.imageUrls?.filter((entry) => entry.trim().length > 0) ?? []
   const localImagePaths =
     attachments.localImagePaths?.filter((entry) => entry.trim().length > 0) ?? []
@@ -26,9 +17,9 @@ function normalizeFollowUpAttachmentsSignature(
     attachments.localFilePaths?.filter((entry) => entry.trim().length > 0) ?? []
 
   if (
-    webImages === 0 &&
-    localImages === 0 &&
-    localFiles === 0 &&
+    attachments.webImages === 0 &&
+    attachments.localImages === 0 &&
+    attachments.localFiles === 0 &&
     imageUrls.length === 0 &&
     localImagePaths.length === 0 &&
     localFilePaths.length === 0
@@ -37,9 +28,9 @@ function normalizeFollowUpAttachmentsSignature(
   }
 
   return {
-    webImages,
-    localImages,
-    localFiles,
+    webImages: attachments.webImages,
+    localImages: attachments.localImages,
+    localFiles: attachments.localFiles,
     ...(imageUrls.length > 0 ? { imageUrls } : {}),
     ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
     ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
@@ -54,44 +45,7 @@ function buildFollowUpText(input: PromptInput[]): string {
     .join("\n\n")
 }
 
-function buildFollowUpAttachmentsSignature(input: PromptInput[]): FollowUpAttachmentsSignature | null {
-  let webImages = 0
-  let localImages = 0
-  let localFiles = 0
-  const imageUrls: string[] = []
-  const localImagePaths: string[] = []
-  const localFilePaths: string[] = []
-
-  for (const entry of input) {
-    switch (entry.type) {
-      case "text":
-        break
-      case "image":
-        webImages += 1
-        imageUrls.push(entry.url)
-        break
-      case "localImage":
-        localImages += 1
-        localImagePaths.push(entry.path)
-        break
-      case "localFile":
-        localFiles += 1
-        localFilePaths.push(entry.path)
-        break
-    }
-  }
-
-  return normalizeFollowUpAttachmentsSignature({
-    webImages,
-    localImages,
-    localFiles,
-    ...(imageUrls.length > 0 ? { imageUrls } : {}),
-    ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
-    ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
-  })
-}
-
-function buildFollowUpSignature(text: string, attachments: FollowUpAttachmentsSignature | null): string {
+function buildFollowUpSignature(text: string, attachments: AttachmentsSignature | null): string {
   return JSON.stringify({
     text,
     attachments,
@@ -101,14 +55,14 @@ function buildFollowUpSignature(text: string, attachments: FollowUpAttachmentsSi
 export function buildFollowUpSignatureFromInput(input: PromptInput[]): string {
   return buildFollowUpSignature(
     buildFollowUpText(input),
-    buildFollowUpAttachmentsSignature(input),
+    collectPromptAttachments(input) ?? null,
   )
 }
 
 function getUserMessageAttachmentsSignature(
   message: ViewUserMessage,
-): FollowUpAttachmentsSignature | null {
-  return normalizeFollowUpAttachmentsSignature(message.attachments)
+): AttachmentsSignature | null {
+  return normalizeAttachmentsSignature(message.attachments)
 }
 
 export function buildFollowUpSignatureFromRow(row: TimelineRow): string | null {

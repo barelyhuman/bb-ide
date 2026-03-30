@@ -2,7 +2,6 @@ import {
   type PromptInput,
   type ThreadQueuedMessage,
 } from "@bb/domain";
-import { toRecord } from "@bb/core-ui";
 import { type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
@@ -105,36 +104,11 @@ export function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
   };
 }
 
-function isPromptInputChunk(value: unknown): value is PromptInput {
-  const record = toRecord(value);
-  if (!record) return false;
-
-  const type = record.type;
-  if (typeof type !== "string") return false;
-  if (type === "text") {
-    return typeof record.text === "string";
-  }
-  if (type === "image") {
-    return typeof record.url === "string";
-  }
-  if (type === "localImage" || type === "localFile") {
-    return typeof record.path === "string";
-  }
-  return false;
-}
-
-function isThreadQueuedMessage(value: unknown): value is ThreadQueuedMessage {
-  const record = toRecord(value);
-  if (!record || typeof record.id !== "string") return false;
-  if (!Array.isArray(record.input)) return false;
-  return record.input.every(isPromptInputChunk);
-}
-
+// TODO: The server does not include queuedMessages in the Thread response.
+// This function always returns []. To make drafts visible, either the server
+// should embed them in GET /threads/:id or the app should fetch them separately.
 export function extractThreadQueuedMessages(
-  thread: unknown,
+  _thread: unknown,
 ): ThreadQueuedMessage[] {
-  const record = toRecord(thread);
-  const queuedMessages = record?.queuedMessages;
-  if (!Array.isArray(queuedMessages)) return [];
-  return queuedMessages.filter(isThreadQueuedMessage);
+  return [];
 }

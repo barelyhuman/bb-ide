@@ -1,5 +1,6 @@
 import type { PromptInput } from "@bb/domain";
-import type { UploadedPromptAttachment } from "@bb/server-contract";
+import { uploadedPromptAttachmentSchema, type UploadedPromptAttachment } from "@bb/server-contract";
+import { z } from "zod";
 
 export type PromptDraftAttachment = UploadedPromptAttachment;
 
@@ -7,6 +8,19 @@ export interface PromptDraftState {
   text: string;
   attachments: PromptDraftAttachment[];
 }
+
+const promptDraftStorageSchema = z.object({
+  text: z.string().default(""),
+  attachments: z
+    .array(z.unknown())
+    .default([])
+    .transform((items) =>
+      items.flatMap((item) => {
+        const result = uploadedPromptAttachmentSchema.safeParse(item);
+        return result.success ? [result.data] : [];
+      }),
+    ),
+});
 
 export function emptyPromptDraftState(): PromptDraftState {
   return {
@@ -19,39 +33,16 @@ export function isPromptDraftEmpty(draft: PromptDraftState): boolean {
   return draft.text.length === 0 && draft.attachments.length === 0;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function isPromptDraftAttachment(value: unknown): value is PromptDraftAttachment {
-  if (!isRecord(value)) return false;
-  const type = value.type;
-  if (type !== "localImage" && type !== "localFile") return false;
-  if (typeof value.path !== "string" || value.path.trim().length === 0) return false;
-  if (typeof value.name !== "string" || value.name.trim().length === 0) return false;
-  if (typeof value.sizeBytes !== "number" || !Number.isFinite(value.sizeBytes)) return false;
-  if (value.sizeBytes < 0) return false;
-  if (value.mimeType !== undefined && typeof value.mimeType !== "string") return false;
-  return true;
-}
-
 export function parsePromptDraftStorage(rawValue: string | null): PromptDraftState {
   if (!rawValue) return emptyPromptDraftState();
 
   try {
-    const parsed = JSON.parse(rawValue) as unknown;
-    if (isRecord(parsed)) {
-      const text = typeof parsed.text === "string" ? parsed.text : "";
-      const attachments = Array.isArray(parsed.attachments)
-        ? parsed.attachments.filter(isPromptDraftAttachment)
-        : [];
-      return { text, attachments };
-    }
+    const parsed: unknown = JSON.parse(rawValue);
+    const result = promptDraftStorageSchema.safeParse(parsed);
+    return result.success ? result.data : emptyPromptDraftState();
   } catch {
     return emptyPromptDraftState();
   }
-
-  return emptyPromptDraftState();
 }
 
 export function serializePromptDraftStorage(draft: PromptDraftState): string | null {

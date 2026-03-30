@@ -138,196 +138,168 @@ function QueuedFollowUpList({
   );
 }
 
-export function ThreadFollowUpComposer({
-  composerRef,
-  provisioningStatusLabel,
-  showScrollToBottom,
-  onScrollToBottom,
-  showPromptGitStatsBanner,
-  isDiffPanelActive,
-  canExpandPromptChangeList,
-  isChangeListExpanded,
-  onToggleChangeListExpanded,
-  promptBannerSummary,
-  showBranchComparisonUi,
-  promptBannerMergeBaseBranch,
-  mergeBaseBranchOptions,
-  mergeBaseBranchOptionsLoading = false,
-  onPromptBannerMergeBaseBranchChange,
-  onPromptBannerMergeBaseBranchPickerOpenChange,
-  workspaceStatus,
-  threadId,
-  onPromptGitStatsBannerClick,
-  onPromptBannerFileClick,
-  queuedMessages,
-  canSendFollowUp,
-  isFollowUpSubmitting,
-  isQueueMutationPending,
-  processingQueuedMessageId,
-  onSendQueuedImmediately,
-  onEditQueuedMessage,
-  onDeleteQueuedMessage,
-  message,
-  onChangeMessage,
-  onSubmit,
-  threadStatus,
-  onStop,
-  promptPlaceholder,
-  mentionSuggestions,
-  mentionSearchScope,
-  mentionLoading,
-  mentionError,
-  onMentionQueryChange,
-  attachments,
-  projectId,
-  onAttachFiles,
-  onRemoveAttachment,
-  isAttaching,
-  attachmentError,
-  hasMultipleProviders,
-  providerOptions,
-  selectedProviderId,
-  providerDisplayName,
-  activeModel,
-  selectedModel,
-  modelOptions,
-  onSelectedModelChange,
-  serviceTier,
-  onServiceTierChange,
-  supportsServiceTier,
-  reasoningLevel,
-  reasoningOptions,
-  onReasoningLevelChange,
-  sandboxMode,
-  sandboxOptions,
-  onSandboxModeChange,
-  environmentLabel,
-  environmentIcon,
-  contextWindowUsage,
-}: {
-  composerRef: RefObject<HTMLDivElement | null>;
-  provisioningStatusLabel?: string;
-  showScrollToBottom: boolean;
-  onScrollToBottom: () => void;
-  showPromptGitStatsBanner: boolean;
-  isDiffPanelActive: boolean;
+export interface ComposerAttachmentsProps {
+  attachmentError: string | null;
+  attachments: NonNullable<PromptBoxAttachmentsConfig["items"]>;
+  isAttaching: boolean;
+  onAttachFiles: (files: File[]) => void | Promise<void>;
+  onRemoveAttachment: (path: string) => void;
+  projectId: string;
+}
+
+export interface ComposerBannerProps {
   canExpandPromptChangeList: boolean;
   isChangeListExpanded: boolean;
-  onToggleChangeListExpanded: () => void;
-  promptBannerSummary: string;
-  showBranchComparisonUi: boolean;
-  promptBannerMergeBaseBranch?: string;
+  isDiffPanelActive: boolean;
   mergeBaseBranchOptions?: readonly string[];
   mergeBaseBranchOptionsLoading?: boolean;
+  onPromptBannerFileClick: (file: { path: string }) => void;
   onPromptBannerMergeBaseBranchChange?: (branch: string) => void;
   onPromptBannerMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
+  onPromptGitStatsBannerClick: () => void;
+  onToggleChangeListExpanded: () => void;
+  promptBannerMergeBaseBranch?: string;
+  promptBannerSummary: string;
+  showBranchComparisonUi: boolean;
+  showPromptGitStatsBanner: boolean;
   workspaceStatus?: {
     files?: ComponentProps<typeof WorkspaceChangesList>["files"];
   } | null;
-  threadId: string;
-  onPromptGitStatsBannerClick: () => void;
-  onPromptBannerFileClick: (file: { path: string }) => void;
-  queuedMessages: readonly ThreadQueuedMessage[];
+}
+
+export interface ComposerCoreProps {
   canSendFollowUp: boolean;
+  composerRef: RefObject<HTMLDivElement | null>;
   isFollowUpSubmitting: boolean;
-  isQueueMutationPending: boolean;
-  processingQueuedMessageId: string | null;
-  onSendQueuedImmediately: (messageId: string) => void;
-  onEditQueuedMessage: (messageId: string) => void;
-  onDeleteQueuedMessage: (messageId: string) => void;
   message: string;
   onChangeMessage: (value: string) => void;
-  onSubmit: () => void;
-  threadStatus: string;
   onStop?: () => void;
+  onSubmit: () => void;
+  processingQueuedMessageId: string | null;
   promptPlaceholder: string;
-  mentionSuggestions: PromptBoxMentionsConfig["suggestions"];
-  mentionSearchScope?: PromptBoxMentionsConfig["searchScope"];
-  mentionLoading: boolean;
-  mentionError: boolean;
-  onMentionQueryChange: NonNullable<PromptBoxMentionsConfig["onQueryChange"]>;
-  attachments: NonNullable<PromptBoxAttachmentsConfig["items"]>;
-  projectId: string;
-  onAttachFiles: (files: File[]) => void | Promise<void>;
-  onRemoveAttachment: (path: string) => void;
-  isAttaching: boolean;
-  attachmentError: string | null;
-  hasMultipleProviders?: boolean;
-  providerOptions?: readonly PromptOption<string>[];
-  selectedProviderId?: string;
-  providerDisplayName?: string;
+  provisioningStatusLabel?: string;
+  threadId: string;
+  threadStatus: string;
+}
+
+export interface ComposerEnvironmentProps {
+  contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
+  environmentIcon?: ComponentType<{ className?: string }>;
+  environmentLabel?: ReactNode;
+}
+
+export interface ComposerExecutionProps {
   activeModel?: { model: string } | null;
-  selectedModel: string;
+  hasMultipleProviders?: boolean;
   modelOptions: readonly PromptOption<string>[];
+  onReasoningLevelChange: (value: ReasoningLevel) => void;
+  onSandboxModeChange: (value: SandboxMode) => void;
   onSelectedModelChange: (value: string) => void;
-  serviceTier?: ServiceTier;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
-  supportsServiceTier: boolean;
+  providerDisplayName?: string;
+  providerOptions?: readonly PromptOption<string>[];
   reasoningLevel: ReasoningLevel;
   reasoningOptions: readonly PromptOption<ReasoningLevel>[];
-  onReasoningLevelChange: (value: ReasoningLevel) => void;
   sandboxMode?: SandboxMode;
   sandboxOptions: readonly PromptOption<SandboxMode>[];
-  onSandboxModeChange: (value: SandboxMode) => void;
-  environmentLabel?: ReactNode;
-  environmentIcon?: ComponentType<{ className?: string }>;
-  contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
-}) {
+  selectedModel: string;
+  selectedProviderId?: string;
+  serviceTier?: ServiceTier;
+  supportsServiceTier: boolean;
+}
+
+export interface ComposerMentionsProps {
+  mentionError: boolean;
+  mentionLoading: boolean;
+  mentionSearchScope?: PromptBoxMentionsConfig["searchScope"];
+  mentionSuggestions: PromptBoxMentionsConfig["suggestions"];
+  onMentionQueryChange: NonNullable<PromptBoxMentionsConfig["onQueryChange"]>;
+}
+
+export interface ComposerQueueProps {
+  isQueueMutationPending: boolean;
+  onDeleteQueuedMessage: (messageId: string) => void;
+  onEditQueuedMessage: (messageId: string) => void;
+  onSendQueuedImmediately: (messageId: string) => void;
+  onScrollToBottom: () => void;
+  queuedMessages: readonly ThreadQueuedMessage[];
+  showScrollToBottom: boolean;
+}
+
+export interface ThreadFollowUpComposerProps {
+  attachments: ComposerAttachmentsProps;
+  banner: ComposerBannerProps;
+  composer: ComposerCoreProps;
+  environment: ComposerEnvironmentProps;
+  execution: ComposerExecutionProps;
+  mentions: ComposerMentionsProps;
+  queue: ComposerQueueProps;
+}
+
+export function ThreadFollowUpComposer({
+  attachments,
+  banner,
+  composer,
+  environment,
+  execution,
+  mentions,
+  queue,
+}: ThreadFollowUpComposerProps) {
   const promptBannerMergeBaseCandidates = getMergeBaseBranchCandidates({
-    mergeBaseBranch: promptBannerMergeBaseBranch,
-    mergeBaseBranchOptions,
+    mergeBaseBranch: banner.promptBannerMergeBaseBranch,
+    mergeBaseBranchOptions: banner.mergeBaseBranchOptions,
   });
   const canSelectPromptBannerMergeBase = Boolean(
-    showBranchComparisonUi &&
-      promptBannerMergeBaseBranch &&
-      onPromptBannerMergeBaseBranchChange &&
+    banner.showBranchComparisonUi &&
+      banner.promptBannerMergeBaseBranch &&
+      banner.onPromptBannerMergeBaseBranchChange &&
       promptBannerMergeBaseCandidates.length > 0,
   );
 
   return (
-    <div ref={composerRef}>
+    <div ref={composer.composerRef}>
       <PromptComposerShell
         statusLabel={
-          provisioningStatusLabel ? (
-            <ConversationStatusIndicator label={provisioningStatusLabel} />
+          composer.provisioningStatusLabel ? (
+            <ConversationStatusIndicator label={composer.provisioningStatusLabel} />
           ) : undefined
         }
       >
         <ScrollToBottomButton
-          visible={showScrollToBottom}
-          onClick={onScrollToBottom}
+          visible={queue.showScrollToBottom}
+          onClick={queue.onScrollToBottom}
         />
-        {showPromptGitStatsBanner ? (
+        {banner.showPromptGitStatsBanner ? (
           <div
             className={cn(
               "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
-              !isDiffPanelActive && "cursor-pointer transition-colors hover:bg-muted/55",
+              !banner.isDiffPanelActive && "cursor-pointer transition-colors hover:bg-muted/55",
             )}
-            onClick={onPromptGitStatsBannerClick}
+            onClick={banner.onPromptGitStatsBannerClick}
           >
             <div className="flex items-center justify-between gap-3">
-              {canExpandPromptChangeList ? (
+              {banner.canExpandPromptChangeList ? (
                 <button
                   type="button"
                   className="flex min-w-0 items-center gap-2 truncate text-left"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onToggleChangeListExpanded();
+                    banner.onToggleChangeListExpanded();
                   }}
                 >
-                  <span className="truncate">{promptBannerSummary}</span>
+                  <span className="truncate">{banner.promptBannerSummary}</span>
                   <ChevronDown
                     className={cn(
                       "size-3.5 shrink-0 transition-transform duration-200",
-                      isChangeListExpanded && "rotate-180",
+                      banner.isChangeListExpanded && "rotate-180",
                     )}
                   />
                 </button>
               ) : (
-                <span className="truncate">{promptBannerSummary}</span>
+                <span className="truncate">{banner.promptBannerSummary}</span>
               )}
-              {showBranchComparisonUi ? (
-                canSelectPromptBannerMergeBase && promptBannerMergeBaseBranch ? (
+              {banner.showBranchComparisonUi ? (
+                canSelectPromptBannerMergeBase && banner.promptBannerMergeBaseBranch ? (
                   <div
                     className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/90"
                     onClick={(event) => {
@@ -336,21 +308,21 @@ export function ThreadFollowUpComposer({
                   >
                     <span className="shrink-0">Merge base:</span>
                     <MergeBaseBranchPicker
-                      value={promptBannerMergeBaseBranch}
+                      value={banner.promptBannerMergeBaseBranch}
                       options={promptBannerMergeBaseCandidates}
                       variant="minimal"
-                      loading={mergeBaseBranchOptionsLoading}
+                      loading={banner.mergeBaseBranchOptionsLoading}
                       onChange={(branch) => {
-                        onPromptBannerMergeBaseBranchChange?.(branch);
+                        banner.onPromptBannerMergeBaseBranchChange?.(branch);
                       }}
-                      onOpenChange={onPromptBannerMergeBaseBranchPickerOpenChange}
+                      onOpenChange={banner.onPromptBannerMergeBaseBranchPickerOpenChange}
                       className="max-w-[10rem] text-muted-foreground/90"
                     />
                   </div>
                 ) : (
                   <span className="shrink-0 text-xs text-muted-foreground/90">
-                    {promptBannerMergeBaseBranch
-                      ? `Merge base: ${promptBannerMergeBaseBranch}`
+                    {banner.promptBannerMergeBaseBranch
+                      ? `Merge base: ${banner.promptBannerMergeBaseBranch}`
                       : "Merge base comparison"}
                   </span>
                 )
@@ -360,11 +332,11 @@ export function ThreadFollowUpComposer({
                 </span>
               )}
             </div>
-            {canExpandPromptChangeList && workspaceStatus ? (
+            {banner.canExpandPromptChangeList && banner.workspaceStatus ? (
               <div
                 className={cn(
                   "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
-                  isChangeListExpanded
+                  banner.isChangeListExpanded
                     ? "mt-2 grid-rows-[1fr] border-t border-border/50 pt-1 opacity-100"
                     : "grid-rows-[0fr] border-t border-transparent pt-0 opacity-0",
                 )}
@@ -374,8 +346,8 @@ export function ThreadFollowUpComposer({
               >
                 <div className="overflow-hidden">
                   <WorkspaceChangesList
-                    files={workspaceStatus.files ?? []}
-                    onFileClick={onPromptBannerFileClick}
+                    files={banner.workspaceStatus.files ?? []}
+                    onFileClick={banner.onPromptBannerFileClick}
                   />
                 </div>
               </div>
@@ -383,98 +355,98 @@ export function ThreadFollowUpComposer({
           </div>
         ) : null}
         <QueuedFollowUpList
-          queuedMessages={queuedMessages}
-          sendDisabled={!canSendFollowUp || isFollowUpSubmitting || isQueueMutationPending}
-          actionDisabled={isFollowUpSubmitting || isQueueMutationPending}
-          processingMessageId={processingQueuedMessageId}
-          onSendImmediately={onSendQueuedImmediately}
-          onEdit={onEditQueuedMessage}
-          onDelete={onDeleteQueuedMessage}
+          queuedMessages={queue.queuedMessages}
+          sendDisabled={!composer.canSendFollowUp || composer.isFollowUpSubmitting || queue.isQueueMutationPending}
+          actionDisabled={composer.isFollowUpSubmitting || queue.isQueueMutationPending}
+          processingMessageId={composer.processingQueuedMessageId}
+          onSendImmediately={queue.onSendQueuedImmediately}
+          onEdit={queue.onEditQueuedMessage}
+          onDelete={queue.onDeleteQueuedMessage}
         />
         <PromptBox
-          value={message}
-          onChange={onChangeMessage}
-          onSubmit={onSubmit}
-          placeholder={promptPlaceholder}
+          value={composer.message}
+          onChange={composer.onChangeMessage}
+          onSubmit={composer.onSubmit}
+          placeholder={composer.promptPlaceholder}
           autoFocus
           submission={{
-            onStop: threadStatus === "active" ? onStop : undefined,
-            isSubmitting: isFollowUpSubmitting,
-            disabled: !canSendFollowUp || isFollowUpSubmitting,
-            title: threadStatus === "active"
+            onStop: composer.threadStatus === "active" ? composer.onStop : undefined,
+            isSubmitting: composer.isFollowUpSubmitting,
+            disabled: !composer.canSendFollowUp || composer.isFollowUpSubmitting,
+            title: composer.threadStatus === "active"
               ? "Queue follow-up (Enter)"
               : "Submit (Enter)",
-            isRunning: threadStatus === "active",
+            isRunning: composer.threadStatus === "active",
             mode: "enter",
           }}
           mentions={{
-            suggestions: mentionSuggestions,
-            searchScope: mentionSearchScope,
-            isLoading: mentionLoading,
-            isError: mentionError,
-            onQueryChange: onMentionQueryChange,
+            suggestions: mentions.mentionSuggestions,
+            searchScope: mentions.mentionSearchScope,
+            isLoading: mentions.mentionLoading,
+            isError: mentions.mentionError,
+            onQueryChange: mentions.onMentionQueryChange,
           }}
           attachments={{
-            items: attachments,
-            projectId,
-            onAttachFiles,
-            onRemove: onRemoveAttachment,
-            isAttaching,
-            error: attachmentError,
+            items: attachments.attachments,
+            projectId: attachments.projectId,
+            onAttachFiles: attachments.onAttachFiles,
+            onRemove: attachments.onRemoveAttachment,
+            isAttaching: attachments.isAttaching,
+            error: attachments.attachmentError,
           }}
           zenMode={{
             layout: "thread",
             storageKey: null,
-            resetKey: threadId,
+            resetKey: composer.threadId,
             resetOnSubmit: true,
           }}
           footerStart={
             <PromptExecutionControls
               provider={{
-                hasMultiple: hasMultipleProviders,
-                options: providerOptions,
-                selectedId: selectedProviderId,
-                displayName: providerDisplayName,
+                hasMultiple: execution.hasMultipleProviders,
+                options: execution.providerOptions,
+                selectedId: execution.selectedProviderId,
+                displayName: execution.providerDisplayName,
                 readOnly: true,
               }}
               model={{
-                active: activeModel,
-                selected: selectedModel,
-                options: modelOptions,
-                onChange: onSelectedModelChange,
+                active: execution.activeModel,
+                selected: execution.selectedModel,
+                options: execution.modelOptions,
+                onChange: execution.onSelectedModelChange,
               }}
               serviceTier={{
-                value: serviceTier,
-                onChange: onServiceTierChange,
-                supported: supportsServiceTier,
+                value: execution.serviceTier,
+                onChange: execution.onServiceTierChange,
+                supported: execution.supportsServiceTier,
               }}
               reasoning={{
-                value: reasoningLevel,
-                options: reasoningOptions,
-                onChange: onReasoningLevelChange,
+                value: execution.reasoningLevel,
+                options: execution.reasoningOptions,
+                onChange: execution.onReasoningLevelChange,
               }}
               sandbox={{
-                value: sandboxMode,
-                options: sandboxOptions,
-                onChange: onSandboxModeChange,
+                value: execution.sandboxMode,
+                options: execution.sandboxOptions,
+                onChange: execution.onSandboxModeChange,
               }}
             />
           }
         />
-        {environmentLabel || contextWindowUsage ? (
+        {environment.environmentLabel || environment.contextWindowUsage ? (
           <div className="mt-1 flex items-center justify-between gap-2 px-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-              {environmentLabel ? (
+              {environment.environmentLabel ? (
                 <PromptOptionDisplay
                   label="Environment"
-                  value={environmentLabel}
-                  icon={environmentIcon}
+                  value={environment.environmentLabel}
+                  icon={environment.environmentIcon}
                   className="h-6 px-0"
                 />
               ) : null}
             </div>
-            {contextWindowUsage ? (
-              <ThreadContextWindowIndicator usage={contextWindowUsage} />
+            {environment.contextWindowUsage ? (
+              <ThreadContextWindowIndicator usage={environment.contextWindowUsage} />
             ) : null}
           </div>
         ) : null}

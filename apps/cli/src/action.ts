@@ -1,5 +1,14 @@
 import { getErrorMessage } from "./commands/helpers.js";
 
+export class CliExitError extends Error {
+  readonly exitCode: number;
+  constructor(message: string, exitCode: number) {
+    super(message);
+    this.name = "CliExitError";
+    this.exitCode = exitCode;
+  }
+}
+
 type CommandActionArgs = readonly unknown[];
 type CommandAction<TArgs extends CommandActionArgs> = (
   ...args: TArgs
@@ -14,6 +23,11 @@ export function action<TArgs extends CommandActionArgs>(
     } catch (err: unknown) {
       if (isProcessExitError(err)) {
         throw err;
+      }
+      if (err instanceof CliExitError) {
+        console.error(`Error: ${err.message}`);
+        process.exit(err.exitCode);
+        return;
       }
       console.error(`Error: ${getErrorMessage(err)}`);
       process.exit(1);

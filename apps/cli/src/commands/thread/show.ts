@@ -15,7 +15,7 @@ import type {
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { action } from "../../action.js";
-import { createClient, unwrap } from "../../client.js";
+import { createClient, type Client, unwrap } from "../../client.js";
 import {
   outputJson,
   printContextLabel,
@@ -63,6 +63,27 @@ interface ThreadShowJsonPayload extends ThreadStatusPayload {
   workStatus?: WorkspaceStatus | null;
   gitDiff?: ThreadGitDiffResponse;
   mergeBaseBranches?: string[];
+}
+
+type FetchedWorkStatus =
+  | { available: true; status: WorkspaceStatus }
+  | { available: false };
+
+async function fetchWorkStatus(args: {
+  client: Client;
+  environmentId: string;
+  mergeBaseBranch: string;
+}): Promise<FetchedWorkStatus> {
+  const environmentStatus = await unwrap<EnvironmentStatusResponse>(
+    args.client.api.v1.environments[":id"].status.$get({
+      param: { id: args.environmentId },
+      query: { mergeBaseBranch: args.mergeBaseBranch },
+    }),
+  );
+  if (environmentStatus.workspace === null) {
+    return { available: false };
+  }
+  return { available: true, status: environmentStatus.workspace };
 }
 
 export function registerShowCommand(
@@ -149,16 +170,14 @@ export function registerShowCommand(
         return mergeBaseBranch;
       };
 
-      let workStatus: WorkspaceStatus | null | undefined;
+      let fetchedWorkStatus: FetchedWorkStatus | undefined;
       if (opts.workStatus && thread.environmentId) {
         const mergeBaseBranch = await requireMergeBaseBranch();
-        const environmentStatus = await unwrap<EnvironmentStatusResponse>(
-          client.api.v1.environments[":id"].status.$get({
-            param: { id: thread.environmentId },
-            query: { mergeBaseBranch },
-          }),
-        );
-        workStatus = environmentStatus.workspace;
+        fetchedWorkStatus = await fetchWorkStatus({
+          client,
+          environmentId: thread.environmentId,
+          mergeBaseBranch,
+        });
       }
 
       let gitDiff: ThreadGitDiffResponse | undefined;
@@ -191,8 +210,10 @@ export function registerShowCommand(
 
       if (opts.json) {
         const jsonPayload: ThreadShowJsonPayload = { ...statusPayload };
-        if (workStatus !== undefined) {
-          jsonPayload.workStatus = workStatus;
+        if (fetchedWorkStatus !== undefined) {
+          jsonPayload.workStatus = fetchedWorkStatus.available
+            ? fetchedWorkStatus.status
+            : null;
         }
         if (gitDiff !== undefined) {
           jsonPayload.gitDiff = gitDiff;
@@ -206,28 +227,31 @@ export function registerShowCommand(
 
       printThreadStatus(statusPayload);
 
-      if (workStatus) {
-        console.log("");
-        console.log("Work status:");
-        console.log(`  State:    ${workStatus.state}`);
-        if (workStatus.currentBranch) {
-          console.log(`  Branch:   ${workStatus.currentBranch}`);
+      if (fetchedWorkStatus !== undefined) {
+        if (fetchedWorkStatus.available) {
+          const ws = fetchedWorkStatus.status;
+          console.log("");
+          console.log("Work status:");
+          console.log(`  State:    ${ws.state}`);
+          if (ws.currentBranch) {
+            console.log(`  Branch:   ${ws.currentBranch}`);
+          }
+          console.log(
+            `  Changed files: ${ws.changedFiles} (workspace: ${ws.workspaceChangedFiles})`,
+          );
+          console.log(
+            `  Insertions:    +${ws.insertions} (workspace: +${ws.workspaceInsertions})`,
+          );
+          console.log(
+            `  Deletions:     -${ws.deletions} (workspace: -${ws.workspaceDeletions})`,
+          );
+          console.log(
+            `  Ahead: ${ws.aheadCount}  Behind: ${ws.behindCount}`,
+          );
+        } else {
+          console.log("");
+          console.log("Work status: unavailable");
         }
-        console.log(
-          `  Changed files: ${workStatus.changedFiles} (workspace: ${workStatus.workspaceChangedFiles})`,
-        );
-        console.log(
-          `  Insertions:    +${workStatus.insertions} (workspace: +${workStatus.workspaceInsertions})`,
-        );
-        console.log(
-          `  Deletions:     -${workStatus.deletions} (workspace: -${workStatus.workspaceDeletions})`,
-        );
-        console.log(
-          `  Ahead: ${workStatus.aheadCount}  Behind: ${workStatus.behindCount}`,
-        );
-      } else if (opts.workStatus && workStatus === null) {
-        console.log("");
-        console.log("Work status: unavailable");
       }
 
       if (gitDiff) {

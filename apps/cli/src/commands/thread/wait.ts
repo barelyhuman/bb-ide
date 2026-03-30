@@ -6,10 +6,10 @@ import {
   threadStatusSchema,
   threadStatusValues,
 } from "@bb/domain";
+import { action, CliExitError } from "../../action.js";
 import { assertNever } from "../../assert-never.js";
 import { createClient, unwrap } from "../../client.js";
 import {
-  getErrorMessage,
   outputJson,
   printContextLabel,
   requireThreadIdWithLabel,
@@ -33,10 +33,6 @@ interface ThreadWaitCommandOptions {
   json?: boolean;
 }
 
-class ThreadWaitInvalidRequestError extends Error {}
-class ThreadWaitTimeoutError extends Error {}
-class ThreadWaitUnreachableError extends Error {}
-
 export function registerWaitCommand(
   parent: Command,
   getUrl: () => string,
@@ -55,104 +51,87 @@ export function registerWaitCommand(
       `Polling interval in milliseconds (default: ${DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS})`,
     )
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: ThreadWaitCommandOptions) => {
+    .action(action(async (id: string | undefined, opts: ThreadWaitCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const resolved = requireThreadIdWithLabel(id);
-        const threadId = resolved.id;
-        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const target = parseThreadWaitTarget(opts);
-        const timeoutSeconds = parseThreadWaitTimeoutSeconds(opts.timeout);
-        const pollIntervalMs = parseThreadWaitPollIntervalMs(opts.pollInterval);
-        const deadline = Date.now() + timeoutSeconds * 1000;
+      const resolved = requireThreadIdWithLabel(id);
+      const threadId = resolved.id;
+      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+      const target = parseThreadWaitTarget(opts);
+      const timeoutSeconds = parseThreadWaitTimeoutSeconds(opts.timeout);
+      const pollIntervalMs = parseThreadWaitPollIntervalMs(opts.pollInterval);
+      const deadline = Date.now() + timeoutSeconds * 1000;
 
-        let afterSeq: number | undefined;
-        while (true) {
-          if (target.kind === "status") {
-            const thread = await unwrap<Thread>(
-              client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
-            );
-            if (thread.status === target.status) {
-              if (outputJson(opts, { threadId, matched: true, target })) return;
-              console.log(`Thread ${threadId} reached status ${target.status}.`);
-              return;
-            }
-            const unreachableReason = getThreadWaitUnreachableReason(
-              threadId,
-              thread.status,
-              target.status,
-            );
-            if (unreachableReason) {
-              throw new ThreadWaitUnreachableError(unreachableReason);
-            }
-          } else {
-            const events = await unwrap<ThreadEventRow[]>(
-              client.api.v1.threads[":id"].events.$get({
-                param: { id: threadId },
-                query: afterSeq !== undefined ? { afterSeq: String(afterSeq) } : {},
-              }),
-            );
-            if (events.length > 0) {
-              afterSeq = events[events.length - 1].seq;
-            }
-            const matched = events.find(
-              (event) => event.type === target.eventType,
-            );
-            if (matched) {
-              if (outputJson(opts, { threadId, matched: true, target })) return;
-              console.log(
-                `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,
-              );
-              return;
-            }
+      let afterSeq: number | undefined;
+      while (true) {
+        if (target.kind === "status") {
+          const thread = await unwrap<Thread>(
+            client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+          );
+          if (thread.status === target.status) {
+            if (outputJson(opts, { threadId, matched: true, target })) return;
+            console.log(`Thread ${threadId} reached status ${target.status}.`);
+            return;
           }
-
-          if (Date.now() >= deadline) {
-            throw new ThreadWaitTimeoutError(
-              target.kind === "status"
-                ? `Timed out waiting for thread ${threadId} to reach status ${target.status}.`
-                : `Timed out waiting for thread ${threadId} event ${target.eventType}.`,
-            );
+          const unreachableReason = getThreadWaitUnreachableReason(
+            threadId,
+            thread.status,
+            target.status,
+          );
+          if (unreachableReason) {
+            throw new CliExitError(unreachableReason, THREAD_WAIT_EXIT_CODE_UNREACHABLE);
           }
+        } else {
+          const events = await unwrap<ThreadEventRow[]>(
+            client.api.v1.threads[":id"].events.$get({
+              param: { id: threadId },
+              query: afterSeq !== undefined ? { afterSeq: String(afterSeq) } : {},
+            }),
+          );
+          if (events.length > 0) {
+            afterSeq = events[events.length - 1].seq;
+          }
+          const matched = events.find(
+            (event) => event.type === target.eventType,
+          );
+          if (matched) {
+            if (outputJson(opts, { threadId, matched: true, target })) return;
+            console.log(
+              `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,
+            );
+            return;
+          }
+        }
 
-          await sleep(pollIntervalMs);
+        if (Date.now() >= deadline) {
+          throw new CliExitError(
+            target.kind === "status"
+              ? `Timed out waiting for thread ${threadId} to reach status ${target.status}.`
+              : `Timed out waiting for thread ${threadId} event ${target.eventType}.`,
+            THREAD_WAIT_EXIT_CODE_TIMEOUT,
+          );
         }
-      } catch (err: unknown) {
-        if (err instanceof ThreadWaitTimeoutError) {
-          console.error(`Error: ${err.message}`);
-          process.exit(THREAD_WAIT_EXIT_CODE_TIMEOUT);
-          return;
-        }
-        if (err instanceof ThreadWaitUnreachableError) {
-          console.error(`Error: ${err.message}`);
-          process.exit(THREAD_WAIT_EXIT_CODE_UNREACHABLE);
-          return;
-        }
-        if (err instanceof ThreadWaitInvalidRequestError) {
-          console.error(`Error: ${err.message}`);
-          process.exit(THREAD_WAIT_EXIT_CODE_INVALID_REQUEST);
-          return;
-        }
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+
+        await sleep(pollIntervalMs);
       }
-    });
+    }));
 }
 
 function parseThreadWaitTarget(opts: ThreadWaitCommandOptions): ThreadWaitTarget {
   const hasStatus = Boolean(opts.status);
   const hasEvent = Boolean(opts.event);
   if (hasStatus === hasEvent) {
-    throw new ThreadWaitInvalidRequestError(
+    throw new CliExitError(
       "Provide exactly one of --status or --event.",
+      THREAD_WAIT_EXIT_CODE_INVALID_REQUEST,
     );
   }
 
   if (opts.status) {
     const parsed = threadStatusSchema.safeParse(opts.status);
     if (!parsed.success) {
-      throw new ThreadWaitInvalidRequestError(
+      throw new CliExitError(
         `Invalid thread status '${opts.status}'. Expected one of ${threadStatusValues.join(", ")}.`,
+        THREAD_WAIT_EXIT_CODE_INVALID_REQUEST,
       );
     }
     return { kind: "status", status: parsed.data };

@@ -1,5 +1,6 @@
 import { getDefaultStore, useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
+import { z } from "zod";
 import { createLocalStorageSyncStorage } from "./browser-storage";
 
 const AUTO_ARCHIVE_PREFERENCES_STORAGE_KEY = "bb.auto-archive.preferences";
@@ -12,9 +13,9 @@ const DEFAULT_PREFERENCES: AutoArchivePreferences = {
   autoArchiveThreadOnCommit: true,
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
+const autoArchivePreferencesSchema = z.object({
+  autoArchiveThreadOnCommit: z.boolean(),
+});
 
 const autoArchivePreferencesStorage = createLocalStorageSyncStorage<AutoArchivePreferences>({
   parse: (storedValue, initialValue) => {
@@ -23,17 +24,9 @@ const autoArchivePreferencesStorage = createLocalStorageSyncStorage<AutoArchiveP
     }
 
     try {
-      const parsed = JSON.parse(storedValue) as unknown;
-      if (!isRecord(parsed)) {
-        return initialValue;
-      }
-
-      return {
-        autoArchiveThreadOnCommit:
-          typeof parsed.autoArchiveThreadOnCommit === "boolean"
-            ? parsed.autoArchiveThreadOnCommit
-            : initialValue.autoArchiveThreadOnCommit,
-      };
+      const parsed: unknown = JSON.parse(storedValue);
+      const result = autoArchivePreferencesSchema.safeParse(parsed);
+      return result.success ? result.data : initialValue;
     } catch {
       return initialValue;
     }

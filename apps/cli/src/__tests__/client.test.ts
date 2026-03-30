@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { unwrap } from "../client.js";
+import { unwrap, unwrapVoid } from "../client.js";
 
 describe("unwrap()", () => {
   it("parses successful JSON response", async () => {
@@ -16,22 +16,35 @@ describe("unwrap()", () => {
     expect(result.title).toBe("Hello");
   });
 
-  it("returns undefined for empty response body", async () => {
+  it("throws on empty response body", async () => {
     const response = new Response("", { status: 200 });
 
-    const result = await unwrap<{ id: string } | undefined>(
-      Promise.resolve(response),
-    );
-
-    expect(result).toBeUndefined();
+    await expect(
+      unwrap<{ id: string }>(Promise.resolve(response)),
+    ).rejects.toThrow();
   });
 
-  it("returns undefined for null body (204 No Content)", async () => {
+  it("unwrapVoid succeeds for empty response body", async () => {
+    const response = new Response("", { status: 200 });
+
+    await expect(unwrapVoid(Promise.resolve(response))).resolves.toBeUndefined();
+  });
+
+  it("unwrapVoid succeeds for null body (204 No Content)", async () => {
     const response = new Response(null, { status: 204 });
 
-    const result = await unwrap<void>(Promise.resolve(response));
+    await expect(unwrapVoid(Promise.resolve(response))).resolves.toBeUndefined();
+  });
 
-    expect(result).toBeUndefined();
+  it("unwrapVoid throws for non-ok response", async () => {
+    const response = new Response("", {
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+
+    await expect(unwrapVoid(Promise.resolve(response))).rejects.toThrow(
+      "HTTP 500: Internal Server Error",
+    );
   });
 
   it("throws HTTP error with status and body for non-ok response", async () => {

@@ -7,6 +7,14 @@ import type {
   CommitActionResponse,
   SquashMergeActionResponse,
 } from "@bb/server-contract";
+import type { ResolvedId } from "../context-env.js";
+
+export {
+  type ResolvedId,
+  requireProjectIdWithLabel,
+  requireThreadIdWithLabel,
+  requireThreadIdOrSelf,
+} from "../context-env.js";
 
 const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
 
@@ -26,79 +34,6 @@ export function outputJson(opts: JsonOutputOptions, data: unknown): boolean {
   if (!opts.json) return false;
   console.log(JSON.stringify(data, null, 2));
   return true;
-}
-
-/**
- * Require a thread ID for mutating commands that support `--self`.
- *
- * - Positional `<id>` and `--self` are mutually exclusive.
- * - `--self` resolves from BB_THREAD_ID.
- * - If neither is provided, error with guidance.
- */
-export function requireThreadIdOrSelf(
-  positionalId: string | undefined,
-  opts: SelfTargetOptions,
-): string {
-  if (opts.self && positionalId) {
-    throw new Error("Cannot combine a thread ID argument with --self.");
-  }
-  if (opts.self) {
-    const envThreadId = process.env.BB_THREAD_ID?.trim();
-    if (!envThreadId) {
-      throw new Error("--self requires BB_THREAD_ID to be set.");
-    }
-    return envThreadId;
-  }
-  if (positionalId) {
-    return positionalId;
-  }
-  throw new Error(
-    "Provide a thread ID or use --self to target the current thread.",
-  );
-}
-
-export interface ResolvedId {
-  id: string;
-  /** "arg" when provided as a positional/flag, "env" when resolved from the environment variable. */
-  source: "arg" | "env";
-}
-
-/**
- * Require a thread ID for read-only commands. Returns the resolved ID and its
- * source so the caller can print a context label when the value came from the
- * environment variable.
- */
-export function requireThreadIdWithLabel(
-  positionalId: string | undefined,
-): ResolvedId {
-  if (positionalId) {
-    return { id: positionalId, source: "arg" };
-  }
-  const envValue = process.env.BB_THREAD_ID?.trim();
-  if (envValue) {
-    return { id: envValue, source: "env" };
-  }
-  throw new Error("Missing thread context. Pass <threadId> or set BB_THREAD_ID.");
-}
-
-/**
- * Require a project ID for read-only commands. Returns the resolved ID and its
- * source so the caller can print a context label when the value came from the
- * environment variable.
- */
-export function requireProjectIdWithLabel(
-  flagValue: string | undefined,
-): ResolvedId {
-  if (flagValue) {
-    return { id: flagValue, source: "arg" };
-  }
-  const envValue = process.env.BB_PROJECT_ID?.trim();
-  if (envValue) {
-    return { id: envValue, source: "env" };
-  }
-  throw new Error(
-    "Missing project context. Pass a project ID (for example --project <id>) or set BB_PROJECT_ID.",
-  );
 }
 
 /**
@@ -171,6 +106,6 @@ export function prependErrorContext(context: string, err: unknown): Error {
   return new Error(`${context}: ${getErrorMessage(err)}`);
 }
 
-function joinValues(values: readonly string[]): string {
+export function joinValues(values: readonly string[]): string {
   return values.map((value) => `'${value}'`).join(" or ");
 }

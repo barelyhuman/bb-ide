@@ -51,14 +51,7 @@ describe("threadQueuedMessages", () => {
     });
   });
 
-  it("ignores malformed queued messages during extraction", () => {
-    expect(
-      extractThreadQueuedMessages({
-        queuedMessages: [
-          { id: "good", input: [{ type: "text", text: "hello" }] },
-          { id: "bad", input: [{ type: "localFile" }] },
-        ],
-      }),
-    ).toEqual([{ id: "good", input: [{ type: "text", text: "hello" }] }]);
+  it("returns empty array (server does not embed drafts in thread response)", () => {
+    expect(extractThreadQueuedMessages({})).toEqual([]);
   });
 });

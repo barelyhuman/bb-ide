@@ -8,7 +8,6 @@ import { registerProjectCommands } from "./commands/project.js";
 import { registerProviderCommands } from "./commands/provider.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread/index.js";
-import { normalizeCliArgv } from "./argv-normalization.js";
 import { resolveContextSnapshot, resolveServerUrl } from "./context-env.js";
 
 const program = new Command();
@@ -52,7 +51,7 @@ registerThreadCommands(program, getUrl);
 registerEnvironmentCommands(program, getUrl);
 registerGuideCommand(program);
 
-program.parseAsync(normalizeCliArgv(process.argv)).catch((err) => {
+program.parseAsync(process.argv).catch((err) => {
   console.error(err.message);
   process.exit(1);
 });

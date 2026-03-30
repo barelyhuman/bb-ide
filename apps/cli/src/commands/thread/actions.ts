@@ -48,8 +48,11 @@ interface ThreadStopCommandOptions {
   json?: boolean;
 }
 
-interface ThreadSendOptions {
-  mode?: "auto" | "steer";
+interface PostThreadMessageArgs {
+  getUrl: () => string;
+  threadId: string;
+  message: string;
+  mode: "auto" | "steer";
   model?: string;
   reasoningLevel?: ReasoningLevel;
 }
@@ -223,7 +226,10 @@ export function registerActionsCommands(
         message: string,
         opts: ThreadTellCommandOptions,
       ) => {
-        const response = await postThreadMessage(getUrl, id, message, {
+        const response = await postThreadMessage({
+          getUrl,
+          threadId: id,
+          message,
           mode: resolveThreadMessageMode(opts.mode),
           model: opts.model,
           reasoningLevel: parseReasoningLevel(opts.reasoningLevel),
@@ -261,34 +267,34 @@ export function registerActionsCommands(
 }
 
 async function postThreadMessage(
-  getUrl: () => string,
-  threadId: string,
-  message: string,
-  options?: ThreadSendOptions,
+  args: PostThreadMessageArgs,
 ): Promise<{ ok: boolean; mode?: "steer" }> {
-  const client = createClient(getUrl());
-  const requestedMode = options?.mode ?? "auto";
+  const client = createClient(args.getUrl());
   const response = await unwrap<{ ok: boolean }>(
     client.api.v1.threads[":id"].send.$post({
-      param: { id: threadId },
+      param: { id: args.threadId },
       json: {
-        input: [{ type: "text", text: message }],
-        mode: requestedMode,
-        ...(options?.model ? { model: options.model } : {}),
-        ...(options?.reasoningLevel
-          ? { reasoningLevel: options.reasoningLevel }
+        input: [{ type: "text", text: args.message }],
+        mode: args.mode,
+        ...(args.model ? { model: args.model } : {}),
+        ...(args.reasoningLevel
+          ? { reasoningLevel: args.reasoningLevel }
           : {}),
       },
     }),
   );
   return {
     ...response,
-    ...(requestedMode === "steer" ? { mode: "steer" as const } : {}),
+    ...(args.mode === "steer" ? { mode: "steer" as const } : {}),
   };
 }
 
-function resolveThreadMessageMode(value: string | undefined): "steer" | undefined {
-  return value?.trim().toLowerCase() === "steer" ? "steer" : undefined;
+function resolveThreadMessageMode(value: string | undefined): "auto" | "steer" {
+  if (value === undefined) return "auto";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "steer") return "steer";
+  if (normalized === "auto") return "auto";
+  throw new Error(`Invalid message mode '${value}'. Expected 'auto' or 'steer'.`);
 }
 
 function getThreadStopBlockedReason(

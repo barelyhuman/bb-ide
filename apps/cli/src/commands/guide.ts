@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { renderTemplate } from "@bb/templates";
+import { action } from "../action.js";
 import { outputJson } from "./helpers.js";
 
 export function registerGuideCommand(program: Command): void {
@@ -7,7 +8,7 @@ export function registerGuideCommand(program: Command): void {
     .command("guide")
     .description("Show the BB system overview and CLI guide")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { json?: boolean }) => {
+    .action(action(async (opts: { json?: boolean }) => {
       const systemOverview = renderTemplate("bbSystemOverview", {});
       const cliGuide = renderTemplate("bbCliGuide", {});
 
@@ -16,5 +17,5 @@ export function registerGuideCommand(program: Command): void {
       console.log(systemOverview);
       console.log("---");
       console.log(cliGuide);
-    });
+    }));
 }

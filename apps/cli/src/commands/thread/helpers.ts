@@ -6,6 +6,7 @@ import {
   type ServiceTier,
 } from "@bb/domain";
 import { assertNever } from "../../assert-never.js";
+import { joinValues } from "../helpers.js";
 
 export type ThreadStatusEventMode = "summary" | "raw";
 export type ThreadWaitTarget =
@@ -111,8 +112,4 @@ export function parseSandboxMode(
   throw new Error(
     `Invalid sandbox mode '${value}'. Expected ${joinValues(SANDBOX_MODES)}.`,
   );
-}
-
-function joinValues(values: readonly string[]): string {
-  return values.map((value) => `'${value}'`).join(" or ");
 }
