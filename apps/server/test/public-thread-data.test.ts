@@ -705,19 +705,24 @@ describe("public thread data routes", () => {
       expect(filesCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/thread-workspace", workspaceProvisionType: "unmanaged" },
         query: "src",
+        limit: 1000,
       });
       await reportQueuedCommandSuccess(harness, filesCommand, {
         files: [
           { path: "src/index.ts", name: "index.ts" },
           { path: "src/routes.ts", name: "routes.ts" },
         ],
+        truncated: false,
       });
       const filesResponse = await filesPromise;
       expect(filesResponse.status).toBe(200);
-      await expect(readJson(filesResponse)).resolves.toEqual([
-        { path: "src/index.ts", name: "index.ts" },
-        { path: "src/routes.ts", name: "routes.ts" },
-      ]);
+      await expect(readJson(filesResponse)).resolves.toEqual({
+        files: [
+          { path: "src/index.ts", name: "index.ts" },
+          { path: "src/routes.ts", name: "routes.ts" },
+        ],
+        truncated: false,
+      });
 
       const filePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/workspace/file?path=${encodeURIComponent("src/index.ts")}`,

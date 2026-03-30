@@ -20,7 +20,6 @@ import {
   typedRoutes,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
-  workspaceFileSchema,
   type ProjectResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
@@ -179,6 +178,10 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(409, "invalid_request", "Project has no default source");
     }
 
+    const limit = Math.min(parseOptionalInteger(query.limit, "limit") ?? 1000, 10000);
+    if (limit <= 0) {
+      throw new ApiError(400, "invalid_request", "limit must be a positive integer");
+    }
     const environment = await ensureProjectSourceEnvironment(deps, {
       hostId: source.hostId,
       path: source.path,
@@ -195,15 +198,11 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         ...(query.query ? { query: query.query } : {}),
+        limit,
       },
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.list_files"].parse(rawResult);
-    const limit = parseOptionalInteger(query.limit, "limit");
-    return context.json(
-      result.files
-        .slice(0, limit ?? result.files.length)
-        .map((file) => workspaceFileSchema.parse(file)),
-    );
+    return context.json({ files: result.files, truncated: result.truncated });
   });
 
   post("/projects/:id/attachments", async (context) => {

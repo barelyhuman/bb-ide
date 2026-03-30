@@ -448,6 +448,12 @@ export const workspaceFileSchema = z.object({
 });
 export type WorkspaceFile = z.infer<typeof workspaceFileSchema>;
 
+export const workspaceFileListResponseSchema = z.object({
+  files: z.array(workspaceFileSchema),
+  truncated: z.boolean(),
+});
+export type WorkspaceFileListResponse = z.infer<typeof workspaceFileListResponseSchema>;
+
 export const projectResponseSchema = projectSchema.extend({
   sources: z.array(projectSourceSchema),
 });
@@ -462,12 +468,6 @@ export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env
 });
-
-export const projectFileSuggestionSchema = z.object({
-  path: z.string(),
-});
-export type ProjectFileSuggestion = z.infer<typeof projectFileSuggestionSchema>;
-
 
 export const uploadedPromptAttachmentSchema = z.object({
   type: z.enum(["localImage", "localFile"]),

@@ -24,7 +24,6 @@ import type {
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
-  ProjectFileSuggestion,
   SendDraftResponse,
   CreateThreadRequest,
   SystemProviderInfo,
@@ -37,6 +36,7 @@ import type {
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
   ProjectResponse,
+  WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
 
@@ -273,8 +273,8 @@ export async function searchProjectFiles(
   projectId: string,
   query: string,
   limit: number = 8,
-): Promise<ProjectFileSuggestion[]> {
-  return request<ProjectFileSuggestion[]>(
+): Promise<WorkspaceFileListResponse> {
+  return request<WorkspaceFileListResponse>(
     apiClient.projects[":id"].files.$get({
       param: { id: projectId },
       query: { query, limit: String(limit) },
@@ -342,15 +342,10 @@ export async function getThread(id: string): Promise<Thread> {
   return request<Thread>(apiClient.threads[":id"].$get({ param: { id } }));
 }
 
-export interface WorkspaceFileEntry {
-  path: string;
-  size: number;
-}
-
 export async function listThreadWorkspaceFiles(
   id: string,
-): Promise<{ files: WorkspaceFileEntry[] }> {
-  return request<{ files: WorkspaceFileEntry[] }>(
+): Promise<WorkspaceFileListResponse> {
+  return request<WorkspaceFileListResponse>(
     apiClient.threads[":id"].workspace.files.$get({ param: { id } }),
   );
 }

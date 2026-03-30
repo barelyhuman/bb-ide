@@ -243,6 +243,7 @@ export const workspaceDemoteCommandSchema = hostDaemonWorkspaceTargetSchema.exte
 export const workspaceListFilesCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.list_files"),
   query: z.string().optional(),
+  limit: z.number().int().positive(),
 });
 
 export const workspaceReadFileCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
@@ -325,6 +326,7 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.list_files": z.object({
     files: z.array(z.object({ path: z.string(), name: z.string() })),
+    truncated: z.boolean(),
   }),
   "workspace.read_file": z.object({
     path: z.string(),

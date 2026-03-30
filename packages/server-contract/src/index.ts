@@ -29,7 +29,6 @@ export {
   environmentActionTypeSchema,
   environmentStatusResponseSchema,
   projectAttachmentContentQuerySchema,
-  projectFileSuggestionSchema,
   projectFilesQuerySchema,
   projectResponseSchema,
   sendDraftRequestSchema,
@@ -87,7 +86,6 @@ export type {
   EnvironmentStatusResponse,
   ProjectAttachmentContentQuery,
   ProjectAttachmentUploadForm,
-  ProjectFileSuggestion,
   ProjectFilesQuery,
   ProjectResponse,
   SendDraftRequest,
@@ -119,6 +117,7 @@ export type {
   UploadedPromptAttachment,
   WorkspaceArgs,
   WorkspaceFile,
+  WorkspaceFileListResponse,
 } from "./api-types.js";
 
 export { createApiClient, createPublicApiClient } from "./public-api.js";

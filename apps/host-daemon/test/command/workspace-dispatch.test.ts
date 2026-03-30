@@ -135,6 +135,7 @@ describe("workspace command dispatch", () => {
         type: "workspace.list_files",
         environmentId: "env-1",
         workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
+        limit: 1000,
       },
       { runtimeManager: harness.manager },
     );
@@ -142,6 +143,7 @@ describe("workspace command dispatch", () => {
     const paths = result.files.map((f: { path: string }) => f.path).sort();
     expect(paths).toContain("file-a.txt");
     expect(paths).toContain(path.join("sub", "file-b.ts"));
+    expect(result.truncated).toBe(false);
 
     const filtered = await dispatchCommand(
       {
@@ -149,11 +151,25 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
         query: "file-b",
+        limit: 1000,
       },
       { runtimeManager: harness.manager },
     );
     expect(filtered.files).toHaveLength(1);
     expect(filtered.files[0].name).toBe("file-b.ts");
+    expect(filtered.truncated).toBe(false);
+
+    const limited = await dispatchCommand(
+      {
+        type: "workspace.list_files",
+        environmentId: "env-1",
+        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
+        limit: 1,
+      },
+      { runtimeManager: harness.manager },
+    );
+    expect(limited.files).toHaveLength(1);
+    expect(limited.truncated).toBe(true);
   });
 
   it("covers workspace.read_file", async () => {

@@ -25,7 +25,6 @@ import type {
   CreateDraftRequest,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
-  ProjectFileSuggestion,
   ProjectResponse,
   SendDraftResponse,
   CreateThreadRequest,
@@ -35,6 +34,7 @@ import type {
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UploadedPromptAttachment,
+  WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import * as api from "../lib/api";
 import { wsManager } from "../lib/ws";
@@ -365,7 +365,7 @@ export function useProjectFileSuggestions(
   limit: number = 8,
 ) {
   const trimmedQuery = query?.trim() ?? "";
-  return useQuery<ProjectFileSuggestion[]>({
+  return useQuery<WorkspaceFileListResponse>({
     queryKey: ["projectFiles", projectId, trimmedQuery, limit],
     queryFn: () => api.searchProjectFiles(projectId ?? "", trimmedQuery, limit),
     enabled: Boolean(projectId) && trimmedQuery.length > 0,
@@ -443,7 +443,7 @@ export function useThreadWorkspaceFiles(
   id: string,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<{ files: api.WorkspaceFileEntry[] }>({
+  return useQuery<WorkspaceFileListResponse>({
     queryKey: ["threadWorkspaceFiles", id],
     queryFn: () => api.listThreadWorkspaceFiles(id),
     enabled: (options?.enabled ?? true) && !!id,

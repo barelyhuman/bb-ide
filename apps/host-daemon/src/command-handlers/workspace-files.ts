@@ -1,17 +1,14 @@
-import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import mimeTypes from "mime-types";
-import { promisify } from "node:util";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import { runGit } from "@bb/workspace";
 import type { RuntimeManager } from "../runtime-manager.js";
 import {
   CommandDispatchError,
   requireWorkspaceEnvironment,
 } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
-
-const execFileAsync = promisify(execFile);
 
 export async function listWorkspaceFiles(
   command: CommandOf<"workspace.list_files">,
@@ -21,15 +18,22 @@ export async function listWorkspaceFiles(
   const workspacePath = entry.workspace.path;
 
   let filePaths: string[];
-  try {
-    const { stdout } = await execFileAsync(
-      "git",
-      ["ls-files", "--cached", "--others", "--exclude-standard"],
-      { cwd: workspacePath, maxBuffer: 10 * 1024 * 1024 },
-    );
-    filePaths = stdout.split("\n").filter((line) => line.length > 0);
-  } catch {
+  const gitResult = await runGit(
+    ["ls-files", "--cached", "--others", "--exclude-standard"],
+    { cwd: workspacePath, allowFailure: true },
+  );
+  if (gitResult.exitCode === 0) {
+    filePaths = gitResult.stdout.split("\n").filter((line) => line.length > 0);
+  } else if (
+    gitResult.exitCode === 128 ||
+    gitResult.stderr.includes("not a git repository")
+  ) {
     filePaths = await listFilesRecursively(workspacePath, workspacePath);
+  } else {
+    throw new CommandDispatchError(
+      "git_command_failed",
+      `git ls-files failed (exit ${gitResult.exitCode}): ${gitResult.stderr}`,
+    );
   }
 
   if (command.query) {
@@ -37,11 +41,18 @@ export async function listWorkspaceFiles(
     filePaths = filePaths.filter((p) => p.toLowerCase().includes(lowerQuery));
   }
 
+  let truncated = false;
+  if (filePaths.length > command.limit) {
+    filePaths = filePaths.slice(0, command.limit);
+    truncated = true;
+  }
+
   return {
     files: filePaths.map((filePath) => ({
       path: filePath,
       name: path.basename(filePath),
     })),
+    truncated,
   };
 }
 

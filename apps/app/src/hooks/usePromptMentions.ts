@@ -74,12 +74,12 @@ export function usePromptMentions(
   const currentThreadId = options?.currentThreadId;
   const fileSuggestions = useMemo(
     () =>
-      (search.data ?? []).map<PromptMentionSuggestion>((item) => ({
+      (search.data?.files ?? []).map<PromptMentionSuggestion>((item) => ({
         kind: "file",
         path: item.path,
         replacement: item.path,
       })),
-    [search.data],
+    [search.data?.files],
   );
   const threadSuggestions = useMemo(() => {
     if (threadSuggestionMode === "none" || trimmedQuery.length === 0) {

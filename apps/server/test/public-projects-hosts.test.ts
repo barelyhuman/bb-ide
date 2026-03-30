@@ -280,19 +280,23 @@ describe("public project and host routes", () => {
       expect(queued.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/project-files", workspaceProvisionType: "unmanaged" },
         query: "src",
+        limit: 1,
       });
       await reportQueuedCommandSuccess(harness, queued, {
         files: [
           { path: "src/index.ts", name: "index.ts" },
-          { path: "src/routes.ts", name: "routes.ts" },
         ],
+        truncated: true,
       });
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual([
-        { path: "src/index.ts", name: "index.ts" },
-      ]);
+      await expect(readJson(response)).resolves.toEqual({
+        files: [
+          { path: "src/index.ts", name: "index.ts" },
+        ],
+        truncated: true,
+      });
     } finally {
       await harness.cleanup();
     }

@@ -34,7 +34,6 @@ import type {
   ProjectAttachmentContentQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
-  ProjectFileSuggestion,
   ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
@@ -58,7 +57,7 @@ import type {
   UpdateProjectSourceRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
-  WorkspaceFile,
+  WorkspaceFileListResponse,
 } from "./api-types.js";
 import type { ApiError } from "./errors.js";
 
@@ -89,7 +88,7 @@ export type PublicApiSchema = {
      * Search files in the project. Used for file mentions in the prompt box.
      * Proxies to `workspace.list_files` on the project's default source host.
      */
-    $get: Endpoint<PathProjectId & { query: ProjectFilesQuery }, ProjectFileSuggestion[]>;
+    $get: Endpoint<PathProjectId & { query: ProjectFilesQuery }, WorkspaceFileListResponse>;
   };
   "/projects/:id/attachments": {
     /** Upload a file attachment. Used to attach files to user messages. */
@@ -269,7 +268,7 @@ export type PublicApiSchema = {
      * Resolves thread -> environmentId -> environment -> hostId, queues
      * `workspace.list_files` to the host daemon, and waits for the result.
      */
-    $get: Endpoint<PathId & { query?: ThreadWorkspaceFilesQuery }, WorkspaceFile[]>;
+    $get: Endpoint<PathId & { query?: ThreadWorkspaceFilesQuery }, WorkspaceFileListResponse>;
   };
   "/threads/:id/workspace/file": {
     /** Read a single file from the thread's workspace. Proxies to `workspace.read_file`. */

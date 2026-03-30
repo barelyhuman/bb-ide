@@ -77,10 +77,12 @@ describe("host-daemon command schemas", () => {
         environmentId: "env_123",
         environmentStatus: "ready",
         workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        limit: 1000,
       }),
     ).toMatchObject({
       type: "workspace.list_files",
       workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+      limit: 1000,
     });
   });
 

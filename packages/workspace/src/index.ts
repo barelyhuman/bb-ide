@@ -21,5 +21,6 @@ export type {
   SquashMergeResult,
 } from "./workspace.js";
 
-export { readDefaultBranch } from "./git.js";
+export { readDefaultBranch, runGit } from "./git.js";
+export type { RunGitOptions, GitCommandResult } from "./git.js";
 export { WorkspaceError } from "./git.js";

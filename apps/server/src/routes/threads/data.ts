@@ -125,6 +125,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(409, "invalid_request", "Thread has no environment");
     }
     const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
+    const limit = Math.min(parseOptionalInteger(query.limit, "limit") ?? 1000, 10000);
+    if (limit <= 0) {
+      throw new ApiError(400, "invalid_request", "limit must be a positive integer");
+    }
     const rawResult = await queueCommandAndWait(deps, {
       hostId: readyEnvironment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -136,11 +140,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           workspaceProvisionType: readyEnvironment.workspaceProvisionType,
         },
         ...(query.query ? { query: query.query } : {}),
+        limit,
       },
     });
-    return context.json(
-      hostDaemonCommandResultSchemaByType["workspace.list_files"].parse(rawResult).files,
-    );
+    const result = hostDaemonCommandResultSchemaByType["workspace.list_files"].parse(rawResult);
+    return context.json({ files: result.files, truncated: result.truncated });
   });
 
   get("/threads/:id/workspace/file", threadWorkspaceFileQuerySchema, async (context, query) => {

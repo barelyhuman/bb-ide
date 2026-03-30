@@ -16,6 +16,7 @@ import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
+import type { WorkspaceFile } from "@bb/server-contract";
 
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
@@ -71,15 +72,10 @@ interface ThreadDetailMetadataProps {
   workspaceStatusFiles?: ComponentProps<typeof WorkspaceChangesList>["files"];
 }
 
-interface WorkspaceFileEntry {
-  path: string;
-  size: number;
-}
-
 interface ThreadDetailWorkspaceProps {
   fileContent?: string;
   fileError?: Error | null;
-  files?: readonly WorkspaceFileEntry[];
+  files?: readonly WorkspaceFile[];
   isFileLoading: boolean;
   onTogglePath: (path: string) => void;
   selectedPath: string | null;
@@ -385,9 +381,6 @@ function WorkspaceContent({
               )}
               <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
                 {file.path}
-              </span>
-              <span className="shrink-0 ui-text-xs text-muted-foreground">
-                {file.size} B
               </span>
             </button>
             {isExpanded ? (
