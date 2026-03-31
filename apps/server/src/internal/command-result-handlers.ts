@@ -177,9 +177,6 @@ async function handleProvisionCommandResult(
       message: `Thread provisioning failed for project ${thread.projectId}`,
       detail: report.errorMessage,
     });
-    if (thread.status === "created" && !tryTransition(deps.db, deps.hub, thread.id, "provisioning")) {
-      continue;
-    }
     tryTransition(deps.db, deps.hub, thread.id, "error");
   }
 }
