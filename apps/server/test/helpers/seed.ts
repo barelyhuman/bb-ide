@@ -33,8 +33,8 @@ export interface SeedEventArgs<TType extends ThreadEventType> {
 export interface SeedStoredEventArgs {
   data: Record<string, unknown>;
   environmentId?: string | null;
-  itemId: string | null;
-  itemKind: ThreadEventItemType | null;
+  itemId?: string | null;
+  itemKind?: ThreadEventItemType | null;
   providerThreadId?: string | null;
   sequence: number;
   threadId: string;
@@ -212,8 +212,8 @@ export function seedStoredEvent(
       sequence: args.sequence,
       turnId: args.turnId ?? null,
       type: args.type,
-      itemId: args.itemId,
-      itemKind: args.itemKind,
+      itemId: args.itemId ?? null,
+      itemKind: args.itemKind ?? null,
       data: JSON.stringify(args.data),
     },
   ]);

@@ -22,6 +22,7 @@ import {
   seedEvent,
   seedHostSession,
   seedProjectWithSource,
+  seedStoredEvent,
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
@@ -568,7 +569,7 @@ describe("internal session routes", () => {
           source: "tell",
         },
       });
-      seedEvent(harness.deps, {
+      seedStoredEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         sequence: 2,
