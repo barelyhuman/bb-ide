@@ -15,6 +15,7 @@ import {
   environmentActionRequestSchema,
   sendMessageRequestSchema,
   timelineToolDetailsResponseSchema,
+  updateEnvironmentRequestSchema,
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
@@ -100,6 +101,14 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       action: "commit",
       threadId: "thr_123",
+    });
+
+    expect(
+      updateEnvironmentRequestSchema.parse({
+        mergeBaseBranch: null,
+      }),
+    ).toEqual({
+      mergeBaseBranch: null,
     });
 
     expect(

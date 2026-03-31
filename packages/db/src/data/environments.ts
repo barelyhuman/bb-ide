@@ -18,6 +18,7 @@ export interface CreateEnvironmentInput {
   isWorktree?: boolean;
   branchName?: string | null;
   defaultBranch?: string | null;
+  mergeBaseBranch?: string | null;
   status?: EnvironmentStatus;
 }
 
@@ -39,6 +40,7 @@ export function createEnvironment(
       isWorktree: input.isWorktree ?? false,
       branchName: input.branchName ?? null,
       defaultBranch: input.defaultBranch ?? null,
+      mergeBaseBranch: input.mergeBaseBranch ?? null,
       workspaceProvisionType: input.workspaceProvisionType,
       status: input.status ?? "provisioning",
       createdAt: now,
@@ -88,6 +90,7 @@ export interface UpdateEnvironmentInput {
   isWorktree?: boolean;
   branchName?: string | null;
   defaultBranch?: string | null;
+  mergeBaseBranch?: string | null;
 }
 
 export function updateEnvironment(

@@ -134,6 +134,11 @@ export const updateThreadRequestSchema = z
   );
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
+export const updateEnvironmentRequestSchema = z.object({
+  mergeBaseBranch: z.string().min(1).nullable(),
+});
+export type UpdateEnvironmentRequest = z.infer<typeof updateEnvironmentRequestSchema>;
+
 const createLocalPathProjectSourceRequestSchema = z.object({
   hostId: z.string().min(1),
   type: z.literal("local_path"),

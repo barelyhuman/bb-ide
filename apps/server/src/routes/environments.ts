@@ -1,8 +1,10 @@
+import { updateEnvironment as updateEnvironmentRecord } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   environmentActionRequestSchema,
   environmentDiffQuerySchema,
   environmentStatusQuerySchema,
+  updateEnvironmentRequestSchema,
   typedRoutes,
   type EnvironmentDiffQuery,
   type PublicApiSchema,
@@ -55,11 +57,27 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
-  const { get, post } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
+  const { get, patch, post } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
 
   get("/environments/:id", (context) =>
     context.json(requireEnvironment(deps.db, context.req.param("id"))),
   );
+
+  patch("/environments/:id", updateEnvironmentRequestSchema, (context, payload) => {
+    const environment = requireEnvironment(deps.db, context.req.param("id"));
+    const updated = updateEnvironmentRecord(
+      deps.db,
+      deps.hub,
+      environment.id,
+      payload,
+    );
+    if (!updated) {
+      throw new ApiError(404, "environment_not_found", "Environment not found");
+    }
+    return context.json(updated);
+  });
 
   get("/environments/:id/status", environmentStatusQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));

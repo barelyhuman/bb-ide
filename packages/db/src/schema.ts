@@ -100,6 +100,7 @@ export const environments = sqliteTable(
       .default(false),
     branchName: text("branch_name"),
     defaultBranch: text("default_branch"),
+    mergeBaseBranch: text("merge_base_branch"),
     workspaceProvisionType: text("workspace_provision_type")
       .$type<WorkspaceProvisionType>()
       .notNull(),

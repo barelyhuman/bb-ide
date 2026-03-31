@@ -219,6 +219,39 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("updates an environment merge base branch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-update",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/environment-update/worktree",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/environments/${environment.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mergeBaseBranch: "release" }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        id: environment.id,
+        mergeBaseBranch: "release",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("queues workspace.commit after checking status and diff, then returns the reported commit info", async () => {
     const harness = await createTestAppHarness();
     try {
