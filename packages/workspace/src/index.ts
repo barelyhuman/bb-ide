@@ -11,8 +11,6 @@ export type {
 } from "./provision.js";
 
 export type {
-  CheckpointOptions,
-  CheckpointResult,
   CommitOptions,
   CommitResult,
   DiffOptions,

@@ -257,7 +257,7 @@ environment.provision, environment.destroy
 
 // Workspace (git repos only)
 workspace.status, workspace.diff, workspace.commit, workspace.squash_merge,
-workspace.promote, workspace.demote, workspace.reset, workspace.checkpoint,
+workspace.promote, workspace.demote, workspace.reset,
 workspace.list_files, workspace.read_file, workspace.list_branches
 ```
 
@@ -411,7 +411,7 @@ Promote and demote are **single daemon commands** — no multi-step chaining, no
 
 **Promoted state is derived.** The daemon checks what branch the primary checkout is on. If it matches a known environment branch, that environment is promoted. No application state to track. Demote always restores the project's default branch.
 
-**Cross-host promote:** Works only if the branch is already available on the remote (from a prior `workspace.checkpoint`). The daemon fetches the branch and checks it out. No pushing as part of promote — if the branch isn't on the remote, the command fails with a clear error ("branch not available on remote — run checkpoint first"). This means promote/demote is the same command regardless of same-host vs cross-host — the daemon figures out the right approach based on whether the branch is locally visible or needs a fetch.
+**Cross-host promote:** Works only if the branch is already available on the remote. The daemon fetches the branch and checks it out. No pushing as part of promote — if the branch isn't on the remote, the command fails with a clear error. This means promote/demote is the same command regardless of same-host vs cross-host — the daemon figures out the right approach based on whether the branch is locally visible or needs a fetch.
 
 ### Non-git environments
 

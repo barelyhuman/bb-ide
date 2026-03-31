@@ -158,12 +158,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return squashMerge(command, options.runtimeManager) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
-    case "workspace.checkpoint": {
-      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
-      return entry.workspace.checkpoint({
-        commitMessage: command.commitMessage,
-      }) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
-    }
     case "workspace.promote":
       return promoteWorkspace(command, options.runtimeManager) as Promise<
         HostDaemonCommandResult<TCommand["type"]>

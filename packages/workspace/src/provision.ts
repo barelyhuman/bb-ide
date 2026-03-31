@@ -3,8 +3,6 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type {
-  CheckpointOptions,
-  CheckpointResult,
   CommitOptions,
   CommitResult,
   DiffOptions,
@@ -105,7 +103,6 @@ export interface IWorkspace {
   commit(options: CommitOptions): Promise<CommitResult>;
   reset(): Promise<void>;
   fetch(options?: FetchOptions): Promise<void>;
-  checkpoint(options: CheckpointOptions): Promise<CheckpointResult>;
   squashMergeInto(options: SquashMergeOptions): Promise<SquashMergeResult>;
 
   // Promote/demote
@@ -191,10 +188,6 @@ class WorkspaceImpl implements IWorkspace {
 
   fetch(options?: FetchOptions): Promise<void> {
     return this.ws.fetch(options);
-  }
-
-  checkpoint(options: CheckpointOptions): Promise<CheckpointResult> {
-    return this.ws.checkpoint(options);
   }
 
   squashMergeInto(options: SquashMergeOptions): Promise<SquashMergeResult> {

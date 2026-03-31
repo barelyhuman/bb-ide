@@ -191,25 +191,6 @@ describe("Workspace", () => {
     expect((await workspace.getStatus()).workingTree.state).toBe("dirty_uncommitted");
   });
 
-  it("creates checkpoints and pushes them to a local bare remote", async () => {
-    const repoPath = await initRepo();
-    const bareRemote = await initBareRemoteFrom(repoPath);
-    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
-    await fs.writeFile(path.join(repoPath, "README.md"), "checkpoint\n", "utf8");
-
-    const workspace = new Workspace(repoPath);
-    const checkpoint = await workspace.checkpoint({
-      commitMessage: "Checkpoint feature",
-    });
-
-    const remoteHead = (
-      await runGit(["--git-dir", bareRemote, "rev-parse", "refs/heads/feature"], {
-        cwd: path.dirname(repoPath),
-      })
-    ).stdout.trim();
-    expect(remoteHead).toBe(checkpoint.commitSha);
-  });
-
   it("squash merges into the target branch using a temporary worktree", async () => {
     const repoPath = await initRepo();
     await initBareRemoteFrom(repoPath);

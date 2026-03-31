@@ -51,15 +51,6 @@ describe("workspace command dispatch", () => {
       },
       { runtimeManager: harness.manager },
     );
-    const checkpointResult = await dispatchCommand(
-      {
-        type: "workspace.checkpoint",
-        environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
-        commitMessage: "Checkpoint",
-      },
-      { runtimeManager: harness.manager },
-    );
     const promoteResult = await dispatchCommand(
       {
         type: "workspace.promote",
@@ -85,7 +76,6 @@ describe("workspace command dispatch", () => {
     expect(diffResult.diff.diff).toBe("");
     expect(commitResult).toEqual({ commitSha: "commit-1", commitSubject: "Commit message" });
     expect(squashResult).toEqual({ merged: true, commitSha: "merge-main" });
-    expect(checkpointResult).toEqual({ commitSha: "checkpoint-1", branchName: "main", remoteName: "origin" });
     expect(promoteResult).toEqual({ ok: true });
     expect(demoteResult).toEqual({ ok: true });
     expect(harness.workspaceState.statusReads).toBe(1);

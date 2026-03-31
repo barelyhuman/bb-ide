@@ -34,7 +34,6 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.diff",
   "workspace.commit",
   "workspace.squash_merge",
-  "workspace.checkpoint",
   "workspace.promote",
   "workspace.demote",
   "workspace.list_files",
@@ -248,12 +247,6 @@ export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema
   commitMessage: z.string().min(1),
 });
 
-/** Commit and push to remote. Internal use only — not exposed via public API. */
-export const workspaceCheckpointCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
-  type: z.literal("workspace.checkpoint"),
-  commitMessage: z.string().min(1),
-});
-
 /** Switch the project's primary checkout to the environment's branch so the user can work with the changes directly. */
 export const workspacePromoteCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.promote"),
@@ -293,7 +286,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   workspaceDiffCommandSchema,
   workspaceCommitCommandSchema,
   workspaceSquashMergeCommandSchema,
-  workspaceCheckpointCommandSchema,
   workspacePromoteCommandSchema,
   workspaceDemoteCommandSchema,
   workspaceListFilesCommandSchema,
@@ -351,11 +343,6 @@ export const hostDaemonCommandResultSchemaByType = {
   "workspace.squash_merge": z.object({
     merged: z.boolean(),
     commitSha: z.string().min(1),
-  }),
-  "workspace.checkpoint": z.object({
-    commitSha: z.string().min(1),
-    remoteName: z.string().min(1),
-    branchName: z.string().min(1),
   }),
   "workspace.promote": z.object({
     ok: z.boolean(),

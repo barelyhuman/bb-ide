@@ -47,7 +47,7 @@ All individual audits live in `plans/route-audit/`. One file per route/command.
 - `GET /session/commands` — N+1 per-command UPDATE + re-SELECT in fetchCommands
 
 ### Dead Code / Unused
-- **`workspace.reset`** and **`workspace.checkpoint`** — daemon commands with zero server-side callers (never queued)
+- **`workspace.reset`** — daemon command with zero server-side callers (never queued)
 - **`thread.resume`** — never explicitly queued by the server; only triggered implicitly by daemon auto-resume
 - **`queueThreadStopCommand`** wrapper — exists but never called; both stop callers queue directly
 - **`GET /status`** and **`POST /restart`** (daemon local API) — zero production callers, test-only
@@ -145,7 +145,6 @@ All individual audits live in `plans/route-audit/`. One file per route/command.
 - [x] `workspace.commit` → `daemon-cmd-workspace-commit.md`
 - [x] `workspace.squash_merge` → `daemon-cmd-workspace-squash-merge.md`
 - [x] `workspace.reset` → `daemon-cmd-workspace-reset.md`
-- [x] `workspace.checkpoint` → `daemon-cmd-workspace-checkpoint.md`
 - [x] `workspace.promote` → `daemon-cmd-workspace-promote.md`
 - [x] `workspace.demote` → `daemon-cmd-workspace-demote.md`
 - [x] `workspace.list_files` → `daemon-cmd-workspace-list-files.md`

@@ -8,7 +8,6 @@ type GetStatusResult = Awaited<ReturnType<IWorkspace["getStatus"]>>;
 type GetDiffResult = Awaited<ReturnType<IWorkspace["getDiff"]>>;
 type CommitArgs = Parameters<IWorkspace["commit"]>;
 type FetchArgs = Parameters<IWorkspace["fetch"]>;
-type CheckpointArgs = Parameters<IWorkspace["checkpoint"]>;
 type SquashMergeArgs = Parameters<IWorkspace["squashMergeInto"]>;
 type PromoteArgs = Parameters<IWorkspace["promote"]>;
 type DemoteArgs = Parameters<IWorkspace["demote"]>;
@@ -70,11 +69,6 @@ function createFakeWorkspace(path: string) {
     })),
     reset: vi.fn(async () => undefined),
     fetch: vi.fn(async (..._args: FetchArgs) => undefined),
-    checkpoint: vi.fn(async (..._args: CheckpointArgs) => ({
-      commitSha: "commit-1",
-      branchName: "main",
-      remoteName: "origin",
-    })),
     squashMergeInto: vi.fn(async (..._args: SquashMergeArgs) => ({
       merged: true,
       commitSha: "commit-1",

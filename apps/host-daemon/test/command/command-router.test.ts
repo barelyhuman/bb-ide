@@ -49,11 +49,6 @@ function createFakeWorkspace(path: string) {
     })),
     reset: vi.fn(async () => undefined),
     fetch: vi.fn(async () => undefined),
-    checkpoint: vi.fn(async () => ({
-      commitSha: "commit-2",
-      branchName: "main",
-      remoteName: "origin",
-    })),
     squashMergeInto: vi.fn(async () => ({
       merged: true,
       commitSha: "commit-3",

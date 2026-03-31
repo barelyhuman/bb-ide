@@ -30,7 +30,6 @@ interface IWorkspace {
   commit(options: CommitOptions): Promise<CommitResult>;
   reset(): Promise<void>;
   fetch(options?: FetchOptions): Promise<void>;
-  checkpoint(options: CheckpointOptions): Promise<CheckpointResult>;
   squashMergeInto(options: SquashMergeOptions): Promise<SquashMergeResult>;
 
   // Promote/demote

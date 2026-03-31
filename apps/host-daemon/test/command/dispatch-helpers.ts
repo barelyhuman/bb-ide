@@ -19,7 +19,6 @@ export function createFakeWorkspace(pathname: string) {
       | undefined,
     lastCommitMessage: undefined as string | undefined,
     resetCount: 0,
-    lastCheckpointMessage: undefined as string | undefined,
     promotedPrimaryPath: undefined as string | undefined,
     demotedPrimaryPath: undefined as string | undefined,
     demotedDefaultBranch: undefined as string | undefined,
@@ -90,14 +89,6 @@ export function createFakeWorkspace(pathname: string) {
       state.resetCount += 1;
     },
     async fetch() {},
-    async checkpoint(options: { commitMessage: string }) {
-      state.lastCheckpointMessage = options.commitMessage;
-      return {
-        commitSha: "checkpoint-1",
-        branchName: "main",
-        remoteName: "origin",
-      };
-    },
     async squashMergeInto(options: { targetBranch: string; commitMessage: string }) {
       return {
         merged: true,

@@ -35,7 +35,6 @@ export {
   threadStopCommandSchema,
   turnRunCommandSchema,
   turnSteerCommandSchema,
-  workspaceCheckpointCommandSchema,
   workspaceCommitCommandSchema,
   workspaceDiffCommandSchema,
   workspaceDemoteCommandSchema,

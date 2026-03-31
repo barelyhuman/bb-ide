@@ -51,16 +51,6 @@ export interface FetchOptions {
   branch?: string;
 }
 
-export interface CheckpointOptions {
-  commitMessage: string;
-}
-
-export interface CheckpointResult {
-  commitSha: string;
-  branchName: string;
-  remoteName: string;
-}
-
 export interface SquashMergeOptions {
   targetBranch: string;
   commitMessage: string;
@@ -302,36 +292,6 @@ export class Workspace {
     }
 
     await runGit(args, { cwd: this.path });
-  }
-
-  async checkpoint(options: CheckpointOptions): Promise<CheckpointResult> {
-    await ensureGitRepo(this.path);
-
-    const branchName = await this.currentBranch;
-    if (!branchName) {
-      throw new WorkspaceError("detached_head", "Cannot checkpoint a detached workspace");
-    }
-
-    let commitSha: string;
-    if (await hasUncommittedChanges(this.path)) {
-      commitSha = (
-        await this.commit({
-          message: options.commitMessage,
-          noVerify: true,
-        })
-      ).commitSha;
-    } else {
-      commitSha = await revParse(this.path, "HEAD");
-    }
-
-    const remoteName = "origin";
-    await runGit(["push", remoteName, branchName], { cwd: this.path });
-
-    return {
-      commitSha,
-      branchName,
-      remoteName,
-    };
   }
 
   async checkoutBranch(branchName: string): Promise<void> {

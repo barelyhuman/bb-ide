@@ -183,8 +183,6 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema: contract.hostDaemonCommandSchema,
       workspaceCommitResultSchema:
         contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
-      workspaceCheckpointResultSchema:
-        contract.hostDaemonCommandResultSchemaByType["workspace.checkpoint"],
       workspaceSquashMergeResultSchema:
         contract.hostDaemonCommandResultSchemaByType["workspace.squash_merge"],
     });
