@@ -126,6 +126,29 @@ describe("Workspace", () => {
     expect(commitOnly.diff).toContain("+feature");
   });
 
+  it("includes untracked files across multiple diff batches", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+
+    await Promise.all(
+      Array.from({ length: 12 }, async (_, index) => {
+        await fs.writeFile(
+          path.join(repoPath, `note-${index}.txt`),
+          `untracked ${index}\n`,
+          "utf8",
+        );
+      }),
+    );
+
+    const diff = await workspace.getDiff({
+      target: { type: "uncommitted" },
+    });
+
+    expect(diff.diff).toContain("untracked 11");
+    expect(diff.files).toContain("note-11.txt");
+    expect(diff.shortstat).toContain("12 files changed");
+  });
+
   it("commits staged work and resets dirty changes", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);

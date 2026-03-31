@@ -76,8 +76,21 @@ type DiffSummary = {
   truncated: boolean;
 };
 
+type DiffArtifacts = {
+  diff: string;
+  files: string;
+  numstat: string;
+};
+
+type ReadDiffArtifactsArgs = {
+  diffArgs: string[];
+  filesArgs: string[];
+  numstatArgs: string[];
+};
+
 const SQUASH_MERGE_PREP_COMMIT_MESSAGE = "bb squash merge prep";
 const SQUASH_MERGE_COMMIT_MESSAGE = "bb squash merge";
+const UNTRACKED_DIFF_BATCH_SIZE = 10;
 
 function countWorktrees(porcelainOutput: string): number {
   return porcelainOutput
@@ -587,11 +600,9 @@ export class Workspace {
     return [diff.stdout, shortstat.stdout, files.stdout];
   }
 
-  private async readDiffArtifactsIncludingUntracked(args: {
-    diffArgs: string[];
-    filesArgs: string[];
-    numstatArgs: string[];
-  }): Promise<[string, string, string]> {
+  private async readDiffArtifactsIncludingUntracked(
+    args: ReadDiffArtifactsArgs,
+  ): Promise<[string, string, string]> {
     const [trackedDiff, trackedNumstat, trackedFiles] = await Promise.all([
       runGit(["diff", "--no-ext-diff", "--binary", ...args.diffArgs], {
         cwd: this.path,
@@ -605,17 +616,15 @@ export class Workspace {
     ]);
 
     return this.appendUntrackedDiffArtifacts({
-      trackedDiff: trackedDiff.stdout,
-      trackedFiles: trackedFiles.stdout,
-      trackedNumstat: trackedNumstat.stdout,
+      diff: trackedDiff.stdout,
+      files: trackedFiles.stdout,
+      numstat: trackedNumstat.stdout,
     });
   }
 
-  private async appendUntrackedDiffArtifacts(args: {
-    trackedDiff: string;
-    trackedFiles: string;
-    trackedNumstat: string;
-  }): Promise<[string, string, string]> {
+  private async appendUntrackedDiffArtifacts(
+    args: DiffArtifacts,
+  ): Promise<[string, string, string]> {
     const untrackedFilesOutput = await runGit(
       ["ls-files", "--others", "--exclude-standard", "-z"],
       { cwd: this.path },
@@ -623,61 +632,73 @@ export class Workspace {
     const untrackedPaths = parseNullSeparatedLines(untrackedFilesOutput.stdout);
     if (untrackedPaths.length === 0) {
       return [
-        args.trackedDiff,
-        formatShortstat(summarizeNumstat(args.trackedNumstat)),
-        args.trackedFiles,
+        args.diff,
+        formatShortstat(summarizeNumstat(args.numstat)),
+        args.files,
       ];
     }
 
-    const untrackedArtifacts = await Promise.all(
-      untrackedPaths.map(async (relativePath) => {
-        const [diff, numstat, files] = await Promise.all([
-          runGit(
-            ["diff", "--no-index", "--no-ext-diff", "--binary", "--", "/dev/null", relativePath],
-            { cwd: this.path, allowFailure: true },
-          ),
-          runGit(
-            ["diff", "--no-index", "--numstat", "--", "/dev/null", relativePath],
-            { cwd: this.path, allowFailure: true },
-          ),
-          runGit(
-            ["diff", "--no-index", "--name-status", "--", "/dev/null", relativePath],
-            { cwd: this.path, allowFailure: true },
-          ),
-        ]);
-
-        return {
-          diff: diff.stdout,
-          files: files.stdout,
-          numstat: numstat.stdout,
-        };
-      }),
-    );
-
-    const combinedNumstat = [
-      args.trackedNumstat.trimEnd(),
-      ...untrackedArtifacts.map((artifact) => artifact.numstat.trimEnd()),
-    ]
-      .filter((value) => value.length > 0)
-      .join("\n");
-    const combinedDiff = [
-      args.trackedDiff.trimEnd(),
-      ...untrackedArtifacts.map((artifact) => artifact.diff.trimEnd()),
-    ]
-      .filter((value) => value.length > 0)
-      .join("\n");
-    const combinedFiles = [
-      args.trackedFiles.trimEnd(),
-      ...untrackedArtifacts.map((artifact) => artifact.files.trimEnd()),
-    ]
-      .filter((value) => value.length > 0)
-      .join("\n");
+    const untrackedArtifacts = await this.readUntrackedDiffArtifacts(untrackedPaths);
+    const combinedNumstat = joinDiffArtifactLines([
+      args.numstat,
+      ...untrackedArtifacts.map((artifact) => artifact.numstat),
+    ]);
+    const combinedDiff = joinDiffArtifactOutput([
+      args.diff,
+      ...untrackedArtifacts.map((artifact) => artifact.diff),
+    ]);
+    const combinedFiles = joinDiffArtifactOutput([
+      args.files,
+      ...untrackedArtifacts.map((artifact) => artifact.files),
+    ]);
 
     return [
-      combinedDiff.length > 0 ? `${combinedDiff}\n` : "",
+      combinedDiff,
       formatShortstat(summarizeNumstat(combinedNumstat)),
-      combinedFiles.length > 0 ? `${combinedFiles}\n` : "",
+      combinedFiles,
     ];
+  }
+
+  private async readUntrackedDiffArtifacts(relativePaths: string[]): Promise<DiffArtifacts[]> {
+    const artifacts: DiffArtifacts[] = [];
+
+    for (
+      let index = 0;
+      index < relativePaths.length;
+      index += UNTRACKED_DIFF_BATCH_SIZE
+    ) {
+      const batchPaths = relativePaths.slice(index, index + UNTRACKED_DIFF_BATCH_SIZE);
+      artifacts.push(
+        ...await Promise.all(
+          batchPaths.map((relativePath) => this.readUntrackedDiffArtifact(relativePath)),
+        ),
+      );
+    }
+
+    return artifacts;
+  }
+
+  private async readUntrackedDiffArtifact(relativePath: string): Promise<DiffArtifacts> {
+    const [diff, numstat, files] = await Promise.all([
+      runGit(
+        ["diff", "--no-index", "--no-ext-diff", "--binary", "--", "/dev/null", relativePath],
+        { cwd: this.path, allowFailure: true },
+      ),
+      runGit(
+        ["diff", "--no-index", "--numstat", "--", "/dev/null", relativePath],
+        { cwd: this.path, allowFailure: true },
+      ),
+      runGit(
+        ["diff", "--no-index", "--name-status", "--", "/dev/null", relativePath],
+        { cwd: this.path, allowFailure: true },
+      ),
+    ]);
+
+    return {
+      diff: diff.stdout,
+      files: files.stdout,
+      numstat: numstat.stdout,
+    };
   }
 
   private async readUncommittedDiffArtifacts(): Promise<[string, string, string]> {
@@ -687,4 +708,16 @@ export class Workspace {
       numstatArgs: ["HEAD", "--"],
     });
   }
+}
+
+function joinDiffArtifactLines(parts: string[]): string {
+  return parts
+    .map((value) => value.trimEnd())
+    .filter((value) => value.length > 0)
+    .join("\n");
+}
+
+function joinDiffArtifactOutput(parts: string[]): string {
+  const combined = joinDiffArtifactLines(parts);
+  return combined.length > 0 ? `${combined}\n` : "";
 }
