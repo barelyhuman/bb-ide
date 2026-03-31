@@ -68,6 +68,20 @@ async function resolveReadablePath(
     return args.resolvedPath;
   }
 
+  const rootStat = await fs.lstat(args.rootPath);
+  if (rootStat.isSymbolicLink()) {
+    throw new CommandDispatchError(
+      "invalid_path",
+      `Root path "${args.rootPath}" must not be a symlink`,
+    );
+  }
+  if (!rootStat.isDirectory()) {
+    throw new CommandDispatchError(
+      "invalid_path",
+      `Root path "${args.rootPath}" is not a directory`,
+    );
+  }
+
   const [realRootPath, realResolvedPath] = await Promise.all([
     fs.realpath(args.rootPath),
     fs.realpath(args.resolvedPath),

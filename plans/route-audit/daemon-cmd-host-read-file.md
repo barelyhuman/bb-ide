@@ -21,6 +21,7 @@
 2. `readHostFile` rejects non-absolute `path` values and non-absolute `rootPath` values with `CommandDispatchError("invalid_path")`.
 3. `readHostFile` delegates to `readFileForTransport({ resolvedPath, resultPath, rootPath })`.
 4. `readFileForTransport`:
+   - `lstat`s `rootPath` and rejects it when the declared root is itself a symlink or not a directory
    - resolves symlinks for both `rootPath` and `resolvedPath` and rejects files whose real path escapes the root
    - `stat`s the path
    - rejects directories
@@ -58,6 +59,7 @@
   1. `host.read_file` now requires `rootPath`, so every caller must declare the absolute root that bounds the read.
   2. The manager-workspace content route and manager preferences read both use that bound root to prevent symlink escapes outside `<dataDir>/workspace/<threadId>`.
   3. UTF-8 transport now requires the file bytes to be valid UTF-8; declared text MIME types with non-UTF-8 bytes fall back to base64 so the server preserves the original bytes.
+  4. The daemon now rejects declared roots that are themselves symlinks, so replacing the durable workspace directory with a symlink can no longer retarget the trusted root.
 
 ## Review Comments
 

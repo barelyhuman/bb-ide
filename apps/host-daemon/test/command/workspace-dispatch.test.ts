@@ -346,6 +346,32 @@ describe("workspace command dispatch", () => {
     });
   });
 
+  it("rejects host.read_file when rootPath itself is a symlink", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-root-symlink-");
+    const targetRoot = path.join(tempDir, "target-root");
+    const symlinkRoot = path.join(tempDir, "root-link");
+    const filePath = path.join(symlinkRoot, "notes.txt");
+    await fs.mkdir(targetRoot);
+    await fs.writeFile(path.join(targetRoot, "notes.txt"), "hello");
+    await fs.symlink(targetRoot, symlinkRoot);
+
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: filePath,
+          rootPath: symlinkRoot,
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("must not be a symlink"),
+    });
+  });
+
   it("enforces the 10 MB image read limit", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-large-image-");
     const imagePath = path.join(tempDir, "large.png");
