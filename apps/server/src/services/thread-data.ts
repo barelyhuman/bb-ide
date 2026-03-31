@@ -134,6 +134,21 @@ export function getLatestStoredEventRowByType(
   return rows ?? null;
 }
 
+export function listStoredEventRowsByType(
+  db: DbConnection,
+  args: {
+    threadId: string;
+    type: ThreadEventType;
+  },
+): StoredEventRow[] {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(and(eq(events.threadId, args.threadId), eq(events.type, args.type)))
+    .orderBy(events.sequence)
+    .all();
+}
+
 export function findThreadEvent(
   db: DbConnection,
   args: { threadId: string; type: string; afterSeq?: number },

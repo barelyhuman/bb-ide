@@ -13,8 +13,8 @@ import type { DbConnection } from "@bb/db";
 import {
   decodeEventRow,
   type StoredEventRow,
-  getLatestStoredEventRowByType,
   listRecentStoredEventRows,
+  listStoredEventRowsByType,
   listThreadEventRowsInRange,
 } from "./thread-data.js";
 
@@ -131,7 +131,7 @@ export function buildThreadTimeline(
     threadStatus: thread.status,
     threadType: thread.type,
   });
-  const latestTokenUsageRow = getLatestStoredEventRowByType(db, {
+  const tokenUsageRows = listStoredEventRowsByType(db, {
     threadId: thread.id,
     type: "thread/tokenUsage/updated",
   });
@@ -140,9 +140,8 @@ export function buildThreadTimeline(
     rows: buildTimelineRows(messages, {
       includeToolGroupMessages: options.includeToolGroupMessages ?? false,
     }),
-    contextWindowUsage: latestTokenUsageRow
-      ? extractThreadContextWindowUsage([decodeEventRow(latestTokenUsageRow)]) ?? undefined
-      : undefined,
+    contextWindowUsage:
+      extractThreadContextWindowUsage(tokenUsageRows.map((row) => decodeEventRow(row))) ?? undefined,
   };
 }
 

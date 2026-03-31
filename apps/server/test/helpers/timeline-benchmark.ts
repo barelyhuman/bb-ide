@@ -27,9 +27,9 @@ import {
 import {
   decodeEventRow,
   type StoredEventRow,
-  getLatestStoredEventRowByType,
   listRecentStoredEventRows,
   listRecentThreadEventRows,
+  listStoredEventRowsByType,
 } from "../../src/services/thread-data.js";
 
 interface TimelineBenchmarkFixture {
@@ -48,7 +48,7 @@ export interface TimelineBenchmarkScenario {
   buildExpectedSummary: () => ThreadTimelineResponse;
   buildAndSerializeSummary: () => string;
   loadSummaryStoredRows: () => StoredEventRow[];
-  loadLatestTokenUsageRow: () => StoredEventRow | null;
+  loadTokenUsageRows: () => StoredEventRow[];
   compactSummaryStoredRows: () => StoredEventRow[];
   decodeSummaryEvents: () => ThreadEventWithMeta[];
   projectSummaryMessages: () => ViewMessage[];
@@ -188,8 +188,8 @@ function createTimelineBenchmarkScenario(
       excludedTypes: ["thread/started", "thread/identity", "thread/tokenUsage/updated"],
     });
   const compactSummaryStoredRows = () => compactSummaryStoredEventRows(storedEventRows);
-  const loadLatestTokenUsageRow = () =>
-    getLatestStoredEventRowByType(db, {
+  const loadTokenUsageRows = () =>
+    listStoredEventRowsByType(db, {
       threadId: thread.id,
       type: "thread/tokenUsage/updated",
     });
@@ -224,7 +224,7 @@ function createTimelineBenchmarkScenario(
     buildExpectedSummary,
     buildAndSerializeSummary,
     loadSummaryStoredRows,
-    loadLatestTokenUsageRow,
+    loadTokenUsageRows,
     compactSummaryStoredRows,
     decodeSummaryEvents,
     projectSummaryMessages,
