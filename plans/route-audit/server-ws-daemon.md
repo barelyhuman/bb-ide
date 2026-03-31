@@ -65,14 +65,13 @@
 
 `onDaemonSocketClose(deps, sessionId)`:
 1. `hub.unregisterDaemon(sessionId)` — removes daemon from both maps.
-2. SELECT session by PK. If not found or not "active", return.
-3. `closeSession(db, hub, sessionId, "daemon-disconnect")`:
-   - UPDATE session to `status="closed"`, `closeReason="daemon-disconnect"`.
-   - `notifier.notifyHost(["host-disconnected"])`.
-4. **Interrupt active threads** — SELECT threads JOIN environments WHERE `environments.hostId = session.hostId` AND `threads.status IN ("active", "provisioning")`.
-5. For each interrupted thread:
-   - `appendSystemErrorEvent` — inserts `system/error` event with code `"host_daemon_disconnected"`.
-   - `tryTransition(db, hub, thread.id, "error")` — transitions thread to error status.
+2. `hub.scheduleDaemonDisconnect(sessionId, 5000, ...)` — starts a 5s grace timer.
+3. When the timer expires:
+   - SELECT session by PK. If not found or not "active", return.
+   - `closeSession(db, hub, sessionId, "daemon-disconnect")`.
+   - **Interrupt active threads** — SELECT threads JOIN environments WHERE `environments.hostId = session.hostId` AND `threads.status IN ("active", "provisioning")`.
+   - Batch INSERT one `system/error` event per interrupted thread with code `"host_daemon_disconnected"`.
+   - Batch UPDATE interrupted threads to `status="error"`.
 
 ## DB Query Summary
 
@@ -83,14 +82,15 @@
 | **Per Heartbeat** | | | | |
 | 2 | SELECT session by PK + status + lease | `host_daemon_sessions` | PK | requireActiveSession |
 | 3 | UPDATE session lease/heartbeat | `host_daemon_sessions` | PK | heartbeatSession |
-| **On Close** | | | | |
+| **On Close (after 5s grace)** | | | | |
 | 4 | SELECT session by PK | `host_daemon_sessions` | PK | Check status |
 | 5 | UPDATE session -> closed | `host_daemon_sessions` | PK | closeSession |
 | 6 | SELECT active/provisioning threads for host | `threads`, `environments` | `threads_environment_idx` | Interrupt detection |
-| 7 | N x INSERT system/error event | `events` | `events_thread_sequence_idx` | Per interrupted thread |
-| 8 | N x UPDATE thread status | `threads` | PK | Per interrupted thread |
+| 7 | SELECT max event sequence per interrupted thread | `events` | `events_thread_sequence_idx` | Batch event sequencing |
+| 8 | Batch INSERT system/error events | `events` | `events_thread_sequence_idx` | One row per interrupted thread |
+| 9 | Batch UPDATE thread status -> error | `threads` | PK | One statement for all interrupted threads |
 
-**Heartbeat: 2 queries per heartbeat (every ~5s). Close: 3 + 2N queries. No N+1 for heartbeat. Close path is N+1 for hosts with many active threads.**
+**Heartbeat: 2 queries per heartbeat (every ~5s). Close finalization now happens only after a 5s grace period, and the event insert + status update are batched rather than N individual writes.**
 
 ## Code Reuse
 
@@ -106,7 +106,7 @@
 
 1. **Session re-validated on every heartbeat**: `requireActiveSession` does a full DB read on each heartbeat message (~every 5s). This is correct for safety but adds query load. Could cache the session in-memory and only re-validate periodically.
 2. **No graceful shutdown notification**: When the server itself shuts down, there's no mechanism to send `session-close` to all connected daemons. The daemons will only discover the disconnect via WebSocket close/error.
-3. **Thread interruption on close is not batched**: The close handler iterates threads individually, inserting events and transitioning one at a time. For hosts with many active threads, this could be slow and block the close handler.
+3. **Disconnect fallout is delayed by design**: The route now waits 5s before closing the session and erroring threads. This improves resilience to brief network blips, but it also means true daemon failures are reflected slightly later.
 
 ## Usages
 
@@ -129,4 +129,4 @@
 
 ## Review Comments
 
-<!-- Flag 1 is now query-load/operational rather than a contract issue. Flag 3 is the primary remaining scalability concern in this route. -->
+<!-- Flag 1 is now query-load/operational. Flag 3 is an intentional product tradeoff: better reconnect tolerance in exchange for a slightly slower failure signal. -->

@@ -5,16 +5,16 @@ import {
   getThread,
   hostDaemonSessions,
   listEvents,
-  queueCommand,
 } from "@bb/db";
 import { systemErrorEventDataSchema } from "@bb/domain";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   createHostDaemonClient,
 } from "@bb/host-daemon-contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/errors.js";
-import { validateDaemonWebSocket } from "../src/ws/daemon-protocol.js";
+import { DAEMON_DISCONNECT_GRACE_MS } from "../src/constants.js";
+import { onDaemonSocketClose, validateDaemonWebSocket } from "../src/ws/daemon-protocol.js";
 import { internalAuthHeaders } from "./helpers/commands.js";
 import {
   seedEnvironment,
@@ -53,50 +53,6 @@ async function waitForCloseDetails(
     });
     socket.once("error", reject);
   });
-}
-
-async function waitForSessionStatus(
-  args: {
-    server: Awaited<ReturnType<typeof startTestServer>>;
-    sessionId: string;
-    status: string;
-  },
-): Promise<typeof hostDaemonSessions.$inferSelect> {
-  const deadline = Date.now() + 1_000;
-
-  while (Date.now() < deadline) {
-    const session = args.server.db
-      .select()
-      .from(hostDaemonSessions)
-      .where(eq(hostDaemonSessions.id, args.sessionId))
-      .get();
-    if (session?.status === args.status) {
-      return session;
-    }
-    await sleep(10);
-  }
-
-  throw new Error(`Timed out waiting for session ${args.sessionId} to reach ${args.status}`);
-}
-
-async function waitForThreadStatus(
-  args: {
-    server: Awaited<ReturnType<typeof startTestServer>>;
-    threadId: string;
-    status: string;
-  },
-): Promise<NonNullable<ReturnType<typeof getThread>>> {
-  const deadline = Date.now() + 1_000;
-
-  while (Date.now() < deadline) {
-    const thread = getThread(args.server.db, args.threadId);
-    if (thread?.status === args.status) {
-      return thread;
-    }
-    await sleep(10);
-  }
-
-  throw new Error(`Timed out waiting for thread ${args.threadId} to reach ${args.status}`);
 }
 
 describe("internal session correctness", () => {
@@ -279,96 +235,85 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("closes the daemon session immediately when the websocket disconnects", async () => {
-    const server = await startTestServer();
+  it("keeps the daemon session active during the disconnect grace period", async () => {
+    const harness = await createTestAppHarness();
     try {
-      const daemonClient = createHostDaemonClient(
-        server.baseUrl,
-        server.config.authToken,
-      );
-      const sessionResponse = await daemonClient.session.open.$post({
-        json: {
-          hostId: "host-daemon-disconnect",
-          instanceId: "instance-1",
-          hostName: "Disconnect Host",
-          hostType: "persistent",
-          dataDir: "/tmp/host-daemon-disconnect-data",
-          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-          activeThreads: [],
-        },
+      vi.useFakeTimers();
+      const { session } = seedHostSession(harness.deps, {
+        id: "host-daemon-disconnect",
       });
-      expect(sessionResponse.status).toBe(201);
-      const session = await sessionResponse.json();
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
-      );
-      await waitForOpen(socket);
-      socket.close();
+      onDaemonSocketClose(harness.deps, session.id);
+      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS - 1);
 
-      const closedSession = await waitForSessionStatus({
-        server,
-        sessionId: session.sessionId,
-        status: "closed",
-      });
-      expect(closedSession.closeReason).toBe("daemon-disconnect");
+      const activeSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(activeSession?.status).toBe("active");
     } finally {
-      await server.close();
+      vi.useRealTimers();
+      await harness.cleanup();
     }
   });
 
-  it("marks active threads errored and appends a system error when the daemon disconnects", async () => {
-    const server = await startTestServer();
+  it("closes the daemon session after the disconnect grace period expires", async () => {
+    const harness = await createTestAppHarness();
     try {
-      const daemonClient = createHostDaemonClient(
-        server.baseUrl,
-        server.config.authToken,
-      );
-      const sessionResponse = await daemonClient.session.open.$post({
-        json: {
-          hostId: "host-daemon-active-disconnect",
-          instanceId: "instance-1",
-          hostName: "Disconnect Host",
-          hostType: "persistent",
-          dataDir: "/tmp/host-daemon-active-disconnect-data",
-          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-          activeThreads: [],
-        },
+      vi.useFakeTimers();
+      const { session } = seedHostSession(harness.deps, {
+        id: "host-daemon-disconnect-expired",
       });
-      expect(sessionResponse.status).toBe(201);
-      const session = await sessionResponse.json();
 
-      const { project } = seedProjectWithSource(server, {
-        hostId: "host-daemon-active-disconnect",
+      onDaemonSocketClose(harness.deps, session.id);
+      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
+
+      const closedSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(closedSession?.status).toBe("closed");
+      expect(closedSession?.closeReason).toBe("daemon-disconnect");
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("marks active threads errored and appends a system error after the grace period expires", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      vi.useFakeTimers();
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-active-disconnect",
       });
-      const environment = seedEnvironment(server, {
-        hostId: "host-daemon-active-disconnect",
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
         projectId: project.id,
       });
-      const thread = seedThread(server, {
+      const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
         status: "active",
       });
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
-      );
-      await waitForOpen(socket);
-      socket.close();
+      onDaemonSocketClose(harness.deps, session.id);
+      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
 
-      await waitForSessionStatus({
-        server,
-        sessionId: session.sessionId,
-        status: "closed",
-      });
-      await waitForThreadStatus({
-        server,
-        threadId: thread.id,
-        status: "error",
-      });
+      const closedSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(closedSession?.closeReason).toBe("daemon-disconnect");
+      expect(getThread(harness.db, thread.id)?.status).toBe("error");
 
-      const errorEvent = listEvents(server.db, { threadId: thread.id }).find(
+      const errorEvent = listEvents(harness.db, { threadId: thread.id }).find(
         (event) => event.type === "system/error",
       );
       expect(errorEvent).toBeDefined();
@@ -379,7 +324,64 @@ describe("internal session correctness", () => {
         message: "Host daemon disconnected during active work",
       });
     } finally {
-      await server.close();
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("cancels daemon-disconnect fallout if a replacement session opens during the grace period", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      vi.useFakeTimers();
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-reconnect",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      onDaemonSocketClose(harness.deps, session.id);
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-2",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/host-daemon-reconnect-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [{ threadId: thread.id }],
+        }),
+      });
+      expect(response.status).toBe(201);
+      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
+
+      const originalSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(originalSession?.closeReason).toBe("replaced");
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+      expect(
+        listEvents(harness.db, { threadId: thread.id }).some(
+          (event) => event.type === "system/error",
+        ),
+      ).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
     }
   });
 });
