@@ -1,54 +1,27 @@
-import type { ThreadEventItemType, ThreadEventType } from "@bb/domain";
+import type { ThreadEvent, ThreadEventItemType } from "@bb/domain";
 
 export interface StoredEventItemFields {
   itemId: string | null;
   itemKind: ThreadEventItemType | null;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && Array.isArray(value) === false;
-}
-
-function toNullableString(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
-}
-
-function toThreadEventItemType(value: unknown): ThreadEventItemType | null {
-  switch (value) {
-    case "userMessage":
-    case "agentMessage":
-    case "commandExecution":
-    case "fileChange":
-    case "webSearch":
-    case "toolCall":
-    case "reasoning":
-    case "plan":
-    case "contextCompaction":
-      return value;
-    default:
-      return null;
-  }
-}
-
-export function deriveStoredEventItemFields(args: {
-  data: Record<string, unknown>;
-  type: ThreadEventType;
+function fromItem(args: {
+  id: string;
+  type: ThreadEventItemType;
 }): StoredEventItemFields {
-  switch (args.type) {
+  return {
+    itemId: args.id,
+    itemKind: args.type,
+  };
+}
+
+export function deriveStoredEventItemFields(
+  event: ThreadEvent,
+): StoredEventItemFields {
+  switch (event.type) {
     case "item/started":
     case "item/completed": {
-      const item = args.data.item;
-      if (!isRecord(item)) {
-        return {
-          itemId: null,
-          itemKind: null,
-        };
-      }
-
-      return {
-        itemId: toNullableString(item.id),
-        itemKind: toThreadEventItemType(item.type),
-      };
+      return fromItem(event.item);
     }
     case "item/agentMessage/delta":
     case "item/commandExecution/outputDelta":
@@ -59,7 +32,7 @@ export function deriveStoredEventItemFields(args: {
     case "item/mcpToolCall/progress":
     case "item/toolCall/progress":
       return {
-        itemId: toNullableString(args.data.itemId),
+        itemId: event.itemId ?? null,
         itemKind: null,
       };
     default:

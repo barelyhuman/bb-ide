@@ -84,10 +84,7 @@ function toStoredEvent(envelope: HostDaemonEventEnvelope) {
     // Provider events keep the daemon timestamp even though server-originated
     // events still use server time.
     createdAt: envelope.createdAt,
-    ...deriveStoredEventItemFields({
-      type,
-      data,
-    }),
+    ...deriveStoredEventItemFields(envelope.event),
     data: JSON.stringify(data),
   };
 }

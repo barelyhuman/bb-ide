@@ -3,8 +3,6 @@ import { events } from "@bb/db";
 import {
   buildThreadEventRow,
   parseStoredThreadEvent,
-  providerEventSchema,
-  systemManagerUserMessageEventDataSchema,
 } from "@bb/domain";
 import type { ThreadEventItemType, ThreadEventRow, ThreadEventType } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
@@ -23,7 +21,7 @@ export interface StoredEventRow {
   type: ThreadEventType;
 }
 
-const storedEventRowFields = {
+export const storedEventRowFields = {
   createdAt: events.createdAt,
   data: events.data,
   id: events.id,
@@ -40,11 +38,15 @@ interface StoredEventPayloadRow {
   data: string;
   sequence: number;
   threadId: string;
-  type: string;
+  type: ThreadEventType;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && Array.isArray(value) === false;
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null;
 }
 
 function parseStoredEventPayload(row: StoredEventPayloadRow): Record<string, unknown> {
@@ -59,7 +61,8 @@ function parseStoredEventPayload(row: StoredEventPayloadRow): Record<string, unk
     );
   }
 
-  if (!isRecord(data)) {
+  const record = toRecord(data);
+  if (!record) {
     throw new ApiError(
       500,
       "internal_error",
@@ -67,10 +70,10 @@ function parseStoredEventPayload(row: StoredEventPayloadRow): Record<string, unk
     );
   }
 
-  return data;
+  return record;
 }
 
-export function decodeEventRow(row: StoredEventRow): ThreadEventRow {
+export function parseStoredEventRow(row: StoredEventRow): ThreadEventRow {
   return buildThreadEventRow({
     id: row.id,
     threadId: row.threadId,
@@ -106,7 +109,7 @@ export function listThreadEventRows(
     .limit(args.limit ?? Number.MAX_SAFE_INTEGER)
     .all();
 
-  return rows.map((row) => decodeEventRow(row));
+  return rows.map((row) => parseStoredEventRow(row));
 }
 
 export function listThreadEventRowsInRange(
@@ -130,7 +133,7 @@ export function listThreadEventRowsInRange(
     .orderBy(events.sequence)
     .all();
 
-  return rows.map((row) => decodeEventRow(row));
+  return rows.map((row) => parseStoredEventRow(row));
 }
 
 export function listRecentStoredEventRows(
@@ -162,40 +165,51 @@ export function listRecentThreadEventRows(
     threadId: string;
   },
 ): ThreadEventRow[] {
-  return listRecentStoredEventRows(db, args).map((row) => decodeEventRow(row));
+  return listRecentStoredEventRows(db, args).map((row) => parseStoredEventRow(row));
 }
 
-export function getLatestStoredEventRowByType(
+export function listTokenUsageRowsForContextWindowUsage(
   db: DbConnection,
   args: {
     threadId: string;
-    type: ThreadEventType;
   },
-): StoredEventRow | null {
-  const rows = db
+): StoredEventRow[] {
+  const latestRow = db
     .select(storedEventRowFields)
     .from(events)
-    .where(and(eq(events.threadId, args.threadId), eq(events.type, args.type)))
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "thread/tokenUsage/updated"),
+      ),
+    )
     .orderBy(desc(events.sequence))
     .limit(1)
     .get();
 
-  return rows ?? null;
-}
+  if (!latestRow) {
+    return [];
+  }
 
-export function listStoredEventRowsByType(
-  db: DbConnection,
-  args: {
-    threadId: string;
-    type: ThreadEventType;
-  },
-): StoredEventRow[] {
-  return db
+  const latestContextRow = db
     .select(storedEventRowFields)
     .from(events)
-    .where(and(eq(events.threadId, args.threadId), eq(events.type, args.type)))
-    .orderBy(events.sequence)
-    .all();
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "thread/tokenUsage/updated"),
+        sql`json_extract(${events.data}, '$.tokenUsage.modelContextWindow') IS NOT NULL`,
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+
+  if (!latestContextRow || latestContextRow.id === latestRow.id) {
+    return [latestRow];
+  }
+
+  return [latestContextRow, latestRow];
 }
 
 export function findThreadEvent(
@@ -203,7 +217,7 @@ export function findThreadEvent(
   args: { threadId: string; type: ThreadEventType; afterSeq?: number },
 ): ThreadEventRow | null {
   const row = db
-    .select()
+    .select(storedEventRowFields)
     .from(events)
     .where(
       args.afterSeq !== undefined
@@ -213,7 +227,7 @@ export function findThreadEvent(
     .orderBy(events.sequence)
     .limit(1)
     .get();
-  return row ? decodeEventRow(row) : null;
+  return row ? parseStoredEventRow(row) : null;
 }
 
 export function getLastThreadOutput(
@@ -223,7 +237,7 @@ export function getLastThreadOutput(
   // Filter at the DB level so tool calls, file changes, etc. don't crowd out
   // the actual text output. item_kind lets us match only agentMessage items.
   const row = db
-    .select()
+    .select(storedEventRowFields)
     .from(events)
     .where(
       sql`${events.threadId} = ${threadId} AND (
@@ -237,44 +251,18 @@ export function getLastThreadOutput(
 
   if (!row) return null;
 
-  const data = parseStoredEventPayload(row);
+  const eventRow = parseStoredEventRow(row);
 
-  if (row.type === "system/manager/user_message") {
-    const parsed = systemManagerUserMessageEventDataSchema.safeParse(data);
-    if (!parsed.success) {
-      throw new ApiError(
-        500,
-        "internal_error",
-        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
-      );
-    }
-    return parsed.data.text.length > 0 ? parsed.data.text : null;
+  if (eventRow.type === "system/manager/user_message") {
+    return eventRow.data.text.length > 0 ? eventRow.data.text : null;
   }
 
-  // item/completed — DB already filtered to agentMessage, just extract the text
-  if (!row.providerThreadId || !row.turnId) {
-    throw new ApiError(
-      500,
-      "internal_error",
-      `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is missing provider context`,
-    );
-  }
-  const parsed = providerEventSchema.safeParse({
-    ...data,
-    type: row.type,
-    threadId: row.threadId,
-    providerThreadId: row.providerThreadId,
-    turnId: row.turnId,
-  });
-  if (!parsed.success) {
-    throw new ApiError(
-      500,
-      "internal_error",
-      `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
-    );
-  }
-  if (parsed.data.type === "item/completed" && parsed.data.item.type === "agentMessage" && parsed.data.item.text.length > 0) {
-    return parsed.data.item.text;
+  if (
+    eventRow.type === "item/completed" &&
+    eventRow.data.item.type === "agentMessage" &&
+    eventRow.data.item.text.length > 0
+  ) {
+    return eventRow.data.item.text;
   }
 
   return null;

@@ -24,6 +24,11 @@ function setup() {
   return { db, project, thread };
 }
 
+const emptyItemFields = {
+  itemId: null,
+  itemKind: null,
+} as const;
+
 describe("events", () => {
   it("inserts events and returns count", () => {
     const { db, thread } = setup();
@@ -33,12 +38,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
+        ...emptyItemFields,
         data: JSON.stringify({ message: "test" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
+        ...emptyItemFields,
         data: JSON.stringify({ message: "test2" }),
       },
     ]);
@@ -84,6 +91,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
+        ...emptyItemFields,
         data: JSON.stringify({ message: "first" }),
       },
     ]);
@@ -95,12 +103,14 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
+        ...emptyItemFields,
         data: JSON.stringify({ message: "duplicate" }),
       },
       {
         threadId: thread.id,
         sequence: 2,
         type: "system/error",
+        ...emptyItemFields,
         data: JSON.stringify({ message: "new" }),
       },
     ]);
@@ -138,9 +148,9 @@ describe("events", () => {
     });
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 1, type: "system/error", data: "{}" },
-      { threadId: thread.id, sequence: 5, type: "system/error", data: "{}" },
-      { threadId: thread2.id, sequence: 3, type: "system/error", data: "{}" },
+      { threadId: thread.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 5, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread2.id, sequence: 3, type: "system/error", ...emptyItemFields, data: "{}" },
     ]);
 
     const hwm = getHighWaterMarks(db);
@@ -156,8 +166,8 @@ describe("events", () => {
     });
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 10, type: "system/error", data: "{}" },
-      { threadId: thread2.id, sequence: 3, type: "system/error", data: "{}" },
+      { threadId: thread.id, sequence: 10, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread2.id, sequence: 3, type: "system/error", ...emptyItemFields, data: "{}" },
     ]);
 
     const hwm = getHighWaterMarks(db, [thread.id]);
@@ -169,9 +179,9 @@ describe("events", () => {
     const { db, thread } = setup();
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 1, type: "system/error", data: "{}" },
-      { threadId: thread.id, sequence: 2, type: "system/error", data: "{}" },
-      { threadId: thread.id, sequence: 3, type: "system/error", data: "{}" },
+      { threadId: thread.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 2, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 3, type: "system/error", ...emptyItemFields, data: "{}" },
     ]);
 
     const after1 = listEvents(db, { threadId: thread.id, afterSequence: 1 });
@@ -196,8 +206,8 @@ describe("events", () => {
     };
 
     insertEvents(db, spy, [
-      { threadId: thread.id, sequence: 1, type: "system/error", data: "{}" },
-      { threadId: thread2.id, sequence: 1, type: "system/error", data: "{}" },
+      { threadId: thread.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread2.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
     ]);
 
     expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [

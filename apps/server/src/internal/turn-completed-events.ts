@@ -1,15 +1,16 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { events, getThread, transitionThreadStatus } from "@bb/db";
-import { providerEventSchema } from "@bb/domain";
+import { buildThreadEvent } from "@bb/domain";
+import type { ThreadEvent } from "@bb/domain";
 import type { AppDeps } from "../types.js";
-import { decodeEventRow } from "../services/thread-data.js";
+import {
+  parseStoredEventRow,
+  storedEventRowFields,
+} from "../services/thread-data.js";
 
 export function applyTurnCompletedEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  payload: Extract<
-    ReturnType<typeof providerEventSchema.parse>,
-    { type: "turn/completed" }
-  >,
+  payload: Extract<ThreadEvent, { type: "turn/completed" }>,
 ): void {
   const thread = getThread(deps.db, payload.threadId);
   if (!thread) {
@@ -38,18 +39,7 @@ export function handleTurnCompletedEvents(
   }
 
   const rows = deps.db
-    .select({
-      createdAt: events.createdAt,
-      data: events.data,
-      id: events.id,
-      itemId: events.itemId,
-      itemKind: events.itemKind,
-      providerThreadId: events.providerThreadId,
-      sequence: events.sequence,
-      threadId: events.threadId,
-      turnId: events.turnId,
-      type: events.type,
-    })
+    .select(storedEventRowFields)
     .from(events)
     .where(
       and(
@@ -66,17 +56,7 @@ export function handleTurnCompletedEvents(
       continue;
     }
     seenThreadIds.add(row.threadId);
-    if (!row.providerThreadId || !row.turnId) {
-      continue;
-    }
-    const decodedRow = decodeEventRow(row);
-    const payload = providerEventSchema.parse({
-      ...decodedRow.data,
-      type: decodedRow.type,
-      threadId: decodedRow.threadId,
-      providerThreadId: row.providerThreadId,
-      turnId: row.turnId,
-    });
+    const payload = buildThreadEvent(parseStoredEventRow(row));
     if (payload.type !== "turn/completed") {
       continue;
     }

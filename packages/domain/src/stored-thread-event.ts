@@ -5,10 +5,11 @@ import {
 } from "./provider-event.js";
 import type { ThreadEvent, ThreadEventType } from "./provider-event.js";
 
-type ThreadEventForType<TType extends ThreadEventType> = Extract<
-  ThreadEvent,
-  { type: TType }
->;
+type ThreadEventByType = {
+  [TType in ThreadEventType]: Extract<ThreadEvent, { type: TType }>;
+};
+
+type ThreadEventForType<TType extends ThreadEventType> = ThreadEventByType[TType];
 
 type StoredThreadEventDataFromEvent<TEvent extends ThreadEvent> = Omit<
   TEvent,
@@ -25,12 +26,6 @@ interface ThreadEventRowBase {
 interface ThreadEventRowInput extends ThreadEventRowBase {
   type: ThreadEventType;
   data: Record<string, unknown>;
-}
-
-export interface ThreadEventRowOfType<TType extends ThreadEventType>
-  extends ThreadEventRowBase {
-  type: TType;
-  data: StoredThreadEventDataForType<TType>;
 }
 
 export interface StoredThreadEventParseArgs {
@@ -51,6 +46,14 @@ export type StoredThreadEventData = StoredThreadEventDataByType[ThreadEventType]
 
 export type StoredThreadEventDataForType<TType extends ThreadEventType> =
   StoredThreadEventDataByType[TType];
+
+type ThreadEventRowFromEvent<TEvent extends ThreadEvent> = ThreadEventRowBase & {
+  type: TEvent["type"];
+  data: StoredThreadEventDataFromEvent<TEvent>;
+};
+
+export type ThreadEventRowOfType<TType extends ThreadEventType> =
+  ThreadEventRowFromEvent<ThreadEventForType<TType>>;
 
 export type ThreadEventRow = {
   [TType in ThreadEventType]: ThreadEventRowOfType<TType>;
@@ -89,138 +92,27 @@ export function parseStoredThreadEvent(
 
 export function buildThreadEventRow(
   args: ThreadEventRowBase & { event: ThreadEvent },
-): ThreadEventRow {
-  switch (args.event.type) {
-    case "thread/started":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "thread/identity":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "turn/started":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "turn/completed":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "thread/name/updated":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "thread/compacted":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/started":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/completed":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/agentMessage/delta":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/commandExecution/outputDelta":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/fileChange/outputDelta":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/reasoning/summaryTextDelta":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/reasoning/textDelta":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/plan/delta":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/mcpToolCall/progress":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "item/toolCall/progress":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "thread/tokenUsage/updated":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "turn/plan/updated":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "turn/diff/updated":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "error":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "warning":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "provider/unhandled":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "client/thread/start":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "client/turn/requested":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "client/turn/start":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "system/error":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "system/manager/user_message":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "system/thread/interrupted":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "system/thread-title/updated":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "system/operation":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-    case "system/provisioning":
-      return { ...args, type: args.event.type, data: toStoredThreadEventData(args.event) };
-  }
+): ThreadEventRow;
+export function buildThreadEventRow<TEvent extends ThreadEvent>(
+  args: ThreadEventRowBase & { event: TEvent },
+): ThreadEventRowFromEvent<TEvent>;
+export function buildThreadEventRow<TEvent extends ThreadEvent>(
+  args: ThreadEventRowBase & { event: TEvent },
+): ThreadEventRowFromEvent<TEvent> {
+  const { event, ...row } = args;
+  return {
+    ...row,
+    type: event.type,
+    data: toStoredThreadEventData(event),
+  };
 }
 
 export function buildThreadEvent(row: ThreadEventRow): ThreadEvent {
-  switch (row.type) {
-    case "thread/started":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "thread/identity":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "turn/started":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "turn/completed":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "thread/name/updated":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "thread/compacted":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/started":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/completed":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/agentMessage/delta":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/commandExecution/outputDelta":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/fileChange/outputDelta":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/reasoning/summaryTextDelta":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/reasoning/textDelta":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/plan/delta":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/mcpToolCall/progress":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "item/toolCall/progress":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "thread/tokenUsage/updated":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "turn/plan/updated":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "turn/diff/updated":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "error":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "warning":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "provider/unhandled":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "client/thread/start":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "client/turn/requested":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "client/turn/start":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "system/error":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "system/manager/user_message":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "system/thread/interrupted":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "system/thread-title/updated":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "system/operation":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-    case "system/provisioning":
-      return { ...row.data, threadId: row.threadId, type: row.type };
-  }
+  return parseStoredThreadEvent({
+    data: row.data,
+    threadId: row.threadId,
+    type: row.type,
+  });
 }
 
 export function isThreadEventRowOfType<TType extends ThreadEventType>(

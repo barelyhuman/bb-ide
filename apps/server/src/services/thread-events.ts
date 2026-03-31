@@ -4,25 +4,29 @@ import {
   deriveStoredEventItemFields,
   events,
 } from "@bb/db";
+import {
+  parseStoredThreadEvent,
+  turnRequestEventDataSchema,
+} from "@bb/domain";
 import type {
   PromptInput,
   ProvisioningTranscriptEntry,
+  StoredThreadEventDataForType,
   TurnRequestEventData,
   ThreadEventType,
   ResolvedThreadExecutionOptions,
   ThreadTurnInitiator,
 } from "@bb/domain";
-import { turnRequestEventDataSchema } from "@bb/domain";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 
-export interface AppendThreadEventArgs {
-  data: Record<string, unknown>;
+export interface AppendThreadEventArgs<TType extends ThreadEventType> {
+  data: StoredThreadEventDataForType<TType>;
   environmentId?: string | null;
   providerThreadId?: string | null;
   threadId: string;
   turnId?: string | null;
-  type: ThreadEventType;
+  type: TType;
 }
 
 export interface ClientTurnEventArgs {
@@ -40,7 +44,7 @@ export interface StoredTurnRequestEventRow {
   data: string;
   sequence: number;
   threadId: string;
-  type: string;
+  type: ThreadEventType;
 }
 
 export type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
@@ -54,7 +58,11 @@ export interface AppendThreadOwnershipChangeEventArgs {
 
 export function appendThreadEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: AppendThreadEventArgs,
+  args: AppendThreadEventArgs<ThreadEventType>,
+): number;
+export function appendThreadEvent<TType extends ThreadEventType>(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: AppendThreadEventArgs<TType>,
 ): number {
   const now = Date.now();
   const nextSequence = deps.db.transaction(
@@ -65,7 +73,13 @@ export function appendThreadEvent(
         .where(eq(events.threadId, args.threadId))
         .get();
       const sequence = (maxRow?.maxSeq ?? 0) + 1;
-      const itemFields = deriveStoredEventItemFields(args);
+      const itemFields = deriveStoredEventItemFields(
+        parseStoredThreadEvent({
+          data: args.data,
+          threadId: args.threadId,
+          type: args.type,
+        }),
+      );
 
       tx.run(
         sql`INSERT INTO events

@@ -9,8 +9,38 @@ import {
   upsertHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import type { PromptInput, ThreadEventType } from "@bb/domain";
+import {
+  parseStoredThreadEvent,
+} from "@bb/domain";
+import type {
+  PromptInput,
+  StoredThreadEventDataForType,
+  ThreadEventItemType,
+  ThreadEventType,
+} from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
+
+export interface SeedEventArgs<TType extends ThreadEventType> {
+  data: StoredThreadEventDataForType<TType>;
+  environmentId?: string | null;
+  providerThreadId?: string | null;
+  sequence: number;
+  threadId: string;
+  turnId?: string | null;
+  type: TType;
+}
+
+export interface SeedStoredEventArgs {
+  data: Record<string, unknown>;
+  environmentId?: string | null;
+  itemId: string | null;
+  itemKind: ThreadEventItemType | null;
+  providerThreadId?: string | null;
+  sequence: number;
+  threadId: string;
+  turnId?: string | null;
+  type: ThreadEventType;
+}
 
 export function seedHost(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -143,16 +173,19 @@ export function seedDraft(
 
 export function seedEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    data: Record<string, unknown>;
-    environmentId?: string | null;
-    providerThreadId?: string | null;
-    sequence: number;
-    threadId: string;
-    turnId?: string | null;
-    type: ThreadEventType;
-  },
-) {
+  args: SeedEventArgs<ThreadEventType>,
+): void;
+export function seedEvent<TType extends ThreadEventType>(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: SeedEventArgs<TType>,
+): void {
+  const event = parseStoredThreadEvent({
+    data: args.data,
+    providerThreadId: args.providerThreadId ?? null,
+    threadId: args.threadId,
+    turnId: args.turnId ?? null,
+    type: args.type,
+  });
   insertEvents(deps.db, deps.hub, [
     {
       threadId: args.threadId,
@@ -161,10 +194,26 @@ export function seedEvent(
       sequence: args.sequence,
       turnId: args.turnId ?? null,
       type: args.type,
-      ...deriveStoredEventItemFields({
-        type: args.type,
-        data: args.data,
-      }),
+      ...deriveStoredEventItemFields(event),
+      data: JSON.stringify(args.data),
+    },
+  ]);
+}
+
+export function seedStoredEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: SeedStoredEventArgs,
+): void {
+  insertEvents(deps.db, deps.hub, [
+    {
+      threadId: args.threadId,
+      environmentId: args.environmentId ?? null,
+      providerThreadId: args.providerThreadId ?? null,
+      sequence: args.sequence,
+      turnId: args.turnId ?? null,
+      type: args.type,
+      itemId: args.itemId,
+      itemKind: args.itemKind,
       data: JSON.stringify(args.data),
     },
   ]);

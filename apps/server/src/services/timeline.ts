@@ -11,11 +11,11 @@ import type {
 } from "@bb/server-contract";
 import type { DbConnection } from "@bb/db";
 import {
-  decodeEventRow,
   type StoredEventRow,
   listRecentStoredEventRows,
-  listStoredEventRowsByType,
+  listTokenUsageRowsForContextWindowUsage,
   listThreadEventRowsInRange,
+  parseStoredEventRow,
 } from "./thread-data.js";
 
 const TIMELINE_EXCLUDED_EVENT_TYPES = [
@@ -27,7 +27,7 @@ const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
 export function compactSummaryStoredEventRows(
   rows: readonly StoredEventRow[],
-): StoredEventRow[] {
+): readonly StoredEventRow[] {
   let agentMessageDeltaCount = 0;
   for (const row of rows) {
     if (row.type === "item/agentMessage/delta") {
@@ -36,7 +36,7 @@ export function compactSummaryStoredEventRows(
   }
 
   if (agentMessageDeltaCount < MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION) {
-    return [...rows];
+    return rows;
   }
 
   const completedAgentMessageItemIds = new Set<string>();
@@ -51,7 +51,7 @@ export function compactSummaryStoredEventRows(
   }
 
   if (completedAgentMessageItemIds.size === 0) {
-    return [...rows];
+    return rows;
   }
 
   const retainedCompletedDeltaItemIds = new Set<string>();
@@ -91,15 +91,14 @@ export function buildThreadTimeline(
       : { excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES }),
   });
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
-  const messages = toViewMessages(eventRows.map((row) => decodeRow(decodeEventRow(row))), {
+  const messages = toViewMessages(eventRows.map((row) => decodeRow(parseStoredEventRow(row))), {
     includeDebugRawEvents: options.includeManagerDebugView,
     includeInternalSystemMessages: options.includeManagerDebugView,
     threadStatus: thread.status,
     threadType: thread.type,
   });
-  const tokenUsageRows = listStoredEventRowsByType(db, {
+  const tokenUsageRows = listTokenUsageRowsForContextWindowUsage(db, {
     threadId: thread.id,
-    type: "thread/tokenUsage/updated",
   });
 
   return {
@@ -107,7 +106,7 @@ export function buildThreadTimeline(
       includeToolGroupMessages: options.includeToolGroupMessages ?? false,
     }),
     contextWindowUsage:
-      extractThreadContextWindowUsage(tokenUsageRows.map((row) => decodeEventRow(row))) ?? undefined,
+      extractThreadContextWindowUsage(tokenUsageRows.map((row) => parseStoredEventRow(row))) ?? undefined,
   };
 }
 

@@ -11,6 +11,7 @@ import {
   seedEvent,
   seedHostSession,
   seedProjectWithSource,
+  seedStoredEvent,
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
@@ -226,11 +227,13 @@ describe("public thread data routes", () => {
       });
       // Malformed: missing item.type, so the derived item_kind column is null.
       // The row is filtered out at the DB level instead of turning into a 500.
-      seedEvent(harness.deps, {
+      seedStoredEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         providerThreadId: "provider-output",
         turnId: "turn-2",
+        itemId: "msg-2",
+        itemKind: null,
         sequence: 2,
         type: "item/completed",
         data: {
@@ -367,9 +370,11 @@ describe("public thread data routes", () => {
           source: "tell",
         },
       });
-      seedEvent(harness.deps, {
+      seedStoredEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
+        itemId: null,
+        itemKind: null,
         sequence: 2,
         type: "client/turn/requested",
         data: {
