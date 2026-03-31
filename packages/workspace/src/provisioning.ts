@@ -124,6 +124,8 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
     return { path: args.targetPath };
   }
 
+  await ensureWorkspaceParentDirectory(args.targetPath);
+
   const gitArgs = ["worktree", "add", "-B", args.branchName, args.targetPath];
   const commandText = `git ${gitArgs.join(" ")}`;
 
@@ -157,6 +159,8 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };
   }
+
+  await ensureWorkspaceParentDirectory(args.targetPath);
 
   const cloneArgs = ["clone", args.sourcePath, args.targetPath];
   const cloneText = `git ${cloneArgs.join(" ")}`;

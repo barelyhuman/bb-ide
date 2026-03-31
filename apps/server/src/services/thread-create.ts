@@ -7,6 +7,7 @@ import {
   deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
+  getHighWaterMarks,
   transitionThreadStatus,
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
@@ -18,6 +19,7 @@ import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import { waitForHostSession } from "./host-lifecycle.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
@@ -29,6 +31,7 @@ import {
   getThreadSafe,
   queueEnvironmentProvision,
   requireProjectExists,
+  requireSandboxCloneSource,
   SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
@@ -96,9 +99,9 @@ async function createThreadInEnvironment(
       entries: [
         {
           type: "step",
-          key: "provision",
-          text: "Waiting for environment...",
-          status: "started",
+          key: "environment",
+          text: `environment: ${args.provisioningLabel}`,
+          status: "completed",
         },
       ],
     });
@@ -140,6 +143,41 @@ async function createThreadInEnvironment(
   }
 
   return getThreadSafe(deps, thread.id);
+}
+
+function ensurePublicServerUrl(publicUrl: string): string {
+  const parsedUrl = new URL(publicUrl);
+  if (
+    parsedUrl.hostname === "localhost" ||
+    parsedUrl.hostname === "127.0.0.1" ||
+    parsedUrl.hostname === "0.0.0.0" ||
+    parsedUrl.hostname === "::1" ||
+    parsedUrl.hostname === "[::1]"
+  ) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+    );
+  }
+  return publicUrl;
+}
+
+function getWorkspaceProvisioningLabel(
+  workspaceProvisionType: Environment["workspaceProvisionType"],
+): string {
+  switch (workspaceProvisionType) {
+    case "unmanaged":
+      return "Direct";
+    case "managed-worktree":
+      return "Worktree";
+    case "managed-clone":
+      return "Clone";
+    default: {
+      const _exhaustive: never = workspaceProvisionType;
+      throw new Error(`Unsupported workspace provisioning type: ${_exhaustive}`);
+    }
+  }
 }
 
 async function reuseEnvironmentByHostPath(
@@ -207,6 +245,90 @@ async function startQueuedThreadIfNeeded(
     providerId: args.thread.providerId,
   });
   transitionThreadStatus(deps.db, deps.hub, args.thread.id, "active");
+}
+
+async function createSandboxHostThread(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  args: CreateSandboxHostThreadArgs,
+) {
+  if (!deps.config.e2bApiKey) {
+    throw new ApiError(
+      501,
+      "not_configured",
+      "Sandbox provisioning requires E2B_API_KEY to be configured",
+    );
+  }
+
+  const defaultSource = requireSandboxCloneSource(deps, args.request.projectId);
+  const hostId = createHostId();
+  const hostName = `sandbox-${hostId.slice(-6)}`;
+
+  upsertHost(deps.db, deps.hub, {
+    id: hostId,
+    name: hostName,
+    provider: args.sandboxType,
+    type: "ephemeral",
+  });
+
+  let sandboxHost: SandboxHost;
+  try {
+    sandboxHost = await provisionHost({
+      apiKey: deps.config.e2bApiKey,
+      authToken: deps.config.authToken,
+      hostId,
+      hostName,
+      sandboxType: args.sandboxType,
+      serverUrl: ensurePublicServerUrl(deps.config.publicUrl),
+      template: deps.config.e2bTemplate === "" ? undefined : deps.config.e2bTemplate,
+    });
+  } catch (error) {
+    deleteHost(deps.db, deps.hub, hostId);
+    throw error;
+  }
+
+  updateHost(deps.db, deps.hub, hostId, {
+    externalId: sandboxHost.externalId,
+  });
+  deps.sandboxRegistry.set(hostId, sandboxHost);
+
+  try {
+    await waitForHostSession(deps, hostId);
+  } catch (error) {
+    deps.sandboxRegistry.remove(hostId);
+    await sandboxHost.destroy().catch(() => {});
+    updateHost(deps.db, deps.hub, hostId, { destroyedAt: Date.now() });
+    throw error;
+  }
+
+  const environment = createEnvironment(deps.db, deps.hub, {
+    hostId,
+    managed: true,
+    projectId: args.request.projectId,
+    status: "provisioning",
+    workspaceProvisionType: "managed-clone",
+  });
+  const thread = await createThreadInEnvironment(deps, {
+    environment,
+    mergeBaseBranch: null,
+    provisioningLabel: "Cloud sandbox",
+    request: args.request,
+    threadStatus: "provisioning",
+  });
+  const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
+
+  queueEnvironmentProvision(deps, {
+    branchName: buildManagedBranchName(args.request, thread.id),
+    environmentId: environment.id,
+    hostId,
+    initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
+    sourcePath: defaultSource.repoUrl,
+    targetPath: buildSandboxTargetPath(args.request.projectId, thread.id),
+    workspaceProvisionType: "managed-clone",
+    setupScript: SETUP_SCRIPT_NAME,
+    setupTimeoutMs: SETUP_TIMEOUT_MS,
+  });
+
+  return thread;
 }
 
 export async function createThreadFromRequest(

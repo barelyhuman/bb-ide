@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
+  createProject,
   createProjectSource,
   createEnvironment,
   createThread,
@@ -605,7 +606,6 @@ describe("public thread routes", () => {
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
-          hostId: host.id,
           repoUrl: "https://github.com/example/repo.git",
           type: "github_repo",
         },
@@ -677,7 +677,6 @@ describe("public thread routes", () => {
       );
       expect(queued.command).toMatchObject({
         environmentId: environment.id,
-        projectId: project.id,
         sourcePath: "https://github.com/example/repo.git",
         targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,
         workspaceProvisionType: "managed-clone",
@@ -701,7 +700,6 @@ describe("public thread routes", () => {
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
-          hostId: host.id,
           repoUrl: "https://github.com/example/repo.git",
           type: "github_repo",
         },
@@ -744,7 +742,6 @@ describe("public thread routes", () => {
       const { project } = createProject(harness.db, harness.hub, {
         name: "Cloud Sandbox Project",
         source: {
-          hostId: host.id,
           repoUrl: "https://github.com/example/repo.git",
           type: "github_repo",
         },

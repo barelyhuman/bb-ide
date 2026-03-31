@@ -6,12 +6,17 @@ import {
   getThread,
   queueCommand,
 } from "@bb/db";
-import type { LocalPathProjectSource } from "@bb/domain";
+import type {
+  GitHubRepoProjectSource,
+  LocalPathProjectSource,
+} from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
 import { deriveTitleFallback } from "./title-generation.js";
+
+const REMOTE_WORKSPACE_ROOT = "/tmp/bb-managed-workspaces";
 
 function slugify(value: string): string {
   const cleaned = value

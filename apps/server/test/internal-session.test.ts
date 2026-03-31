@@ -197,6 +197,7 @@ describe("internal session routes", () => {
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
           activeThreads: [],
+          dataDir: "/tmp/host-daemon-reconnected",
           hostId: host.id,
           instanceId: "instance-reconnected",
           hostName: "Sandbox Host",

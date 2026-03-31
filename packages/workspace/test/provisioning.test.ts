@@ -117,6 +117,8 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "clone-branch",
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
     });
 
     expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
@@ -131,6 +133,8 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
     });
 
     expect(await new Workspace(targetPath).currentBranch).toBe("feature");
