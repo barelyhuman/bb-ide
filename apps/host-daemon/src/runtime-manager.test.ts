@@ -6,6 +6,8 @@ import { RuntimeManager } from "./runtime-manager.js";
 type CurrentBranchArgs = Parameters<IWorkspace["currentBranch"]>;
 type GetStatusResult = Awaited<ReturnType<IWorkspace["getStatus"]>>;
 type GetDiffResult = Awaited<ReturnType<IWorkspace["getDiff"]>>;
+type WatchStatusArgs = Parameters<IWorkspace["watchStatus"]>;
+type StopWatchingStatus = ReturnType<IWorkspace["watchStatus"]>;
 type CommitArgs = Parameters<IWorkspace["commit"]>;
 type FetchArgs = Parameters<IWorkspace["fetch"]>;
 type SquashMergeArgs = Parameters<IWorkspace["squashMergeInto"]>;
@@ -23,7 +25,12 @@ type StopThreadArgs = Parameters<AgentRuntime["stopThread"]>[0];
 type RenameThreadArgs = Parameters<AgentRuntime["renameThread"]>[0];
 type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
 
-function createFakeWorkspace(path: string) {
+function createFakeWorkspace(
+  path: string,
+  options: {
+    watchStatus?: (...args: WatchStatusArgs) => StopWatchingStatus;
+  } = {},
+) {
   const status: GetStatusResult = {
     workingTree: {
       hasUncommittedChanges: false,
@@ -52,6 +59,9 @@ function createFakeWorkspace(path: string) {
     shortstat: "",
     files: "",
   };
+  const watchStatus =
+    options.watchStatus ??
+    vi.fn((_onChange: WatchStatusArgs[0]) => () => undefined);
   const workspace = {
     path,
     managed: false,
@@ -63,7 +73,7 @@ function createFakeWorkspace(path: string) {
     getStatus: vi.fn(async () => status),
     getDiff: vi.fn(async () => diff),
     getBranches: vi.fn(async () => ["main"]),
-    watchStatus: vi.fn(() => () => undefined),
+    watchStatus: vi.fn(watchStatus),
     commit: vi.fn(async (..._args: CommitArgs) => ({
       commitSha: "commit-1",
       commitSubject: "commit",
@@ -150,7 +160,10 @@ describe("RuntimeManager", () => {
   });
 
   it("shuts down the runtime and destroys the workspace", async () => {
-    const workspace = createFakeWorkspace("/tmp/env-1");
+    const stopWatchingStatus = vi.fn(() => undefined);
+    const workspace = createFakeWorkspace("/tmp/env-1", {
+      watchStatus: () => stopWatchingStatus,
+    });
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
       provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-1").mockResolvedValue(
@@ -166,7 +179,44 @@ describe("RuntimeManager", () => {
     await manager.destroyEnvironment("env-1");
 
     expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+    expect(workspace.watchStatus).toHaveBeenCalledTimes(1);
+    expect(stopWatchingStatus).toHaveBeenCalledTimes(1);
     expect(workspace.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("installs the workspace status watcher once and reports workspace status changes", async () => {
+    const stopWatchingStatus = vi.fn(() => undefined);
+    let onStatusChange: WatchStatusArgs[0] | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-watch", {
+      watchStatus: (callback) => {
+        onStatusChange = callback;
+        return stopWatchingStatus;
+      },
+    });
+    const onWorkspaceStatusChanged = vi.fn();
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onWorkspaceStatusChanged,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-watch",
+      workspacePath: "/tmp/env-watch",
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-watch",
+      workspacePath: "/tmp/env-watch",
+    });
+    onStatusChange?.();
+
+    expect(workspace.watchStatus).toHaveBeenCalledTimes(1);
+    expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
+      environmentId: "env-watch",
+    });
+    expect(stopWatchingStatus).not.toHaveBeenCalled();
   });
 
   it("tracks active threads for session reconciliation", async () => {
@@ -217,7 +267,10 @@ describe("RuntimeManager", () => {
   });
 
   it("removes stale entries when the provider process exits", async () => {
-    const workspace = createFakeWorkspace("/tmp/env-exit");
+    const stopWatchingStatus = vi.fn(() => undefined);
+    const workspace = createFakeWorkspace("/tmp/env-exit", {
+      watchStatus: () => stopWatchingStatus,
+    });
     const runtime = createFakeRuntime();
     let onProcessExit:
       | ((info: {
@@ -252,11 +305,15 @@ describe("RuntimeManager", () => {
 
     expect(manager.get("env-exit")).toBeUndefined();
     expect(manager.hasThread("env-exit", "thread-1")).toBe(false);
+    expect(stopWatchingStatus).toHaveBeenCalledTimes(1);
     expect(runtime.shutdown).not.toHaveBeenCalled();
   });
 
   it("keeps sibling provider threads running when one provider exits", async () => {
-    const workspace = createFakeWorkspace("/tmp/env-shared");
+    const stopWatchingStatus = vi.fn(() => undefined);
+    const workspace = createFakeWorkspace("/tmp/env-shared", {
+      watchStatus: () => stopWatchingStatus,
+    });
     const runtime = createFakeRuntime();
     let runningProviders = ["fake-alpha", "fake-beta"];
     runtime.listRunningProviders.mockImplementation(() => runningProviders);
@@ -296,12 +353,19 @@ describe("RuntimeManager", () => {
     expect(manager.get("env-shared")).toBeDefined();
     expect(manager.hasThread("env-shared", "thread-a")).toBe(false);
     expect(manager.hasThread("env-shared", "thread-b")).toBe(true);
+    expect(stopWatchingStatus).not.toHaveBeenCalled();
     expect(runtime.shutdown).not.toHaveBeenCalled();
   });
 
   it("shuts down all tracked environments", async () => {
-    const workspaceA = createFakeWorkspace("/tmp/env-a");
-    const workspaceB = createFakeWorkspace("/tmp/env-b");
+    const stopWatchingStatusA = vi.fn(() => undefined);
+    const stopWatchingStatusB = vi.fn(() => undefined);
+    const workspaceA = createFakeWorkspace("/tmp/env-a", {
+      watchStatus: () => stopWatchingStatusA,
+    });
+    const workspaceB = createFakeWorkspace("/tmp/env-b", {
+      watchStatus: () => stopWatchingStatusB,
+    });
     const runtimeA = createFakeRuntime();
     const runtimeB = createFakeRuntime();
     const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-a")
@@ -329,6 +393,8 @@ describe("RuntimeManager", () => {
 
     expect(runtimeA.shutdown).toHaveBeenCalledTimes(1);
     expect(runtimeB.shutdown).toHaveBeenCalledTimes(1);
+    expect(stopWatchingStatusA).toHaveBeenCalledTimes(1);
+    expect(stopWatchingStatusB).toHaveBeenCalledTimes(1);
     // shutdownAll does NOT destroy workspaces — the server owns managed
     // workspace lifecycle via explicit environment.destroy commands
     expect(workspaceA.destroy).not.toHaveBeenCalled();

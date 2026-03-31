@@ -78,6 +78,9 @@ export function createFakeWorkspace(pathname: string) {
     async getBranches() {
       return ["main"];
     },
+    watchStatus() {
+      return () => undefined;
+    },
     async commit(options: { message: string; noVerify: boolean }) {
       state.lastCommitMessage = options.message;
       return {

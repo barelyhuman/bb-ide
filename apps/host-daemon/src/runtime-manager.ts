@@ -28,6 +28,7 @@ function lazyProvisionOpts(
 export interface RuntimeEntry {
   environmentId: string;
   runtime: AgentRuntime;
+  stopWatchingStatus: () => void;
   workspace: IWorkspace;
   path: string;
   threads: Map<
@@ -51,6 +52,7 @@ export interface RuntimeManagerOptions {
   provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
+  onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
   onToolCall?: AgentRuntimeOptions["onToolCall"];
   onStderr?: AgentRuntimeOptions["onStderr"];
   onProcessExit?: AgentRuntimeOptions["onProcessExit"];
@@ -170,6 +172,7 @@ export class RuntimeManager {
     }
 
     this.entries.delete(environmentId);
+    this.stopWatchingStatus(entry);
     await entry.runtime.shutdown();
     await entry.workspace.destroy();
   }
@@ -187,6 +190,7 @@ export class RuntimeManager {
     this.pendingEntries.clear();
 
     for (const entry of entries) {
+      this.stopWatchingStatus(entry);
       await entry.runtime.shutdown();
       // Do NOT call workspace.destroy() — the server owns managed workspace
       // lifecycle via explicit environment.destroy commands. Daemon shutdown
@@ -206,6 +210,11 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
+    const stopWatchingStatus = workspace.watchStatus(() => {
+      this.options.onWorkspaceStatusChanged?.({
+        environmentId: args.environmentId,
+      });
+    });
     const threads = new Map<
       string,
       {
@@ -214,52 +223,65 @@ export class RuntimeManager {
       }
     >();
     let runtime: AgentRuntime | null = null;
-    runtime = this.createRuntime({
-      workspacePath: workspace.path,
-      adapterFactory: this.options.adapterFactory,
-      onEvent: (event) => {
-        if (event.type === "thread/identity") {
-          this.markThreadActive(
-            args.environmentId,
-            event.threadId,
-            event.providerThreadId,
-          );
-        } else if (event.type === "turn/completed") {
-          this.markThreadInactive(args.environmentId, event.threadId);
-        }
-        this.options.onEvent?.({
-          environmentId: args.environmentId,
-          event,
-        });
-      },
-      onToolCall:
-        this.options.onToolCall ??
-        (async () => ({
-          contentItems: [],
-          success: true,
-        })),
-      onStderr: this.options.onStderr,
-      onProcessExit: (info) => {
-        for (const threadId of info.threadIds) {
-          threads.delete(threadId);
-        }
-        const current = this.entries.get(args.environmentId);
-        if (
-          current?.runtime === runtime &&
-          runtime?.listRunningProviders().length === 0
-        ) {
-          this.entries.delete(args.environmentId);
-        }
-        this.options.onProcessExit?.(info);
-      },
-    });
+    try {
+      runtime = this.createRuntime({
+        workspacePath: workspace.path,
+        adapterFactory: this.options.adapterFactory,
+        onEvent: (event) => {
+          if (event.type === "thread/identity") {
+            this.markThreadActive(
+              args.environmentId,
+              event.threadId,
+              event.providerThreadId,
+            );
+          } else if (event.type === "turn/completed") {
+            this.markThreadInactive(args.environmentId, event.threadId);
+          }
+          this.options.onEvent?.({
+            environmentId: args.environmentId,
+            event,
+          });
+        },
+        onToolCall:
+          this.options.onToolCall ??
+          (async () => ({
+            contentItems: [],
+            success: true,
+          })),
+        onStderr: this.options.onStderr,
+        onProcessExit: (info) => {
+          for (const threadId of info.threadIds) {
+            threads.delete(threadId);
+          }
+          const current = this.entries.get(args.environmentId);
+          if (
+            current?.runtime === runtime &&
+            runtime?.listRunningProviders().length === 0
+          ) {
+            this.stopWatchingStatus(current);
+            this.entries.delete(args.environmentId);
+          }
+          this.options.onProcessExit?.(info);
+        },
+      });
+    } catch (error) {
+      stopWatchingStatus();
+      throw error;
+    }
 
     return {
       environmentId: args.environmentId,
       runtime,
+      stopWatchingStatus,
       workspace,
       path: workspace.path,
       threads,
     };
+  }
+
+  private stopWatchingStatus(entry: RuntimeEntry): void {
+    const stopWatchingStatus = entry.stopWatchingStatus;
+    entry.stopWatchingStatus = () => undefined;
+    stopWatchingStatus();
   }
 }

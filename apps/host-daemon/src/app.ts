@@ -10,6 +10,7 @@ import {
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
+import type { HostDaemonEnvironmentChangeRequest } from "@bb/host-daemon-contract";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 
 interface SessionState {
@@ -17,6 +18,55 @@ interface SessionState {
 }
 
 const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
+const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
+
+type BufferedEnvironmentChange = Omit<
+  HostDaemonEnvironmentChangeRequest,
+  "sessionId"
+>;
+
+export function createBufferedEnvironmentChangeReporter(args: {
+  debounceMs?: number;
+  logger: HostDaemonLogger;
+  reportEnvironmentChange: (
+    change: BufferedEnvironmentChange,
+  ) => Promise<void>;
+}) {
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  function toKey(change: BufferedEnvironmentChange): string {
+    return `${change.environmentId}:${change.change}`;
+  }
+
+  return {
+    queue(change: BufferedEnvironmentChange): void {
+      const key = toKey(change);
+      if (timers.has(key)) {
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        timers.delete(key);
+        void args.reportEnvironmentChange(change).catch((error) => {
+          args.logger.warn(
+            {
+              change,
+              err: error,
+            },
+            "Failed to report environment change",
+          );
+        });
+      }, args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS);
+      timers.set(key, timer);
+    },
+    dispose(): void {
+      for (const timer of timers.values()) {
+        clearTimeout(timer);
+      }
+      timers.clear();
+    },
+  };
+}
 
 export function createCommandFetchLoop(args: {
   logger: HostDaemonLogger;
@@ -119,6 +169,11 @@ export async function createHostDaemonApp(
     fetchFn: options.fetchFn,
   });
 
+  const environmentChangeReporter = createBufferedEnvironmentChangeReporter({
+    logger: options.logger,
+    reportEnvironmentChange: (change) => serverClient.postEnvironmentChange(change),
+  });
+
   const eventBuffer = createEventBuffer({
     logger: options.logger,
     postEvents: (events) => serverClient.postEvents(events),
@@ -131,6 +186,12 @@ export async function createHostDaemonApp(
         environmentId,
         threadId: event.threadId,
         event,
+      });
+    },
+    onWorkspaceStatusChanged: ({ environmentId }) => {
+      environmentChangeReporter.queue({
+        environmentId,
+        change: "work-status-changed",
       });
     },
     onToolCall: options.onToolCall ?? ((request) => serverClient.callTool(request)),
@@ -207,6 +268,7 @@ export async function createHostDaemonApp(
     flushEventBuffer: () => eventBuffer.flush(),
     shutdownRuntimes: async () => {
       eventBuffer.dispose();
+      environmentChangeReporter.dispose();
       await localApi?.close();
       await runtimeManager.shutdownAll();
       await connection.shutdown();

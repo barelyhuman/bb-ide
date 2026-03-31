@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createCommandFetchLoop } from "./app.js";
+import {
+  createBufferedEnvironmentChangeReporter,
+  createCommandFetchLoop,
+} from "./app.js";
 
 function createLogger() {
   return {
@@ -41,5 +44,60 @@ describe("createCommandFetchLoop", () => {
       expect(fetchCommands).toHaveBeenCalledTimes(2);
     });
     expect(handleCommands).not.toHaveBeenCalled();
+  });
+});
+
+describe("createBufferedEnvironmentChangeReporter", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("deduplicates repeated workspace status change hints into one server report per environment", async () => {
+    vi.useFakeTimers();
+    const logger = createLogger();
+    const reportEnvironmentChange = vi.fn(async () => undefined);
+    const reporter = createBufferedEnvironmentChangeReporter({
+      logger,
+      debounceMs: 100,
+      reportEnvironmentChange,
+    });
+
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+    expect(reportEnvironmentChange).toHaveBeenCalledWith({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("cancels queued environment change reports on dispose", async () => {
+    vi.useFakeTimers();
+    const logger = createLogger();
+    const reportEnvironmentChange = vi.fn(async () => undefined);
+    const reporter = createBufferedEnvironmentChangeReporter({
+      logger,
+      debounceMs: 100,
+      reportEnvironmentChange,
+    });
+
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+    reporter.dispose();
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(reportEnvironmentChange).not.toHaveBeenCalled();
   });
 });

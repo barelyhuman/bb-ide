@@ -43,6 +43,7 @@ function createFakeWorkspace(path: string) {
       files: "",
     })),
     getBranches: vi.fn(async () => ["main"]),
+    watchStatus: vi.fn(() => () => undefined),
     commit: vi.fn(async () => ({
       commitSha: "commit-1",
       commitSubject: "subject",
