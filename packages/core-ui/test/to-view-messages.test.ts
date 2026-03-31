@@ -47,6 +47,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "agentMessage",
@@ -75,6 +76,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "agentMessage",
@@ -90,6 +92,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "agentMessage",
@@ -119,6 +122,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           delta: "PONG",
         },
@@ -130,6 +134,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "agentMessage",
@@ -196,6 +201,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "commandExecution",
             id: "call-1",
@@ -237,6 +243,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -254,6 +261,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -288,6 +296,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -305,6 +314,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -752,6 +762,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "commandExecution",
             id: "call-1",
@@ -769,6 +780,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/commandExecution/outputDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "call-1",
@@ -782,6 +794,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/reasoning/summaryTextDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "rs-1",
@@ -811,6 +824,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "commandExecution",
             id: "call-1",
@@ -896,6 +910,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -909,6 +924,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/reasoning/summaryTextDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "rs-1",
@@ -950,6 +966,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -963,6 +980,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/reasoning/summaryTextDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "rs-1",
@@ -996,6 +1014,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -1009,6 +1028,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -1022,6 +1042,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/reasoning/summaryTextDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "rs-1",
@@ -1035,6 +1056,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 4,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "agentMessage",
@@ -1050,6 +1072,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 5,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "reasoning",
@@ -1086,6 +1109,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -1117,6 +1141,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -1130,6 +1155,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "turn/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           status: "completed",
@@ -1156,6 +1182,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -1200,6 +1227,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -1216,6 +1244,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/agentMessage/delta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "msg-1",
@@ -1244,6 +1273,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -1261,6 +1291,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/reasoning/summaryTextDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "rs-1",
@@ -1289,6 +1320,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "commandExecution",
             id: "call-1",
@@ -1306,6 +1338,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/commandExecution/outputDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "call-1",
@@ -1319,6 +1352,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/commandExecution/outputDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "call-1",
@@ -1332,6 +1366,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 4,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "commandExecution",
             id: "call-1",
@@ -1375,6 +1410,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -1392,6 +1428,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -1410,6 +1447,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -1427,6 +1465,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 4,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -1460,6 +1499,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -1490,6 +1530,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -1527,6 +1568,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -1556,6 +1598,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -1592,6 +1635,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -1609,6 +1653,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -1628,6 +1673,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -1737,6 +1783,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "fileChange",
             id: "call-edit-1",
@@ -1759,6 +1806,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/fileChange/outputDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "call-edit-1",
@@ -1772,6 +1820,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "fileChange",
             id: "call-edit-1",
@@ -1811,6 +1860,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "commandExecution",
             id: "call-declined-1",
@@ -1842,6 +1892,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "fileChange",
             id: "file-declined-1",
@@ -1878,6 +1929,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: {
             type: "fileChange",
             id: "call-edit-2",
@@ -1925,6 +1977,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "turn/plan/updated",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           explanation: "Plan is now clearer",
@@ -1965,6 +2018,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/reasoning/textDelta",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "reasoning-1",
@@ -1994,6 +2048,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "warning",
         data: {
+          providerThreadId: "thread-1",
           category: "deprecation",
           summary: "Legacy API will be removed",
           details: "Use v2 APIs instead",
@@ -2006,6 +2061,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "warning",
         data: {
+          providerThreadId: "thread-1",
           category: "config",
           summary: "Unknown config key",
           details: "Remove 'legacyFlag'",
@@ -2034,6 +2090,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "warning",
         data: {
+          providerThreadId: "thread-1",
           category: "general",
           summary: "Rate limit status updated",
           details: "status: allowed • limit: five_hour",
@@ -2094,6 +2151,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "thread/name/updated",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           threadName: "Compaction summary title",
         },
@@ -2123,6 +2181,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "thread/name/updated",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           threadName: "Server-assigned title",
         },
@@ -2164,6 +2223,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "compact-1",
@@ -2194,6 +2254,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "compact-1",
@@ -2208,6 +2269,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "compact-1",
@@ -2222,6 +2284,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "thread/compacted",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
         },
@@ -2250,6 +2313,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "thread/compacted",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
         },
@@ -2335,6 +2399,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -2380,6 +2445,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -2410,6 +2476,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -2754,13 +2821,8 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "turn/started",
         data: {
-          threadId: "thread-1",
-          turn: {
-            id: "turn-1",
-            items: [],
-            status: "inProgress",
-            error: null,
-          },
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
         },
         createdAt: 1,
       },
@@ -2778,8 +2840,8 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "turn/started",
         data: {
-          threadId: "thread-1",
-          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
         },
         createdAt: 1,
       },
@@ -2789,8 +2851,8 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "turn/started",
         data: {
-          threadId: "thread-1",
-          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
         },
         createdAt: 2,
       },
@@ -2800,8 +2862,9 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "turn/completed",
         data: {
-          threadId: "thread-1",
-          turn: { id: "turn-1", items: [], status: "completed", error: null },
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
         },
         createdAt: 3,
       },
@@ -2811,8 +2874,9 @@ describe("toViewMessages replay coverage", () => {
         seq: 4,
         type: "turn/completed",
         data: {
-          threadId: "thread-1",
-          turn: { id: "turn-1", items: [], status: "completed", error: null },
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
         },
         createdAt: 4,
       },
@@ -2830,6 +2894,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: { type: "reasoning", id: "rs-1", summary: [], content: [] },
           turnId: "turn-1",
         },
@@ -2841,6 +2906,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           item: { type: "agentMessage", id: "msg-1", text: "" },
           turnId: "turn-1",
         },
@@ -2860,6 +2926,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: { type: "reasoning", id: "rs-1", summary: [], content: [] },
           turnId: "turn-1",
         },
@@ -2871,6 +2938,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           item: { type: "agentMessage", id: "msg-1", text: "" },
           turnId: "turn-1",
         },
@@ -2911,6 +2979,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -2929,6 +2998,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -2945,6 +3015,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -2962,6 +3033,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 4,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -2978,6 +3050,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 5,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-2",
           item: {
@@ -3362,7 +3435,8 @@ describe("toViewMessages replay coverage", () => {
         threadId: "thread-1",
         seq: 2,
         type: "turn/started",
-        data: { turnId: "turn-1" },
+        data: {
+        providerThreadId: "thread-1", turnId: "turn-1" },
         createdAt: 2,
       },
       {
@@ -3371,6 +3445,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 3,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "item-user-1",
@@ -3450,6 +3525,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "item-user-1",
@@ -3619,6 +3695,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 5,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "item-user-1",
@@ -3762,6 +3839,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-2",
           item: {
             id: "item-user-2",
@@ -3928,6 +4006,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             id: "item-user-1",
@@ -4024,6 +4103,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -4090,6 +4170,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -4155,6 +4236,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           threadId: "thread-1",
           turnId: "turn-1",
           item: {
@@ -4203,6 +4285,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4220,6 +4303,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4253,6 +4337,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4270,6 +4355,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4288,6 +4374,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 3,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4305,6 +4392,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 4,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4338,6 +4426,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -4355,6 +4444,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -4397,6 +4487,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4414,6 +4505,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4446,6 +4538,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 1,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -4463,6 +4556,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 2,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "commandExecution",
@@ -4482,6 +4576,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 3,
         type: "item/started",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",
@@ -4499,6 +4594,7 @@ describe("toolCall projection for bridge and Codex tool calls", () => {
         seq: 4,
         type: "item/completed",
         data: {
+          providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
             type: "toolCall",

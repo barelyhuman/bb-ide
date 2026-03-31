@@ -9,9 +9,6 @@ const knownThreadEventTypeSet = new Set<string>([
   ...providerEventTypeValues,
   ...systemEventTypeValues,
 ]);
-const providerEventTypesRequiringProviderThreadId = new Set<string>(
-  providerEventTypeValues.filter((type) => type !== "thread/started"),
-);
 
 export interface UnknownDecodedThreadEvent {
   type: string;
@@ -81,79 +78,34 @@ export interface EventMeta {
   createdAt: number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function normalizeLegacyPersistedProviderRow(row: ThreadEventRow): ThreadEventRow {
-  if (!isRecord(row.data)) {
-    return row;
-  }
-
-  let data = row.data;
-
-  if (
-    providerEventTypesRequiringProviderThreadId.has(row.type) &&
-    getOptionalEventString(data, "providerThreadId") === undefined
-  ) {
-    data = {
-      ...data,
-      providerThreadId:
-        getOptionalEventString(data, "threadId") ?? row.threadId,
-    };
-  }
-
-  if (
-    (row.type === "turn/started" || row.type === "turn/completed") &&
-    isRecord(data.turn) &&
-    typeof data.turn.id === "string"
-  ) {
-    data = {
-      ...data,
-      turnId: data.turn.id,
-      ...(row.type === "turn/completed" && typeof data.turn.status === "string"
-        ? { status: data.turn.status === "inProgress" ? "interrupted" : data.turn.status }
-        : {}),
-      ...(row.type === "turn/completed" &&
-          isRecord(data.turn.error) &&
-          typeof data.turn.error.message === "string"
-        ? { error: { message: data.turn.error.message } }
-        : {}),
-    };
-  }
-
-  return data === row.data ? row : { ...row, data };
-}
-
 export function decodeRow(
   row: ThreadEventRow,
 ): { event: DecodedThreadEvent; meta: EventMeta } {
-  const normalizedRow = normalizeLegacyPersistedProviderRow(row);
   const parsedEvent = threadEventSchema.safeParse({
-    type: normalizedRow.type,
-    ...normalizedRow.data,
-    threadId: normalizedRow.threadId,
+    type: row.type,
+    ...row.data,
+    threadId: row.threadId,
   });
   if (parsedEvent.success) {
     return {
       event: parsedEvent.data,
       meta: {
-        id: normalizedRow.id,
-        seq: normalizedRow.seq,
-        createdAt: normalizedRow.createdAt,
+        id: row.id,
+        seq: row.seq,
+        createdAt: row.createdAt,
       },
     };
   }
-  if (knownThreadEventTypeSet.has(normalizedRow.type)) {
+  if (knownThreadEventTypeSet.has(row.type)) {
     throw parsedEvent.error;
   }
 
   return {
-    event: buildUnknownDecodedThreadEvent(normalizedRow),
+    event: buildUnknownDecodedThreadEvent(row),
     meta: {
-      id: normalizedRow.id,
-      seq: normalizedRow.seq,
-      createdAt: normalizedRow.createdAt,
+      id: row.id,
+      seq: row.seq,
+      createdAt: row.createdAt,
     },
   };
 }

@@ -65,75 +65,27 @@ describe("decodeRow", () => {
     expect(() => decodeRow(row)).toThrow();
   });
 
-  it("normalizes legacy persisted turn rows before parsing", () => {
-    const row: ThreadEventRow = {
-      id: "row-legacy-turn",
-      threadId: "bb-thread-1",
-      seq: 2,
-      type: "turn/completed",
-      data: {
-        threadId: "provider-thread-1",
-        turn: {
-          id: "turn-1",
-          status: "completed",
-          error: null,
-        },
-      },
-      createdAt: 456,
-    };
-
-    expect(decodeRow(row)).toEqual({
-      event: {
-        type: "turn/completed",
-        threadId: "bb-thread-1",
-        providerThreadId: "provider-thread-1",
-        turnId: "turn-1",
-        status: "completed",
-      },
-      meta: {
-        id: "row-legacy-turn",
-        seq: 2,
-        createdAt: 456,
-      },
-    });
-  });
-
   it("throws when turn/completed rows omit canonical status", () => {
     const row: ThreadEventRow = {
       id: "row-turn-status-missing",
       threadId: "thread-1",
-      seq: 3,
+      seq: 2,
       type: "turn/completed",
       data: {
         providerThreadId: "provider-thread-1",
         turnId: "turn-1",
       },
-      createdAt: 789,
+      createdAt: 456,
     };
 
     expect(() => decodeRow(row)).toThrow();
   });
 
-  it("throws when system rows rely on deleted default fields", () => {
-    const row: ThreadEventRow = {
-      id: "row-thread-interrupted",
-      threadId: "thread-1",
-      seq: 4,
-      type: "system/thread/interrupted",
-      data: {
-        message: "Stopped by user",
-      },
-      createdAt: 999,
-    };
-
-    expect(() => decodeRow(row)).toThrow();
-  });
-
-  it("throws when web-search items use legacy structured action payloads", () => {
+  it("throws when web-search item actions are not canonical strings", () => {
     const row: ThreadEventRow = {
       id: "row-web-search-action",
       threadId: "thread-1",
-      seq: 5,
+      seq: 3,
       type: "item/completed",
       data: {
         providerThreadId: "provider-thread-1",
@@ -146,7 +98,7 @@ describe("decodeRow", () => {
           outputText: "Found the React Suspense docs",
         },
       },
-      createdAt: 1111,
+      createdAt: 789,
     };
 
     expect(() => decodeRow(row)).toThrow();
@@ -156,13 +108,13 @@ describe("decodeRow", () => {
     const decoded = decodeRow({
       id: "row-unknown-1",
       threadId: "thread-1",
-      seq: 3,
+      seq: 4,
       type: "provider/future-event",
       data: {
         providerThreadId: "provider-thread-1",
         rawData: "payload-shaped-like-a-future-event",
       },
-      createdAt: 789,
+      createdAt: 999,
     });
 
     expect(isKnownThreadEvent(decoded.event)).toBe(false);
