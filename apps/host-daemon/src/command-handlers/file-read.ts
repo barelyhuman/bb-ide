@@ -39,8 +39,16 @@ function isFsErrorWithCode(
   return error instanceof Error && "code" in error && error.code === code;
 }
 
+function isBinaryImageMimeType(mimeType?: string): boolean {
+  return Boolean(
+    mimeType &&
+    mimeType.startsWith("image/") &&
+    mimeType !== "image/svg+xml",
+  );
+}
+
 function getFileSizeLimitBytes(mimeType?: string): number {
-  return mimeType?.startsWith("image/")
+  return isBinaryImageMimeType(mimeType)
     ? IMAGE_FILE_SIZE_LIMIT_BYTES
     : NON_IMAGE_FILE_SIZE_LIMIT_BYTES;
 }
@@ -56,7 +64,7 @@ function getContentEncoding(
   fileContents: Buffer,
   mimeType?: string,
 ): FileContentEncoding {
-  if (mimeType?.startsWith("image/")) {
+  if (isBinaryImageMimeType(mimeType)) {
     return "base64";
   }
   if (isUtf8TextMimeType(mimeType) || isUtf8(fileContents)) {

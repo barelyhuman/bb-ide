@@ -358,6 +358,26 @@ describe("workspace command dispatch", () => {
     });
   });
 
+  it("treats svg files as utf8 text with the non-image size limit", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-svg-");
+    const filePath = path.join(tempDir, "diagram.svg");
+    const svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>";
+    await fs.writeFile(filePath, svg);
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file",
+        path: filePath,
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result.mimeType).toBe("image/svg+xml");
+    expect(result.contentEncoding).toBe("utf8");
+    expect(result.content).toBe(svg);
+  });
+
   it("covers workspace.list_branches", async () => {
     const harness = createHarness();
     await harness.manager.ensureEnvironment({

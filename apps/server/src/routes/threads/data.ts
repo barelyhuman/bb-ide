@@ -215,9 +215,8 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult),
         );
       } catch (error) {
-        remapDaemonFileRouteError(error);
+        return remapDaemonFileRouteError(error);
       }
-      throw new ApiError(500, "internal_error", "Unexpected manager workspace route state");
     },
   );
 }
